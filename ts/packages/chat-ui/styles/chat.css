@@ -128,7 +128,8 @@
 }
 
 @keyframes message {
-  0% {}
+  0% {
+  }
   100% {
     transform: scale(1);
     overflow: visible;
@@ -266,7 +267,8 @@ table.table-message td {
 }
 
 @keyframes metrics {
-  0% {}
+  0% {
+  }
   100% {
     transform: scaleY(1);
     overflow: visible;
@@ -439,23 +441,55 @@ table.table-message td {
    ANSI color classes (from ansi_up)
    ========================================================================= */
 
-span.ansi-black-fg { color: black; }
-span.ansi-red-fg { color: rgb(128, 0, 0); }
-span.ansi-green-fg { color: rgb(0, 128, 0); }
-span.ansi-yellow-fg { color: rgb(128, 128, 0); }
-span.ansi-blue-fg { color: rgb(0, 0, 128); }
-span.ansi-magenta-fg { color: rgb(128, 0, 128); }
-span.ansi-cyan-fg { color: rgb(0, 128, 128); }
-span.ansi-white-fg { color: rgb(192, 192, 192); }
+span.ansi-black-fg {
+  color: black;
+}
+span.ansi-red-fg {
+  color: rgb(128, 0, 0);
+}
+span.ansi-green-fg {
+  color: rgb(0, 128, 0);
+}
+span.ansi-yellow-fg {
+  color: rgb(128, 128, 0);
+}
+span.ansi-blue-fg {
+  color: rgb(0, 0, 128);
+}
+span.ansi-magenta-fg {
+  color: rgb(128, 0, 128);
+}
+span.ansi-cyan-fg {
+  color: rgb(0, 128, 128);
+}
+span.ansi-white-fg {
+  color: rgb(192, 192, 192);
+}
 span.ansi-gray-fg,
-span.ansi-bright-black-fg { color: rgb(128, 128, 128); }
-span.ansi-bright-red-fg { color: rgb(192, 0, 0); }
-span.ansi-bright-green-fg { color: rgb(0, 192, 0); }
-span.ansi-bright-yellow-fg { color: rgb(192, 192, 0); }
-span.ansi-bright-blue-fg { color: rgb(0, 0, 192); }
-span.ansi-bright-magenta-fg { color: rgb(192, 0, 192); }
-span.ansi-bright-cyan-fg { color: rgb(0, 192, 192); }
-span.ansi-bright-white-fg { color: rgb(255, 255, 255); }
+span.ansi-bright-black-fg {
+  color: rgb(128, 128, 128);
+}
+span.ansi-bright-red-fg {
+  color: rgb(192, 0, 0);
+}
+span.ansi-bright-green-fg {
+  color: rgb(0, 192, 0);
+}
+span.ansi-bright-yellow-fg {
+  color: rgb(192, 192, 0);
+}
+span.ansi-bright-blue-fg {
+  color: rgb(0, 0, 192);
+}
+span.ansi-bright-magenta-fg {
+  color: rgb(192, 0, 192);
+}
+span.ansi-bright-cyan-fg {
+  color: rgb(0, 192, 192);
+}
+span.ansi-bright-white-fg {
+  color: rgb(255, 255, 255);
+}
 
 /* =========================================================================
    Scrollbar styling
@@ -495,9 +529,15 @@ span.ansi-bright-white-fg { color: rgb(255, 255, 255); }
   font-size: 10px;
 }
 
-.notification-error { color: red; }
-.notification-warning { color: orange; }
-.notification-info { color: blue; }
+.notification-error {
+  color: red;
+}
+.notification-warning {
+  color: orange;
+}
+.notification-info {
+  color: blue;
+}
 
 .references {
   font-size: small;

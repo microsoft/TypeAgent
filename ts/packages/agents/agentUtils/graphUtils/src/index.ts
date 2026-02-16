@@ -20,8 +20,15 @@ export {
     CalendarProviderConfig,
 } from "./calendarProvider.js";
 
-export { MSGraphCalendarProvider, getMSGraphCalendarProvider } from "./msGraphCalendarProvider.js";
-export { GoogleCalendarClient, getGoogleCalendarClient, loadGoogleCalendarSettings } from "./googleCalendarClient.js";
+export {
+    MSGraphCalendarProvider,
+    getMSGraphCalendarProvider,
+} from "./msGraphCalendarProvider.js";
+export {
+    GoogleCalendarClient,
+    getGoogleCalendarClient,
+    loadGoogleCalendarSettings,
+} from "./googleCalendarClient.js";
 export {
     createCalendarProvider,
     createCalendarProviderFromConfig,
@@ -42,8 +49,14 @@ export {
     EmailProviderConfig,
 } from "./emailProvider.js";
 
-export { MSGraphEmailProvider, getMSGraphEmailProvider } from "./msGraphEmailProvider.js";
-export { GoogleEmailClient, getGoogleEmailClient } from "./googleEmailClient.js";
+export {
+    MSGraphEmailProvider,
+    getMSGraphEmailProvider,
+} from "./msGraphEmailProvider.js";
+export {
+    GoogleEmailClient,
+    getGoogleEmailClient,
+} from "./googleEmailClient.js";
 export {
     createEmailProvider,
     createEmailProviderFromConfig,

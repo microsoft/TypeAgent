@@ -22,6 +22,16 @@ import {
 
 const debug = registerDebug("typeagent:shell:browserViewManager");
 
+// Check if a URL points to Google accounts (using hostname, not substring match)
+function isGoogleAccountsUrl(urlStr: string): boolean {
+    try {
+        const parsed = new URL(urlStr);
+        return parsed.hostname === "accounts.google.com";
+    } catch {
+        return false;
+    }
+}
+
 // Check if a hostname belongs to Google (for conditional Firefox masking)
 function isGoogleDomain(hostname: string): boolean {
     return (
@@ -357,7 +367,7 @@ export class BrowserViewManager {
 
             // Detect Google auth block by page title
             if (
-                lastNavigatedUrl.includes("accounts.google.com") &&
+                isGoogleAccountsUrl(lastNavigatedUrl) &&
                 title.toLowerCase().includes("not secure")
             ) {
                 debug(
@@ -383,7 +393,7 @@ export class BrowserViewManager {
             this.notifyPageLoadComplete(tabId);
 
             // Check for Google auth block after page loads
-            if (url.includes("accounts.google.com")) {
+            if (isGoogleAccountsUrl(url)) {
                 try {
                     const blocked = await webContents.executeJavaScript(
                         `document.body?.innerText?.includes("browser or app may not be secure") ?? false`,

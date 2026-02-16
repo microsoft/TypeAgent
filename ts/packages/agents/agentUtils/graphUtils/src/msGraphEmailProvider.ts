@@ -219,7 +219,8 @@ export class MSGraphEmailProvider
             }
             if (m.receivedDateTime) msg.receivedDateTime = m.receivedDateTime;
             if (m.isRead !== undefined) msg.isRead = m.isRead;
-            if (m.hasAttachments !== undefined) msg.hasAttachments = m.hasAttachments;
+            if (m.hasAttachments !== undefined)
+                msg.hasAttachments = m.hasAttachments;
             if (m.webLink) msg.webLink = m.webLink;
             return msg;
         });

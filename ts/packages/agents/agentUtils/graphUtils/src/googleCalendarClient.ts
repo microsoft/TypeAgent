@@ -74,10 +74,12 @@ interface GoogleCalendarAPI {
  * Load Google auth settings from environment variables.
  * These are shared across Google services (calendar, email, etc.)
  */
-export function loadGoogleCalendarSettings(): {
-    clientId: string;
-    clientSecret: string;
-} | undefined {
+export function loadGoogleCalendarSettings():
+    | {
+          clientId: string;
+          clientSecret: string;
+      }
+    | undefined {
     const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
 
@@ -163,9 +165,7 @@ export class GoogleCalendarClient
             // Try to load existing token for silent login
             await this.tryLoadToken();
         } catch (error) {
-            debugError(
-                `Failed to initialize Google Calendar client: ${error}`,
-            );
+            debugError(`Failed to initialize Google Calendar client: ${error}`);
         }
     }
 
@@ -207,8 +207,9 @@ export class GoogleCalendarClient
                                 "Access token expired, refreshing with refresh token",
                             );
                             try {
-                                const { credentials } =
-                                    await (this.auth as any).refreshAccessToken();
+                                const { credentials } = await (
+                                    this.auth as any
+                                ).refreshAccessToken();
                                 this.auth.setCredentials(credentials);
                                 this.saveToken(credentials);
                                 if (credentials.expiry_date) {
@@ -254,8 +255,9 @@ export class GoogleCalendarClient
         if (this.isTokenExpired() && this.auth.credentials?.refresh_token) {
             debug("Access token expired, auto-refreshing");
             try {
-                const { credentials } =
-                    await (this.auth as any).refreshAccessToken();
+                const { credentials } = await (
+                    this.auth as any
+                ).refreshAccessToken();
                 this.auth.setCredentials(credentials);
                 this.saveToken(credentials);
                 if (credentials.expiry_date) {
@@ -368,9 +370,13 @@ export class GoogleCalendarClient
 
                     if (error) {
                         res.writeHead(200, { "Content-Type": "text/html" });
+                        const safeError = String(error)
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;");
                         res.end(
                             "<html><body><h2>Authorization Failed</h2>" +
-                                `<p>Error: ${error}</p>` +
+                                `<p>Error: ${safeError}</p>` +
                                 "<p>You can close this window.</p></body></html>",
                         );
                         server.close();
@@ -403,8 +409,7 @@ export class GoogleCalendarClient
             // Listen on port 0 = OS assigns an available ephemeral port
             server.listen(0, "127.0.0.1", async () => {
                 const addr = server.address();
-                const port =
-                    typeof addr === "object" && addr ? addr.port : 0;
+                const port = typeof addr === "object" && addr ? addr.port : 0;
                 actualRedirectUri = `http://127.0.0.1:${port}/oauth2callback`;
 
                 debug(
@@ -412,9 +417,7 @@ export class GoogleCalendarClient
                 );
 
                 // Generate auth URL with the dynamic redirect URI
-                const authUrl = (
-                    this.auth as GoogleAuth
-                ).generateAuthUrl({
+                const authUrl = (this.auth as GoogleAuth).generateAuthUrl({
                     access_type: "offline",
                     scope: GOOGLE_AUTH_SCOPES,
                     prompt: "consent",
@@ -441,11 +444,14 @@ export class GoogleCalendarClient
             });
 
             // Timeout after 5 minutes
-            setTimeout(() => {
-                server.close();
-                debugError("OAuth callback timed out after 5 minutes");
-                resolve({ authCode: undefined, redirectUri: "" });
-            }, 5 * 60 * 1000);
+            setTimeout(
+                () => {
+                    server.close();
+                    debugError("OAuth callback timed out after 5 minutes");
+                    resolve({ authCode: undefined, redirectUri: "" });
+                },
+                5 * 60 * 1000,
+            );
         });
     }
 
@@ -719,8 +725,7 @@ export class GoogleCalendarClient
                 },
             });
 
-            const busyTimes =
-                response.data.calendars?.[user.email]?.busy || [];
+            const busyTimes = response.data.calendars?.[user.email]?.busy || [];
 
             const freeSlots: TimeSlot[] = [];
             let currentStart = new Date(startTime);

@@ -23,7 +23,10 @@ import { DevicePromptCallback } from "./graphClient.js";
  * Microsoft Graph Calendar Provider
  * Wraps the existing CalendarClient to implement the ICalendarProvider interface
  */
-export class MSGraphCalendarProvider extends EventEmitter implements ICalendarProvider {
+export class MSGraphCalendarProvider
+    extends EventEmitter
+    implements ICalendarProvider
+{
     public readonly providerName = "microsoft";
 
     private client: CalendarClient;
@@ -119,7 +122,9 @@ export class MSGraphCalendarProvider extends EventEmitter implements ICalendarPr
         return this.convertMSGraphEvents(events);
     }
 
-    async findEventsByDateRange(query: CalendarDateRangeQuery): Promise<CalendarEvent[]> {
+    async findEventsByDateRange(
+        query: CalendarDateRangeQuery,
+    ): Promise<CalendarEvent[]> {
         const events = await this.client.findCalendarEventsByDateRange({
             startDateTime: query.startDateTime,
             endDateTime: query.endDateTime,
@@ -127,7 +132,9 @@ export class MSGraphCalendarProvider extends EventEmitter implements ICalendarPr
         return this.convertMSGraphEvents(events);
     }
 
-    async getCalendarView(query: CalendarDateRangeQuery): Promise<CalendarEvent[]> {
+    async getCalendarView(
+        query: CalendarDateRangeQuery,
+    ): Promise<CalendarEvent[]> {
         // Build query string for the underlying client
         const queryString = `startDateTime=${encodeURIComponent(query.startDateTime)}&endDateTime=${encodeURIComponent(query.endDateTime)}`;
         const events = await this.client.findCalendarView(queryString);
@@ -158,7 +165,10 @@ export class MSGraphCalendarProvider extends EventEmitter implements ICalendarPr
     // Participant Management
     // =========================================================================
 
-    async addParticipants(eventId: string, participants: string[]): Promise<boolean> {
+    async addParticipants(
+        eventId: string,
+        participants: string[],
+    ): Promise<boolean> {
         // Use the underlying client's method
         const result = await this.client.addParticipantsToExistingMeeting(
             eventId,

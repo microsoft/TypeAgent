@@ -79,7 +79,7 @@ export function createExternalBrowserServer(channel: RpcChannel) {
                     const errMsg =
                         typeof error === "string"
                             ? error
-                            : error?.message ?? "";
+                            : (error?.message ?? "");
                     if (
                         errMsg.includes("Could not establish connection") ||
                         errMsg.includes("Receiving end does not exist")

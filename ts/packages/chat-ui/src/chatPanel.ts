@@ -9,10 +9,7 @@
  * recognition dependencies.
  */
 
-import {
-    DisplayAppendMode,
-    DisplayContent,
-} from "@typeagent/agent-sdk";
+import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { setContent } from "./setContent.js";
 import {
     PlatformAdapter,
@@ -124,14 +121,10 @@ export class ChatPanel {
         if (this.commandHistory.length === 0) return;
         this.historyIndex = Math.max(
             -1,
-            Math.min(
-                this.commandHistory.length - 1,
-                this.historyIndex + delta,
-            ),
+            Math.min(this.commandHistory.length - 1, this.historyIndex + delta),
         );
         if (this.historyIndex >= 0) {
-            this.textInput.textContent =
-                this.commandHistory[this.historyIndex];
+            this.textInput.textContent = this.commandHistory[this.historyIndex];
         } else {
             this.textInput.textContent = "";
         }
@@ -209,11 +202,7 @@ export class ChatPanel {
             );
         }
 
-        this.currentAgentContainer.setMessage(
-            content,
-            source,
-            appendMode,
-        );
+        this.currentAgentContainer.setMessage(content, source, appendMode);
 
         this.scrollToBottom();
     }
@@ -354,8 +343,7 @@ class AgentMessageContainer {
 
         // Message body
         const bodyDiv = document.createElement("div");
-        bodyDiv.className =
-            "chat-message-body-hide-metrics chat-message-agent";
+        bodyDiv.className = "chat-message-body-hide-metrics chat-message-agent";
 
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat-message-content";
@@ -451,10 +439,17 @@ class AgentMessageContainer {
         let text: string | undefined;
         if (typeof content === "string") {
             text = content;
-        } else if (!Array.isArray(content) && typeof content.content === "string") {
+        } else if (
+            !Array.isArray(content) &&
+            typeof content.content === "string"
+        ) {
             text = content.content;
-        } else if (!Array.isArray(content) && Array.isArray(content.content) &&
-                   content.content.length > 0 && typeof content.content[0] === "string") {
+        } else if (
+            !Array.isArray(content) &&
+            Array.isArray(content.content) &&
+            content.content.length > 0 &&
+            typeof content.content[0] === "string"
+        ) {
             text = (content.content as string[]).join("\n");
         }
         if (!text) return undefined;
@@ -467,7 +462,12 @@ class AgentMessageContainer {
         let jsonStart = -1;
         for (let i = 0; i < lines.length; i++) {
             const t = lines[i].trim();
-            if (t === "[" || t === "{" || t.startsWith("[{") || t.startsWith("{\"")) {
+            if (
+                t === "[" ||
+                t === "{" ||
+                t.startsWith("[{") ||
+                t.startsWith('{"')
+            ) {
                 jsonStart = i;
                 break;
             }

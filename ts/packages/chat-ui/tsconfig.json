@@ -1,18 +1,18 @@
 {
-    "compilerOptions": {
-        "target": "ES2022",
-        "module": "Node16",
-        "moduleResolution": "Node16",
-        "lib": ["ES2022", "DOM", "DOM.Iterable"],
-        "outDir": "dist",
-        "rootDir": "src",
-        "declaration": true,
-        "declarationMap": true,
-        "sourceMap": true,
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "composite": true
-    },
-    "include": ["src/**/*.ts"]
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "composite": true
+  },
+  "include": ["src/**/*.ts"]
 }

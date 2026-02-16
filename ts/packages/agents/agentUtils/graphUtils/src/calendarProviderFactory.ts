@@ -121,11 +121,14 @@ export function getAvailableProviders(): CalendarProviderType[] {
 /**
  * Check if a specific provider is configured
  */
-export function isProviderConfigured(providerType: CalendarProviderType): boolean {
+export function isProviderConfigured(
+    providerType: CalendarProviderType,
+): boolean {
     switch (providerType) {
         case "microsoft":
             return !!(
-                process.env.MSGRAPH_APP_CLIENTID || process.env.MSGRAPH_APP_TENANTID
+                process.env.MSGRAPH_APP_CLIENTID ||
+                process.env.MSGRAPH_APP_TENANTID
             );
         case "google":
             return !!(

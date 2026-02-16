@@ -55,10 +55,7 @@ interface GoogleAuth {
     credentials: any;
 }
 
-export class GoogleEmailClient
-    extends EventEmitter
-    implements IEmailProvider
-{
+export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
     public readonly providerName = "google";
 
     private auth: GoogleAuth | undefined;
@@ -125,8 +122,9 @@ export class GoogleEmailClient
                         if (this.isTokenExpired()) {
                             debug("Access token expired, refreshing");
                             try {
-                                const { credentials } =
-                                    await (this.auth as any).refreshAccessToken();
+                                const { credentials } = await (
+                                    this.auth as any
+                                ).refreshAccessToken();
                                 this.auth.setCredentials(credentials);
                                 this.saveToken(credentials);
                                 if (credentials.expiry_date) {
@@ -146,7 +144,9 @@ export class GoogleEmailClient
                         });
                         this._isAuthenticated = true;
                         this.emit("connected", this.gmail);
-                        debug("Loaded and validated Google auth token for Gmail");
+                        debug(
+                            "Loaded and validated Google auth token for Gmail",
+                        );
                         return true;
                     }
                 }
@@ -167,8 +167,9 @@ export class GoogleEmailClient
         if (this.isTokenExpired() && this.auth.credentials?.refresh_token) {
             debug("Access token expired, auto-refreshing");
             try {
-                const { credentials } =
-                    await (this.auth as any).refreshAccessToken();
+                const { credentials } = await (
+                    this.auth as any
+                ).refreshAccessToken();
                 this.auth.setCredentials(credentials);
                 this.saveToken(credentials);
                 if (credentials.expiry_date) {
@@ -253,9 +254,13 @@ export class GoogleEmailClient
 
                     if (error) {
                         res.writeHead(200, { "Content-Type": "text/html" });
+                        const safeError = String(error)
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;");
                         res.end(
                             "<html><body><h2>Authorization Failed</h2>" +
-                                `<p>Error: ${error}</p>` +
+                                `<p>Error: ${safeError}</p>` +
                                 "<p>You can close this window.</p></body></html>",
                         );
                         server.close();
@@ -287,17 +292,14 @@ export class GoogleEmailClient
 
             server.listen(0, "127.0.0.1", async () => {
                 const addr = server.address();
-                const port =
-                    typeof addr === "object" && addr ? addr.port : 0;
+                const port = typeof addr === "object" && addr ? addr.port : 0;
                 actualRedirectUri = `http://127.0.0.1:${port}/oauth2callback`;
 
                 debug(
                     `OAuth redirect listener started on ${actualRedirectUri}`,
                 );
 
-                const authUrl = (
-                    this.auth as GoogleAuth
-                ).generateAuthUrl({
+                const authUrl = (this.auth as GoogleAuth).generateAuthUrl({
                     access_type: "offline",
                     scope: GOOGLE_AUTH_SCOPES,
                     prompt: "consent",
@@ -323,11 +325,14 @@ export class GoogleEmailClient
                 }
             });
 
-            setTimeout(() => {
-                server.close();
-                debugError("OAuth callback timed out after 5 minutes");
-                resolve({ authCode: undefined, redirectUri: "" });
-            }, 5 * 60 * 1000);
+            setTimeout(
+                () => {
+                    server.close();
+                    debugError("OAuth callback timed out after 5 minutes");
+                    resolve({ authCode: undefined, redirectUri: "" });
+                },
+                5 * 60 * 1000,
+            );
         });
     }
 
@@ -430,7 +435,9 @@ export class GoogleEmailClient
         bccAddresses?: string[],
     ): Promise<boolean> {
         if (!this.gmail) {
-            console.error("[Gmail] Not initialized - please run '@email login' first");
+            console.error(
+                "[Gmail] Not initialized - please run '@email login' first",
+            );
             return false;
         }
 
@@ -531,7 +538,9 @@ export class GoogleEmailClient
             return !!response.data.id;
         } catch (error: any) {
             debugError(`Failed to reply: ${error}`);
-            console.error(`[Gmail] Failed to reply: ${error?.message || error}`);
+            console.error(
+                `[Gmail] Failed to reply: ${error?.message || error}`,
+            );
             return false;
         }
     }
@@ -594,7 +603,9 @@ export class GoogleEmailClient
             return !!response.data.id;
         } catch (error: any) {
             debugError(`Failed to forward: ${error}`);
-            console.error(`[Gmail] Failed to forward: ${error?.message || error}`);
+            console.error(
+                `[Gmail] Failed to forward: ${error?.message || error}`,
+            );
             return false;
         }
     }
@@ -610,10 +621,14 @@ export class GoogleEmailClient
             if (query.subject) queryParts.push(`subject:${query.subject}`);
             if (query.content) queryParts.push(query.content);
             if (query.startDateTime) {
-                queryParts.push(`after:${this.toGmailDate(query.startDateTime)}`);
+                queryParts.push(
+                    `after:${this.toGmailDate(query.startDateTime)}`,
+                );
             }
             if (query.endDateTime) {
-                queryParts.push(`before:${this.toGmailDate(query.endDateTime)}`);
+                queryParts.push(
+                    `before:${this.toGmailDate(query.endDateTime)}`,
+                );
             }
             if (query.folder) queryParts.push(`in:${query.folder}`);
 
@@ -645,10 +660,14 @@ export class GoogleEmailClient
             if (query.subject) queryParts.push(`subject:${query.subject}`);
             if (query.content) queryParts.push(query.content);
             if (query.startDateTime) {
-                queryParts.push(`after:${this.toGmailDate(query.startDateTime)}`);
+                queryParts.push(
+                    `after:${this.toGmailDate(query.startDateTime)}`,
+                );
             }
             if (query.endDateTime) {
-                queryParts.push(`before:${this.toGmailDate(query.endDateTime)}`);
+                queryParts.push(
+                    `before:${this.toGmailDate(query.endDateTime)}`,
+                );
             }
             if (query.folder) queryParts.push(`in:${query.folder}`);
 

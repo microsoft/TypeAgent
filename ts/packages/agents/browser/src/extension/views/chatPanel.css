@@ -5,7 +5,8 @@
 @import "./chat-ui.css";
 
 /* Reset & extension-level layout */
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   height: 100%;

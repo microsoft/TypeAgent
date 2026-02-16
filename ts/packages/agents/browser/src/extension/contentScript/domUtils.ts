@@ -105,7 +105,14 @@ function hasNavigableHref(element: HTMLElement): boolean {
     const anchor = element as HTMLAnchorElement;
     if (!anchor.href) return false;
     const raw = anchor.getAttribute("href") ?? "";
-    if (!raw || raw === "#" || raw.startsWith("javascript:")) return false;
+    if (
+        !raw ||
+        raw === "#" ||
+        raw.startsWith("javascript:") ||
+        raw.startsWith("data:") ||
+        raw.startsWith("vbscript:")
+    )
+        return false;
     // Fragment-only links that point to the current page
     try {
         const url = new URL(anchor.href);
@@ -181,7 +188,10 @@ export function matchLinks(pattern: string): HTMLElement | null {
     );
     for (const element of allElements) {
         const el = element as HTMLElement;
-        if (matchString(el.innerText, re) || matchString(el.textContent ?? "", re)) {
+        if (
+            matchString(el.innerText, re) ||
+            matchString(el.textContent ?? "", re)
+        ) {
             const link = findNearestLink(el);
             if (link && hasNavigableHref(link)) {
                 console.log(

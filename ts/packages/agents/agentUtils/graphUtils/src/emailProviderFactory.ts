@@ -22,9 +22,7 @@ const debug = registerDebug("typeagent:graphUtils:emailfactory");
 /**
  * Detect which email provider is configured based on environment variables
  */
-export function detectConfiguredEmailProvider():
-    | EmailProviderType
-    | undefined {
+export function detectConfiguredEmailProvider(): EmailProviderType | undefined {
     // Check for Microsoft Graph configuration
     const hasMSGraph = !!(
         process.env.MSGRAPH_APP_CLIENTID || process.env.MSGRAPH_APP_TENANTID

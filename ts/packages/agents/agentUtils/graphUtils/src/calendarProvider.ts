@@ -141,7 +141,9 @@ export interface ICalendarProvider extends EventEmitter {
     /**
      * Find events within a date range
      */
-    findEventsByDateRange(query: CalendarDateRangeQuery): Promise<CalendarEvent[]>;
+    findEventsByDateRange(
+        query: CalendarDateRangeQuery,
+    ): Promise<CalendarEvent[]>;
 
     /**
      * Get calendar view for a date range (similar to findEventsByDateRange but may include recurring event instances)
@@ -173,10 +175,7 @@ export interface ICalendarProvider extends EventEmitter {
      * @param eventId The event ID
      * @param participants Email addresses to add
      */
-    addParticipants(
-        eventId: string,
-        participants: string[],
-    ): Promise<boolean>;
+    addParticipants(eventId: string, participants: string[]): Promise<boolean>;
 
     /**
      * Resolve usernames to email addresses (provider-specific)

@@ -105,7 +105,12 @@ function handleServiceWorkerMessage(message: any): void {
     switch (message.type) {
         case "dispatcher:setDisplay": {
             const msg = message.message;
-            console.log("[chatPanel] setDisplay content:", JSON.stringify(msg.message).substring(0, 200), "type:", typeof msg.message);
+            console.log(
+                "[chatPanel] setDisplay content:",
+                JSON.stringify(msg.message).substring(0, 200),
+                "type:",
+                typeof msg.message,
+            );
             chatPanel.addAgentMessage(
                 msg.message as DisplayContent,
                 msg.source,
@@ -117,7 +122,14 @@ function handleServiceWorkerMessage(message: any): void {
         case "dispatcher:appendDisplay": {
             const msg = message.message;
             const mode = message.mode as DisplayAppendMode;
-            console.log("[chatPanel] appendDisplay content:", JSON.stringify(msg.message).substring(0, 200), "mode:", mode, "type:", typeof msg.message);
+            console.log(
+                "[chatPanel] appendDisplay content:",
+                JSON.stringify(msg.message).substring(0, 200),
+                "mode:",
+                mode,
+                "type:",
+                typeof msg.message,
+            );
             chatPanel.addAgentMessage(
                 msg.message as DisplayContent,
                 msg.source,
@@ -128,10 +140,7 @@ function handleServiceWorkerMessage(message: any): void {
         }
 
         case "dispatcher:setDisplayInfo": {
-            chatPanel.setDisplayInfo(
-                message.source,
-                message.sourceIcon,
-            );
+            chatPanel.setDisplayInfo(message.source, message.sourceIcon);
             break;
         }
 

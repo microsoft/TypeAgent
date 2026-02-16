@@ -70,7 +70,13 @@ function createChatPanelClientIO(): ClientIO {
         appendDiagnosticData(requestId, data) {
             // Diagnostic data not shown in extension chat panel
         },
-        setDynamicDisplay(requestId, source, actionIndex, displayId, nextRefreshMs) {
+        setDynamicDisplay(
+            requestId,
+            source,
+            actionIndex,
+            displayId,
+            nextRefreshMs,
+        ) {
             send("dispatcher:setDynamicDisplay", {
                 requestId,
                 source,
@@ -206,12 +212,18 @@ async function doConnect(): Promise<Dispatcher> {
         };
 
         ws.onclose = (event: CloseEvent) => {
-            debug("Agent Server WebSocket closed: %d %s", event.code, event.reason);
+            debug(
+                "Agent Server WebSocket closed: %d %s",
+                event.code,
+                event.reason,
+            );
             channel.notifyDisconnected();
             dispatcher = undefined;
             dispatcherWs = undefined;
             if (!resolved) {
-                reject(new Error(`Failed to connect to Agent Server at ${url}`));
+                reject(
+                    new Error(`Failed to connect to Agent Server at ${url}`),
+                );
             }
             // Broadcast disconnection status
             chrome.runtime

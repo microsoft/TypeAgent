@@ -16,19 +16,19 @@
     ".": "./dist/index.js"
   },
   "types": "./dist/index.d.ts",
+  "bin": {
+    "kp-test": "./dist/testDriver.js"
+  },
   "files": [
     "dist",
     "!dist/test"
   ],
-  "bin": {
-    "kp-test": "./dist/testDriver.js"
-  },
   "scripts": {
     "build": "npm run tsc",
-    "test:driver": "node dist/testDriver.js",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "test:driver": "node dist/testDriver.js",
     "tsc": "tsc -b"
   },
   "dependencies": {

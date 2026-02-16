@@ -280,7 +280,12 @@ export const CalendarTime: EntityConverter<string> = createConverter(
  */
 function parseTimeRange(
     rangeStr: string,
-): { start: { hours: number; minutes: number }; end?: { hours: number; minutes: number } } | undefined {
+):
+    | {
+          start: { hours: number; minutes: number };
+          end?: { hours: number; minutes: number };
+      }
+    | undefined {
     let lower = rangeStr.toLowerCase().trim();
 
     // Strip "from" prefix if present: "from 1 to 2pm" -> "1 to 2pm"
@@ -392,12 +397,18 @@ export function registerBuiltInEntities(): void {
     globalEntityRegistry.registerConverter("Cardinal", Cardinal);
     globalEntityRegistry.registerConverter("CalendarDate", CalendarDate);
     globalEntityRegistry.registerConverter("CalendarTime", CalendarTime);
-    globalEntityRegistry.registerConverter("CalendarTimeRange", CalendarTimeRange);
+    globalEntityRegistry.registerConverter(
+        "CalendarTimeRange",
+        CalendarTimeRange,
+    );
 
     // Lowercase aliases (paramSpec convention from .pas.json schemas)
     globalEntityRegistry.registerConverter("ordinal", Ordinal);
     globalEntityRegistry.registerConverter("cardinal", Cardinal);
     globalEntityRegistry.registerConverter("calendarDate", CalendarDate);
     globalEntityRegistry.registerConverter("calendarTime", CalendarTime);
-    globalEntityRegistry.registerConverter("calendarTimeRange", CalendarTimeRange);
+    globalEntityRegistry.registerConverter(
+        "calendarTimeRange",
+        CalendarTimeRange,
+    );
 }
