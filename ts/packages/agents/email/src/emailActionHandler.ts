@@ -549,7 +549,9 @@ function formatEmailListHtml(
             ? new Date(msg.receivedDateTime).toLocaleDateString()
             : "";
         const preview = msg.bodyPreview
-            ? escapeHtml(msg.bodyPreview.replace(/\s+/g, " ").trim().slice(0, 120))
+            ? escapeHtml(
+                  msg.bodyPreview.replace(/\s+/g, " ").trim().slice(0, 120),
+              )
             : "";
         const unread = msg.isRead === false;
         const borderColor = unread ? "#4a9eda" : "#ccc";
@@ -796,12 +798,18 @@ async function handleFindEmailAction(
                 if (sourceEmails.length > 0) {
                     sourceLinksHtml = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #e0e0e0;font-size:12px;color:#666;">
 <div style="margin-bottom:4px;">Sources:</div>
-${sourceEmails.map((m) => {
-    const from = m.from ? escapeHtml(m.from.name || m.from.address) : "Unknown";
-    const subject = escapeHtml(m.subject);
-    const date = m.receivedDateTime ? new Date(m.receivedDateTime).toLocaleDateString() : "";
-    return `<div style="margin-left:8px;"><a href="${escapeHtml(m.webLink!)}" target="_blank" style="color:#4a9eda;text-decoration:none;">${subject}</a> <span style="color:#999;">— ${from}, ${date}</span></div>`;
-}).join("\n")}
+${sourceEmails
+    .map((m) => {
+        const from = m.from
+            ? escapeHtml(m.from.name || m.from.address)
+            : "Unknown";
+        const subject = escapeHtml(m.subject);
+        const date = m.receivedDateTime
+            ? new Date(m.receivedDateTime).toLocaleDateString()
+            : "";
+        return `<div style="margin-left:8px;"><a href="${escapeHtml(m.webLink!)}" target="_blank" style="color:#4a9eda;text-decoration:none;">${subject}</a> <span style="color:#999;">— ${from}, ${date}</span></div>`;
+    })
+    .join("\n")}
 </div>`;
                 }
             }
@@ -812,8 +820,10 @@ ${answerHtml}
 ${sourceLinksHtml}
 </div>`;
 
-            // Strip HTML tags for plain text historyText
-            const plainText = answer.answer.replace(/<[^>]+>/g, "");
+            // Strip HTML tags for plain text historyText, then remove any residual angle brackets
+            const plainText = answer.answer
+                .replace(/<[^>]*>/g, "")
+                .replace(/[<>]/g, "");
 
             return createActionResultFromHtmlDisplay(htmlContent, plainText);
         }
@@ -839,7 +849,9 @@ function linkEmailSubjects(html: string, messages: EmailMessage[]): string {
     const subjectLinks = new Map<string, string>();
     for (const m of messages) {
         if (m.webLink && m.subject) {
-            const clean = m.subject.replace(/^(Re:\s*|Fwd:\s*|FW:\s*)+/i, "").trim();
+            const clean = m.subject
+                .replace(/^(Re:\s*|Fwd:\s*|FW:\s*)+/i, "")
+                .trim();
             if (clean.length > 10 && !subjectLinks.has(clean.toLowerCase())) {
                 subjectLinks.set(clean.toLowerCase(), m.webLink);
             }
@@ -872,7 +884,9 @@ function linkEmailSubjects(html: string, messages: EmailMessage[]): string {
         const lastCloseA = before.lastIndexOf("</a>");
         if (lastOpenA > lastCloseA) continue; // inside a link already
 
-        const matchText = html.slice(idx).match(new RegExp(escapedSubject, "i"))![0];
+        const matchText = html
+            .slice(idx)
+            .match(new RegExp(escapedSubject, "i"))![0];
         html =
             html.slice(0, idx) +
             `<a href="${escapeHtml(link)}" target="_blank" style="color:#4a9eda;text-decoration:none;">${matchText}</a>` +

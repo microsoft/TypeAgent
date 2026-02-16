@@ -563,8 +563,9 @@ export class CalendarActionHandlerV3 implements AppAgent {
         }
 
         // User format: "2pm to 3pm" or "2pm-3pm" (each time has its own AM/PM)
+        // Use bounded whitespace quantifiers to avoid regex backtracking warnings
         const separateMatch = lower.match(
-            /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i,
+            /^(\d{1,2})(?::(\d{2}))?\s{0,5}(am|pm)?\s{0,5}(?:to|-)\s{0,5}(\d{1,2})(?::(\d{2}))?\s{0,5}(am|pm)?$/i,
         );
         if (separateMatch) {
             const startStr = `${separateMatch[1]}${separateMatch[2] ? ":" + separateMatch[2] : ""}${separateMatch[3] || ""}`;

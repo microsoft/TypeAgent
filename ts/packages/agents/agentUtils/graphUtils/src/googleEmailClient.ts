@@ -459,11 +459,9 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
             messageParts.push("");
             messageParts.push(body);
 
-            const raw = Buffer.from(messageParts.join("\r\n"))
-                .toString("base64")
-                .replace(/\+/g, "-")
-                .replace(/\//g, "_")
-                .replace(/=+$/, "");
+            const raw = Buffer.from(messageParts.join("\r\n")).toString(
+                "base64url",
+            );
 
             const response = await this.gmail.users.messages.send({
                 userId: "me",
@@ -523,11 +521,9 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
             messageParts.push("");
             messageParts.push(body);
 
-            const raw = Buffer.from(messageParts.join("\r\n"))
-                .toString("base64")
-                .replace(/\+/g, "-")
-                .replace(/\//g, "_")
-                .replace(/=+$/, "");
+            const raw = Buffer.from(messageParts.join("\r\n")).toString(
+                "base64url",
+            );
 
             const response = await this.gmail.users.messages.send({
                 userId: "me",
@@ -588,11 +584,9 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
             messageParts.push("");
             messageParts.push(fullBody);
 
-            const raw = Buffer.from(messageParts.join("\r\n"))
-                .toString("base64")
-                .replace(/\+/g, "-")
-                .replace(/\//g, "_")
-                .replace(/=+$/, "");
+            const raw = Buffer.from(messageParts.join("\r\n")).toString(
+                "base64url",
+            );
 
             const response = await this.gmail.users.messages.send({
                 userId: "me",

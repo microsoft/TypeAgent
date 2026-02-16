@@ -227,8 +227,8 @@ export function extractKeywords(text: string): ExtractedKeyword[] {
  * Based on extract_proper_nouns() from baseExtract.py.
  */
 function extractProperNouns(text: string): string[] {
-    // Split into sentences
-    const sentences = text.split(/[.!?]+\s+/);
+    // Split into sentences (bounded quantifiers to avoid regex backtracking warnings)
+    const sentences = text.split(/[.!?]{1,10}\s+/);
     const properNouns: string[] = [];
 
     for (const sentence of sentences) {
@@ -289,8 +289,8 @@ function extractProperNouns(text: string): string[] {
  * Handles common punctuation, email addresses, URLs.
  */
 function tokenize(text: string): string[] {
-    // Preserve email addresses and URLs as tokens
-    const emailPattern = /[\w.+-]+@[\w.-]+\.\w+/g;
+    // Preserve email addresses and URLs as tokens (bounded quantifiers per email spec limits)
+    const emailPattern = /[\w.+-]{1,254}@[\w.-]{1,253}\.\w{2,63}/g;
     const emails: string[] = [];
     let stripped = text.replace(emailPattern, (match) => {
         emails.push(match);
@@ -311,7 +311,7 @@ function tokenize(text: string): string[] {
 
 /** Clean leading/trailing punctuation from a word, preserving apostrophes */
 function cleanWord(word: string): string {
-    return word.replace(/^[^\w']+/, "").replace(/[^\w']+$/, "");
+    return word.replace(/^[^\w']{1,50}/, "").replace(/[^\w']{1,50}$/, "");
 }
 
 function isCapitalized(word: string): boolean {
