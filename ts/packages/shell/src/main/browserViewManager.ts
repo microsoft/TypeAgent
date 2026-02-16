@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebContentsView } from "electron";
+import { WebContentsView, shell } from "electron";
 import path from "node:path";
 import registerDebug from "debug";
 import { ShellWindow } from "./shellWindow.js";
@@ -21,6 +21,75 @@ import {
 } from "./navigationUtils.js";
 
 const debug = registerDebug("typeagent:shell:browserViewManager");
+
+// Check if a hostname belongs to Google (for conditional Firefox masking)
+function isGoogleDomain(hostname: string): boolean {
+    return (
+        hostname.endsWith(".google.com") ||
+        hostname === "google.com" ||
+        hostname.endsWith(".googleapis.com") ||
+        hostname.endsWith(".gstatic.com")
+    );
+}
+
+// Firefox UA — Google trusts Firefox and won't check for Chrome-specific APIs
+const FIREFOX_VERSION = "134.0";
+const FIREFOX_USER_AGENT = `Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:${FIREFOX_VERSION}) Gecko/20100101 Firefox/${FIREFOX_VERSION}`;
+
+// CDP script injected before any page JavaScript runs.
+// Strategy: present as Chrome (natural Chromium) by default, but switch to
+// Firefox identity on Google domains to bypass their auth fingerprint checks.
+const CDP_FINGERPRINT_SCRIPT = `
+// Always: remove webdriver flag (automation detection)
+if (Object.getOwnPropertyDescriptor(navigator, 'webdriver')) {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+}
+try { delete navigator.__proto__.webdriver; } catch {}
+
+// Conditional: apply Firefox stubs only on Google domains
+(function() {
+    var host = window.location.hostname;
+    if (!host.endsWith('.google.com') && host !== 'google.com') return;
+
+    // Override navigator.userAgent to Firefox
+    Object.defineProperty(navigator, 'userAgent', {
+        get: function() { return '${FIREFOX_USER_AGENT}'; },
+        configurable: true
+    });
+
+    // Remove Chrome-specific objects that Firefox doesn't have
+    try { delete window.chrome; } catch {}
+    try {
+        Object.defineProperty(window, 'chrome', { get: function() { return undefined; }, configurable: true });
+    } catch {}
+
+    // Remove navigator.userAgentData — Firefox doesn't have Client Hints
+    try { delete navigator.userAgentData; } catch {}
+    try {
+        Object.defineProperty(navigator, 'userAgentData', { get: function() { return undefined; }, configurable: true });
+    } catch {}
+
+    // navigator.vendor — Firefox returns empty string, Chrome returns "Google Inc."
+    try {
+        Object.defineProperty(navigator, 'vendor', { get: function() { return ''; }, configurable: true });
+    } catch {}
+
+    // navigator.productSub — Firefox returns "20100101"
+    try {
+        Object.defineProperty(navigator, 'productSub', { get: function() { return '20100101'; }, configurable: true });
+    } catch {}
+
+    // navigator.oscpu — Firefox-specific property
+    try {
+        Object.defineProperty(navigator, 'oscpu', { get: function() { return 'Windows NT 10.0; Win64; x64'; }, configurable: true });
+    } catch {}
+
+    // navigator.buildID — Firefox-specific
+    try {
+        Object.defineProperty(navigator, 'buildID', { get: function() { return '20181001000000'; }, configurable: true });
+    } catch {}
+})();
+`;
 
 export interface BrowserViewContext {
     id: string;
@@ -47,6 +116,7 @@ export class BrowserViewManager {
     private onNavigationUpdateCallback?: () => void;
     private onPageLoadCompleteCallback?: (tabId: string) => void;
     private viewBounds: Electron.Rectangle | null = null;
+    private sessionHeadersConfigured = false;
     constructor(private readonly shellWindow: ShellWindow) {
         debug("BrowserViewManager initialized");
     }
@@ -88,7 +158,7 @@ export class BrowserViewManager {
             },
         });
 
-        // Set up WebContentsView with browser view context
+        // Register event handlers (synchronous)
         this.setupWebContentsView(webContentsView, tabId);
 
         const browserViewContext: BrowserViewContext = {
@@ -127,6 +197,31 @@ export class BrowserViewManager {
             this.shellWindow.setOverlayVisibility(false);
         });
 
+        // Make the tab active/visible before loading so it appears immediately
+        if (this.browserViews.size === 1 || !options.background) {
+            this.setActiveBrowserView(tabId);
+        } else {
+            // Hide the view initially if it's a background tab
+            webContentsView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+        }
+
+        // Run CDP fingerprint masking before loading any URL.
+        // Use a timeout so a hung debugger doesn't block tab creation.
+        try {
+            await Promise.race([
+                this.setupCDP(webContentsView.webContents, tabId),
+                new Promise<void>((_, reject) =>
+                    setTimeout(
+                        () => reject(new Error("CDP setup timed out")),
+                        3000,
+                    ),
+                ),
+            ]);
+        } catch (err) {
+            debug(`CDP setup skipped for tab ${tabId}: ${err}`);
+            // Chrome is the natural default — no fallback UA needed
+        }
+
         // Load the URL or show new tab page
         if (options.url === "about:blank") {
             // Load the new tab HTML file
@@ -160,20 +255,86 @@ export class BrowserViewManager {
             }
         }
 
-        // If this is the first tab or not background, make it active
-        if (this.browserViews.size === 1 || !options.background) {
-            this.setActiveBrowserView(tabId);
-        } else {
-            // Hide the view initially if it's a background tab
-            webContentsView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-        }
-
         debug(`Browser tab created: ${tabId}`);
         return tabId;
     }
 
     /**
-     * Set up event listeners and context for a WebContentsView
+     * Attach Chrome DevTools Protocol to a tab's webContents.
+     * Strategy: present as Chrome (natural Chromium) for most sites, but
+     * switch to Firefox identity on Google domains to bypass auth fingerprint
+     * checks. CDP injects a conditional script before page JS runs, and
+     * onBeforeSendHeaders modifies HTTP headers only for Google requests.
+     */
+    private async setupCDP(
+        webContents: Electron.WebContents,
+        tabId: string,
+    ): Promise<void> {
+        try {
+            webContents.debugger.attach("1.3");
+        } catch (err) {
+            debug(`CDP attach failed for tab ${tabId}: ${err}`);
+            return;
+        }
+
+        webContents.debugger.on("detach", (_event, reason) => {
+            debug(`CDP detached for tab ${tabId}: ${reason}`);
+        });
+
+        try {
+            // Inject conditional fingerprint script — applies Firefox stubs
+            // only on Google domains, leaves other sites as natural Chrome.
+            await webContents.debugger.sendCommand(
+                "Page.addScriptToEvaluateOnNewDocument",
+                { source: CDP_FINGERPRINT_SCRIPT },
+            );
+
+            // Set up per-request header modification (session-wide, register once).
+            // For Google domains: set Firefox UA and strip Sec-CH-UA headers.
+            // For other domains: leave headers as-is (natural Chrome).
+            if (!this.sessionHeadersConfigured) {
+                this.sessionHeadersConfigured = true;
+                webContents.session.webRequest.onBeforeSendHeaders(
+                    (details, callback) => {
+                        try {
+                            const url = new URL(details.url);
+                            if (isGoogleDomain(url.hostname)) {
+                                const headers = {
+                                    ...details.requestHeaders,
+                                };
+                                headers["User-Agent"] = FIREFOX_USER_AGENT;
+                                for (const key of Object.keys(headers)) {
+                                    if (
+                                        key.toLowerCase().startsWith("sec-ch-")
+                                    ) {
+                                        delete headers[key];
+                                    }
+                                }
+                                callback({ requestHeaders: headers });
+                            } else {
+                                callback({});
+                            }
+                        } catch {
+                            callback({});
+                        }
+                    },
+                );
+            }
+
+            debug(
+                `CDP setup complete for tab ${tabId} (Chrome default, Firefox for Google)`,
+            );
+        } catch (err) {
+            debug(`CDP command failed for tab ${tabId}: ${err}`);
+            try {
+                webContents.debugger.detach();
+            } catch {}
+        }
+    }
+
+    /**
+     * Set up event listeners and context for a WebContentsView.
+     * This is synchronous — CDP setup runs separately before loadURL.
      */
     private setupWebContentsView(
         webContentsView: WebContentsView,
@@ -181,15 +342,30 @@ export class BrowserViewManager {
     ): void {
         const webContents = webContentsView.webContents;
 
-        // Set user agent
-        webContents.setUserAgent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0",
-        );
+        // If Google blocks sign-in, detect it and open in system browser.
+        // Google shows "This browser or app may not be secure" — we detect
+        // this via page title since the URL pattern varies.
+        let lastNavigatedUrl = "";
+        webContents.on("did-navigate", (_, url) => {
+            lastNavigatedUrl = url;
+        });
 
         // Handle title updates
         webContents.on("page-title-updated", (_, title) => {
             this.updateTabTitle(tabId, title);
             this.notifyTabUpdate();
+
+            // Detect Google auth block by page title
+            if (
+                lastNavigatedUrl.includes("accounts.google.com") &&
+                title.toLowerCase().includes("not secure")
+            ) {
+                debug(
+                    "Google blocked sign-in in embedded browser, opening in system browser: %s",
+                    lastNavigatedUrl,
+                );
+                shell.openExternal(lastNavigatedUrl);
+            }
         });
 
         // Handle favicon updates
@@ -205,6 +381,23 @@ export class BrowserViewManager {
             const url = webContents.getURL();
             await this.handleNavigation(webContents, url, tabId, false);
             this.notifyPageLoadComplete(tabId);
+
+            // Check for Google auth block after page loads
+            if (url.includes("accounts.google.com")) {
+                try {
+                    const blocked = await webContents.executeJavaScript(
+                        `document.body?.innerText?.includes("browser or app may not be secure") ?? false`,
+                    );
+                    if (blocked) {
+                        debug(
+                            "Google auth block detected via page content, opening in system browser",
+                        );
+                        shell.openExternal(url);
+                    }
+                } catch {
+                    // ignore — page may have navigated away
+                }
+            }
         });
 
         webContents.on("did-start-loading", () => {

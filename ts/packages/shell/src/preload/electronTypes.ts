@@ -62,6 +62,7 @@ export interface ClientAPI {
     openImageFile: () => void;
     openFolder: (path: string) => void;
     openUrlInBrowserTab: (url: string) => void;
+    openUrlExternal: (url: string) => void;
 
     searchMenuUpdate(
         id: number,

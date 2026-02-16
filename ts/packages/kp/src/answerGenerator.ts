@@ -52,6 +52,8 @@ export interface AnswerGeneratorConfig {
     model?: string;
     /** Max characters of chunk text to include in the prompt. */
     charBudget?: number;
+    /** When true, instruct the LLM to produce HTML-formatted answers. */
+    htmlOutput?: boolean;
 }
 
 export interface AnswerContext {
@@ -139,6 +141,9 @@ export async function generateAnswer(
     let systemPrompt = ANSWER_SYSTEM_PROMPT;
     if (ctx.userName) {
         systemPrompt += `\n\nThe user's name is "${ctx.userName}". When referring to them, use "you" or their name. Emails sent from or to this person are the user's own emails.`;
+    }
+    if (config?.htmlOutput) {
+        systemPrompt += ANSWER_HTML_SUFFIX;
     }
 
     // Try aiclient first, fall back to agent SDK
@@ -242,6 +247,9 @@ function formatChunkEvidence(
         if (chunk.metadata.subject) {
             parts.push(`Subject: ${chunk.metadata.subject.join(", ")}`);
         }
+        if (chunk.metadata.webLink) {
+            parts.push(`Link: ${chunk.metadata.webLink[0]}`);
+        }
     }
     if (chunk.timestamp) {
         parts.push(`Date: ${chunk.timestamp}`);
@@ -278,3 +286,14 @@ Rules:
    - list: enumerate the items found
    - recall: describe what you found in the emails
 5. If multiple emails are relevant, synthesize the information coherently.`;
+
+const ANSWER_HTML_SUFFIX = `
+
+Format your answer as clean HTML suitable for inline display. Use these elements:
+- <strong> for emphasis, names, and key terms
+- <em> for email subjects or titles
+- <ul>/<li> for lists
+- <p> for paragraphs
+- Use inline styles sparingly (e.g. style="color:#555") for secondary info like dates
+- When referencing an email that has a Link in its evidence, make the subject a clickable link: <a href="THE_LINK_URL" target="_blank">Subject</a>
+Do NOT include <html>, <head>, <body>, or <div> wrapper tags. Just produce the content HTML directly.`;

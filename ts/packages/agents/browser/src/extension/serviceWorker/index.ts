@@ -83,14 +83,15 @@ function setupEventListeners(): void {
         if (changeInfo.status === "complete" && tab.active) {
             await toggleSiteTranslator(tab);
 
-            // Trigger navigation handler for page knowledge extraction
-            if (tab.url && tab.title) {
-                try {
-                    await sendNavigationMessage(tab.url, tab.title, tab.id);
-                } catch (error) {
-                    console.error("Error sending navigation message:", error);
-                }
-            }
+            // Knowledge extraction on navigation is disabled for now
+            // to simplify debugging of the chat panel feature.
+            // if (tab.url && tab.title) {
+            //     try {
+            //         await sendNavigationMessage(tab.url, tab.title, tab.id);
+            //     } catch (error) {
+            //         console.error("Error sending navigation message:", error);
+            //     }
+            // }
         }
         if (changeInfo.title) {
             const addTabAction = {

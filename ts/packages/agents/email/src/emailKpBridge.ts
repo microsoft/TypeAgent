@@ -55,6 +55,9 @@ export function emailsToChunks(
         if (msg.subject) {
             metadata.subject = [msg.subject];
         }
+        if (msg.webLink) {
+            metadata.webLink = [msg.webLink];
+        }
 
         // Build text content: headers + body
         const textParts: string[] = [];

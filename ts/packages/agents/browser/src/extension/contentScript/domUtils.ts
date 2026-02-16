@@ -43,9 +43,11 @@ export function matchElement(
     re: RegExp,
 ): RegExpMatchArray | "" | null {
     return (
-        matchString(element.innerHTML, re) ||
+        matchString(element.innerText, re) ||
+        matchString(element.textContent ?? "", re) ||
         matchString(element.id, re) ||
-        matchString(element.innerText, re)
+        matchString(element.getAttribute("title") ?? "", re) ||
+        matchString(element.getAttribute("aria-label") ?? "", re)
     );
 }
 
@@ -54,6 +56,75 @@ export function matchElement(
  * @param pattern The pattern to match
  * @returns The matched link or null
  */
+/**
+ * Walk up the DOM from an element to find the nearest ancestor <a> tag.
+ */
+function findAncestorLink(element: HTMLElement): HTMLAnchorElement | null {
+    let current: HTMLElement | null = element;
+    while (current) {
+        if (current.tagName === "A") {
+            return current as HTMLAnchorElement;
+        }
+        current = current.parentElement;
+    }
+    return null;
+}
+
+/**
+ * Find the nearest <a> tag relative to an element:
+ * ancestor first, then children, then walk up a few parent
+ * levels searching for an <a> anywhere in the subtree.
+ */
+function findNearestLink(element: HTMLElement): HTMLAnchorElement | null {
+    // Check ancestors
+    const ancestor = findAncestorLink(element);
+    if (ancestor) return ancestor;
+
+    // Check children
+    const child = element.querySelector("a") as HTMLAnchorElement | null;
+    if (child) return child;
+
+    // Walk up a few levels and search within each parent's subtree.
+    // This handles cases like ESPN where <a> and <h2> are cousins
+    // under a card container (article, section, div, etc.).
+    let parent = element.parentElement;
+    for (let depth = 0; depth < 5 && parent; depth++) {
+        const link = parent.querySelector("a") as HTMLAnchorElement | null;
+        if (link) return link;
+        parent = parent.parentElement;
+    }
+
+    return null;
+}
+
+/**
+ * Check whether an anchor element has a real navigable href
+ * (not #, empty, or javascript:void).
+ */
+function hasNavigableHref(element: HTMLElement): boolean {
+    const anchor = element as HTMLAnchorElement;
+    if (!anchor.href) return false;
+    const raw = anchor.getAttribute("href") ?? "";
+    if (!raw || raw === "#" || raw.startsWith("javascript:")) return false;
+    // Fragment-only links that point to the current page
+    try {
+        const url = new URL(anchor.href);
+        if (
+            url.origin === location.origin &&
+            url.pathname === location.pathname &&
+            url.search === location.search &&
+            url.hash !== ""
+        ) {
+            // Same page with just a hash — not a real navigation
+            return false;
+        }
+    } catch {
+        // If URL parsing fails, treat as non-navigable
+        return false;
+    }
+    return true;
+}
+
 export function matchLinks(pattern: string): HTMLElement | null {
     let re: RegExp | undefined;
     try {
@@ -65,21 +136,64 @@ export function matchLinks(pattern: string): HTMLElement | null {
         );
     }
 
-    const allLinks = document.querySelectorAll("a");
-    const matchedLinks: HTMLElement[] = [];
+    if (!re) return null;
 
-    allLinks.forEach((element: HTMLElement) => {
-        if (re && isVisible(element) && matchElement(element, re)) {
-            matchedLinks.push(element);
+    // First: search <a> tags and role="link" elements directly
+    const allLinks = document.querySelectorAll('a, [role="link"]');
+    const visibleMatches: HTMLElement[] = [];
+    const allMatches: HTMLElement[] = [];
+
+    console.log(
+        `[matchLinks] Searching ${allLinks.length} links for pattern: ${pattern}`,
+    );
+
+    allLinks.forEach((el) => {
+        const element = el as HTMLElement;
+        if (matchElement(element, re!) && hasNavigableHref(element)) {
+            allMatches.push(element);
+            if (isVisible(element)) {
+                visibleMatches.push(element);
+            }
         }
     });
 
-    let selectedLink = null;
-    if (matchedLinks.length > 0) {
-        selectedLink = matchedLinks[0];
+    console.log(
+        `[matchLinks] Found ${visibleMatches.length} visible, ${allMatches.length} total matches`,
+    );
+
+    if (visibleMatches.length > 0 || allMatches.length > 0) {
+        const match = visibleMatches[0] ?? allMatches[0];
+        const matchHref = (match as HTMLAnchorElement).href;
+        console.log(
+            `[matchLinks] Matched: <${match.tagName.toLowerCase()}> text="${match.innerText?.substring(0, 80)}" href="${matchHref}"`,
+        );
+        return match;
     }
 
-    return selectedLink;
+    // Second: search ALL elements for matching text, then find nearby <a> tags.
+    // This handles cases like ESPN where the text is in an <h2> and the <a>
+    // is a parent, child, or sibling element.
+    console.log(
+        `[matchLinks] No direct link match; searching all elements for text`,
+    );
+    const allElements = document.querySelectorAll(
+        "h1, h2, h3, h4, h5, h6, span, p, li, div, button",
+    );
+    for (const element of allElements) {
+        const el = element as HTMLElement;
+        if (matchString(el.innerText, re) || matchString(el.textContent ?? "", re)) {
+            const link = findNearestLink(el);
+            if (link && hasNavigableHref(link)) {
+                console.log(
+                    `[matchLinks] Found text in <${el.tagName.toLowerCase()}>, nearest link: ${link.href}`,
+                );
+                return link;
+            }
+        }
+    }
+
+    console.log(`[matchLinks] No matches found anywhere`);
+    return null;
 }
 
 /**
@@ -91,7 +205,8 @@ export function matchLinksByPosition(position: number): HTMLElement | null {
     const allLinks = document.querySelectorAll("a");
     const matchedLinks: HTMLElement[] = [];
 
-    allLinks.forEach((element: HTMLElement) => {
+    allLinks.forEach((el) => {
+        const element = el as HTMLElement;
         if (isVisible(element)) {
             matchedLinks.push(element);
         }

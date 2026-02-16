@@ -10,8 +10,8 @@ import {
     MessageContent,
 } from "@typeagent/agent-sdk";
 import DOMPurify from "dompurify";
-import { SettingsView } from "./settingsView";
 import MarkdownIt from "markdown-it";
+import { PlatformAdapter, ChatSettingsView } from "./platformAdapter.js";
 
 const ansiUpTextToHtml = new AnsiUp();
 ansiUpTextToHtml.use_classes = true;
@@ -53,7 +53,7 @@ function processContent(
                 ALLOWED_URI_REGEXP:
                     /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
             });
-        case "markdown":
+        case "markdown": {
             const md = new MarkdownIt({
                 html: true,
             });
@@ -81,6 +81,7 @@ function processContent(
                 ALLOWED_URI_REGEXP:
                     /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|typeagent-browser):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
             });
+        }
         case "text":
             return enableText2Html
                 ? textToHtml(content)
@@ -161,11 +162,19 @@ function messageContentToHTML(
     return `<table class="table-message">${table.map((row, i) => `<tr>${row.map((cell) => `${i === 0 ? "<th>" : "<td>"}${processContent(cell, type)}${i === 0 ? "</th>" : "</td>"}`).join("")}</tr>`).join("")}</table>`;
 }
 
+/**
+ * Render DisplayContent into a DOM element.
+ *
+ * This is the core rendering function shared between the Electron shell
+ * and the Chrome extension chat panel. Platform-specific link handling
+ * is delegated to the PlatformAdapter.
+ */
 export function setContent(
     elm: HTMLElement,
     content: DisplayContent,
-    settingsView: SettingsView,
+    settingsView: ChatSettingsView,
     classNameModifier: string,
+    platformAdapter: PlatformAdapter,
     appendMode?: DisplayAppendMode,
 ): string | undefined {
     // Remove existing content if we are not appending.
@@ -270,7 +279,6 @@ export function setContent(
                             .then((response) => response.text())
                             .then((text) => {
                                 css += `<style>${text}</style>`;
-                                console.log(text);
                             }),
                     );
                 } else {
@@ -293,7 +301,7 @@ export function setContent(
         // vanilla, sanitized HTML only
         contentElm.innerHTML += contentHtml;
 
-        // Add click handlers for all links to open in browser tabs
+        // Add click handlers for all links — delegated to platform adapter
         const allLinks = contentElm.querySelectorAll("a[href]");
         allLinks.forEach((link) => {
             const href = link.getAttribute("href");
@@ -304,20 +312,9 @@ export function setContent(
                     href.startsWith("https://"))
             ) {
                 link.addEventListener("click", (e) => {
-                    e.preventDefault(); // Prevent default navigation
+                    e.preventDefault();
                     const target = link.getAttribute("target");
-                    if (
-                        target === "_system" &&
-                        (window as any).api?.openUrlExternal
-                    ) {
-                        // Open in external system browser
-                        (window as any).api.openUrlExternal(href);
-                    } else if (
-                        (window as any).api?.openUrlInBrowserTab
-                    ) {
-                        // Use IPC to open the URL in a new browser tab
-                        (window as any).api.openUrlInBrowserTab(href);
-                    }
+                    platformAdapter.handleLinkClick(href, target);
                 });
             }
         });
@@ -334,9 +331,9 @@ export function setContent(
             return undefined;
         }
         if (typeof message[0] === "string") {
-            return message.join("\n");
+            return (message as string[]).join("\n");
         }
-        return message.map((row) => row.join("\t")).join("\n");
+        return (message as string[][]).map((row) => row.join("\t")).join("\n");
     }
 
     if (newDiv) {
@@ -350,8 +347,6 @@ export function setContent(
 /**
  * Takes the "action-data" attribute from the source element and places it as the html
  * of the target element.
- * @param sourceElement The source element.
- * @param targetElement The target element.
  */
 export function swapContent(
     sourceElement: HTMLElement,
@@ -360,7 +355,6 @@ export function swapContent(
     const data: string = sourceElement.getAttribute("action-data") ?? "";
     const originalMessage: string = targetElement.innerHTML;
 
-    // don't do anything if there's no data in the action-data attribute
     if (data.length === 0) {
         return;
     }

@@ -51,31 +51,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Extract knowledge from page",
-        id: "extractKnowledgeFromPage",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        title: "Learn more from this page",
-        id: "learnMoreFromPage",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        title: "View Knowledge Library",
-        id: "showWebsiteLibrary",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        type: "separator",
-        id: "menuSeparator3",
-    });
-
-    chrome.contextMenus.create({
-        title: "View Annotations",
-        id: "showAnnotationsLibrary",
+        title: "Open TypeAgent Chat",
+        id: "openChatPanel",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 }
@@ -251,6 +228,17 @@ export async function handleContextMenuClick(
                 });
             }
 
+            break;
+        }
+
+        case "openChatPanel": {
+            // open() must be the first await to preserve the user gesture context
+            await chrome.sidePanel.open({ tabId: tab.id! });
+            await chrome.sidePanel.setOptions({
+                tabId: tab.id!,
+                path: "views/chatPanel.html",
+                enabled: true,
+            });
             break;
         }
     }

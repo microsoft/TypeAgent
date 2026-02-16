@@ -782,6 +782,7 @@ export class GoogleEmailClient
                 gmailMsg.payload?.parts?.some(
                     (p: any) => p.filename && p.filename.length > 0,
                 ) || false,
+            webLink: `https://mail.google.com/mail/u/0/#inbox/${gmailMsg.id}`,
         };
     }
 

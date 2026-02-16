@@ -1,0 +1,26 @@
+{
+    "name": "chat-ui",
+    "version": "0.0.1",
+    "private": true,
+    "description": "Shared chat UI rendering for TypeAgent shell and Chrome extension",
+    "type": "module",
+    "exports": {
+        ".": "./dist/index.js",
+        "./styles": "./styles/chat.css"
+    },
+    "scripts": {
+        "build": "tsc -b",
+        "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log"
+    },
+    "dependencies": {
+        "@typeagent/agent-sdk": "workspace:*",
+        "dompurify": "^3.2.5",
+        "markdown-it": "^14.1.0",
+        "ansi_up": "^6.0.2"
+    },
+    "devDependencies": {
+        "@types/dompurify": "^3.0.5",
+        "@types/markdown-it": "^14.1.2",
+        "typescript": "~5.4.5"
+    }
+}

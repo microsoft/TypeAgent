@@ -53,7 +53,7 @@ export function createInlineBrowserControl(
         async openWebPage(url: string, options?: { newTab?: boolean }) {
             const activeTab = shellWindow.getActiveBrowserView();
             if (options?.newTab || !activeTab) {
-                shellWindow.createBrowserTab(new URL(url), {
+                await shellWindow.createBrowserTab(new URL(url), {
                     background: options?.newTab === true ? false : true,
                 });
             } else {
@@ -335,7 +335,13 @@ export function createInlineBrowserControl(
         },
         async getAutoIndexSetting(): Promise<boolean> {
             try {
-                const webContents = getActiveBrowserWebContents();
+                const activeBrowserView =
+                    shellWindow.getActiveBrowserView();
+                if (!activeBrowserView) {
+                    return false;
+                }
+                const webContents =
+                    activeBrowserView.webContentsView.webContents;
                 const result = await webContents.executeJavaScript(`
                     (async () => {
                         try {
@@ -359,7 +365,17 @@ export function createInlineBrowserControl(
         },
         async getBrowserSettings() {
             try {
-                const webContents = getActiveBrowserWebContents();
+                const activeBrowserView =
+                    shellWindow.getActiveBrowserView();
+                if (!activeBrowserView) {
+                    // No tabs open yet — return defaults without error
+                    return {
+                        autoIndexing: false,
+                        extractionMode: "content",
+                    };
+                }
+                const webContents =
+                    activeBrowserView.webContentsView.webContents;
                 const result = await webContents.executeJavaScript(`
                     (async () => {
                         try {

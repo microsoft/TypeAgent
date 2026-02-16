@@ -44,20 +44,67 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         }
     });
 
+    /**
+     * Inject content scripts into a tab programmatically.
+     * This is needed when the extension is reloaded and existing tabs
+     * don't have the content scripts from the manifest.
+     */
+    async function injectContentScripts(tabId: number): Promise<void> {
+        await chrome.scripting.executeScript({
+            target: { tabId, allFrames: true },
+            files: ["contentScript.js"],
+        });
+    }
+
     function getContentScriptRpc(tabId: number) {
         const entry = rpcMap.get(tabId);
         if (entry) {
             return entry.contentScriptRpc;
         }
 
+        // Target frameId 0 (main frame) to avoid race conditions where
+        // multiple frames respond to the same RPC and the wrong one wins.
+        const sendOptions = { frameId: 0 };
+
         const contentScriptRpcChannel = createChannelAdapter(
             async (message, cb) => {
                 try {
-                    await chrome.tabs.sendMessage(tabId, {
-                        type: "rpc",
-                        message,
-                    });
-                } catch (error) {
+                    await chrome.tabs.sendMessage(
+                        tabId,
+                        { type: "rpc", message },
+                        sendOptions,
+                    );
+                } catch (error: any) {
+                    // If the content script isn't loaded, inject it and retry
+                    const errMsg =
+                        typeof error === "string"
+                            ? error
+                            : error?.message ?? "";
+                    if (
+                        errMsg.includes("Could not establish connection") ||
+                        errMsg.includes("Receiving end does not exist")
+                    ) {
+                        try {
+                            await injectContentScripts(tabId);
+                            // Small delay to let the content script initialize
+                            await new Promise((r) => setTimeout(r, 100));
+                            await chrome.tabs.sendMessage(
+                                tabId,
+                                { type: "rpc", message },
+                                sendOptions,
+                            );
+                            return;
+                        } catch (retryError) {
+                            console.error(
+                                "Error after injecting content script:",
+                                retryError,
+                            );
+                            if (cb) {
+                                cb(retryError as Error);
+                            }
+                            return;
+                        }
+                    }
                     console.error(
                         "Error sending message to content script:",
                         error,
@@ -260,18 +307,43 @@ export function createExternalBrowserServer(channel: RpcChannel) {
         },
         followLinkByText: async (keywords: string, openInNewTab?: boolean) => {
             const targetTab = await ensureActiveTab();
+            console.log(
+                `[followLinkByText] keywords="${keywords}" tabId=${targetTab.id} tabUrl="${targetTab.url}"`,
+            );
             const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
             const url = await contentScriptRpc.getPageLinksByQuery(keywords);
+            console.log(
+                `[followLinkByText] content script returned url="${url}"`,
+            );
 
             if (url) {
                 const resolvedUrl = resolveCustomProtocolUrl(url);
+                console.log(
+                    `[followLinkByText] resolvedUrl="${resolvedUrl}" openInNewTab=${openInNewTab}`,
+                );
                 if (openInNewTab) {
                     await chrome.tabs.create({ url: resolvedUrl });
                 } else {
-                    await chrome.tabs.update(targetTab.id!, {
-                        url: resolvedUrl,
+                    console.log(
+                        `[followLinkByText] navigating tab ${targetTab.id} to "${resolvedUrl}" via scripting`,
+                    );
+                    // Use window.location.href instead of chrome.tabs.update
+                    // so the navigation creates a proper history entry (goBack works).
+                    await chrome.scripting.executeScript({
+                        target: { tabId: targetTab.id! },
+                        func: (url: string) => {
+                            window.location.href = url;
+                        },
+                        args: [resolvedUrl],
                     });
+                    console.log(
+                        `[followLinkByText] navigation script injected`,
+                    );
                 }
+            } else {
+                console.log(
+                    `[followLinkByText] No URL returned from content script`,
+                );
             }
 
             return url;

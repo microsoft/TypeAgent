@@ -26,7 +26,11 @@ import {
     TypeAgentAction,
     ParsedCommandParams,
 } from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromHtmlDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
+import { ActionResultSuccess } from "@typeagent/agent-sdk";
 import {
     CommandHandler,
     CommandHandlerNoParams,
@@ -315,6 +319,8 @@ async function executeEmailAction(
 
     let result = await handleEmailAction(action, context);
     if (result) {
+        // If handler already built an ActionResultSuccess, return it directly
+        if (typeof result === "object") return result;
         return createActionResult(result);
     }
 }
@@ -322,7 +328,7 @@ async function executeEmailAction(
 async function handleEmailAction(
     action: EmailAction,
     context: ActionContext<EmailActionContext>,
-) {
+): Promise<ActionResultSuccess | string | undefined> {
     const { emailProvider } = context.sessionContext.agentContext;
     if (!emailProvider) {
         return "Email provider not initialized ...";
@@ -414,6 +420,7 @@ async function handleEmailAction(
                 action,
                 emailProvider,
                 context.sessionContext.agentContext.kpIndex,
+                context,
             );
 
         default:
@@ -521,6 +528,62 @@ function formatMessageSummary(msg: EmailMessage): string {
     return `- ${msg.subject}${read}  |  ${from}  |  ${date}\n  ${preview}`;
 }
 
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function formatEmailListHtml(
+    messages: EmailMessage[],
+    heading: string,
+): string {
+    const rows = messages.map((msg) => {
+        const from = msg.from
+            ? escapeHtml(msg.from.name || msg.from.address)
+            : "Unknown";
+        const subject = escapeHtml(msg.subject);
+        const date = msg.receivedDateTime
+            ? new Date(msg.receivedDateTime).toLocaleDateString()
+            : "";
+        const preview = msg.bodyPreview
+            ? escapeHtml(msg.bodyPreview.replace(/\s+/g, " ").trim().slice(0, 120))
+            : "";
+        const unread = msg.isRead === false;
+        const borderColor = unread ? "#4a9eda" : "#ccc";
+        const subjectWeight = unread ? "font-weight:bold;" : "";
+
+        // Wrap subject in a link if webLink is available
+        const subjectHtml = msg.webLink
+            ? `<a href="${escapeHtml(msg.webLink)}" target="_blank" style="${subjectWeight}color:#1a1a1a;text-decoration:none;" title="Open in browser">${subject}</a>`
+            : `<span style="${subjectWeight}">${subject}</span>`;
+
+        return `<div style="border-left:3px solid ${borderColor};padding:6px 10px;margin-bottom:6px;background:#f8f9fa;">
+  <div>${subjectHtml} <span style="color:#888;font-size:11px;">&middot; ${date}</span></div>
+  <div style="color:#555;font-size:12px;">From: ${from}</div>
+  ${preview ? `<div style="color:#777;font-size:12px;margin-top:2px;">${preview}</div>` : ""}
+</div>`;
+    });
+
+    return `<div style="font-family:-apple-system,sans-serif;font-size:13px;">
+<div style="color:#666;margin-bottom:8px;">${escapeHtml(heading)}</div>
+${rows.join("\n")}
+</div>`;
+}
+
+function formatEmailListPlain(
+    messages: EmailMessage[],
+    heading: string,
+): string {
+    const lines: string[] = [heading + "\n"];
+    for (const msg of messages) {
+        lines.push(formatMessageSummary(msg));
+    }
+    return lines.join("\n");
+}
+
 const SELF_TERMS = new Set(["myself", "me", "my email", "i", "my", "s"]);
 
 /**
@@ -621,7 +684,10 @@ async function generateOnlineAnswer(
     if (userName) ctx.userName = userName;
 
     try {
-        return await generateAnswer(ctx, { charBudget: 16_000 });
+        return await generateAnswer(ctx, {
+            charBudget: 16_000,
+            htmlOutput: true,
+        });
     } catch (e: any) {
         debug("Online answer generation failed: %s", e.message);
         return undefined;
@@ -632,7 +698,8 @@ async function handleFindEmailAction(
     action: FindEmailAction,
     emailProvider: IEmailProvider,
     kpIndex: EmailKpIndex,
-): Promise<string> {
+    context: ActionContext<unknown>,
+): Promise<ActionResultSuccess | string> {
     debug(chalk.green("Handling findEmail action ..."));
 
     const msgRef = action.parameters.messageRef;
@@ -666,6 +733,7 @@ async function handleFindEmailAction(
 
     if (!hasSearchCriteria) {
         // No specific search criteria — just show inbox
+        displayStatus("Fetching inbox...", context);
         const messages = await emailProvider.getInbox(10);
 
         // Absorb inbox emails into kp index (incremental, in background)
@@ -678,14 +746,15 @@ async function handleFindEmailAction(
         if (!messages || messages.length === 0) {
             return "No emails found in inbox.";
         }
-        const lines: string[] = [`Inbox (${messages.length} messages):\n`];
-        for (const msg of messages) {
-            lines.push(formatMessageSummary(msg));
-        }
-        return lines.join("\n");
+        const heading = `Inbox (${messages.length} messages):`;
+        return createActionResultFromHtmlDisplay(
+            formatEmailListHtml(messages, heading),
+            formatEmailListPlain(messages, heading),
+        );
     }
 
     // Provider search — primary path for all queries
+    displayStatus("Searching emails...", context);
     searchQuery.maxResults = searchQuery.maxResults || 10;
     const messages = await emailProvider.searchEmails(searchQuery);
 
@@ -702,23 +771,115 @@ async function handleFindEmailAction(
 
     // Content query: online RAG — convert emails to chunks and generate answer
     if (msgRef.content) {
+        displayStatus(
+            `Found ${messages.length} email(s), generating answer...`,
+            context,
+        );
         const answer = await generateOnlineAnswer(
             msgRef.content,
             messages,
             emailProvider,
         );
         if (answer && answer.chunksUsed > 0) {
-            return answer.answer;
+            // Post-process: link email subjects in the answer HTML
+            let answerHtml = linkEmailSubjects(answer.answer, messages);
+
+            // Count linked titles already in the answer body
+            const inlineLinks = (answerHtml.match(/<a\s+href=/gi) || []).length;
+
+            // Build source links only if the answer doesn't already have 2+ inline links
+            let sourceLinksHtml = "";
+            if (inlineLinks < 2) {
+                const sourceEmails = messages
+                    .filter((m) => m.webLink)
+                    .slice(0, 3);
+                if (sourceEmails.length > 0) {
+                    sourceLinksHtml = `<div style="margin-top:10px;padding-top:8px;border-top:1px solid #e0e0e0;font-size:12px;color:#666;">
+<div style="margin-bottom:4px;">Sources:</div>
+${sourceEmails.map((m) => {
+    const from = m.from ? escapeHtml(m.from.name || m.from.address) : "Unknown";
+    const subject = escapeHtml(m.subject);
+    const date = m.receivedDateTime ? new Date(m.receivedDateTime).toLocaleDateString() : "";
+    return `<div style="margin-left:8px;"><a href="${escapeHtml(m.webLink!)}" target="_blank" style="color:#4a9eda;text-decoration:none;">${subject}</a> <span style="color:#999;">— ${from}, ${date}</span></div>`;
+}).join("\n")}
+</div>`;
+                }
+            }
+
+            // answer.answer is HTML (from htmlOutput: true)
+            const htmlContent = `<div style="font-family:-apple-system,sans-serif;font-size:13px;">
+${answerHtml}
+${sourceLinksHtml}
+</div>`;
+
+            // Strip HTML tags for plain text historyText
+            const plainText = answer.answer.replace(/<[^>]+>/g, "");
+
+            return createActionResultFromHtmlDisplay(htmlContent, plainText);
         }
         // Fallback: LLM answer generation failed, show email list
     }
 
     // Metadata-only query or RAG fallback: show email list
-    const lines: string[] = [`Found ${messages.length} email(s):\n`];
-    for (const msg of messages) {
-        lines.push(formatMessageSummary(msg));
+    const heading = `Found ${messages.length} email(s):`;
+    return createActionResultFromHtmlDisplay(
+        formatEmailListHtml(messages, heading),
+        formatEmailListPlain(messages, heading),
+    );
+}
+
+/**
+ * Post-process RAG answer HTML to make email subjects clickable.
+ * Scans the HTML for <em> tags (used for subjects per prompt instructions)
+ * and plain-text subject mentions, and wraps them in links when a matching
+ * email webLink is available.
+ */
+function linkEmailSubjects(html: string, messages: EmailMessage[]): string {
+    // Build a map of subject → webLink (first match wins)
+    const subjectLinks = new Map<string, string>();
+    for (const m of messages) {
+        if (m.webLink && m.subject) {
+            const clean = m.subject.replace(/^(Re:\s*|Fwd:\s*|FW:\s*)+/i, "").trim();
+            if (clean.length > 10 && !subjectLinks.has(clean.toLowerCase())) {
+                subjectLinks.set(clean.toLowerCase(), m.webLink);
+            }
+        }
     }
-    return lines.join("\n");
+
+    if (subjectLinks.size === 0) return html;
+
+    // First pass: link <em> tags that match known subjects
+    html = html.replace(/<em>([^<]+)<\/em>/g, (match, inner) => {
+        const normalized = inner.trim().toLowerCase();
+        for (const [subject, link] of subjectLinks) {
+            if (normalized.includes(subject) || subject.includes(normalized)) {
+                return `<a href="${escapeHtml(link)}" target="_blank" style="color:#4a9eda;text-decoration:none;font-style:italic;">${inner}</a>`;
+            }
+        }
+        return match;
+    });
+
+    // Second pass: link remaining unlinked subject mentions in plain text.
+    // Only replace once per subject, and skip if already inside a link.
+    for (const [subject, link] of subjectLinks) {
+        const escapedSubject = subject.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const idx = html.search(new RegExp(escapedSubject, "i"));
+        if (idx === -1) continue;
+
+        // Check if this occurrence is already inside an <a> tag
+        const before = html.slice(0, idx);
+        const lastOpenA = before.lastIndexOf("<a ");
+        const lastCloseA = before.lastIndexOf("</a>");
+        if (lastOpenA > lastCloseA) continue; // inside a link already
+
+        const matchText = html.slice(idx).match(new RegExp(escapedSubject, "i"))![0];
+        html =
+            html.slice(0, idx) +
+            `<a href="${escapeHtml(link)}" target="_blank" style="color:#4a9eda;text-decoration:none;">${matchText}</a>` +
+            html.slice(idx + matchText.length);
+    }
+
+    return html;
 }
 
 // =========================================================================
