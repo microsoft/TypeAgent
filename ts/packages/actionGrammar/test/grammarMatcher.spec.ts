@@ -124,7 +124,10 @@ describe("Grammar Matcher", () => {
             expect(testMatchGrammar(grammar, "value")).toStrictEqual(["value"]);
         });
         it("simple variable - explicit type name", () => {
-            const g = `@<Start> = $(x:TrackName) -> $(x)`;
+            const g = `
+                @import { TrackName } from "types.ts"
+                @<Start> = $(x:TrackName) -> $(x)
+            `;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(testMatchGrammar(grammar, "value")).toStrictEqual(["value"]);
         });

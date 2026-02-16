@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Packaging;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -13,6 +14,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 using Microsoft.VisualBasic;
+using Microsoft.VisualBasic.ApplicationServices;
 using Microsoft.WindowsAPICodePack.Shell;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -72,7 +74,7 @@ internal partial class AutoShell
             { "m365 copilot", new[] { "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" } },
             { "copilot", new[] { "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" } },
             { "spotify", new[] { "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.278.418.0_x64__zpdnekdrzrea0\\spotify.exe" } },
-            { "github copilot", new[] { $"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\\.copilot-cli\\0.0.395\\copilot.exe", "GITHUB_COPILOT_ROOT_DIR" } }
+            { "github copilot", new[] { $"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe\\copilot.exe", "GITHUB_COPILOT_ROOT_DIR", "--allow-all-tools" } },
         };
 
         // add the entries to the hashtable
@@ -555,6 +557,12 @@ internal partial class AutoShell
                 if (s_sortedList.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1)
                 {
                     psi.WorkingDirectory = Environment.ExpandEnvironmentVariables("%" + value[1] + "%") ?? string.Empty;
+                }
+
+                // do we have any specific command line arguments for this application?                
+                if (s_sortedList.TryGetValue(friendlyName.ToLowerInvariant(), out string[] args) && value.Length > 2)
+                {
+                    psi.Arguments = string.Join(" ", args.Skip(2));
                 }
 
                 try
