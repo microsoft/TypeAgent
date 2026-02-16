@@ -820,10 +820,16 @@ ${answerHtml}
 ${sourceLinksHtml}
 </div>`;
 
-            // Strip HTML tags for plain text historyText, then remove any residual angle brackets
-            const plainText = answer.answer
-                .replace(/<[^>]*>/g, "")
-                .replace(/[<>]/g, "");
+            // Strip HTML tags for plain text historyText
+            let plainText = answer.answer;
+            // Loop to handle nested constructs like <scr<script>ipt>
+            let prev: string;
+            do {
+                prev = plainText;
+                plainText = plainText.replace(/<[^>]*>/g, "");
+            } while (plainText !== prev);
+            // Remove any residual angle brackets
+            plainText = plainText.replace(/[<>]/g, "");
 
             return createActionResultFromHtmlDisplay(htmlContent, plainText);
         }
