@@ -35,6 +35,9 @@ type GrammarCompileResult = {
     grammar: Grammar;
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
+    // Type names imported from .ts files that are actually used as variable types.
+    // These should be treated as entity declarations for runtime validation.
+    usedImportedTypes: string[];
 };
 
 export type GrammarCompileError = {
@@ -50,6 +53,7 @@ type CompileContext = {
     ruleDefMap: DefinitionMap;
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     importedTypeNames: Set<string>; // Type names imported from .ts files
+    usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
     currentDefinition?: string | undefined;
     errors: Omit<GrammarCompileError, "displayPath">[];
     warnings: Omit<GrammarCompileError, "displayPath">[];
@@ -104,6 +108,7 @@ function createCompileContext(
         ruleDefMap,
         importedRuleMap,
         importedTypeNames,
+        usedImportedTypes: new Set<string>(),
         errors: [],
         warnings: [],
     };
@@ -225,10 +230,19 @@ export function compileGrammar(
         );
     }
 
+    // Collect all imported .ts types used as variable types across all contexts
+    const usedImportedTypes = new Set<string>();
+    for (const [, compileContext] of context.grammarFileMap) {
+        for (const t of compileContext.usedImportedTypes) {
+            usedImportedTypes.add(t);
+        }
+    }
+
     return {
         grammar,
         errors,
         warnings,
+        usedImportedTypes: Array.from(usedImportedTypes),
     };
 }
 
@@ -409,6 +423,10 @@ function createGrammarRule(
                                 definition: context.currentDefinition,
                                 pos: ruleRefPos,
                             });
+                        } else {
+                            // Track imported .ts types used as variable types.
+                            // These need runtime entity validation (like old "entity" declarations).
+                            context.usedImportedTypes.add(typeName);
                         }
                     }
 
@@ -456,11 +474,28 @@ function createGrammarRule(
         validateVariableReferences(context, value, availableVariables);
     }
 
+    // Determine if this rule produces a value:
+    // 1. It has an explicit value expression (value !== undefined)
+    // 2. It has exactly one variable (implicit variable value)
+    // 3. It has exactly one non-empty string literal (NFA normalization will add -> "literal")
+    // 4. It has exactly one rule reference without variable (passthrough - NFA normalization will add capture)
+    const isSingleLiteral =
+        parts.length === 1 &&
+        parts[0].type === "string" &&
+        parts[0].value.length > 0;
+
+    const isPassthrough =
+        parts.length === 1 && parts[0].type === "rules" && !parts[0].variable;
+
     return {
         grammarRule: {
             parts,
             value,
         },
-        hasValue: value !== undefined || variableCount === 1,
+        hasValue:
+            value !== undefined ||
+            variableCount === 1 ||
+            isSingleLiteral ||
+            isPassthrough,
     };
 }

@@ -175,6 +175,13 @@ async function validatePlayerWildcardMatch(
                 action.parameters.name,
                 clientContext,
             );
+        case "selectDevice": {
+            const result = await resolveMusicDeviceEntity(
+                clientContext,
+                action.parameters.deviceName,
+            );
+            return result !== undefined;
+        }
     }
     return true;
 }
@@ -391,23 +398,12 @@ async function getPlayerActionCompletion(
     context: SessionContext<PlayerActionContext>,
     action: AppAction,
     propertyName: string,
-    entityType?: string,
+    _entityType?: string,
 ): Promise<string[]> {
     const result: string[] = [];
     const clientContext = context.agentContext.spotify;
     if (clientContext === undefined) {
         return result;
-    }
-
-    if (entityType === "MusicDevice") {
-        const devices = await getUserDevices(clientContext.service);
-        if (devices !== undefined) {
-            result.push(
-                ...devices.devices
-                    .filter((device) => device.id !== null)
-                    .map((device) => device.name),
-            );
-        }
     }
 
     const userData = clientContext.userData;
@@ -465,6 +461,18 @@ async function getPlayerActionCompletion(
                         .map((pl) => pl.name)
                         .sort();
                     result.push(...names);
+                }
+            }
+            return result;
+        case "selectDevice":
+            if (propertyName === "parameters.deviceName") {
+                const devices = await getUserDevices(clientContext.service);
+                if (devices !== undefined) {
+                    result.push(
+                        ...devices.devices
+                            .filter((device) => device.id !== null)
+                            .map((device) => device.name),
+                    );
                 }
             }
             return result;

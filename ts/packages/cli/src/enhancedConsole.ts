@@ -726,6 +726,7 @@ async function questionWithCompletion(
 ): Promise<string> {
     return new Promise<string>((resolve) => {
         let input = "";
+        let cursorPos = 0; // Position within input string (0 = before first char)
         let allCompletions: string[] = []; // All available completions
         let filteredCompletions: string[] = []; // Filtered based on user typing
         let completionIndex = 0;
@@ -771,12 +772,20 @@ async function questionWithCompletion(
 
         // Render the prompt and input with inline gray suggestion
         const render = () => {
-            // Hide cursor during render to prevent flashing
-            stdout.write(ANSI.hideCursor);
+            // Build entire output as a single string to prevent cursor flashing
+            const promptText = chalk.cyanBright(message);
 
-            // Clear line and redraw
-            stdout.write("\r" + ANSI.clearLine);
-            stdout.write(chalk.cyanBright(message) + input);
+            // Calculate cursor column based on cursorPos within input
+            const cursorCol =
+                getDisplayWidth(message) +
+                getDisplayWidth(input.substring(0, cursorPos)) +
+                1;
+
+            // Don't clear whole line first - overwrite in place, then clear to end
+            // This avoids the brief "blank line" flash
+            let output = ANSI.hideCursor;
+            output += "\r"; // Move to column 0 (carriage return)
+            output += promptText + input;
 
             // Show inline completion if available
             if (
@@ -792,16 +801,19 @@ async function questionWithCompletion(
                 if (fullCompletion.length > input.length) {
                     const suggestion = fullCompletion.slice(input.length);
                     const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
-                    stdout.write(chalk.dim(suggestion + counter));
-                    // Move cursor back to end of input
-                    stdout.write(
-                        "\x1b[" + (suggestion.length + counter.length) + "D",
-                    );
+                    output += chalk.dim(suggestion + counter);
                 }
             }
 
-            // Show cursor at the correct position
-            stdout.write(ANSI.showCursor);
+            // Clear from cursor to end of line (removes leftover chars from previous longer content)
+            output += "\x1b[K";
+
+            // Position cursor at end of input using absolute positioning
+            output += `\x1b[${cursorCol}G`;
+            output += ANSI.showCursor;
+
+            // Write everything in one call
+            stdout.write(output);
         };
 
         // Fetch completions for current input
@@ -862,8 +874,19 @@ async function questionWithCompletion(
                         render();
                     }
                     return;
-                } else if (data === "\x1b[C" || data === "\x1b[D") {
-                    // Left/Right arrows - ignore for now
+                } else if (data === "\x1b[C") {
+                    // Arrow Right - move cursor right
+                    if (cursorPos < input.length) {
+                        cursorPos++;
+                        render();
+                    }
+                    return;
+                } else if (data === "\x1b[D") {
+                    // Arrow Left - move cursor left
+                    if (cursorPos > 0) {
+                        cursorPos--;
+                        render();
+                    }
                     return;
                 } else if (data === "\x1b") {
                     // Esc - clear completions
@@ -915,32 +938,42 @@ async function questionWithCompletion(
                             ? " "
                             : "") +
                         completion;
+                    cursorPos = input.length; // Move cursor to end
                     allCompletions = [];
                     filteredCompletions = [];
                     filterStartIndex = -1;
                     render();
                 }
             } else if (code === 127 || code === 8) {
-                // Backspace
-                if (input.length > 0) {
-                    input = input.slice(0, -1);
-                    // If we backspace before the filter point, refetch completions
+                // Backspace - delete character before cursor
+                if (cursorPos > 0) {
+                    input =
+                        input.slice(0, cursorPos - 1) + input.slice(cursorPos);
+                    cursorPos--;
+                    // Update completions state
                     if (
                         filterStartIndex < 0 ||
                         input.length < filterStartIndex
                     ) {
-                        await updateCompletions();
+                        filteredCompletions = [];
+                        allCompletions = [];
+                        filterStartIndex = -1;
                     } else {
-                        // Just refilter
                         filterCompletions();
-                        render();
                     }
+                    // Just render - skip async updateCompletions to avoid double render/flash
+                    render();
                 }
             } else if (code >= 32 && code < 127) {
-                // Printable ASCII character
-                input += data;
+                // Printable ASCII character - insert at cursor position
+                input =
+                    input.slice(0, cursorPos) + data + input.slice(cursorPos);
+                cursorPos++;
                 // If typing a space, always fetch new completions (new context)
                 if (data === " ") {
+                    // Clear completions and render immediately to prevent flashing
+                    filteredCompletions = [];
+                    render();
                     await updateCompletions();
                 } else if (
                     filterStartIndex >= 0 &&
@@ -950,7 +983,9 @@ async function questionWithCompletion(
                     filterCompletions();
                     render();
                 } else {
-                    // Fetch new completions
+                    // Clear completions and render immediately to prevent flashing
+                    filteredCompletions = [];
+                    render();
                     await updateCompletions();
                 }
             }

@@ -70,10 +70,16 @@ export async function runDesktopActions(
     action: AllDesktopActions,
     agentContext: DesktopActionContext,
     sessionStorage: Storage,
+    schemaName?: string, // Schema name for disambiguation (e.g., "desktop-display", "desktop-taskbar")
 ) {
     let confirmationMessage = "OK";
     let actionData = "";
     const actionName = action.actionName;
+
+    // Log schema name for debugging duplicate action resolution
+    if (schemaName) {
+        debug(`Executing action '${actionName}' from schema '${schemaName}'`);
+    }
     switch (actionName) {
         case "setWallpaper": {
             let file = action.parameters.filePath;
