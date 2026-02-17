@@ -690,7 +690,7 @@ export class ChatView {
                     ) {
                         const messages: NodeListOf<Element> =
                             this.messageDiv.querySelectorAll(
-                                ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
+                                ":not(.history) > .chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
                             );
                         this.commandBackStack = Array.from(messages).map(
                             (m: Element) =>
