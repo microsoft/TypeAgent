@@ -511,11 +511,10 @@ export async function searchTracks(
     queryString: string,
     context: IClientContext,
 ) {
-    const MAX_TRACK_LIMIT = 50;
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: MAX_TRACK_LIMIT,
+        limit: 50,
         offset: 0,
     };
     const data = await search(query, context.service);
@@ -528,11 +527,10 @@ export async function searchForPlaylists(
     queryString: string,
     context: IClientContext,
 ) {
-    const MAX_PLAYLIST_LIMIT = 50;
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "playlist",
-        limit: MAX_PLAYLIST_LIMIT,
+        limit: 20,
         offset: 0,
     };
     const data = await search(query, context.service);
