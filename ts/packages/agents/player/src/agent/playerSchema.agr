@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-@ import { MusicDevice } from "playerSchema.ts"
-
 @ <Start> = <Pause>
           | <Resume>
           | <Next>
@@ -128,6 +126,6 @@
 @ <TrackName> = $(x:wildcard)
 @ <ArtistName> = $(x:wildcard)
 @ <AlbumName> = $(x:wildcard)
-@ <DeviceName> = $(x:MusicDevice)
+@ <DeviceName> = $(x:wildcard)
 
 

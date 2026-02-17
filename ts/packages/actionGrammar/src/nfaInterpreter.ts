@@ -301,8 +301,21 @@ function tryTransition(
                     const validator = globalEntityRegistry.getValidator(
                         trans.typeName,
                     );
-                    if (validator && !validator.validate(token)) {
-                        return undefined; // Validation failed
+                    if (validator) {
+                        if (!validator.validate(token)) {
+                            return undefined; // Validation failed
+                        }
+                    } else {
+                        // No validator registered — only built-in wildcard
+                        // types (wildcard, string, word) are allowed without
+                        // a validator. Custom entity types must have one.
+                        const isBuiltInWildcardType =
+                            trans.typeName === "wildcard" ||
+                            trans.typeName === "string" ||
+                            trans.typeName === "word";
+                        if (!isBuiltInWildcardType) {
+                            return undefined; // No validator for custom entity type
+                        }
                     }
                     // Try converter if available
                     const converter = globalEntityRegistry.getConverter(
