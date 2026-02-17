@@ -53,6 +53,7 @@ async function executeDesktopAction(
         action as AllDesktopActions,
         context.sessionContext.agentContext,
         context.sessionContext.sessionStorage!,
+        action.schemaName, // Pass schema name for disambiguation
     );
     return createActionResult(message);
 }

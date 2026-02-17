@@ -412,15 +412,27 @@ export class ChatView {
         return retVal;
     }
 
-    notifyExplained(id: string, data: NotifyExplainedData) {
-        this.idToMessageGroup.get(id)?.notifyExplained(data);
+    notifyExplained(requestId: string | RequestId, data: NotifyExplainedData) {
+        const id =
+            typeof requestId === "string"
+                ? requestId
+                : getMessageGroupId(requestId);
+        if (id) {
+            this.idToMessageGroup.get(id)?.notifyExplained(data);
+        }
     }
 
-    randomCommandSelected(id: string, message: string) {
-        const pair = this.idToMessageGroup.get(id);
-        if (pair !== undefined) {
-            if (message.length > 0) {
-                pair.updateUserMessage(message);
+    randomCommandSelected(requestId: string | RequestId, message: string) {
+        const id =
+            typeof requestId === "string"
+                ? requestId
+                : getMessageGroupId(requestId);
+        if (id) {
+            const pair = this.idToMessageGroup.get(id);
+            if (pair !== undefined) {
+                if (message.length > 0) {
+                    pair.updateUserMessage(message);
+                }
             }
         }
     }

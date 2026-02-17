@@ -23,7 +23,14 @@ export class MailClient extends GraphClient {
         const client = await this.ensureClient();
         return client
             .api("/me/mailFolders/inbox/messages")
-            .select(["from", "isRead", "receivedDateTime", "subject"])
+            .select([
+                "from",
+                "isRead",
+                "receivedDateTime",
+                "subject",
+                "bodyPreview",
+                "webLink",
+            ])
             .top(25)
             .orderby("receivedDateTime DESC")
             .get();
