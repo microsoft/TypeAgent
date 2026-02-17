@@ -373,7 +373,6 @@ export async function getArtistTopTracks(service: SpotifyService, id: string) {
     return fetchGet<SpotifyApi.ArtistsTopTracksResponse>(
         service,
         `https://api.spotify.com/v1/artists/${encodeURIComponent(id)}/top-tracks`,
-        { market: "US" },
     );
 }
 
