@@ -1,0 +1,44 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+/* Extension-specific overrides and imports for the chat panel */
+
+/* Import the shared chat UI styles */
+@import "./chat-ui.css";
+
+/* Reset & extension-level layout */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+  background: #fafafa;
+}
+
+#chat-root {
+  height: 100%;
+  width: 100%;
+}
+
+/* Connection status banner */
+.connection-banner {
+  padding: 6px 12px;
+  text-align: center;
+  font-size: 12px;
+  background-color: #fff3cd;
+  color: #856404;
+  border-bottom: 1px solid #ffc107;
+}
+
+.connection-banner.connected {
+  background-color: #d4edda;
+  color: #155724;
+  border-bottom-color: #28a745;
+}
+
+/* Make message containers slightly wider in the narrow side panel */
+.chat-message-container-agent,
+.chat-message-container-user {
+  width: 85%;
+}
