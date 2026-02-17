@@ -407,6 +407,9 @@ export class AgentCache {
                             debug(
                                 `Calling populateCache for request: "${requestAction.request}"`,
                             );
+                            console.log(
+                                `[GRAMMAR] populateCache input: request="${requestAction.request}", action=${actionName}, params=${JSON.stringify(parameters)}`,
+                            );
                             // Generate grammar rule
                             const genResult = await populateCache({
                                 request: requestAction.request,
@@ -417,6 +420,9 @@ export class AgentCache {
                                 },
                                 schemaPath,
                             });
+                            console.log(
+                                `[GRAMMAR] populateCache result: success=${genResult.success}, rule=${genResult.generatedRule ?? "none"}, rejection=${genResult.rejectionReason ?? "none"}`,
+                            );
 
                             if (genResult.success && genResult.generatedRule) {
                                 debug(
@@ -438,11 +444,17 @@ export class AgentCache {
                                     debug(
                                         `Adding rule to agent grammar registry...`,
                                     );
+                                    console.log(
+                                        `[GRAMMAR] Adding to registry: checkedVars=${genResult.checkedVariables ? [...genResult.checkedVariables].join(",") : "none"}`,
+                                    );
                                     const addResult =
                                         agentGrammar.addGeneratedRules(
                                             genResult.generatedRule,
                                             genResult.checkedVariables,
                                         );
+                                    console.log(
+                                        `[GRAMMAR] addGeneratedRules: success=${addResult.success}, errors=${addResult.errors.join("; ") || "none"}, unresolved=${addResult.unresolvedEntities?.join(", ") || "none"}`,
+                                    );
                                     if (addResult.success) {
                                         // Sync to the grammar store used for matching
                                         this.syncAgentGrammar(schemaName);
