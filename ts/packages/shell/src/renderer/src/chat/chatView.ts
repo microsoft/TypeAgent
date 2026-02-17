@@ -42,8 +42,6 @@ export class ChatView {
     private partialCompletionEnabled: boolean = false;
     private partialCompletionDisableRemoteUI: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
-    private titleDiv: HTMLDivElement;
-
     private commandBackStack: string[] = [];
     private commandBackStackIndex = 0;
 
@@ -64,11 +62,6 @@ export class ChatView {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
 
-        // Add the app title to the chat view
-        this.titleDiv = document.createElement("div");
-        this.titleDiv.className = "chat-title";
-        this.topDiv.appendChild(this.titleDiv);
-
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
         this.messageDiv.addEventListener("scrollend", () => {
@@ -81,7 +74,6 @@ export class ChatView {
             }
         });
         if (inputOnly) {
-            this.titleDiv.style.visibility = "hidden";
             this.messageDiv.style.visibility = "hidden";
         }
 
@@ -638,9 +630,6 @@ export class ChatView {
         }
     }
 
-    public setTitle(title: string) {
-        this.titleDiv.innerText = title;
-    }
     /**
      * Hosts a chat input control within the chat view.
      * @param input The chat input to set. This method can only be called once.
