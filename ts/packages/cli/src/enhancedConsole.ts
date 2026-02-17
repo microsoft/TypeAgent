@@ -776,7 +776,10 @@ async function questionWithCompletion(
             const promptText = chalk.cyanBright(message);
 
             // Calculate cursor column based on cursorPos within input
-            const cursorCol = getDisplayWidth(message) + getDisplayWidth(input.substring(0, cursorPos)) + 1;
+            const cursorCol =
+                getDisplayWidth(message) +
+                getDisplayWidth(input.substring(0, cursorPos)) +
+                1;
 
             // Don't clear whole line first - overwrite in place, then clear to end
             // This avoids the brief "blank line" flash
@@ -944,7 +947,8 @@ async function questionWithCompletion(
             } else if (code === 127 || code === 8) {
                 // Backspace - delete character before cursor
                 if (cursorPos > 0) {
-                    input = input.slice(0, cursorPos - 1) + input.slice(cursorPos);
+                    input =
+                        input.slice(0, cursorPos - 1) + input.slice(cursorPos);
                     cursorPos--;
                     // Update completions state
                     if (
@@ -962,7 +966,8 @@ async function questionWithCompletion(
                 }
             } else if (code >= 32 && code < 127) {
                 // Printable ASCII character - insert at cursor position
-                input = input.slice(0, cursorPos) + data + input.slice(cursorPos);
+                input =
+                    input.slice(0, cursorPos) + data + input.slice(cursorPos);
                 cursorPos++;
                 // If typing a space, always fetch new completions (new context)
                 if (data === " ") {

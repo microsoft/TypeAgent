@@ -312,9 +312,7 @@ export function setContent(
                     ) {
                         // Open in external system browser
                         (window as any).api.openUrlExternal(href);
-                    } else if (
-                        (window as any).api?.openUrlInBrowserTab
-                    ) {
+                    } else if ((window as any).api?.openUrlInBrowserTab) {
                         // Use IPC to open the URL in a new browser tab
                         (window as any).api.openUrlInBrowserTab(href);
                     }

@@ -513,9 +513,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
         return undefined;
     }
 
-    private parseTimeRange(
-        timeStr: string,
-    ):
+    private parseTimeRange(timeStr: string):
         | {
               start: { hours: number; minutes: number };
               end: { hours: number; minutes: number };

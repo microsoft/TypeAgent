@@ -335,8 +335,7 @@ export function createInlineBrowserControl(
         },
         async getAutoIndexSetting(): Promise<boolean> {
             try {
-                const activeBrowserView =
-                    shellWindow.getActiveBrowserView();
+                const activeBrowserView = shellWindow.getActiveBrowserView();
                 if (!activeBrowserView) {
                     return false;
                 }
@@ -365,8 +364,7 @@ export function createInlineBrowserControl(
         },
         async getBrowserSettings() {
             try {
-                const activeBrowserView =
-                    shellWindow.getActiveBrowserView();
+                const activeBrowserView = shellWindow.getActiveBrowserView();
                 if (!activeBrowserView) {
                     // No tabs open yet — return defaults without error
                     return {
