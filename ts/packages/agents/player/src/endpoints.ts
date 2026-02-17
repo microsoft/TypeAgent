@@ -8,7 +8,8 @@ import { createFetchError } from "./utils.js";
 const debugSpotifyRest = registerDebug("typeagent:spotify:rest");
 const debugSpotifyRestVerbose = registerDebug("typeagent:spotify-verbose:rest");
 
-const limitMax = 50;
+/** Maximum number of items per Spotify API request */
+export const limitMax = 50;
 
 export async function search(
     query: SpotifyApi.SearchForItemParameterObject,
@@ -483,7 +484,7 @@ export async function getQueue(service: SpotifyService) {
     return fetchGet<SpotifyApi.UsersQueueResponse>(
         service,
         "https://api.spotify.com/v1/me/player/queue",
-        { limit: 50 },
+        { limit: limitMax },
     );
 }
 
