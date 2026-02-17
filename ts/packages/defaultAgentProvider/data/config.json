@@ -37,21 +37,11 @@
       "name": "image-agent",
       "execMode": "dispatcher"
     },
-    "androidMobile": {
-      "name": "android-mobile-agent",
-      "execMode": "dispatcher"
-    },
     "markdown": {
       "name": "markdown-agent"
     },
     "montage": {
       "name": "montage-agent"
-    },
-    "oracle": {
-      "name": "oracle-agent"
-    },
-    "spelunker": {
-      "name": "spelunker-agent"
     },
     "video": {
       "name": "video-agent",
