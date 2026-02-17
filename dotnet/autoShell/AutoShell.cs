@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Packaging;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -13,6 +14,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Controls;
 using Microsoft.VisualBasic;
+using Microsoft.VisualBasic.ApplicationServices;
 using Microsoft.WindowsAPICodePack.Shell;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -27,6 +29,7 @@ internal partial class AutoShell
     static Hashtable s_friendlyNameToPath = [];
     static Hashtable s_friendlyNameToId = [];
     static double s_savedVolumePct = 0.0;
+    static SortedList<string, string[]> s_sortedList;
 
     static IServiceProvider10 s_shell;
     static IVirtualDesktopManager s_virtualDesktopManager;
@@ -43,39 +46,41 @@ internal partial class AutoShell
     {
         // get current user name
         string userName = Environment.UserName;
-        SortedList<string, string> sortedList = new SortedList<string, string>
+        // known appication, path to executable, any env var for working directory
+        s_sortedList = new SortedList<string, string[]>
         {
-            { "chrome", "chrome.exe" },
-            { "power point", "C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE" },
-            { "powerpoint", "C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE" },
-            { "word", "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE" },
-            { "winword", "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE" },
-            { "excel", "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE" },
-            { "outlook", "C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE" },
-            { "visual studio", "devenv.exe" },
-            { "visual studio code", "C:\\Users\\" + userName + "\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe" },
-            { "edge", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" },
-            { "microsoft edge", "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" },
-            { "notepad", "C:\\Windows\\System32\\notepad.exe" },
-            { "paint", "mspaint.exe" },
-            { "calculator", "calc.exe" },
-            { "file explorer", "C:\\Windows\\explorer.exe" },
-            { "control panel", "C:\\Windows\\System32\\control.exe" },
-            { "task manager", "C:\\Windows\\System32\\Taskmgr.exe" },
-            { "cmd", "C:\\Windows\\System32\\cmd.exe" },
-            { "powershell", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" },
-            { "snipping tool", "C:\\Windows\\System32\\SnippingTool.exe" },
-            { "magnifier", "C:\\Windows\\System32\\Magnify.exe" },
-            { "paint 3d", "C:\\Program Files\\WindowsApps\\Microsoft.MSPaint_10.1807.18022.0_x64__8wekyb3d8bbwe\\"},
-            { "m365 copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
-            { "copilot", "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" },
-            { "spotify", "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.279.427.0_x64__zpdnekdrzrea0\\spotify.exe" },
+            { "chrome", new[] { "chrome.exe" } },
+            { "power point", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE" } },
+            { "powerpoint", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE" } },
+            { "word", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE" } },
+            { "winword", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE" } },
+            { "excel", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\EXCEL.EXE" } },
+            { "outlook", new[] { "C:\\Program Files\\Microsoft Office\\root\\Office16\\OUTLOOK.EXE" } },
+            { "visual studio", new[] { "devenv.exe" } },
+            { "visual studio code", new[] { "C:\\Users\\" + userName + "\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe" } },
+            { "edge", new[] { "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" } },
+            { "microsoft edge", new[] { "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe" } },
+            { "notepad", new[] { "C:\\Windows\\System32\\notepad.exe" } },
+            { "paint", new[] { "mspaint.exe" } },
+            { "calculator", new[] { "calc.exe" } },
+            { "file explorer", new[] { "C:\\Windows\\explorer.exe" } },
+            { "control panel", new[] { "C:\\Windows\\System32\\control.exe" } },
+            { "task manager", new[] { "C:\\Windows\\System32\\Taskmgr.exe" } },
+            { "cmd", new[] { "C:\\Windows\\System32\\cmd.exe" } },
+            { "powershell", new[] { "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" } },
+            { "snipping tool", new[] { "C:\\Windows\\System32\\SnippingTool.exe" } },
+            { "magnifier", new[] { "C:\\Windows\\System32\\Magnify.exe" } },
+            { "paint 3d", new[] { "C:\\Program Files\\WindowsApps\\Microsoft.MSPaint_10.1807.18022.0_x64__8wekyb3d8bbwe\\" } },
+            { "m365 copilot", new[] { "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" } },
+            { "copilot", new[] { "C:\\Program Files\\WindowsApps\\Microsoft.MicrosoftOfficeHub_19.2512.45041.0_x64__8wekyb3d8bbwe\\M365Copilot.exe" } },
+            { "spotify", new[] { "C:\\Program Files\\WindowsApps\\SpotifyAB.SpotifyMusic_1.278.418.0_x64__zpdnekdrzrea0\\spotify.exe" } },
+            { "github copilot", new[] { $"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe\\copilot.exe", "GITHUB_COPILOT_ROOT_DIR", "--allow-all-tools" } },
         };
 
         // add the entries to the hashtable
-        foreach (var kvp in sortedList)
+        foreach (var kvp in s_sortedList)
         {
-            s_friendlyNameToPath.Add(kvp.Key, kvp.Value);
+            s_friendlyNameToPath.Add(kvp.Key, kvp.Value[0]);
         }
 
         var installedApps = GetAllInstalledAppsIds();
@@ -473,12 +478,19 @@ internal partial class AutoShell
             }
             // set the window positions using the shellRect and making sure the windows are visible
             int halfwidth = (desktopRect.Right - desktopRect.Left) / 2;
+            int height = desktopRect.Bottom - desktopRect.Top;
             IntPtr HWND_TOP = IntPtr.Zero;
             uint showWindow = 0x40;
-            SetWindowPos(hWnd1, HWND_TOP, desktopRect.Left, desktopRect.Top, halfwidth, desktopRect.Bottom, showWindow);
+
+            // Restore windows first (in case they're maximized - SetWindowPos won't work on maximized windows)
+            uint SW_RESTORE = 9;
+            ShowWindow(hWnd1, SW_RESTORE);
+            ShowWindow(hWnd2, SW_RESTORE);
+
+            SetWindowPos(hWnd1, HWND_TOP, desktopRect.Left, desktopRect.Top, halfwidth, height, showWindow);
             SetForegroundWindow(hWnd1);
             Interaction.AppActivate(pid1);
-            SetWindowPos(hWnd2, HWND_TOP, desktopRect.Left + halfwidth, desktopRect.Top, halfwidth, desktopRect.Bottom, showWindow);
+            SetWindowPos(hWnd2, HWND_TOP, desktopRect.Left + halfwidth, desktopRect.Top, halfwidth, height, showWindow);
             SetForegroundWindow(hWnd2);
             Interaction.AppActivate(pid2);
         }
@@ -535,14 +547,34 @@ internal partial class AutoShell
             string path = (string)s_friendlyNameToPath[friendlyName.ToLowerInvariant()];
             if (path != null)
             {
+                ProcessStartInfo psi = new ProcessStartInfo()
+                {
+                    FileName = path,
+                    UseShellExecute = true
+                };
+
+                // do we have a specific startup directory for this application?
+                if (s_sortedList.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1)
+                {
+                    psi.WorkingDirectory = Environment.ExpandEnvironmentVariables("%" + value[1] + "%") ?? string.Empty;
+                }
+
+                // do we have any specific command line arguments for this application?                
+                if (s_sortedList.TryGetValue(friendlyName.ToLowerInvariant(), out string[] args) && value.Length > 2)
+                {
+                    psi.Arguments = string.Join(" ", args.Skip(2));
+                }
+
                 try
                 {
-                    Process.Start(path);
+                    Process.Start(psi);
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
+                    psi.FileName = friendlyName;
+
                     // alternate start method
-                    Process.Start(friendlyName);
+                    Process.Start(psi);
                 }
             }
             else
@@ -990,6 +1022,181 @@ internal partial class AutoShell
                 case "listResolutions":
                     ListDisplayResolutions();
                     break;
+
+                // ===== Settings Actions (50 new handlers) =====
+
+                // Network Settings
+                case "BluetoothToggle":
+                    HandleBluetoothToggle(value);
+                    break;
+                case "enableWifi":
+                    HandleEnableWifi(value);
+                    break;
+                case "enableMeteredConnections":
+                    HandleEnableMeteredConnections(value);
+                    break;
+
+                // Display Settings
+                case "AdjustScreenBrightness":
+                    HandleAdjustScreenBrightness(value);
+                    break;
+                case "EnableBlueLightFilterSchedule":
+                    HandleEnableBlueLightFilterSchedule(value);
+                    break;
+                case "adjustColorTemperature":
+                    HandleAdjustColorTemperature(value);
+                    break;
+                case "DisplayScaling":
+                    HandleDisplayScaling(value);
+                    break;
+                case "AdjustScreenOrientation":
+                    HandleAdjustScreenOrientation(value);
+                    break;
+                case "DisplayResolutionAndAspectRatio":
+                    HandleDisplayResolutionAndAspectRatio(value);
+                    break;
+                case "RotationLock":
+                    HandleRotationLock(value);
+                    break;
+
+                // Personalization Settings
+                case "SystemThemeMode":
+                    HandleSystemThemeMode(value);
+                    break;
+                case "EnableTransparency":
+                    HandleEnableTransparency(value);
+                    break;
+                case "ApplyColorToTitleBar":
+                    HandleApplyColorToTitleBar(value);
+                    break;
+                case "HighContrastTheme":
+                    HandleHighContrastTheme(value);
+                    break;
+
+                // Taskbar Settings
+                case "AutoHideTaskbar":
+                    HandleAutoHideTaskbar(value);
+                    break;
+                case "TaskbarAlignment":
+                    HandleTaskbarAlignment(value);
+                    break;
+                case "TaskViewVisibility":
+                    HandleTaskViewVisibility(value);
+                    break;
+                case "ToggleWidgetsButtonVisibility":
+                    HandleToggleWidgetsButtonVisibility(value);
+                    break;
+                case "ShowBadgesOnTaskbar":
+                    HandleShowBadgesOnTaskbar(value);
+                    break;
+                case "DisplayTaskbarOnAllMonitors":
+                    HandleDisplayTaskbarOnAllMonitors(value);
+                    break;
+                case "DisplaySecondsInSystrayClock":
+                    HandleDisplaySecondsInSystrayClock(value);
+                    break;
+
+                // Mouse Settings
+                case "MouseCursorSpeed":
+                    HandleMouseCursorSpeed(value);
+                    break;
+                case "MouseWheelScrollLines":
+                    HandleMouseWheelScrollLines(value);
+                    break;
+                case "setPrimaryMouseButton":
+                    HandleSetPrimaryMouseButton(value);
+                    break;
+                case "EnhancePointerPrecision":
+                    HandleEnhancePointerPrecision(value);
+                    break;
+                case "AdjustMousePointerSize":
+                    HandleAdjustMousePointerSize(value);
+                    break;
+                case "mousePointerCustomization":
+                    HandleMousePointerCustomization(value);
+                    break;
+
+                // Touchpad Settings
+                case "EnableTouchPad":
+                    HandleEnableTouchPad(value);
+                    break;
+                case "TouchpadCursorSpeed":
+                    HandleTouchpadCursorSpeed(value);
+                    break;
+
+                // Privacy Settings
+                case "ManageMicrophoneAccess":
+                    HandleManageMicrophoneAccess(value);
+                    break;
+                case "ManageCameraAccess":
+                    HandleManageCameraAccess(value);
+                    break;
+                case "ManageLocationAccess":
+                    HandleManageLocationAccess(value);
+                    break;
+
+                // Power Settings
+                case "BatterySaverActivationLevel":
+                    HandleBatterySaverActivationLevel(value);
+                    break;
+                case "setPowerModePluggedIn":
+                    HandleSetPowerModePluggedIn(value);
+                    break;
+                case "SetPowerModeOnBattery":
+                    HandleSetPowerModeOnBattery(value);
+                    break;
+
+                // Gaming Settings
+                case "enableGameMode":
+                    HandleEnableGameMode(value);
+                    break;
+
+                // Accessibility Settings
+                case "EnableNarratorAction":
+                    HandleEnableNarratorAction(value);
+                    break;
+                case "EnableMagnifier":
+                    HandleEnableMagnifier(value);
+                    break;
+                case "enableStickyKeys":
+                    HandleEnableStickyKeysAction(value);
+                    break;
+                case "EnableFilterKeysAction":
+                    HandleEnableFilterKeysAction(value);
+                    break;
+                case "MonoAudioToggle":
+                    HandleMonoAudioToggle(value);
+                    break;
+
+                // File Explorer Settings
+                case "ShowFileExtensions":
+                    HandleShowFileExtensions(value);
+                    break;
+                case "ShowHiddenAndSystemFiles":
+                    HandleShowHiddenAndSystemFiles(value);
+                    break;
+
+                // Time & Region Settings
+                case "AutomaticTimeSettingAction":
+                    HandleAutomaticTimeSettingAction(value);
+                    break;
+                case "AutomaticDSTAdjustment":
+                    HandleAutomaticDSTAdjustment(value);
+                    break;
+
+                // Focus Assist Settings
+                case "EnableQuietHours":
+                    HandleEnableQuietHours(value);
+                    break;
+
+                // Multi-Monitor Settings
+                case "RememberWindowLocations":
+                    HandleRememberWindowLocationsAction(value);
+                    break;
+                case "MinimizeWindowsOnMonitorDisconnectAction":
+                    HandleMinimizeWindowsOnMonitorDisconnectAction(value);
+                    break;
+
                 default:
                     Debug.WriteLine("Unknown command: " + key);
                     break;

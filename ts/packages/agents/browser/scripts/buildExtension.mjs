@@ -65,9 +65,11 @@ const sharedScripts = {
     "views/annotationsLibrary": "views/annotationsLibrary.ts",
     "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
     "views/pdfView": "views/pdfView.ts",
+    "views/chatPanel": "views/chatPanel.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
     "offscreen/contentProcessor": "offscreen/contentProcessor.ts",
+    "offscreen/screenshotCapture": "offscreen/screenshotCapture.ts",
 };
 
 const electronOnlyScripts = {
@@ -130,6 +132,8 @@ const libraryAssets = [
     "views/pageQnA.html",
     "views/pdfView.css",
     "views/pdfView.html",
+    "views/chatPanel.css",
+    "views/chatPanel.html",
 ];
 
 function copyLibraryAssets(outDir) {
@@ -143,11 +147,19 @@ function copyCommonStaticAssets(outDir) {
     // Copy library assets
     copyLibraryAssets(outDir);
 
+    // Copy shared chat-ui CSS into views/ so chatPanel.css can @import it
+    const chatUiCss = resolve(__dirname, "../../../chat-ui/styles/chat.css");
+    copyFileSync(chatUiCss, `${outDir}/views/chat-ui.css`);
+
     // Copy other common assets
     mkdirSync(`${outDir}/offscreen`, { recursive: true });
     copyFileSync(
         `${srcDir}/offscreen/offscreen.html`,
         `${outDir}/offscreen/offscreen.html`,
+    );
+    copyFileSync(
+        `${srcDir}/offscreen/screenshotCapture.html`,
+        `${outDir}/offscreen/screenshotCapture.html`,
     );
 
     mkdirSync(`${outDir}/sites`, { recursive: true });

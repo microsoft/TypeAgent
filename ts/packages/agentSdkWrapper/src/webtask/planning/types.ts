@@ -85,6 +85,10 @@ export interface PlannedAction {
     parameterBindings?: ParameterBinding[];
     rationale?: string;
 
+    // UI change indicator - false for internal actions like @config commands
+    // that don't affect page state and don't require page validation
+    hasUIChange?: boolean; // defaults to true if not specified
+
     // Execution tracking
     execution?: ActionExecution;
 }

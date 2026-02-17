@@ -5,4 +5,7 @@ export {
     DispatcherConnectOptions,
     AgentServerInvokeFunctions,
     ChannelName,
+    registerClientType,
+    getClientType,
+    unregisterClient,
 } from "./protocol.js";

@@ -9,6 +9,7 @@ import {
     setSlotValue,
     evaluateExpression,
     cloneEnvironment,
+    deepCloneEnvironment,
 } from "./environment.js";
 import registerDebug from "debug";
 
@@ -165,6 +166,18 @@ export function matchNFA(
     debugNFA(
         `After all tokens, currentStates: ${currentStates.length}, accepting states: [${nfa.acceptingStates.join(", ")}]`,
     );
+
+    // DEBUG: Count State 1 entries in currentStates
+    const state1Entries = currentStates.filter((s) => s.stateId === 1);
+    debugNFA(
+        `DEBUG: Found ${state1Entries.length} State 1 entries in currentStates`,
+    );
+    for (const s1 of state1Entries) {
+        debugNFA(
+            `DEBUG: State 1 entry - slots: ${JSON.stringify(s1.environment?.slots)}, hash: ${getSlotHash(s1.environment)}`,
+        );
+    }
+
     const acceptingThreads: NFAMatchResult[] = [];
     for (const state of currentStates) {
         debugNFA(
@@ -288,8 +301,21 @@ function tryTransition(
                     const validator = globalEntityRegistry.getValidator(
                         trans.typeName,
                     );
-                    if (validator && !validator.validate(token)) {
-                        return undefined; // Validation failed
+                    if (validator) {
+                        if (!validator.validate(token)) {
+                            return undefined; // Validation failed
+                        }
+                    } else {
+                        // No validator registered — only built-in wildcard
+                        // types (wildcard, string, word) are allowed without
+                        // a validator. Custom entity types must have one.
+                        const isBuiltInWildcardType =
+                            trans.typeName === "wildcard" ||
+                            trans.typeName === "string" ||
+                            trans.typeName === "word";
+                        if (!isBuiltInWildcardType) {
+                            return undefined; // No validator for custom entity type
+                        }
                     }
                     // Try converter if available
                     const converter = globalEntityRegistry.getConverter(
@@ -366,6 +392,60 @@ function getEnvironmentDepth(env: Environment | undefined): number {
 }
 
 /**
+ * Generate a simple hash of the environment's slot values
+ * This is used to distinguish execution threads that have the same state ID and priorities
+ * but different slot values (i.e., different matching results)
+ */
+function getSlotHash(
+    env: Environment | undefined,
+    debug: boolean = false,
+): string {
+    if (!env || env.slots.length === 0) {
+        return "empty";
+    }
+
+    // Create a simple hash from slot values
+    // For performance, we only look at the first slot (which typically contains the result)
+    // and create a hash based on its type and basic content
+    const slot = env.slots[0];
+    if (slot === undefined) {
+        return "undef";
+    }
+    if (slot === null) {
+        return "null";
+    }
+    if (typeof slot === "string") {
+        // Use first 20 chars + length for string hash
+        return `s:${slot.length}:${slot.substring(0, 20)}`;
+    }
+    if (typeof slot === "number") {
+        return `n:${slot}`;
+    }
+    if (typeof slot === "object") {
+        // For objects, use a simple structural hash
+        // Check for action objects specifically
+        if ("actionName" in slot) {
+            const action = slot as { actionName: string; parameters?: object };
+            const params = action.parameters;
+            const paramKeys = params ? Object.keys(params) : [];
+            const paramCount = paramKeys.length;
+            const paramKeysStr = paramKeys.sort().join(",");
+
+            if (debug) {
+                debugNFA(
+                    `  getSlotHash DEBUG: params=${JSON.stringify(params)}, paramKeys=[${paramKeys.join(",")}], paramCount=${paramCount}`,
+                );
+            }
+
+            return `a:${action.actionName}:${paramCount}:${paramKeysStr}`;
+        }
+        // For other objects, use key count
+        return `o:${Object.keys(slot).length}`;
+    }
+    return "other";
+}
+
+/**
  * Compute epsilon closure of a set of states
  * Returns all states reachable via epsilon transitions
  *
@@ -388,16 +468,6 @@ function epsilonClosure(
 
     while (queue.length > 0) {
         const state = queue.shift()!;
-
-        // Create unique key for this execution thread
-        // Include environment depth so paths with different nesting levels don't collide
-        const envDepth = getEnvironmentDepth(state.environment);
-        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}-${envDepth}`;
-
-        if (visited.has(key)) {
-            continue;
-        }
-        visited.add(key);
 
         const nfaState = nfa.states[state.stateId];
         if (!nfaState) continue;
@@ -426,6 +496,37 @@ function epsilonClosure(
             currentSlotMap = nfaState.slotMap;
         }
 
+        // Create unique key for this execution thread AFTER environment is determined
+        // Include environment depth so paths with different nesting levels don't collide
+        // Also include a hash of the first slot value to distinguish threads with different results
+        const envDepth = getEnvironmentDepth(currentEnvironment);
+
+        // DEBUG: Log before hash computation for State 1
+        if (state.stateId === 1) {
+            const slot0 = currentEnvironment?.slots?.[0];
+            debugNFA(
+                `DEBUG STATE 1 BEFORE HASH: slots[0]=${JSON.stringify(slot0)}, slot0 type=${typeof slot0}`,
+            );
+            // Check all levels of the environment
+            let env = currentEnvironment;
+            let level = 0;
+            while (env) {
+                debugNFA(
+                    `  Level ${level}: slots=${JSON.stringify(env.slots)}, hash=${getSlotHash({ ...env, parent: undefined })}`,
+                );
+                env = env.parent;
+                level++;
+            }
+        }
+
+        const slotHash = getSlotHash(currentEnvironment, state.stateId === 1);
+        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}-${envDepth}-${slotHash}`;
+
+        if (visited.has(key)) {
+            continue;
+        }
+        visited.add(key);
+
         // IMPORTANT: For actionValue, we need to be careful about nested rules.
         // If the state has an actionValue AND we're creating a new environment,
         // we should use the state's actionValue (it's the outer rule's value).
@@ -445,13 +546,47 @@ function epsilonClosure(
         // Otherwise keep the current actionValue (we're inside the same rule)
 
         // Update the state with current values before adding to result
+        // IMPORTANT: Deep clone the environment to prevent later mutations
+        // from affecting this state's data
+        const frozenEnvironment = currentEnvironment
+            ? deepCloneEnvironment(currentEnvironment)
+            : undefined;
         const updatedState: NFAExecutionState = {
             ...state,
             ruleIndex: currentRuleIndex,
             actionValue: currentActionValue,
-            environment: currentEnvironment,
+            environment: frozenEnvironment,
             slotMap: currentSlotMap,
         };
+
+        // DEBUG: Track State 1 additions
+        if (state.stateId === 1) {
+            const existingState1Count = result.filter(
+                (s) => s.stateId === 1,
+            ).length;
+            // Check if currentEnvironment slots differ from frozenEnvironment
+            const currentSlot0 = currentEnvironment?.slots?.[0];
+            const frozenSlot0 = frozenEnvironment?.slots?.[0];
+            debugNFA(
+                `DEBUG STATE 1 ADDING: key=${key}, existing State 1 count=${existingState1Count}`,
+            );
+            debugNFA(
+                `  currentEnvironment.slots[0] = ${JSON.stringify(currentSlot0)}`,
+            );
+            debugNFA(
+                `  frozenEnvironment.slots[0] = ${JSON.stringify(frozenSlot0)}`,
+            );
+            if (
+                currentSlot0 &&
+                typeof currentSlot0 === "object" &&
+                "parameters" in currentSlot0
+            ) {
+                debugNFA(
+                    `  currentSlot0.parameters = ${JSON.stringify(currentSlot0.parameters)}`,
+                );
+            }
+        }
+
         result.push(updatedState);
 
         // Follow epsilon transitions
@@ -479,7 +614,8 @@ function epsilonClosure(
                         );
                         // IMPORTANT: Clone the parent environment before writing to avoid
                         // mutation affecting other execution paths that share the same parent
-                        const clonedParent = cloneEnvironment(
+                        // DEEP CLONE: Also clone the parent's parent chain to prevent shared mutations
+                        const clonedParent = deepCloneEnvironment(
                             currentEnvironment.parent,
                         );
                         // Write to the cloned parent's slot
@@ -498,6 +634,25 @@ function epsilonClosure(
                         // On error, still pop to parent (unmodified)
                         newEnvironment = currentEnvironment.parent;
                     }
+                    // Restore slotMap from parent environment if available
+                    if (newEnvironment?.slotMap) {
+                        newSlotMap = newEnvironment.slotMap;
+                    }
+                    // Restore actionValue from parent environment if available
+                    if (newEnvironment?.actionValue !== undefined) {
+                        newActionValue = newEnvironment.actionValue;
+                    }
+                } else if (
+                    trans.popEnvironment &&
+                    currentEnvironment &&
+                    currentEnvironment.parent
+                ) {
+                    // Pop environment without writing - used when exiting nested rules
+                    // that don't capture to parent (e.g., (<Item>)?)
+                    debugNFA(
+                        `  PopEnvironment: popping from depth ${getEnvironmentDepth(currentEnvironment)} to ${getEnvironmentDepth(currentEnvironment.parent)}`,
+                    );
+                    newEnvironment = currentEnvironment.parent;
                     // Restore slotMap from parent environment if available
                     if (newEnvironment?.slotMap) {
                         newSlotMap = newEnvironment.slotMap;

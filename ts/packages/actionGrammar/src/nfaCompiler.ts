@@ -27,8 +27,6 @@ interface RuleCompilationContext {
     nextSlotIndex: number;
     /** Checked variables set from grammar */
     checkedVariables: Set<string> | undefined;
-    /** Override variable name for nested rules */
-    overrideVariableName: string | undefined;
     /** Parent slot index (for nested rule results) */
     parentSlotIndex: number | undefined;
 }
@@ -55,6 +53,141 @@ function isPassthroughRule(rule: GrammarRule): boolean {
         return false; // Already has a variable binding
     }
     return true;
+}
+
+/**
+ * Check if a rule is a single-literal rule (e.g., @ <KnownProgram> = chrome)
+ * Such rules should implicitly produce the matched literal as their value: -> "chrome"
+ */
+function isSingleLiteralRule(rule: GrammarRule): { literal: string } | false {
+    // A single-literal rule has:
+    // 1. No explicit value expression
+    // 2. Single part that is a string literal (not a variable or rules reference)
+    if (rule.value) {
+        return false; // Has explicit value
+    }
+    if (rule.parts.length !== 1) {
+        return false; // Multiple parts
+    }
+    const part = rule.parts[0];
+    if (part.type !== "string") {
+        return false; // Not a literal
+    }
+    if (part.value.length === 0) {
+        return false; // Empty string, nothing to capture
+    }
+    // Return the literal value (joined tokens)
+    return { literal: part.value.join(" ") };
+}
+
+/**
+ * Normalize a grammar for matching.
+ * This converts:
+ * - Passthrough rules: @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
+ * - Single-literal rules: @ <S> = chrome becomes @ <S> = chrome -> "chrome"
+ *
+ * Normalization is done as a preprocessing step so matchers don't need special handling.
+ * Both completion-based and NFA-based matchers benefit from this normalization.
+ *
+ * @param grammar The grammar to normalize
+ * @returns A new grammar with normalized rules (original is not modified)
+ */
+export function normalizeGrammar(grammar: Grammar): Grammar {
+    // Cache to avoid re-normalizing shared rule arrays (handles recursive grammars)
+    const rulesCache = new Map<GrammarRule[], GrammarRule[]>();
+    return {
+        ...grammar,
+        rules: normalizeRulesArray(grammar.rules, rulesCache),
+    };
+}
+
+/**
+ * Normalize an array of rules, using cache to handle circular references.
+ */
+function normalizeRulesArray(
+    rules: GrammarRule[],
+    cache: Map<GrammarRule[], GrammarRule[]>,
+): GrammarRule[] {
+    // Check cache first to handle recursive rule references
+    const cached = cache.get(rules);
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    // Create the result array and cache it BEFORE normalizing
+    // This handles recursive references: when we encounter the same rules array
+    // during normalization, we return the (partially filled) cached array
+    const result: GrammarRule[] = [];
+    cache.set(rules, result);
+
+    // Now normalize each rule
+    for (const rule of rules) {
+        result.push(normalizeRule(rule, cache));
+    }
+
+    return result;
+}
+
+/**
+ * Normalize a single rule, recursively normalizing any nested rules.
+ */
+function normalizeRule(
+    rule: GrammarRule,
+    cache: Map<GrammarRule[], GrammarRule[]>,
+): GrammarRule {
+    // First, normalize all nested RulesParts
+    const normalizedParts = rule.parts.map((part) =>
+        normalizePart(part, cache),
+    );
+
+    // Check if this is a passthrough rule that needs transformation
+    if (isPassthroughRule(rule)) {
+        // Transform: @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
+        const rulesPart = normalizedParts[0] as RulesPart;
+        return {
+            parts: [
+                {
+                    ...rulesPart,
+                    variable: "_result", // Add capture variable
+                },
+            ],
+            value: { type: "variable", name: "_result" }, // Add value expression
+        };
+    }
+
+    // Check if this is a single-literal rule that needs transformation
+    const singleLiteral = isSingleLiteralRule(rule);
+    if (singleLiteral) {
+        // Transform: @ <S> = chrome becomes @ <S> = chrome -> "chrome"
+        return {
+            parts: normalizedParts,
+            value: { type: "literal", value: singleLiteral.literal },
+        };
+    }
+
+    // Not a passthrough or single-literal - return with normalized parts
+    return {
+        ...rule,
+        parts: normalizedParts,
+    };
+}
+
+/**
+ * Normalize a grammar part, recursively normalizing nested rules.
+ */
+function normalizePart(
+    part: GrammarPart,
+    cache: Map<GrammarRule[], GrammarRule[]>,
+): GrammarPart {
+    if (part.type !== "rules") {
+        return part; // Only RulesParts need normalization
+    }
+
+    // Normalize all nested rules within this RulesPart (using cache)
+    return {
+        ...part,
+        rules: normalizeRulesArray(part.rules, cache),
+    };
 }
 
 /**
@@ -199,6 +332,10 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
  * @returns An NFA representing the grammar
  */
 export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
+    // Normalize grammar first: convert passthrough rules to explicit form
+    // @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
+    const normalizedGrammar = normalizeGrammar(grammar);
+
     const builder = new NFABuilder();
 
     // Create start state
@@ -208,8 +345,12 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
     const acceptState = builder.createState(true);
 
     // Compile each rule as an alternative path from start to accept
-    for (let ruleIndex = 0; ruleIndex < grammar.rules.length; ruleIndex++) {
-        const rule = grammar.rules[ruleIndex];
+    for (
+        let ruleIndex = 0;
+        ruleIndex < normalizedGrammar.rules.length;
+        ruleIndex++
+    ) {
+        const rule = normalizedGrammar.rules[ruleIndex];
 
         // VALIDATION: Multi-term rules MUST have value expressions
         // Single-term rules can omit value expressions (they inherit from the term)
@@ -220,24 +361,9 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             );
         }
 
-        // Check for passthrough rule normalization
-        // Passthrough: @ <S> = <C>  becomes  @ <S> = $(_result:<C>) -> $(_result)
-        const isPassthrough = isPassthroughRule(rule);
-        let effectiveValue = rule.value;
-        let effectiveOverrideVariable: string | undefined;
-
-        if (isPassthrough) {
-            // Create implicit value expression: $(_result)
-            effectiveValue = {
-                type: "variable",
-                name: "_result",
-            };
-            // The nested rule's result should be captured to _result
-            effectiveOverrideVariable = "_result";
-        }
-
-        // Also check for single-variable rules like @ <ArtistName> = $(x:wildcard)
+        // Check for single-variable rules like @ <ArtistName> = $(x:wildcard)
         // These should implicitly produce their variable's value: -> $(x)
+        let effectiveValue = rule.value;
         if (!effectiveValue) {
             const singleVar = isSingleVariableRule(rule);
             if (singleVar) {
@@ -279,15 +405,13 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
         const context: RuleCompilationContext = {
             slotMap,
             nextSlotIndex: slotMap.size,
-            checkedVariables: grammar.checkedVariables,
-            // For passthrough rules, set override so nested rule writes to _result slot
-            overrideVariableName: effectiveOverrideVariable,
+            checkedVariables: normalizedGrammar.checkedVariables,
             parentSlotIndex: undefined,
         };
 
         const ruleEnd = compileRuleFromStateWithSlots(
             builder,
-            grammar,
+            normalizedGrammar,
             rule,
             ruleEntry,
             acceptState,
@@ -626,8 +750,8 @@ function compileWildcardPartWithSlots(
     toState: number,
     context: RuleCompilationContext,
 ): number {
-    // Use override variable name if provided, otherwise use the part's variable name
-    const variableName = context.overrideVariableName ?? part.variable;
+    // Use the part's variable name directly (passthrough normalization handles overrides)
+    const variableName = part.variable;
 
     // Get slot index for this variable
     const slotIndex = context.slotMap.get(variableName);
@@ -838,13 +962,18 @@ function compileRulesPartWithSlots(
     builder.addEpsilonTransition(fromState, nestedEntry);
 
     // Determine the variable name for this nested rule's result
-    // Priority: part.variable > context.overrideVariableName > undefined
-    const effectiveVariable = part.variable ?? context.overrideVariableName;
+    // Only use the explicit variable from the part - no implicit override inheritance
+    // (Passthrough normalization is done upfront, so we don't need overrideVariableName)
+    const effectiveVariable = part.variable;
 
     // If we have a variable, find its slot in the parent environment
     const parentSlotIndex = effectiveVariable
         ? context.slotMap.get(effectiveVariable)
         : undefined;
+
+    // Track whether any rule in this RulesPart created an environment
+    // (needed to decide whether to pop environment on exit)
+    let anyRuleCreatedEnvironment = false;
 
     // Compile each nested rule as an alternative
     for (const rule of part.rules) {
@@ -853,32 +982,11 @@ function compileRulesPartWithSlots(
         // Create a new slot map for the nested rule FIRST (needed for compilation)
         const nestedSlotMap = createRuleSlotMap(rule);
 
-        // Set slot info on the entry state if either:
-        // 1. The nested rule has variables (nestedSlotMap.size > 0)
-        // 2. We need to write to parent (parentSlotIndex is set)
-        // Even if the nested rule has no variables, we need to create an environment
-        // with parent reference so writeToParent can work
-        if (nestedSlotMap.size > 0 || parentSlotIndex !== undefined) {
-            builder.setStateSlotInfo(
-                ruleEntry,
-                nestedSlotMap.size,
-                nestedSlotMap,
-            );
-        }
-
-        // Compile and store the action value on the entry state
-        // Check for passthrough rule normalization (same as top-level rules)
+        // Compile and store the action value on the entry state FIRST
+        // We need to know if there's a value before deciding about environments
+        // Passthrough normalization is done upfront, so rules already have explicit values
+        // Just check for single-variable rules like @ <ArtistName> = $(x:wildcard)
         let effectiveValue = rule.value;
-        let nestedOverrideVariable: string | undefined;
-
-        if (!effectiveValue && isPassthroughRule(rule)) {
-            // Passthrough rule: @ <S> = <C>  becomes  @ <S> = $(_result:<C>) -> $(_result)
-            effectiveValue = { type: "variable", name: "_result" };
-            nestedOverrideVariable = "_result";
-        }
-
-        // Also check for single-variable rules like @ <ArtistName> = $(x:wildcard)
-        // These should implicitly produce their variable's value: -> $(x)
         if (!effectiveValue) {
             const singleVar = isSingleVariableRule(rule);
             if (singleVar) {
@@ -904,21 +1012,39 @@ function compileRulesPartWithSlots(
             builder.getState(ruleEntry).actionValue = compiledValue;
         }
 
-        // If this nested rule's result should be written to a parent slot, record it
-        if (parentSlotIndex !== undefined) {
+        // Set slot info on the entry state if either:
+        // 1. The nested rule has variables (nestedSlotMap.size > 0)
+        // 2. We need to write to parent AND have a value to write
+        // Only create an environment when actually needed
+        const needsEnvironment =
+            nestedSlotMap.size > 0 ||
+            (parentSlotIndex !== undefined && compiledValue !== undefined);
+        if (needsEnvironment) {
+            builder.setStateSlotInfo(
+                ruleEntry,
+                nestedSlotMap.size,
+                nestedSlotMap,
+            );
+            anyRuleCreatedEnvironment = true;
+        }
+
+        // Only set parentSlotIndex if this rule has a value to write to parent
+        // Rules without values (like string literals) should not set this
+        if (parentSlotIndex !== undefined && compiledValue !== undefined) {
             builder.setStateParentSlotIndex(ruleEntry, parentSlotIndex);
         }
 
         builder.addEpsilonTransition(nestedEntry, ruleEntry);
 
         // Create new context for the nested rule
+        // IMPORTANT: Don't propagate parentSlotIndex - each rule level computes its own
+        // based on its variable capture. This prevents deeper rules from incorrectly
+        // inheriting parent slot indices.
         const nestedContext: RuleCompilationContext = {
             slotMap: nestedSlotMap,
             nextSlotIndex: nestedSlotMap.size,
             checkedVariables: context.checkedVariables,
-            // Pass override for passthrough rules so nested rules know to capture to _result
-            overrideVariableName: nestedOverrideVariable,
-            parentSlotIndex,
+            parentSlotIndex: undefined, // Each level computes its own from part.variable
         };
 
         // If we need to write to parent, create a per-rule exit state
@@ -956,7 +1082,17 @@ function compileRulesPartWithSlots(
         // Optional: can skip the entire nested section
         builder.addEpsilonTransition(fromState, toState);
     }
-    builder.addEpsilonTransition(nestedExit, toState);
+
+    // If no parent slot index (nested rule doesn't write to parent), we need to
+    // pop the environment when exiting. This handles cases like (<Item>)? where
+    // the parent doesn't capture the result but nested rules still create environments.
+    // IMPORTANT: Only pop if at least one rule actually created an environment.
+    // Rules like (the)? don't create environments and shouldn't trigger a pop.
+    if (parentSlotIndex === undefined && anyRuleCreatedEnvironment) {
+        builder.addEpsilonWithPopEnvironment(nestedExit, toState);
+    } else {
+        builder.addEpsilonTransition(nestedExit, toState);
+    }
 
     return toState;
 }

@@ -25,7 +25,11 @@ export type DesktopActions =
     | ToggleNotificationsAction
     | DebugAutoShellAction
     | SetTextSizeAction
-    | SetScreenResolutionAction;
+    | SetScreenResolutionAction
+    // Common settings actions
+    | BluetoothToggleAction
+    | EnableWifiAction
+    | AdjustScreenBrightnessAction;
 
 // Launches a new program window on a Windows Desktop
 // Example:
@@ -216,6 +220,32 @@ export type SetScreenResolutionAction = {
     parameters: {
         width: number; // width in pixels
         height: number; // height in pixels
+    };
+};
+
+// ===== Common Settings Actions =====
+
+// Toggles Bluetooth radio on or off
+export type BluetoothToggleAction = {
+    actionName: "BluetoothToggle";
+    parameters: {
+        enableBluetooth?: boolean; // true to enable, false to disable
+    };
+};
+
+// Enables or disables WiFi adapter
+export type EnableWifiAction = {
+    actionName: "enableWifi";
+    parameters: {
+        enable: boolean; // true to enable, false to disable
+    };
+};
+
+// Adjusts screen brightness (increase or decrease)
+export type AdjustScreenBrightnessAction = {
+    actionName: "AdjustScreenBrightness";
+    parameters: {
+        brightnessLevel: "increase" | "decrease";
     };
 };
 

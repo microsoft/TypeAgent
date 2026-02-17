@@ -121,7 +121,13 @@ async function getSchemaFileContents(fileName: string): Promise<string> {
 }
 
 export async function createCommercePageTranslator(
-    model: "GPT_35_TURBO" | "GPT_4" | "GPT_v" | "GPT_4_O" | "GPT_4_O_MINI",
+    model:
+        | "GPT_35_TURBO"
+        | "GPT_4"
+        | "GPT_v"
+        | "GPT_4_O"
+        | "GPT_5_MINI"
+        | "GPT_5_2",
 ) {
     const actionSchema = await getSchemaFileContents("userActions.mts");
     const pageSchema = await getSchemaFileContents("pageComponents.mts");
@@ -156,9 +162,12 @@ export class ECommerceSiteAgent<T extends object> {
             undefined,
             fastModelName,
         );
-        this.model = ai.createChatModel(apiSettings, undefined, undefined, [
-            "commerce",
-        ]);
+        this.model = ai.createChatModel(
+            apiSettings,
+            { temperature: 1 },
+            undefined,
+            ["commerce"],
+        );
         const validator = createTypeScriptJsonValidator<T>(
             this.schema,
             schemaName,

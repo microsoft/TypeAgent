@@ -65,7 +65,9 @@
     {
       "resources": [
         "offscreen/offscreen.html",
-        "offscreen/contentProcessor.js"
+        "offscreen/contentProcessor.js",
+        "offscreen/screenshotCapture.html",
+        "offscreen/screenshotCapture.js"
       ],
       "matches": ["<all_urls>"]
     }
@@ -84,7 +86,8 @@
     "contextMenus",
     "downloads",
     "sidePanel",
-    "offscreen"
+    "offscreen",
+    "tabCapture"
   ],
   "host_permissions": ["<all_urls>"],
   "icons": {
@@ -97,7 +100,7 @@
     "open_in_tab": false
   },
   "side_panel": {
-    "default_path": "views/pageMacros.html"
+    "default_path": "views/chatPanel.html"
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

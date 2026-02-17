@@ -1,0 +1,31 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Desktop Power Settings Grammar
+// Battery saver and power mode configuration
+
+@ <Start> = <BatterySaverActivationLevel>
+          | <SetPowerModePluggedIn>
+          | <SetPowerModeOnBattery>
+
+@ <BatterySaverActivationLevel> =
+    set battery saver to $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
+  | battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
+  | activate battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
+  | turn on battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
+
+@ <SetPowerModePluggedIn> =
+    set power mode to best performance -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
+  | set power mode to balanced -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "balanced" } }
+  | set power mode to best power efficiency -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPowerEfficiency" } }
+  | enable best performance mode -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
+  | enable balanced mode -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "balanced" } }
+  | enable power saver mode -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPowerEfficiency" } }
+  | use best performance -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
+
+@ <SetPowerModeOnBattery> =
+    set battery power mode to best performance -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "bestPerformance" } }
+  | set battery power mode to balanced -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "balanced" } }
+  | set battery power mode to best power efficiency -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "bestPowerEfficiency" } }
+  | on battery use best performance -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "bestPerformance" } }
+  | on battery use power saver -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "bestPowerEfficiency" } }

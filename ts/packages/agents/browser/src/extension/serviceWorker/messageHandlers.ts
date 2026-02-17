@@ -11,6 +11,11 @@ import {
 } from "./websocket";
 import { BrowserContentDownloader } from "./contentDownloader.js";
 import type { KnowledgeExtractionProgress } from "../interfaces/knowledgeExtraction.types";
+import { screenshotCoordinator } from "./screenshotCoordinator";
+import {
+    connectToDispatcher,
+    isDispatcherConnected,
+} from "./dispatcherConnection";
 
 // Store active extraction callbacks
 const knowledgeExtractionCallbacks = new Map<
@@ -231,10 +236,8 @@ export async function handleMessage(
             return {};
         }
         case "takeScreenshot": {
-            const screenshotUrl = await chrome.tabs.captureVisibleTab({
-                format: "png",
-            });
-
+            const screenshotUrl =
+                await screenshotCoordinator.captureScreenshot();
             return screenshotUrl;
         }
         case "captureHtmlFragments": {
@@ -1453,6 +1456,49 @@ export async function handleMessage(
                                 : "Unknown error",
                     },
                 };
+            }
+        }
+
+        // =============================================
+        // Chat Panel — Dispatcher Connection
+        // =============================================
+
+        case "chatPanel:connect": {
+            try {
+                await connectToDispatcher();
+                // Also ensure the port 8081 browser control WebSocket is connected.
+                // This is needed so the browser agent can route commands
+                // (like followLink, scrollDown, etc.) back to this extension.
+                await ensureWebsocketConnected();
+                return { connected: true };
+            } catch (error: any) {
+                console.error(
+                    "Failed to connect to Agent Server:",
+                    error?.message || error,
+                );
+                return { connected: false, error: error?.message };
+            }
+        }
+
+        case "chatPanel:connectionStatus": {
+            return { connected: isDispatcherConnected() };
+        }
+
+        case "chatPanel:processCommand": {
+            try {
+                const dispatcher = await connectToDispatcher();
+                const result = await dispatcher.processCommand(
+                    message.command,
+                    message.clientRequestId,
+                    message.attachments,
+                );
+                return { success: true, result };
+            } catch (error: any) {
+                console.error(
+                    "Failed to process command:",
+                    error?.message || error,
+                );
+                return { error: error?.message || "Command failed" };
             }
         }
 

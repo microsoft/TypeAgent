@@ -434,6 +434,214 @@ const SCHEMA_REGISTRY: SchemaInfo[] = [
             },
         ],
     },
+    {
+        name: "browser",
+        description:
+            "Browser automation agent for web navigation, interaction, and content extraction",
+        schemaSource:
+            "export type BrowserActions = OpenWebPage | CloseWebPage | ClickOnElement | EnterTextInElement | GetHTML | ...",
+        actions: [
+            {
+                name: "openWebPage",
+                description: "Open a web page in the browser",
+                parameters: {
+                    site: {
+                        type: "string",
+                        description: "Website name, URL, or search terms",
+                    },
+                    tab: {
+                        type: "string",
+                        enum: ["new", "current", "existing"],
+                        description:
+                            "Tab to open in (optional, default: current)",
+                    },
+                },
+            },
+            {
+                name: "clickOnElement",
+                description: "Click on an element on the page",
+                parameters: {
+                    cssSelector: {
+                        type: "string",
+                        description: "CSS selector for the element to click",
+                    },
+                },
+            },
+            {
+                name: "enterTextInElement",
+                description: "Enter text into an input element",
+                parameters: {
+                    value: {
+                        type: "string",
+                        description: "Text to enter",
+                    },
+                    cssSelector: {
+                        type: "string",
+                        description: "CSS selector for the input element",
+                    },
+                    submitForm: {
+                        type: "boolean",
+                        description:
+                            "Submit form after entering text (optional)",
+                    },
+                },
+            },
+            {
+                name: "getHTML",
+                description: "Get HTML content from the current page",
+                parameters: {
+                    fullHTML: {
+                        type: "boolean",
+                        description: "Get full HTML (optional)",
+                    },
+                    extractText: {
+                        type: "boolean",
+                        description: "Extract only text content (optional)",
+                    },
+                },
+            },
+            {
+                name: "awaitPageLoad",
+                description: "Wait for page to finish loading",
+                parameters: {},
+            },
+            {
+                name: "scrollDown",
+                description: "Scroll down the page",
+                parameters: {},
+            },
+            {
+                name: "scrollUp",
+                description: "Scroll up the page",
+                parameters: {},
+            },
+            {
+                name: "goBack",
+                description: "Navigate back in browser history",
+                parameters: {},
+            },
+            {
+                name: "goForward",
+                description: "Navigate forward in browser history",
+                parameters: {},
+            },
+            {
+                name: "reloadPage",
+                description: "Reload the current page",
+                parameters: {},
+            },
+            {
+                name: "getElementByDescription",
+                description:
+                    "Find UI element on page using natural language description (PREFERRED over raw HTML parsing)",
+                parameters: {
+                    elementDescription: {
+                        type: "string",
+                        description:
+                            "Natural language description of element (e.g., 'Add to Cart button', 'search input')",
+                    },
+                    elementType: {
+                        type: "string",
+                        description:
+                            "Optional element type hint (button, input, link, etc.)",
+                    },
+                },
+            },
+            {
+                name: "isPageStateMatched",
+                description:
+                    "Verify current page state matches expected condition (PREFERRED for state validation)",
+                parameters: {
+                    expectedStateDescription: {
+                        type: "string",
+                        description:
+                            "Expected page state description (e.g., 'page shows shopping cart', 'product details loaded')",
+                    },
+                },
+            },
+            {
+                name: "queryPageContent",
+                description:
+                    "Answer questions about visible page content (PREFERRED over raw HTML parsing)",
+                parameters: {
+                    query: {
+                        type: "string",
+                        description:
+                            "Question about page content (e.g., 'how many items in stock?', 'what is the price?')",
+                    },
+                },
+            },
+        ],
+    },
+    {
+        name: "browser.commerce",
+        description:
+            "Commerce-specific browser actions for shopping, cart management, and reservations",
+        schemaSource:
+            "export type ShoppingActions = ViewShoppingCart | FindNearbyStore | GetLocationInStore | BuyProduct | SearchForReservation | SelectReservation",
+        actions: [
+            {
+                name: "buyProduct",
+                description:
+                    "Complete shopping flow: search, select, and add product to cart",
+                parameters: {
+                    productName: {
+                        type: "string",
+                        description: "Product name or description to purchase",
+                    },
+                },
+            },
+            {
+                name: "getLocationInStore",
+                description:
+                    "Find physical location of product in store (aisle, shelf)",
+                parameters: {
+                    productName: {
+                        type: "string",
+                        description: "Name of the product to locate",
+                    },
+                },
+            },
+            {
+                name: "viewShoppingCart",
+                description: "View shopping cart contents",
+                parameters: {},
+            },
+            {
+                name: "findNearbyStore",
+                description: "Find nearest store location",
+                parameters: {},
+            },
+            {
+                name: "searchForReservation",
+                description: "Search for restaurant reservation slots",
+                parameters: {
+                    restaurantName: {
+                        type: "string",
+                        description: "Name of the restaurant",
+                    },
+                    time: {
+                        type: "string",
+                        description: "Desired time (AM/PM format)",
+                    },
+                    numberOfPeople: {
+                        type: "number",
+                        description: "Number of people (default: 1)",
+                    },
+                },
+            },
+            {
+                name: "selectReservation",
+                description: "Select and book a specific reservation time slot",
+                parameters: {
+                    time: {
+                        type: "string",
+                        description: "Time slot to book",
+                    },
+                },
+            },
+        ],
+    },
 ];
 
 /**
@@ -461,13 +669,19 @@ export class CommandServer {
     private responseCollector: { messages: string[] } = { messages: [] };
     private currentRequestConfirmed: boolean = false;
     private config: ResolvedAgentServerConfig;
+    private schemaDiscovery: boolean = false;
 
     /**
      * Creates a new CommandServer instance
      * @param debugMode Enable debug mode for diagnostic tools
      * @param agentServerUrl URL of the TypeAgent dispatcher server (default: ws://localhost:8999)
+     * @param schemaDiscovery Enable schema discovery tools (discover_schemas, load_schema) - default: false
      */
-    constructor(debugMode: boolean = true, agentServerUrl?: string) {
+    constructor(
+        debugMode: boolean = true,
+        agentServerUrl?: string,
+        schemaDiscovery: boolean = false,
+    ) {
         this.logger = new Logger();
 
         // Load agent server configuration
@@ -506,8 +720,12 @@ export class CommandServer {
             agentServerUrl ??
             process.env.AGENT_SERVER_URL ??
             "ws://localhost:8999";
+        this.schemaDiscovery = schemaDiscovery;
         this.logger.log(
             `CommandServer initializing with TypeAgent server URL: ${this.agentServerUrl}`,
+        );
+        this.logger.log(
+            `Schema discovery: ${this.schemaDiscovery ? "enabled" : "disabled"}`,
         );
         this.addTools();
         if (debugMode) {
@@ -658,11 +876,12 @@ export class CommandServer {
             {
                 inputSchema: executeCommandRequestSchema(),
                 description:
+                    "Perform a single user command at a time. If the user wants multiple commands break them up into multiple calls.\n" +
                     "Execute user commands including:\n" +
                     "- Music & media: play songs, control playback\n" +
                     "- Lists & tasks: manage shopping lists, todo lists\n" +
                     "- Calendar: schedule events, view calendar\n" +
-                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings\n\n" +
+                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings\n" +
                     "Parameters:\n" +
                     "- request: The command to execute\n" +
                     "- cacheCheck: (optional) Check cache before executing\n" +
@@ -676,39 +895,44 @@ export class CommandServer {
                 this.executeCommand(request),
         );
 
-        // Discovery tool
-        this.server.registerTool(
-            "discover_schemas",
-            {
-                inputSchema: discoverSchemasRequestSchema(),
-                description:
-                    "Check if TypeAgent has capabilities for a user request that isn't covered by existing tools. " +
-                    "Returns available schemas/agents that match the request, along with their actions. " +
-                    "Use this BEFORE telling the user a capability isn't available.\n\n" +
-                    "Example: User asks 'What's the weather?' → Call discover_schemas({query: 'weather'}) to see if a weather agent is installed.\n\n" +
-                    "Parameters:\n" +
-                    "- query: Natural language description of what the user wants (e.g., 'weather', 'send email', 'analyze code')\n" +
-                    "- includeActions: If true, return detailed action schemas and TypeScript source. If false, just return agent names and descriptions (default: false)",
-            },
-            async (request: DiscoverSchemasRequest) =>
-                this.discoverSchemas(request),
-        );
+        // Schema discovery tools (only registered if schemaDiscovery flag is enabled)
+        if (this.schemaDiscovery) {
+            // Discovery tool
+            this.server.registerTool(
+                "discover_schemas",
+                {
+                    inputSchema: discoverSchemasRequestSchema(),
+                    description:
+                        "Check if TypeAgent has capabilities for a user request that isn't covered by existing tools. " +
+                        "Returns available schemas/agents that match the request, along with their actions. " +
+                        "Use this BEFORE telling the user a capability isn't available.\n\n" +
+                        "Example: User asks 'What's the weather?' → Call discover_schemas({query: 'weather'}) to see if a weather agent is installed.\n\n" +
+                        "Parameters:\n" +
+                        "- query: Natural language description of what the user wants (e.g., 'weather', 'send email', 'analyze code')\n" +
+                        "- includeActions: If true, return detailed action schemas and TypeScript source. If false, just return agent names and descriptions (default: false)",
+                },
+                async (request: DiscoverSchemasRequest) =>
+                    this.discoverSchemas(request),
+            );
 
-        // Schema loading tool
-        this.server.registerTool(
-            "load_schema",
-            {
-                inputSchema: loadSchemaRequestSchema(),
-                description:
-                    "Load a TypeAgent schema dynamically and register its actions as tools. " +
-                    "After loading, the agent's actions become available for direct invocation in this session. " +
-                    "Only use this after discover_schemas confirms the schema is available.\n\n" +
-                    "Parameters:\n" +
-                    "- schemaName: The schema/agent name returned by discover_schemas (e.g., 'weather', 'email')\n" +
-                    "- exposeAs: How to expose actions - 'individual' creates one tool per action (e.g., weather_getCurrentConditions), 'composite' creates one tool (e.g., weather_action) with action as a parameter (default: composite)",
-            },
-            async (request: LoadSchemaRequest) => this.loadSchema(request),
-        );
+            // Schema loading tool
+            this.server.registerTool(
+                "load_schema",
+                {
+                    inputSchema: loadSchemaRequestSchema(),
+                    description:
+                        "Load a TypeAgent schema dynamically and register its actions as tools. " +
+                        "After loading, the agent's actions become available for direct invocation in this session. " +
+                        "Only use this after discover_schemas confirms the schema is available.\n\n" +
+                        "Parameters:\n" +
+                        "- schemaName: The schema/agent name returned by discover_schemas (e.g., 'weather', 'email')\n" +
+                        "- exposeAs: How to expose actions - 'individual' creates one tool per action (e.g., weather_getCurrentConditions), 'composite' creates one tool (e.g., weather_action) with action as a parameter (default: composite)",
+                },
+                async (request: LoadSchemaRequest) => this.loadSchema(request),
+            );
+
+            this.logger.log("Schema discovery tools registered");
+        }
 
         // Generic action execution tool
         this.server.registerTool(

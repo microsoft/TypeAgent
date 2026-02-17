@@ -37,6 +37,13 @@ import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
+import type {
+    ElementDescriptionResult,
+    PageStateMatchResult,
+    PageContentQueryResult,
+} from "./browserQueryResults.mjs";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -1034,6 +1041,12 @@ async function resolveWebPage(
 ): Promise<string[]> {
     debug(`Resolving site '${site}'`);
 
+    if (!site) {
+        throw new Error(
+            "No site or URL specified. Please provide a URL to open.",
+        );
+    }
+
     // Handle library pages with custom protocol
     const libraryPages: Record<string, string> = {
         annotationslibrary: "typeagent-browser://views/annotationsLibrary.html",
@@ -1699,6 +1712,27 @@ async function executeBrowserAction(
                         "knowledgeExtraction",
                     );
                     return createActionResult(JSON.stringify(fragments));
+                }
+                case "getElementByDescription": {
+                    const result = await handleGetElementByDescription(
+                        action.parameters,
+                        context,
+                    );
+                    return result;
+                }
+                case "isPageStateMatched": {
+                    const result = await handleIsPageStateMatched(
+                        action.parameters,
+                        context,
+                    );
+                    return result;
+                }
+                case "queryPageContent": {
+                    const result = await handleQueryPageContent(
+                        action.parameters,
+                        context,
+                    );
+                    return result;
                 }
                 default:
                     // Should never happen.
@@ -2749,6 +2783,433 @@ async function handleWebsiteLibraryStats(
             totalHistory: 0,
             topDomains: 0,
         };
+    }
+}
+
+// ============================================================================
+// Browser Semantic Query Action Handlers
+// ============================================================================
+
+/**
+ * Helper function to load schema file contents
+ */
+async function getBrowserQuerySchemaContents(
+    fileName: string,
+): Promise<string> {
+    const packageRoot = path.join("..", "..");
+    return await fs.promises.readFile(
+        fileURLToPath(
+            new URL(
+                path.join(packageRoot, "./src/agent", fileName),
+                import.meta.url,
+            ),
+        ),
+        "utf8",
+    );
+}
+
+/**
+ * Create a TypeChat translator for browser query result types
+ */
+function createBrowserQueryTranslator<T extends object>(
+    resultType: string,
+    schema: string,
+    context: ActionContext<BrowserActionContext>,
+) {
+    const apiSettings = openai.azureApiSettingsFromEnv(
+        openai.ModelType.Chat,
+        undefined,
+        "GPT_5_2",
+    );
+    const model = openai.createChatModel(apiSettings, undefined, undefined, [
+        "browser-query",
+    ]);
+    const validator = createTypeScriptJsonValidator<T>(schema, resultType);
+    const translator = createJsonTranslator(model, validator);
+
+    // Override createRequestPrompt to suppress TypeChat's default prompt
+    translator.createRequestPrompt = () => "";
+
+    return translator;
+}
+
+/**
+ * Build prompt sections for HTML fragments
+ */
+function buildHtmlPromptSection(fragments: any[] | undefined) {
+    const sections: any[] = [];
+    if (fragments && fragments.length > 0) {
+        const htmlContent = fragments
+            .map((f, i) => `Fragment ${i + 1}:\n${f.content || f.html || ""}`)
+            .join("\n\n");
+        sections.push({
+            type: "text",
+            text: `Here are HTML fragments from the page:\n\`\`\`\n${htmlContent}\n\`\`\``,
+        });
+    }
+    return sections;
+}
+
+/**
+ * Build prompt sections for screenshot
+ */
+function buildScreenshotPromptSection(screenshot: string | undefined) {
+    const sections: any[] = [];
+    if (screenshot) {
+        sections.push({
+            type: "text",
+            text: "Here is a screenshot of the currently visible webpage:",
+        });
+        sections.push({
+            type: "image_url",
+            image_url: { url: screenshot },
+        });
+    }
+    return sections;
+}
+
+/**
+ * Handle getElementByDescription action
+ */
+async function handleGetElementByDescription(
+    parameters: { elementDescription: string; elementType?: string },
+    context: ActionContext<BrowserActionContext>,
+): Promise<ActionResult> {
+    const browserControl = getActionBrowserControl(context);
+
+    try {
+        // Get HTML fragments for analysis
+        const htmlFragments = await browserControl.getHtmlFragments(
+            false,
+            "knowledgeExtraction",
+        );
+
+        // Attempt to capture screenshot (optional)
+        let screenshot: string | undefined;
+        try {
+            screenshot = await browserControl.captureScreenshot();
+        } catch (error) {
+            console.warn(
+                "Screenshot capture failed:",
+                (error as Error)?.message,
+            );
+        }
+
+        // Load schema and create translator
+        const schema = await getBrowserQuerySchemaContents(
+            "browserQueryResults.mts",
+        );
+        const translator =
+            createBrowserQueryTranslator<ElementDescriptionResult>(
+                "ElementDescriptionResult",
+                schema,
+                context,
+            );
+
+        // Build prompt
+        const screenshotSection = buildScreenshotPromptSection(screenshot);
+        const htmlSection = buildHtmlPromptSection(htmlFragments);
+
+        const promptSections = [
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `# Task: Locate Element by Description
+
+You are tasked with finding a specific UI element on the webpage based on a natural language description.
+
+## Element to Find
+Description: "${parameters.elementDescription}"
+${parameters.elementType ? `Type Hint: ${parameters.elementType}` : ""}
+
+## Instructions
+1. Examine the HTML fragments and screenshot provided
+2. Identify the element that best matches the description
+3. Extract the following information:
+   - Element name (short descriptive label)
+   - Element HTML (complete outerHTML of the element)
+   - CSS selector (prefer ID-based, fallback to other unique selectors)
+   - Element type (button, input, link, div, etc.)
+   - Visible text content (if any)
+   - Key attributes (id, class, data-*, aria-*, etc.)
+
+4. If the element cannot be found:
+   - Set found: false
+   - Provide a clear reason in notFoundReason
+
+## CSS Selector Guidelines
+- Prefer selectors in this order:
+  1. ID-based: #element-id
+  2. Data attribute: [data-testid="value"]
+  3. Unique class: .unique-class-name
+  4. Combination: button.class-name[type="submit"]
+- Ensure selector is specific enough to uniquely identify the element
+- Test mentally: would this selector match only one element?
+
+Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
+
+\`\`\`
+${translator.validator.getSchemaText()}
+\`\`\`
+
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
+            },
+        ];
+
+        const response = await translator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+
+        if (response.success && response.data) {
+            const result = response.data;
+            let displayText: string;
+            if (result.found) {
+                displayText = `Found element: ${result.elementName}`;
+                if (result.elementCssSelector) {
+                    displayText += `\nCSS Selector: ${result.elementCssSelector}`;
+                }
+                if (result.elementText) {
+                    displayText += `\nText: ${result.elementText}`;
+                }
+            } else {
+                displayText = `Element not found: ${result.notFoundReason || "Unknown reason"}`;
+            }
+            context.actionIO.setDisplay(displayText);
+            return createActionResult(JSON.stringify(result));
+        } else {
+            const errorMsg = "Failed to analyze page";
+            context.actionIO.setDisplay(errorMsg);
+            return createActionResultFromError(errorMsg);
+        }
+    } catch (error) {
+        const errorMsg = `Error in getElementByDescription: ${(error as Error).message}`;
+        context.actionIO.setDisplay(errorMsg);
+        return createActionResultFromError(errorMsg);
+    }
+}
+
+/**
+ * Handle isPageStateMatched action
+ */
+async function handleIsPageStateMatched(
+    parameters: { expectedStateDescription: string },
+    context: ActionContext<BrowserActionContext>,
+): Promise<ActionResult> {
+    const browserControl = getActionBrowserControl(context);
+
+    try {
+        // Get HTML fragments for analysis
+        const htmlFragments = await browserControl.getHtmlFragments(
+            false,
+            "knowledgeExtraction",
+        );
+
+        // Attempt to capture screenshot (optional)
+        let screenshot: string | undefined;
+        try {
+            screenshot = await browserControl.captureScreenshot();
+        } catch (error) {
+            console.warn(
+                "Screenshot capture failed:",
+                (error as Error)?.message,
+            );
+        }
+
+        // Load schema and create translator
+        const schema = await getBrowserQuerySchemaContents(
+            "browserQueryResults.mts",
+        );
+        const translator = createBrowserQueryTranslator<PageStateMatchResult>(
+            "PageStateMatchResult",
+            schema,
+            context,
+        );
+
+        // Build prompt
+        const screenshotSection = buildScreenshotPromptSection(screenshot);
+        const htmlSection = buildHtmlPromptSection(htmlFragments);
+
+        const promptSections = [
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `# Task: Verify Page State
+
+You are tasked with determining if the current page state matches an expected condition.
+
+## Expected State
+"${parameters.expectedStateDescription}"
+
+## Instructions
+1. Analyze the current page using the HTML fragments and screenshot
+2. Determine the current page state:
+   - Page type (e.g., homePage, searchResults, productDetails, shoppingCart)
+   - Description of what's currently shown
+   - Key elements visible on the page
+   - Possible user actions
+
+3. Compare current state to expected state:
+   - Does the page type match?
+   - Are the expected elements present?
+   - Does the content align with expectations?
+   - Calculate confidence score (0.0 to 1.0)
+
+4. Set matched: true only if:
+   - Core aspects of expected state are present
+   - Confidence >= 0.7
+
+5. Provide clear explanation:
+   - If matched: "The page shows [current state] which matches the expected [expected state]"
+   - If not matched: "The page shows [current state] but expected [expected state]. Missing: [details]"
+
+Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
+
+\`\`\`
+${translator.validator.getSchemaText()}
+\`\`\`
+
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
+            },
+        ];
+
+        const response = await translator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+
+        if (response.success && response.data) {
+            const result = response.data;
+            const displayText = result.matched
+                ? `✅ Page state matched: ${result.explanation}`
+                : `❌ Page state not matched: ${result.explanation}`;
+            context.actionIO.setDisplay(displayText);
+            return createActionResult(JSON.stringify(result));
+        } else {
+            const errorMsg = "Failed to analyze page state";
+            context.actionIO.setDisplay(errorMsg);
+            return createActionResultFromError(errorMsg);
+        }
+    } catch (error) {
+        const errorMsg = `Error in isPageStateMatched: ${(error as Error).message}`;
+        context.actionIO.setDisplay(errorMsg);
+        return createActionResultFromError(errorMsg);
+    }
+}
+
+/**
+ * Handle queryPageContent action
+ */
+async function handleQueryPageContent(
+    parameters: { query: string },
+    context: ActionContext<BrowserActionContext>,
+): Promise<ActionResult> {
+    const browserControl = getActionBrowserControl(context);
+
+    try {
+        // Get HTML fragments for analysis
+        const htmlFragments = await browserControl.getHtmlFragments(
+            false,
+            "knowledgeExtraction",
+        );
+
+        // Attempt to capture screenshot (optional)
+        let screenshot: string | undefined;
+        try {
+            screenshot = await browserControl.captureScreenshot();
+        } catch (error) {
+            console.warn(
+                "Screenshot capture failed:",
+                (error as Error)?.message,
+            );
+        }
+
+        // Load schema and create translator
+        const schema = await getBrowserQuerySchemaContents(
+            "browserQueryResults.mts",
+        );
+        const translator = createBrowserQueryTranslator<PageContentQueryResult>(
+            "PageContentQueryResult",
+            schema,
+            context,
+        );
+
+        // Build prompt
+        const screenshotSection = buildScreenshotPromptSection(screenshot);
+        const htmlSection = buildHtmlPromptSection(htmlFragments);
+
+        const promptSections = [
+            ...screenshotSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `# Task: Answer Question About Page Content
+
+You are tasked with answering a question about the current webpage content.
+
+## Question
+"${parameters.query}"
+
+## Instructions
+1. Analyze the HTML fragments and screenshot provided
+2. Find the answer to the question in the page content
+3. If answered:
+   - Provide a clear, concise answer
+   - Extract relevant text snippets as evidence
+   - Include CSS selectors pointing to source elements
+   - Assign confidence score (0.0 to 1.0)
+   - Be precise: use exact values, include units (e.g., "$24.99" not "about 25")
+
+4. If unable to answer:
+   - Set answered: false
+   - Explain why (e.g., "Information not found on page", "Question ambiguous")
+   - Suggest next steps if applicable
+
+5. Answer Guidelines:
+   - Extract exact values from the page
+   - Include units for measurements, prices, quantities
+   - If multiple answers exist, list them clearly
+   - Cite specific locations in the page
+
+Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
+
+\`\`\`
+${translator.validator.getSchemaText()}
+\`\`\`
+
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
+            },
+        ];
+
+        const response = await translator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+
+        if (response.success && response.data) {
+            const result = response.data;
+            const displayText = result.answered
+                ? `Answer: ${result.answerText}`
+                : `Unable to answer: ${result.unableToAnswerReason || "No information found"}`;
+            context.actionIO.setDisplay(displayText);
+            return createActionResult(JSON.stringify(result));
+        } else {
+            const errorMsg = "Failed to query page content";
+            context.actionIO.setDisplay(errorMsg);
+            return createActionResultFromError(errorMsg);
+        }
+    } catch (error) {
+        const errorMsg = `Error in queryPageContent: ${(error as Error).message}`;
+        context.actionIO.setDisplay(errorMsg);
+        return createActionResultFromError(errorMsg);
     }
 }
 

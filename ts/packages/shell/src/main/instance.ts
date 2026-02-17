@@ -29,10 +29,7 @@ import {
     RequestId,
 } from "agent-dispatcher";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
-import {
-    hasPendingUpdate,
-    setPendingUpdateCallback,
-} from "./commands/update.js";
+import { setPendingUpdateCallback } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { isProd } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
@@ -132,6 +129,14 @@ async function initializeDispatcher(
             newDispatcher = await connectDispatcher(
                 clientIO,
                 `ws://localhost:${connect}`,
+                undefined,
+                () => {
+                    dialog.showErrorBox(
+                        "Disconnected",
+                        "The connection to the dispatcher was lost.",
+                    );
+                    app.quit();
+                },
             );
             debugShellInit(
                 "Connected to remote dispatcher",
@@ -269,11 +274,7 @@ export function initializeInstance(
         const status = await dispatcher.getStatus();
 
         const newSettingSummary = getStatusSummary(status);
-        const zoomFactor = chatView.webContents.zoomFactor;
-        const pendingUpdate = hasPendingUpdate() ? " [Pending Update]" : "";
-        const zoomFactorTitle =
-            zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
-        const newTitle = `${app.getName()} v${app.getVersion()} - ${newSettingSummary}${pendingUpdate}${zoomFactorTitle}`;
+        const newTitle = app.getName();
         if (newTitle !== title) {
             title = newTitle;
             shellWindow.updateSummary(

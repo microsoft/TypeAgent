@@ -46,7 +46,7 @@ export {
     sortNFAMatches,
     type NFAMatchResult,
 } from "./nfaInterpreter.js";
-export { compileGrammarToNFA } from "./nfaCompiler.js";
+export { compileGrammarToNFA, normalizeGrammar } from "./nfaCompiler.js";
 export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
 
 // Environment-based slot system

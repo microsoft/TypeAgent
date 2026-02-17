@@ -56,6 +56,9 @@ export const webapi: ClientAPI = {
     openUrlInBrowserTab: () => {
         // not supported on mobile
     },
+    openUrlExternal: () => {
+        // not supported on mobile
+    },
     searchMenuUpdate: () => {
         // not supported on mobile
         throw new Error("Not implemented");

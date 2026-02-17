@@ -65,7 +65,7 @@ export async function handleInstacartAction(
     }
 
     const browser: BrowserConnector = context.agentContext.browserConnector;
-    const agent = await createInstacartPageTranslator("GPT_4_O_MINI");
+    const agent = await createInstacartPageTranslator("GPT_5_MINI");
     const ui = setupPageActions(browser, agent);
 
     // Create entity collector and action context

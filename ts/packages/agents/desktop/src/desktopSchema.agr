@@ -1,0 +1,138 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Desktop Agent Grammar - Core Actions
+// Window management, volume, theme, network, and basic display settings
+
+@ <Start> = <LaunchProgram>
+          | <CloseProgram>
+          | <WindowManagement>
+          | <VolumeControl>
+          | <ThemeMode>
+          | <WifiControl>
+          | <DesktopManagement>
+          | <NetworkSettings>
+          | <BrightnessControl>
+
+// ===== Known Programs (for completions and priority matching) =====
+// These are matched with higher priority than wildcards
+@ <KnownProgram> = chrome
+                 | word
+                 | excel
+                 | powerpoint
+                 | outlook
+                 | edge
+                 | visual studio code
+                 | visual studio
+                 | paint 3d
+                 | paint
+                 | notepad
+                 | calculator
+                 | file explorer
+                 | control panel
+                 | task manager
+                 | cmd
+                 | powershell
+                 | snipping tool
+                 | magnifier
+                 | spotify
+                 | m365 copilot
+
+// Program is either a known program or any wildcard text
+@ <Program> = <KnownProgram>
+            | $(name:wildcard) -> $(name)
+
+// ===== Program Launch/Close =====
+@ <LaunchProgram> = launch $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+                  | open $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+                  | start $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+                  | run $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+
+@ <CloseProgram> = close $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
+                 | quit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
+                 | exit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
+
+// ===== Window Management =====
+@ <WindowManagement> = <MaximizeWindow>
+                     | <MinimizeWindow>
+                     | <SwitchToWindow>
+                     | <TileWindows>
+
+@ <MaximizeWindow> = maximize $(program:<Program>) -> { actionName: "maximize", parameters: { name: $(program) } }
+                   | make $(program:<Program>) full screen -> { actionName: "maximize", parameters: { name: $(program) } }
+
+@ <MinimizeWindow> = minimize $(program:<Program>) -> { actionName: "minimize", parameters: { name: $(program) } }
+                   | hide $(program:<Program>) -> { actionName: "minimize", parameters: { name: $(program) } }
+
+@ <SwitchToWindow> = switch to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
+                   | focus (on)? $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
+                   | go to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
+
+@ <TileWindows> = tile $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
+                | put $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
+                | tile $(left:<Program>) and $(right:<Program>) -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
+
+// ===== Volume Control =====
+@ <VolumeControl> = set volume to $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: $(level) } }
+                  | volume $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: $(level) } }
+                  | mute -> { actionName: "mute", parameters: { on: true } }
+                  | unmute -> { actionName: "mute", parameters: { on: false } }
+                  | restore volume -> { actionName: "restoreVolume" }
+
+// ===== Theme Mode =====
+@ <ThemeMode> = set theme to dark -> { actionName: "setThemeMode", parameters: { mode: "dark" } }
+              | set theme to light -> { actionName: "setThemeMode", parameters: { mode: "light" } }
+              | toggle (theme)? mode -> { actionName: "setThemeMode", parameters: { mode: "toggle" } }
+              | enable dark mode -> { actionName: "setThemeMode", parameters: { mode: "dark" } }
+              | enable light mode -> { actionName: "setThemeMode", parameters: { mode: "light" } }
+              | switch to dark (mode)? -> { actionName: "setThemeMode", parameters: { mode: "dark" } }
+              | switch to light (mode)? -> { actionName: "setThemeMode", parameters: { mode: "light" } }
+
+// ===== WiFi Control =====
+@ <WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "connectWifi", parameters: { ssid: $(ssid) } }
+                | connect to wifi $(ssid:wildcard) -> { actionName: "connectWifi", parameters: { ssid: $(ssid) } }
+                | disconnect (from)? wifi -> { actionName: "disconnectWifi", parameters: {} }
+                | enable airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: true } }
+                | disable airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: false } }
+                | turn on airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: true } }
+                | turn off airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: false } }
+
+// ===== Desktop Management =====
+@ <DesktopManagement> = create (new)? desktop -> { actionName: "createDesktop", parameters: { names: [] } }
+                      | create desktop $(name:wildcard) -> { actionName: "createDesktop", parameters: { names: [$(name)] } }
+                      | move $(program:<Program>) to desktop $(id:number) -> { actionName: "moveWindowToDesktop", parameters: { name: $(program), desktopId: $(id) } }
+                      | pin $(program:<Program>) (to all desktops)? -> { actionName: "pinWindow", parameters: { name: $(program) } }
+                      | switch to desktop $(id:number) -> { actionName: "switchDesktop", parameters: { desktopId: $(id) } }
+                      | next desktop -> { actionName: "nextDesktop", parameters: {} }
+                      | previous desktop -> { actionName: "previousDesktop", parameters: {} }
+                      | show notifications -> { actionName: "toggleNotifications", parameters: { enable: true } }
+                      | hide notifications -> { actionName: "toggleNotifications", parameters: { enable: false } }
+                      | toggle notifications -> { actionName: "toggleNotifications", parameters: { enable: true } }
+
+// ===== Network Settings (core) =====
+@ <NetworkSettings> = <BluetoothToggle>
+                    | <EnableWifi>
+
+@ <BluetoothToggle> =
+    turn on bluetooth -> { actionName: "BluetoothToggle", parameters: { enableBluetooth: true } }
+  | turn off bluetooth -> { actionName: "BluetoothToggle", parameters: { enableBluetooth: false } }
+  | enable bluetooth -> { actionName: "BluetoothToggle", parameters: { enableBluetooth: true } }
+  | disable bluetooth -> { actionName: "BluetoothToggle", parameters: { enableBluetooth: false } }
+  | toggle bluetooth -> { actionName: "BluetoothToggle", parameters: {} }
+
+@ <EnableWifi> =
+    turn on wifi -> { actionName: "enableWifi", parameters: { enable: true } }
+  | turn off wifi -> { actionName: "enableWifi", parameters: { enable: false } }
+  | enable wifi -> { actionName: "enableWifi", parameters: { enable: true } }
+  | disable wifi -> { actionName: "enableWifi", parameters: { enable: false } }
+  | turn on wi\-fi -> { actionName: "enableWifi", parameters: { enable: true } }
+  | turn off wi\-fi -> { actionName: "enableWifi", parameters: { enable: false } }
+
+// ===== Brightness Control (core) =====
+@ <BrightnessControl> =
+    increase (screen)? brightness -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "increase" } }
+  | decrease (screen)? brightness -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "decrease" } }
+  | make (the)? screen brighter -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "increase" } }
+  | make (the)? screen dimmer -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "decrease" } }
+  | dim (the)? screen -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "decrease" } }
+  | brighten (the)? screen -> { actionName: "AdjustScreenBrightness", parameters: { brightnessLevel: "increase" } }

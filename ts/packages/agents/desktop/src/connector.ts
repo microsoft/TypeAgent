@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { ProgramNameIndex, loadProgramNameIndex } from "./programNameIndex.js";
 import { Storage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
-import { DesktopActions } from "./actionsSchema.js";
+import { AllDesktopActions } from "./allActionsSchema.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -67,13 +67,19 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
 }
 
 export async function runDesktopActions(
-    action: DesktopActions,
+    action: AllDesktopActions,
     agentContext: DesktopActionContext,
     sessionStorage: Storage,
+    schemaName?: string, // Schema name for disambiguation (e.g., "desktop-display", "desktop-taskbar")
 ) {
     let confirmationMessage = "OK";
     let actionData = "";
     const actionName = action.actionName;
+
+    // Log schema name for debugging duplicate action resolution
+    if (schemaName) {
+        debug(`Executing action '${actionName}' from schema '${schemaName}'`);
+    }
     switch (actionName) {
         case "setWallpaper": {
             let file = action.parameters.filePath;
@@ -297,6 +303,345 @@ export async function runDesktopActions(
             confirmationMessage = `Set screen resolution to ${action.parameters.width}x${action.parameters.height}`;
             break;
         }
+
+        // ===== New Settings Actions =====
+
+        // Network Settings
+        case "BluetoothToggle": {
+            actionData = JSON.stringify({
+                enableBluetooth: action.parameters.enableBluetooth ?? true,
+            });
+            confirmationMessage = `Bluetooth ${action.parameters.enableBluetooth !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "enableWifi": {
+            actionData = JSON.stringify({ enable: action.parameters.enable });
+            confirmationMessage = `WiFi ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "enableMeteredConnections": {
+            actionData = JSON.stringify({ enable: action.parameters.enable });
+            confirmationMessage = `Metered connections ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        }
+
+        // Display Settings
+        case "AdjustScreenBrightness": {
+            actionData = JSON.stringify({
+                brightnessLevel: action.parameters.brightnessLevel,
+            });
+            confirmationMessage = `Screen brightness ${action.parameters.brightnessLevel}d`;
+            break;
+        }
+        case "EnableBlueLightFilterSchedule": {
+            actionData = JSON.stringify({
+                schedule: action.parameters.schedule,
+                nightLightScheduleDisabled:
+                    action.parameters.nightLightScheduleDisabled,
+            });
+            confirmationMessage = `Night Light schedule ${action.parameters.nightLightScheduleDisabled ? "disabled" : "enabled"}`;
+            break;
+        }
+        case "adjustColorTemperature": {
+            actionData = JSON.stringify({
+                filterEffect: action.parameters.filterEffect,
+            });
+            confirmationMessage = `Color temperature adjusted`;
+            break;
+        }
+        case "DisplayScaling": {
+            actionData = JSON.stringify({
+                sizeOverride: action.parameters.sizeOverride,
+            });
+            confirmationMessage = `Display scaling set to ${action.parameters.sizeOverride}%`;
+            break;
+        }
+        case "AdjustScreenOrientation": {
+            actionData = JSON.stringify({
+                orientation: action.parameters.orientation,
+            });
+            confirmationMessage = `Screen orientation set to ${action.parameters.orientation}`;
+            break;
+        }
+        case "RotationLock": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Rotation lock ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+
+        // Personalization Settings
+        case "EnableTransparency": {
+            actionData = JSON.stringify({ enable: action.parameters.enable });
+            confirmationMessage = `Transparency effects ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "ApplyColorToTitleBar": {
+            actionData = JSON.stringify({
+                enableColor: action.parameters.enableColor,
+            });
+            confirmationMessage = `Title bar color ${action.parameters.enableColor ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "HighContrastTheme": {
+            actionData = JSON.stringify({});
+            confirmationMessage = `Opening high contrast theme settings`;
+            break;
+        }
+
+        // Taskbar Settings
+        case "AutoHideTaskbar": {
+            actionData = JSON.stringify({
+                hideWhenNotUsing: action.parameters.hideWhenNotUsing,
+                alwaysShow: action.parameters.alwaysShow,
+            });
+            confirmationMessage = `Taskbar auto-hide ${action.parameters.hideWhenNotUsing ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "TaskbarAlignment": {
+            actionData = JSON.stringify({
+                alignment: action.parameters.alignment,
+            });
+            confirmationMessage = `Taskbar aligned to ${action.parameters.alignment}`;
+            break;
+        }
+        case "TaskViewVisibility": {
+            actionData = JSON.stringify({
+                visibility: action.parameters.visibility,
+            });
+            confirmationMessage = `Task View button ${action.parameters.visibility ? "shown" : "hidden"}`;
+            break;
+        }
+        case "ToggleWidgetsButtonVisibility": {
+            actionData = JSON.stringify({
+                visibility: action.parameters.visibility,
+            });
+            confirmationMessage = `Widgets button ${action.parameters.visibility}`;
+            break;
+        }
+        case "ShowBadgesOnTaskbar": {
+            actionData = JSON.stringify({
+                enableBadging: action.parameters.enableBadging ?? true,
+            });
+            confirmationMessage = `Taskbar badges ${action.parameters.enableBadging !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "DisplayTaskbarOnAllMonitors": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Taskbar on all monitors ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "DisplaySecondsInSystrayClock": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Seconds in clock ${action.parameters.enable !== false ? "shown" : "hidden"}`;
+            break;
+        }
+
+        // Mouse Settings
+        case "MouseCursorSpeed": {
+            actionData = JSON.stringify({
+                speedLevel: action.parameters.speedLevel,
+                reduceSpeed: action.parameters.reduceSpeed,
+            });
+            confirmationMessage = `Mouse cursor speed set to ${action.parameters.speedLevel}`;
+            break;
+        }
+        case "MouseWheelScrollLines": {
+            actionData = JSON.stringify({
+                scrollLines: action.parameters.scrollLines,
+            });
+            confirmationMessage = `Mouse wheel scroll lines set to ${action.parameters.scrollLines}`;
+            break;
+        }
+        case "setPrimaryMouseButton": {
+            actionData = JSON.stringify({
+                primaryButton: action.parameters.primaryButton,
+            });
+            confirmationMessage = `Primary mouse button set to ${action.parameters.primaryButton}`;
+            break;
+        }
+        case "EnhancePointerPrecision": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Enhanced pointer precision ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "AdjustMousePointerSize": {
+            actionData = JSON.stringify({
+                sizeAdjustment: action.parameters.sizeAdjustment,
+            });
+            confirmationMessage = `Mouse pointer size adjusted`;
+            break;
+        }
+        case "mousePointerCustomization": {
+            actionData = JSON.stringify({
+                color: action.parameters.color,
+                style: action.parameters.style,
+            });
+            confirmationMessage = `Mouse pointer customized`;
+            break;
+        }
+
+        // Touchpad Settings
+        case "EnableTouchPad": {
+            actionData = JSON.stringify({ enable: action.parameters.enable });
+            confirmationMessage = `Touchpad ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "TouchpadCursorSpeed": {
+            actionData = JSON.stringify({ speed: action.parameters.speed });
+            confirmationMessage = `Touchpad cursor speed adjusted`;
+            break;
+        }
+
+        // Privacy Settings
+        case "ManageMicrophoneAccess": {
+            actionData = JSON.stringify({
+                accessSetting: action.parameters.accessSetting,
+            });
+            confirmationMessage = `Microphone access set to ${action.parameters.accessSetting}`;
+            break;
+        }
+        case "ManageCameraAccess": {
+            actionData = JSON.stringify({
+                accessSetting: action.parameters.accessSetting ?? "allow",
+            });
+            confirmationMessage = `Camera access set to ${action.parameters.accessSetting ?? "allow"}`;
+            break;
+        }
+        case "ManageLocationAccess": {
+            actionData = JSON.stringify({
+                accessSetting: action.parameters.accessSetting ?? "allow",
+            });
+            confirmationMessage = `Location access set to ${action.parameters.accessSetting ?? "allow"}`;
+            break;
+        }
+
+        // Power Settings
+        case "BatterySaverActivationLevel": {
+            actionData = JSON.stringify({
+                thresholdValue: action.parameters.thresholdValue,
+            });
+            confirmationMessage = `Battery saver threshold set to ${action.parameters.thresholdValue}%`;
+            break;
+        }
+        case "setPowerModePluggedIn": {
+            actionData = JSON.stringify({
+                powerMode: action.parameters.powerMode,
+            });
+            confirmationMessage = `Power mode when plugged in set to ${action.parameters.powerMode}`;
+            break;
+        }
+        case "SetPowerModeOnBattery": {
+            actionData = JSON.stringify({ mode: action.parameters.mode });
+            confirmationMessage = `Power mode on battery adjusted`;
+            break;
+        }
+
+        // Gaming Settings
+        case "enableGameMode": {
+            actionData = JSON.stringify({});
+            confirmationMessage = `Opening Game Mode settings`;
+            break;
+        }
+
+        // Accessibility Settings
+        case "EnableNarratorAction": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Narrator ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "EnableMagnifier": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Magnifier ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "enableStickyKeys": {
+            actionData = JSON.stringify({ enable: action.parameters.enable });
+            confirmationMessage = `Sticky Keys ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "EnableFilterKeysAction": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Filter Keys ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "MonoAudioToggle": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Mono audio ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+
+        // File Explorer Settings
+        case "ShowFileExtensions": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `File extensions ${action.parameters.enable !== false ? "shown" : "hidden"}`;
+            break;
+        }
+        case "ShowHiddenAndSystemFiles": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Hidden files ${action.parameters.enable !== false ? "shown" : "hidden"}`;
+            break;
+        }
+
+        // Time & Region Settings
+        case "AutomaticTimeSettingAction": {
+            actionData = JSON.stringify({
+                enableAutoTimeSync: action.parameters.enableAutoTimeSync,
+            });
+            confirmationMessage = `Automatic time sync ${action.parameters.enableAutoTimeSync ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "AutomaticDSTAdjustment": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Automatic DST adjustment ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+
+        // Focus Assist Settings
+        case "EnableQuietHours": {
+            actionData = JSON.stringify({
+                startHour: action.parameters.startHour,
+                endHour: action.parameters.endHour,
+            });
+            confirmationMessage = `Focus Assist settings opened`;
+            break;
+        }
+
+        // Multi-Monitor Settings
+        case "RememberWindowLocations": {
+            actionData = JSON.stringify({ enable: action.parameters.enable });
+            confirmationMessage = `Remember window locations ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        }
+        case "MinimizeWindowsOnMonitorDisconnectAction": {
+            actionData = JSON.stringify({
+                enable: action.parameters.enable ?? true,
+            });
+            confirmationMessage = `Minimize windows on disconnect ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        }
+
         default:
             throw new Error(`Unknown action: ${actionName}`);
     }

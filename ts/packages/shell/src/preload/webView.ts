@@ -13,6 +13,12 @@ import { ElectronPDFInterceptor } from "./pdfInterceptor";
 
 const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 
+// --- Firefox fingerprint mode ---
+// We use CDP to set a Firefox UA and inject a script that removes Chromium
+// signals. The preload runs AFTER CDP's addScriptToEvaluateOnNewDocument,
+// so we just need to avoid re-adding Chrome objects here.
+// (No Chrome compat shims — the browser claims to be Firefox.)
+
 // Import progress callback registry
 const importProgressCallbacks = new Map<string, (progress: any) => void>();
 

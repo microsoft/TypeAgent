@@ -3,8 +3,75 @@
   "description": "Agent to control the desktop",
   "defaultEnabled": false,
   "schema": {
-    "description": "Desktop agent that allows you to manage the programs running on a computer, including performing actions such as opening a file, closing a window, tiling windows, launching a program, and maximizing windows.",
+    "description": "Desktop agent that allows you to manage the programs running on a computer, change Windows settings, control the desktop environment, and perform actions such as opening a file, closing a window, tiling windows, launching a program, maximizing windows, adjusting display settings, managing privacy settings, and controlling system features.",
     "schemaFile": "./actionsSchema.ts",
+    "compiledSchemaFile": "agents/desktop/dist/desktopSchema.pas.json",
+    "grammarFile": "../dist/desktopSchema.ag.json",
     "schemaType": "DesktopActions"
+  },
+  "subActionManifests": {
+    "desktop-display": {
+      "schema": {
+        "description": "Desktop agent for display and screen settings including night light, color temperature, scaling, orientation, and rotation lock.",
+        "schemaFile": "./windows/displayActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/displaySchema.pas.json",
+        "grammarFile": "../dist/displaySchema.ag.json",
+        "schemaType": "DesktopDisplayActions"
+      }
+    },
+    "desktop-personalization": {
+      "schema": {
+        "description": "Desktop agent for personalization settings including transparency effects, title bar colors, and high contrast themes.",
+        "schemaFile": "./windows/personalizationActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/personalizationSchema.pas.json",
+        "grammarFile": "../dist/personalizationSchema.ag.json",
+        "schemaType": "DesktopPersonalizationActions"
+      }
+    },
+    "desktop-taskbar": {
+      "schema": {
+        "description": "Desktop agent for taskbar settings including auto-hide, alignment, task view, widgets, badges, and system clock options.",
+        "schemaFile": "./windows/taskbarActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/taskbarSchema.pas.json",
+        "grammarFile": "../dist/taskbarSchema.ag.json",
+        "schemaType": "DesktopTaskbarActions"
+      }
+    },
+    "desktop-input": {
+      "schema": {
+        "description": "Desktop agent for mouse and touchpad settings including cursor speed, scroll lines, button configuration, pointer precision, and touchpad controls.",
+        "schemaFile": "./windows/inputActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/inputSchema.pas.json",
+        "grammarFile": "../dist/inputSchema.ag.json",
+        "schemaType": "DesktopInputActions"
+      }
+    },
+    "desktop-privacy": {
+      "schema": {
+        "description": "Desktop agent for privacy settings to manage microphone, camera, and location access for applications.",
+        "schemaFile": "./windows/privacyActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/privacySchema.pas.json",
+        "grammarFile": "../dist/privacySchema.ag.json",
+        "schemaType": "DesktopPrivacyActions"
+      }
+    },
+    "desktop-power": {
+      "schema": {
+        "description": "Desktop agent for power management settings including battery saver and power mode configuration.",
+        "schemaFile": "./windows/powerActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/powerSchema.pas.json",
+        "grammarFile": "../dist/powerSchema.ag.json",
+        "schemaType": "DesktopPowerActions"
+      }
+    },
+    "desktop-system": {
+      "schema": {
+        "description": "Desktop agent for system settings including accessibility features, file explorer options, time settings, focus assist, multi-monitor configuration, and other system-level controls.",
+        "schemaFile": "./windows/systemActionsSchema.ts",
+        "compiledSchemaFile": "agents/desktop/dist/systemSchema.pas.json",
+        "grammarFile": "../dist/systemSchema.ag.json",
+        "schemaType": "DesktopSystemActions"
+      }
+    }
   }
 }

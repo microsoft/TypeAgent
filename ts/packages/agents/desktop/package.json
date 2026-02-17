@@ -17,7 +17,25 @@
     "./agent/handlers": "./dist/actionHandler.js"
   },
   "scripts": {
-    "build": "npm run tsc",
+    "agc": "agc -i ./src/desktopSchema.agr -o ./dist/desktopSchema.ag.json",
+    "agc:all": "concurrently npm:agc npm:agc:display npm:agc:personalization npm:agc:taskbar npm:agc:input npm:agc:privacy npm:agc:power npm:agc:system",
+    "agc:display": "agc -i ./src/windows/displaySchema.agr -o ./dist/displaySchema.ag.json",
+    "agc:input": "agc -i ./src/windows/inputSchema.agr -o ./dist/inputSchema.ag.json",
+    "agc:personalization": "agc -i ./src/windows/personalizationSchema.agr -o ./dist/personalizationSchema.ag.json",
+    "agc:power": "agc -i ./src/windows/powerSchema.agr -o ./dist/powerSchema.ag.json",
+    "agc:privacy": "agc -i ./src/windows/privacySchema.agr -o ./dist/privacySchema.ag.json",
+    "agc:system": "agc -i ./src/windows/systemSchema.agr -o ./dist/systemSchema.ag.json",
+    "agc:taskbar": "agc -i ./src/windows/taskbarSchema.agr -o ./dist/taskbarSchema.ag.json",
+    "asc": "asc -i ./src/actionsSchema.ts -o ./dist/desktopSchema.pas.json -t DesktopActions",
+    "asc:all": "concurrently npm:asc npm:asc:display npm:asc:personalization npm:asc:taskbar npm:asc:input npm:asc:privacy npm:asc:power npm:asc:system",
+    "asc:display": "asc -i ./src/windows/displayActionsSchema.ts -o ./dist/displaySchema.pas.json -t DesktopDisplayActions",
+    "asc:input": "asc -i ./src/windows/inputActionsSchema.ts -o ./dist/inputSchema.pas.json -t DesktopInputActions",
+    "asc:personalization": "asc -i ./src/windows/personalizationActionsSchema.ts -o ./dist/personalizationSchema.pas.json -t DesktopPersonalizationActions",
+    "asc:power": "asc -i ./src/windows/powerActionsSchema.ts -o ./dist/powerSchema.pas.json -t DesktopPowerActions",
+    "asc:privacy": "asc -i ./src/windows/privacyActionsSchema.ts -o ./dist/privacySchema.pas.json -t DesktopPrivacyActions",
+    "asc:system": "asc -i ./src/windows/systemActionsSchema.ts -o ./dist/systemSchema.pas.json -t DesktopSystemActions",
+    "asc:taskbar": "asc -i ./src/windows/taskbarActionsSchema.ts -o ./dist/taskbarSchema.pas.json -t DesktopTaskbarActions",
+    "build": "concurrently npm:tsc npm:asc:all npm:agc:all",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -39,15 +57,230 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
     "@types/body-parser": "^1.19.5",
     "@types/cors": "^2.8.17",
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",
     "@types/find-config": "1.0.4",
     "@types/ws": "^8.5.10",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/desktopSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/desktopSchema.ag.json"
+          ]
+        }
+      },
+      "agc:display": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/displaySchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/displaySchema.ag.json"
+          ]
+        }
+      },
+      "agc:input": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/inputSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/inputSchema.ag.json"
+          ]
+        }
+      },
+      "agc:personalization": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/personalizationSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/personalizationSchema.ag.json"
+          ]
+        }
+      },
+      "agc:power": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/powerSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/powerSchema.ag.json"
+          ]
+        }
+      },
+      "agc:privacy": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/privacySchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/privacySchema.ag.json"
+          ]
+        }
+      },
+      "agc:system": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/systemSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/systemSchema.ag.json"
+          ]
+        }
+      },
+      "agc:taskbar": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/taskbarSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/taskbarSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/actionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/desktopSchema.pas.json"
+          ]
+        }
+      },
+      "asc:display": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/displayActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/displaySchema.pas.json"
+          ]
+        }
+      },
+      "asc:input": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/inputActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/inputSchema.pas.json"
+          ]
+        }
+      },
+      "asc:personalization": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/personalizationActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/personalizationSchema.pas.json"
+          ]
+        }
+      },
+      "asc:power": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/powerActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/powerSchema.pas.json"
+          ]
+        }
+      },
+      "asc:privacy": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/privacyActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/privacySchema.pas.json"
+          ]
+        }
+      },
+      "asc:system": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/systemActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/systemSchema.pas.json"
+          ]
+        }
+      },
+      "asc:taskbar": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/windows/taskbarActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/taskbarSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

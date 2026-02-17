@@ -11,6 +11,7 @@ import { toggleSiteTranslator } from "./siteTranslator";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { getActiveTab } from "./tabManager";
 import { handleMessage } from "./messageHandlers";
+import { screenshotCoordinator } from "./screenshotCoordinator";
 
 import {
     isWebAgentMessage,
@@ -82,14 +83,15 @@ function setupEventListeners(): void {
         if (changeInfo.status === "complete" && tab.active) {
             await toggleSiteTranslator(tab);
 
-            // Trigger navigation handler for page knowledge extraction
-            if (tab.url && tab.title) {
-                try {
-                    await sendNavigationMessage(tab.url, tab.title, tab.id);
-                } catch (error) {
-                    console.error("Error sending navigation message:", error);
-                }
-            }
+            // Knowledge extraction on navigation is disabled for now
+            // to simplify debugging of the chat panel feature.
+            // if (tab.url && tab.title) {
+            //     try {
+            //         await sendNavigationMessage(tab.url, tab.title, tab.id);
+            //     } catch (error) {
+            //         console.error("Error sending navigation message:", error);
+            //     }
+            // }
         }
         if (changeInfo.title) {
             const addTabAction = {
@@ -373,6 +375,9 @@ async function sendActionToTabIndex(action: any): Promise<string | undefined> {
 
 // Start initialization
 initialize();
+
+// Expose screenshotCoordinator globally for testing/debugging
+(globalThis as any).screenshotCoordinator = screenshotCoordinator;
 
 // Track recent navigation events for debouncing
 const recentNavigations = new Map<string, number>();

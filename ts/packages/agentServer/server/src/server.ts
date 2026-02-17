@@ -40,6 +40,7 @@ async function main() {
             requestKnowledgeExtraction: false,
             actionResultKnowledgeExtraction: false,
         },
+        collectCommandResult: true,
     });
 
     await createWebSocketChannelServer(

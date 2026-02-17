@@ -133,9 +133,11 @@ export type DispatcherConfig = {
     execution: {
         history: boolean;
         activity: boolean;
+        planReuse: "enabled" | "disabled"; // workflow plan reuse for reasoning actions
         memory: {
             legacy: boolean; // use legacy memory behavior
         };
+        reasoning: "claude" | "none";
     };
     explainer: {
         enabled: boolean;
@@ -219,9 +221,11 @@ const defaultSessionConfig: SessionConfig = {
     execution: {
         history: true,
         activity: false, // TODO: experimental.
+        planReuse: "disabled", // default: workflow plan reuse disabled (opt-in)
         memory: {
             legacy: true, // use the new memory behavior
         },
+        reasoning: "none",
     },
     explainer: {
         enabled: true,
