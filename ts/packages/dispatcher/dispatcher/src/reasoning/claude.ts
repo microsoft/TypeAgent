@@ -190,17 +190,9 @@ function generateRequestId(): string {
  * Execute reasoning action without planning (standard mode)
  */
 async function executeReasoningWithoutPlanning(
-    action: TypeAgentAction<ReasoningAction>,
+    originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<any> {
-    const systemContext = context.sessionContext.agentContext;
-    if (systemContext.session.getConfig().execution.reasoning !== "claude") {
-        throw new Error(
-            `Reasoning model is not set to 'claude' for this session.`,
-        );
-    }
-    const originalRequest = action.parameters.originalRequest;
-
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
 
@@ -276,7 +268,7 @@ async function executeReasoningWithoutPlanning(
  * Execute reasoning action with trace capture (no plan execution)
  */
 async function executeReasoningWithTracing(
-    action: TypeAgentAction<ReasoningAction>,
+    originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
@@ -285,10 +277,9 @@ async function executeReasoningWithTracing(
     if (!storage) {
         // No session storage available - fallback to standard reasoning
         debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(action, context);
+        return executeReasoningWithoutPlanning(originalRequest, context);
     }
 
-    const originalRequest = action.parameters.originalRequest;
     const requestId = generateRequestId();
 
     // Create trace collector
@@ -399,16 +390,83 @@ async function executeReasoningWithTracing(
                 );
 
                 if (plan && planGenerator.validatePlan(plan)) {
-                    await planLibrary.savePlan(plan);
-                    debug(
-                        `Generated and saved workflow plan: ${plan.planId} (${plan.intent})`,
+                    // Check for duplicate plans before saving
+                    const existingPlans = await planLibrary.findMatchingPlans(
+                        originalRequest,
+                        plan.intent,
                     );
 
-                    // Notify user that a plan was created
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: `\n✓ Created reusable workflow plan: ${plan.description}`,
-                    });
+                    let isDuplicate = false;
+                    let duplicatePlanId: string | undefined;
+
+                    if (existingPlans.length > 0) {
+                        // Use PlanMatcher to check if this plan is essentially a duplicate
+                        const planMatcher = new PlanMatcher(planLibrary);
+
+                        for (const existingPlan of existingPlans) {
+                            // Check if existing plan is user-approved
+                            if (existingPlan.approval?.status === "approved") {
+                                debug(
+                                    `Found user-approved plan: ${existingPlan.planId}, skipping new plan creation`,
+                                );
+
+                                // Update usage of approved plan instead
+                                await planLibrary.updatePlanUsage(
+                                    existingPlan.planId,
+                                    true,
+                                    tracer.getTrace().metrics.duration,
+                                );
+
+                                isDuplicate = true;
+                                duplicatePlanId = existingPlan.planId;
+                                break;
+                            }
+
+                            // Check if the descriptions are very similar
+                            const similarity =
+                                await planMatcher.computeSimilarity(
+                                    plan.description,
+                                    existingPlan.description,
+                                );
+
+                            if (similarity >= 0.8) {
+                                isDuplicate = true;
+                                duplicatePlanId = existingPlan.planId;
+                                debug(
+                                    `Detected duplicate plan (similarity: ${similarity}): ${existingPlan.planId}`,
+                                );
+
+                                // Update the existing plan's usage count
+                                await planLibrary.updatePlanUsage(
+                                    existingPlan.planId,
+                                    true,
+                                    tracer.getTrace().metrics.duration,
+                                );
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isDuplicate) {
+                        debug(
+                            `Skipped creating duplicate plan, updated existing: ${duplicatePlanId}`,
+                        );
+                        context.actionIO.appendDisplay({
+                            type: "text",
+                            content: `\n✓ Updated existing workflow plan usage (prevented duplicate)`,
+                        });
+                    } else {
+                        await planLibrary.savePlan(plan);
+                        debug(
+                            `Generated and saved workflow plan: ${plan.planId} (${plan.intent})`,
+                        );
+
+                        // Notify user that a plan was created
+                        context.actionIO.appendDisplay({
+                            type: "text",
+                            content: `\n✓ Created reusable workflow plan: ${plan.description}`,
+                        });
+                    }
                 }
             } catch (error) {
                 // Don't fail the request if plan generation fails
@@ -431,7 +489,7 @@ async function executeReasoningWithTracing(
  * Execute reasoning action with planning (Phase 3: plan execution + fallback)
  */
 async function executeReasoningWithPlanning(
-    action: TypeAgentAction<ReasoningAction>,
+    originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<any> {
     const storage = context.sessionContext.sessionStorage;
@@ -439,10 +497,8 @@ async function executeReasoningWithPlanning(
     if (!storage) {
         // No session storage available - fallback to standard reasoning
         debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(action, context);
+        return executeReasoningWithoutPlanning(originalRequest, context);
     }
-
-    const originalRequest = action.parameters.originalRequest;
 
     // Phase 3: Try to find and execute a matching plan
     try {
@@ -494,6 +550,14 @@ async function executeReasoningWithPlanning(
                     content: `\n✓ Workflow completed successfully`,
                 });
 
+                // Prompt for review if plan is pending
+                if (match.plan.approval?.status === "pending_review") {
+                    context.actionIO.appendDisplay({
+                        type: "text",
+                        content: `\n💡 This workflow is ready for review.`,
+                    });
+                }
+
                 return executionResult.finalOutput
                     ? createActionResultNoDisplay(executionResult.finalOutput)
                     : undefined;
@@ -518,6 +582,10 @@ async function executeReasoningWithPlanning(
             }
         } else {
             debug("No matching plan found, using reasoning");
+            displayStatus(
+                "No matching workflow found, using reasoning...",
+                context,
+            );
         }
     } catch (error) {
         debug("Plan matching/execution failed:", error);
@@ -525,7 +593,7 @@ async function executeReasoningWithPlanning(
     }
 
     // Fallback: Execute reasoning with tracing
-    return executeReasoningWithTracing(action, context);
+    return executeReasoningWithTracing(originalRequest, context);
 }
 
 /**
@@ -538,15 +606,42 @@ export async function executeReasoningAction(
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
+    if (config.execution.reasoning !== "claude") {
+        throw new Error(
+            `Reasoning model is not set to 'claude' for this session.`,
+        );
+    }
+
+    const request = action.parameters.originalRequest;
+    debug(`Received reasoning request: ${request}`);
 
     // Check if plan reuse is enabled
     const planReuseEnabled = config.execution.planReuse === "enabled";
 
+    return executeReasoning(request, context, {
+        planReuseEnabled,
+        engine: "claude",
+    });
+}
+
+export async function executeReasoning(
+    request: string,
+    context: ActionContext<CommandHandlerContext>,
+    options?: {
+        planReuseEnabled?: boolean; // false by default
+        engine?: "claude"; // default is "claude" for now
+    },
+) {
+    const engine = options?.engine ?? "claude";
+    if (engine !== "claude") {
+        throw new Error(`Unsupported reasoning engine: ${engine}`);
+    }
+    const planReuseEnabled = options?.planReuseEnabled ?? false;
     if (!planReuseEnabled) {
         // Standard reasoning without planning
-        return executeReasoningWithoutPlanning(action, context);
+        return executeReasoningWithoutPlanning(request, context);
     }
 
     // Reasoning with planning (trace capture)
-    return executeReasoningWithPlanning(action, context);
+    return executeReasoningWithPlanning(request, context);
 }

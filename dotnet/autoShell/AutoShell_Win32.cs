@@ -70,6 +70,10 @@ namespace autoShell
         [DllImport("user32.dll")]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        // import ShowWindow
+        [DllImport("user32.dll")]
+        static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
+
         // import FindWindowEx
         [DllImport("user32.dll")]
         internal static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);

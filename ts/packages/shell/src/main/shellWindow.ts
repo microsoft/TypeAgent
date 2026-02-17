@@ -170,9 +170,8 @@ export class ShellWindow {
 
         const chatView = createChatView(state);
         chatView.setBackgroundColor("#00000000");
-        this.setupZoomHandlers(chatView.webContents, (zoomFactor) => {
+        this.setupZoomHandlers(chatView.webContents, () => {
             this.updateOverlayBounds();
-            this.updateZoomInTitle(zoomFactor);
         });
 
         chatView.webContents.on("focus", () => {
@@ -1123,28 +1122,6 @@ export class ShellWindow {
         this.mainWindow.setTitle(title);
         this.chatView.webContents.send("updated-title", title);
         this.chatView.webContents.send("setting-summary-changed", status);
-    }
-
-    /**
-     * Updates the window title to include the current zoom level.
-     * @param zoomFactor - The zoom factor to show in the title
-     */
-    private updateZoomInTitle(zoomFactor: number) {
-        const prevTitle = this.mainWindow.getTitle();
-        const prevZoomIndex = prevTitle.indexOf(" Zoom: ");
-        const summary =
-            prevZoomIndex !== -1
-                ? prevTitle.substring(0, prevZoomIndex)
-                : prevTitle;
-        const zoomTitle =
-            zoomFactor === 1 ? "" : ` Zoom: ${Math.round(zoomFactor * 100)}%`;
-        this.mainWindow.setTitle(`${summary}${zoomTitle}`);
-
-        // Update the page title to match the window title as well for backwards compat with Playwright tests
-        this.chatView.webContents.send(
-            "updated-title",
-            `${summary}${zoomTitle}`,
-        );
     }
 
     // ================================================================

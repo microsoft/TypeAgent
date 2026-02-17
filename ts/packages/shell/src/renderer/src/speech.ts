@@ -44,15 +44,13 @@ export async function enumerateMicrophones() {
 export function getAudioConfig() {
     const microphoneSources = document.getElementById(
         "microphoneSources",
-    )! as HTMLSelectElement;
+    ) as HTMLSelectElement | null;
 
-    if (microphoneSources.value) {
-        const deviceId =
-            microphoneSources.value === "<default>"
-                ? undefined
-                : microphoneSources.value;
-        debug(`Using device id: ${deviceId}`);
-        return speechSDK.AudioConfig.fromMicrophoneInput(deviceId);
+    if (microphoneSources?.value && microphoneSources.value !== "<default>") {
+        debug(`Using device id: ${microphoneSources.value}`);
+        return speechSDK.AudioConfig.fromMicrophoneInput(
+            microphoneSources.value,
+        );
     }
     return speechSDK.AudioConfig.fromDefaultMicrophoneInput();
 }
@@ -160,26 +158,29 @@ export function recognizeOnce(
             onRecognizedResult(result, onRecognized, onError);
         });
     } else {
-        const audioConfig = getAudioConfig();
-        const speechConfig = getSpeechConfig(token);
-        const reco = new speechSDK.SpeechRecognizer(speechConfig!, audioConfig);
-        // The 'recognizing' event signals that an intermediate recognition result is received.
-        // Intermediate results arrive while audio is being processed and represent the current "best guess" about
-        // what's been spoken so far.
-        reco.recognizing = (_s, e) => {
-            onRecognizing(e.result.text);
-        };
-        // Note: this scenario sample demonstrates result handling via continuation on the recognizeOnceAsync call.
-        // The 'recognized' event handler can be used in a similar fashion.
-        reco.recognizeOnceAsync(
-            (result) => {
-                onRecognizedResult(result, onRecognized, onError);
-            },
-            (err) => {
-                debugError(err);
-                onError(`[ERROR: ${err}]`);
-            },
-        );
+        try {
+            const audioConfig = getAudioConfig();
+            const speechConfig = getSpeechConfig(token);
+            const reco = new speechSDK.SpeechRecognizer(
+                speechConfig!,
+                audioConfig,
+            );
+            reco.recognizing = (_s, e) => {
+                onRecognizing(e.result.text);
+            };
+            reco.recognizeOnceAsync(
+                (result) => {
+                    onRecognizedResult(result, onRecognized, onError);
+                },
+                (err) => {
+                    debugError(err);
+                    onError(`[ERROR: ${err}]`);
+                },
+            );
+        } catch (e: any) {
+            debugError("Speech recognition setup failed", e);
+            onError(`[ERROR: ${e.message}]`);
+        }
     }
 }
 

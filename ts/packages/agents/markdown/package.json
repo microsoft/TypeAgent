@@ -43,7 +43,7 @@
     "express-rate-limit": "^7.5.0",
     "katex": "^0.16.21",
     "lib0": "^0.2.52",
-    "markdown-it": "^14.1.0",
+    "markdown-it": "^14.1.1",
     "markdown-it-texmath": "^1.0.0",
     "mermaid": "^11.10.0",
     "prosemirror-inputrules": "^1.2.0",

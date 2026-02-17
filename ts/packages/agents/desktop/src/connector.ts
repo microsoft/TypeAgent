@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { ProgramNameIndex, loadProgramNameIndex } from "./programNameIndex.js";
 import { Storage } from "@typeagent/agent-sdk";
 import registerDebug from "debug";
-import { DesktopActions } from "./actionsSchema.js";
+import { AllDesktopActions } from "./allActionsSchema.js";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -67,13 +67,19 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
 }
 
 export async function runDesktopActions(
-    action: DesktopActions,
+    action: AllDesktopActions,
     agentContext: DesktopActionContext,
     sessionStorage: Storage,
+    schemaName?: string, // Schema name for disambiguation (e.g., "desktop-display", "desktop-taskbar")
 ) {
     let confirmationMessage = "OK";
     let actionData = "";
     const actionName = action.actionName;
+
+    // Log schema name for debugging duplicate action resolution
+    if (schemaName) {
+        debug(`Executing action '${actionName}' from schema '${schemaName}'`);
+    }
     switch (actionName) {
         case "setWallpaper": {
             let file = action.parameters.filePath;

@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DispatcherConnectOptions } from "@typeagent/agent-server-protocol";
+import {
+    DispatcherConnectOptions,
+    registerClientType,
+    unregisterClient,
+} from "@typeagent/agent-server-protocol";
 import {
     Dispatcher,
     DispatcherOptions,
@@ -159,11 +163,16 @@ export async function createSharedDispatcher(
                 clientIO,
                 filter: options?.filter ?? false,
             });
+            // Register client type for per-request routing
+            if (options?.clientType) {
+                registerClientType(connectionId, options.clientType);
+            }
             const dispatcher = createDispatcherFromContext(
                 context,
                 connectionId,
                 async () => {
                     clients.delete(connectionId);
+                    unregisterClient(connectionId);
                     closeFn();
                     debugConnect(
                         `Client disconnected: ${connectionId} (total clients: ${clients.size})`,

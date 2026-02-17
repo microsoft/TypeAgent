@@ -20,7 +20,10 @@ export interface PlanMatchResult {
  * Matches user requests to saved workflow plans
  */
 export class PlanMatcher {
-    constructor(private planLibrary: PlanLibrary) {}
+    constructor(
+        private planLibrary: PlanLibrary,
+        private useLLMValidation: boolean = false, // Disable by default due to process spawning issues
+    ) {}
 
     /**
      * Find the best matching plan for a user request
@@ -33,49 +36,62 @@ export class PlanMatcher {
         minConfidence: number = 0.7,
     ): Promise<PlanMatchResult | null> {
         debug(`Finding matching plan for: "${request}"`);
+        debug(`Minimum confidence threshold: ${minConfidence}`);
 
-        // Step 1: Get candidate plans from library (keyword-based)
-        const candidates = await this.planLibrary.findMatchingPlans(request);
+        // Step 1: Get candidate plans with scores from library
+        const candidatesWithScores =
+            await this.planLibrary.findMatchingPlansWithScores(request);
 
-        if (candidates.length === 0) {
+        if (candidatesWithScores.length === 0) {
             debug("No candidate plans found");
             return null;
         }
 
-        debug(`Found ${candidates.length} candidate plans`);
+        debug(
+            `Found ${candidatesWithScores.length} candidate plans for validation`,
+        );
 
-        // Step 2: If only one candidate, validate it
-        if (candidates.length === 1) {
-            const validated = await this.validateMatch(request, candidates[0]);
+        // Step 2: Use ranking scores as confidence (unless LLM validation enabled)
+        const matches: PlanMatchResult[] = [];
 
-            if (validated && validated.confidence >= minConfidence) {
+        for (const { plan, score } of candidatesWithScores) {
+            if (this.useLLMValidation) {
+                // Use LLM validation if enabled
+                const validated = await this.validateMatch(request, plan);
+                if (validated) {
+                    matches.push(validated);
+                }
+            } else {
+                // Use ranking score directly as confidence
+                const confidence = score;
                 debug(
-                    `Single candidate validated: ${candidates[0].planId} (confidence: ${validated.confidence})`,
+                    `Using ranking score as confidence for ${plan.planId}: ${confidence.toFixed(3)}`,
                 );
-                return validated;
-            }
 
-            debug(
-                `Single candidate rejected (confidence: ${validated?.confidence || 0})`,
-            );
-            return null;
+                if (confidence >= minConfidence) {
+                    matches.push({
+                        plan,
+                        confidence,
+                        reason: "Keyword-based match from ranking",
+                    });
+                } else {
+                    debug(
+                        `Plan ${plan.planId} below threshold: ${confidence.toFixed(3)} < ${minConfidence}`,
+                    );
+                }
+            }
         }
 
-        // Step 3: If multiple candidates, rank them
-        const rankedMatches = await this.rankCandidates(request, candidates);
-
-        // Return best match if it meets confidence threshold
-        const bestMatch = rankedMatches[0];
-        if (bestMatch && bestMatch.confidence >= minConfidence) {
+        // Return best match
+        if (matches.length > 0) {
+            const bestMatch = matches[0];
             debug(
                 `Best match: ${bestMatch.plan.planId} (confidence: ${bestMatch.confidence})`,
             );
             return bestMatch;
         }
 
-        debug(
-            `No match meets confidence threshold (best: ${bestMatch?.confidence || 0})`,
-        );
+        debug(`No match meets confidence threshold`);
         return null;
     }
 
@@ -86,6 +102,23 @@ export class PlanMatcher {
         request: string,
         plan: WorkflowPlan,
     ): Promise<PlanMatchResult | null> {
+        // Use keyword-based confidence if LLM validation is disabled
+        if (!this.useLLMValidation) {
+            debug(
+                `Using keyword-based confidence for plan: ${plan.planId} (LLM validation disabled)`,
+            );
+            const confidence = await this.computeKeywordConfidence(
+                request,
+                plan,
+            );
+            return {
+                plan,
+                confidence,
+                reason: "Keyword-based match",
+            };
+        }
+
+        // LLM-based validation
         try {
             const prompt = this.buildValidationPrompt(request, plan);
 
@@ -143,33 +176,6 @@ export class PlanMatcher {
     }
 
     /**
-     * Rank multiple candidate plans
-     */
-    private async rankCandidates(
-        request: string,
-        candidates: WorkflowPlan[],
-    ): Promise<PlanMatchResult[]> {
-        const results: PlanMatchResult[] = [];
-
-        // Validate each candidate in parallel
-        const validations = await Promise.all(
-            candidates.map((plan) => this.validateMatch(request, plan)),
-        );
-
-        // Collect valid matches
-        for (const validation of validations) {
-            if (validation) {
-                results.push(validation);
-            }
-        }
-
-        // Sort by confidence (descending)
-        results.sort((a, b) => b.confidence - a.confidence);
-
-        return results;
-    }
-
-    /**
      * Build validation prompt
      */
     private buildValidationPrompt(request: string, plan: WorkflowPlan): string {
@@ -210,5 +216,110 @@ Return a JSON object:
 }
 
 Analyze now:`;
+    }
+
+    /**
+     * Compute similarity between two descriptions (0-1 score)
+     * Uses simple keyword overlap for fast duplicate detection
+     */
+    async computeSimilarity(
+        description1: string,
+        description2: string,
+    ): Promise<number> {
+        // Normalize and extract keywords
+        const extractKeywords = (text: string): Set<string> => {
+            return new Set(
+                text
+                    .toLowerCase()
+                    .replace(/[^\w\s]/g, " ") // Remove punctuation
+                    .split(/\s+/)
+                    .filter((w) => w.length > 3), // Filter out short words
+            );
+        };
+
+        const keywords1 = extractKeywords(description1);
+        const keywords2 = extractKeywords(description2);
+
+        if (keywords1.size === 0 || keywords2.size === 0) {
+            return 0;
+        }
+
+        // Compute Jaccard similarity
+        const intersection = new Set(
+            [...keywords1].filter((k) => keywords2.has(k)),
+        );
+        const union = new Set([...keywords1, ...keywords2]);
+
+        return intersection.size / union.size;
+    }
+
+    /**
+     * Compute keyword-based confidence for a plan match
+     * Returns confidence score 0-1 based on keyword overlap
+     */
+    private async computeKeywordConfidence(
+        request: string,
+        plan: WorkflowPlan,
+    ): Promise<number> {
+        // Extract keywords from request and plan
+        const extractKeywords = (text: string): Set<string> => {
+            return new Set(
+                text
+                    .toLowerCase()
+                    .replace(/[^\w\s]/g, " ")
+                    .split(/\s+/)
+                    .filter((w) => w.length > 3),
+            );
+        };
+
+        const requestKeywords = extractKeywords(request);
+        const planKeywords = extractKeywords(
+            `${plan.description} ${plan.intent}`,
+        );
+
+        if (requestKeywords.size === 0 || planKeywords.size === 0) {
+            return 0;
+        }
+
+        // Count matching keywords
+        const matchingKeywords = [...requestKeywords].filter((k) =>
+            planKeywords.has(k),
+        );
+        const matches = matchingKeywords.length;
+
+        // Calculate confidence as percentage of request keywords that match
+        // Higher weight for matching more of the user's intent
+        const confidence = matches / requestKeywords.size;
+
+        // Boost confidence if intent-related keywords match
+        const intentKeywords = new Set([
+            "search",
+            "find",
+            "list",
+            "get",
+            "add",
+            "create",
+            "delete",
+            "update",
+            "buy",
+            "purchase",
+            "shopping",
+            "cart",
+        ]);
+
+        const intentMatches = [...requestKeywords].filter(
+            (k) => intentKeywords.has(k) && planKeywords.has(k),
+        ).length;
+
+        // Add bonus for intent keyword matches (up to 0.2)
+        const bonus = Math.min(intentMatches * 0.1, 0.2);
+
+        const finalConfidence = Math.min(confidence + bonus, 1.0);
+
+        debug(
+            `Keyword confidence for ${plan.planId}: ${matches}/${requestKeywords.size} keywords match = ${confidence.toFixed(3)} + intent bonus ${bonus.toFixed(3)} = ${finalConfidence.toFixed(3)}`,
+        );
+
+        return finalConfidence;
     }
 }

@@ -1,0 +1,576 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+/* Shared chat UI styles — used by both Electron shell and Chrome extension */
+
+/* =========================================================================
+   Chat Layout
+   ========================================================================= */
+
+.chat-panel-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 14px;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column-reverse;
+  flex: 1;
+  scroll-behavior: smooth;
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 25px 10px 25px 10px;
+}
+
+/* =========================================================================
+   Chat Input
+   ========================================================================= */
+
+.chat-input {
+  display: flex;
+  padding: 5px;
+  background-color: white;
+  align-self: flex-end;
+  margin: 10px;
+  width: calc(100% - 20px);
+  box-sizing: border-box;
+  border: solid 1px rgb(224, 224, 224);
+  border-radius: 6px;
+  position: relative;
+}
+
+.chat-input.listening {
+  background-color: aquamarine;
+}
+
+.chat-input-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.user-textarea {
+  padding: 5px 8px;
+  display: flex;
+  width: calc(100% - 48px);
+  overflow: hidden;
+  resize: none;
+  outline: 0px solid transparent;
+  min-height: 30px;
+  line-height: 30px;
+  font-family: inherit;
+  font-size: inherit;
+  align-self: flex-start;
+}
+
+/* Placeholder for contenteditable */
+.user-textarea:empty::before {
+  content: attr(data-placeholder);
+  color: #aaa;
+  pointer-events: none;
+}
+
+.chat-input-button {
+  align-self: flex-end;
+  border: none;
+  background-color: transparent;
+  width: 24px;
+  height: 24px;
+  padding: 0px;
+  margin: 6px 3.5px;
+  cursor: pointer;
+}
+
+.chat-input-button:disabled svg {
+  fill: lightslategray;
+}
+
+/* =========================================================================
+   Message Containers
+   ========================================================================= */
+
+.chat-message-container {
+  padding-left: 10px;
+  padding-right: 10px;
+  margin-bottom: 8px;
+  margin-top: 8px;
+  width: 55%;
+  transform-origin: 0 100%;
+  transform: scale(0);
+  animation: message 0.15s ease-out 0s forwards;
+}
+
+.chat-message-container-agent {
+  padding-left: 10px;
+  padding-right: 10px;
+  margin-bottom: 8px;
+  margin-top: 8px;
+  width: 55%;
+  transform-origin: 0 100%;
+  transform: scale(0);
+  animation: message 0.15s ease-out 0s forwards;
+  margin-left: 10px;
+}
+
+.chat-message-container-user {
+  padding-left: 10px;
+  padding-right: 10px;
+  margin-bottom: 8px;
+  margin-top: 8px;
+  width: 55%;
+  transform-origin: 0 100%;
+  transform: scale(0);
+  animation: message 0.15s ease-out 0s forwards;
+  margin-right: 10px;
+  align-self: flex-end;
+}
+
+@keyframes message {
+  0% {
+  }
+  100% {
+    transform: scale(1);
+    overflow: visible;
+  }
+}
+
+/* =========================================================================
+   Message Body
+   ========================================================================= */
+
+.chat-message-body {
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.chat-message-user {
+  border-radius: 8px;
+  margin-bottom: 4px;
+  position: relative;
+  background-color: lavender;
+  margin-right: 30px;
+}
+
+.chat-message-agent {
+  left: 30px;
+  position: relative;
+  background-color: #d6f3ff;
+}
+
+/* =========================================================================
+   Message Content
+   ========================================================================= */
+
+.chat-message-content {
+  padding: 6px 15px 6px 15px;
+  word-wrap: break-word;
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.chat-message-kind-status {
+  font-style: italic;
+  color: grey;
+}
+
+.chat-message-kind-warning {
+  font-style: italic;
+  color: rgb(146, 146, 0);
+}
+
+.chat-message-kind-error {
+  font-style: italic;
+  color: red;
+}
+
+.chat-message-kind-success {
+  font-style: italic;
+  color: green;
+}
+
+.chat-message-agent-text {
+  white-space: break-spaces;
+}
+
+.chat-message-user-text {
+  white-space: break-spaces;
+}
+
+.chat-message-hidden {
+  display: none;
+  visibility: hidden;
+}
+
+.chat-message-action-data {
+  white-space: nowrap;
+  font-size: 80%;
+}
+
+/* =========================================================================
+   Tables
+   ========================================================================= */
+
+table.table-message {
+  table-layout: fixed;
+  text-overflow: ellipsis;
+  text-wrap: pretty;
+  width: 100%;
+}
+
+table.table-message th,
+table.table-message td {
+  border: solid 1px black;
+  padding: 0px 10px 0px 10px;
+}
+
+/* =========================================================================
+   Metrics (hover-reveal)
+   ========================================================================= */
+
+.chat-message-metrics {
+  margin: 0px;
+  border-radius: 0px 0px 8px 8px;
+  font-size: 10px;
+  font-style: normal;
+  z-index: 50;
+  text-align: right;
+}
+
+.chat-message-metrics-agent {
+  margin: 0px;
+  border-radius: 0px 0px 8px 8px;
+  font-size: 10px;
+  font-style: normal;
+  z-index: 50;
+  text-align: right;
+  background-color: #c2edff;
+}
+
+.chat-message-body-hide-metrics .chat-message-metrics {
+  display: none;
+}
+
+.chat-message-body-hide-metrics:hover {
+  border-radius: 8px 8px 0px 0px;
+}
+
+.chat-message-body-hide-metrics:hover .chat-message-metrics {
+  display: block;
+  position: absolute;
+  width: 100%;
+  transform-origin: 0 0;
+  transform: scaleY(0);
+  animation: metrics 0.15s ease-out 0s forwards;
+}
+
+@keyframes metrics {
+  0% {
+  }
+  100% {
+    transform: scaleY(1);
+    overflow: visible;
+  }
+}
+
+/* =========================================================================
+   Timestamps & Icons
+   ========================================================================= */
+
+.chat-timestamp {
+  font-size: 10px;
+  font-style: normal;
+  color: darkgray;
+  position: relative;
+  margin: 4px;
+}
+
+.chat-timestamp-agent {
+  font-size: 10px;
+  font-style: normal;
+  color: darkgray;
+  position: relative;
+  margin: 4px;
+  margin-left: 34px;
+}
+
+.chat-timestamp-user {
+  font-size: 10px;
+  font-style: normal;
+  color: darkgray;
+  position: relative;
+  margin: 4px;
+  text-align: end;
+  margin-right: 35px;
+}
+
+.agent-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  position: absolute;
+  left: 0px;
+  font-size: 20px;
+  font-style: normal;
+  text-align: center;
+}
+
+.user-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  position: absolute;
+  right: 0px;
+  font-size: 20px;
+  font-style: normal;
+  text-align: center;
+  background: plum;
+  color: purple;
+  margin-top: 2px;
+  font-family: sans-serif;
+  font-weight: 300;
+}
+
+.agent-name {
+  font-style: normal;
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.timestring {
+  font-style: normal;
+}
+
+/* Clickable timestamp to toggle action details */
+.chat-timestamp-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.chat-timestamp-toggle:hover {
+  color: #555;
+}
+
+/* Collapsible action details — hidden by default */
+.chat-message-details {
+  display: none;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #555;
+}
+
+.chat-message-details.chat-details-visible {
+  display: block;
+}
+
+/* =========================================================================
+   Choice Panel
+   ========================================================================= */
+
+.choice-panel {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  height: 40px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.choice-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  width: 100%;
+}
+
+.choice-button:hover {
+  background-color: #c6e3ef;
+}
+
+.choice-button:focus {
+  box-shadow:
+    inset 0px 0.8px 0px -0.25px rgba(255, 255, 255, 0.2),
+    0px 0.5px 1px rgba(0, 0, 0, 0.1),
+    0px 0px 0px 3.5px rgba(58, 108, 217, 0.5);
+  outline: 0;
+}
+
+/* =========================================================================
+   Explained tooltips
+   ========================================================================= */
+
+.chat-message-explained {
+  position: relative;
+}
+
+.chat-message-explained-icon {
+  align-self: flex-end;
+  border: none;
+  background-color: transparent;
+  margin-right: 5px;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.chat-message-explained[data-expl]:hover::after {
+  content: attr(data-expl);
+  position: absolute;
+  text-align: right;
+  top: 0px;
+  right: 30px;
+  white-space: nowrap;
+  color: gray;
+  background-color: lightyellow;
+  border: 1px solid black;
+  padding: 1px 5px 1px 5px;
+  font-size: 70%;
+}
+
+/* =========================================================================
+   ANSI color classes (from ansi_up)
+   ========================================================================= */
+
+span.ansi-black-fg {
+  color: black;
+}
+span.ansi-red-fg {
+  color: rgb(128, 0, 0);
+}
+span.ansi-green-fg {
+  color: rgb(0, 128, 0);
+}
+span.ansi-yellow-fg {
+  color: rgb(128, 128, 0);
+}
+span.ansi-blue-fg {
+  color: rgb(0, 0, 128);
+}
+span.ansi-magenta-fg {
+  color: rgb(128, 0, 128);
+}
+span.ansi-cyan-fg {
+  color: rgb(0, 128, 128);
+}
+span.ansi-white-fg {
+  color: rgb(192, 192, 192);
+}
+span.ansi-gray-fg,
+span.ansi-bright-black-fg {
+  color: rgb(128, 128, 128);
+}
+span.ansi-bright-red-fg {
+  color: rgb(192, 0, 0);
+}
+span.ansi-bright-green-fg {
+  color: rgb(0, 192, 0);
+}
+span.ansi-bright-yellow-fg {
+  color: rgb(192, 192, 0);
+}
+span.ansi-bright-blue-fg {
+  color: rgb(0, 0, 192);
+}
+span.ansi-bright-magenta-fg {
+  color: rgb(192, 0, 192);
+}
+span.ansi-bright-cyan-fg {
+  color: rgb(0, 192, 192);
+}
+span.ansi-bright-white-fg {
+  color: rgb(255, 255, 255);
+}
+
+/* =========================================================================
+   Scrollbar styling
+   ========================================================================= */
+
+.chat::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chat::-webkit-scrollbar-corner {
+  background: rgba(0, 0, 0, 0);
+}
+
+.chat::-webkit-scrollbar-thumb {
+  background-color: #ccc;
+  border-radius: 10px;
+}
+
+.chat::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+.chat::-webkit-scrollbar-track {
+  background-color: rgba(0, 0, 0, 0);
+  margin-right: 4px;
+}
+
+/* =========================================================================
+   Misc
+   ========================================================================= */
+
+.clickable {
+  cursor: pointer;
+}
+
+.notification {
+  font-size: 10px;
+}
+
+.notification-error {
+  color: red;
+}
+.notification-warning {
+  color: orange;
+}
+.notification-info {
+  color: blue;
+}
+
+.references {
+  font-size: small;
+  font-weight: 400;
+}
+
+.references a {
+  font-size: small;
+  font-weight: 200;
+}
+
+/* =========================================================================
+   Separator (between sessions)
+   ========================================================================= */
+
+.chat-separator {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  text-align: center;
+  font-size: 10px;
+  margin: 20px 20px;
+}
+
+.chat-separator-line {
+  flex-grow: 1;
+  width: 40px;
+  background-color: darkgray;
+  height: 2px;
+}
+
+.chat-separator-text {
+  margin: 0px 10px;
+  color: darkgray;
+  height: 20px;
+}

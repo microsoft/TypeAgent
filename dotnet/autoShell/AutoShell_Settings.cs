@@ -486,8 +486,8 @@ internal partial class AutoShell
             {
                 if (key != null)
                 {
-                    // 0 = center, 1 = left
-                    key.SetValue("TaskbarAl", useCenter ? 0 : 1, RegistryValueKind.DWord);
+                    // 0 = left, 1 = center
+                    key.SetValue("TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
                     RefreshTaskbar();
                 }
             }

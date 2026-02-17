@@ -41,6 +41,7 @@ import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
 import { executeReasoningAction } from "../../reasoning/claude.js";
+import { ReasonCommandHandler } from "./handlers/reasonCommandHandler.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
     description: "Type Agent Dispatcher Commands",
@@ -48,6 +49,7 @@ const dispatcherHandlers: CommandHandlerTable = {
         request: new RequestCommandHandler(),
         match: new MatchCommandHandler(),
         translate: new TranslateCommandHandler(),
+        reason: new ReasonCommandHandler(),
         explain: new ExplainCommandHandler(),
     },
 };
