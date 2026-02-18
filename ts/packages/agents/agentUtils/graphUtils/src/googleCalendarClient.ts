@@ -829,27 +829,33 @@ export class GoogleCalendarClient
     // =========================================================================
 
     private convertGoogleEvents(googleEvents: any[]): CalendarEvent[] {
-        return googleEvents.map((ge) => ({
-            id: ge.id,
-            subject: ge.summary || "(No title)",
-            body: ge.description,
-            start: {
-                dateTime: ge.start?.dateTime || ge.start?.date,
-                timeZone: ge.start?.timeZone || "UTC",
-            },
-            end: {
-                dateTime: ge.end?.dateTime || ge.end?.date,
-                timeZone: ge.end?.timeZone || "UTC",
-            },
-            attendees: ge.attendees?.map((a: any) => ({
-                email: a.email,
-                name: a.displayName,
-                type: a.optional ? "optional" : "required",
-                responseStatus: a.responseStatus,
-            })),
-            location: ge.location,
-            isAllDay: !!ge.start?.date,
-        }));
+        return googleEvents.map((ge) => {
+            const event: CalendarEvent = {
+                id: ge.id,
+                subject: ge.summary || "(No title)",
+                body: ge.description,
+                start: {
+                    dateTime: ge.start?.dateTime || ge.start?.date,
+                    timeZone: ge.start?.timeZone || "UTC",
+                },
+                end: {
+                    dateTime: ge.end?.dateTime || ge.end?.date,
+                    timeZone: ge.end?.timeZone || "UTC",
+                },
+                attendees: ge.attendees?.map((a: any) => ({
+                    email: a.email,
+                    name: a.displayName,
+                    type: a.optional ? "optional" : "required",
+                    responseStatus: a.responseStatus,
+                })),
+                location: ge.location,
+                isAllDay: !!ge.start?.date,
+            };
+            if (ge.htmlLink) {
+                event.htmlLink = ge.htmlLink;
+            }
+            return event;
+        });
     }
 }
 

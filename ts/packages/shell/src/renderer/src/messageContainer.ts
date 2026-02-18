@@ -635,4 +635,28 @@ export class MessageContainer {
         icon.className = "chat-message-explained-icon";
         this.messageDiv.appendChild(icon);
     }
+
+    /**
+     * Update roadrunner color based on grammar rule generation result.
+     * Called when "grammarRule" notification arrives (after "explained").
+     * Blue = no dynamic rule created; keeps green/gold if rule succeeded.
+     */
+    public updateGrammarResult(success: boolean, message?: string) {
+        if (!success) {
+            const icon = this.messageDiv.querySelector(
+                ".chat-message-explained-icon svg",
+            );
+            if (icon) {
+                (icon as SVGElement).style.fill = "cornflowerblue";
+            }
+            // Update tooltip with rejection reason
+            if (message) {
+                const existing = this.div.getAttribute("data-expl") || "";
+                this.div.setAttribute(
+                    "data-expl",
+                    `${existing}. No grammar rule: ${message}`,
+                );
+            }
+        }
+    }
 }

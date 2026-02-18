@@ -93,12 +93,20 @@ function createCompileContext(
     fileUtils: FileLoader | undefined,
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
+    entityNames?: string[],
 ): CompileContext {
     const ruleDefMap: DefinitionMap = new Map();
 
     // Build separate sets of imported rule names and type names
     const importedRuleMap = new Map<string, CompileContext>();
     const importedTypeNames = new Set<string>();
+
+    // Entity declarations (e.g., "entity CalendarDate;") are valid type names
+    if (entityNames) {
+        for (const name of entityNames) {
+            importedTypeNames.add(name);
+        }
+    }
 
     // Create the context early and add to the map BEFORE processing anything
     // This prevents infinite recursion on circular dependencies
@@ -191,6 +199,7 @@ export function compileGrammar(
     definitions: RuleDefinition[],
     start: string,
     imports?: ImportStatement[],
+    entityNames?: string[],
 ): GrammarCompileResult {
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
@@ -200,6 +209,7 @@ export function compileGrammar(
         fileUtils,
         definitions,
         imports,
+        entityNames,
     );
 
     const grammar = { rules: createNamedGrammarRules(context, start) };

@@ -52,9 +52,8 @@ export type CommandResult = {
 };
 
 export type CommandCompletionResult = {
-    startIndex: number; // the index for the input where completion starts
-    completions: CompletionGroup[]; // All the partial completions available after partial (and space if true)
-    space: boolean; // require space before the completion   (e.g. false if we are trying to complete a command)
+    startIndex: number; // index of first character of the filter text (after the last space)
+    completions: CompletionGroup[]; // completions available at the current position
 };
 
 export type AppAgentStatus = {

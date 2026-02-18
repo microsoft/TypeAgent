@@ -701,7 +701,7 @@ export async function setVolume(
     amt: number,
 ) {
     const volumeUrl = getUrlWithParams(
-        "https://api.spotify.com/v1/me/player/volume?volume_percent",
+        "https://api.spotify.com/v1/me/player/volume",
         { volume_percent: amt, device_id: deviceId },
     );
     return fetchPutEmptyResult(service, volumeUrl);

@@ -203,10 +203,17 @@ function formatEventsAsHtml(events: any[]): string {
         const end = event.end?.dateTime
             ? new Date(event.end.dateTime).toLocaleString()
             : "Unknown";
-        html += `<li><strong>${event.subject || "No subject"}</strong><br/>`;
+        const subject = event.subject || "No subject";
+        if (event.htmlLink) {
+            html += `<li><a href="${event.htmlLink}" target="_blank"><strong>${subject}</strong></a><br/>`;
+        } else {
+            html += `<li><strong>${subject}</strong><br/>`;
+        }
         html += `${start} - ${end}`;
         if (event.location?.displayName) {
             html += `<br/>Location: ${event.location.displayName}`;
+        } else if (event.location && typeof event.location === "string") {
+            html += `<br/>Location: ${event.location}`;
         }
         html += "</li>";
     }

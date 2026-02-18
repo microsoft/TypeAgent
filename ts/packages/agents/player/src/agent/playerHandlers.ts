@@ -419,7 +419,10 @@ async function getPlayerActionCompletion(
         case "playTrack":
             if (propertyName === "parameters.trackName") {
                 track = true;
-            } else if (propertyName.startsWith("parameters.artists.")) {
+            } else if (
+                propertyName === "parameters.artists" ||
+                propertyName.startsWith("parameters.artists.")
+            ) {
                 artist = true;
             } else if (propertyName === "parameters.albumName") {
                 album = true;
@@ -428,7 +431,10 @@ async function getPlayerActionCompletion(
         case "playAlbum":
             if (propertyName === "parameters.albumName") {
                 album = true;
-            } else if (propertyName.startsWith("parameters.artists.")) {
+            } else if (
+                propertyName === "parameters.artists" ||
+                propertyName.startsWith("parameters.artists.")
+            ) {
                 artist = true;
             }
             break;
