@@ -1,0 +1,67 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Browser Agent Grammar - Core Actions
+// Covers the most common browser operations
+
+@ <Start> = <OpenPage>
+          | <ClosePage>
+          | <Navigation>
+          | <Scrolling>
+          | <FollowLink>
+          | <TabControl>
+          | <Zoom>
+          | <ReadPage>
+          | <Screenshot>
+
+// ===== Open Web Page =====
+@ <OpenPage> = open $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
+             | go to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
+             | navigate to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
+             | browse to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
+             | visit $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
+
+// ===== Close Page =====
+@ <ClosePage> = close (the)? (web)? page -> { actionName: "closeWebPage", parameters: {} }
+              | close (the)? tab -> { actionName: "closeWebPage", parameters: {} }
+              | close all (web)? pages -> { actionName: "closeAllWebPages", parameters: {} }
+              | close all tabs -> { actionName: "closeAllWebPages", parameters: {} }
+
+// ===== Navigation =====
+@ <Navigation> = go back -> { actionName: "goBack", parameters: {} }
+               | back -> { actionName: "goBack", parameters: {} }
+               | go forward -> { actionName: "goForward", parameters: {} }
+               | forward -> { actionName: "goForward", parameters: {} }
+               | reload (the)? page -> { actionName: "reloadPage", parameters: {} }
+               | refresh (the)? page -> { actionName: "reloadPage", parameters: {} }
+
+// ===== Scrolling =====
+@ <Scrolling> = scroll down -> { actionName: "scrollDown", parameters: {} }
+              | scroll up -> { actionName: "scrollUp", parameters: {} }
+              | page down -> { actionName: "scrollDown", parameters: {} }
+              | page up -> { actionName: "scrollUp", parameters: {} }
+
+// ===== Follow Link =====
+@ <FollowLink> = follow (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: $(keywords) } }
+               | click (on)? (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: $(keywords) } }
+               | click (on)? $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: $(keywords) } }
+
+// ===== Tab Control =====
+@ <TabControl> = switch to tab $(n:number) -> { actionName: "changeTabs", parameters: { tabNumber: $(n) } }
+               | go to tab $(n:number) -> { actionName: "changeTabs", parameters: { tabNumber: $(n) } }
+               | next tab -> { actionName: "changeTabs", parameters: { tabNumber: 0 } }
+
+// ===== Zoom =====
+@ <Zoom> = zoom in -> { actionName: "zoomIn", parameters: {} }
+         | zoom out -> { actionName: "zoomOut", parameters: {} }
+         | reset zoom -> { actionName: "zoomReset", parameters: {} }
+
+// ===== Read Page =====
+@ <ReadPage> = read (the)? page -> { actionName: "readPageContent", parameters: {} }
+             | read (the)? page (out loud)? -> { actionName: "readPageContent", parameters: {} }
+             | stop reading -> { actionName: "stopReadPageContent", parameters: {} }
+
+// ===== Screenshot =====
+@ <Screenshot> = take (a)? screenshot -> { actionName: "captureScreenshot", parameters: {} }
+               | capture (the)? screen -> { actionName: "captureScreenshot", parameters: {} }
+               | screenshot -> { actionName: "captureScreenshot", parameters: {} }

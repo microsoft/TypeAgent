@@ -66,8 +66,7 @@ async function getCompletionsData(
         }
 
         const prefix = line.substring(0, result.startIndex);
-        // Filter starts after prefix + space
-        const filterStartIndex = result.startIndex + (result.space ? 1 : 0);
+        const filterStartIndex = result.startIndex;
 
         return {
             allCompletions,

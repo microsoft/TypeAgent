@@ -187,6 +187,12 @@ function registerClient(
                     chatView.randomCommandSelected(requestId, data.message);
                     break;
                 case "grammarRule":
+                    // Update roadrunner color based on grammar result
+                    chatView.updateGrammarResult(
+                        requestId,
+                        data.success,
+                        data.message,
+                    );
                     // Display grammar rule generation result
                     if (data.success && data.rule) {
                         chatView.addNotificationMessage(

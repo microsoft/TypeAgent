@@ -1463,6 +1463,9 @@ importers:
       '@fluidframework/build-tools':
         specifier: ^0.57.0
         version: 0.57.0(@types/node@20.19.23)
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
       '@types/chrome':
         specifier: ^0.0.256
         version: 0.0.256
@@ -1508,6 +1511,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       archiver:
         specifier: ^7.0.1
         version: 7.0.1

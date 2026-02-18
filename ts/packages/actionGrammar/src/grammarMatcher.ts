@@ -766,6 +766,25 @@ export function matchGrammar(grammar: Grammar, request: string) {
     return results;
 }
 
+/**
+ * Check if the remaining input text is a case-insensitive prefix of a rule's
+ * string part. Used for completions when the user has partially typed a keyword.
+ * For example, prefix "p" should match and complete "play".
+ */
+function isPartialPrefixOfStringPart(
+    prefix: string,
+    index: number,
+    part: StringPart,
+): boolean {
+    // Get the remaining text after any leading separators
+    const remaining = prefix.slice(index).trimStart().toLowerCase();
+    if (remaining.length === 0) {
+        return false; // No partial text - handled by the normal completion path
+    }
+    const partText = part.value.join(" ").toLowerCase();
+    return partText.startsWith(remaining) && remaining.length < partText.length;
+}
+
 export function matchGrammarCompletion(
     grammar: Grammar,
     prefix: string,
@@ -796,8 +815,8 @@ export function matchGrammarCompletion(
                 completions.push(nextPart.value.join(" "));
             }
         } else {
-            // We can't finalize the state because of empty pending wildcard.
-            // Return a completion property.
+            // We can't finalize the state because of empty pending wildcard
+            // or because there's trailing unmatched text.
             const pendingWildcard = state.pendingWildcard;
             if (pendingWildcard !== undefined) {
                 debugCompletion("Completing wildcard part");
@@ -810,6 +829,22 @@ export function matchGrammarCompletion(
                         `Adding completion property: ${JSON.stringify(completionProperty)}`,
                     );
                     properties.push(completionProperty);
+                }
+            } else if (!matched) {
+                // matchState failed on a string part and there's trailing text.
+                // Check if the remaining input is a partial prefix of the
+                // current string part (e.g. "p" is a prefix of "play").
+                const currentPart = state.rule.parts[state.partIndex];
+                if (
+                    currentPart !== undefined &&
+                    currentPart.type === "string" &&
+                    isPartialPrefixOfStringPart(prefix, state.index, currentPart)
+                ) {
+                    const fullText = currentPart.value.join(" ");
+                    debugCompletion(
+                        `Adding partial prefix completion: "${fullText}"`,
+                    );
+                    completions.push(fullText);
                 }
             }
         }

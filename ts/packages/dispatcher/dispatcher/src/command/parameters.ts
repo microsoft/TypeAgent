@@ -141,7 +141,12 @@ export function parseParams<T extends ParameterDefinitions>(
     paramDefs: T,
     partial: boolean = false,
 ): ParsedCommandParams<T> {
-    let curr = parameters.trim();
+    // Use trimStart (not trim) so trailing whitespace is preserved for
+    // completion: a trailing space signals that the last token is complete.
+    let curr = partial ? parameters.trimStart() : parameters.trim();
+    const trimRemainder = partial
+        ? (s: string) => s.trimStart()
+        : (s: string) => s.trim();
     const parsedTokens: string[] = [];
     const nextToken = () => {
         if (curr.length === 0) {
@@ -160,7 +165,7 @@ export function parseParams<T extends ParameterDefinitions>(
                 }
                 if (curr[end - 1] !== "\\") {
                     token = curr.substring(0, end + 1);
-                    curr = curr.substring(end + 1).trim();
+                    curr = trimRemainder(curr.substring(end + 1));
                     break;
                 }
             }
@@ -170,7 +175,7 @@ export function parseParams<T extends ParameterDefinitions>(
                 return undefined;
             }
             token = result[0].trim();
-            curr = curr.substring(result[0].length).trim();
+            curr = trimRemainder(curr.substring(result[0].length));
         }
         parsedTokens.push(token);
         return token;

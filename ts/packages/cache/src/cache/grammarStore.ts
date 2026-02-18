@@ -9,6 +9,7 @@ import {
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
+    computeNFACompletions,
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
@@ -125,6 +126,7 @@ export class GrammarStoreImpl implements GrammarStore {
         }
 
         const matches: MatchResult[] = [];
+        const missedSchemas: string[] = [];
         const filter = namespaceKeys ? new Set(namespaceKeys) : undefined;
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -132,9 +134,6 @@ export class GrammarStoreImpl implements GrammarStore {
             }
 
             const { schemaName } = splitSchemaNamespaceKey(name);
-            console.log(
-                `[GRAMMAR] Matching "${request}" against ${schemaName} (${this.useNFA ? "NFA" : "legacy"}) - NFA states: ${entry.nfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
-            );
             debug(
                 `Matching "${request}" against ${schemaName} (${this.useNFA ? "NFA" : "legacy"}) - NFA states: ${entry.nfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
             );
@@ -146,7 +145,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     : matchGrammar(entry.grammar, request);
 
             if (grammarMatches.length === 0) {
-                console.log(`[GRAMMAR] MISS: "${request}" in ${schemaName}`);
+                missedSchemas.push(schemaName);
                 debug(`No matches in ${schemaName} grammar`);
                 continue;
             }
@@ -183,6 +182,11 @@ export class GrammarStoreImpl implements GrammarStore {
             }
         }
 
+        if (matches.length === 0 && missedSchemas.length > 0) {
+            console.log(
+                `[GRAMMAR] MISS: "${request}" in all ${missedSchemas.length} schema(s)`,
+            );
+        }
         debug(
             matches.length === 0 ? `MISS: "${request}"` : `HIT: "${request}"`,
         );
@@ -208,32 +212,67 @@ export class GrammarStoreImpl implements GrammarStore {
             if (filter && !filter.has(name)) {
                 continue;
             }
-            // TODO: Implement NFA-based completions
-            // For now, always use old completion matcher
-            const partial = matchGrammarCompletion(
-                entry.grammar,
-                requestPrefix ?? "",
-            );
-            if (partial.completions.length > 0) {
-                completions.push(...partial.completions);
-            }
-            if (
-                partial.properties !== undefined &&
-                partial.properties.length > 0
-            ) {
-                const { schemaName } = splitSchemaNamespaceKey(name);
-                for (const p of partial.properties) {
-                    const action: any = p.match;
-                    properties.push({
-                        actions: [
-                            createExecutableAction(
-                                schemaName,
-                                action.actionName,
-                                action.parameters,
-                            ),
-                        ],
-                        names: p.propertyNames,
-                    });
+            if (this.useNFA && entry.nfa) {
+                // NFA-based completions: tokenize into complete whole tokens
+                const tokens = requestPrefix
+                    ? requestPrefix
+                          .trim()
+                          .split(/\s+/)
+                          .filter((t) => t.length > 0)
+                    : [];
+                const nfaResult = computeNFACompletions(entry.nfa, tokens);
+                if (nfaResult.completions.length > 0) {
+                    completions.push(...nfaResult.completions);
+                }
+                if (
+                    nfaResult.properties !== undefined &&
+                    nfaResult.properties.length > 0
+                ) {
+                    // NFA schema name is stored in nfa.name, fall back to namespace key
+                    const schemaName =
+                        entry.nfa.name ??
+                        splitSchemaNamespaceKey(name).schemaName;
+                    for (const p of nfaResult.properties) {
+                        const action: any = p.match;
+                        properties.push({
+                            actions: [
+                                createExecutableAction(
+                                    schemaName,
+                                    action.actionName,
+                                    action.parameters,
+                                ),
+                            ],
+                            names: p.propertyNames,
+                        });
+                    }
+                }
+            } else {
+                // Legacy grammar-based completions
+                const partial = matchGrammarCompletion(
+                    entry.grammar,
+                    requestPrefix ?? "",
+                );
+                if (partial.completions.length > 0) {
+                    completions.push(...partial.completions);
+                }
+                if (
+                    partial.properties !== undefined &&
+                    partial.properties.length > 0
+                ) {
+                    const { schemaName } = splitSchemaNamespaceKey(name);
+                    for (const p of partial.properties) {
+                        const action: any = p.match;
+                        properties.push({
+                            actions: [
+                                createExecutableAction(
+                                    schemaName,
+                                    action.actionName,
+                                    action.parameters,
+                                ),
+                            ],
+                            names: p.propertyNames,
+                        });
+                    }
                 }
             }
         }

@@ -28,22 +28,29 @@ import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
 
-// Return the index of the last incomplete term for completion.
-// if the last term is the '@' command itself, return the index right after the '@'.
-// Input with trailing space doesn't have incomplete term, so return -1.
-function getCompletionStartIndex(input: string) {
-    const commandPrefix = input.match(/^\s*@/);
-    if (commandPrefix !== null) {
-        // Input is a command
-        const command = input.substring(commandPrefix.length);
-        if (!/\s/.test(command)) {
-            // No space on command yet just return right after the '@' as the start of the last term.
-            return commandPrefix.length;
+// Return the index of the first character of the last partial token.
+// This is where the shell's filter text begins.
+// Examples:
+//   "play sh"  → 5  (the "s" in "sh")
+//   "play "    → 5  (= input.length, empty filter)
+//   "p"        → 0
+//   "@calen"   → 1  (right after "@")
+//   "@cal foo" → 5  (the "f" in "foo")
+function getFilterStart(input: string) {
+    const commandMatch = input.match(/^\s*@/);
+    if (commandMatch !== null) {
+        const afterAt = input.substring(commandMatch.length);
+        if (!/\s/.test(afterAt)) {
+            // No space after @command — filtering command name
+            return commandMatch.length;
         }
     }
-
-    const suffix = input.match(/\s\S+$/);
-    return suffix !== null ? input.length - suffix[0].length : -1;
+    if (/\s$/.test(input)) {
+        // Trailing whitespace — filter is empty, starts at end
+        return input.length;
+    }
+    const lastSpace = input.lastIndexOf(" ");
+    return lastSpace === -1 ? 0 : lastSpace + 1;
 }
 
 // Return the full flag name if we are waiting a flag value.  Add boolean values for completions and return undefined if the flag is boolean.
@@ -196,14 +203,10 @@ export async function getCommandCompletion(
 ): Promise<CommandCompletionResult | undefined> {
     try {
         debug(`Command completion start: '${input}'`);
-        const completionStartIndex = getCompletionStartIndex(input);
-        const commandPrefix =
-            completionStartIndex !== -1
-                ? input.substring(0, completionStartIndex)
-                : input;
+        const filterStart = getFilterStart(input);
 
-        // Trim spaces and remove leading '@'
-        const partialCommand = normalizeCommand(commandPrefix, context);
+        // Always send the full input so the backend sees all typed text.
+        const partialCommand = normalizeCommand(input, context);
 
         debug(`Command completion resolve command: '${partialCommand}'`);
         const result = await resolveCommand(partialCommand, context);
@@ -217,7 +220,7 @@ export async function getCommandCompletion(
 
         // Collect completions
         const completions: CompletionGroup[] = [];
-        if (commandPrefix.trim() === "") {
+        if (input.trim() === "") {
             completions.push({
                 name: "Command Prefixes",
                 completions: ["@"],
@@ -276,12 +279,9 @@ export async function getCommandCompletion(
             }
         }
 
-        const space =
-            completionStartIndex > 0 && input[completionStartIndex - 1] !== "@";
         const completionResult = {
-            startIndex: completionStartIndex,
+            startIndex: filterStart,
             completions,
-            space,
         };
 
         debug(`Command completion result:`, completionResult);
