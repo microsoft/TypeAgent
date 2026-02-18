@@ -134,6 +134,9 @@ export class GrammarStoreImpl implements GrammarStore {
             }
 
             const { schemaName } = splitSchemaNamespaceKey(name);
+            console.log(
+                `[GRAMMAR] Matching "${request}" against ${schemaName} (${this.useNFA ? "NFA" : "legacy"}) - NFA states: ${entry.nfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
+            );
             debug(
                 `Matching "${request}" against ${schemaName} (${this.useNFA ? "NFA" : "legacy"}) - NFA states: ${entry.nfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
             );
@@ -146,6 +149,7 @@ export class GrammarStoreImpl implements GrammarStore {
 
             if (grammarMatches.length === 0) {
                 missedSchemas.push(schemaName);
+                console.log(`[GRAMMAR] MISS: "${request}" in ${schemaName}`);
                 debug(`No matches in ${schemaName} grammar`);
                 continue;
             }
