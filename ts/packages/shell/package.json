@@ -135,6 +135,5 @@
       }
     }
   },
-  "productName": "TypeAgent Shell",
-  "packageManager": "pnpm@10.24.0"
+  "productName": "TypeAgent Shell"
 }
