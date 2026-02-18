@@ -31,7 +31,12 @@ export default {
         // For some reason, electron-builder only process "!" and FileSet for node modules.
         {
             filter: [
-                "**/*",
+                "LICENSE",
+                "README.md",
+                "package.json",
+                "out/**",
+                "deploy/node_modules/**",
+
                 // Ignore all build artifacts
                 "!**/*.tsbuildinfo",
                 "!**/*.done.build.log",

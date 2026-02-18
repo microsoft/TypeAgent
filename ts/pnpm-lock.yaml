@@ -3991,10 +3991,10 @@ importers:
         specifier: ^37.4.0
         version: 37.4.0
       electron-builder:
-        specifier: ^26.7.0
+        specifier: ^26.3.1
         version: 26.7.0(electron-builder-squirrel-windows@26.7.0)
       electron-builder-squirrel-windows:
-        specifier: ^26.7.0
+        specifier: ^26.3.1
         version: 26.7.0(dmg-builder@26.7.0)
       electron-vite:
         specifier: ^4.0.1
