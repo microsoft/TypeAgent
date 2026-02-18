@@ -31,7 +31,6 @@
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "knowledge-processor": "workspace:*",
-    "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*"

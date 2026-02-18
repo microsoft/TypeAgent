@@ -15,8 +15,6 @@ import {
     createDatabaseLoggerSink,
     CosmosContainerClientFactory,
     CosmosPartitionKeyBuilderFactory,
-    PromptLogger,
-    createPromptLogger,
     PromptLoggerOptions,
 } from "telemetry";
 import { AgentCache } from "agent-cache";
@@ -163,7 +161,7 @@ export type CommandHandlerContext = {
     streamingActionContext?: ActionContextWithClose | undefined;
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
-    promptLogger?: PromptLogger | undefined;
+    promptLogger?: undefined;
 
     instanceDirLock: (() => Promise<void>) | undefined;
 
@@ -197,7 +195,6 @@ async function getAgentCache(
         explainerName,
         actionSchemaProvider,
         session.cacheConfig,
-        logger,
     );
 
     try {
@@ -586,7 +583,7 @@ export async function initializeCommandHandlerContext(
             ),
             logger,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
-            promptLogger: createPromptLogger(getCosmosFactories()),
+            promptLogger: undefined,
             batchMode: false,
             instanceDirLock,
             constructionProvider,

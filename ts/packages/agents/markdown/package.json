@@ -50,7 +50,6 @@
     "prosemirror-model": "^1.19.0",
     "prosemirror-state": "^1.4.2",
     "prosemirror-view": "^1.31.0",
-    "telemetry": "workspace:*",
     "typechat": "^0.1.1",
     "unist-util-visit": "^4.1.2",
     "ws": "^8.14.2",

@@ -41,7 +41,6 @@
     "dispatcher-node-providers": "workspace:*",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
-    "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat-utils": "workspace:*",
     "ws": "^8.17.1"

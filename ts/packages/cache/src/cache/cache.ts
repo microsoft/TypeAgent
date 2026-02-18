@@ -5,7 +5,6 @@ import registerDebug from "debug";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
 
 const debug = registerDebug("typeagent:cache");
-import * as Telemetry from "telemetry";
 import { ExplanationData } from "../explanation/explanationData.js";
 import {
     equalNormalizedObject,
@@ -108,14 +107,12 @@ export class AgentCache {
     private readonly explainWorkQueue: ExplainWorkQueue;
     // Function to return whether the namespace key matches to the current schema file's hash.
     private readonly namespaceKeyFilter?: NamespaceKeyFilter;
-    private readonly logger: Telemetry.Logger | undefined;
     public model?: string;
     constructor(
         public readonly explainerName: string,
         getExplainerForTranslator: ExplainerFactory,
         private readonly schemaInfoProvider?: SchemaInfoProvider,
         cacheOptions?: CacheOptions,
-        logger?: Telemetry.Logger,
     ) {
         this._grammarStore = new GrammarStoreImpl(schemaInfoProvider);
         this._constructionStore = new ConstructionStoreImpl(
@@ -125,11 +122,11 @@ export class AgentCache {
 
         this.explainWorkQueue = new ExplainWorkQueue(getExplainerForTranslator);
 
-        this.logger = logger
-            ? new Telemetry.ChildLogger(logger, "cache", {
-                  explainerName,
-              })
-            : undefined;
+        // this.logger = logger
+        //     ? new Telemetry.ChildLogger(logger, "cache", {
+        //           explainerName,
+        //       })
+        //     : undefined;
 
         if (schemaInfoProvider) {
             this.namespaceKeyFilter = (namespaceKey) => {
@@ -302,14 +299,14 @@ export class AgentCache {
                 this.model,
             );
 
-            const { explanation, elapsedMs } = explanationResult;
-            this.logger?.logEvent("explanation", {
-                request: requestAction.request,
-                actions: executableActions,
-                history: requestAction.history,
-                explanation,
-                elapsedMs,
-            });
+            const { explanation } = explanationResult;
+            // this.logger?.logEvent("explanation", {
+            //     request: requestAction.request,
+            //     actions: executableActions,
+            //     history: requestAction.history,
+            //     explanation,
+            //     elapsedMs,
+            // });
 
             const store = this._constructionStore;
             // In NFA mode, skip construction generation - use grammar rules instead
@@ -342,17 +339,17 @@ export class AgentCache {
                             "  \n",
                         )}`;
                     }
-                    const info = this.getInfo();
-                    this.logger?.logEvent("construction", {
-                        added,
-                        message,
-                        config: this._constructionStore.getConfig(),
-                        count: info?.constructionCount,
-                        filteredCount: info?.filteredConstructionCount,
-                        builtInCount: info?.builtInConstructionCount,
-                        filteredBuiltinCount:
-                            info?.filteredBuiltInConstructionCount,
-                    });
+                    //const info = this.getInfo();
+                    // this.logger?.logEvent("construction", {
+                    //     added,
+                    //     message,
+                    //     config: this._constructionStore.getConfig(),
+                    //     count: info?.constructionCount,
+                    //     filteredCount: info?.filteredConstructionCount,
+                    //     builtInCount: info?.builtInConstructionCount,
+                    //     filteredBuiltinCount:
+                    //         info?.filteredBuiltInConstructionCount,
+                    // });
                 }
                 constructionResult = { added, message };
             }
@@ -505,13 +502,13 @@ export class AgentCache {
                                 };
                             }
 
-                            this.logger?.logEvent("grammarGeneration", {
-                                request: requestAction.request,
-                                schemaName,
-                                actionName,
-                                success: grammarResult?.success,
-                                message: grammarResult?.message,
-                            });
+                            // this.logger?.logEvent("grammarGeneration", {
+                            //     request: requestAction.request,
+                            //     schemaName,
+                            //     actionName,
+                            //     success: grammarResult?.success,
+                            //     message: grammarResult?.message,
+                            // });
                         } catch (genError) {
                             debug(`Error during generation: %O`, genError);
                             grammarResult = {
@@ -527,11 +524,11 @@ export class AgentCache {
                         message: `Grammar generation error: ${error.message}`,
                     };
 
-                    this.logger?.logEvent("grammarGeneration", {
-                        request: requestAction.request,
-                        success: false,
-                        error: error.message,
-                    });
+                    // this.logger?.logEvent("grammarGeneration", {
+                    //     request: requestAction.request,
+                    //     success: false,
+                    //     error: error.message,
+                    // });
                 }
             }
 
@@ -541,15 +538,15 @@ export class AgentCache {
                 ...(grammarResult !== undefined && { grammarResult }),
             };
         } catch (e: any) {
-            this.logger?.logEvent("error", {
-                request: requestAction.request,
-                actions: requestAction.actions,
-                history: requestAction.history,
-                cache,
-                options,
-                message: e.message,
-                stack: e.stack,
-            });
+            // this.logger?.logEvent("error", {
+            //     request: requestAction.request,
+            //     actions: requestAction.actions,
+            //     history: requestAction.history,
+            //     cache,
+            //     options,
+            //     message: e.message,
+            //     stack: e.stack,
+            // });
             throw e;
         }
     }

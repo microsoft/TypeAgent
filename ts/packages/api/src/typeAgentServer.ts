@@ -16,7 +16,6 @@ import {
     ContainerListBlobsOptions,
 } from "@azure/storage-blob";
 // import { DefaultAzureCredential } from "@azure/identity";
-import { StopWatch } from "telemetry";
 import path from "node:path";
 import fs from "node:fs";
 import { isDirectoryPath } from "typeagent";
@@ -69,10 +68,10 @@ export class TypeAgentServer {
     async start() {
         // restore & enable session backup?
         if (this.config.blobBackupEnabled && this.storageProvider) {
-            const sw = new StopWatch();
+            //const sw = new StopWatch();
             await this.syncFromProvider();
             this.startLocalStorageBackup();
-            sw.stop("Downloaded Session Backup");
+            //sw.stop("Downloaded Session Backup");
         }
 
         this.webDispatcher = await createWebDispatcher();

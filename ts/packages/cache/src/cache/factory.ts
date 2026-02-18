@@ -5,7 +5,6 @@ import { getExplainerFactories } from "../explanation/explainerFactories.js";
 import { GenericExplainer } from "../explanation/genericExplainer.js";
 import { SchemaInfoProvider } from "../explanation/schemaInfoProvider.js";
 import { CacheOptions, AgentCache } from "./cache.js";
-import { Logger } from "telemetry";
 
 const defaultExplainerName = "v5";
 
@@ -46,14 +45,12 @@ export class AgentCacheFactory {
         explainerName: string = getDefaultExplainerName(),
         schemaInfoProvider?: SchemaInfoProvider,
         cacheOptions?: CacheOptions,
-        logger?: Logger,
     ) {
         return new AgentCache(
             explainerName,
             this.getExplainerFactory(explainerName),
             schemaInfoProvider,
             cacheOptions,
-            logger,
         );
     }
 

@@ -26,7 +26,6 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
-    "telemetry": "workspace:*",
     "typechat-utils": "workspace:*"
   },
   "devDependencies": {

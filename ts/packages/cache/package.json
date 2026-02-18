@@ -43,7 +43,6 @@
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "regexp.escape": "^2.0.1",
-    "telemetry": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*"
   },

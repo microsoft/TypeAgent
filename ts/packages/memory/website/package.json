@@ -44,7 +44,6 @@
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
     "memory-storage": "workspace:*",
-    "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },

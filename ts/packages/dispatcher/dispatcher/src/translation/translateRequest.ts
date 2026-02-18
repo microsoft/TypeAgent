@@ -156,7 +156,6 @@ export function getTranslatorForSchema(
         },
         generateOptions,
         config.model,
-        context.promptLogger,
     );
     if (!activityContext) {
         context.translatorCache.set(translatorName, newTranslator);
@@ -209,7 +208,6 @@ async function getTranslatorForSelectedActions(
             multiple: config.multiple,
         },
         config.model,
-        context.promptLogger,
     );
 }
 
@@ -482,7 +480,6 @@ async function findAssistantForRequest(
     const selectTranslator = loadAssistantSelectionJsonTranslator(
         schemaNames,
         systemContext.agents,
-        systemContext.promptLogger,
     );
 
     const result = await selectTranslator.translate(request);

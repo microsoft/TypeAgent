@@ -13,7 +13,6 @@ import {
     SchemaCreator as sc,
 } from "@typeagent/action-schema";
 import { getCombinedActionSchemaTypeName } from "./agentTranslators.js";
-import { PromptLogger } from "telemetry";
 const debugSwitchSearch = registerDebug("typeagent:switch:search");
 
 function createSelectionActionTypeDefinition(
@@ -133,7 +132,6 @@ const assistantSelectionLimit = 8192 * 3;
 export function loadAssistantSelectionJsonTranslator(
     schemaNames: Iterable<string>,
     provider: ActionConfigProvider,
-    promptLogger?: PromptLogger,
 ) {
     const schemas = getAssistantSelectionSchemas(schemaNames, provider);
 
@@ -172,7 +170,6 @@ export function loadAssistantSelectionJsonTranslator(
                                 "Select the assistant to handle the request",
                         },
                     ],
-                    promptLogger,
                 },
             ),
         };

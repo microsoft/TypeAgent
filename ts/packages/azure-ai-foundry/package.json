@@ -39,7 +39,6 @@
     "aiclient": "workspace:*",
     "async": "^3.2.5",
     "debug": "^4.4.0",
-    "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },

@@ -179,7 +179,6 @@ async function clarifyWithLookup(
         undefined,
         undefined,
         undefined,
-        systemContext.promptLogger,
     );
 
     const question = `What is ${action.parameters.reference}?`;

@@ -38,7 +38,6 @@ import { ActionConfig, getSchemaContent } from "./actionConfig.js";
 import { ActionConfigProvider } from "./actionConfigProvider.js";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { CompleteUsageStatsCallback } from "aiclient";
-import { PromptLogger } from "telemetry";
 
 export function getAppAgentName(schemaName: string) {
     return schemaName.split(".")[0];
@@ -335,7 +334,6 @@ export function loadAgentJsonTranslator<
     options?: ComposeSchemaOptions,
     generateOptions?: GenerateSchemaOptions | null, // null means not generated
     model?: string,
-    promptLogger?: PromptLogger,
 ): TypeAgentTranslator<T> {
     const validator = createTypeAgentValidator<T>(
         actionConfigs,
@@ -348,7 +346,6 @@ export function loadAgentJsonTranslator<
     const schemaNameMap = collectSchemaName(actionConfigs, provider);
     return createTypeAgentTranslator<T>(validator, schemaNameMap, {
         model,
-        promptLogger,
     });
 }
 
@@ -366,7 +363,6 @@ function createTypeAgentTranslator<
     );
     const streamingTranslator = enableJsonTranslatorStreaming(
         translator,
-        options.promptLogger,
     );
 
     // the request prompt is already expanded by the override replacement below
@@ -438,7 +434,6 @@ export function createTypeAgentTranslatorForSelectedActions<
     provider: ActionConfigProvider,
     options?: ComposeSchemaOptions,
     model?: string,
-    promptLogger?: PromptLogger,
 ) {
     const validator = createActionSchemaJsonValidator<T>(
         composeSelectedActionSchema(
@@ -458,7 +453,6 @@ export function createTypeAgentTranslatorForSelectedActions<
     );
     return createTypeAgentTranslator<T>(validator, schemaNameMap, {
         model,
-        promptLogger,
     });
 }
 
