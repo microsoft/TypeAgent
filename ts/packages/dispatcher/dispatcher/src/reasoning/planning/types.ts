@@ -30,6 +30,28 @@ export interface WorkflowPlan {
         lastUsed: string;
         avgDuration: number;
     };
+
+    // User approval tracking
+    approval?: PlanApproval;
+}
+
+export interface PlanApproval {
+    status: "auto" | "pending_review" | "reviewed" | "approved";
+
+    // Review tracking
+    reviewedBy?: string; // User identifier
+    reviewedAt?: string; // ISO timestamp
+    approvedAt?: string; // ISO timestamp
+
+    // User feedback
+    userComments?: string;
+
+    // Review history
+    reviewHistory?: Array<{
+        action: "reviewed" | "approved" | "rejected";
+        timestamp: string;
+        comments?: string;
+    }>;
 }
 
 export interface PlanStep {
@@ -88,6 +110,7 @@ export interface PlanIndexEntry {
     successRate: number;
     lastUsed: string;
     executionCount: number;
+    approvalStatus?: "auto" | "pending_review" | "reviewed" | "approved";
 }
 
 export interface PlanGenerationOptions {

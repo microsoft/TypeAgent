@@ -245,6 +245,7 @@ export function getUserDataCompletions(
     track = true,
     artist = false,
     album = false,
+    playlist = false,
 ): string[] {
     const completions: string[] = [];
     if (track) {
@@ -295,6 +296,9 @@ export function getUserDataCompletions(
             (a) => a.name,
         );
         completions.push(...albumNames);
+    }
+    if (playlist) {
+        // TODO: return names of playlists, sorted by timestamp
     }
     return completions;
 }

@@ -56,28 +56,89 @@ function isPassthroughRule(rule: GrammarRule): boolean {
 }
 
 /**
- * Normalize a grammar for NFA compilation.
- * This converts passthrough rules: @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
+ * Check if a rule is a single-literal rule (e.g., @ <KnownProgram> = chrome)
+ * Such rules should implicitly produce the matched literal as their value: -> "chrome"
+ */
+function isSingleLiteralRule(rule: GrammarRule): { literal: string } | false {
+    // A single-literal rule has:
+    // 1. No explicit value expression
+    // 2. Single part that is a string literal (not a variable or rules reference)
+    if (rule.value) {
+        return false; // Has explicit value
+    }
+    if (rule.parts.length !== 1) {
+        return false; // Multiple parts
+    }
+    const part = rule.parts[0];
+    if (part.type !== "string") {
+        return false; // Not a literal
+    }
+    if (part.value.length === 0) {
+        return false; // Empty string, nothing to capture
+    }
+    // Return the literal value (joined tokens)
+    return { literal: part.value.join(" ") };
+}
+
+/**
+ * Normalize a grammar for matching.
+ * This converts:
+ * - Passthrough rules: @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
+ * - Single-literal rules: @ <S> = chrome becomes @ <S> = chrome -> "chrome"
  *
- * Normalization is done as a preprocessing step before construction so the NFA compiler
- * doesn't need special handling for passthroughs.
+ * Normalization is done as a preprocessing step so matchers don't need special handling.
+ * Both completion-based and NFA-based matchers benefit from this normalization.
  *
  * @param grammar The grammar to normalize
  * @returns A new grammar with normalized rules (original is not modified)
  */
-function normalizeGrammarForNFA(grammar: Grammar): Grammar {
+export function normalizeGrammar(grammar: Grammar): Grammar {
+    // Cache to avoid re-normalizing shared rule arrays (handles recursive grammars)
+    const rulesCache = new Map<GrammarRule[], GrammarRule[]>();
     return {
         ...grammar,
-        rules: grammar.rules.map((rule) => normalizeRule(rule)),
+        rules: normalizeRulesArray(grammar.rules, rulesCache),
     };
+}
+
+/**
+ * Normalize an array of rules, using cache to handle circular references.
+ */
+function normalizeRulesArray(
+    rules: GrammarRule[],
+    cache: Map<GrammarRule[], GrammarRule[]>,
+): GrammarRule[] {
+    // Check cache first to handle recursive rule references
+    const cached = cache.get(rules);
+    if (cached !== undefined) {
+        return cached;
+    }
+
+    // Create the result array and cache it BEFORE normalizing
+    // This handles recursive references: when we encounter the same rules array
+    // during normalization, we return the (partially filled) cached array
+    const result: GrammarRule[] = [];
+    cache.set(rules, result);
+
+    // Now normalize each rule
+    for (const rule of rules) {
+        result.push(normalizeRule(rule, cache));
+    }
+
+    return result;
 }
 
 /**
  * Normalize a single rule, recursively normalizing any nested rules.
  */
-function normalizeRule(rule: GrammarRule): GrammarRule {
+function normalizeRule(
+    rule: GrammarRule,
+    cache: Map<GrammarRule[], GrammarRule[]>,
+): GrammarRule {
     // First, normalize all nested RulesParts
-    const normalizedParts = rule.parts.map((part) => normalizePart(part));
+    const normalizedParts = rule.parts.map((part) =>
+        normalizePart(part, cache),
+    );
 
     // Check if this is a passthrough rule that needs transformation
     if (isPassthroughRule(rule)) {
@@ -94,7 +155,17 @@ function normalizeRule(rule: GrammarRule): GrammarRule {
         };
     }
 
-    // Not a passthrough - return with normalized parts
+    // Check if this is a single-literal rule that needs transformation
+    const singleLiteral = isSingleLiteralRule(rule);
+    if (singleLiteral) {
+        // Transform: @ <S> = chrome becomes @ <S> = chrome -> "chrome"
+        return {
+            parts: normalizedParts,
+            value: { type: "literal", value: singleLiteral.literal },
+        };
+    }
+
+    // Not a passthrough or single-literal - return with normalized parts
     return {
         ...rule,
         parts: normalizedParts,
@@ -104,15 +175,18 @@ function normalizeRule(rule: GrammarRule): GrammarRule {
 /**
  * Normalize a grammar part, recursively normalizing nested rules.
  */
-function normalizePart(part: GrammarPart): GrammarPart {
+function normalizePart(
+    part: GrammarPart,
+    cache: Map<GrammarRule[], GrammarRule[]>,
+): GrammarPart {
     if (part.type !== "rules") {
         return part; // Only RulesParts need normalization
     }
 
-    // Normalize all nested rules within this RulesPart
+    // Normalize all nested rules within this RulesPart (using cache)
     return {
         ...part,
-        rules: part.rules.map((rule) => normalizeRule(rule)),
+        rules: normalizeRulesArray(part.rules, cache),
     };
 }
 
@@ -260,7 +334,7 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
 export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
     // Normalize grammar first: convert passthrough rules to explicit form
     // @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
-    const normalizedGrammar = normalizeGrammarForNFA(grammar);
+    const normalizedGrammar = normalizeGrammar(grammar);
 
     const builder = new NFABuilder();
 

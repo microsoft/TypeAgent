@@ -358,9 +358,6 @@ export class AgentCache {
             let grammarResult:
                 | { success: boolean; message: string; generatedRule?: string }
                 | undefined = undefined;
-            debug(
-                `Grammar gen check: cache=${!!cache}, useNFA=${this._useNFAGrammar}, success=${explanation.success}, actionCount=${executableActions.length}`,
-            );
             if (
                 cache &&
                 this._useNFAGrammar &&
@@ -407,6 +404,9 @@ export class AgentCache {
                             debug(
                                 `Calling populateCache for request: "${requestAction.request}"`,
                             );
+                            console.log(
+                                `[GRAMMAR] populateCache input: request="${requestAction.request}", action=${actionName}, params=${JSON.stringify(parameters)}`,
+                            );
                             // Generate grammar rule
                             const genResult = await populateCache({
                                 request: requestAction.request,
@@ -417,20 +417,16 @@ export class AgentCache {
                                 },
                                 schemaPath,
                             });
-
-                            debug(
-                                `populateCache result: success=${genResult.success}, reason=${genResult.rejectionReason || "none"}`,
+                            console.log(
+                                `[GRAMMAR] populateCache result: success=${genResult.success}, rule=${genResult.generatedRule ?? "none"}, rejection=${genResult.rejectionReason ?? "none"}`,
                             );
 
                             if (genResult.success && genResult.generatedRule) {
-                                // Log the generated rule
                                 debug(
-                                    `NEW RULE for ${schemaName}.${actionName}: "${requestAction.request}" => %s`,
-                                    genResult.generatedRule,
+                                    `Grammar rule generated for ${schemaName}.${actionName}: ${genResult.generatedRule}`,
                                 );
 
                                 // Add rule to persisted grammar store
-                                debug(`Adding rule to persisted store...`);
                                 await this._persistedGrammarStore.addRule({
                                     schemaName,
                                     grammarText: genResult.generatedRule,
@@ -445,17 +441,22 @@ export class AgentCache {
                                     debug(
                                         `Adding rule to agent grammar registry...`,
                                     );
+                                    console.log(
+                                        `[GRAMMAR] Adding to registry: checkedVars=${genResult.checkedVariables ? [...genResult.checkedVariables].join(",") : "none"}`,
+                                    );
                                     const addResult =
                                         agentGrammar.addGeneratedRules(
                                             genResult.generatedRule,
                                             genResult.checkedVariables,
                                         );
+                                    console.log(
+                                        `[GRAMMAR] addGeneratedRules: success=${addResult.success}, errors=${addResult.errors.join("; ") || "none"}, unresolved=${addResult.unresolvedEntities?.join(", ") || "none"}`,
+                                    );
                                     if (addResult.success) {
                                         // Sync to the grammar store used for matching
                                         this.syncAgentGrammar(schemaName);
-
                                         debug(
-                                            `Successfully added rule for ${schemaName}.${actionName}`,
+                                            `Grammar rule added for ${schemaName}.${actionName}`,
                                         );
                                         grammarResult = {
                                             success: true,
@@ -465,7 +466,7 @@ export class AgentCache {
                                         };
                                     } else {
                                         debug(
-                                            `Failed to add to registry: ${addResult.errors.join(", ")}`,
+                                            `Failed to add rule to registry: ${addResult.errors.join(", ")}`,
                                         );
                                         grammarResult = {
                                             success: false,
@@ -490,7 +491,9 @@ export class AgentCache {
                                     };
                                 }
                             } else {
-                                debug(`Grammar generation rejected or failed`);
+                                debug(
+                                    `Grammar generation rejected: ${genResult.rejectionReason || "unknown reason"}`,
+                                );
                                 grammarResult = {
                                     success: false,
                                     message:

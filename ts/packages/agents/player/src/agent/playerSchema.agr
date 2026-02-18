@@ -117,8 +117,8 @@
                  | select (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | switch to $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | switch to (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
-                 | use $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | use (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
+                 | use device $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | play on $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
                  | play on (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: $(deviceName) } }
 
@@ -126,6 +126,6 @@
 @ <TrackName> = $(x:wildcard)
 @ <ArtistName> = $(x:wildcard)
 @ <AlbumName> = $(x:wildcard)
-@ <DeviceName> = $(x:MusicDevice)
+@ <DeviceName> = $(x:wildcard)
 
 

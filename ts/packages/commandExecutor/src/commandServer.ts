@@ -669,13 +669,19 @@ export class CommandServer {
     private responseCollector: { messages: string[] } = { messages: [] };
     private currentRequestConfirmed: boolean = false;
     private config: ResolvedAgentServerConfig;
+    private schemaDiscovery: boolean = false;
 
     /**
      * Creates a new CommandServer instance
      * @param debugMode Enable debug mode for diagnostic tools
      * @param agentServerUrl URL of the TypeAgent dispatcher server (default: ws://localhost:8999)
+     * @param schemaDiscovery Enable schema discovery tools (discover_schemas, load_schema) - default: false
      */
-    constructor(debugMode: boolean = true, agentServerUrl?: string) {
+    constructor(
+        debugMode: boolean = true,
+        agentServerUrl?: string,
+        schemaDiscovery: boolean = false,
+    ) {
         this.logger = new Logger();
 
         // Load agent server configuration
@@ -714,8 +720,12 @@ export class CommandServer {
             agentServerUrl ??
             process.env.AGENT_SERVER_URL ??
             "ws://localhost:8999";
+        this.schemaDiscovery = schemaDiscovery;
         this.logger.log(
             `CommandServer initializing with TypeAgent server URL: ${this.agentServerUrl}`,
+        );
+        this.logger.log(
+            `Schema discovery: ${this.schemaDiscovery ? "enabled" : "disabled"}`,
         );
         this.addTools();
         if (debugMode) {
@@ -866,11 +876,12 @@ export class CommandServer {
             {
                 inputSchema: executeCommandRequestSchema(),
                 description:
+                    "Perform a single user command at a time. If the user wants multiple commands break them up into multiple calls.\n" +
                     "Execute user commands including:\n" +
                     "- Music & media: play songs, control playback\n" +
                     "- Lists & tasks: manage shopping lists, todo lists\n" +
                     "- Calendar: schedule events, view calendar\n" +
-                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings\n\n" +
+                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings\n" +
                     "Parameters:\n" +
                     "- request: The command to execute\n" +
                     "- cacheCheck: (optional) Check cache before executing\n" +
@@ -884,39 +895,44 @@ export class CommandServer {
                 this.executeCommand(request),
         );
 
-        // Discovery tool
-        this.server.registerTool(
-            "discover_schemas",
-            {
-                inputSchema: discoverSchemasRequestSchema(),
-                description:
-                    "Check if TypeAgent has capabilities for a user request that isn't covered by existing tools. " +
-                    "Returns available schemas/agents that match the request, along with their actions. " +
-                    "Use this BEFORE telling the user a capability isn't available.\n\n" +
-                    "Example: User asks 'What's the weather?' → Call discover_schemas({query: 'weather'}) to see if a weather agent is installed.\n\n" +
-                    "Parameters:\n" +
-                    "- query: Natural language description of what the user wants (e.g., 'weather', 'send email', 'analyze code')\n" +
-                    "- includeActions: If true, return detailed action schemas and TypeScript source. If false, just return agent names and descriptions (default: false)",
-            },
-            async (request: DiscoverSchemasRequest) =>
-                this.discoverSchemas(request),
-        );
+        // Schema discovery tools (only registered if schemaDiscovery flag is enabled)
+        if (this.schemaDiscovery) {
+            // Discovery tool
+            this.server.registerTool(
+                "discover_schemas",
+                {
+                    inputSchema: discoverSchemasRequestSchema(),
+                    description:
+                        "Check if TypeAgent has capabilities for a user request that isn't covered by existing tools. " +
+                        "Returns available schemas/agents that match the request, along with their actions. " +
+                        "Use this BEFORE telling the user a capability isn't available.\n\n" +
+                        "Example: User asks 'What's the weather?' → Call discover_schemas({query: 'weather'}) to see if a weather agent is installed.\n\n" +
+                        "Parameters:\n" +
+                        "- query: Natural language description of what the user wants (e.g., 'weather', 'send email', 'analyze code')\n" +
+                        "- includeActions: If true, return detailed action schemas and TypeScript source. If false, just return agent names and descriptions (default: false)",
+                },
+                async (request: DiscoverSchemasRequest) =>
+                    this.discoverSchemas(request),
+            );
 
-        // Schema loading tool
-        this.server.registerTool(
-            "load_schema",
-            {
-                inputSchema: loadSchemaRequestSchema(),
-                description:
-                    "Load a TypeAgent schema dynamically and register its actions as tools. " +
-                    "After loading, the agent's actions become available for direct invocation in this session. " +
-                    "Only use this after discover_schemas confirms the schema is available.\n\n" +
-                    "Parameters:\n" +
-                    "- schemaName: The schema/agent name returned by discover_schemas (e.g., 'weather', 'email')\n" +
-                    "- exposeAs: How to expose actions - 'individual' creates one tool per action (e.g., weather_getCurrentConditions), 'composite' creates one tool (e.g., weather_action) with action as a parameter (default: composite)",
-            },
-            async (request: LoadSchemaRequest) => this.loadSchema(request),
-        );
+            // Schema loading tool
+            this.server.registerTool(
+                "load_schema",
+                {
+                    inputSchema: loadSchemaRequestSchema(),
+                    description:
+                        "Load a TypeAgent schema dynamically and register its actions as tools. " +
+                        "After loading, the agent's actions become available for direct invocation in this session. " +
+                        "Only use this after discover_schemas confirms the schema is available.\n\n" +
+                        "Parameters:\n" +
+                        "- schemaName: The schema/agent name returned by discover_schemas (e.g., 'weather', 'email')\n" +
+                        "- exposeAs: How to expose actions - 'individual' creates one tool per action (e.g., weather_getCurrentConditions), 'composite' creates one tool (e.g., weather_action) with action as a parameter (default: composite)",
+                },
+                async (request: LoadSchemaRequest) => this.loadSchema(request),
+            );
+
+            this.logger.log("Schema discovery tools registered");
+        }
 
         // Generic action execution tool
         this.server.registerTool(
