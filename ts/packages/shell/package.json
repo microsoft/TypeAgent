@@ -88,7 +88,7 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^37.4.0",
-    "electron-builder": "^26.3.1",
+    "electron-builder": "26.3.1",
     "electron-builder-squirrel-windows": "26.3.1",
     "electron-vite": "^4.0.1",
     "less": "^4.2.0",
