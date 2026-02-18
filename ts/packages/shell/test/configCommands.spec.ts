@@ -52,23 +52,23 @@ test.describe("@config Commands", () => {
 
         await runTestCallback(async (mainWindow: Page) => {
             let msg = await sendUserRequestAndWaitForResponse(
-                `@config schema oracle`,
+                `@config schema calendar`,
                 mainWindow,
             );
 
             expect(
                 msg.toLowerCase(),
-                "Oracle scheme should be ON but it is OFF.",
+                "Calendar schema should be ON but it is OFF.",
             ).toContain("✅");
 
             msg = await sendUserRequestAndWaitForResponse(
-                `@config schema --off oracle`,
+                `@config schema --off calendar`,
                 mainWindow,
             );
 
             expect(
                 msg.toLowerCase(),
-                "Oracle schema should be OFF but is is ON.",
+                "Calendar schema should be OFF but it is ON.",
             ).toContain("❌");
 
             msg = await sendUserRequestAndWaitForResponse(
