@@ -65,6 +65,7 @@ export function loadGrammarRules(
         parseResult.definitions,
         start,
         parseResult.imports,
+        parseResult.entities.length > 0 ? parseResult.entities : undefined,
     );
 
     if (result.warnings.length > 0 && warnings !== undefined) {

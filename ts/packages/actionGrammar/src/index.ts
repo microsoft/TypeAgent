@@ -5,6 +5,8 @@ export type { GrammarJson, Grammar } from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules } from "./grammarLoader.js";
+export { parseGrammarRules } from "./grammarRuleParser.js";
+export { compileGrammar } from "./grammarCompiler.js";
 export {
     matchGrammar,
     GrammarMatchResult,
@@ -80,6 +82,7 @@ export {
     tokenizeRequest,
     type NFAGrammarMatchResult,
 } from "./nfaMatcher.js";
+export { computeNFACompletions } from "./nfaCompletion.js";
 
 // DFA system
 export type {

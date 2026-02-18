@@ -30,6 +30,11 @@ export interface NFATransition {
     typeName?: string | undefined;
     checked?: boolean | undefined; // true if wildcard has validation (entity type or checked_wildcard paramSpec)
 
+    // For checked wildcard transitions: completion metadata (set at compile time)
+    // Allows completion to return property info without runtime action value evaluation
+    actionName?: string | undefined; // e.g., "play"
+    propertyPath?: string | undefined; // e.g., "parameters.songName"
+
     // Slot assignment for the new environment system
     // When set, the captured value is written to this slot index
     slotIndex?: number | undefined;
@@ -104,6 +109,11 @@ export interface NFAState {
     // For nested rule references: which slot in the parent environment to write the result to
     // Set on states that enter a nested rule
     parentSlotIndex?: number | undefined;
+
+    // Completion metadata for nested rule entry states
+    // Set when this state is the entry point of a nested rules reference that captures a property
+    completionActionName?: string | undefined;
+    completionPropertyPath?: string | undefined;
 }
 
 /**
@@ -150,12 +160,14 @@ export class NFABuilder {
         checked?: boolean,
         slotIndex?: number,
         appendToSlot?: boolean,
+        actionName?: string,
+        propertyPath?: string,
     ): void {
         const state = this.states[from];
         if (!state) {
             throw new Error(`State ${from} does not exist`);
         }
-        state.transitions.push({
+        const trans: NFATransition = {
             type,
             to,
             tokens,
@@ -164,7 +176,10 @@ export class NFABuilder {
             checked,
             slotIndex,
             appendToSlot,
-        });
+        };
+        if (actionName) trans.actionName = actionName;
+        if (propertyPath) trans.propertyPath = propertyPath;
+        state.transitions.push(trans);
     }
 
     addTokenTransition(from: number, to: number, tokens: string[]): void {
@@ -220,6 +235,8 @@ export class NFABuilder {
         checked?: boolean,
         slotIndex?: number,
         appendToSlot?: boolean,
+        actionName?: string,
+        propertyPath?: string,
     ): void {
         this.addTransition(
             from,
@@ -231,6 +248,8 @@ export class NFABuilder {
             checked,
             slotIndex,
             appendToSlot,
+            actionName,
+            propertyPath,
         );
     }
 

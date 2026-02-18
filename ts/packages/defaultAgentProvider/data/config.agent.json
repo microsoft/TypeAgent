@@ -1,5 +1,5 @@
 {
-  "description": "Default agent provider configuration - contains all *current* agents",
+  "description": "Configuration when hosted within another agent.",
   "agents": {
     "player": {
       "name": "music"
@@ -25,17 +25,9 @@
     "code": {
       "name": "code-agent"
     },
-    "chat": {
-      "name": "chat-agent",
-      "execMode": "dispatcher"
-    },
     "photo": {
       "name": "photo-agent",
       "execMode": "separate"
-    },
-    "greeting": {
-      "name": "greeting-agent",
-      "execMode": "dispatcher"
     },
     "image": {
       "name": "image-agent",
@@ -47,9 +39,15 @@
     "montage": {
       "name": "montage-agent"
     },
+    "oracle": {
+      "name": "oracle-agent"
+    },
+    "spelunker": {
+      "name": "spelunker-agent"
+    },
     "video": {
       "name": "video-agent",
-      "execMode": "dispatcher"
+      "excecMode": "dispatcher"
     },
     "settings": {
       "name": "settings-agent",

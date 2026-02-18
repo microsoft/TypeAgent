@@ -535,6 +535,12 @@ export class AgentCache {
                 }
             }
 
+            if (grammarResult && !grammarResult.success) {
+                console.log(
+                    `[GRAMMAR] Rule generation failed: ${grammarResult.message}${grammarResult.generatedRule ? `, rule=${grammarResult.generatedRule}` : ""}`,
+                );
+            }
+
             return {
                 explanationResult,
                 ...(constructionResult !== undefined && { constructionResult }),

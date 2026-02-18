@@ -27,6 +27,7 @@ export interface CalendarEvent {
     attendees?: CalendarAttendee[];
     location?: string;
     isAllDay?: boolean;
+    htmlLink?: string;
 }
 
 /**
