@@ -187,6 +187,12 @@ function registerClient(
                     chatView.randomCommandSelected(requestId, data.message);
                     break;
                 case "grammarRule":
+                    // Update roadrunner color based on grammar result
+                    chatView.updateGrammarResult(
+                        requestId,
+                        data.success,
+                        data.message,
+                    );
                     // Display grammar rule generation result
                     if (data.success && data.rule) {
                         chatView.addNotificationMessage(
@@ -358,11 +364,7 @@ function registerClient(
             remoteSearchMenuUIOnCompletion(id, item);
         },
         titleUpdated(title: string): void {
-            // update document title
             document.title = title;
-
-            // update chatview title
-            chatView.setTitle(title);
         },
         continuousSpeechProcessed(expressions: UserExpression[]): void {
             console.log(
@@ -473,14 +475,6 @@ document.addEventListener("DOMContentLoaded", async function () {
         [iconSettings(), iconMetrics(), iconHelp()],
         [iconSettings(), iconMetrics(), iconHelp()],
     );
-    wrapper.appendChild(tabs.getContainer());
-
-    document.onkeyup = (ev: KeyboardEvent) => {
-        if (ev.key === "Escape") {
-            tabs.closeTabs();
-            ev.preventDefault();
-        }
-    };
 
     const chatView = new ChatView(idGenerator, agents, inputOnly);
     const chatInput = new ChatInput({}, "phraseDiv");

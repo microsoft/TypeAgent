@@ -22,6 +22,7 @@ export async function connectDispatcher(
     clientIO: ClientIO,
     url: string | URL,
     options?: DispatcherConnectOptions,
+    onDisconnect?: () => void,
 ): Promise<Dispatcher> {
     return new Promise((resolve, reject: (e: Error) => void) => {
         const ws = new WebSocket(url); // Replace with the actual WebSocket server URL
@@ -74,7 +75,9 @@ export async function connectDispatcher(
         ws.onclose = (event: WebSocket.CloseEvent) => {
             debug("WebSocket connection closed", event.code, event.reason);
             channel.notifyDisconnected();
-            if (!resolved) {
+            if (resolved) {
+                onDisconnect?.();
+            } else {
                 reject(new Error(`Failed to connect to dispatcher at ${url}`));
             }
         };

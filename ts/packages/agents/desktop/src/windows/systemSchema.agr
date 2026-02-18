@@ -1,0 +1,112 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Desktop System Settings Grammar
+// Accessibility, file explorer, time settings, focus assist, multi-monitor, gaming, metered connections
+
+@ <Start> = <EnableMeteredConnections>
+          | <EnableGameMode>
+          | <EnableNarrator>
+          | <EnableMagnifier>
+          | <EnableStickyKeys>
+          | <EnableFilterKeys>
+          | <MonoAudioToggle>
+          | <ShowFileExtensions>
+          | <ShowHiddenFiles>
+          | <AutomaticTimeSetting>
+          | <AutomaticDSTAdjustment>
+          | <EnableQuietHours>
+          | <RememberWindowLocations>
+          | <MinimizeWindowsOnDisconnect>
+
+// ===== Network =====
+@ <EnableMeteredConnections> =
+    enable metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: true } }
+  | disable metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: false } }
+  | turn on metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: true } }
+  | turn off metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: false } }
+
+// ===== Gaming =====
+@ <EnableGameMode> =
+    enable game mode -> { actionName: "enableGameMode", parameters: {} }
+  | open game mode (settings)? -> { actionName: "enableGameMode", parameters: {} }
+  | turn on game mode -> { actionName: "enableGameMode", parameters: {} }
+
+// ===== Accessibility =====
+@ <EnableNarrator> =
+    enable narrator -> { actionName: "EnableNarratorAction", parameters: { enable: true } }
+  | disable narrator -> { actionName: "EnableNarratorAction", parameters: { enable: false } }
+  | start narrator -> { actionName: "EnableNarratorAction", parameters: { enable: true } }
+  | stop narrator -> { actionName: "EnableNarratorAction", parameters: { enable: false } }
+  | turn on narrator -> { actionName: "EnableNarratorAction", parameters: { enable: true } }
+  | turn off narrator -> { actionName: "EnableNarratorAction", parameters: { enable: false } }
+
+@ <EnableMagnifier> =
+    enable magnifier -> { actionName: "EnableMagnifier", parameters: { enable: true } }
+  | disable magnifier -> { actionName: "EnableMagnifier", parameters: { enable: false } }
+  | start magnifier -> { actionName: "EnableMagnifier", parameters: { enable: true } }
+  | stop magnifier -> { actionName: "EnableMagnifier", parameters: { enable: false } }
+  | turn on magnifier -> { actionName: "EnableMagnifier", parameters: { enable: true } }
+  | turn off magnifier -> { actionName: "EnableMagnifier", parameters: { enable: false } }
+
+@ <EnableStickyKeys> =
+    enable sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: true } }
+  | disable sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: false } }
+  | turn on sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: true } }
+  | turn off sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: false } }
+
+@ <EnableFilterKeys> =
+    enable filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: true } }
+  | disable filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: false } }
+  | turn on filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: true } }
+  | turn off filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: false } }
+
+@ <MonoAudioToggle> =
+    enable mono audio -> { actionName: "MonoAudioToggle", parameters: { enable: true } }
+  | disable mono audio -> { actionName: "MonoAudioToggle", parameters: { enable: false } }
+  | turn on mono audio -> { actionName: "MonoAudioToggle", parameters: { enable: true } }
+  | turn off mono audio -> { actionName: "MonoAudioToggle", parameters: { enable: false } }
+
+// ===== File Explorer =====
+@ <ShowFileExtensions> =
+    show file extensions -> { actionName: "ShowFileExtensions", parameters: { enable: true } }
+  | hide file extensions -> { actionName: "ShowFileExtensions", parameters: { enable: false } }
+  | display file extensions -> { actionName: "ShowFileExtensions", parameters: { enable: true } }
+
+@ <ShowHiddenFiles> =
+    show hidden files -> { actionName: "ShowHiddenAndSystemFiles", parameters: { enable: true } }
+  | hide hidden files -> { actionName: "ShowHiddenAndSystemFiles", parameters: { enable: false } }
+  | show system files -> { actionName: "ShowHiddenAndSystemFiles", parameters: { enable: true } }
+  | display hidden files -> { actionName: "ShowHiddenAndSystemFiles", parameters: { enable: true } }
+
+// ===== Time & Region =====
+@ <AutomaticTimeSetting> =
+    enable automatic time sync -> { actionName: "AutomaticTimeSettingAction", parameters: { enableAutoTimeSync: true } }
+  | disable automatic time sync -> { actionName: "AutomaticTimeSettingAction", parameters: { enableAutoTimeSync: false } }
+  | automatically set time -> { actionName: "AutomaticTimeSettingAction", parameters: { enableAutoTimeSync: true } }
+  | sync time automatically -> { actionName: "AutomaticTimeSettingAction", parameters: { enableAutoTimeSync: true } }
+
+@ <AutomaticDSTAdjustment> =
+    enable automatic dst (adjustment)? -> { actionName: "AutomaticDSTAdjustment", parameters: { enable: true } }
+  | disable automatic dst (adjustment)? -> { actionName: "AutomaticDSTAdjustment", parameters: { enable: false } }
+  | automatically adjust for dst -> { actionName: "AutomaticDSTAdjustment", parameters: { enable: true } }
+  | enable daylight saving time adjustment -> { actionName: "AutomaticDSTAdjustment", parameters: { enable: true } }
+
+// ===== Focus Assist =====
+@ <EnableQuietHours> =
+    enable quiet hours -> { actionName: "EnableQuietHours", parameters: {} }
+  | enable focus assist -> { actionName: "EnableQuietHours", parameters: {} }
+  | turn on quiet hours -> { actionName: "EnableQuietHours", parameters: {} }
+  | open focus assist (settings)? -> { actionName: "EnableQuietHours", parameters: {} }
+  | do not disturb -> { actionName: "EnableQuietHours", parameters: {} }
+
+// ===== Multi-Monitor =====
+@ <RememberWindowLocations> =
+    remember window locations -> { actionName: "RememberWindowLocations", parameters: { enable: true } }
+  | forget window locations -> { actionName: "RememberWindowLocations", parameters: { enable: false } }
+  | remember window positions -> { actionName: "RememberWindowLocations", parameters: { enable: true } }
+
+@ <MinimizeWindowsOnDisconnect> =
+    minimize windows on disconnect -> { actionName: "MinimizeWindowsOnMonitorDisconnectAction", parameters: { enable: true } }
+  | minimize windows when monitor disconnects -> { actionName: "MinimizeWindowsOnMonitorDisconnectAction", parameters: { enable: true } }
+  | keep windows when monitor disconnects -> { actionName: "MinimizeWindowsOnMonitorDisconnectAction", parameters: { enable: false } }

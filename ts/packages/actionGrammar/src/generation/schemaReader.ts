@@ -17,6 +17,7 @@ export interface ParameterValidationInfo {
     paramSpec?: ParamSpec; // e.g., "checked_wildcard", "ordinal", "number", etc.
     entityTypeName?: string; // e.g., "MusicDevice" if the parameter references an entity type
     isEntityType: boolean;
+    optional?: boolean; // Whether the parameter is optional in the schema
 }
 
 /**
@@ -91,6 +92,7 @@ export function loadSchemaInfo(pasJsonPath: string): SchemaInfo {
                     const validationInfo: ParameterValidationInfo = {
                         parameterName: paramName,
                         isEntityType: false,
+                        optional: field.optional === true,
                     };
 
                     // Check if this parameter has a paramSpec

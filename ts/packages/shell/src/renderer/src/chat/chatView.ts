@@ -42,8 +42,6 @@ export class ChatView {
     private partialCompletionEnabled: boolean = false;
     private partialCompletionDisableRemoteUI: boolean = false;
     private partialCompletion: PartialCompletion | undefined;
-    private titleDiv: HTMLDivElement;
-
     private commandBackStack: string[] = [];
     private commandBackStackIndex = 0;
 
@@ -64,11 +62,6 @@ export class ChatView {
         this.topDiv = document.createElement("div");
         this.topDiv.className = "chat-container";
 
-        // Add the app title to the chat view
-        this.titleDiv = document.createElement("div");
-        this.titleDiv.className = "chat-title";
-        this.topDiv.appendChild(this.titleDiv);
-
         this.messageDiv = document.createElement("div");
         this.messageDiv.className = "chat scroll_enabled";
         this.messageDiv.addEventListener("scrollend", () => {
@@ -81,7 +74,6 @@ export class ChatView {
             }
         });
         if (inputOnly) {
-            this.titleDiv.style.visibility = "hidden";
             this.messageDiv.style.visibility = "hidden";
         }
 
@@ -412,15 +404,43 @@ export class ChatView {
         return retVal;
     }
 
-    notifyExplained(id: string, data: NotifyExplainedData) {
-        this.idToMessageGroup.get(id)?.notifyExplained(data);
+    notifyExplained(requestId: string | RequestId, data: NotifyExplainedData) {
+        const id =
+            typeof requestId === "string"
+                ? requestId
+                : getMessageGroupId(requestId);
+        if (id) {
+            this.idToMessageGroup.get(id)?.notifyExplained(data);
+        }
     }
 
-    randomCommandSelected(id: string, message: string) {
-        const pair = this.idToMessageGroup.get(id);
-        if (pair !== undefined) {
-            if (message.length > 0) {
-                pair.updateUserMessage(message);
+    updateGrammarResult(
+        requestId: string | RequestId,
+        success: boolean,
+        message?: string,
+    ) {
+        const id =
+            typeof requestId === "string"
+                ? requestId
+                : getMessageGroupId(requestId);
+        if (id) {
+            this.idToMessageGroup
+                .get(id)
+                ?.updateGrammarResult(success, message);
+        }
+    }
+
+    randomCommandSelected(requestId: string | RequestId, message: string) {
+        const id =
+            typeof requestId === "string"
+                ? requestId
+                : getMessageGroupId(requestId);
+        if (id) {
+            const pair = this.idToMessageGroup.get(id);
+            if (pair !== undefined) {
+                if (message.length > 0) {
+                    pair.updateUserMessage(message);
+                }
             }
         }
     }
@@ -626,9 +646,6 @@ export class ChatView {
         }
     }
 
-    public setTitle(title: string) {
-        this.titleDiv.innerText = title;
-    }
     /**
      * Hosts a chat input control within the chat view.
      * @param input The chat input to set. This method can only be called once.
@@ -689,7 +706,7 @@ export class ChatView {
                     ) {
                         const messages: NodeListOf<Element> =
                             this.messageDiv.querySelectorAll(
-                                ".chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
+                                ":not(.history) > .chat-message-container-user:not(.chat-message-hidden) .chat-message-content",
                             );
                         this.commandBackStack = Array.from(messages).map(
                             (m: Element) =>

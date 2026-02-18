@@ -55,6 +55,9 @@
     "addToPlaylistFromCurrentTrackList": {
       "name": "checked_wildcard",
       "trackNumber": "ordinal"
+    },
+    "selectDevice": {
+      "deviceName": "checked_wildcard"
     }
   },
   "paramCompletionEmojis": {

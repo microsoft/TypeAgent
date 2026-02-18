@@ -1,7 +1,11 @@
 {
+  "description": "Default agent provider configuration - contains all *current* agents",
   "agents": {
     "player": {
       "name": "music"
+    },
+    "localPlayer": {
+      "name": "music-local"
     },
     "calendar": {
       "name": "calendar"
@@ -37,25 +41,15 @@
       "name": "image-agent",
       "execMode": "dispatcher"
     },
-    "androidMobile": {
-      "name": "android-mobile-agent",
-      "execMode": "dispatcher"
-    },
     "markdown": {
       "name": "markdown-agent"
     },
     "montage": {
       "name": "montage-agent"
     },
-    "oracle": {
-      "name": "oracle-agent"
-    },
-    "spelunker": {
-      "name": "spelunker-agent"
-    },
     "video": {
       "name": "video-agent",
-      "excecMode": "dispatcher"
+      "execMode": "dispatcher"
     },
     "settings": {
       "name": "settings-agent",

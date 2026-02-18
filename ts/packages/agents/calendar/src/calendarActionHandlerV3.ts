@@ -7,8 +7,10 @@ import {
     ActionContext,
     ActionResult,
     SessionContext,
+    ParsedCommandParams,
 } from "@typeagent/agent-sdk";
 import {
+    CommandHandler,
     CommandHandlerNoParams,
     CommandHandlerTable,
     getCommandInterface,
@@ -23,7 +25,14 @@ import {
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
 import { CalendarActionV3 } from "./calendarActionsSchemaV3.js";
-import { createCalendarGraphClient, CalendarClient } from "graph-utils";
+import {
+    CalendarClient,
+    ICalendarProvider,
+    CalendarProviderType,
+    createCalendarProviderFromConfig,
+    getAvailableProviders,
+    GoogleCalendarClient,
+} from "graph-utils";
 import {
     getNWeeksDateRangeISO,
     generateQueryFromFuzzyDay,
@@ -37,38 +46,56 @@ import chalk from "chalk";
 
 // Calendar context to hold the client
 export type CalendarActionContext = {
-    calendarClient: CalendarClient | undefined;
+    calendarClient: CalendarClient | undefined; // Legacy - kept for backward compatibility
+    calendarProvider: ICalendarProvider | undefined;
+    providerType: CalendarProviderType | undefined;
 };
 
 // Login command handler
 export class CalendarClientLoginCommandHandler
     implements CommandHandlerNoParams
 {
-    public readonly description = "Log into MS Graph to access calendar";
+    public readonly description = "Log into calendar service";
     public async run(context: ActionContext<CalendarActionContext>) {
-        const calendarClient: CalendarClient | undefined =
-            context.sessionContext.agentContext.calendarClient;
-        if (calendarClient === undefined) {
-            throw new Error("Calendar client not initialized");
+        const provider = context.sessionContext.agentContext.calendarProvider;
+        const providerType = context.sessionContext.agentContext.providerType;
+
+        if (provider === undefined) {
+            throw new Error("Calendar provider not initialized");
         }
-        if (calendarClient.isAuthenticated()) {
-            const name = await calendarClient.getUserAsync();
+
+        if (provider.isAuthenticated()) {
+            const user = await provider.getUser();
             displayWarn(
-                `Already logged in as ${name.displayName}<${name.mail}>`,
+                `Already logged in as ${user.displayName || "Unknown"}<${user.email || "Unknown"}>`,
                 context,
             );
             return;
         }
 
-        await calendarClient.login((prompt) => {
-            displayStatus(prompt, context);
-        });
-
-        const name = await calendarClient.getUserAsync();
-        displaySuccess(
-            `Successfully logged in as ${name.displayName}<${name.mail}>`,
+        displayStatus(
+            `Logging into ${providerType || "calendar"} service...`,
             context,
         );
+
+        const success = await provider.login(
+            (userCode, verificationUri, message) => {
+                displayStatus(message, context);
+            },
+        );
+
+        if (success) {
+            const user = await provider.getUser();
+            displaySuccess(
+                `Successfully logged in as ${user.displayName || "Unknown"} <${user.email || "Unknown"}>`,
+                context,
+            );
+        } else {
+            displayWarn(
+                "Login failed. If using Google Calendar, you can also try '@calendar google-auth <code>' with a manual authorization code.",
+                context,
+            );
+        }
     }
 }
 
@@ -76,17 +103,78 @@ export class CalendarClientLoginCommandHandler
 export class CalendarClientLogoutCommandHandler
     implements CommandHandlerNoParams
 {
-    public readonly description = "Log out of MS Graph to access calendar";
+    public readonly description = "Log out of calendar service";
     public async run(context: ActionContext<CalendarActionContext>) {
-        const calendarClient: CalendarClient | undefined =
-            context.sessionContext.agentContext.calendarClient;
-        if (calendarClient === undefined) {
-            throw new Error("Calendar client not initialized");
+        const provider = context.sessionContext.agentContext.calendarProvider;
+        if (provider === undefined) {
+            throw new Error("Calendar provider not initialized");
         }
-        if (calendarClient.logout()) {
+        if (provider.logout()) {
             displaySuccess("Successfully logged out", context);
         } else {
             displayWarn("Already logged out", context);
+        }
+    }
+}
+
+// Google auth command handler - completes OAuth flow with authorization code
+export class GoogleAuthCommandHandler implements CommandHandler {
+    public readonly description =
+        "Complete Google Calendar OAuth flow with authorization code";
+    public readonly parameters = {
+        args: {
+            code: {
+                description: "Authorization code from Google OAuth redirect",
+                type: "string",
+                optional: false,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CalendarActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const provider = context.sessionContext.agentContext.calendarProvider;
+        const providerType = context.sessionContext.agentContext.providerType;
+
+        if (provider === undefined) {
+            throw new Error("Calendar provider not initialized");
+        }
+
+        if (providerType !== "google") {
+            displayWarn(
+                "This command is only for Google Calendar. Use '@calendar login' for Microsoft Graph.",
+                context,
+            );
+            return;
+        }
+
+        const code = params.args.code as string;
+        if (!code || code.trim() === "") {
+            displayWarn(
+                "Please provide the authorization code: @calendar google-auth <code>",
+                context,
+            );
+            return;
+        }
+
+        displayStatus("Completing Google Calendar authorization...", context);
+
+        const googleProvider = provider as GoogleCalendarClient;
+        const success = await googleProvider.completeAuth(code);
+
+        if (success) {
+            const user = await provider.getUser();
+            displaySuccess(
+                `Successfully logged in to Google Calendar as ${user.displayName || "Unknown"} <${user.email || "Unknown"}>`,
+                context,
+            );
+        } else {
+            displayWarn(
+                "Failed to complete authorization. Please try '@calendar login' again to get a new code.",
+                context,
+            );
         }
     }
 }
@@ -97,6 +185,7 @@ const handlers: CommandHandlerTable = {
     commands: {
         login: new CalendarClientLoginCommandHandler(),
         logout: new CalendarClientLogoutCommandHandler(),
+        "google-auth": new GoogleAuthCommandHandler(),
     },
 };
 
@@ -114,10 +203,17 @@ function formatEventsAsHtml(events: any[]): string {
         const end = event.end?.dateTime
             ? new Date(event.end.dateTime).toLocaleString()
             : "Unknown";
-        html += `<li><strong>${event.subject || "No subject"}</strong><br/>`;
+        const subject = event.subject || "No subject";
+        if (event.htmlLink) {
+            html += `<li><a href="${event.htmlLink}" target="_blank"><strong>${subject}</strong></a><br/>`;
+        } else {
+            html += `<li><strong>${subject}</strong><br/>`;
+        }
         html += `${start} - ${end}`;
         if (event.location?.displayName) {
             html += `<br/>Location: ${event.location.displayName}`;
+        } else if (event.location && typeof event.location === "string") {
+            html += `<br/>Location: ${event.location}`;
         }
         html += "</li>";
     }
@@ -125,11 +221,13 @@ function formatEventsAsHtml(events: any[]): string {
     return html;
 }
 
-// Calendar action handler V3 - with Graph API integration
+// Calendar action handler V3 - with multi-provider calendar integration
 export class CalendarActionHandlerV3 implements AppAgent {
     public async initializeAgentContext(): Promise<CalendarActionContext> {
         return {
             calendarClient: undefined,
+            calendarProvider: undefined,
+            providerType: undefined,
         };
     }
 
@@ -138,10 +236,46 @@ export class CalendarActionHandlerV3 implements AppAgent {
         context: SessionContext<CalendarActionContext>,
     ): Promise<void> {
         if (enable) {
-            context.agentContext.calendarClient =
-                await createCalendarGraphClient();
+            // Create provider from configuration (auto-detects MS Graph or Google)
+            const provider = createCalendarProviderFromConfig();
+
+            if (provider) {
+                context.agentContext.calendarProvider = provider;
+                context.agentContext.providerType =
+                    provider.providerName as CalendarProviderType;
+
+                // For backward compatibility, also set the legacy calendarClient
+                // if we're using Microsoft Graph
+                if (provider.providerName === "microsoft") {
+                    const msProvider = provider as any;
+                    if (msProvider.getUnderlyingClient) {
+                        context.agentContext.calendarClient =
+                            msProvider.getUnderlyingClient();
+                    }
+                }
+
+                console.log(
+                    chalk.cyan(
+                        `[Calendar] Using ${provider.providerName} calendar provider`,
+                    ),
+                );
+            } else {
+                const availableProviders = getAvailableProviders();
+                console.log(
+                    chalk.yellow(
+                        `[Calendar] No calendar provider configured. Available: ${availableProviders.length > 0 ? availableProviders.join(", ") : "none"}`,
+                    ),
+                );
+                console.log(
+                    chalk.yellow(
+                        `[Calendar] Set MSGRAPH_APP_CLIENTID for Microsoft Graph or GOOGLE_CALENDAR_CLIENT_ID for Google Calendar`,
+                    ),
+                );
+            }
         } else {
             context.agentContext.calendarClient = undefined;
+            context.agentContext.calendarProvider = undefined;
+            context.agentContext.providerType = undefined;
         }
     }
 
@@ -150,22 +284,22 @@ export class CalendarActionHandlerV3 implements AppAgent {
         context: ActionContext<CalendarActionContext>,
     ): Promise<ActionResult | undefined> {
         const calendarAction = action as CalendarActionV3;
-        const calendarClient =
-            context.sessionContext.agentContext.calendarClient;
+        const provider = context.sessionContext.agentContext.calendarProvider;
+        const providerType = context.sessionContext.agentContext.providerType;
 
         console.log(
             chalk.cyan(
-                `\n[Calendar V3] Executing action: ${calendarAction.actionName}`,
+                `\n[Calendar V3] Executing action: ${calendarAction.actionName} (provider: ${providerType || "none"})`,
             ),
         );
 
-        if (!calendarClient) {
+        if (!provider) {
             return createActionResultFromError(
-                "Calendar client not initialized. Please run '@calendar login' first.",
+                "Calendar provider not initialized. Please configure MSGRAPH_APP_CLIENTID or GOOGLE_CALENDAR_CLIENT_ID.",
             );
         }
 
-        if (!calendarClient.isAuthenticated()) {
+        if (!provider.isAuthenticated()) {
             return createActionResultFromError(
                 "Not logged in. Please run '@calendar login' first.",
             );
@@ -176,30 +310,24 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 return await this.handleScheduleEvent(
                     calendarAction,
                     context,
-                    calendarClient,
+                    provider,
                 );
             case "findEvents":
                 return await this.handleFindEvents(
                     calendarAction,
                     context,
-                    calendarClient,
+                    provider,
                 );
             case "addParticipant":
                 return await this.handleAddParticipant(
                     calendarAction,
                     context,
-                    calendarClient,
+                    provider,
                 );
             case "findTodaysEvents":
-                return await this.handleFindTodaysEvents(
-                    context,
-                    calendarClient,
-                );
+                return await this.handleFindTodaysEvents(context, provider);
             case "findThisWeeksEvents":
-                return await this.handleFindThisWeeksEvents(
-                    context,
-                    calendarClient,
-                );
+                return await this.handleFindThisWeeksEvents(context, provider);
             default:
                 console.log(
                     chalk.red(
@@ -215,7 +343,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
     private async handleScheduleEvent(
         action: CalendarActionV3 & { actionName: "scheduleEvent" },
         context: ActionContext<CalendarActionContext>,
-        client: CalendarClient,
+        provider: ICalendarProvider,
     ): Promise<ActionResult | undefined> {
         const { description, date, time, participant } = action.parameters;
 
@@ -235,40 +363,58 @@ export class CalendarActionHandlerV3 implements AppAgent {
             // Parse the time and set it on the date
             let startHour = 9,
                 startMinute = 0;
+            let endHour: number | undefined;
+            let endMinute = 0;
+
             if (time) {
-                // Try simple parsing like "2pm", "14:00"
-                const simpleTime = this.parseSimpleTime(time);
-                if (simpleTime) {
-                    startHour = simpleTime.hours;
-                    startMinute = simpleTime.minutes;
+                // Try parsing as time range first (canonical "HH:MM-HH:MM" or user formats)
+                const timeRange = this.parseTimeRange(time);
+                if (timeRange) {
+                    startHour = timeRange.start.hours;
+                    startMinute = timeRange.start.minutes;
+                    endHour = timeRange.end.hours;
+                    endMinute = timeRange.end.minutes;
                 } else {
-                    // Try parseTimeString which returns "HH:mm:ss" format
-                    try {
-                        const parsedTime = parseTimeString(time);
-                        const [h, m] = parsedTime.split(":").map(Number);
-                        startHour = h;
-                        startMinute = m;
-                    } catch {
-                        // Fall back to default 9am
-                        console.log(
-                            chalk.yellow(
-                                `Could not parse time: ${time}, using 9am`,
-                            ),
-                        );
+                    // Try simple parsing like "2pm", "14:00", or canonical "HH:MM"
+                    const simpleTime = this.parseSimpleTime(time);
+                    if (simpleTime) {
+                        startHour = simpleTime.hours;
+                        startMinute = simpleTime.minutes;
+                    } else {
+                        // Try parseTimeString which returns "HH:mm:ss" format
+                        try {
+                            const parsedTime = parseTimeString(time);
+                            const [h, m] = parsedTime.split(":").map(Number);
+                            startHour = h;
+                            startMinute = m;
+                        } catch {
+                            // Fall back to default 9am
+                            console.log(
+                                chalk.yellow(
+                                    `Could not parse time: ${time}, using 9am`,
+                                ),
+                            );
+                        }
                     }
                 }
             }
 
             eventDate.setHours(startHour, startMinute, 0, 0);
             const endDate = new Date(eventDate);
-            endDate.setHours(startHour + 1); // Default 1 hour duration
+            if (endHour !== undefined) {
+                // Use specified end time
+                endDate.setHours(endHour, endMinute, 0, 0);
+            } else {
+                // Default 1 hour duration
+                endDate.setHours(startHour + 1, startMinute, 0, 0);
+            }
 
             const startDateTime = eventDate.toISOString();
             const endDateTime = endDate.toISOString();
             const attendees = participant ? [participant] : undefined;
 
-            // Create the event via Graph API using correct signature
-            const eventId = await client.createCalendarEvent(
+            // Create the event via calendar provider
+            const eventId = await provider.createEvent(
                 description, // subject
                 "", // body
                 startDateTime, // startDateTime
@@ -279,12 +425,21 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
             if (eventId) {
                 const dateStr = eventDate.toLocaleDateString();
-                const timeStr = eventDate.toLocaleTimeString([], {
+                const startTimeStr = eventDate.toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
                 });
+                const endTimeStr = endDate.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
+                // Show time range if end time differs from start + 1 hour (explicit end time was specified)
+                const timeDisplay =
+                    endHour !== undefined
+                        ? `${startTimeStr} - ${endTimeStr}`
+                        : startTimeStr;
                 return createActionResultFromHtmlDisplay(
-                    `<p>✓ Event created: <strong>${description}</strong> on ${dateStr} at ${timeStr}</p>`,
+                    `<p>✓ Event created: <strong>${description}</strong> on ${dateStr} at ${timeDisplay}</p>`,
                 );
             } else {
                 return createActionResultFromError("Failed to create event");
@@ -365,10 +520,87 @@ export class CalendarActionHandlerV3 implements AppAgent {
         return undefined;
     }
 
+    private parseTimeRange(timeStr: string):
+        | {
+              start: { hours: number; minutes: number };
+              end: { hours: number; minutes: number };
+          }
+        | undefined {
+        let lower = timeStr.toLowerCase().trim();
+
+        // Strip "from" prefix if present: "from 1 to 2pm" -> "1 to 2pm"
+        if (lower.startsWith("from ")) {
+            lower = lower.slice(5);
+        }
+
+        // Canonical format from converter: "HH:MM-HH:MM" (e.g., "22:00-23:00")
+        const canonicalMatch = lower.match(/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/);
+        if (canonicalMatch) {
+            return {
+                start: {
+                    hours: parseInt(canonicalMatch[1], 10),
+                    minutes: parseInt(canonicalMatch[2], 10),
+                },
+                end: {
+                    hours: parseInt(canonicalMatch[3], 10),
+                    minutes: parseInt(canonicalMatch[4], 10),
+                },
+            };
+        }
+
+        // User format: "10-11pm" or "1-2pm" (shared AM/PM suffix)
+        const sharedSuffixMatch = lower.match(
+            /^(\d{1,2})(?::(\d{2}))?-(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i,
+        );
+        if (sharedSuffixMatch) {
+            let startHours = parseInt(sharedSuffixMatch[1], 10);
+            const startMinutes = sharedSuffixMatch[2]
+                ? parseInt(sharedSuffixMatch[2], 10)
+                : 0;
+            let endHours = parseInt(sharedSuffixMatch[3], 10);
+            const endMinutes = sharedSuffixMatch[4]
+                ? parseInt(sharedSuffixMatch[4], 10)
+                : 0;
+            const period = sharedSuffixMatch[5].toLowerCase();
+
+            if (period === "pm") {
+                if (startHours < 12) startHours += 12;
+                if (endHours < 12) endHours += 12;
+            } else if (period === "am") {
+                if (startHours === 12) startHours = 0;
+                if (endHours === 12) endHours = 0;
+            }
+
+            return {
+                start: { hours: startHours, minutes: startMinutes },
+                end: { hours: endHours, minutes: endMinutes },
+            };
+        }
+
+        // User format: "2pm to 3pm" or "2pm-3pm" (each time has its own AM/PM)
+        // Use bounded whitespace quantifiers to avoid regex backtracking warnings
+        const separateMatch = lower.match(
+            /^(\d{1,2})(?::(\d{2}))?\s{0,5}(am|pm)?\s{0,5}(?:to|-)\s{0,5}(\d{1,2})(?::(\d{2}))?\s{0,5}(am|pm)?$/i,
+        );
+        if (separateMatch) {
+            const startStr = `${separateMatch[1]}${separateMatch[2] ? ":" + separateMatch[2] : ""}${separateMatch[3] || ""}`;
+            const endStr = `${separateMatch[4]}${separateMatch[5] ? ":" + separateMatch[5] : ""}${separateMatch[6] || ""}`;
+
+            const start = this.parseSimpleTime(startStr);
+            const end = this.parseSimpleTime(endStr);
+
+            if (start && end) {
+                return { start, end };
+            }
+        }
+
+        return undefined;
+    }
+
     private async handleFindEvents(
         action: CalendarActionV3 & { actionName: "findEvents" },
         context: ActionContext<CalendarActionContext>,
-        client: CalendarClient,
+        provider: ICalendarProvider,
     ): Promise<ActionResult | undefined> {
         const { date, description } = action.parameters;
 
@@ -378,15 +610,25 @@ export class CalendarActionHandlerV3 implements AppAgent {
             let events: any[] = [];
 
             if (description) {
-                // Search by description using embeddings
-                events = (await client.findEventsFromEmbeddings(
-                    description,
-                )) as any[];
+                // Search by description/subject
+                events = await provider.findEventsBySubject(description);
             } else if (date) {
                 // Try to use generateQueryFromFuzzyDay for natural language dates
-                const query = generateQueryFromFuzzyDay(date);
-                if (query) {
-                    events = await client.findCalendarEventsByDateRange(query);
+                const queryString = generateQueryFromFuzzyDay(date);
+                if (queryString) {
+                    // Parse the query string to extract dates
+                    // Format: "startdatetime=...&enddatetime=..."
+                    const params = new URLSearchParams(
+                        queryString.toLowerCase(),
+                    );
+                    const startDateTime = params.get("startdatetime");
+                    const endDateTime = params.get("enddatetime");
+                    if (startDateTime && endDateTime) {
+                        events = await provider.findEventsByDateRange({
+                            startDateTime,
+                            endDateTime,
+                        });
+                    }
                 } else {
                     // Fall back to parsing the date manually
                     const parsedDate = this.parseNaturalDate(date);
@@ -395,11 +637,10 @@ export class CalendarActionHandlerV3 implements AppAgent {
                         startDate.setHours(0, 0, 0, 0);
                         const endDate = new Date(parsedDate);
                         endDate.setHours(23, 59, 59, 999);
-                        const manualQuery = `startDateTime=${startDate.toISOString()}&endDateTime=${endDate.toISOString()}`;
-                        events =
-                            await client.findCalendarEventsByDateRange(
-                                manualQuery,
-                            );
+                        events = await provider.findEventsByDateRange({
+                            startDateTime: startDate.toISOString(),
+                            endDateTime: endDate.toISOString(),
+                        });
                     } else {
                         return createActionResultFromError(
                             `Could not parse date: ${date}`,
@@ -409,8 +650,10 @@ export class CalendarActionHandlerV3 implements AppAgent {
             } else {
                 // Default: get this week's events
                 const dateRange = getNWeeksDateRangeISO(1);
-                const query = `startDateTime=${dateRange.startDateTime}&endDateTime=${dateRange.endDateTime}`;
-                events = await client.findCalendarEventsByDateRange(query);
+                events = await provider.findEventsByDateRange({
+                    startDateTime: dateRange.startDateTime,
+                    endDateTime: dateRange.endDateTime,
+                });
             }
 
             if (!events || events.length === 0) {
@@ -433,7 +676,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
     private async handleAddParticipant(
         action: CalendarActionV3 & { actionName: "addParticipant" },
         context: ActionContext<CalendarActionContext>,
-        client: CalendarClient,
+        provider: ICalendarProvider,
     ): Promise<ActionResult | undefined> {
         const { description, participant } = action.parameters;
 
@@ -444,10 +687,8 @@ export class CalendarActionHandlerV3 implements AppAgent {
         );
 
         try {
-            // Find the event first - returns event objects despite type saying string[]
-            const events = (await client.findEventsFromEmbeddings(
-                description,
-            )) as any[];
+            // Find the event first
+            const events = await provider.findEventsBySubject(description);
             if (!events || events.length === 0) {
                 return createActionResultFromError(
                     `Could not find event: ${description}`,
@@ -455,16 +696,24 @@ export class CalendarActionHandlerV3 implements AppAgent {
             }
 
             const event = events[0];
-            // Add participant to the event using the correct API
-            await client.addParticipantsToExistingMeeting(
-                event.id,
-                event.attendees || [],
-                [participant],
-            );
+            // Resolve participant name to email if needed
+            const emails = await provider.resolveUserEmails([participant]);
+            const participantEmail = emails[0] || participant;
 
-            return createActionResultFromHtmlDisplay(
-                `<p>✓ Added <strong>${participant}</strong> to <strong>${description}</strong></p>`,
-            );
+            // Add participant to the event
+            const success = await provider.addParticipants(event.id, [
+                participantEmail,
+            ]);
+
+            if (success) {
+                return createActionResultFromHtmlDisplay(
+                    `<p>✓ Added <strong>${participant}</strong> to <strong>${description}</strong></p>`,
+                );
+            } else {
+                return createActionResultFromError(
+                    `Failed to add ${participant} to ${description}`,
+                );
+            }
         } catch (error: any) {
             console.error(
                 chalk.red(`Error adding participant: ${error.message}`),
@@ -477,7 +726,7 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
     private async handleFindTodaysEvents(
         context: ActionContext<CalendarActionContext>,
-        client: CalendarClient,
+        provider: ICalendarProvider,
     ): Promise<ActionResult | undefined> {
         console.log(chalk.green(`\n✓ Finding today's events`));
 
@@ -502,8 +751,10 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 999,
             );
 
-            const query = `startDateTime=${startOfDay.toISOString()}&endDateTime=${endOfDay.toISOString()}`;
-            const events = await client.findCalendarEventsByDateRange(query);
+            const events = await provider.findEventsByDateRange({
+                startDateTime: startOfDay.toISOString(),
+                endDateTime: endOfDay.toISOString(),
+            });
 
             if (!events || events.length === 0) {
                 return createActionResultFromHtmlDisplay(
@@ -526,14 +777,16 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
     private async handleFindThisWeeksEvents(
         context: ActionContext<CalendarActionContext>,
-        client: CalendarClient,
+        provider: ICalendarProvider,
     ): Promise<ActionResult | undefined> {
         console.log(chalk.green(`\n✓ Finding this week's events`));
 
         try {
             const dateRange = getNWeeksDateRangeISO(1);
-            const query = `startDateTime=${dateRange.startDateTime}&endDateTime=${dateRange.endDateTime}`;
-            const events = await client.findCalendarEventsByDateRange(query);
+            const events = await provider.findEventsByDateRange({
+                startDateTime: dateRange.startDateTime,
+                endDateTime: dateRange.endDateTime,
+            });
 
             if (!events || events.length === 0) {
                 return createActionResultFromHtmlDisplay(

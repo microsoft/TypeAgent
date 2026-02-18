@@ -55,6 +55,10 @@ export class PlanGenerator {
                     lastUsed: new Date().toISOString(),
                     avgDuration: trace.metrics.duration,
                 },
+                approval: {
+                    status: "auto",
+                    reviewHistory: [],
+                },
             };
 
             debug(`Generated plan: ${plan.planId} (${plan.intent})`);

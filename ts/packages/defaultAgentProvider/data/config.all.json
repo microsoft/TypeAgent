@@ -1,0 +1,100 @@
+{
+  "description": "Default agent provider configuration - contains all available agents",
+  "agents": {
+    "player": {
+      "name": "music"
+    },
+    "localPlayer": {
+      "name": "music-local"
+    },
+    "calendar": {
+      "name": "calendar"
+    },
+    "email": {
+      "name": "email"
+    },
+    "list": {
+      "name": "list-agent"
+    },
+    "browser": {
+      "name": "browser-typeagent"
+    },
+    "desktop": {
+      "name": "desktop-automation"
+    },
+    "code": {
+      "name": "code-agent"
+    },
+    "chat": {
+      "name": "chat-agent",
+      "execMode": "dispatcher"
+    },
+    "photo": {
+      "name": "photo-agent",
+      "execMode": "separate"
+    },
+    "greeting": {
+      "name": "greeting-agent",
+      "execMode": "dispatcher"
+    },
+    "image": {
+      "name": "image-agent",
+      "execMode": "dispatcher"
+    },
+    "androidMobile": {
+      "name": "android-mobile-agent",
+      "execMode": "dispatcher"
+    },
+    "markdown": {
+      "name": "markdown-agent"
+    },
+    "montage": {
+      "name": "montage-agent"
+    },
+    "oracle": {
+      "name": "oracle-agent"
+    },
+    "spelunker": {
+      "name": "spelunker-agent"
+    },
+    "video": {
+      "name": "video-agent",
+      "excecMode": "dispatcher"
+    },
+    "settings": {
+      "name": "settings-agent",
+      "execMode": "dispatcher"
+    },
+    "weather": {
+      "name": "weather-agent",
+      "path": "../agents/weather"
+    }
+  },
+  "mcpServers": {
+    "mcpfilesystem": {
+      "emojiChar": "📁",
+      "description": "File system agent",
+      "defaultEnabled": false,
+      "serverScript": "./node_modules/@modelcontextprotocol/server-filesystem/dist/index.js",
+      "serverScriptArgs": {
+        "allowedDirectories": {
+          "description": "Allowed directories for the file system agent to access",
+          "type": "string",
+          "multiple": true
+        }
+      }
+    }
+  },
+  "explainers": {
+    "v5": {
+      "constructions": {
+        "data": ["./data/explainer/v5/data/player/basic.json"],
+        "file": "./data/explainer/v5/constructions.json"
+      }
+    }
+  },
+  "tests": [
+    "./test/data/explanations/**/**/*.json",
+    "./test/repo/explanations/**/**/*.json"
+  ]
+}

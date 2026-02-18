@@ -1,7 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { IClientContext, getClientContext, handleCall } from "../client.js";
+import {
+    IClientContext,
+    getClientContext,
+    handleCall,
+    searchForPlaylists,
+} from "../client.js";
 import chalk from "chalk";
 import {
     AppAgent,
@@ -165,6 +170,18 @@ async function validatePlayerWildcardMatch(
             );
         case "playGenre":
             return false;
+        case "playPlaylist":
+            return await validatePlayList(
+                action.parameters.name,
+                clientContext,
+            );
+        case "selectDevice": {
+            const result = await resolveMusicDeviceEntity(
+                clientContext,
+                action.parameters.deviceName,
+            );
+            return result !== undefined;
+        }
     }
     return true;
 }
@@ -321,6 +338,39 @@ async function validateArtist(artistName: string, context: IClientContext) {
     return false;
 }
 
+async function validatePlayList(
+    playlistName: string,
+    context: IClientContext,
+): Promise<boolean> {
+    // Check user data for an exact match first
+    const userData = context.userData;
+    if (userData && userData.data) {
+        if (userData.data.playlists === undefined) {
+            await getPlaylistsFromUserData(context.service, userData.data);
+        }
+        if (userData.data.playlists) {
+            const lowerCaseName = playlistName.toLowerCase();
+            if (
+                userData.data.playlists.some((pl) =>
+                    pl.name.toLowerCase().includes(lowerCaseName),
+                )
+            ) {
+                return true;
+            }
+        }
+    }
+
+    // Fall back to searching Spotify
+    const playlists = await searchForPlaylists(playlistName, context);
+    if (playlists && playlists.length > 0) {
+        const lowerCaseName = playlistName.toLowerCase();
+        return playlists.some((pl) =>
+            pl.name.toLowerCase().includes(lowerCaseName),
+        );
+    }
+    return false;
+}
+
 async function getPlayerDynamicDisplay(
     type: DisplayType,
     displayId: string,
@@ -348,23 +398,12 @@ async function getPlayerActionCompletion(
     context: SessionContext<PlayerActionContext>,
     action: AppAction,
     propertyName: string,
-    entityType?: string,
+    _entityType?: string,
 ): Promise<string[]> {
     const result: string[] = [];
     const clientContext = context.agentContext.spotify;
     if (clientContext === undefined) {
         return result;
-    }
-
-    if (entityType === "MusicDevice") {
-        const devices = await getUserDevices(clientContext.service);
-        if (devices !== undefined) {
-            result.push(
-                ...devices.devices
-                    .filter((device) => device.id !== null)
-                    .map((device) => device.name),
-            );
-        }
     }
 
     const userData = clientContext.userData;
@@ -375,11 +414,15 @@ async function getPlayerActionCompletion(
     let track = false;
     let artist = false;
     let album = false;
+    let playlist = false;
     switch (action.actionName) {
         case "playTrack":
             if (propertyName === "parameters.trackName") {
                 track = true;
-            } else if (propertyName.startsWith("parameters.artists.")) {
+            } else if (
+                propertyName === "parameters.artists" ||
+                propertyName.startsWith("parameters.artists.")
+            ) {
                 artist = true;
             } else if (propertyName === "parameters.albumName") {
                 album = true;
@@ -388,7 +431,10 @@ async function getPlayerActionCompletion(
         case "playAlbum":
             if (propertyName === "parameters.albumName") {
                 album = true;
-            } else if (propertyName.startsWith("parameters.artists.")) {
+            } else if (
+                propertyName === "parameters.artists" ||
+                propertyName.startsWith("parameters.artists.")
+            ) {
                 artist = true;
             }
             break;
@@ -398,6 +444,11 @@ async function getPlayerActionCompletion(
             }
             break;
         case "playGenre":
+            break;
+        case "playPlaylist":
+            if (propertyName === "parameters.name") {
+                playlist = true;
+            }
             break;
         case "getPlaylist":
         case "deletePlaylist":
@@ -419,8 +470,28 @@ async function getPlayerActionCompletion(
                 }
             }
             return result;
+        case "selectDevice":
+            if (propertyName === "parameters.deviceName") {
+                const devices = await getUserDevices(clientContext.service);
+                if (devices !== undefined) {
+                    result.push(
+                        ...devices.devices
+                            .filter((device) => device.id !== null)
+                            .map((device) => device.name),
+                    );
+                }
+            }
+            return result;
     }
 
-    result.push(...getUserDataCompletions(userData.data, track, artist, album));
+    result.push(
+        ...getUserDataCompletions(
+            userData.data,
+            track,
+            artist,
+            album,
+            playlist,
+        ),
+    );
     return result;
 }

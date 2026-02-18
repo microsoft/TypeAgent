@@ -165,68 +165,217 @@ function validateCalendarDate(token: string): boolean {
     return false;
 }
 
-function convertCalendarDate(token: string): Date | undefined {
-    const lower = token.toLowerCase();
-    const now = new Date();
-
-    // Handle relative dates
-    if (lower === "today") {
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+/**
+ * CalendarDate "converter" - validates but preserves original text
+ *
+ * Unlike other converters that transform values (e.g., ordinal "first" -> 1),
+ * CalendarDate PRESERVES the user's original text (e.g., "Friday", "tomorrow").
+ *
+ * Why? For caching to work:
+ * 1. Grammar rules match patterns like "add X $(date:CalendarDate)"
+ * 2. If we converted "Friday" -> Date -> ISO string, cache would store "2026-02-13"
+ * 3. Future requests with different dates wouldn't match
+ *
+ * The calendar action handler should do the actual date conversion at execution time.
+ */
+function convertCalendarDate(token: string): string | undefined {
+    // Validate the token is a valid date expression
+    if (validateCalendarDate(token)) {
+        // Return the original text - let the action handler do the conversion
+        return token;
     }
+    return undefined;
+}
 
-    if (lower === "tomorrow") {
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    }
+/**
+ * CalendarDate entity converter
+ * Validates date strings (today, tomorrow, ISO dates, weekdays) but preserves original text
+ * Actual date conversion happens in the action handler, not during grammar matching
+ */
+export const CalendarDate: EntityConverter<string> = createConverter(
+    validateCalendarDate,
+    convertCalendarDate,
+);
 
-    if (lower === "yesterday") {
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-    }
+// ============================================================================
+// CalendarTime Entity
+// ============================================================================
 
-    // Handle ISO dates
-    if (/^\d{4}-\d{2}-\d{2}$/.test(token)) {
-        // Parse as local date (not UTC) by splitting components
-        const parts = token.split("-");
-        const year = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1; // Months are 0-indexed
-        const day = parseInt(parts[2], 10);
-        const date = new Date(year, month, day);
-        return isNaN(date.getTime()) ? undefined : date;
-    }
+/**
+ * Parse a single time string to hours and minutes
+ * Returns undefined if not a valid time format
+ */
+function parseTimeToHoursMinutes(
+    timeStr: string,
+): { hours: number; minutes: number } | undefined {
+    const lower = timeStr.toLowerCase().trim();
 
-    // Handle weekday names (next occurrence)
-    const weekdays = [
-        "sunday",
-        "monday",
-        "tuesday",
-        "wednesday",
-        "thursday",
-        "friday",
-        "saturday",
-    ];
-    const dayIndex = weekdays.indexOf(lower);
-    if (dayIndex !== -1) {
-        const currentDay = now.getDay();
-        let daysUntil = dayIndex - currentDay;
-        if (daysUntil <= 0) {
-            daysUntil += 7; // Next week
+    // Handle special words
+    if (lower === "noon") return { hours: 12, minutes: 0 };
+    if (lower === "midnight") return { hours: 0, minutes: 0 };
+
+    // Match patterns: "2pm", "2:30pm", "14:00", "2:30"
+    const match = lower.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+    if (match) {
+        let hours = parseInt(match[1], 10);
+        const minutes = match[2] ? parseInt(match[2], 10) : 0;
+        const period = match[3]?.toLowerCase();
+
+        // Validate hours and minutes
+        if (hours > 23 || minutes > 59) return undefined;
+
+        // Handle AM/PM
+        if (period === "pm" && hours < 12) {
+            hours += 12;
+        } else if (period === "am" && hours === 12) {
+            hours = 0;
         }
-        return new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate() + daysUntil,
-        );
+
+        return { hours, minutes };
     }
 
     return undefined;
 }
 
 /**
- * CalendarDate entity converter
- * Converts date strings (today, tomorrow, ISO dates, weekdays) to Date objects
+ * Format hours and minutes as "HH:MM" string
  */
-export const CalendarDate: EntityConverter<Date> = createConverter(
-    validateCalendarDate,
-    convertCalendarDate,
+function formatTime(hours: number, minutes: number): string {
+    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+}
+
+function validateCalendarTime(token: string): boolean {
+    return parseTimeToHoursMinutes(token) !== undefined;
+}
+
+/**
+ * Convert time string to canonical "HH:MM" format
+ * "2pm" -> "14:00", "noon" -> "12:00", "3:30pm" -> "15:30"
+ */
+function convertCalendarTime(token: string): string | undefined {
+    const parsed = parseTimeToHoursMinutes(token);
+    if (parsed) {
+        return formatTime(parsed.hours, parsed.minutes);
+    }
+    return undefined;
+}
+
+/**
+ * CalendarTime entity converter
+ * Validates and converts time strings to canonical "HH:MM" format
+ */
+export const CalendarTime: EntityConverter<string> = createConverter(
+    validateCalendarTime,
+    convertCalendarTime,
+);
+
+// ============================================================================
+// CalendarTimeRange Entity
+// ============================================================================
+
+/**
+ * Parse a time range string to start and end times
+ * Supports: "10-11pm", "2pm to 3pm", "9am-10am", "1-2pm", "2pm-3pm"
+ * Returns undefined end for single times
+ */
+function parseTimeRange(rangeStr: string):
+    | {
+          start: { hours: number; minutes: number };
+          end?: { hours: number; minutes: number };
+      }
+    | undefined {
+    let lower = rangeStr.toLowerCase().trim();
+
+    // Strip "from" prefix if present: "from 1 to 2pm" -> "1 to 2pm"
+    if (lower.startsWith("from ")) {
+        lower = lower.slice(5);
+    }
+
+    // Pattern 1: "10-11pm" or "1-2pm" (shared AM/PM suffix)
+    const sharedSuffixMatch = lower.match(
+        /^(\d{1,2})(?::(\d{2}))?-(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i,
+    );
+    if (sharedSuffixMatch) {
+        let startHours = parseInt(sharedSuffixMatch[1], 10);
+        const startMinutes = sharedSuffixMatch[2]
+            ? parseInt(sharedSuffixMatch[2], 10)
+            : 0;
+        let endHours = parseInt(sharedSuffixMatch[3], 10);
+        const endMinutes = sharedSuffixMatch[4]
+            ? parseInt(sharedSuffixMatch[4], 10)
+            : 0;
+        const period = sharedSuffixMatch[5].toLowerCase();
+
+        // Apply AM/PM to both times
+        if (period === "pm") {
+            if (startHours < 12) startHours += 12;
+            if (endHours < 12) endHours += 12;
+        } else if (period === "am") {
+            if (startHours === 12) startHours = 0;
+            if (endHours === 12) endHours = 0;
+        }
+
+        return {
+            start: { hours: startHours, minutes: startMinutes },
+            end: { hours: endHours, minutes: endMinutes },
+        };
+    }
+
+    // Pattern 2: "2pm to 3pm" or "2pm-3pm" (each time has its own AM/PM)
+    const separateMatch = lower.match(
+        /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i,
+    );
+    if (separateMatch) {
+        const startTime = `${separateMatch[1]}${separateMatch[2] ? ":" + separateMatch[2] : ""}${separateMatch[3] || ""}`;
+        const endTime = `${separateMatch[4]}${separateMatch[5] ? ":" + separateMatch[5] : ""}${separateMatch[6] || ""}`;
+
+        const start = parseTimeToHoursMinutes(startTime);
+        const end = parseTimeToHoursMinutes(endTime);
+
+        if (start && end) {
+            return { start, end };
+        }
+    }
+
+    // Pattern 3: Single time - also valid as a "time range" (just no end time)
+    // This allows CalendarTimeRange to match single times like "2pm", "14:00"
+    const singleTime = parseTimeToHoursMinutes(rangeStr);
+    if (singleTime) {
+        return { start: singleTime }; // No end time
+    }
+
+    return undefined;
+}
+
+function validateCalendarTimeRange(token: string): boolean {
+    return parseTimeRange(token) !== undefined;
+}
+
+/**
+ * Convert time/time-range to canonical format
+ * Single time: "2pm" -> "14:00"
+ * Time range: "10-11pm" -> "22:00-23:00", "2pm to 3pm" -> "14:00-15:00"
+ */
+function convertCalendarTimeRange(token: string): string | undefined {
+    const parsed = parseTimeRange(token);
+    if (parsed) {
+        const startStr = formatTime(parsed.start.hours, parsed.start.minutes);
+        if (parsed.end) {
+            const endStr = formatTime(parsed.end.hours, parsed.end.minutes);
+            return `${startStr}-${endStr}`;
+        }
+        return startStr; // Single time, no range
+    }
+    return undefined;
+}
+
+/**
+ * CalendarTimeRange entity converter
+ * Validates and converts time range strings to canonical "HH:MM-HH:MM" format
+ */
+export const CalendarTimeRange: EntityConverter<string> = createConverter(
+    validateCalendarTimeRange,
+    convertCalendarTimeRange,
 );
 
 // ============================================================================
@@ -245,9 +394,19 @@ export function registerBuiltInEntities(): void {
     globalEntityRegistry.registerConverter("Ordinal", Ordinal);
     globalEntityRegistry.registerConverter("Cardinal", Cardinal);
     globalEntityRegistry.registerConverter("CalendarDate", CalendarDate);
+    globalEntityRegistry.registerConverter("CalendarTime", CalendarTime);
+    globalEntityRegistry.registerConverter(
+        "CalendarTimeRange",
+        CalendarTimeRange,
+    );
 
     // Lowercase aliases (paramSpec convention from .pas.json schemas)
     globalEntityRegistry.registerConverter("ordinal", Ordinal);
     globalEntityRegistry.registerConverter("cardinal", Cardinal);
     globalEntityRegistry.registerConverter("calendarDate", CalendarDate);
+    globalEntityRegistry.registerConverter("calendarTime", CalendarTime);
+    globalEntityRegistry.registerConverter(
+        "calendarTimeRange",
+        CalendarTimeRange,
+    );
 }

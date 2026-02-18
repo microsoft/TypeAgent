@@ -9,6 +9,7 @@ import {
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
+    computeNFACompletions,
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
@@ -147,7 +148,6 @@ export class GrammarStoreImpl implements GrammarStore {
                 continue;
             }
 
-            // Log cache hit
             debug(
                 `HIT: "${request}" matched in ${schemaName} - ${grammarMatches.length} match(es)`,
             );
@@ -201,32 +201,67 @@ export class GrammarStoreImpl implements GrammarStore {
             if (filter && !filter.has(name)) {
                 continue;
             }
-            // TODO: Implement NFA-based completions
-            // For now, always use old completion matcher
-            const partial = matchGrammarCompletion(
-                entry.grammar,
-                requestPrefix ?? "",
-            );
-            if (partial.completions.length > 0) {
-                completions.push(...partial.completions);
-            }
-            if (
-                partial.properties !== undefined &&
-                partial.properties.length > 0
-            ) {
-                const { schemaName } = splitSchemaNamespaceKey(name);
-                for (const p of partial.properties) {
-                    const action: any = p.match;
-                    properties.push({
-                        actions: [
-                            createExecutableAction(
-                                schemaName,
-                                action.actionName,
-                                action.parameters,
-                            ),
-                        ],
-                        names: p.propertyNames,
-                    });
+            if (this.useNFA && entry.nfa) {
+                // NFA-based completions: tokenize into complete whole tokens
+                const tokens = requestPrefix
+                    ? requestPrefix
+                          .trim()
+                          .split(/\s+/)
+                          .filter((t) => t.length > 0)
+                    : [];
+                const nfaResult = computeNFACompletions(entry.nfa, tokens);
+                if (nfaResult.completions.length > 0) {
+                    completions.push(...nfaResult.completions);
+                }
+                if (
+                    nfaResult.properties !== undefined &&
+                    nfaResult.properties.length > 0
+                ) {
+                    // NFA schema name is stored in nfa.name, fall back to namespace key
+                    const schemaName =
+                        entry.nfa.name ??
+                        splitSchemaNamespaceKey(name).schemaName;
+                    for (const p of nfaResult.properties) {
+                        const action: any = p.match;
+                        properties.push({
+                            actions: [
+                                createExecutableAction(
+                                    schemaName,
+                                    action.actionName,
+                                    action.parameters,
+                                ),
+                            ],
+                            names: p.propertyNames,
+                        });
+                    }
+                }
+            } else {
+                // Legacy grammar-based completions
+                const partial = matchGrammarCompletion(
+                    entry.grammar,
+                    requestPrefix ?? "",
+                );
+                if (partial.completions.length > 0) {
+                    completions.push(...partial.completions);
+                }
+                if (
+                    partial.properties !== undefined &&
+                    partial.properties.length > 0
+                ) {
+                    const { schemaName } = splitSchemaNamespaceKey(name);
+                    for (const p of partial.properties) {
+                        const action: any = p.match;
+                        properties.push({
+                            actions: [
+                                createExecutableAction(
+                                    schemaName,
+                                    action.actionName,
+                                    action.parameters,
+                                ),
+                            ],
+                            names: p.propertyNames,
+                        });
+                    }
                 }
             }
         }

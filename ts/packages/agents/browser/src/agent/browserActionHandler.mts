@@ -1041,6 +1041,12 @@ async function resolveWebPage(
 ): Promise<string[]> {
     debug(`Resolving site '${site}'`);
 
+    if (!site) {
+        throw new Error(
+            "No site or URL specified. Please provide a URL to open.",
+        );
+    }
+
     // Handle library pages with custom protocol
     const libraryPages: Record<string, string> = {
         annotationslibrary: "typeagent-browser://views/annotationsLibrary.html",

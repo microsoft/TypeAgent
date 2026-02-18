@@ -112,8 +112,9 @@ describe("Dynamic Grammar Loader", () => {
         it("should load a rule with symbol types", () => {
             const loader = new DynamicGrammarLoader();
 
-            // Generated rule using registered symbol type
-            const agrText = `@ <Start> = <play>
+            // Generated rule using imported type
+            const agrText = `@ import { Ordinal } from "types.ts"
+@ <Start> = <play>
 @ <play> = play (the)? $(n:Ordinal) track -> {
     actionName: "play",
     parameters: {
@@ -138,7 +139,7 @@ describe("Dynamic Grammar Loader", () => {
         it("should reject rule with unresolved symbol", () => {
             const loader = new DynamicGrammarLoader();
 
-            // Rule references unknown symbol type
+            // Rule references unknown type (not imported)
             const agrText = `@ <Start> = <schedule>
 @ <schedule> = schedule $(event:string) on $(date:UnknownDateType) -> {
     actionName: "schedule",
@@ -152,7 +153,9 @@ describe("Dynamic Grammar Loader", () => {
 
             expect(result.success).toBe(false);
             expect(result.errors.length).toBeGreaterThan(0);
-            expect(result.unresolvedSymbols).toContain("UnknownDateType");
+            expect(result.errors[0]).toContain(
+                "Undefined type 'UnknownDateType'",
+            );
         });
 
         it("should merge new rules into existing grammar", () => {
@@ -358,7 +361,7 @@ describe("Dynamic Grammar Loader", () => {
 
             const statsBefore = cache.getStats();
 
-            // Try to add rule with unresolved symbol
+            // Try to add rule with unimported type
             const invalidRule = `@ <Start> = <schedule>
 @ <schedule> = schedule $(event:string) on $(date:InvalidDateType) -> {
     actionName: "schedule",
@@ -370,7 +373,8 @@ describe("Dynamic Grammar Loader", () => {
             const result = cache.addRules(invalidRule);
 
             expect(result.success).toBe(false);
-            expect(result.unresolvedSymbols).toContain("InvalidDateType");
+            expect(result.errors).toBeDefined();
+            expect(result.errors!.length).toBeGreaterThan(0);
 
             // Verify cache state unchanged
             const statsAfter = cache.getStats();
@@ -416,7 +420,8 @@ describe("Dynamic Grammar Loader", () => {
         it.skip("should load rules with CalendarDate symbol", () => {
             const loader = new DynamicGrammarLoader();
 
-            const generatedRule = `@ <Start> = <scheduleEvent>
+            const generatedRule = `@ import { CalendarDate } from "types.ts"
+@ <Start> = <scheduleEvent>
 @ <scheduleEvent> = schedule $(event:string) on $(date:CalendarDate) -> {
     actionName: "scheduleEvent",
     parameters: {

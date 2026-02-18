@@ -3,9 +3,11 @@
 
 // Built-in entity types for temporal expressions
 // These entity types can be deterministically recognized by converters
-export type CalendarDate = string; // "tomorrow", "next Monday", "July 15", "2024-03-15"
-export type CalendarTime = string; // "2pm", "14:00", "noon", "3:30pm"
-export type CalendarTimeRange = string; // "2pm to 3pm", "9am-10am", "1-2pm", "from 2pm until 4pm"
+// IMPORTANT: Preserve the user's original expression EXACTLY as they typed it.
+// Do NOT convert to ISO dates or other formats - the handler will parse temporal expressions.
+export type CalendarDate = string; // "today", "tomorrow", "next Monday", "Friday", "July 15" - use user's exact words
+export type CalendarTime = string; // "2pm", "14:00", "noon", "3:30pm" - use user's exact words
+export type CalendarTimeRange = string; // "2pm to 3pm", "9am-10am", "1-2pm" - use user's exact words
 
 // Entity types for the calendar agent
 // Note: Only includes deterministically recognizable entities (dates, times, and time ranges)
@@ -27,10 +29,11 @@ export type ScheduleEventAction = {
     parameters: {
         // What the event is about (required) - plain string, not an entity type
         description: string;
-        // When the event occurs (required) - deterministically recognizable
+        // When the event occurs (required) - use the user's EXACT words like "today", "tomorrow", "Friday", "next week"
+        // Do NOT convert to ISO date format - the handler will parse temporal expressions
         date: CalendarDate;
         // What time the event starts (optional, defaults to all-day if not specified)
-        // Can be a single time (2pm, 14:00) or a time range (2pm to 3pm, 9am-10am)
+        // Use the user's EXACT words like "2pm", "3:30", "noon" - do NOT convert formats
         time?: string;
         // Where the event takes place (optional) - plain string, not an entity type
         location?: string;
@@ -45,6 +48,7 @@ export type FindEventsAction = {
     actionName: "findEvents";
     parameters: {
         // When to search (optional, defaults to future events)
+        // Use the user's EXACT words like "today", "tomorrow", "this week" - do NOT convert to ISO date
         date?: CalendarDate;
         // What type of event to find (optional, finds all if not specified) - plain string
         description?: string;
