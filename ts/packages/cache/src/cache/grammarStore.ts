@@ -126,7 +126,6 @@ export class GrammarStoreImpl implements GrammarStore {
         }
 
         const matches: MatchResult[] = [];
-        const missedSchemas: string[] = [];
         const filter = namespaceKeys ? new Set(namespaceKeys) : undefined;
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -134,9 +133,6 @@ export class GrammarStoreImpl implements GrammarStore {
             }
 
             const { schemaName } = splitSchemaNamespaceKey(name);
-            console.log(
-                `[GRAMMAR] Matching "${request}" against ${schemaName} (${this.useNFA ? "NFA" : "legacy"}) - NFA states: ${entry.nfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
-            );
             debug(
                 `Matching "${request}" against ${schemaName} (${this.useNFA ? "NFA" : "legacy"}) - NFA states: ${entry.nfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
             );
@@ -148,16 +144,10 @@ export class GrammarStoreImpl implements GrammarStore {
                     : matchGrammar(entry.grammar, request);
 
             if (grammarMatches.length === 0) {
-                missedSchemas.push(schemaName);
-                console.log(`[GRAMMAR] MISS: "${request}" in ${schemaName}`);
                 debug(`No matches in ${schemaName} grammar`);
                 continue;
             }
 
-            // Log cache hit
-            console.log(
-                `[GRAMMAR] HIT: "${request}" matched in ${schemaName} - ${grammarMatches.length} match(es)`,
-            );
             debug(
                 `HIT: "${request}" matched in ${schemaName} - ${grammarMatches.length} match(es)`,
             );
@@ -186,11 +176,6 @@ export class GrammarStoreImpl implements GrammarStore {
             }
         }
 
-        if (matches.length === 0 && missedSchemas.length > 0) {
-            console.log(
-                `[GRAMMAR] MISS: "${request}" in all ${missedSchemas.length} schema(s)`,
-            );
-        }
         debug(
             matches.length === 0 ? `MISS: "${request}"` : `HIT: "${request}"`,
         );
