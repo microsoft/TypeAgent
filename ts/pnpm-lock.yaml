@@ -1259,6 +1259,12 @@ importers:
       find-config:
         specifier: ^1.0.0
         version: 1.0.0
+      googleapis:
+        specifier: ^144.0.0
+        version: 144.0.0(encoding@0.1.13)
+      open:
+        specifier: ^10.1.0
+        version: 10.1.2
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
@@ -1330,9 +1336,15 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
+      '@typeagent/agent-server-protocol':
+        specifier: workspace:*
+        version: link:../../agentServer/protocol
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/dispatcher-rpc':
+        specifier: workspace:*
+        version: link:../../dispatcher/rpc
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
@@ -1345,6 +1357,9 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
+      chat-ui:
+        specifier: workspace:*
+        version: link:../../chat-ui
       cheerio:
         specifier: ^1.1.0
         version: 1.1.0
@@ -1395,7 +1410,7 @@ importers:
         version: 26.1.0
       jsonpath:
         specifier: ^1.2.0
-        version: 1.2.0
+        version: 1.2.1
       knowledge-processor:
         specifier: workspace:*
         version: link:../../knowledgeProcessor
@@ -1403,8 +1418,8 @@ importers:
         specifier: workspace:*
         version: link:../../knowPro
       markdown-it:
-        specifier: ^14.1.0
-        version: 14.1.0
+        specifier: ^14.1.1
+        version: 14.1.1
       pdfjs-dist:
         specifier: ^5.3.31
         version: 5.3.31
@@ -1764,6 +1779,9 @@ importers:
 
   packages/agents/email:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.1.13)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -1779,6 +1797,9 @@ importers:
       graph-utils:
         specifier: workspace:*
         version: link:../agentUtils/graphUtils
+      kp:
+        specifier: workspace:*
+        version: link:../../kp
       typeagent:
         specifier: workspace:*
         version: link:../../typeagent
@@ -1946,8 +1967,8 @@ importers:
         specifier: ^0.2.52
         version: 0.2.108
       markdown-it:
-        specifier: ^14.1.0
-        version: 14.1.0
+        specifier: ^14.1.1
+        version: 14.1.1
       markdown-it-texmath:
         specifier: ^1.0.0
         version: 1.0.0
@@ -2714,6 +2735,31 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
+
+  packages/chat-ui:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../agentSdk
+      ansi_up:
+        specifier: ^6.0.2
+        version: 6.0.5
+      dompurify:
+        specifier: ^3.2.5
+        version: 3.2.6
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.1.1
+    devDependencies:
+      '@types/dompurify':
+        specifier: ^3.0.5
+        version: 3.2.0
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/cli:
     dependencies:
@@ -3585,6 +3631,40 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
 
+  packages/kp:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@3.25.76)
+      aiclient:
+        specifier: workspace:*
+        version: link:../aiclient
+      better-sqlite3:
+        specifier: 12.2.0
+        version: 12.2.0
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.8
+        version: 7.6.11
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/mcp/thoughts:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -3975,8 +4055,8 @@ importers:
         specifier: ^5.9.6
         version: 5.10.0
       markdown-it:
-        specifier: ^14.1.0
-        version: 14.1.0
+        specifier: ^14.1.1
+        version: 14.1.1
       microsoft-cognitiveservices-speech-sdk:
         specifier: ^1.38.0
         version: 1.43.1
@@ -4019,7 +4099,10 @@ importers:
         version: 37.4.0
       electron-builder:
         specifier: ^26.7.0
-        version: 26.7.0(electron-builder-squirrel-windows@26.3.1)
+        version: 26.7.0(electron-builder-squirrel-windows@26.7.0)
+      electron-builder-squirrel-windows:
+        specifier: 26.7.0
+        version: 26.7.0(dmg-builder@26.7.0)
       electron-vite:
         specifier: ^4.0.1
         version: 4.0.1(vite@6.4.1(@types/node@22.15.18)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0))
@@ -5105,11 +5188,6 @@ packages:
   '@electron/osx-sign@1.3.3':
     resolution: {integrity: sha512-KZ8mhXvWv2rIEgMbWZ4y33bDHyUKMXnx4M0sTyPNK/vcB81ImdeY9Ggdqy0SWbMDgmbqyQ+phgejh6V3R2QuSg==}
     engines: {node: '>=12.0.0'}
-    hasBin: true
-
-  '@electron/rebuild@4.0.1':
-    resolution: {integrity: sha512-iMGXb6Ib7H/Q3v+BKZJoETgF9g6KMNZVbsO4b7Dmpgb5qTFqyFTzqW9F3TOSHdybv2vKYKzSS9OiZL+dcJb+1Q==}
-    engines: {node: '>=22.12.0'}
     hasBin: true
 
   '@electron/rebuild@4.0.3':
@@ -6984,6 +7062,10 @@ packages:
   '@types/debug@4.1.12':
     resolution: {integrity: sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ==}
 
+  '@types/dompurify@3.2.0':
+    resolution: {integrity: sha512-Fgg31wv9QbLDA0SpTOXO3MaxySc4DKGLi8sna4/Utjo4r3ZRPdCt4UQee8BWr+Q5z21yifghREPJGYaEOEIACg==}
+    deprecated: This is a stub types definition. dompurify provides its own type definitions, so you do not need this installed.
+
   '@types/eslint-scope@3.7.7':
     resolution: {integrity: sha512-MzMFlSLBqNF2gcHWO0G1vP/YQyfvrxZ0bF+u7mzUdZ1/xK4A4sru+nraZz5i3iEIk1l1uyicaDVTB4QbbEkAYg==}
 
@@ -7636,13 +7718,6 @@ packages:
   app-builder-bin@5.0.0-alpha.12:
     resolution: {integrity: sha512-j87o0j6LqPL3QRr8yid6c+Tt5gC7xNfYo6uQIQkorAC6MpeayVMZrEDzKmJJ/Hlv7EnOQpaRm53k6ktDYZyB6w==}
 
-  app-builder-lib@26.3.1:
-    resolution: {integrity: sha512-TA6SCnyfZkUVv+QUwNlF75bq9Fq9/zHRm3l1dNa5RZx2a/mtOI71In82O2aglu3uHhmqUwmjkgPxxmkp4pvDmw==}
-    engines: {node: '>=14.0.0'}
-    peerDependencies:
-      dmg-builder: 26.3.1
-      electron-builder-squirrel-windows: 26.3.1
-
   app-builder-lib@26.7.0:
     resolution: {integrity: sha512-/UgCD8VrO79Wv8aBNpjMfsS1pIUfIPURoRn0Ik6tMe5avdZF+vQgl/juJgipcMmH3YS0BD573lCdCHyoi84USg==}
     engines: {node: '>=14.0.0'}
@@ -7845,6 +7920,9 @@ packages:
     resolution: {integrity: sha512-eGbYq2CT+tos1fBwLQ/tkBt9J5M3JEHjku4hbvQUePCckkvVf14xWj+1m7dGoK81M/fOjFT7yM9UMeKT/+vFLQ==}
     engines: {node: 20.x || 22.x || 23.x || 24.x}
 
+  bignumber.js@9.3.1:
+    resolution: {integrity: sha512-Ko0uX15oIUS7wJ3Rb30Fs6SkVbLmPBAKdlm7q9+ak9bbIeFf0MwuBsQV6z7+X768/cHsfg+WlysDWJcmthjsjQ==}
+
   binary-extensions@2.2.0:
     resolution: {integrity: sha512-jDctJ/IVQbZoJykoeHbhXpOlNBqGNcwXJKJog42E5HDPUwQTSdjCHdihjj0DlnheQ7blbT6dHOafNAiS8ooQKA==}
     engines: {node: '>=8'}
@@ -7952,9 +8030,6 @@ packages:
     resolution: {integrity: sha512-qt41tMfgHTllhResqM5DcnHyDIWNgzHvuY2jDcYP9iaGpkWxTUzV6GQjDeLnlR1/DtdlcsWQbA7sByMpmJFTLQ==}
     engines: {node: '>=12.0.0'}
 
-  builder-util@26.3.1:
-    resolution: {integrity: sha512-pplZEYBx1g15qvIOshpR1WTwjAwQM4ukhGgSNdYPnbuM6wLePq3+njy1sGfekCrJmUP+2xfuwuT9zEoUWfX5zQ==}
-
   builder-util@26.4.1:
     resolution: {integrity: sha512-FlgH43XZ50w3UtS1RVGDWOz8v9qMXPC7upMtKMtBEnYdt1OVoS61NYhKm/4x+cIaWqJTXua0+VVPI+fSPGXNIw==}
 
@@ -8030,8 +8105,8 @@ packages:
   caniuse-lite@1.0.30001718:
     resolution: {integrity: sha512-AflseV1ahcSunK53NfEs9gFWgOEmzr0f+kaMFA4xiLZlr9Hzt7HxcSpIFcnNCUkz6R6dWKa54rUz3HUmI3nVcw==}
 
-  caniuse-lite@1.0.30001768:
-    resolution: {integrity: sha512-qY3aDRZC5nWPgHUgIB84WL+nySuo19wk0VJpp/XI9T34lrvkyhRvNVOFJOp2kxClQhiFBu+TaUSudf6oa3vkSA==}
+  caniuse-lite@1.0.30001769:
+    resolution: {integrity: sha512-BCfFL1sHijQlBGWBMuJyhZUhzo7wer5sVj9hqekB/7xn0Ypy+pER/edCYQm4exbXj4WiySGp40P8UuTh6w1srg==}
 
   caseless@0.12.0:
     resolution: {integrity: sha512-4tYFyifaFfGacoiObjJegolkwSU4xQNGbVgUiNYVUxbQ2x2lUsFvY4hVgVzGiIe6WLOPqycWXA40l+PWsxthUw==}
@@ -8093,10 +8168,6 @@ packages:
 
   chownr@1.1.4:
     resolution: {integrity: sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg==}
-
-  chownr@2.0.0:
-    resolution: {integrity: sha512-bIomtDF5KGpdogkLd9VspvFzk9KfpyyGlS8YFVZl7TGPBHL5snIOnxeshwVgPteQ9b4Eydl+pVbIyE1DcvCWgQ==}
-    engines: {node: '>=10'}
 
   chownr@3.0.0:
     resolution: {integrity: sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==}
@@ -8380,10 +8451,6 @@ packages:
 
   cors@2.8.5:
     resolution: {integrity: sha512-KIHbLJqu73RGr/hnbrO9uBeixNGuvSQjul/jdFvS/KFSIH1hWVd1ng7zOHx+YrEfInLG7q4n6GHQ9cDtxv/P6g==}
-    engines: {node: '>= 0.10'}
-
-  cors@2.8.6:
-    resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
     engines: {node: '>= 0.10'}
 
   cose-base@1.0.3:
@@ -8943,16 +9010,13 @@ packages:
     engines: {node: '>=0.10.0'}
     hasBin: true
 
-  electron-builder-squirrel-windows@26.3.1:
-    resolution: {integrity: sha512-WY0INnhIqy1TaMPK7sC9bD8/kdwE//e5CYN783ZqVgUdrMb9QgC4MUu4adiSDQzc4Om9InQaN9v/jS4OlmeV5g==}
+  electron-builder-squirrel-windows@26.7.0:
+    resolution: {integrity: sha512-3EqkQK+q0kGshdPSKEPb2p5F75TENMKu6Fe5aTdeaPfdzFK4Yjp5L0d6S7K8iyvqIsGQ/ei4bnpyX9wt+kVCKQ==}
 
   electron-builder@26.7.0:
     resolution: {integrity: sha512-LoXbCvSFxLesPneQ/fM7FB4OheIDA2tjqCdUkKlObV5ZKGhYgi5VHPHO/6UUOUodAlg7SrkPx7BZJPby+Vrtbg==}
     engines: {node: '>=14.0.0'}
     hasBin: true
-
-  electron-publish@26.3.1:
-    resolution: {integrity: sha512-XYGYL/fpQULLW9slTVPelaUOGlKfOTmV2Uda3K+qzFzvNnkGJCj7L0nLVvMuj5cgxpAX+3BhO5HOUb4rv6jikA==}
 
   electron-publish@26.6.0:
     resolution: {integrity: sha512-LsyHMMqbvJ2vsOvuWJ19OezgF2ANdCiHpIucDHNiLhuI+/F3eW98ouzWSRmXXi82ZOPZXC07jnIravY4YYwCLQ==}
@@ -9043,8 +9107,8 @@ packages:
     resolution: {integrity: sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw==}
     engines: {node: '>=0.12'}
 
-  entities@6.0.0:
-    resolution: {integrity: sha512-aKstq2TDOndCn4diEyp9Uq/Flu2i1GlLkc6XIDQSDMuaFE3OPW5OphLCyQ5SpSJZTb4reN+kTcYru5yIfXoRPw==}
+  entities@6.0.1:
+    resolution: {integrity: sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g==}
     engines: {node: '>=0.12'}
 
   env-paths@2.2.1:
@@ -9455,10 +9519,6 @@ packages:
     resolution: {integrity: sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ==}
     engines: {node: '>=10'}
 
-  fs-minipass@2.1.0:
-    resolution: {integrity: sha512-V/JgOLFCS+R6Vcq0slCuaeWEdNC3ouDlJMNIsacH2VtALiu9mV4LPrHc5cDl8k5aw6J8jwgWWpiTo5RYhmIzvg==}
-    engines: {node: '>= 8'}
-
   fs-minipass@3.0.3:
     resolution: {integrity: sha512-XUBA9XClHbnJWSfBzjkm6RvPsyg3sryZt06BEQoXcF7EK/xpGaQYJgQKDJSUH5SGZ76Y7pFx1QBnXz09rU5Fbw==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
@@ -9485,6 +9545,14 @@ packages:
 
   functions-have-names@1.2.3:
     resolution: {integrity: sha512-xckBUXyTIqT97tq2x2AMb+g163b5JFysYk0x4qxNFwbfQkmNZoiRHb6sPzI9/QV33WeuvVYBUIiD4NzNIyqaRQ==}
+
+  gaxios@6.7.1:
+    resolution: {integrity: sha512-LDODD4TMYx7XXdpwxAVRAIAuB0bzv0s+ywFonY46k126qzQHT9ygyoa9tncmOiQmmDrik65UYsEkv3lbfqQ3yQ==}
+    engines: {node: '>=14'}
+
+  gcp-metadata@6.1.1:
+    resolution: {integrity: sha512-a4tiq7E0/5fTjxPAaH4jpjkSv/uCaU2p5KC6HVGrvl0cDjA8iBZv4vv1gyzlmK0ZUKqwpOyQMKzZQe3lTit77A==}
+    engines: {node: '>=14'}
 
   generator-function@2.0.1:
     resolution: {integrity: sha512-SFdFmIJi+ybC0vjlHN0ZGVGHc3lgE0DxPAT0djjVg+kjOnSqclqmj0KQ7ykTOLP6YxoqOvuAODGdcHJn+43q3g==}
@@ -9620,6 +9688,22 @@ packages:
     resolution: {integrity: sha512-0Ia46fDOaT7k4og1PDW4YbodWWr3scS2vAr2lTbsplOt2WkKp0vQbkI9wKis/T5LV/dqPjO3bpS/z6GTJB82LA==}
     engines: {node: '>=18'}
 
+  google-auth-library@9.15.1:
+    resolution: {integrity: sha512-Jb6Z0+nvECVz+2lzSMt9u98UsoakXxA2HGHMCxh+so3n90XgYWkq5dur19JAJV7ONiJY22yBTyJB1TSkvPq9Ng==}
+    engines: {node: '>=14'}
+
+  google-logging-utils@0.0.2:
+    resolution: {integrity: sha512-NEgUnEcBiP5HrPzufUkBzJOD/Sxsco3rLNo1F1TNf7ieU8ryUzBhqba8r756CjLX7rn3fHl6iLEwPYuqpoKgQQ==}
+    engines: {node: '>=14'}
+
+  googleapis-common@7.2.0:
+    resolution: {integrity: sha512-/fhDZEJZvOV3X5jmD+fKxMqma5q2Q9nZNSF3kn1F18tpxmA86BcTxAGBQdM0N89Z3bEaIs+HVznSmFJEAmMTjA==}
+    engines: {node: '>=14.0.0'}
+
+  googleapis@144.0.0:
+    resolution: {integrity: sha512-ELcWOXtJxjPX4vsKMh+7V+jZvgPwYMlEhQFiu2sa9Qmt5veX8nwXPksOWGGN6Zk4xCiLygUyaz7xGtcMO+Onxw==}
+    engines: {node: '>=14.0.0'}
+
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
@@ -9682,6 +9766,10 @@ packages:
     peerDependencies:
       graphology-types: '>=0.24.0'
 
+  gtoken@7.1.0:
+    resolution: {integrity: sha512-pCcEwRi+TKpMlxAQObHDQ56KawURgyAf6jtIY046fJ5tIv3zDe/LEIubckAO8fj6JnAxLdmWkUfNyulQ2iKdEw==}
+    engines: {node: '>=14.0.0'}
+
   hachure-fill@0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
 
@@ -9726,8 +9814,8 @@ packages:
   highlight.js@10.7.3:
     resolution: {integrity: sha512-tzcUFauisWKNHaRkN4Wjl/ZA07gENAjFl3J/c480dprkGTg5EQstgaNFqBfUqCq54kZRIEcreTsAgF/m2quD7A==}
 
-  hono@4.11.7:
-    resolution: {integrity: sha512-l7qMiNee7t82bH3SeyUCt9UF15EVmaBvsppY2zQtrbIhl/yzBTny+YUxsVjSjQ6gaqaeVtZmGocom8TzBlA4Yw==}
+  hono@4.11.8:
+    resolution: {integrity: sha512-eVkB/CYCCei7K2WElZW9yYQFWssG0DhaDhVvr7wy5jJ22K+ck8fWW0EsLpB0sITUTvPnc97+rrbQqIr5iqiy9Q==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@4.1.0:
@@ -9875,8 +9963,8 @@ packages:
     resolution: {integrity: sha512-cf6L2Ds3h57VVmkZe+Pn+5APsT7FpqJtEhhieDCvrE2MK5Qk9MyffgQyuxQTm6BChfeZNtcOLHp9IcWRVcIcBQ==}
     engines: {node: '>=0.10.0'}
 
-  iconv-lite@0.7.2:
-    resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
+  iconv-lite@0.7.1:
+    resolution: {integrity: sha512-2Tth85cXwGFHfvRgZWszZSvdo+0Xsqmw8k8ZwxScfcBneNUraK+dxRxRm24nszx80Y0TVio8kKLt5sLE7ZCLlw==}
     engines: {node: '>=0.10.0'}
 
   ieee754@1.2.1:
@@ -10497,6 +10585,9 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
+  json-bigint@1.0.0:
+    resolution: {integrity: sha512-SiPv/8VpZuWbvLSMtTDU8hEfrZWg/mH/nV/b4o0CYbSxu1UIQPLdwKOCIyLQX+VIPO5vrLX3i8qtqFyhdPSUSQ==}
+
   json-bignum@0.0.3:
     resolution: {integrity: sha512-2WHyXj3OfHSgNyuzDbSxI1w2jgw5gkWSWhS7Qg4bWXx1nLk3jnbwfUeS0PSba3IzpTUWdHxBieELUzXRjQB2zg==}
     engines: {node: '>=0.8'}
@@ -10540,8 +10631,8 @@ packages:
   jsonfile@6.2.0:
     resolution: {integrity: sha512-FGuPw30AdOIUTRMC2OMRtQV+jkVj2cfPqSeWXv1NEAJ1qZ5zb1X6z1mFhbfOB/iy3ssJCD+3KuZ8r8C3uVFlAg==}
 
-  jsonpath@1.2.0:
-    resolution: {integrity: sha512-EVm29wT2coM0QfZd8TREEeMTOxZcyV3oCQ61AM0DrMkVaVCKXtPEm0oJccEbz5P9Oi+JwRkkIt0Bkn63gqCHjg==}
+  jsonpath@1.2.1:
+    resolution: {integrity: sha512-Jl6Jhk0jG+kP3yk59SSeGq7LFPR4JQz1DU0K+kXTysUhMostbhU3qh5mjTuf0PqFcXpAT7kvmMt9WxV10NyIgQ==}
 
   jsonwebtoken@9.0.2:
     resolution: {integrity: sha512-PRp66vJ865SSqOlgqS8hujT5U4AOgMfhrwYIuIhfKaoSCZcirrmASQr8CX7cUg+RMih+hgznrjp99o+W4pJLHQ==}
@@ -10553,8 +10644,14 @@ packages:
   jwa@1.4.1:
     resolution: {integrity: sha512-qiLX/xhEEFKUAJ6FiBMbes3w9ATzyk5W7Hvzpa/SLYdxNtng+gcurvrI7TbACjIXlsJyr05/S1oUhZrc63evQA==}
 
+  jwa@2.0.1:
+    resolution: {integrity: sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==}
+
   jws@3.2.2:
     resolution: {integrity: sha512-YHlZCB6lMTllWDtSPHz/ZXTsi8S00usEV6v1tjq8tOUZzw7DpSDWVXjXDre6ed1w/pd495ODpHZYSdkRTsa0HA==}
+
+  jws@4.0.1:
+    resolution: {integrity: sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==}
 
   katex@0.16.22:
     resolution: {integrity: sha512-XCHRdUw4lf3SKBaJe4EvgqIuWwkPSo9XoeO8GjQW94Bp7TWv9hNhzZjZ+OH9yf1UmLygb7DIT5GSFQiyt16zYg==}
@@ -10873,8 +10970,8 @@ packages:
   markdown-it-texmath@1.0.0:
     resolution: {integrity: sha512-4hhkiX8/gus+6e53PLCUmUrsa6ZWGgJW2XCW6O0ASvZUiezIK900ZicinTDtG3kAO2kon7oUA/ReWmpW2FByxg==}
 
-  markdown-it@14.1.0:
-    resolution: {integrity: sha512-a54IwgWPaeBCAAsv13YgmALOF1elABB08FxO9i+r4VFk5Vl4pKokRPeX8u5TCgSsPi6ec1otfLjdOpVcgbpshg==}
+  markdown-it@14.1.1:
+    resolution: {integrity: sha512-BuU2qnTti9YKgK5N+IeMubp14ZUKUUw7yeJbkjtosvHiP0AZ5c8IAgEMk79D0eC8F23r4Ac/q8cAIFdm2FtyoA==}
     hasBin: true
 
   markdown-link-check@3.14.2:
@@ -11198,17 +11295,9 @@ packages:
     resolution: {integrity: sha512-fNzuVyifolSLFL4NzpF+wEF4qrgqaaKX0haXPQEdQ7NKAN+WecoKMHV09YcuL/DHxrUsYQOK3MiuDf7Ip2OXfQ==}
     engines: {node: '>=8'}
 
-  minipass@5.0.0:
-    resolution: {integrity: sha512-3FnjYuehv9k6ovOEbyOswadCDPX1piCfhV8ncmYtHOjuPwylVWsghTLo7rabjC3Rx5xD4HDx8Wm1xnMF7S5qFQ==}
-    engines: {node: '>=8'}
-
   minipass@7.1.2:
     resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
     engines: {node: '>=16 || 14 >=14.17'}
-
-  minizlib@2.1.2:
-    resolution: {integrity: sha512-bAxsR8BVfj60DWXHE3u30oHzfl4G7khkSuPW+qvpd7jFRHm7dLxOjUk1EHACJ/hxLY8phGJ0YhYHZo7jil7Qdg==}
-    engines: {node: '>= 8'}
 
   minizlib@3.1.0:
     resolution: {integrity: sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==}
@@ -12886,14 +12975,10 @@ packages:
   tar-stream@3.1.7:
     resolution: {integrity: sha512-qJj60CXt7IU1Ffyc3NJMjh6EkuCFej46zUqJ4J7pqYlThyd9bO0XBTmcOIhSzZJVWfsLks0+nle/j538YAW9RQ==}
 
-  tar@6.2.1:
-    resolution: {integrity: sha512-DZ4yORTwrbTj/7MZYq2w+/ZFdI6OZ/f9SFHR+71gIVUZhOQPHzVCLpvRnPgyaMpfWxxk/4ONva3GQSyNIKRv6A==}
-    engines: {node: '>=10'}
-    deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
-
   tar@7.5.7:
     resolution: {integrity: sha512-fov56fJiRuThVFXD6o6/Q354S7pnWMJIVlDBYijsTNx6jKSE4pvrDTs6lUnmGvNyfJwFQQwWy3owKz1ucIhveQ==}
     engines: {node: '>=18'}
+    deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   temp-file@3.4.0:
     resolution: {integrity: sha512-C5tjlC/HCtVUOi3KWVokd4vHVViOmGjtLwIh4MuzPo/nMYTV/p1urt3RnMz2IWXDdKEGJH3k5+KPxtqRsUYGtg==}
@@ -13239,9 +13324,6 @@ packages:
   underscore@1.13.6:
     resolution: {integrity: sha512-+A5Sja4HP1M08MaXya7p5LvjuM7K6q/2EaC0+iovj/wOcMsTzMvDFbasi/oSapiwOlt252IqsKqPjCl7huKS0A==}
 
-  underscore@1.13.7:
-    resolution: {integrity: sha512-GMXzWtsc57XAtguZgaQViUOzs0KTkk8ojr3/xAxXLITqf/3EMwxC0inyETfDFjH/Krbhuep0HNbbjI9i/q3F3g==}
-
   undici-types@5.26.5:
     resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
 
@@ -13343,6 +13425,9 @@ packages:
 
   url-parse@1.5.10:
     resolution: {integrity: sha512-WypcfiRhfeUP9vvF0j6rw0J3hrWrw6iZv3+22h6iRMJ/8z1Tj6XfLP4DsUix5MhMPnXpiHDoKyoZ/bdCkwBCiQ==}
+
+  url-template@2.0.8:
+    resolution: {integrity: sha512-XdVKMF4SJ0nP/O7XIPB0JwAEuT9lDIYnNsK8yGVe43y0AWoKeJNdv3ZNWh7ksJ6KqQFjOO6ox/VEitLnaVNufw==}
 
   user-home@2.0.0:
     resolution: {integrity: sha512-KMWqdlOcjCYdtIJpicDSFBQ8nFwS2i9sslAd6f4+CBGcU4gist2REnr2fxj2YocvJFxSF3ZOHLYLVZnUxv4BZQ==}
@@ -15421,25 +15506,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@electron/rebuild@4.0.1':
-    dependencies:
-      '@malept/cross-spawn-promise': 2.0.0
-      chalk: 4.1.2
-      debug: 4.4.3(supports-color@8.1.1)
-      detect-libc: 2.0.3
-      got: 11.8.6
-      graceful-fs: 4.2.11
-      node-abi: 4.24.0
-      node-api-version: 0.2.1
-      node-gyp: 11.5.0
-      ora: 5.4.1
-      read-binary-file-arch: 1.0.6
-      semver: 7.7.3
-      tar: 6.2.1
-      yargs: 17.7.2
-    transitivePeerDependencies:
-      - supports-color
-
   '@electron/rebuild@4.0.3':
     dependencies:
       '@malept/cross-spawn-promise': 2.0.0
@@ -15718,9 +15784,9 @@ snapshots:
       protobufjs: 7.4.0
       yargs: 17.7.2
 
-  '@hono/node-server@1.19.9(hono@4.11.7)':
+  '@hono/node-server@1.19.9(hono@4.11.8)':
     dependencies:
-      hono: 4.11.7
+      hono: 4.11.8
 
   '@iconify/types@2.0.0': {}
 
@@ -16705,17 +16771,17 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.26.0(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 1.19.9(hono@4.11.7)
+      '@hono/node-server': 1.19.9(hono@4.11.8)
       ajv: 8.17.1
       ajv-formats: 3.0.1(ajv@8.17.1)
       content-type: 1.0.5
-      cors: 2.8.6
+      cors: 2.8.5
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.2.1(express@5.2.1)
-      hono: 4.11.7
+      hono: 4.11.8
       jose: 6.1.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -16727,17 +16793,17 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.26.0(zod@4.1.13)':
     dependencies:
-      '@hono/node-server': 1.19.9(hono@4.11.7)
+      '@hono/node-server': 1.19.9(hono@4.11.8)
       ajv: 8.17.1
       ajv-formats: 3.0.1(ajv@8.17.1)
       content-type: 1.0.5
-      cors: 2.8.6
+      cors: 2.8.5
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.2.1(express@5.2.1)
-      hono: 4.11.7
+      hono: 4.11.8
       jose: 6.1.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -17940,6 +18006,10 @@ snapshots:
     dependencies:
       '@types/ms': 0.7.33
 
+  '@types/dompurify@3.2.0':
+    dependencies:
+      dompurify: 3.2.6
+
   '@types/eslint-scope@3.7.7':
     dependencies:
       '@types/eslint': 9.6.1
@@ -18346,7 +18416,7 @@ snapshots:
       hosted-git-info: 4.1.0
       jsonc-parser: 3.2.1
       leven: 3.1.0
-      markdown-it: 14.1.0
+      markdown-it: 14.1.1
       mime: 1.6.0
       minimatch: 3.1.2
       parse-semver: 1.1.1
@@ -18688,48 +18758,7 @@ snapshots:
 
   app-builder-bin@5.0.0-alpha.12: {}
 
-  app-builder-lib@26.3.1(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.3.1):
-    dependencies:
-      '@develar/schema-utils': 2.6.5
-      '@electron/asar': 3.4.1
-      '@electron/fuses': 1.8.0
-      '@electron/notarize': 2.5.0
-      '@electron/osx-sign': 1.3.3
-      '@electron/rebuild': 4.0.1
-      '@electron/universal': 2.0.3
-      '@malept/flatpak-bundler': 0.4.0
-      '@types/fs-extra': 9.0.13
-      async-exit-hook: 2.0.1
-      builder-util: 26.3.1
-      builder-util-runtime: 9.5.1
-      chromium-pickle-js: 0.2.0
-      ci-info: 4.3.1
-      debug: 4.4.3(supports-color@8.1.1)
-      dmg-builder: 26.7.0(electron-builder-squirrel-windows@26.3.1)
-      dotenv: 16.5.0
-      dotenv-expand: 11.0.7
-      ejs: 3.1.10
-      electron-builder-squirrel-windows: 26.3.1(dmg-builder@26.7.0)
-      electron-publish: 26.3.1
-      fs-extra: 10.1.0
-      hosted-git-info: 4.1.0
-      isbinaryfile: 5.0.0
-      jiti: 2.5.1
-      js-yaml: 4.1.1
-      json5: 2.2.3
-      lazy-val: 1.0.5
-      minimatch: 10.1.1
-      plist: 3.1.0
-      resedit: 1.7.2
-      semver: 7.7.2
-      tar: 6.2.1
-      temp-file: 3.4.0
-      tiny-async-pool: 1.3.0
-      which: 5.0.0
-    transitivePeerDependencies:
-      - supports-color
-
-  app-builder-lib@26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.3.1):
+  app-builder-lib@26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.7.0):
     dependencies:
       '@develar/schema-utils': 2.6.5
       '@electron/asar': 3.4.1
@@ -18747,11 +18776,11 @@ snapshots:
       chromium-pickle-js: 0.2.0
       ci-info: 4.3.1
       debug: 4.4.3(supports-color@8.1.1)
-      dmg-builder: 26.7.0(electron-builder-squirrel-windows@26.3.1)
+      dmg-builder: 26.7.0(electron-builder-squirrel-windows@26.7.0)
       dotenv: 16.5.0
       dotenv-expand: 11.0.7
       ejs: 3.1.10
-      electron-builder-squirrel-windows: 26.3.1(dmg-builder@26.7.0)
+      electron-builder-squirrel-windows: 26.7.0(dmg-builder@26.7.0)
       electron-publish: 26.6.0
       fs-extra: 10.1.0
       hosted-git-info: 4.1.0
@@ -18998,6 +19027,8 @@ snapshots:
       bindings: 1.5.0
       prebuild-install: 7.1.3
 
+  bignumber.js@9.3.1: {}
+
   binary-extensions@2.2.0: {}
 
   binaryextensions@4.19.0: {}
@@ -19035,7 +19066,7 @@ snapshots:
       content-type: 1.0.5
       debug: 4.4.3(supports-color@8.1.1)
       http-errors: 2.0.1
-      iconv-lite: 0.7.2
+      iconv-lite: 0.7.1
       on-finished: 2.4.1
       qs: 6.14.1
       raw-body: 3.0.2
@@ -19086,7 +19117,7 @@ snapshots:
   browserslist@4.28.1:
     dependencies:
       baseline-browser-mapping: 2.9.19
-      caniuse-lite: 1.0.30001768
+      caniuse-lite: 1.0.30001769
       electron-to-chromium: 1.5.286
       node-releases: 2.0.27
       update-browserslist-db: 1.2.3(browserslist@4.28.1)
@@ -19135,28 +19166,6 @@ snapshots:
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       sax: 1.3.0
-    transitivePeerDependencies:
-      - supports-color
-
-  builder-util@26.3.1:
-    dependencies:
-      7zip-bin: 5.2.0
-      '@types/debug': 4.1.12
-      app-builder-bin: 5.0.0-alpha.12
-      builder-util-runtime: 9.5.1
-      chalk: 4.1.2
-      ci-info: 4.3.1
-      cross-spawn: 7.0.6
-      debug: 4.4.3(supports-color@8.1.1)
-      fs-extra: 10.1.0
-      http-proxy-agent: 7.0.2
-      https-proxy-agent: 7.0.6
-      js-yaml: 4.1.1
-      sanitize-filename: 1.6.3
-      source-map-support: 0.5.21
-      stat-mode: 1.0.0
-      temp-file: 3.4.0
-      tiny-async-pool: 1.3.0
     transitivePeerDependencies:
       - supports-color
 
@@ -19276,7 +19285,7 @@ snapshots:
 
   caniuse-lite@1.0.30001718: {}
 
-  caniuse-lite@1.0.30001768: {}
+  caniuse-lite@1.0.30001769: {}
 
   caseless@0.12.0: {}
 
@@ -19367,8 +19376,6 @@ snapshots:
       fsevents: 2.3.3
 
   chownr@1.1.4: {}
-
-  chownr@2.0.0: {}
 
   chownr@3.0.0: {}
 
@@ -19656,11 +19663,6 @@ snapshots:
   core-util-is@1.0.3: {}
 
   cors@2.8.5:
-    dependencies:
-      object-assign: 4.1.1
-      vary: 1.1.2
-
-  cors@2.8.6:
     dependencies:
       object-assign: 4.1.1
       vary: 1.1.2
@@ -20178,9 +20180,9 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  dmg-builder@26.7.0(electron-builder-squirrel-windows@26.3.1):
+  dmg-builder@26.7.0(electron-builder-squirrel-windows@26.7.0):
     dependencies:
-      app-builder-lib: 26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.3.1)
+      app-builder-lib: 26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.7.0)
       builder-util: 26.4.1
       fs-extra: 10.1.0
       iconv-lite: 0.6.3
@@ -20292,42 +20294,29 @@ snapshots:
     dependencies:
       jake: 10.8.7
 
-  electron-builder-squirrel-windows@26.3.1(dmg-builder@26.7.0):
+  electron-builder-squirrel-windows@26.7.0(dmg-builder@26.7.0):
     dependencies:
-      app-builder-lib: 26.3.1(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.3.1)
-      builder-util: 26.3.1
+      app-builder-lib: 26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.7.0)
+      builder-util: 26.4.1
       electron-winstaller: 5.4.0
     transitivePeerDependencies:
       - dmg-builder
       - supports-color
 
-  electron-builder@26.7.0(electron-builder-squirrel-windows@26.3.1):
+  electron-builder@26.7.0(electron-builder-squirrel-windows@26.7.0):
     dependencies:
-      app-builder-lib: 26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.3.1)
+      app-builder-lib: 26.7.0(dmg-builder@26.7.0)(electron-builder-squirrel-windows@26.7.0)
       builder-util: 26.4.1
       builder-util-runtime: 9.5.1
       chalk: 4.1.2
       ci-info: 4.3.1
-      dmg-builder: 26.7.0(electron-builder-squirrel-windows@26.3.1)
+      dmg-builder: 26.7.0(electron-builder-squirrel-windows@26.7.0)
       fs-extra: 10.1.0
       lazy-val: 1.0.5
       simple-update-notifier: 2.0.0
       yargs: 17.7.2
     transitivePeerDependencies:
       - electron-builder-squirrel-windows
-      - supports-color
-
-  electron-publish@26.3.1:
-    dependencies:
-      '@types/fs-extra': 9.0.13
-      builder-util: 26.3.1
-      builder-util-runtime: 9.5.1
-      chalk: 4.1.2
-      form-data: 4.0.4
-      fs-extra: 10.1.0
-      lazy-val: 1.0.5
-      mime: 2.6.0
-    transitivePeerDependencies:
       - supports-color
 
   electron-publish@26.6.0:
@@ -20444,7 +20433,7 @@ snapshots:
 
   entities@4.5.0: {}
 
-  entities@6.0.0: {}
+  entities@6.0.1: {}
 
   env-paths@2.2.1: {}
 
@@ -21016,10 +21005,6 @@ snapshots:
       jsonfile: 6.2.0
       universalify: 2.0.1
 
-  fs-minipass@2.1.0:
-    dependencies:
-      minipass: 3.3.6
-
   fs-minipass@3.0.3:
     dependencies:
       minipass: 7.1.2
@@ -21044,6 +21029,26 @@ snapshots:
       is-callable: 1.2.7
 
   functions-have-names@1.2.3: {}
+
+  gaxios@6.7.1(encoding@0.1.13):
+    dependencies:
+      extend: 3.0.2
+      https-proxy-agent: 7.0.6
+      is-stream: 2.0.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+      uuid: 9.0.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
+  gcp-metadata@6.1.1(encoding@0.1.13):
+    dependencies:
+      gaxios: 6.7.1(encoding@0.1.13)
+      google-logging-utils: 0.0.2
+      json-bigint: 1.0.0
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
 
   generator-function@2.0.1: {}
 
@@ -21228,6 +21233,40 @@ snapshots:
       slash: 5.1.0
       unicorn-magic: 0.3.0
 
+  google-auth-library@9.15.1(encoding@0.1.13):
+    dependencies:
+      base64-js: 1.5.1
+      ecdsa-sig-formatter: 1.0.11
+      gaxios: 6.7.1(encoding@0.1.13)
+      gcp-metadata: 6.1.1(encoding@0.1.13)
+      gtoken: 7.1.0(encoding@0.1.13)
+      jws: 4.0.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
+  google-logging-utils@0.0.2: {}
+
+  googleapis-common@7.2.0(encoding@0.1.13):
+    dependencies:
+      extend: 3.0.2
+      gaxios: 6.7.1(encoding@0.1.13)
+      google-auth-library: 9.15.1(encoding@0.1.13)
+      qs: 6.14.1
+      url-template: 2.0.8
+      uuid: 9.0.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
+  googleapis@144.0.0(encoding@0.1.13):
+    dependencies:
+      google-auth-library: 9.15.1(encoding@0.1.13)
+      googleapis-common: 7.2.0(encoding@0.1.13)
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
   gopd@1.2.0: {}
 
   got@11.8.6:
@@ -21309,6 +21348,14 @@ snapshots:
       graphology-types: 0.24.8
       obliterator: 2.0.5
 
+  gtoken@7.1.0(encoding@0.1.13):
+    dependencies:
+      gaxios: 6.7.1(encoding@0.1.13)
+      jws: 4.0.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+
   hachure-fill@0.5.2: {}
 
   handle-thing@2.0.1: {}
@@ -21341,7 +21388,7 @@ snapshots:
 
   highlight.js@10.7.3: {}
 
-  hono@4.11.7: {}
+  hono@4.11.8: {}
 
   hosted-git-info@4.1.0:
     dependencies:
@@ -21407,7 +21454,7 @@ snapshots:
       domelementtype: 2.3.0
       domhandler: 5.0.3
       domutils: 3.2.2
-      entities: 6.0.0
+      entities: 6.0.1
 
   htmlparser2@6.1.0:
     dependencies:
@@ -21539,7 +21586,7 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
-  iconv-lite@0.7.2:
+  iconv-lite@0.7.1:
     dependencies:
       safer-buffer: 2.1.2
 
@@ -22532,6 +22579,10 @@ snapshots:
 
   jsesc@3.1.0: {}
 
+  json-bigint@1.0.0:
+    dependencies:
+      bignumber.js: 9.3.1
+
   json-bignum@0.0.3: {}
 
   json-buffer@3.0.1: {}
@@ -22569,7 +22620,7 @@ snapshots:
     optionalDependencies:
       graceful-fs: 4.2.11
 
-  jsonpath@1.2.0:
+  jsonpath@1.2.1:
     dependencies:
       esprima: 1.2.5
       static-eval: 2.1.1
@@ -22601,9 +22652,20 @@ snapshots:
       ecdsa-sig-formatter: 1.0.11
       safe-buffer: 5.2.1
 
+  jwa@2.0.1:
+    dependencies:
+      buffer-equal-constant-time: 1.0.1
+      ecdsa-sig-formatter: 1.0.11
+      safe-buffer: 5.2.1
+
   jws@3.2.2:
     dependencies:
       jwa: 1.4.1
+      safe-buffer: 5.2.1
+
+  jws@4.0.1:
+    dependencies:
+      jwa: 2.0.1
       safe-buffer: 5.2.1
 
   katex@0.16.22:
@@ -22941,7 +23003,7 @@ snapshots:
 
   markdown-it-texmath@1.0.0: {}
 
-  markdown-it@14.1.0:
+  markdown-it@14.1.1:
     dependencies:
       argparse: 2.0.1
       entities: 4.5.0
@@ -23478,14 +23540,7 @@ snapshots:
 
   minipass@4.2.8: {}
 
-  minipass@5.0.0: {}
-
   minipass@7.1.2: {}
-
-  minizlib@2.1.2:
-    dependencies:
-      minipass: 3.3.6
-      yallist: 4.0.0
 
   minizlib@3.1.0:
     dependencies:
@@ -24000,7 +24055,7 @@ snapshots:
 
   parse5@7.3.0:
     dependencies:
-      entities: 6.0.0
+      entities: 6.0.1
 
   parseley@0.12.1:
     dependencies:
@@ -24466,7 +24521,7 @@ snapshots:
     dependencies:
       bytes: 3.1.2
       http-errors: 2.0.1
-      iconv-lite: 0.7.2
+      iconv-lite: 0.7.1
       unpipe: 1.0.0
 
   rc-config-loader@4.1.3:
@@ -25504,15 +25559,6 @@ snapshots:
       fast-fifo: 1.3.2
       streamx: 2.22.0
 
-  tar@6.2.1:
-    dependencies:
-      chownr: 2.0.0
-      fs-minipass: 2.1.0
-      minipass: 5.0.0
-      minizlib: 2.1.2
-      mkdirp: 1.0.4
-      yallist: 4.0.0
-
   tar@7.5.7:
     dependencies:
       '@isaacs/fs-minipass': 4.0.1
@@ -25559,7 +25605,7 @@ snapshots:
   terser@5.27.0:
     dependencies:
       '@jridgewell/source-map': 0.3.5
-      acorn: 8.15.0
+      acorn: 8.14.1
       commander: 2.20.3
       source-map-support: 0.5.21
 
@@ -25905,9 +25951,9 @@ snapshots:
 
   typed-rest-client@1.8.11:
     dependencies:
-      qs: 6.14.0
+      qs: 6.14.1
       tunnel: 0.0.6
-      underscore: 1.13.7
+      underscore: 1.13.6
 
   typescript@5.4.5: {}
 
@@ -25934,8 +25980,6 @@ snapshots:
       through: 2.3.8
 
   underscore@1.13.6: {}
-
-  underscore@1.13.7: {}
 
   undici-types@5.26.5: {}
 
@@ -26040,6 +26084,8 @@ snapshots:
     dependencies:
       querystringify: 2.2.0
       requires-port: 1.0.0
+
+  url-template@2.0.8: {}
 
   user-home@2.0.0:
     dependencies:
