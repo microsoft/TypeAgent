@@ -247,10 +247,11 @@ export function compileGrammar(
         }
     }
 
-    return {
-        rules: grammarRules,
-        entities: Array.from(usedImportedTypes),
-    };
+    const grammar: Grammar = { rules: grammarRules };
+    if (usedImportedTypes.size > 0) {
+        grammar.entities = Array.from(usedImportedTypes);
+    }
+    return grammar;
 }
 
 function convertCompileError(
@@ -380,7 +381,7 @@ function createGrammarRule(
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
     let variableCount = 0;
-    let nestedValue = false;
+    let defaultValue = false;
     for (const expr of expressions) {
         switch (expr.type) {
             case "string": {
@@ -390,6 +391,8 @@ function createGrammarRule(
                 };
                 // TODO: create regexp
                 parts.push(part);
+                // default value of the string
+                defaultValue = true;
                 break;
             }
             case "variable": {
@@ -465,7 +468,8 @@ function createGrammarRule(
                     expr.name,
                     expr.pos,
                 );
-                nestedValue = hasValue;
+                // defaule value of the rule reference
+                defaultValue = hasValue;
                 parts.push({
                     type: "rules",
                     rules: grammarRules,
@@ -475,7 +479,8 @@ function createGrammarRule(
             case "rules": {
                 const { rules, optional } = expr;
                 const grammarRules: GrammarRule[] = [];
-                nestedValue = createGrammarRules(context, rules, grammarRules);
+                // default value of the nested rules
+                defaultValue = createGrammarRules(context, rules, grammarRules);
                 parts.push({
                     type: "rules",
                     rules: grammarRules,
@@ -510,6 +515,6 @@ function createGrammarRule(
         hasValue:
             value !== undefined ||
             variableCount === 1 ||
-            (variableCount === 0 && parts.length === 1 && nestedValue),
+            (variableCount === 0 && parts.length === 1 && defaultValue),
     };
 }
