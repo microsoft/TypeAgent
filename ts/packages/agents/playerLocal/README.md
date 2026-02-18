@@ -129,6 +129,7 @@ show music folder
 - WMA (.wma)
 
 ## TODOs
+
 - real volume controlling would require a library with api. Currently we can control this only via restart.
 - tested only on windows currently. Tests on Linux and macOS will follow.
 

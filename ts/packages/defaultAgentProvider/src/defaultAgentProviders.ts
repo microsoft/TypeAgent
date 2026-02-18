@@ -126,7 +126,10 @@ export async function getIndexingServiceRegistry(
     instanceDirOrConfigProvider?: string | InstanceConfigProvider,
     configName?: string,
 ): Promise<IndexingServiceRegistry> {
-    const providers = getDefaultAppAgentProviders(instanceDirOrConfigProvider, configName);
+    const providers = getDefaultAppAgentProviders(
+        instanceDirOrConfigProvider,
+        configName,
+    );
     const registry = new DefaultIndexingServiceRegistry();
 
     for (const provider of providers) {
