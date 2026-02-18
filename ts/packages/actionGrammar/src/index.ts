@@ -4,7 +4,7 @@
 export type { GrammarJson, Grammar } from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
-export { loadGrammarRules } from "./grammarLoader.js";
+export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
 export {
     matchGrammar,
     GrammarMatchResult,

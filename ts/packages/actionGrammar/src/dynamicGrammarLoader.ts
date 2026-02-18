@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Grammar, GrammarPart } from "./grammarTypes.js";
-import { loadGrammarRules } from "./grammarLoader.js";
+import { loadGrammarRulesNoThrow } from "./grammarLoader.js";
 import { mergeGrammarRules } from "./grammarMerger.js";
 import { compileGrammarToNFA } from "./nfaCompiler.js";
 import { NFA } from "./nfa.js";
@@ -46,7 +46,7 @@ export class DynamicGrammarLoader {
         const errors: string[] = [];
 
         // Step 1: Parse the grammar rules
-        const newGrammar = loadGrammarRules("<dynamic>", agrText, errors);
+        const newGrammar = loadGrammarRulesNoThrow("<dynamic>", agrText, errors);
 
         if (!newGrammar) {
             return {
@@ -117,7 +117,7 @@ export class DynamicGrammarLoader {
         const errors: string[] = [];
 
         // Step 1: Parse the grammar rules
-        const grammar = loadGrammarRules("<dynamic>", agrText, errors);
+        const grammar = loadGrammarRulesNoThrow("<dynamic>", agrText, errors);
 
         if (!grammar) {
             return {

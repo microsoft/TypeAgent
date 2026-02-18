@@ -23,6 +23,9 @@ import {
     populateCache,
     type GrammarTestCase,
 } from "../src/generation/index.js";
+import {
+    loadGrammarRules
+} from "../src/grammarLoader.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -565,10 +568,8 @@ describe("Grammar Generator", () => {
             expect(grammarRule).toContain("$(deviceName:MusicDevice)");
 
             // Try to compile the rule to verify it's valid
-            const { loadGrammarRules } = await import("action-grammar");
-
             try {
-                const grammar = loadGrammarRules("player", grammarRule, []);
+                const grammar = loadGrammarRules("player", grammarRule);
                 expect(grammar).toBeDefined();
                 expect(grammar?.rules.length).toBeGreaterThan(0);
             } catch (error: any) {

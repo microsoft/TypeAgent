@@ -14,6 +14,7 @@ import {
     parseGrammarRules,
     ValueNode,
 } from "./grammarRuleParser.js";
+import { getLineCol } from "./utils.js";
 
 export type FileLoader = {
     resolvePath: (name: string, ref?: string) => string;
@@ -21,38 +22,34 @@ export type FileLoader = {
     readContent: (fullPath: string) => string;
 };
 
-type DefinitionMap = Map<
-    string,
-    {
-        rules: Rule[];
-        pos: number | undefined;
-        grammarRules?: GrammarRule[];
-        hasValue: boolean;
-    }
->;
-
-type GrammarCompileResult = {
-    grammar: Grammar;
-    errors: GrammarCompileError[];
-    warnings: GrammarCompileError[];
+type DefinitionRecord = {
+    rules: Rule[];
+    pos: number | undefined;
+    grammarRules?: GrammarRule[];
+    hasValue: boolean;
 };
 
-export type GrammarCompileError = {
+type CompletedDefinitionRecord = DefinitionRecord & {
+    grammarRules: GrammarRule[];
+};
+type DefinitionMap = Map<string, DefinitionRecord>;
+
+type GrammarCompileError = {
     message: string;
-    displayPath: string;
     definition?: string | undefined;
     pos?: number | undefined;
 };
 
 type CompileContext = {
     grammarFileMap: Map<string, CompileContext>;
+    content: string;
     displayPath: string;
     ruleDefMap: DefinitionMap;
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     importedTypeNames: Set<string>; // Type names imported from .ts files
     currentDefinition?: string | undefined;
-    errors: Omit<GrammarCompileError, "displayPath">[];
-    warnings: Omit<GrammarCompileError, "displayPath">[];
+    errors: GrammarCompileError[];
+    warnings: GrammarCompileError[];
 };
 
 function createImportCompileContext(
@@ -73,6 +70,7 @@ function createImportCompileContext(
     const result = parseGrammarRules(displayPath, content);
     const importContext = createCompileContext(
         grammarFileMap,
+        content,
         displayPath,
         fullPath,
         fileLoader,
@@ -84,6 +82,7 @@ function createImportCompileContext(
 
 function createCompileContext(
     grammarFileMap: Map<string, CompileContext>,
+    content: string,
     displayPath: string,
     fullPath: string,
     fileUtils: FileLoader | undefined,
@@ -100,6 +99,7 @@ function createCompileContext(
     // This prevents infinite recursion on circular dependencies
     const context: CompileContext = {
         grammarFileMap,
+        content,
         displayPath,
         ruleDefMap,
         importedRuleMap,
@@ -180,26 +180,31 @@ function createCompileContext(
 }
 
 export function compileGrammar(
-    relativePath: string,
+    displayPath: string,
+    content: string,
     fullPath: string,
     fileUtils: FileLoader | undefined,
     definitions: RuleDefinition[],
     start: string,
+    startValueRequired: boolean,
+    errors: string[],
+    warnings?: string[],
     imports?: ImportStatement[],
-): GrammarCompileResult {
+): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
         grammarFileMap,
-        relativePath,
+        content,
+        displayPath,
         fullPath,
         fileUtils,
         definitions,
         imports,
     );
 
-    const grammar = { rules: createNamedGrammarRules(context, start) };
+    const { grammarRules, hasValue } = createNamedGrammarRules(context, start);
 
-    if (context.ruleDefMap.get(start)?.hasValue !== true) {
+    if (startValueRequired && !hasValue) {
         context.errors.push({
             message: `Start rule '<${start}>' does not produce a value.`,
             definition: start,
@@ -215,28 +220,35 @@ export function compileGrammar(
         }
     }
 
-    const errors: GrammarCompileError[] = [];
-    const warnings: GrammarCompileError[] = [];
     for (const [, compileContext] of context.grammarFileMap) {
         errors.push(
-            ...compileContext.errors.map((e) => ({
-                ...e,
-                displayPath: compileContext.displayPath,
-            })),
+            ...convertCompileError(
+                compileContext,
+                "error",
+                compileContext.errors,
+            ),
         );
-        warnings.push(
-            ...compileContext.warnings.map((w) => ({
-                ...w,
-                displayPath: compileContext.displayPath,
-            })),
+        warnings?.push(
+            ...convertCompileError(
+                compileContext,
+                "warning",
+                compileContext.warnings,
+            ),
         );
     }
+    return { rules: grammarRules };
+}
 
-    return {
-        grammar,
-        errors,
-        warnings,
-    };
+function convertCompileError(
+    compileContext: CompileContext,
+    type: "error" | "warning",
+    errors: GrammarCompileError[],
+) {
+    const { content, displayPath } = compileContext;
+    return errors.map((e) => {
+        const lineCol = getLineCol(content, e.pos ?? 0);
+        return `${displayPath}(${lineCol.line},${lineCol.col}): ${type}: ${e.message}${e.definition ? ` in definition '<${e.definition}>'` : ""}`;
+    });
 }
 
 const emptyRecord = {
@@ -288,7 +300,7 @@ function createNamedGrammarRules(
     referencePosition?: number,
     referenceVariable?: string,
     referenceContext: CompileContext = context,
-): GrammarRule[] {
+): CompletedDefinitionRecord {
     const record = context.ruleDefMap.get(name);
     if (record === undefined) {
         // Check if this rule name is imported from a grammar file
@@ -300,7 +312,7 @@ function createNamedGrammarRules(
                 pos: referencePosition,
             });
             context.ruleDefMap.set(name, emptyRecord);
-            return emptyRecord.grammarRules;
+            return emptyRecord;
         }
         return createNamedGrammarRules(
             importedContext,
@@ -329,7 +341,7 @@ function createNamedGrammarRules(
             pos: record.pos,
         });
     }
-    return record.grammarRules;
+    return record as CompletedDefinitionRecord;
 }
 
 function createGrammarRules(
@@ -354,6 +366,7 @@ function createGrammarRule(
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
     let variableCount = 0;
+    let nestedValue = false;
     for (const expr of expressions) {
         switch (expr.type) {
             case "string": {
@@ -367,7 +380,7 @@ function createGrammarRule(
             }
             case "variable": {
                 variableCount++;
-                const { name, typeName, ruleReference, ruleRefPos, pos } = expr;
+                const { name, refName, ruleReference, refPos, pos } = expr;
                 // Check for duplicate variable definition
                 if (availableVariables.has(name)) {
                     context.errors.push({
@@ -378,20 +391,20 @@ function createGrammarRule(
                 }
                 availableVariables.add(name);
                 if (ruleReference) {
-                    const rules = createNamedGrammarRules(
+                    const { grammarRules } = createNamedGrammarRules(
                         context,
-                        typeName,
-                        ruleRefPos,
+                        refName,
+                        refPos,
                         name,
                     );
                     parts.push({
                         type: "rules",
-                        rules,
+                        rules: grammarRules,
                         variable: name,
-                        name: typeName,
+                        name: refName,
                         optional: expr.optional,
                     });
-                } else if (typeName === "number") {
+                } else if (refName === "number") {
                     parts.push({
                         type: "number",
                         variable: name,
@@ -402,19 +415,19 @@ function createGrammarRule(
                     // All non-built-in types must be explicitly imported
                     // Built-in types: string, wildcard, word, number
                     const isBuiltInType =
-                        typeName === "string" ||
-                        typeName === "wildcard" ||
-                        typeName === "word";
+                        refName === "string" ||
+                        refName === "wildcard" ||
+                        refName === "word";
                     if (!isBuiltInType) {
                         const isImportedType =
-                            context.importedTypeNames.has(typeName) ||
+                            context.importedTypeNames.has(refName) ||
                             context.importedTypeNames.has("*");
 
                         if (!isImportedType) {
                             context.errors.push({
-                                message: `Undefined type '${typeName}' in variable '${name}'`,
+                                message: `Undefined type '${refName}' in variable '${name}'`,
                                 definition: context.currentDefinition,
-                                pos: ruleRefPos,
+                                pos: refPos,
                             });
                         }
                     }
@@ -423,26 +436,28 @@ function createGrammarRule(
                         type: "wildcard",
                         variable: name,
                         optional: expr.optional,
-                        typeName,
+                        typeName: refName,
                     });
                 }
                 break;
             }
             case "ruleReference":
+                const { grammarRules, hasValue } = createNamedGrammarRules(
+                    context,
+                    expr.name,
+                    expr.pos,
+                );
+                nestedValue = hasValue;
                 parts.push({
                     type: "rules",
-                    rules: createNamedGrammarRules(
-                        context,
-                        expr.name,
-                        expr.pos,
-                    ),
+                    rules: grammarRules,
                     name: expr.name,
                 });
                 break;
             case "rules": {
                 const { rules, optional } = expr;
                 const grammarRules: GrammarRule[] = [];
-                createGrammarRules(context, rules, grammarRules);
+                nestedValue = createGrammarRules(context, rules, grammarRules);
                 parts.push({
                     type: "rules",
                     rules: grammarRules,
@@ -477,6 +492,6 @@ function createGrammarRule(
         hasValue:
             value !== undefined ||
             variableCount === 1 ||
-            (variableCount === 0 && parts.length === 1),
+            (variableCount === 0 && parts.length === 1 && nestedValue),
     };
 }

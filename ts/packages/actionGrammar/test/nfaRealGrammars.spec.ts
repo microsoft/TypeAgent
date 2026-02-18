@@ -4,7 +4,10 @@
 import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
-import { loadGrammarRules } from "../src/grammarLoader.js";
+import {
+    loadGrammarRules,
+    loadGrammarRulesNoThrow,
+} from "../src/grammarLoader.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA, printNFA, printMatchResult } from "../src/nfaInterpreter.js";
 
@@ -32,7 +35,7 @@ describe("NFA with Real Grammars", () => {
             const content = fs.readFileSync(playerGrammarPath, "utf-8");
 
             const errors: string[] = [];
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "playerSchema.agr",
                 content,
                 errors,
@@ -426,7 +429,7 @@ describe("NFA with Real Grammars", () => {
             const content = fs.readFileSync(calendarGrammarPath, "utf-8");
 
             const errors: string[] = [];
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "calendarSchema.agr",
                 content,
                 errors,

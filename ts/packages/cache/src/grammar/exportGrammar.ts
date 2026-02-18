@@ -189,7 +189,7 @@ function convertConstruction(
                 expressions.push({
                     type: "variable",
                     name: variableName,
-                    typeName: ruleDef.name,
+                    refName: ruleDef.name,
                     ruleReference: true,
                 });
             } else {
@@ -222,7 +222,7 @@ function convertConstruction(
             expressions.push({
                 type: "variable",
                 name: variableName,
-                typeName: "string",
+                refName: "string",
                 ruleReference: false,
             });
         }

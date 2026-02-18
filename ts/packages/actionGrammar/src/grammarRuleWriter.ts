@@ -120,12 +120,10 @@ function writeExpression(
             case "variable":
                 result.push("$(");
                 result.push(expr.name);
-                if (expr.typeName !== "string") {
+                if (expr.refName !== "string") {
                     result.push(":");
                     result.push(
-                        expr.ruleReference
-                            ? `<${expr.typeName}>`
-                            : expr.typeName,
+                        expr.ruleReference ? `<${expr.refName}>` : expr.refName,
                     );
                 }
                 result.push(expr.optional ? ")?" : ")");

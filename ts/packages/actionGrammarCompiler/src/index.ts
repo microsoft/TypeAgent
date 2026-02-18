@@ -4,7 +4,7 @@
 import { Command, Flags } from "@oclif/core";
 import path from "node:path";
 import fs from "node:fs";
-import { grammarToJson, loadGrammarRules } from "action-grammar";
+import { grammarToJson, loadGrammarRulesNoThrow } from "action-grammar";
 
 export default class Compile extends Command {
     static description = "Compile action schema files";
@@ -28,11 +28,12 @@ export default class Compile extends Command {
 
         const errors: string[] = [];
         const warnings: string[] = [];
-        const grammar = loadGrammarRules(
+        const grammar = loadGrammarRulesNoThrow(
             flags.input,
             undefined,
             errors,
             warnings,
+            { startValueRequired: true },
         );
 
         if (grammar === undefined) {

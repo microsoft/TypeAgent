@@ -65,7 +65,7 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             expect(grammar).toBeDefined();
 
             // Create AgentCache
@@ -76,7 +76,7 @@ describe("Grammar Integration", () => {
             );
 
             // Add grammar to cache's internal store
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             // Test matching
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
@@ -103,12 +103,8 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const staticGrammar = loadGrammarRules(
-                "player",
-                staticGrammarText,
-                [],
-            );
-            const nfa = compileGrammarToNFA(staticGrammar!, "player");
+            const staticGrammar = loadGrammarRules("player", staticGrammarText);
+            const nfa = compileGrammarToNFA(staticGrammar, "player");
 
             // Create AgentCache and AgentGrammarRegistry
             const cache = new AgentCache(
@@ -119,8 +115,8 @@ describe("Grammar Integration", () => {
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
             // Add static grammar to both stores
-            cache.grammarStore.addGrammar("player", staticGrammar!);
-            agentGrammarRegistry.registerAgent("player", staticGrammar!, nfa);
+            cache.grammarStore.addGrammar("player", staticGrammar);
+            agentGrammarRegistry.registerAgent("player", staticGrammar, nfa);
 
             // Add dynamic rule to AgentGrammarRegistry
             const dynamicRule = `@ <Start> = <pause>
@@ -181,12 +177,8 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const staticGrammar = loadGrammarRules(
-                "player",
-                staticGrammarText,
-                [],
-            );
-            const nfa = compileGrammarToNFA(staticGrammar!, "player");
+            const staticGrammar = loadGrammarRules("player", staticGrammarText);
+            const nfa = compileGrammarToNFA(staticGrammar, "player");
 
             const cache = new AgentCache(
                 "test",
@@ -195,8 +187,8 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", staticGrammar!);
-            agentGrammarRegistry.registerAgent("player", staticGrammar!, nfa);
+            cache.grammarStore.addGrammar("player", staticGrammar);
+            agentGrammarRegistry.registerAgent("player", staticGrammar, nfa);
 
             cache.configureGrammarGeneration(
                 agentGrammarRegistry,
@@ -275,12 +267,8 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const staticGrammar = loadGrammarRules(
-                "player",
-                staticGrammarText,
-                [],
-            );
-            const nfa = compileGrammarToNFA(staticGrammar!, "player");
+            const staticGrammar = loadGrammarRules("player", staticGrammarText);
+            const nfa = compileGrammarToNFA(staticGrammar, "player");
 
             const cache = new AgentCache(
                 "test",
@@ -289,8 +277,8 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", staticGrammar!);
-            agentGrammarRegistry.registerAgent("player", staticGrammar!, nfa);
+            cache.grammarStore.addGrammar("player", staticGrammar);
+            agentGrammarRegistry.registerAgent("player", staticGrammar, nfa);
 
             // Load persisted store and merge rules (simulating setupGrammarGeneration)
             const loadedStore = new PersistedGrammarStore();
@@ -388,7 +376,6 @@ describe("Grammar Integration", () => {
         track: $(track)
     }
 }`,
-                [],
             );
             const calendarGrammar = loadGrammarRules(
                 "calendar",
@@ -399,7 +386,6 @@ describe("Grammar Integration", () => {
         event: $(event)
     }
 }`,
-                [],
             );
 
             const cache = new AgentCache(
@@ -409,18 +395,18 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", playerGrammar!);
-            cache.grammarStore.addGrammar("calendar", calendarGrammar!);
+            cache.grammarStore.addGrammar("player", playerGrammar);
+            cache.grammarStore.addGrammar("calendar", calendarGrammar);
 
             agentGrammarRegistry.registerAgent(
                 "player",
-                playerGrammar!,
-                compileGrammarToNFA(playerGrammar!, "player"),
+                playerGrammar,
+                compileGrammarToNFA(playerGrammar, "player"),
             );
             agentGrammarRegistry.registerAgent(
                 "calendar",
-                calendarGrammar!,
-                compileGrammarToNFA(calendarGrammar!, "calendar"),
+                calendarGrammar,
+                compileGrammarToNFA(calendarGrammar, "calendar"),
             );
 
             // Load and merge persisted rules
@@ -498,11 +484,7 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const staticGrammar = loadGrammarRules(
-                "player",
-                staticGrammarText,
-                [],
-            );
+            const staticGrammar = loadGrammarRules("player", staticGrammarText);
 
             const cache = new AgentCache(
                 "test",
@@ -511,11 +493,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", staticGrammar!);
+            cache.grammarStore.addGrammar("player", staticGrammar);
             agentGrammarRegistry.registerAgent(
                 "player",
-                staticGrammar!,
-                compileGrammarToNFA(staticGrammar!, "player"),
+                staticGrammar,
+                compileGrammarToNFA(staticGrammar, "player"),
             );
 
             // Add dynamic rule for simple "pause" without "music"
@@ -561,7 +543,6 @@ describe("Grammar Integration", () => {
         track: $(track)
     }
 }`,
-                [],
             );
             const calendarGrammar = loadGrammarRules(
                 "calendar",
@@ -572,7 +553,6 @@ describe("Grammar Integration", () => {
         event: $(event)
     }
 }`,
-                [],
             );
 
             const cache = new AgentCache(
@@ -580,8 +560,8 @@ describe("Grammar Integration", () => {
                 mockExplainerFactory,
                 undefined,
             );
-            cache.grammarStore.addGrammar("player", playerGrammar!);
-            cache.grammarStore.addGrammar("calendar", calendarGrammar!);
+            cache.grammarStore.addGrammar("player", playerGrammar);
+            cache.grammarStore.addGrammar("calendar", calendarGrammar);
 
             const playerKeys = cache.getNamespaceKeys(["player"], undefined);
             const calendarKeys = cache.getNamespaceKeys(
@@ -628,7 +608,7 @@ describe("Grammar Integration", () => {
         track: $(track)
     }
 }`;
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
 
             const cache = new AgentCache(
                 "test",
@@ -637,11 +617,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
             agentGrammarRegistry.registerAgent(
                 "player",
-                grammar!,
-                compileGrammarToNFA(grammar!, "player"),
+                grammar,
+                compileGrammarToNFA(grammar, "player"),
             );
 
             // Configure with NFA
@@ -666,14 +646,14 @@ describe("Grammar Integration", () => {
         track: $(track)
     }
 }`;
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
 
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             // Configure with completionBased (no AgentGrammarRegistry)
             cache.configureGrammarGeneration(undefined, undefined, false);
@@ -703,7 +683,7 @@ describe("Grammar Integration", () => {
     actionName: "stop",
     parameters: {}
 }`;
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
@@ -711,11 +691,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
             agentGrammarRegistry.registerAgent(
                 "player",
-                grammar!,
-                compileGrammarToNFA(grammar!, "player"),
+                grammar,
+                compileGrammarToNFA(grammar, "player"),
             );
 
             // Configure with NFA
@@ -753,14 +733,14 @@ describe("Grammar Integration", () => {
     actionName: "pause",
     parameters: {}
 }`;
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
 
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             // Configure with completion-based (no NFA registry)
             cache.configureGrammarGeneration(undefined, undefined, false);
@@ -789,7 +769,7 @@ describe("Grammar Integration", () => {
         artist: $(artist)
     }
 }`;
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
@@ -797,11 +777,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
             agentGrammarRegistry.registerAgent(
                 "player",
-                grammar!,
-                compileGrammarToNFA(grammar!, "player"),
+                grammar,
+                compileGrammarToNFA(grammar, "player"),
             );
 
             // Configure with NFA
@@ -850,7 +830,7 @@ describe("Grammar Integration", () => {
         track: $(track)
     }
 }`;
-            const grammar = loadGrammarRules("player", staticGrammarText, []);
+            const grammar = loadGrammarRules("player", staticGrammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
@@ -861,11 +841,11 @@ describe("Grammar Integration", () => {
 
             await persistedStore.newStore(grammarStoreFile);
 
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
             agentGrammarRegistry.registerAgent(
                 "player",
-                grammar!,
-                compileGrammarToNFA(grammar!, "player"),
+                grammar,
+                compileGrammarToNFA(grammar, "player"),
             );
 
             // Use real player schema file from the agents package
@@ -1026,7 +1006,7 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const grammar1 = loadGrammarRules("test1", grammar1Text, []);
+            const grammar1 = loadGrammarRules("test1", grammar1Text);
 
             const cache = new AgentCache(
                 "test",
@@ -1035,11 +1015,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("test", grammar1!);
+            cache.grammarStore.addGrammar("test", grammar1);
             agentGrammarRegistry.registerAgent(
                 "test",
-                grammar1!,
-                compileGrammarToNFA(grammar1!, "test"),
+                grammar1,
+                compileGrammarToNFA(grammar1, "test"),
             );
 
             const agent = agentGrammarRegistry.getAgent("test");
@@ -1101,7 +1081,7 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const grammar1 = loadGrammarRules("player", staticGrammar, []);
+            const grammar1 = loadGrammarRules("player", staticGrammar);
 
             const cache = new AgentCache(
                 "test",
@@ -1110,11 +1090,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", grammar1!);
+            cache.grammarStore.addGrammar("player", grammar1);
             agentGrammarRegistry.registerAgent(
                 "player",
-                grammar1!,
-                compileGrammarToNFA(grammar1!, "player"),
+                grammar1,
+                compileGrammarToNFA(grammar1, "player"),
             );
 
             const agent = agentGrammarRegistry.getAgent("player");
@@ -1179,7 +1159,7 @@ describe("Grammar Integration", () => {
 }
             `.trim();
 
-            const grammar1 = loadGrammarRules("home", specificGrammar, []);
+            const grammar1 = loadGrammarRules("home", specificGrammar);
 
             const cache = new AgentCache(
                 "test",
@@ -1188,11 +1168,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("home", grammar1!);
+            cache.grammarStore.addGrammar("home", grammar1);
             agentGrammarRegistry.registerAgent(
                 "home",
-                grammar1!,
-                compileGrammarToNFA(grammar1!, "home"),
+                grammar1,
+                compileGrammarToNFA(grammar1, "home"),
             );
 
             const agent = agentGrammarRegistry.getAgent("home");
@@ -1234,7 +1214,7 @@ describe("Grammar Integration", () => {
 @ <cmd3> = command three -> { actionName: "three", parameters: {} }
             `.trim();
 
-            const g1 = loadGrammarRules("test", grammar1, []);
+            const g1 = loadGrammarRules("test", grammar1);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
@@ -1242,11 +1222,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("test", g1!);
+            cache.grammarStore.addGrammar("test", g1);
             agentGrammarRegistry.registerAgent(
                 "test",
-                g1!,
-                compileGrammarToNFA(g1!, "test"),
+                g1,
+                compileGrammarToNFA(g1, "test"),
             );
 
             const agent = agentGrammarRegistry.getAgent("test");
@@ -1289,7 +1269,7 @@ describe("Grammar Integration", () => {
 @ <single> = stop -> { actionName: "stopShort", parameters: {} }
             `.trim();
 
-            const g1 = loadGrammarRules("player", multiToken, []);
+            const g1 = loadGrammarRules("player", multiToken);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
@@ -1297,11 +1277,11 @@ describe("Grammar Integration", () => {
             );
             const agentGrammarRegistry = new AgentGrammarRegistry();
 
-            cache.grammarStore.addGrammar("player", g1!);
+            cache.grammarStore.addGrammar("player", g1);
             agentGrammarRegistry.registerAgent(
                 "player",
-                g1!,
-                compileGrammarToNFA(g1!, "player"),
+                g1,
+                compileGrammarToNFA(g1, "player"),
             );
 
             const agent = agentGrammarRegistry.getAgent("player");
