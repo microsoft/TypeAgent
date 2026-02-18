@@ -16,6 +16,7 @@ import {
     BrowserClient,
     AgentWebSocketServer,
 } from "./agentWebSocketServer.mjs";
+import { getClientType } from "@typeagent/agent-server-protocol";
 
 export type BrowserActionContext = {
     clientBrowserControl?: BrowserControl | undefined;
@@ -60,6 +61,33 @@ export function getBrowserControl(agentContext: BrowserActionContext) {
         );
     }
     return browserControl;
+}
+
+/**
+ * Get the appropriate browser control for a specific request.
+ *
+ * Uses the requestId's connectionId to look up which client initiated
+ * the request. Extension clients route to the external browser control
+ * (Chrome native); shell clients route to the inline browser control.
+ *
+ * Falls back to the session-wide getBrowserControl() if the client type
+ * is unknown or if the preferred control is not available.
+ */
+export function getBrowserControlForRequest(
+    agentContext: BrowserActionContext,
+    connectionId: string | undefined,
+): BrowserControl {
+    if (connectionId) {
+        const clientType = getClientType(connectionId);
+        if (clientType === "extension" && agentContext.externalBrowserControl) {
+            return agentContext.externalBrowserControl.control;
+        }
+        if (clientType === "shell" && agentContext.clientBrowserControl) {
+            return agentContext.clientBrowserControl;
+        }
+    }
+    // Fallback to session-wide default
+    return getBrowserControl(agentContext);
 }
 
 export async function saveSettings(

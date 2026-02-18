@@ -346,6 +346,12 @@ async function initialize() {
         }
     });
 
+    ipcMain.on("open-url-external", (_event, url: string) => {
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            shell.openExternal(url);
+        }
+    });
+
     await initializePen(triggerRecognitionOnce);
     initializeSearchMenuUI();
     initializeSpeech();

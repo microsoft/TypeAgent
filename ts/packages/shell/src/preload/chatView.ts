@@ -131,6 +131,9 @@ const api: ClientAPI = {
     openUrlInBrowserTab: (url: string) => {
         ipcRenderer.send("open-url-in-browser-tab", url);
     },
+    openUrlExternal: (url: string) => {
+        ipcRenderer.send("open-url-external", url);
+    },
 
     searchMenuUpdate: (id: number, data) => {
         ipcRenderer.send("search-menu-update", id, data);

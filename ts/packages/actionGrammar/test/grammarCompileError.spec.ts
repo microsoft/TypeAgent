@@ -32,9 +32,14 @@ describe("Grammar Compiler", () => {
         });
 
         it("Variable reference to non-value rule", () => {
+            // Note: Single-literal rules (even multi-word like "please pause") now implicitly
+            // produce a value (the literal string itself). Rules with multiple parts
+            // (e.g., two rule references) do NOT produce an implicit value.
             const grammarText = `
             @<Start> = $(x:<Pause>)
-            @<Pause> = $(x:string) $(y:string) wait
+            @<Pause> = <Wait> <Stop>
+            @<Wait> = wait
+            @<Stop> = stop
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);

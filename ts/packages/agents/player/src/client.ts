@@ -52,6 +52,7 @@ import {
     addTracksToPlaylist,
     getRecommendationsFromTrackCollection,
     getRecentlyPlayed,
+    limitMax,
 } from "./endpoints.js";
 import { htmlStatus, printStatus } from "./playback.js";
 import { SpotifyService } from "./service.js";
@@ -282,136 +283,73 @@ async function htmlTrackNames(
         return createNotFoundActionResult("tracks");
     }
 
-    // Use HTML for large lists (>10 tracks) to enable scrolling
-    const useHtml = selectedTracks.length > 10;
+    // Enable scrolling for lists with 3+ tracks
+    const scrollClass = selectedTracks.length >= 3 ? " scroll_enabled" : "";
+    const displayContent: DisplayContent = {
+        type: "html",
+        content: `<div class='track-list${scrollClass}'><h3>${headText}</h3><ol>\n`,
+    };
+    actionResult.displayContent = displayContent;
 
-    if (useHtml) {
-        // HTML implementation for large lists with scrolling
-        const displayContent: DisplayContent = {
-            type: "html",
-            content: `<div class='track-list scroll_enabled'><div>${headText}...</div><ol>\n`,
-        };
-        actionResult.displayContent = displayContent;
-
-        let prevUrl = "";
-        let entCount = 0;
-        for (const track of selectedTracks) {
-            if (entCount < 1) {
+    let prevUrl = "";
+    let entCount = 0;
+    for (const track of selectedTracks) {
+        if (entCount < 1) {
+            actionResult.entities.push({
+                name: track.name,
+                type: ["track", "song"],
+                uniqueId: track.id,
+            });
+            for (const artist of track.artists) {
                 actionResult.entities.push({
-                    name: track.name,
-                    type: ["track", "song"],
-                    uniqueId: track.id,
+                    name: artist.name,
+                    type: ["artist"],
+                    uniqueId: artist.id,
                 });
-                for (const artist of track.artists) {
-                    actionResult.entities.push({
-                        name: artist.name,
-                        type: ["artist"],
-                        uniqueId: artist.id,
-                    });
-                }
-                actionResult.entities.push({
-                    name: track.album.name,
-                    type: ["album"],
-                    uniqueId: track.album.id,
-                });
-                entCount++;
             }
-            const artistsPrefix =
-                track.artists.length > 1 ? "   Artists: " : "   Artist: ";
-            const artists =
-                artistsPrefix +
-                track.artists.map((artist) => artist.name).join(", ");
-            if (
-                track.album.images.length > 0 &&
-                track.album.images[0].url &&
-                track.album.images[0].url != prevUrl
-            ) {
-                displayContent.content += `  <li><div class='track-album-cover-container'>\n <div class='track-info'> <div class='track-title'>${track.name}</div>\n`;
-                displayContent.content += `    <div class='track-artist'>${artists}</div>`;
-                displayContent.content += `    <div>Album: ${track.album.name}</div></div>\n`;
-                displayContent.content += `  <img src='${track.album.images[0].url}' alt='album cover' class='track-album-cover' />\n`;
-                prevUrl = track.album.images[0].url;
-                displayContent.content += `  </div></li>\n`;
-            } else {
-                displayContent.content += `  <li><span class='track-title'>${track.name}</span>`;
-                displayContent.content += `    <div class='track-artist'>${artists}</div>`;
-                displayContent.content += `    <div>Album: ${track.album.name}</div>\n`;
-                displayContent.content += `  </li>\n`;
-            }
+            actionResult.entities.push({
+                name: track.album.name,
+                type: ["album"],
+                uniqueId: track.album.id,
+            });
+            entCount++;
         }
-        displayContent.content += "</ol></div>";
+        const artistsPrefix =
+            track.artists.length > 1 ? "   Artists: " : "   Artist: ";
+        const artists =
+            artistsPrefix +
+            track.artists.map((artist) => artist.name).join(", ");
+        if (
+            track.album.images.length > 0 &&
+            track.album.images[0].url &&
+            track.album.images[0].url != prevUrl
+        ) {
+            displayContent.content += `  <li><div class='track-album-cover-container'>\n <div class='track-info'> <div class='track-title'>${track.name}</div>\n`;
+            displayContent.content += `    <div class='track-artist'>${artists}</div>`;
+            displayContent.content += `    <div>Album: ${track.album.name}</div></div>\n`;
+            displayContent.content += `  <img src='${track.album.images[0].url}' alt='album cover' class='track-album-cover' />\n`;
+            prevUrl = track.album.images[0].url;
+            displayContent.content += `  </div></li>\n`;
+        } else {
+            displayContent.content += `  <li><span class='track-title'>${track.name}</span>`;
+            displayContent.content += `    <div class='track-artist'>${artists}</div>`;
+            displayContent.content += `    <div>Album: ${track.album.name}</div>\n`;
+            displayContent.content += `  </li>\n`;
+        }
+    }
+    displayContent.content += "</ol></div>";
+
+    if (selectedTracks.length === 1) {
+        const track = selectedTracks[0];
+        const litArtistsPrefix =
+            track.artists.length > 1 ? "artists: " : "artist ";
+        const litArtists =
+            litArtistsPrefix +
+            track.artists.map((artist) => artist.name).join(", ");
+        actionResult.historyText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
+    } else {
         actionResult.historyText =
             "Updated the current track list with the numbered list of tracks on the screen";
-    } else {
-        // Markdown implementation for small lists (≤10 tracks) with embedded album art
-        const displayContent: DisplayContent = {
-            type: "markdown",
-            content: selectedTracks.length > 1 ? `### ${headText}\n\n` : "",
-        };
-        actionResult.displayContent = displayContent;
-
-        let trackNum = 1;
-        let prevUrl = "";
-        for (const track of selectedTracks) {
-            if (trackNum === 1) {
-                actionResult.entities.push({
-                    name: track.name,
-                    type: ["track", "song"],
-                    uniqueId: track.id,
-                });
-                for (const artist of track.artists) {
-                    actionResult.entities.push({
-                        name: artist.name,
-                        type: ["artist"],
-                        uniqueId: artist.id,
-                    });
-                }
-                actionResult.entities.push({
-                    name: track.album.name,
-                    type: ["album"],
-                    uniqueId: track.album.id,
-                });
-            }
-
-            const artistsLabel =
-                track.artists.length > 1 ? "Artists" : "Artist";
-            const artistsList = track.artists
-                .map((artist) => artist.name)
-                .join(", ");
-
-            if (selectedTracks.length > 1) {
-                displayContent.content += `${trackNum}. **${track.name}**\n`;
-            } else {
-                displayContent.content += `**${track.name}**\n`;
-            }
-            displayContent.content += `   ${artistsLabel}: ${artistsList}\n`;
-            displayContent.content += `   Album: ${track.album.name}\n`;
-
-            if (
-                track.album.images.length > 0 &&
-                track.album.images[0].url &&
-                track.album.images[0].url !== prevUrl
-            ) {
-                displayContent.content += `   <img src="${track.album.images[0].url}" alt="album cover" style="width: 100px; height: 100px; margin-top: 8px;" />\n`;
-                prevUrl = track.album.images[0].url;
-            }
-
-            displayContent.content += "\n";
-            trackNum++;
-        }
-
-        if (selectedTracks.length === 1) {
-            const track = selectedTracks[0];
-            const litArtistsPrefix =
-                track.artists.length > 1 ? "artists: " : "artist ";
-            const litArtists =
-                litArtistsPrefix +
-                track.artists.map((artist) => artist.name).join(", ");
-            actionResult.historyText = `Now playing: ${track.name} from album ${track.album.name} with ${litArtists}`;
-        } else {
-            actionResult.historyText =
-                "Updated the current track list with the numbered list of tracks on the screen";
-        }
     }
 
     return actionResult;
@@ -514,7 +452,7 @@ export async function searchTracks(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: 50,
+        limit: limitMax,
         offset: 0,
     };
     const data = await search(query, context.service);
@@ -530,7 +468,7 @@ export async function searchForPlaylists(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "playlist",
-        limit: 20,
+        limit: limitMax,
         offset: 0,
     };
     const data = await search(query, context.service);

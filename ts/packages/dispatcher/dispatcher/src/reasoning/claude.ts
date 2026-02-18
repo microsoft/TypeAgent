@@ -190,17 +190,9 @@ function generateRequestId(): string {
  * Execute reasoning action without planning (standard mode)
  */
 async function executeReasoningWithoutPlanning(
-    action: TypeAgentAction<ReasoningAction>,
+    originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<any> {
-    const systemContext = context.sessionContext.agentContext;
-    if (systemContext.session.getConfig().execution.reasoning !== "claude") {
-        throw new Error(
-            `Reasoning model is not set to 'claude' for this session.`,
-        );
-    }
-    const originalRequest = action.parameters.originalRequest;
-
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
 
@@ -276,7 +268,7 @@ async function executeReasoningWithoutPlanning(
  * Execute reasoning action with trace capture (no plan execution)
  */
 async function executeReasoningWithTracing(
-    action: TypeAgentAction<ReasoningAction>,
+    originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
@@ -285,10 +277,9 @@ async function executeReasoningWithTracing(
     if (!storage) {
         // No session storage available - fallback to standard reasoning
         debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(action, context);
+        return executeReasoningWithoutPlanning(originalRequest, context);
     }
 
-    const originalRequest = action.parameters.originalRequest;
     const requestId = generateRequestId();
 
     // Create trace collector
@@ -498,7 +489,7 @@ async function executeReasoningWithTracing(
  * Execute reasoning action with planning (Phase 3: plan execution + fallback)
  */
 async function executeReasoningWithPlanning(
-    action: TypeAgentAction<ReasoningAction>,
+    originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<any> {
     const storage = context.sessionContext.sessionStorage;
@@ -506,10 +497,8 @@ async function executeReasoningWithPlanning(
     if (!storage) {
         // No session storage available - fallback to standard reasoning
         debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(action, context);
+        return executeReasoningWithoutPlanning(originalRequest, context);
     }
-
-    const originalRequest = action.parameters.originalRequest;
 
     // Phase 3: Try to find and execute a matching plan
     try {
@@ -604,7 +593,7 @@ async function executeReasoningWithPlanning(
     }
 
     // Fallback: Execute reasoning with tracing
-    return executeReasoningWithTracing(action, context);
+    return executeReasoningWithTracing(originalRequest, context);
 }
 
 /**
@@ -617,15 +606,42 @@ export async function executeReasoningAction(
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
+    if (config.execution.reasoning !== "claude") {
+        throw new Error(
+            `Reasoning model is not set to 'claude' for this session.`,
+        );
+    }
+
+    const request = action.parameters.originalRequest;
+    debug(`Received reasoning request: ${request}`);
 
     // Check if plan reuse is enabled
     const planReuseEnabled = config.execution.planReuse === "enabled";
 
+    return executeReasoning(request, context, {
+        planReuseEnabled,
+        engine: "claude",
+    });
+}
+
+export async function executeReasoning(
+    request: string,
+    context: ActionContext<CommandHandlerContext>,
+    options?: {
+        planReuseEnabled?: boolean; // false by default
+        engine?: "claude"; // default is "claude" for now
+    },
+) {
+    const engine = options?.engine ?? "claude";
+    if (engine !== "claude") {
+        throw new Error(`Unsupported reasoning engine: ${engine}`);
+    }
+    const planReuseEnabled = options?.planReuseEnabled ?? false;
     if (!planReuseEnabled) {
         // Standard reasoning without planning
-        return executeReasoningWithoutPlanning(action, context);
+        return executeReasoningWithoutPlanning(request, context);
     }
 
     // Reasoning with planning (trace capture)
-    return executeReasoningWithPlanning(action, context);
+    return executeReasoningWithPlanning(request, context);
 }

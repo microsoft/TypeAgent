@@ -47,6 +47,7 @@ type CompileContext = {
     ruleDefMap: DefinitionMap;
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     importedTypeNames: Set<string>; // Type names imported from .ts files
+    usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
     currentDefinition?: string | undefined;
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
@@ -94,7 +95,7 @@ function createCompileContext(
     // Build separate sets of imported rule names and type names
     const importedRuleMap = new Map<string, CompileContext>();
     const importedTypeNames = new Set<string>();
-
+    const usedImportedTypes = new Set<string>();
     // Create the context early and add to the map BEFORE processing anything
     // This prevents infinite recursion on circular dependencies
     const context: CompileContext = {
@@ -104,6 +105,7 @@ function createCompileContext(
         ruleDefMap,
         importedRuleMap,
         importedTypeNames,
+        usedImportedTypes,
         errors: [],
         warnings: [],
     };
@@ -236,7 +238,19 @@ export function compileGrammar(
             ),
         );
     }
-    return { rules: grammarRules };
+
+    // Collect all imported .ts types used as variable types across all contexts
+    const usedImportedTypes = new Set<string>();
+    for (const [, compileContext] of context.grammarFileMap) {
+        for (const t of compileContext.usedImportedTypes) {
+            usedImportedTypes.add(t);
+        }
+    }
+
+    return {
+        rules: grammarRules,
+        entities: Array.from(usedImportedTypes),
+    };
 }
 
 function convertCompileError(
@@ -429,6 +443,10 @@ function createGrammarRule(
                                 definition: context.currentDefinition,
                                 pos: refPos,
                             });
+                        } else {
+                            // Track imported .ts types used as variable types.
+                            // These need runtime entity validation (like old "entity" declarations).
+                            context.usedImportedTypes.add(refName);
                         }
                     }
 

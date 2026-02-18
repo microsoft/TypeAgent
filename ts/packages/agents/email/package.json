@@ -24,11 +24,13 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "graph-utils": "workspace:*",
+    "kp": "workspace:*",
     "typeagent": "workspace:*"
   },
   "devDependencies": {

@@ -54,6 +54,7 @@
     "@fluidframework/build-tools": "^0.57.0",
     "@types/node": "^20.17.28",
     "markdown-link-check": "^3.14.2",
+    "prebuild-install": "^7.1.3",
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
@@ -75,7 +76,7 @@
       "exifreader",
       "keytar",
       "koffi",
-      "node-pty",
+      "protobufjs",
       "puppeteer",
       "sharp"
     ],

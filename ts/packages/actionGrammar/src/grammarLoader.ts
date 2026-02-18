@@ -47,9 +47,15 @@ function parseAndCompileGrammar(
         parseResult.imports,
     );
     if (errors.length === 0) {
-        // Add entity declarations to the grammar
-        if (parseResult.entities.length > 0) {
-            grammar.entities = parseResult.entities;
+        // Add entity declarations to the grammar.
+        // This includes both explicit "entity Foo;" declarations and
+        // types imported from .ts files that are used as variable types.
+        // The latter bridges @import with the entity validation system.
+        const allEntities = grammar.entities
+            ? [...parseResult.entities, ...grammar.entities]
+            : parseResult.entities;
+        if (allEntities.length > 0) {
+            grammar.entities = allEntities;
         }
     }
     return grammar;

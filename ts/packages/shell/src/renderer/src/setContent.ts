@@ -305,7 +305,14 @@ export function setContent(
             ) {
                 link.addEventListener("click", (e) => {
                     e.preventDefault(); // Prevent default navigation
-                    if ((window as any).api?.openUrlInBrowserTab) {
+                    const target = link.getAttribute("target");
+                    if (
+                        target === "_system" &&
+                        (window as any).api?.openUrlExternal
+                    ) {
+                        // Open in external system browser
+                        (window as any).api.openUrlExternal(href);
+                    } else if ((window as any).api?.openUrlInBrowserTab) {
                         // Use IPC to open the URL in a new browser tab
                         (window as any).api.openUrlInBrowserTab(href);
                     }

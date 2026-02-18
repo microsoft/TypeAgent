@@ -16,43 +16,131 @@ body {
 }
 
 .dark-mode {
-  background-color: #333;
+  background-color: #1a1a2e;
 
   .action-container {
-    background-color: #222;
+    background-color: #16162a;
   }
 
   .chat-container {
-    background-color: #222;
+    background-color: #16162a;
     .scroll_enabled {
-      background-color: #222;
+      background-color: #16162a;
     }
   }
 
   .replacement-container {
-    background-color: #222;
+    background-color: #16162a;
   }
 
   .chat-input {
-    background-color: #444;
-    border: 1px solid #444;
+    background-color: #2a2a40;
+    border: 1px solid #3a3a50;
+
+    &:focus-within {
+      border-color: #7c3aed;
+      box-shadow: 0 1px 4px rgba(124, 58, 237, 0.2);
+    }
 
     .user-textarea {
-      color: white;
+      color: #e8e8f0;
     }
 
     .chat-input-button {
-      color: white;
+      color: #e8e8f0;
     }
 
     label {
-      color: white;
+      color: #e8e8f0;
     }
 
     .autocomplete-container {
-      background-color: #444;
-      color: white;
+      background-color: #2a2a40;
+      color: #e8e8f0;
     }
+  }
+
+  .chat-message-agent {
+    background-color: #2a2a40;
+  }
+
+  .chat-message-user {
+    background-color: #3b2d63;
+  }
+
+  .chat-message-content {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .chat-message-metrics-agent {
+    background-color: #232338;
+  }
+
+  .chat-message-metrics-user {
+    background-color: #322850;
+  }
+
+  .agent-icon {
+    background-color: #2a2a40;
+  }
+
+  .user-icon {
+    background: #4c1d95;
+    color: #c4b5fd;
+  }
+
+  .chat-timestamp {
+    color: #666;
+  }
+
+  .track-list {
+    h3 {
+      color: #ccc;
+    }
+
+    li {
+      border-bottom-color: rgba(255, 255, 255, 0.06);
+    }
+  }
+
+  .track-title {
+    color: #e8e8f0;
+  }
+
+  .track-artist {
+    color: #999;
+  }
+
+  .track-info div {
+    color: #888;
+  }
+
+  .now-playing-title {
+    color: #e8e8f0;
+  }
+
+  .now-playing-artist {
+    color: #bbb;
+  }
+
+  .now-playing-album {
+    color: #888;
+  }
+
+  .now-playing-times {
+    color: #888;
+  }
+
+  .now-playing-bar {
+    background: #3a3a50;
+  }
+
+  .now-playing-bar-fill {
+    background: #a78bfa;
+  }
+
+  .now-playing-device {
+    color: #666;
   }
 
   .action-text {
@@ -60,11 +148,11 @@ body {
   }
 
   .chat-separator-line {
-    background-color: gray;
+    background-color: #444;
   }
 
   .chat-separator-text {
-    color: gray;
+    color: #666;
   }
 }
 
@@ -218,43 +306,159 @@ body {
 }
 
 .track-list {
-  max-height: 300px;
+  max-height: 350px;
   overflow-y: auto;
   border-radius: 8px;
-  padding-right: 8px;
+  padding-right: 4px;
+
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 6px 0;
+    color: #333;
+  }
+
+  ol {
+    margin: 0;
+    padding-left: 24px;
+    list-style-type: decimal;
+  }
+
+  li {
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
 }
 
 .playlist-list {
-  max-height: 300px;
+  max-height: 350px;
   overflow-y: auto;
   border-radius: 8px;
-  padding-right: 8px;
+  padding-right: 4px;
 }
 
 .playlist-title {
-  color: purple;
+  color: #6b21a8;
+  font-weight: 600;
 }
 
 .track-artist {
-  color: black;
+  color: #555;
+  font-size: 0.9em;
 }
 
 .track-title {
-  color: blue;
+  color: #1a1a1a;
+  font-weight: 600;
 }
 
 .track-album-cover-container {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
 }
 
 .track-info {
-  min-height: 64px;
+  flex: 1;
+  min-width: 0;
+
+  div {
+    font-size: 0.85em;
+    color: #666;
+  }
 }
 
 .track-album-cover {
-  height: 64px;
-  align-self: flex-end;
+  width: 52px;
+  height: 52px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* Now Playing status card */
+.now-playing-card {
+  padding: 4px 0;
+}
+
+.now-playing-top {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.now-playing-art {
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.now-playing-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.now-playing-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1a1a1a;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.now-playing-artist {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 1px;
+}
+
+.now-playing-album {
+  font-size: 12px;
+  color: #888;
+}
+
+.now-playing-progress {
+  margin-top: 10px;
+}
+
+.now-playing-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.now-playing-bar {
+  height: 4px;
+  background: #e5e5e5;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.now-playing-bar-fill {
+  height: 100%;
+  background: #7c3aed;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.now-playing-device {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #aaa;
+}
+
+.now-playing-empty {
+  color: #888;
+  font-style: italic;
 }
 
 .read-only .chat-input {
@@ -277,16 +481,23 @@ body {
 
 .chat-input {
   display: flex;
-  padding: 5px;
+  padding: 6px 8px;
   background-color: @chat-input-bg;
   align-self: flex-end;
-  margin: 10px 10px 10px 10px;
+  margin: 8px 12px 12px 12px;
   width: calc(
-    100% - 20px
+    100% - 24px
   ); // Note: subtracted value should match horizontal margin total from line above
-  border: solid 1px rgb(224, 224, 224);
-  border-radius: 6px;
+  border: solid 1px #e0e0e0;
+  border-radius: 12px;
   position: relative;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.2s ease;
+
+  &:focus-within {
+    border-color: #a78bfa;
+    box-shadow: 0 1px 4px rgba(167, 139, 250, 0.15);
+  }
 }
 
 .chat-input-drag {
@@ -319,30 +530,30 @@ body {
 
 /* Body */
 .chat-message-body {
-  border-radius: 8px;
+  border-radius: 12px;
   margin-bottom: 4px;
 }
 
 .chat-message-user {
   .chat-message-body;
   position: relative;
-  background-color: lavender;
-  margin-right: 30px;
+  background-color: #f0eef5;
+  margin-right: 36px;
 }
 
 .chat-message-agent {
-  left: 30px;
+  margin-left: 36px;
   position: relative;
-  background-color: #d6f3ff;
+  background-color: #f3f4f6;
 }
 
 /* Content */
 .chat-message-content {
-  padding: 6px 15px 6px 15px;
+  padding: 10px 16px;
   word-wrap: break-word;
   overflow-x: auto;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .chat-message-kind-status {
@@ -397,12 +608,12 @@ table.table-message td {
 
 .chat-message-metrics-agent {
   .chat-message-metrics;
-  background-color: #c2edff;
+  background-color: #e8e9eb;
 }
 
 .chat-message-metrics-user {
   .chat-message-metrics;
-  background-color: rgb(150, 150, 202);
+  background-color: #e2e0ec;
 }
 
 /* hidden metrics */
@@ -460,20 +671,21 @@ table.table-message td {
 .chat-timestamp {
   font-size: 10px;
   font-style: normal;
-  color: darkgray;
+  color: #aaa;
   position: relative;
   margin: 4px;
+  letter-spacing: 0.2px;
 }
 
 .chat-timestamp-agent {
   .chat-timestamp;
-  margin-left: 34px;
+  margin-left: 40px;
 }
 
 .chat-timestamp-user {
   .chat-timestamp;
   text-align: end;
-  margin-right: 35px;
+  margin-right: 40px;
 }
 
 .agent-icon {
@@ -482,9 +694,11 @@ table.table-message td {
   border-radius: 15px;
   position: absolute;
   left: 0px;
-  font-size: 20px;
+  font-size: 18px;
   font-style: normal;
   text-align: center;
+  line-height: 30px;
+  background-color: #e8e9eb;
 }
 
 .user-icon {
@@ -493,14 +707,14 @@ table.table-message td {
   border-radius: 15px;
   position: absolute;
   right: 0px;
-  font-size: 20px;
+  font-size: 14px;
   font-style: normal;
   text-align: center;
-  background: plum;
-  color: purple;
-  margin-top: 2px;
-  font-family: sans-serif;
-  font-weight: 300;
+  line-height: 30px;
+  background: #e2dff0;
+  color: #5b4a8a;
+  font-family: inherit;
+  font-weight: 600;
 }
 
 .agent-name {

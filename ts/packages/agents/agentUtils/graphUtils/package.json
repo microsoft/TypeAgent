@@ -40,6 +40,8 @@
     "debug": "^4.4.0",
     "dotenv": "^16.3.1",
     "find-config": "^1.0.0",
+    "googleapis": "^144.0.0",
+    "open": "^10.1.0",
     "proper-lockfile": "^4.1.2",
     "string-compare": "^1.1.2",
     "typeagent": "workspace:*"

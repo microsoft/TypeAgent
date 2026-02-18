@@ -22,6 +22,7 @@ import {
     compileGrammarToNFA,
     loadGrammarRules,
 } from "action-grammar";
+import { describeIf, hasTestKeys } from "test-lib";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -821,172 +822,182 @@ describe("Grammar Integration", () => {
         });
     });
 
-    describe("Grammar Generation via populateCache", () => {
-        it("should generate and add grammar rules from request/action pairs", async () => {
-            const staticGrammarText = `@ <Start> = <play>
+    describeIf(
+        "Grammar Generation via populateCache",
+        () => hasTestKeys(),
+        () => {
+            it("should generate and add grammar rules from request/action pairs", async () => {
+                const staticGrammarText = `@ <Start> = <play>
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
         track: $(track)
     }
 }`;
-            const grammar = loadGrammarRules("player", staticGrammarText);
-            const cache = new AgentCache(
-                "test",
-                mockExplainerFactory,
-                undefined,
-            );
-            const agentGrammarRegistry = new AgentGrammarRegistry();
-            const persistedStore = new PersistedGrammarStore();
-
-            await persistedStore.newStore(grammarStoreFile);
-
-            cache.grammarStore.addGrammar("player", grammar);
-            agentGrammarRegistry.registerAgent(
-                "player",
-                grammar,
-                compileGrammarToNFA(grammar, "player"),
-            );
-
-            // Use real player schema file from the agents package
-            const playerSchemaPath = path.join(
-                __dirname,
-                "../../../agents/player/dist/agent/playerSchema.pas.json",
-            );
-
-            // Verify schema file exists
-            if (!fs.existsSync(playerSchemaPath)) {
-                console.log(
-                    `⚠ Player schema not found at ${playerSchemaPath}`,
+                const grammar = loadGrammarRules("player", staticGrammarText);
+                const cache = new AgentCache(
+                    "test",
+                    mockExplainerFactory,
+                    undefined,
                 );
-                console.log(
-                    "Run 'npm run build' in packages/agents/player to generate the schema",
+                const agentGrammarRegistry = new AgentGrammarRegistry();
+                const persistedStore = new PersistedGrammarStore();
+
+                await persistedStore.newStore(grammarStoreFile);
+
+                cache.grammarStore.addGrammar("player", grammar);
+                agentGrammarRegistry.registerAgent(
+                    "player",
+                    grammar,
+                    compileGrammarToNFA(grammar, "player"),
                 );
-                return; // Skip test if schema not built
-            }
 
-            console.log(`Using player schema: ${playerSchemaPath}`);
+                // Use real player schema file from the agents package
+                const playerSchemaPath = path.join(
+                    __dirname,
+                    "../../../agents/player/dist/agent/playerSchema.pas.json",
+                );
 
-            // Configure with schema path getter
-            cache.configureGrammarGeneration(
-                agentGrammarRegistry,
-                persistedStore,
-                true,
-                (schemaName: string) => playerSchemaPath,
-            );
-
-            const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
-
-            // Before generation, "pause" should not match
-            const matchesBefore = cache.match("pause", { namespaceKeys });
-            expect(matchesBefore.length).toBe(0);
-
-            // Import populateCache dynamically
-            const { populateCache } = await import("action-grammar/generation");
-
-            try {
-                // Generate grammar rule for a new action
-                const genResult = await populateCache({
-                    request: "pause",
-                    schemaName: "player",
-                    action: {
-                        actionName: "pause",
-                        parameters: {},
-                    },
-                    schemaPath: playerSchemaPath,
-                });
-
-                console.log("populateCache result:", genResult);
-
-                // If generation succeeded, add the rule
-                if (genResult.success && genResult.generatedRule) {
-                    await persistedStore.addRule({
-                        schemaName: "player",
-                        grammarText: genResult.generatedRule,
-                    });
-
-                    const agentGrammar =
-                        agentGrammarRegistry.getAgent("player");
-                    const addResult = agentGrammar!.addGeneratedRules(
-                        genResult.generatedRule,
+                // Verify schema file exists
+                if (!fs.existsSync(playerSchemaPath)) {
+                    console.log(
+                        `⚠ Player schema not found at ${playerSchemaPath}`,
                     );
                     console.log(
-                        "addGeneratedRules result:",
-                        JSON.stringify(addResult, null, 2),
+                        "Run 'npm run build' in packages/agents/player to generate the schema",
                     );
-                    if (!addResult.success) {
-                        console.log(
-                            "Failed to add generated rules - this may be expected if the rule format is invalid",
-                        );
-                        // Don't fail test if rule addition fails - focus on validating the generation worked
-                    } else {
-                        console.log(
-                            "✓ Successfully added generated rule to agent grammar",
-                        );
-
-                        cache.syncAgentGrammar("player");
-
-                        // After generation, "pause" should match
-                        const matchesAfter = cache.match("pause", {
-                            namespaceKeys,
-                        });
-                        expect(matchesAfter.length).toBeGreaterThan(0);
-                        expect(
-                            matchesAfter[0].match.actions[0].action.actionName,
-                        ).toBe("pause");
-
-                        console.log(
-                            "✓ Grammar generation and integration successful",
-                        );
-                    }
-                } else {
-                    console.log(
-                        "Grammar generation was rejected:",
-                        genResult.rejectionReason,
-                    );
-                    // Don't fail test if generation was legitimately rejected
+                    return; // Skip test if schema not built
                 }
-            } catch (error: any) {
-                // Let all errors throw so tests fail properly
-                console.error("Grammar generation error:", error.message);
-                throw error;
-            }
-        }, 60000); // 60 second timeout for API call
 
-        it("should handle grammar generation errors gracefully", async () => {
-            // Test that populateCache handles errors gracefully (e.g., invalid schema path)
-            try {
+                console.log(`Using player schema: ${playerSchemaPath}`);
+
+                // Configure with schema path getter
+                cache.configureGrammarGeneration(
+                    agentGrammarRegistry,
+                    persistedStore,
+                    true,
+                    (schemaName: string) => playerSchemaPath,
+                );
+
+                const namespaceKeys = cache.getNamespaceKeys(
+                    ["player"],
+                    undefined,
+                );
+
+                // Before generation, "pause" should not match
+                const matchesBefore = cache.match("pause", { namespaceKeys });
+                expect(matchesBefore.length).toBe(0);
+
+                // Import populateCache dynamically
                 const { populateCache } = await import(
                     "action-grammar/generation"
                 );
 
-                const result = await populateCache({
-                    request: "test request",
-                    schemaName: "test",
-                    action: {
-                        actionName: "testAction",
-                        parameters: {},
-                    },
-                    schemaPath: "/nonexistent/mock/path.pas.json", // Invalid path
-                });
+                try {
+                    // Generate grammar rule for a new action
+                    const genResult = await populateCache({
+                        request: "pause",
+                        schemaName: "player",
+                        action: {
+                            actionName: "pause",
+                            parameters: {},
+                        },
+                        schemaPath: playerSchemaPath,
+                    });
 
-                // Should fail gracefully with invalid schema path
-                expect(result.success).toBe(false);
-                expect(result.rejectionReason).toBeDefined();
-                console.log(
-                    "Handled error gracefully:",
-                    result.rejectionReason,
-                );
-            } catch (error: any) {
-                // Error during file reading is expected and acceptable
-                console.log(
-                    "Expected error for invalid schema path:",
-                    error.message,
-                );
-                expect(error).toBeDefined();
-            }
-        });
-    });
+                    console.log("populateCache result:", genResult);
+
+                    // If generation succeeded, add the rule
+                    if (genResult.success && genResult.generatedRule) {
+                        await persistedStore.addRule({
+                            schemaName: "player",
+                            grammarText: genResult.generatedRule,
+                        });
+
+                        const agentGrammar =
+                            agentGrammarRegistry.getAgent("player");
+                        const addResult = agentGrammar!.addGeneratedRules(
+                            genResult.generatedRule,
+                        );
+                        console.log(
+                            "addGeneratedRules result:",
+                            JSON.stringify(addResult, null, 2),
+                        );
+                        if (!addResult.success) {
+                            console.log(
+                                "Failed to add generated rules - this may be expected if the rule format is invalid",
+                            );
+                            // Don't fail test if rule addition fails - focus on validating the generation worked
+                        } else {
+                            console.log(
+                                "✓ Successfully added generated rule to agent grammar",
+                            );
+
+                            cache.syncAgentGrammar("player");
+
+                            // After generation, "pause" should match
+                            const matchesAfter = cache.match("pause", {
+                                namespaceKeys,
+                            });
+                            expect(matchesAfter.length).toBeGreaterThan(0);
+                            expect(
+                                matchesAfter[0].match.actions[0].action
+                                    .actionName,
+                            ).toBe("pause");
+
+                            console.log(
+                                "✓ Grammar generation and integration successful",
+                            );
+                        }
+                    } else {
+                        console.log(
+                            "Grammar generation was rejected:",
+                            genResult.rejectionReason,
+                        );
+                        // Don't fail test if generation was legitimately rejected
+                    }
+                } catch (error: any) {
+                    // Let all errors throw so tests fail properly
+                    console.error("Grammar generation error:", error.message);
+                    throw error;
+                }
+            }, 180000); // 3 minute timeout for API call (LLM can be slow)
+
+            it("should handle grammar generation errors gracefully", async () => {
+                // Test that populateCache handles errors gracefully (e.g., invalid schema path)
+                try {
+                    const { populateCache } = await import(
+                        "action-grammar/generation"
+                    );
+
+                    const result = await populateCache({
+                        request: "test request",
+                        schemaName: "test",
+                        action: {
+                            actionName: "testAction",
+                            parameters: {},
+                        },
+                        schemaPath: "/nonexistent/mock/path.pas.json", // Invalid path
+                    });
+
+                    // Should fail gracefully with invalid schema path
+                    expect(result.success).toBe(false);
+                    expect(result.rejectionReason).toBeDefined();
+                    console.log(
+                        "Handled error gracefully:",
+                        result.rejectionReason,
+                    );
+                } catch (error: any) {
+                    // Error during file reading is expected and acceptable
+                    console.log(
+                        "Expected error for invalid schema path:",
+                        error.message,
+                    );
+                    expect(error).toBeDefined();
+                }
+            });
+        },
+    );
 
     describe("Grammar Merging - Comprehensive Tests", () => {
         it("should handle multi-token sequences correctly after merging", () => {
