@@ -23,19 +23,15 @@ export default {
         },
     },
     directories: {
-        app: "deploy",
+        app: ".",
         buildResources: "build",
-        output: "dist",
+        output: "../dist",
     },
     files: [
         // For some reason, electron-builder only process "!" and FileSet for node modules.
         {
             filter: [
-                "LICENSE",
-                "README.md",
-                "package.json",
-                "out/**",
-                "deploy/node_modules/**",
+                "**/*",
 
                 // Ignore all build artifacts
                 "!**/*.tsbuildinfo",

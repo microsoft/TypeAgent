@@ -23,12 +23,12 @@
     "build:electron:cjs": "electron-vite build src/preload --config electron.vite.preload-cjs.config.mts --logLevel error",
     "build:electron:esm": "electron-vite build",
     "clean": "rimraf --glob out dist deploy *.tsbuildinfo *.done.build.log",
-    "deploy": "rimraf ./deploy && pnpm deploy --filter=agent-shell --prod ./deploy --config.node-linker=hoisted --legacy --ignore-scripts && pnpm -C deploy run postinstall ",
+    "deploy": "rimraf ./deploy && pnpm deploy --filter=agent-shell --prod ./deploy --ignore-scripts && pnpm -C deploy run postinstall ",
     "dev": "npm run prepare-vite && electron-vite dev -- --env ../../.env",
     "dev:noenv": "npm run prepare-vite && electron-vite dev",
     "postinstall": "run-script-os",
     "package": "run-script-os",
-    "package:default": "pnpm run deploy && electron-builder --config electron-builder.config.js -p never",
+    "package:default": "pnpm run deploy && pushd deploy && electron-builder --config ../electron-builder.config.js -p never && popd",
     "package:linux": "ELECTRON_BUILDER_ARCH=x64 pnpm run package:default --linux --x64",
     "package:macos": "pnpm run package:macos:x64 && pnpm run package:macos:arm64",
     "package:macos:arm64": "ELECTRON_BUILDER_ARCH=arm64 pnpm run package:default --mac --arm64",
@@ -135,5 +135,6 @@
       }
     }
   },
-  "productName": "TypeAgent Shell"
+  "productName": "TypeAgent Shell",
+  "packageManager": "pnpm"
 }
