@@ -21,10 +21,10 @@ import { getDefaultMcpAppAgentProvider } from "./mcpDefaultAgentProvider.js";
 import { getPackageFilePath } from "./utils/getPackageFilePath.js";
 
 let defaultAppAgentProvider: AppAgentProvider | undefined;
-function getDefaultNpmAppAgentProvider(): AppAgentProvider {
+function getDefaultNpmAppAgentProvider(configName?: string): AppAgentProvider {
     if (defaultAppAgentProvider === undefined) {
         defaultAppAgentProvider = createNpmAppAgentProvider(
-            getProviderConfig().agents,
+            getProviderConfig(configName).agents,
             getPackageFilePath("./package.json"),
         );
     }
@@ -53,16 +53,18 @@ function getExternalAppAgentProvider(instanceDir: string): AppAgentProvider {
  * Get the default app agent providers.
  * If instanceDirOrConfigProvider is provided it will load the external app agent provider as well.
  * @param instanceDirOrConfigProvider - Either a string pointing to the instance directory where external agent config is stored, or a InstanceConfigProvider.
+ * @param configName - Optional config name to load specific configuration file (e.g. "test" to load "config.test.json"). If not provided, it will load "config.json".
  * @returns an array containing the default app agent providers and the external app agent provider if instanceDirOrConfigProvider is provided.
  */
 export function getDefaultAppAgentProviders(
     instanceDirOrConfigProvider: string | InstanceConfigProvider | undefined,
+    configName?: string,
 ): AppAgentProvider[] {
     const instanceConfigs =
         typeof instanceDirOrConfigProvider === "string"
             ? getInstanceConfigProvider(instanceDirOrConfigProvider)
             : instanceDirOrConfigProvider;
-    const providers = [getDefaultNpmAppAgentProvider()];
+    const providers = [getDefaultNpmAppAgentProvider(configName)];
     const mcpProvider = getDefaultMcpAppAgentProvider(instanceConfigs);
     if (mcpProvider !== undefined) {
         providers.push(mcpProvider);
@@ -117,12 +119,14 @@ export function getDefaultAppAgentInstaller(
 /**
  * Build indexing service registry from all available app agent providers
  * @param instanceDirOrConfigProvider - Either a string pointing to the instance directory where external agent config is stored, or a InstanceConfigProvider.
+ * @param configName - Optional config name to load specific configuration file (e.g. "test" to load "config.test.json"). If not provided, it will load "config.json".
  * @returns IndexingServiceRegistry containing all registered indexing services
  */
 export async function getIndexingServiceRegistry(
     instanceDirOrConfigProvider?: string | InstanceConfigProvider,
+    configName?: string,
 ): Promise<IndexingServiceRegistry> {
-    const providers = getDefaultAppAgentProviders(instanceDirOrConfigProvider);
+    const providers = getDefaultAppAgentProviders(instanceDirOrConfigProvider, configName);
     const registry = new DefaultIndexingServiceRegistry();
 
     for (const provider of providers) {

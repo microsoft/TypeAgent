@@ -25,6 +25,9 @@ dotenv.config({ path: envPath });
 async function main() {
     const instanceDir = getInstanceDir();
 
+    // did the launch request a specific config? (e.g. "test" to load "config.test.json")
+    const configName = process.argv[process.argv.indexOf("--config") + 1] || undefined;
+
     // Create single shared dispatcher with routing ClientIO
     const sharedDispatcher = await createSharedDispatcher("agent server", {
         appAgentProviders: getDefaultAppAgentProviders(instanceDir),
@@ -34,7 +37,7 @@ async function main() {
         metrics: true,
         dblogging: false,
         traceId: getTraceId(),
-        indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir),
+        indexingServiceRegistry: await getIndexingServiceRegistry(instanceDir, configName),
         constructionProvider: getDefaultConstructionProvider(),
         conversationMemorySettings: {
             requestKnowledgeExtraction: false,
