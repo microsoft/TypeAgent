@@ -156,17 +156,12 @@ export async function populateCache(
         const normalizedRequest = request.request
             .toLowerCase()
             .replace(/[^\w\s]/g, " ");
-        const actionInfo = schemaInfo.actions.get(
-            request.action.actionName,
-        );
+        const actionInfo = schemaInfo.actions.get(request.action.actionName);
         const strippedParams: string[] = [];
         for (const [paramName, paramValue] of Object.entries(
             request.action.parameters,
         )) {
-            const isInRequest = isValueInRequest(
-                paramValue,
-                normalizedRequest,
-            );
+            const isInRequest = isValueInRequest(paramValue, normalizedRequest);
             if (!isInRequest) {
                 const paramInfo = actionInfo?.parameters.get(paramName);
                 if (paramInfo?.optional) {

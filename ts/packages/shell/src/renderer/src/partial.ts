@@ -278,8 +278,7 @@ export class PartialCompletion {
                 }
 
                 const partial =
-                    result.startIndex >= 0 &&
-                    result.startIndex <= input.length
+                    result.startIndex >= 0 && result.startIndex <= input.length
                         ? input.substring(0, result.startIndex)
                         : input;
                 this.current = partial;

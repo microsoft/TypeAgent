@@ -79,9 +79,7 @@ function walkPrefixTokens(nfa: NFA, tokens: string[]): number[] {
             for (const trans of state.transitions) {
                 if (trans.type === "token" && trans.tokens) {
                     if (
-                        trans.tokens.some(
-                            (t) => t.toLowerCase() === lowerToken,
-                        )
+                        trans.tokens.some((t) => t.toLowerCase() === lowerToken)
                     ) {
                         debugCompletion(
                             `  walkPrefix: state ${stateId} --[${trans.tokens.join("|")}]--> ${trans.to} (token matched "${token}")`,

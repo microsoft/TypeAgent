@@ -838,7 +838,11 @@ export function matchGrammarCompletion(
                 if (
                     currentPart !== undefined &&
                     currentPart.type === "string" &&
-                    isPartialPrefixOfStringPart(prefix, state.index, currentPart)
+                    isPartialPrefixOfStringPart(
+                        prefix,
+                        state.index,
+                        currentPart,
+                    )
                 ) {
                     const fullText = currentPart.value.join(" ");
                     debugCompletion(

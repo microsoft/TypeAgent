@@ -50,7 +50,11 @@ function extractCompletionMetadata(expr: ValueExpression): {
     const actionName = expr.actionName;
     // Walk parameters to find variable references
     for (const [paramName, paramExpr] of expr.parameters) {
-        collectVariablePaths(paramExpr, `parameters.${paramName}`, propertyPaths);
+        collectVariablePaths(
+            paramExpr,
+            `parameters.${paramName}`,
+            propertyPaths,
+        );
     }
     return { actionName, propertyPaths };
 }
