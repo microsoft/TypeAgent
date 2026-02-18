@@ -414,6 +414,22 @@ export class ChatView {
         }
     }
 
+    updateGrammarResult(
+        requestId: string | RequestId,
+        success: boolean,
+        message?: string,
+    ) {
+        const id =
+            typeof requestId === "string"
+                ? requestId
+                : getMessageGroupId(requestId);
+        if (id) {
+            this.idToMessageGroup
+                .get(id)
+                ?.updateGrammarResult(success, message);
+        }
+    }
+
     randomCommandSelected(requestId: string | RequestId, message: string) {
         const id =
             typeof requestId === "string"

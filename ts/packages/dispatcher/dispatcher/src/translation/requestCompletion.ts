@@ -97,6 +97,7 @@ export async function requestCompletion(
             name: "Request Completions",
             completions: results.completions,
             needQuotes: false, // Request completions are partial, no quotes needed
+            kind: "literal",
         });
     }
 
@@ -153,6 +154,7 @@ async function collectActionCompletions(
                 ...paramCompletion,
                 needQuotes: false, // Request completions are partial, no quotes needed
                 sorted: true, // REVIEW: assume property completions are already in desired order by the agent.
+                kind: "entity",
             });
         }
     }

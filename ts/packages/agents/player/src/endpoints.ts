@@ -8,7 +8,8 @@ import { createFetchError } from "./utils.js";
 const debugSpotifyRest = registerDebug("typeagent:spotify:rest");
 const debugSpotifyRestVerbose = registerDebug("typeagent:spotify-verbose:rest");
 
-const limitMax = 50;
+/** Maximum number of items per Spotify API request */
+export const limitMax = 50;
 
 export async function search(
     query: SpotifyApi.SearchForItemParameterObject,
@@ -483,7 +484,7 @@ export async function getQueue(service: SpotifyService) {
     return fetchGet<SpotifyApi.UsersQueueResponse>(
         service,
         "https://api.spotify.com/v1/me/player/queue",
-        { limit: 50 },
+        { limit: limitMax },
     );
 }
 
@@ -700,15 +701,24 @@ export async function setVolume(
     amt: number,
 ) {
     const volumeUrl = getUrlWithParams(
-        "https://api.spotify.com/v1/me/player/volume?volume_percent",
+        "https://api.spotify.com/v1/me/player/volume",
         { volume_percent: amt, device_id: deviceId },
     );
     return fetchPutEmptyResult(service, volumeUrl);
 }
 
 function getUrlWithParams(urlString: string, queryParams: Record<string, any>) {
-    const params = new URLSearchParams(queryParams);
-    const url = new URL(urlString);
-    url.search = params.toString();
-    return url.toString();
+    // Use encodeURIComponent for standard URL percent-encoding instead of
+    // URLSearchParams, which uses application/x-www-form-urlencoded semantics
+    // (encoding spaces as '+' rather than '%20'). Spotify's API expects spaces
+    // to be percent-encoded as '%20'.
+    const parts: string[] = [];
+    for (const [key, value] of Object.entries(queryParams)) {
+        if (value !== undefined && value !== null) {
+            parts.push(
+                `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`,
+            );
+        }
+    }
+    return parts.length > 0 ? `${urlString}?${parts.join("&")}` : urlString;
 }

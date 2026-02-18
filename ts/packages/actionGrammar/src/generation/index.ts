@@ -57,6 +57,34 @@ import { loadSchemaInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
 
 /**
+ * Check if a parameter value appears in the normalized request text.
+ * Short values (< 6 chars) are assumed to be in the request to avoid
+ * false rejections for things like years, IDs, short names.
+ */
+function isValueInRequest(paramValue: any, normalizedRequest: string): boolean {
+    if (typeof paramValue === "string") {
+        if (paramValue.length < 6) return true;
+        const normalizedValue = paramValue
+            .toLowerCase()
+            .replace(/[^\w\s]/g, " ");
+        return normalizedRequest.includes(normalizedValue);
+    } else if (Array.isArray(paramValue)) {
+        for (const item of paramValue) {
+            if (typeof item === "string" && item.length >= 6) {
+                const normalizedItem = item
+                    .toLowerCase()
+                    .replace(/[^\w\s]/g, " ");
+                if (!normalizedRequest.includes(normalizedItem)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+    return true; // Non-string, non-array values (numbers, booleans) are fine
+}
+
+/**
  * Convert plural parameter names to singular for grammar variable names
  * e.g., "artists" -> "artist"
  */
@@ -122,42 +150,35 @@ export async function populateCache(
         // Load schema information
         const schemaInfo = loadSchemaInfo(request.schemaPath);
 
-        // Validate that parameter values appear in the request (prevents caching LLM corrections)
-        // Skip validation for short values (< 6 chars) like years, IDs that LLM infers
+        // Validate that parameter values appear in the request.
+        // If a value was inferred by the LLM (not in the request), strip it
+        // from the action if it's optional in the schema; reject if required.
         const normalizedRequest = request.request
             .toLowerCase()
             .replace(/[^\w\s]/g, " ");
+        const actionInfo = schemaInfo.actions.get(request.action.actionName);
+        const strippedParams: string[] = [];
         for (const [paramName, paramValue] of Object.entries(
             request.action.parameters,
         )) {
-            if (typeof paramValue === "string") {
-                // Skip short values that are likely inferred (year, ID, etc) not corrections
-                if (paramValue.length >= 6) {
-                    const normalizedValue = paramValue
-                        .toLowerCase()
-                        .replace(/[^\w\s]/g, " ");
-                    if (!normalizedRequest.includes(normalizedValue)) {
-                        return {
-                            success: false,
-                            rejectionReason: `Parameter '${paramName}' value "${paramValue}" not found in request (possible LLM correction - don't cache)`,
-                        };
-                    }
-                }
-            } else if (Array.isArray(paramValue)) {
-                for (const item of paramValue) {
-                    if (typeof item === "string" && item.length >= 6) {
-                        const normalizedItem = item
-                            .toLowerCase()
-                            .replace(/[^\w\s]/g, " ");
-                        if (!normalizedRequest.includes(normalizedItem)) {
-                            return {
-                                success: false,
-                                rejectionReason: `Parameter '${paramName}' array item "${item}" not found in request (possible LLM correction - don't cache)`,
-                            };
-                        }
-                    }
+            const isInRequest = isValueInRequest(paramValue, normalizedRequest);
+            if (!isInRequest) {
+                const paramInfo = actionInfo?.parameters.get(paramName);
+                if (paramInfo?.optional) {
+                    // Optional parameter inferred by LLM — strip it
+                    strippedParams.push(paramName);
+                } else {
+                    // Required parameter not in request — reject
+                    return {
+                        success: false,
+                        rejectionReason: `Required parameter '${paramName}' value "${paramValue}" not found in request (possible LLM correction - don't cache)`,
+                    };
                 }
             }
+        }
+        // Remove inferred optional parameters from the action
+        for (const paramName of strippedParams) {
+            delete request.action.parameters[paramName];
         }
 
         // Create test case from request
@@ -189,7 +210,6 @@ export async function populateCache(
 
         // Extract checked variables from the action parameters
         const checkedVariables = new Set<string>();
-        const actionInfo = schemaInfo.actions.get(testCase.action.actionName);
         if (actionInfo) {
             for (const [paramName, paramInfo] of actionInfo.parameters) {
                 if (paramInfo.paramSpec === "checked_wildcard") {

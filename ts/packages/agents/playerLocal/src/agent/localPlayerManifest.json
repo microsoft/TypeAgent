@@ -1,0 +1,14 @@
+{
+  "emojiChar": "🎵",
+  "description": "Agent to play local music files",
+  "schema": {
+    "description": "Local Music Player agent that lets you play and control local audio files.",
+    "schemaFile": "./localPlayerSchema.ts",
+    "compiledSchemaFile": "agents/playerLocal/dist/agent/localPlayerSchema.pas.json",
+    "grammarFile": "agents/playerLocal/dist/agent/localPlayerSchema.ag.json",
+    "schemaType": {
+      "action": "LocalPlayerActions",
+      "entity": "LocalPlayerEntities"
+    }
+  }
+}

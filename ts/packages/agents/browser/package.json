@@ -24,6 +24,8 @@
   },
   "main": "index.js",
   "scripts": {
+    "agc": "agc -i ./src/agent/browserSchema.agr -o ./dist/agent/browserSchema.ag.json",
+    "asc": "asc -i ./src/agent/browserActionSchema.mts -o ./dist/agent/browserSchema.pas.json -t BrowserActions -e BrowserEntities",
     "build": "fluid-build . -t build",
     "build:dev": "fluid-build . -t build:dev",
     "build:extension": "fluid-build . -t build:extension",
@@ -100,6 +102,7 @@
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@fluidframework/build-tools": "^0.57.0",
+    "@typeagent/action-schema-compiler": "workspace:*",
     "@types/chrome": "^0.0.256",
     "@types/cytoscape": "^3.21.9",
     "@types/cytoscape-dagre": "^2.3.3",
@@ -115,6 +118,7 @@
     "@types/node": "^20.10.4",
     "@types/prismjs": "^1.26.3",
     "@types/ws": "^8.5.10",
+    "action-grammar-compiler": "workspace:*",
     "archiver": "^7.0.1",
     "concurrently": "^9.1.2",
     "crx": "^5.0.1",

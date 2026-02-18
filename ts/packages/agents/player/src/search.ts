@@ -21,6 +21,9 @@ const debugReuse = registerDebug("typeagent:spotify:search:reuse");
 const debugVerbose = registerDebug("typeagent:spotify-verbose:search");
 const debugError = registerDebug("typeagent:spotify:search:error");
 
+/** Number of results to fetch for targeted searches */
+const searchResultLimit = 10;
+
 export type SpotifyQuery = {
     track?: string[] | undefined;
     album?: string[] | undefined;
@@ -56,7 +59,7 @@ export async function searchArtists(
     const query: SpotifyApi.SearchForItemParameterObject = {
         q: `artist:${quoteString(searchTerm)}`,
         type: "artist",
-        limit: 50,
+        limit: searchResultLimit,
         offset: 0,
     };
     return search(query, context.service);
@@ -77,7 +80,7 @@ export async function searchAlbums(
     const searchQuery: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "album",
-        limit: 50,
+        limit: searchResultLimit,
         offset: 0,
     };
     const result = await search(searchQuery, context.service);
@@ -386,7 +389,7 @@ export async function findArtistTracksWithGenre(
     const param: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: 50,
+        limit: searchResultLimit,
         offset: 0,
     };
     const result = await search(param, context.service);
@@ -489,7 +492,7 @@ async function expandMovementTracks(
         const param: SpotifyApi.SearchForItemParameterObject = {
             q: toQueryString({ ...originalQuery, album: [album] }),
             type: "track",
-            limit: 50,
+            limit: searchResultLimit,
             offset: 0,
         };
         const result = await search(param, context.service);
@@ -564,7 +567,7 @@ export async function findTracksWithGenre(
     const param: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: 50,
+        limit: searchResultLimit,
         offset: 0,
     };
     const result = await search(param, context.service);
@@ -647,7 +650,7 @@ export async function findTracks(
     const param: SpotifyApi.SearchForItemParameterObject = {
         q: queryString,
         type: "track",
-        limit: 50,
+        limit: searchResultLimit,
         offset: 0,
     };
     const result = await search(param, context.service);
