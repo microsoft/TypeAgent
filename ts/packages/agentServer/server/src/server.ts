@@ -30,7 +30,7 @@ async function main() {
 
     // Create single shared dispatcher with routing ClientIO
     const sharedDispatcher = await createSharedDispatcher("agent server", {
-        appAgentProviders: getDefaultAppAgentProviders(instanceDir),
+        appAgentProviders: getDefaultAppAgentProviders(instanceDir, configName),
         persistSession: true,
         persistDir: instanceDir,
         storageProvider: getFsStorageProvider(),
