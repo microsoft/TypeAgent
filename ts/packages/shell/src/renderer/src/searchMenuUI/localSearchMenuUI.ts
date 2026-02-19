@@ -170,8 +170,13 @@ export class LocalSearchMenuUI implements SearchMenuUI {
             this.searchContainer.appendChild(this.completions);
             this.searchContainer.style.visibility = "visible";
 
-            // calculate scrollbar indicator offset and height
-            this.setScrollBarPosition();
+            // Show scrollbar only when items overflow the visible area
+            if (this.items.length > this.visibleItemsCount) {
+                this.scrollBar.style.visibility = "visible";
+                this.setScrollBarPosition();
+            } else {
+                this.scrollBar.style.visibility = "hidden";
+            }
         }
     }
 

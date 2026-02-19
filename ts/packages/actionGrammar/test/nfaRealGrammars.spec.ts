@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA, printNFA, printMatchResult } from "../src/nfaInterpreter.js";
+import { registerBuiltInEntities } from "../src/builtInEntities.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +23,10 @@ function fileExists(filePath: string): boolean {
 }
 
 describe("NFA with Real Grammars", () => {
+    // Register built-in entities (Ordinal, Cardinal, etc.) so entity-type
+    // wildcards in .agr grammars can be validated at runtime.
+    registerBuiltInEntities();
+
     describe("Player Grammar", () => {
         it("should compile and match player grammar", () => {
             // Load player grammar

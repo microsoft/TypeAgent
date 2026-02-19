@@ -1,10 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { isElectron } from "./main";
 import { TST } from "./prefixTree";
+import { InlineSearchMenuUI } from "./searchMenuUI/inlineSearchMenuUI";
 import { LocalSearchMenuUI } from "./searchMenuUI/localSearchMenuUI";
-import { RemoteSearchMenuUI } from "./searchMenuUI/remoteSearchMenuUI";
 import {
     SearchMenuItem,
     SearchMenuPosition,
@@ -26,8 +25,8 @@ export class SearchMenu {
     private prefix: string | undefined;
     constructor(
         private readonly onCompletion: (item: SearchMenuItem) => void,
-        private readonly visibleItems: number = 15,
-        private readonly remoteUI: boolean = isElectron(),
+        private readonly inline: boolean,
+        private readonly textEntry?: HTMLSpanElement,
     ) {}
 
     public isActive() {
@@ -69,15 +68,9 @@ export class SearchMenu {
 
         if (showMenu) {
             if (this.searchMenuUI === undefined) {
-                this.searchMenuUI = this.remoteUI
-                    ? new RemoteSearchMenuUI(
-                          this.onCompletion,
-                          this.visibleItems,
-                      )
-                    : new LocalSearchMenuUI(
-                          this.onCompletion,
-                          this.visibleItems,
-                      );
+                this.searchMenuUI = this.inline
+                    ? new InlineSearchMenuUI(this.onCompletion, this.textEntry!)
+                    : new LocalSearchMenuUI(this.onCompletion);
             }
             this.searchMenuUI.update({ position, prefix, items });
         } else {

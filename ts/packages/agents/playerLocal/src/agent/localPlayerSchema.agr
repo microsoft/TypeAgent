@@ -3,6 +3,8 @@
 
 // Grammar rules for Local Music Player
 
+entity Ordinal, Cardinal;
+
 @ <Start> = <Pause>
           | <Resume>
           | <Stop>
@@ -31,13 +33,13 @@
 @ <PlayCommand> = <PlayTrackNumberCommand>
 
 @ <PlayTrackNumberCommand> =
-    play (the)? $(n:<Ordinal>) (track | song)? -> {
+    play (the)? $(n:Ordinal) (track | song)? -> {
         actionName: "playFromQueue",
         parameters: {
             trackNumber: $(n)
         }
     }
-| play track $(n:<Cardinal>) -> {
+| play track $(n:Cardinal) -> {
         actionName: "playFromQueue",
         parameters: {
             trackNumber: $(n)
@@ -71,27 +73,3 @@
 
 @ <ClearQueue> = clear (the)? queue   ->  { actionName: "clearQueue" }
 
-@ <Cardinal> = 
-  $(x:number) 
-|   one -> 1
-|   two -> 2
-|   three -> 3
-|   four -> 4
-|   five -> 5
-|   six -> 6
-|   seven -> 7
-|   eight -> 8
-|   nine -> 9
-|   ten -> 10
-
-@ <Ordinal> = 
-    first -> 1
-|   second -> 2
-|   third -> 3
-|   fourth -> 4
-|   fifth -> 5
-|   sixth -> 6
-|   seventh -> 7
-|   eighth -> 8
-|   ninth -> 9
-|   tenth -> 10

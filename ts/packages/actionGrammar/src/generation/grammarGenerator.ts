@@ -97,15 +97,15 @@ WILDCARD RULES:
 2. Structure words (the, a, in, by, to, for, etc.) = fixed text
 3. Question words (what, where, when, who, why, how) = fixed text
 4. For array parameters: if only one item is given, use singular variable name
-   - Example Pattern: "by $(artist:EntityType)" → maps to artists: [$(artist)]
+   - Example Pattern: "by $(artist:wildcard)" → maps to artists: [$(artist)]
 
 WILDCARD TYPES:
-- Entity types (capitalized): $(varName:MusicDevice), $(varName:CalendarDate)
-- ParamSpec types (lowercase): $(varName:number), $(varName:ordinal), $(varName:percentage)
-- Validated wildcards: $(varName:wildcard) - when marked "(validated)" and no entity type
-- CRITICAL: ParamSpec types MUST be lowercase: "number" not "Number", "ordinal" not "Ordinal"
-- CRITICAL: Only use entity types that are explicitly listed in the schema
-- CRITICAL: Use "wildcard" (not "string") for multi-word captures without entity types
+- Built-in entity types: $(varName:CalendarDate), $(varName:CalendarTime), $(varName:CalendarTimeRange)
+- ParamSpec types: $(varName:number), $(varName:ordinal), $(varName:percentage)
+- Validated wildcards: $(varName:wildcard) - for checked_wildcard parameters (validated at runtime)
+- Plain wildcards: $(varName:wildcard) - default for multi-word captures
+- CRITICAL: Use "wildcard" (not "string") for multi-word captures
+- CRITICAL: Only use type names that are explicitly listed in the "USE:" directive
 
 REJECT when:
 1. Adjacent UNVALIDATED wildcards with NO FIXED TEXT between them
@@ -148,7 +148,7 @@ interface GrammarAnalysis {
     isWildcard: boolean;
   }>;
   fixedPhrases: string[];
-  grammarPattern: RuleRHS;  // The actual pattern like "play $(track:TrackName) by $(artist:ArtistName)"
+  grammarPattern: RuleRHS;  // The actual pattern like "play $(track:wildcard) by $(artist:wildcard)"
   reasoning: string;
 }
 
@@ -156,14 +156,13 @@ CRITICAL OUTPUT RULES:
 - Output ONLY valid JSON matching the interface above
 - NO markdown, NO comments, NO extra text before or after, NO undefined or null values
 - Start with { and end with }
-- Use exact entity type names from the schema (case-sensitive)
+- Use exact type names from the "USE:" directive (case-sensitive)
 
-EXAMPLE 1 (Entity type):
+EXAMPLE 1 (Validated wildcard):
 
 Request: "select kitchen device"
 Action: selectDevice
-Parameters: { deviceName: "kitchen" }
-Entity types available: MusicDevice
+Parameters: { deviceName: "kitchen" (validated) } → USE: $(deviceName:wildcard)
 
 Output:
 {
@@ -173,11 +172,11 @@ Output:
     { "parameterName": "deviceName", "sourceText": "kitchen", "targetValue": "kitchen", "isWildcard": true }
   ],
   "fixedPhrases": ["select", "device"],
-  "grammarPattern": { "matchPattern": "select $(deviceName:MusicDevice) device", "actionParameters": [ { "parameterName": "deviceName", "parameterValue": "$(deviceName)" } ] },
-  "reasoning": "Fixed structure 'select...device'. Parameter deviceName has entity type MusicDevice."
+  "grammarPattern": { "matchPattern": "select $(deviceName:wildcard) device", "actionParameters": [ { "parameterName": "deviceName", "parameterValue": "$(deviceName)" } ] },
+  "reasoning": "Fixed structure 'select...device'. Parameter deviceName is validated (checked_wildcard), use wildcard type."
 }
 
-EXAMPLE 2 (Validated wildcards):
+EXAMPLE 2 (Validated wildcards with separator):
 
 Request: "play bohemian rhapsody by queen"
 Action: playTrack
@@ -269,10 +268,10 @@ export class ClaudeGrammarGenerator {
                 ? this.getSingularVariableName(paramName)
                 : paramName;
 
-            // Use getWildcardType to determine the correct type (handles entity types, paramSpecs, and defaults)
+            // Use getWildcardType to determine the correct type (handles paramSpecs and defaults)
             const wildcardType = paramInfo
                 ? getWildcardType(paramInfo)
-                : "string";
+                : "wildcard";
             const expectedPattern = `$(${varName}:${wildcardType})`;
 
             // Check if this parameter is validated (has checked_wildcard paramSpec)
@@ -288,14 +287,10 @@ export class ClaudeGrammarGenerator {
             prompt += ` → USE: ${expectedPattern}\n`;
         }
 
-        if (schemaInfo.entityTypes.size > 0) {
-            prompt += `\nAvailable entity types: ${Array.from(schemaInfo.entityTypes).join(", ")}\n`;
-        }
-
         if (schemaInfo.converters.size > 0) {
             prompt += `\nBuilt-in converters/parsers available:\n`;
-            for (const [entityType, converter] of schemaInfo.converters) {
-                prompt += `  ${entityType} (${converter.name}):\n`;
+            for (const [, converter] of schemaInfo.converters) {
+                prompt += `  ${converter.name}:\n`;
                 prompt += `    ${converter.description}\n`;
                 prompt += `    Examples: ${converter.examples.join(", ")}\n`;
             }
@@ -308,8 +303,7 @@ export class ClaudeGrammarGenerator {
         prompt += `1. Fixed text: action words and structure (play, by, to, from, etc.)\n`;
         prompt += `2. Wildcards: variable content only\n`;
         prompt += `   Format: $(varName:TypeName)\n`;
-        prompt += `   - For parameters WITH entity type: use that exact entity type name\n`;
-        prompt += `   - For parameters WITHOUT entity type: use "wildcard"\n`;
+        prompt += `   - Use the EXACT type from the "→ USE:" directive for each parameter\n`;
         prompt += `   - For array parameters: use SINGULAR variable name\n`;
         prompt += `3. Keep the pattern simple and direct\n`;
         prompt += `4. Adjacent wildcards:\n`;
@@ -317,15 +311,14 @@ export class ClaudeGrammarGenerator {
         prompt += `   - Adjacent wildcards are OK if AT LEAST ONE is validated (parse validated first, then remainder)\n`;
         prompt += `   - Adjacent wildcards with NO validated parameters need a separator or structure\n\n`;
 
-        prompt += `CRITICAL - Entity Type Usage:\n`;
-        prompt += `Look at the parameter info above.\n`;
-        prompt += `- If it says "→ USE: $(varName:EntityType)" where EntityType is NOT "wildcard", use that EXACT entity type\n`;
-        prompt += `- If it says "→ USE: $(varName:wildcard)", the parameter is validated but has no entity type\n`;
-        prompt += `- If it says "(validated)", the parameter is checked against real data\n`;
+        prompt += `CRITICAL - Type Usage:\n`;
+        prompt += `Each parameter above has a "→ USE:" directive showing the exact wildcard pattern.\n`;
+        prompt += `- ALWAYS use the type shown in the "→ USE:" directive\n`;
+        prompt += `- ALWAYS use the variable name shown in the "→ USE:" directive\n`;
         prompt += `Example:\n`;
-        prompt += `  Parameter: deviceName "kitchen" → USE: $(deviceName:MusicDevice)\n`;
-        prompt += `  Correct pattern: $(deviceName:MusicDevice)\n`;
-        prompt += `  Wrong: $(deviceName:wildcard) or $(device:MusicDevice)\n\n`;
+        prompt += `  Parameter: deviceName "kitchen" (validated) → USE: $(deviceName:wildcard)\n`;
+        prompt += `  Correct pattern: $(deviceName:wildcard)\n`;
+        prompt += `  Wrong: $(device:wildcard) or $(deviceName:string)\n\n`;
 
         return prompt;
     }
@@ -547,22 +540,13 @@ export class ClaudeGrammarGenerator {
             }
         }
 
-        // Replace types in the matchPattern
+        // Replace types in the matchPattern — normalize any type Claude used to the correct one
         let matchPattern = analysis.grammarPattern.matchPattern;
         for (const [varName, wildcardType] of wildcardTypes) {
-            // Replace $(varName:string) or $(varName:wildcard) with $(varName:CorrectType)
-            // Note: "string" support is for backwards compatibility; Claude should now output "wildcard"
-            const stringPattern = new RegExp(`\\$\\(${varName}:string\\)`, "g");
+            // Match $(varName:AnyType) and replace with $(varName:CorrectType)
+            const anyTypePattern = new RegExp(`\\$\\(${varName}:\\w+\\)`, "g");
             matchPattern = matchPattern.replace(
-                stringPattern,
-                `$(${varName}:${wildcardType})`,
-            );
-            const wildcardPattern = new RegExp(
-                `\\$\\(${varName}:wildcard\\)`,
-                "g",
-            );
-            matchPattern = matchPattern.replace(
-                wildcardPattern,
+                anyTypePattern,
                 `$(${varName}:${wildcardType})`,
             );
         }
