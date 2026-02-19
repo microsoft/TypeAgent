@@ -23,9 +23,7 @@ import {
     populateCache,
     type GrammarTestCase,
 } from "../src/generation/index.js";
-import {
-    loadGrammarRules
-} from "../src/grammarLoader.js";
+import { loadGrammarRules } from "../src/grammarLoader.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

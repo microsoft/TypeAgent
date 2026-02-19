@@ -46,7 +46,11 @@ export class DynamicGrammarLoader {
         const errors: string[] = [];
 
         // Step 1: Parse the grammar rules
-        const newGrammar = loadGrammarRulesNoThrow("<dynamic>", agrText, errors);
+        const newGrammar = loadGrammarRulesNoThrow(
+            "<dynamic>",
+            agrText,
+            errors,
+        );
 
         if (!newGrammar) {
             return {
