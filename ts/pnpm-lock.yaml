@@ -1797,7 +1797,7 @@ importers:
         version: file:packages/agentSdk
       aiclient:
         specifier: workspace:*
-        version: file:packages/aiclient(typescript@5.4.5)(zod@4.1.13)
+        version: file:packages/aiclient(typescript@5.4.5)(zod@3.25.76)
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -1806,13 +1806,13 @@ importers:
         version: 4.4.1
       graph-utils:
         specifier: workspace:*
-        version: file:packages/agents/agentUtils/graphUtils(typescript@5.4.5)(zod@4.1.13)
+        version: file:packages/agents/agentUtils/graphUtils(typescript@5.4.5)(zod@3.25.76)
       kp:
         specifier: workspace:*
         version: link:../../kp
       typeagent:
         specifier: workspace:*
-        version: file:packages/typeagent(zod@4.1.13)
+        version: file:packages/typeagent(zod@3.25.76)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -2695,7 +2695,7 @@ importers:
         version: file:packages/actionGrammar(zod@3.25.76)
       aiclient:
         specifier: workspace:*
-        version: file:packages/aiclient(typescript@5.4.5)(zod@4.1.13)
+        version: file:packages/aiclient(typescript@5.4.5)(zod@3.25.76)
       async:
         specifier: ^3.2.5
         version: 3.2.6
@@ -2713,10 +2713,10 @@ importers:
         version: file:packages/telemetry(socks@2.8.7)
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
-        version: file:packages/utils/typechatUtils(socks@2.8.7)(typescript@5.4.5)(zod@4.1.13)
+        version: file:packages/utils/typechatUtils(socks@2.8.7)(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/async':
         specifier: ^3.2.24
@@ -2741,7 +2741,7 @@ importers:
         version: 6.0.1
       test-lib:
         specifier: workspace:*
-        version: file:packages/testLib(typescript@5.4.5)
+        version: file:packages/testLib(typescript@5.4.5)(zod@3.25.76)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -2845,13 +2845,13 @@ importers:
         version: file:packages/actionGrammar(zod@3.25.76)
       agent-cache:
         specifier: workspace:*
-        version: file:packages/cache(socks@2.8.7)(typescript@5.4.5)
+        version: file:packages/cache(socks@2.8.7)(typescript@5.4.5)(zod@3.25.76)
       agent-dispatcher:
         specifier: workspace:*
         version: file:packages/dispatcher/dispatcher(@azure/core-client@1.9.2)(socks@2.8.7)(typescript@5.4.5)(ws@8.18.2)
       aiclient:
         specifier: workspace:*
-        version: file:packages/aiclient(typescript@5.4.5)(zod@4.1.13)
+        version: file:packages/aiclient(typescript@5.4.5)(zod@3.25.76)
       chalk:
         specifier: ^5.4.1
         version: 5.6.2
@@ -2890,10 +2890,10 @@ importers:
         version: 10.9.2(@types/node@22.15.18)(typescript@5.4.5)
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
-        version: file:packages/utils/typechatUtils(socks@2.8.7)(typescript@5.4.5)(zod@4.1.13)
+        version: file:packages/utils/typechatUtils(socks@2.8.7)(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -3700,7 +3700,7 @@ importers:
         version: 0.2.12(zod@3.25.76)
       aiclient:
         specifier: workspace:*
-        version: file:packages/aiclient(typescript@5.4.5)(zod@4.1.13)
+        version: file:packages/aiclient(typescript@5.4.5)(zod@3.25.76)
       better-sqlite3:
         specifier: 12.2.0
         version: 12.2.0
@@ -3709,7 +3709,7 @@ importers:
         version: 4.4.3(supports-color@8.1.1)
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.8
@@ -5652,67 +5652,79 @@ packages:
     resolution: {integrity: sha512-9B+taZ8DlyyqzZQnoeIvDVR/2F4EbMepXMc/NdVbkzsJbzkUjhXv/70GQJ7tdLA4YJgNP25zukcxpX2/SueNrA==}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linux-arm@1.0.5':
     resolution: {integrity: sha512-gvcC4ACAOPRNATg/ov8/MnbxFDJqf/pDePbBnuBDcjsI8PssmjoKMAz4LtLaVi+OnSb5FK/yIOamqDwGmXW32g==}
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linux-s390x@1.0.4':
     resolution: {integrity: sha512-u7Wz6ntiSSgGSGcjZ55im6uvTrOxSIS8/dgoVMoiGE9I6JAfU50yH5BoDlYA1tcuGS7g/QNtetJnxA6QEsCVTA==}
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linux-x64@1.0.4':
     resolution: {integrity: sha512-MmWmQ3iPFZr0Iev+BAgVMb3ZyC4KeFc3jFxnNbEPas60e1cIfevbtuyf9nDGIzOaW9PdnDciJm+wFFaTlj5xYw==}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-libvips-linuxmusl-arm64@1.0.4':
     resolution: {integrity: sha512-9Ti+BbTYDcsbp4wfYib8Ctm1ilkugkA/uscUn6UXK1ldpC1JjiXbLfFZtRlBhjPZ5o1NCLiDbg8fhUPKStHoTA==}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@img/sharp-libvips-linuxmusl-x64@1.0.4':
     resolution: {integrity: sha512-viYN1KX9m+/hGkJtvYYp+CCLgnJXwiQB39damAO7WMdKWlIhmYTfHjwSbQeUK/20vY154mwezd9HflVFM1wVSw==}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@img/sharp-linux-arm64@0.33.5':
     resolution: {integrity: sha512-JMVv+AMRyGOHtO1RFBiJy/MBsgz0x4AWrT6QoEVVTyh1E39TrCUpTRI7mx9VksGX4awWASxqCYLCV4wBZHAYxA==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linux-arm@0.33.5':
     resolution: {integrity: sha512-JTS1eldqZbJxjvKaAkxhZmBqPRGmxgu+qFKSInv8moZ2AmT5Yib3EQ1c6gp493HvrvV8QgdOXdyaIBrhvFhBMQ==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linux-s390x@0.33.5':
     resolution: {integrity: sha512-y/5PCd+mP4CA/sPDKl2961b+C9d+vPAveS33s6Z3zfASk2j5upL6fXVPZi7ztePZ5CuH+1kW8JtvxgbuXHRa4Q==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linux-x64@0.33.5':
     resolution: {integrity: sha512-opC+Ok5pRNAzuvq1AG0ar+1owsu842/Ab+4qvU879ippJBHvyY5n2mxF1izXqkPYlGuP/M556uh53jRLJmzTWA==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@img/sharp-linuxmusl-arm64@0.33.5':
     resolution: {integrity: sha512-XrHMZwGQGvJg2V/oRSUfSAfjfPxO+4DkiRh6p2AFjLQztWUuY/o8Mq0eMQVIY7HJ1CDQUJlxGGZRw1a5bqmd1g==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@img/sharp-linuxmusl-x64@0.33.5':
     resolution: {integrity: sha512-WT+d/cgqKkkKySYmqoZ8y3pxx7lx9vVejxW/W4DOFMYVSkErR+w7mf2u8m/y4+xHe7yY9DAXQMWQhpnMuFfScw==}
     engines: {node: ^18.17.0 || ^20.3.0 || >=21.0.0}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@img/sharp-wasm32@0.33.5':
     resolution: {integrity: sha512-ykUW4LVGaMcU9lu9thv85CbRMAwfeadCJHRsg2GmeRa/cJxsVY9Rbd57JcMxBkKHag5U/x7TSBpScF4U8ElVzg==}
@@ -6225,30 +6237,35 @@ packages:
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@napi-rs/canvas-linux-arm64-musl@0.1.72':
     resolution: {integrity: sha512-Mu+2hHZAT9SdrjiRtCxMD/Unac8vqVxF/p+Tvjb5sN1NZkLGu+l7WIfrug8aeX150OwrYgAvsR4mhrm0BZvLxg==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@napi-rs/canvas-linux-riscv64-gnu@0.1.72':
     resolution: {integrity: sha512-xBPG/ImL58I4Ep6VM+sCrpwl8rE/8e7Dt9U7zzggNvYHrWD13vIF3q5L2/N9VxdBMh1pee6dBC/VcaXLYccZNQ==}
     engines: {node: '>= 10'}
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   '@napi-rs/canvas-linux-x64-gnu@0.1.72':
     resolution: {integrity: sha512-jkC8L+QovHpzQrw+Jm1IUqxgLV5QB1hJ1cR8iYzxNRd0TOF7YfxLaIGxvd/ReRi9r48JT6PL7z2IGT7TqK8T4w==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@napi-rs/canvas-linux-x64-musl@0.1.72':
     resolution: {integrity: sha512-PwPdPmHgJYnTMUr8Gff80eRVdpGjwrxueIqw+7v4aeFxbQjmQ+paa2xaGedFtkvdS2Dn5z8a0mVlrlbSfec+1Q==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@napi-rs/canvas-win32-x64-msvc@0.1.72':
     resolution: {integrity: sha512-hZhXJZZ/2ZjkAoOtyGUs3Mx6jA4o9ESbc5bk+NKYO6thZRvRNA7rqvT9WF9pZK0xcRK5EyWRymv8fCzqmSVEzg==}
@@ -6561,56 +6578,67 @@ packages:
     resolution: {integrity: sha512-PsNAbcyv9CcecAUagQefwX8fQn9LQ4nZkpDboBOttmyffnInRy8R8dSg6hxxl2Re5QhHBf6FYIDhIj5v982ATQ==}
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-arm-musleabihf@4.52.5':
     resolution: {integrity: sha512-Fw4tysRutyQc/wwkmcyoqFtJhh0u31K+Q6jYjeicsGJJ7bbEq8LwPWV/w0cnzOqR2m694/Af6hpFayLJZkG2VQ==}
     cpu: [arm]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-arm64-gnu@4.52.5':
     resolution: {integrity: sha512-a+3wVnAYdQClOTlyapKmyI6BLPAFYs0JM8HRpgYZQO02rMR09ZcV9LbQB+NL6sljzG38869YqThrRnfPMCDtZg==}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-arm64-musl@4.52.5':
     resolution: {integrity: sha512-AvttBOMwO9Pcuuf7m9PkC1PUIKsfaAJ4AYhy944qeTJgQOqJYJ9oVl2nYgY7Rk0mkbsuOpCAYSs6wLYB2Xiw0Q==}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-loong64-gnu@4.52.5':
     resolution: {integrity: sha512-DkDk8pmXQV2wVrF6oq5tONK6UHLz/XcEVow4JTTerdeV1uqPeHxwcg7aFsfnSm9L+OO8WJsWotKM2JJPMWrQtA==}
     cpu: [loong64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-ppc64-gnu@4.52.5':
     resolution: {integrity: sha512-W/b9ZN/U9+hPQVvlGwjzi+Wy4xdoH2I8EjaCkMvzpI7wJUs8sWJ03Rq96jRnHkSrcHTpQe8h5Tg3ZzUPGauvAw==}
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-gnu@4.52.5':
     resolution: {integrity: sha512-sjQLr9BW7R/ZiXnQiWPkErNfLMkkWIoCz7YMn27HldKsADEKa5WYdobaa1hmN6slu9oWQbB6/jFpJ+P2IkVrmw==}
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-riscv64-musl@4.52.5':
     resolution: {integrity: sha512-hq3jU/kGyjXWTvAh2awn8oHroCbrPm8JqM7RUpKjalIRWWXE01CQOf/tUNWNHjmbMHg/hmNCwc/Pz3k1T/j/Lg==}
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-s390x-gnu@4.52.5':
     resolution: {integrity: sha512-gn8kHOrku8D4NGHMK1Y7NA7INQTRdVOntt1OCYypZPRt6skGbddska44K8iocdpxHTMMNui5oH4elPH4QOLrFQ==}
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-x64-gnu@4.52.5':
     resolution: {integrity: sha512-hXGLYpdhiNElzN770+H2nlx+jRog8TyynpTVzdlc6bndktjKWyZyiCsuDAlpd+j+W+WNqfcyAWz9HxxIGfZm1Q==}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@rollup/rollup-linux-x64-musl@4.52.5':
     resolution: {integrity: sha512-arCGIcuNKjBoKAXD+y7XomR9gY6Mw7HnFBv5Rw7wQRvwYLR7gBAgV7Mb2QTyjXfTveBNFAtPt46/36vV9STLNg==}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-openharmony-arm64@4.52.5':
     resolution: {integrity: sha512-QoFqB6+/9Rly/RiPjaomPLmR/13cgkIGfA40LHly9zcH1S0bN2HVFYk3a1eAyHQyjs3ZJYlXvIGtcCs5tko9Cw==}
@@ -19054,32 +19082,6 @@ snapshots:
 
   agent-base@7.1.3: {}
 
-  agent-cache@file:packages/cache(socks@2.8.7)(typescript@5.4.5):
-    dependencies:
-      '@typeagent/action-schema': file:packages/actionSchema
-      '@typeagent/agent-sdk': file:packages/agentSdk
-      '@typeagent/common-utils': file:packages/utils/commonUtils
-      action-grammar: file:packages/actionGrammar(zod@3.25.76)
-      aiclient: file:packages/aiclient(typescript@5.4.5)(zod@4.1.13)
-      async: 3.2.6
-      chalk: 5.6.2
-      debug: 4.4.3(supports-color@8.1.1)
-      regexp.escape: 2.0.1
-      telemetry: file:packages/telemetry(socks@2.8.7)
-      typechat: 0.1.1(typescript@5.4.5)(zod@4.1.13)
-      typechat-utils: file:packages/utils/typechatUtils(socks@2.8.7)(typescript@5.4.5)(zod@4.1.13)
-    transitivePeerDependencies:
-      - '@aws-sdk/credential-providers'
-      - '@mongodb-js/zstd'
-      - gcp-metadata
-      - kerberos
-      - mongodb-client-encryption
-      - snappy
-      - socks
-      - supports-color
-      - typescript
-      - zod
-
   agent-cache@file:packages/cache(socks@2.8.7)(typescript@5.4.5)(zod@3.25.76):
     dependencies:
       '@typeagent/action-schema': file:packages/actionSchema
@@ -28188,10 +28190,10 @@ snapshots:
       glob: 10.5.0
       minimatch: 9.0.5
 
-  test-lib@file:packages/testLib(typescript@5.4.5):
+  test-lib@file:packages/testLib(typescript@5.4.5)(zod@3.25.76):
     dependencies:
-      aiclient: file:packages/aiclient(typescript@5.4.5)(zod@4.1.13)
-      typechat: 0.1.1(typescript@5.4.5)(zod@4.1.13)
+      aiclient: file:packages/aiclient(typescript@5.4.5)(zod@3.25.76)
+      typechat: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
       - typescript

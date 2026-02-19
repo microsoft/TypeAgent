@@ -1,7 +1,3 @@
-
-injectWorkspacePackages: true
-forceLegacyDeploy: true
-
 packages:
   - packages/*
   - packages/memory/*
