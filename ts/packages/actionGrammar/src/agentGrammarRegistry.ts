@@ -6,7 +6,7 @@ import { Grammar } from "./grammarTypes.js";
 import { NFA } from "./nfa.js";
 import { matchNFA, NFAMatchResult } from "./nfaInterpreter.js";
 import { compileGrammarToNFA } from "./nfaCompiler.js";
-import { loadGrammarRules } from "./grammarLoader.js";
+import { loadGrammarRulesNoThrow } from "./grammarLoader.js";
 import { mergeGrammarRules } from "./grammarMerger.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 
@@ -75,7 +75,7 @@ export class AgentGrammar {
         }
 
         // Parse the generated rules
-        const newGrammar = loadGrammarRules(
+        const newGrammar = loadGrammarRulesNoThrow(
             `<generated-${this.agentId}>`,
             fullAgrText,
             errors,
@@ -353,18 +353,12 @@ export class AgentGrammarRegistry {
         errors?: string[];
     } {
         const errors: string[] = [];
-        let grammar;
 
-        try {
-            grammar = loadGrammarRules(`${agentId}.agr`, agrText, errors);
-        } catch (error) {
-            return {
-                success: false,
-                errors: [
-                    `Failed to parse grammar: ${error instanceof Error ? error.message : String(error)}`,
-                ],
-            };
-        }
+        const grammar = loadGrammarRulesNoThrow(
+            `${agentId}.agr`,
+            agrText,
+            errors,
+        );
 
         if (!grammar) {
             return {

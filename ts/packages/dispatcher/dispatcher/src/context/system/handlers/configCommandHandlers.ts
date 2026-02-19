@@ -192,6 +192,47 @@ function setStatus(
     status[name][kind] = `${statusChar}${defaultStr}`;
 }
 
+function buildAgentStatusHtml(
+    entries: [string, StatusRecords[string]][],
+    agents: { getAppAgentEmoji(name: string): string },
+    showSchema: boolean,
+    showAction: boolean,
+    showCommand: boolean,
+): string {
+    const thStyle = `text-align:center;padding:4px 8px;font-weight:600;font-size:13px;color:#64748b;border-bottom:2px solid #e2e8f0`;
+    const headerCols = [
+        `<th style="text-align:left;padding:4px 12px 4px 8px;font-weight:600;font-size:13px;color:#64748b;border-bottom:2px solid #e2e8f0">Agent</th>`,
+    ];
+    if (showSchema) headerCols.push(`<th style="${thStyle}">Schemas</th>`);
+    if (showAction) headerCols.push(`<th style="${thStyle}">Actions</th>`);
+    if (showCommand) headerCols.push(`<th style="${thStyle}">Commands</th>`);
+
+    const rows: string[] = [];
+    for (const [name, { schemas, actions, commands }] of entries) {
+        const isAppAgent = getAppAgentName(name) === name;
+        const emoji = isAppAgent ? agents.getAppAgentEmoji(name) : "";
+        const displayName = isAppAgent ? name : name.replace(/^[^.]+\./, "");
+        const indent = isAppAgent ? "0" : "20px";
+        const fontWeight = isAppAgent ? "600" : "400";
+        const color = isAppAgent ? "#1e293b" : "#475569";
+        const bb = isAppAgent ? "1px solid #f1f5f9" : "none";
+        const tdStyle = `text-align:center;padding:3px 8px;border-bottom:${bb}`;
+
+        const cols = [
+            `<td style="padding:3px 12px 3px 8px;padding-left:${indent};font-weight:${fontWeight};color:${color};border-bottom:${bb};white-space:nowrap">${emoji ? emoji + " " : ""}${displayName}</td>`,
+        ];
+        if (showSchema)
+            cols.push(`<td style="${tdStyle}">${schemas ?? ""}</td>`);
+        if (showAction)
+            cols.push(`<td style="${tdStyle}">${actions ?? ""}</td>`);
+        if (showCommand)
+            cols.push(`<td style="${tdStyle}">${commands ?? ""}</td>`);
+        rows.push(`<tr>${cols.join("")}</tr>`);
+    }
+
+    return `<table style="border-collapse:collapse;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.4"><thead><tr>${headerCols.join("")}</tr></thead><tbody>${rows.join("")}</tbody></table>`;
+}
+
 function showAgentStatus(
     toggle: AgentToggle,
     context: ActionContext<CommandHandlerContext>,
@@ -200,10 +241,7 @@ function showAgentStatus(
     const systemContext = context.sessionContext.agentContext;
     const agents = systemContext.agents;
 
-    const status: Record<
-        string,
-        { schemas?: string; actions?: string; commands?: string }
-    > = {};
+    const status: StatusRecords = {};
 
     const showSchema =
         toggle === AgentToggle.Schema || toggle === AgentToggle.Agent;
@@ -243,38 +281,61 @@ function showAgentStatus(
         return;
     }
 
-    const getRow = (
-        emoji: string,
+    // Build text table (primary — used by CLI and console)
+    // Use fixed-width chalk-colored text instead of emoji for reliable alignment
+    const textStatus = (s?: string): string => {
+        if (!s) return "";
+        return s
+            .replace("✅", chalk.green("on "))
+            .replace("💤", chalk.yellow("zzz"))
+            .replace("❌", chalk.red("off"))
+            .replace("❔", chalk.gray(" ? "));
+    };
+
+    const getTextRow = (
         displayName: string,
         schemas?: string,
         actions?: string,
         commands?: string,
     ) => {
-        const displayEntry = [emoji, displayName];
-        if (showSchema) {
-            displayEntry.push(schemas ?? "");
-        }
-        if (showAction) {
-            displayEntry.push(actions ?? "");
-        }
-        if (showCommand) {
-            displayEntry.push(commands ?? "");
-        }
+        const displayEntry = [displayName];
+        if (showSchema) displayEntry.push(schemas ?? "");
+        if (showAction) displayEntry.push(actions ?? "");
+        if (showCommand) displayEntry.push(commands ?? "");
         return displayEntry;
     };
 
     const table: string[][] = [
-        getRow("", "Agent", "Schemas", "Actions", "Commands"),
+        getTextRow("Agent", "Schemas", "Actions", "Commands"),
     ];
 
     for (const [name, { schemas, actions, commands }] of entries) {
         const isAppAgentName = getAppAgentName(name) === name;
         const displayName = isAppAgentName ? name : `  ${name}`;
-        const emoji = isAppAgentName ? agents.getAppAgentEmoji(name) : "";
-        table.push(getRow(emoji, displayName, schemas, actions, commands));
+        table.push(
+            getTextRow(
+                displayName,
+                textStatus(schemas),
+                textStatus(actions),
+                textStatus(commands),
+            ),
+        );
     }
 
-    displayResult(table, context);
+    // Build HTML alternate (used by shell and browser UIs)
+    const html = buildAgentStatusHtml(
+        entries,
+        agents,
+        showSchema,
+        showAction,
+        showCommand,
+    );
+
+    context.actionIO.appendDisplay({
+        type: "text",
+        content: table,
+        alternates: [{ type: "html", content: html }],
+    });
 }
 
 class AgentToggleCommandHandler implements CommandHandler {

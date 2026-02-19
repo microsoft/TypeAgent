@@ -491,7 +491,7 @@ class FieldScalar extends FieldBase {
         const searchMenu = new SearchMenu((item) => {
             input.value = item.matchText;
             this.data.setEditing(this.getNextScalarField());
-        });
+        }, false);
         searchMenu.setChoices(choices);
         input.addEventListener("input", () => {
             this.updateSearchMenu();

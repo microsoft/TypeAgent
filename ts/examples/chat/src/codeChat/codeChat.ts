@@ -38,6 +38,9 @@ import {
     sampleFiles,
 } from "./common.js";
 import { createCommandTransformer } from "./commandTransformer.js";
+import { createPromptLogger } from "telemetry";
+
+const promptLogger = createPromptLogger();
 
 export async function runCodeChat(): Promise<void> {
     const model = openai.createChatModelDefault("codeChat");
@@ -381,7 +384,12 @@ export async function runCodeChat(): Promise<void> {
     async function regex(args: string[], io: InteractiveIo): Promise<void> {
         if (args.length > 0) {
             const prompt = `Return a Typescript regular expression for the following:\n ${args.join(" ")}`;
-            const result = await codeReviewer.model.complete(prompt);
+            const result = await codeReviewer.model.complete(
+                prompt,
+                undefined,
+                undefined,
+                promptLogger.logModelRequest,
+            );
             if (result.success) {
                 io.writer.writeLine(result.data);
             } else {

@@ -2,48 +2,22 @@
 // Licensed under the MIT License.
 
 import { defaultFileLoader } from "./defaultFileLoader.js";
-import {
-    compileGrammar,
-    GrammarCompileError,
-    FileLoader,
-} from "./grammarCompiler.js";
+import { compileGrammar, FileLoader } from "./grammarCompiler.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
-import { getLineCol } from "./utils.js";
-import { normalizeGrammar } from "./nfaCompiler.js";
 
-// REVIEW: start symbol should be configurable
-const start = "Start";
+type LoadGrammarRulesOptions = {
+    start?: string; // Optional start symbol (default: "Start")
+    startValueRequired?: boolean; // Whether the start rule must produce a value (default: true)
+};
 
-function convertCompileError(
-    content: string,
-    type: "error" | "warning",
-    errors: GrammarCompileError[],
-) {
-    return errors.map((e) => {
-        const lineCol = getLineCol(content, e.pos ?? 0);
-        return `${e.displayPath}(${lineCol.line},${lineCol.col}): ${type}: ${e.message}${e.definition ? ` in definition '<${e.definition}>'` : ""}`;
-    });
-}
-
-// Throw exception when error.
-export function loadGrammarRules(
+function parseAndCompileGrammar(
     fileName: string,
-    contentOrLoader: string | FileLoader | undefined,
-): Grammar;
-// Return undefined when error if errors array provided.
-export function loadGrammarRules(
-    fileName: string,
-    contentOrLoader: string | FileLoader | undefined,
+    contentOrLoader: string | FileLoader,
     errors: string[],
     warnings?: string[],
-): Grammar | undefined;
-export function loadGrammarRules(
-    fileName: string,
-    contentOrLoader: string | FileLoader = defaultFileLoader,
-    errors?: string[],
-    warnings?: string[],
-): Grammar | undefined {
+    options?: LoadGrammarRulesOptions,
+) {
     let displayPath, fullPath, content: string;
     let fileUtils: FileLoader | undefined;
     if (typeof contentOrLoader === "object") {
@@ -57,50 +31,83 @@ export function loadGrammarRules(
         content = contentOrLoader;
     }
 
+    const start = options?.start ?? "Start";
+    const startValueRequired = options?.startValueRequired ?? true;
     const parseResult = parseGrammarRules(displayPath, content);
-    const result = compileGrammar(
+    const grammar = compileGrammar(
         displayPath,
+        content,
         fullPath,
         fileUtils,
         parseResult.definitions,
         start,
+        startValueRequired,
+        errors,
+        warnings,
         parseResult.imports,
         parseResult.entities.length > 0 ? parseResult.entities : undefined,
     );
-
-    if (result.warnings.length > 0 && warnings !== undefined) {
-        warnings.push(
-            ...convertCompileError(content, "warning", result.warnings),
-        );
-    }
-
-    if (result.errors.length === 0) {
-        // Normalize the grammar (converts passthrough and single-literal rules to explicit form)
-        // This ensures both completion-based and NFA-based matchers work correctly
-        let grammar = normalizeGrammar(result.grammar);
-
+    if (errors.length === 0) {
         // Add entity declarations to the grammar.
         // This includes both explicit "entity Foo;" declarations and
         // types imported from .ts files that are used as variable types.
         // The latter bridges @import with the entity validation system.
-        const allEntities = [
-            ...parseResult.entities,
-            ...result.usedImportedTypes,
-        ];
+        const allEntities = grammar.entities
+            ? [...parseResult.entities, ...grammar.entities]
+            : parseResult.entities;
         if (allEntities.length > 0) {
-            grammar = { ...grammar, entities: allEntities };
+            grammar.entities = allEntities;
         }
+    }
+    return grammar;
+}
+
+// Throw exception when error.
+export function loadGrammarRules(
+    fileName: string,
+    contentOrLoader: string | FileLoader = defaultFileLoader,
+    options?: LoadGrammarRulesOptions,
+): Grammar {
+    const errors: string[] = [];
+    const grammar = parseAndCompileGrammar(
+        fileName,
+        contentOrLoader,
+        errors,
+        undefined,
+        options,
+    );
+    if (errors.length === 0) {
         return grammar;
     }
-    const errorMessages = convertCompileError(content, "error", result.errors);
-    if (errors) {
-        errors.push(...errorMessages);
+
+    const errorStr = errors.length === 1 ? "error" : "errors";
+    errors.unshift(
+        `Error detected in grammar compilation '${fileName}': ${errors.length} ${errorStr}.`,
+    );
+    throw new Error(errors.join("\n"));
+}
+
+export function loadGrammarRulesNoThrow(
+    fileName: string,
+    contentOrLoader: string | FileLoader = defaultFileLoader,
+    errors: string[],
+    warnings?: string[],
+    options?: LoadGrammarRulesOptions,
+): Grammar | undefined {
+    try {
+        const grammar = parseAndCompileGrammar(
+            fileName,
+            contentOrLoader,
+            errors,
+            warnings,
+            options,
+        );
+
+        return errors.length === 0 ? grammar : undefined;
+    } catch (e) {
+        errors.push(
+            `Exception thrown while loading grammar '${fileName}':\n${e}`,
+        );
         return undefined;
     }
-
-    const errorStr = result.errors.length === 1 ? "error" : "errors";
-    errorMessages.unshift(
-        `Error detected in grammar compilation '${displayPath}': ${result.errors.length} ${errorStr}.`,
-    );
-    throw new Error(errorMessages.join("\n"));
 }

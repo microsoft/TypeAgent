@@ -131,7 +131,7 @@ describe("Grammar Matcher", () => {
             const grammar = loadGrammarRules("test.grammar", g);
             expect(testMatchGrammar(grammar, "value")).toStrictEqual(["value"]);
         });
-        it("simple variable - implicit string", () => {
+        it("simple variable - implicit string type", () => {
             const g = `@<Start> = $(x) -> $(x)`;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(testMatchGrammar(grammar, "value")).toStrictEqual(["value"]);
@@ -267,6 +267,50 @@ describe("Grammar Matcher", () => {
                 "first",
                 "second",
             ]);
+        });
+
+        it("nested rules - single string part captures matched text", () => {
+            const g = `
+            @<Start> = $(x:<Hello>) -> $(x)
+            @<Hello> = hello
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "hello")).toStrictEqual(["hello"]);
+        });
+
+        it("nested rules - single string part with multiple words", () => {
+            const g = `
+            @<Start> = $(x:<Greeting>) -> $(x)
+            @<Greeting> = hello world
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                "hello world",
+            ]);
+        });
+
+        it("nested rules - single string part in complex expression", () => {
+            const g = `
+            @<Start> = $(a:<First>) and $(b:<Second>) -> { a: $(a), b: $(b) }
+            @<First> = first
+            @<Second> = second
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "first and second")).toStrictEqual(
+                [{ a: "first", b: "second" }],
+            );
+        });
+
+        it("nested rules - multiple parts should not capture default", () => {
+            const g = `
+            @<Start> = $(x:<HelloWorld>) -> $(x)
+            @<HelloWorld> = <Hello> <World>
+            @<Hello> = hello
+            @<World> = world
+            `;
+            expect(() => loadGrammarRules("test.grammar", g)).toThrow(
+                "Referenced rule '<HelloWorld>' does not produce a value for variable 'x' in definition '<Start>'",
+            );
         });
 
         it("wildcard ", () => {

@@ -6,6 +6,7 @@ import {
     DisplayAppendMode,
     DisplayContent,
     MessageContent,
+    getContentForType,
 } from "@typeagent/agent-sdk";
 import type {
     RequestId,
@@ -76,8 +77,13 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
         if (typeof content === "string" || Array.isArray(content)) {
             message = content;
         } else {
-            // TODO: should reject html content
-            message = content.content;
+            // Console prefers text alternates when available
+            const textContent = getContentForType(content, "text");
+            if (textContent !== undefined && content.type !== "text") {
+                message = textContent;
+            } else {
+                message = content.content;
+            }
             switch (content.kind) {
                 case "status":
                     message = chalk.grey(content.content);

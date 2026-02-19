@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import path from "node:path";
-import { loadGrammarRules } from "../src/grammarLoader.js";
+import {
+    loadGrammarRules,
+    loadGrammarRulesNoThrow,
+} from "../src/grammarLoader.js";
 import { FileLoader } from "../src/grammarCompiler.js";
 import { defaultFileLoader } from "../src/defaultFileLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
@@ -42,7 +45,7 @@ describe("Grammar Imports with File Loading", () => {
                     @<Start> = $(greeting:<Greeting>) world -> { greeting: $(greeting), target: "world" }
                 `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -79,7 +82,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Play> | <Pause> | <Stop>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -108,7 +111,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Greeting> | <Farewell>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -134,7 +137,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = count to $(num:<Number>) -> { count: $(num) }
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -167,7 +170,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Red> | <Blue> | <Green>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -195,7 +198,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Action1> | <Action2>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -226,7 +229,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = start <MiddleRule> -> "start"
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -258,7 +261,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <L1>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -279,10 +282,10 @@ describe("Grammar Imports with File Loading", () => {
                 "lib/utils.agr": `@<UtilRule> = utility -> "util"`,
                 "main.agr": `
                                 @import { UtilRule } from "./lib/utils.agr"
-                                @<Start> = <UtilRule> rule
+                                @<Start> = <UtilRule> rule -> "result"
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -292,7 +295,7 @@ describe("Grammar Imports with File Loading", () => {
             expect(grammar).toBeDefined();
 
             // Test match functionality
-            expect(testMatch(grammar, "utility rule")).toEqual(["util"]);
+            expect(testMatch(grammar, "utility rule")).toEqual(["result"]);
         });
 
         it("should resolve paths relative to each referencing file at multiple levels", () => {
@@ -311,7 +314,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = start <Middle> -> "start"
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -345,7 +348,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Wrapper>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -360,7 +363,31 @@ describe("Grammar Imports with File Loading", () => {
             ]);
         });
     });
-
+    describe("Throw Cases", () => {
+        it("should throw when imported file does not exist", () => {
+            const grammarFiles: Record<string, string> = {
+                "main.agr": `
+                                @import { Missing } from "./nonexistent.agr"
+                                @<Start> = <Missing>
+                            `,
+            };
+            expect(() => {
+                loadGrammarRules("main.agr", getTestFileLoader(grammarFiles));
+            }).toThrow();
+        });
+        it("should throw when imported file has syntax errors", () => {
+            const grammarFiles: Record<string, string> = {
+                "bad.agr": `@<Bad> = invalid syntax {{{`,
+                "main.agr": `
+                                @import { Bad } from "./bad.agr"
+                                @<Start> = <Bad>
+                            `,
+            };
+            expect(() => {
+                loadGrammarRules("main.agr", getTestFileLoader(grammarFiles));
+            }).toThrow();
+        });
+    });
     describe("Error Cases", () => {
         it("should error when imported file does not exist", () => {
             const errors: string[] = [];
@@ -370,15 +397,16 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Missing>
                             `,
             };
-            expect(() => {
-                loadGrammarRules(
+            expect(
+                loadGrammarRulesNoThrow(
                     "main.agr",
                     getTestFileLoader(grammarFiles),
                     errors,
-                );
-            }).toThrow();
+                ),
+            ).toBeUndefined();
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("File not found: ");
         });
-
         it("should error when imported rule is not defined in the file", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
@@ -388,7 +416,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Stop>
                             `,
             };
-            loadGrammarRules(
+            loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -409,7 +437,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Action> = local action -> "local"
                             `,
             };
-            loadGrammarRules(
+            loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -430,16 +458,19 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Bad>
                             `,
             };
-            expect(() => {
-                loadGrammarRules(
+            expect(
+                loadGrammarRulesNoThrow(
                     "main.agr",
                     getTestFileLoader(grammarFiles),
                     errors,
-                );
-            }).toThrow();
+                ),
+            ).toBeUndefined();
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("Special character");
+            expect(errors[0]).toContain("bad.agr");
         });
-
         it("should refer to files using relative paths in error messages - parse error", () => {
+            const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "lib/broken.agr": `@<Broken> = syntax error ->`,
                 "main.agr": `
@@ -447,15 +478,20 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Broken>
                             `,
             };
-            try {
-                loadGrammarRules("main.agr", getTestFileLoader(grammarFiles));
-            } catch (e: any) {
-                // Error should reference the file with relative path (platform-specific separators)
-                const expectedPath = path.join("lib", "broken.agr");
-                expect(e.message).toContain(expectedPath);
-                // Error should NOT contain absolute path (starting with path separator)
-                expect(e.message).not.toContain(path.sep + expectedPath);
-            }
+
+            expect(
+                loadGrammarRulesNoThrow(
+                    "main.agr",
+                    getTestFileLoader(grammarFiles),
+                    errors,
+                ),
+            ).toBeUndefined();
+            expect(errors.length).toBe(1);
+            // Error should reference the file with relative path (platform-specific separators)
+            const expectedPath = path.join("lib", "broken.agr");
+            expect(errors[0]).toContain(expectedPath);
+            // Error should NOT contain absolute path (starting with path separator)
+            expect(errors[0]).not.toContain(path.sep + expectedPath);
         });
 
         it("should refer to files using relative paths in error messages - compile error", () => {
@@ -468,7 +504,7 @@ describe("Grammar Imports with File Loading", () => {
                             `,
             };
 
-            const result = loadGrammarRules(
+            const result = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -503,7 +539,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Sentence>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -540,7 +576,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <ImportedRule1> | <ImportedRule2> | <LocalRule1> | <LocalRule2>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -573,7 +609,7 @@ describe("Grammar Imports with File Loading", () => {
                                 }
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -602,7 +638,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Polite>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -644,7 +680,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Command>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -683,7 +719,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <Module1> | <Module2>
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -707,7 +743,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = value $(x:CustomType) -> $(x)
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -734,7 +770,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Start> = <MyRule> $(value:MyType) -> { value: $(value) }
                             `,
             };
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -766,7 +802,7 @@ describe("Grammar Imports with File Loading", () => {
             };
 
             // Circular dependencies are now fully supported
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "fileA.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -791,7 +827,7 @@ describe("Grammar Imports with File Loading", () => {
             };
 
             // Self-import of a locally defined rule should be detected as an error
-            loadGrammarRules(
+            loadGrammarRulesNoThrow(
                 "fileA.agr",
                 getTestFileLoader(grammarFiles),
                 errors,
@@ -823,7 +859,7 @@ describe("Grammar Imports with File Loading", () => {
             };
 
             // Multi-file circular dependencies are fully supported
-            const grammar = loadGrammarRules(
+            const grammar = loadGrammarRulesNoThrow(
                 "fileA.agr",
                 getTestFileLoader(grammarFiles),
                 errors,

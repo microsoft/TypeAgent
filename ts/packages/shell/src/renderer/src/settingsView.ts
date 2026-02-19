@@ -88,6 +88,7 @@ export class SettingsView {
     private ttsVoice: HTMLSelectElement;
     private agentGreetingCheckBox: HTMLInputElement;
     private intellisenseCheckBox: HTMLInputElement;
+    private inlineCompletionsCheckBox: HTMLInputElement;
     private _shellSettings: ShellUserSettings =
         structuredClone(defaultUserSettings);
     private updateFromSettings: () => Promise<void>;
@@ -102,6 +103,7 @@ export class SettingsView {
         this.ttsCheckBox.checked = value.tts;
         this.microphoneSources.value = value.microphoneId ?? "";
         this.intellisenseCheckBox.checked = value.partialCompletion;
+        this.inlineCompletionsCheckBox.checked = value.ui.inlineCompletions;
         this.agentGreetingCheckBox.checked = value.agentGreeting;
         this.devUICheckBox.checked = !value.ui.dev;
         this.saveChatHistoryCheckBox.checked = value.chatHistory;
@@ -175,7 +177,7 @@ export class SettingsView {
 
             chatView.enablePartialInput(
                 this.shellSettings.partialCompletion,
-                this.shellSettings.ui.disableCompletionRemoteUI,
+                this.shellSettings.ui.inlineCompletions,
             );
             chatView.setMetricsVisible(this.shellSettings.ui.dev);
             chatView.setInputMode(this.shellSettings.ui.verticalLayout);
@@ -278,9 +280,21 @@ export class SettingsView {
                 this.intellisenseCheckBox.checked;
             chatView.enablePartialInput(
                 this.intellisenseCheckBox.checked,
-                this._shellSettings.ui.disableCompletionRemoteUI,
+                this._shellSettings.ui.inlineCompletions,
             );
         });
+
+        this.inlineCompletionsCheckBox = this.addCheckbox(
+            "Inline completions",
+            () => {
+                this._shellSettings.ui.inlineCompletions =
+                    this.inlineCompletionsCheckBox.checked;
+                chatView.enablePartialInput(
+                    this._shellSettings.partialCompletion,
+                    this.inlineCompletionsCheckBox.checked,
+                );
+            },
+        );
 
         this.agentGreetingCheckBox = this.addCheckbox("Agent greeting", () => {
             this._shellSettings.agentGreeting =

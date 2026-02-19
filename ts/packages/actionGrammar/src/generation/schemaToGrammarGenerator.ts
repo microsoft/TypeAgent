@@ -4,7 +4,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { SchemaInfo, ActionInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
-import { loadGrammarRules } from "../grammarLoader.js";
+import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
 
 /**
  * Configuration for grammar generation from a schema
@@ -459,7 +459,7 @@ export class SchemaToGrammarGenerator {
 
         while (retries <= this.maxRetries) {
             const errors: string[] = [];
-            loadGrammarRules("generated.agr", currentGrammar, errors);
+            loadGrammarRulesNoThrow("generated.agr", currentGrammar, errors);
 
             if (errors.length === 0) {
                 if (retries > 0) {

@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { loadGrammarRules } from "./grammarLoader.js";
+import { loadGrammarRulesNoThrow } from "./grammarLoader.js";
 import { Grammar } from "./grammarTypes.js";
 
 /**
@@ -126,7 +126,6 @@ export class GrammarStore {
 
         this.data.schemas[rule.schemaName].push(storedRule);
         this.modified = true;
-
         await this.doAutoSave();
     }
 
@@ -231,11 +230,8 @@ export class GrammarStore {
         }
 
         // Write the store data as JSON
-        await fs.promises.writeFile(
-            outFile,
-            JSON.stringify(this.data, null, 2),
-            "utf-8",
-        );
+        const jsonStr = JSON.stringify(this.data, null, 2);
+        await fs.promises.writeFile(outFile, jsonStr, "utf-8");
 
         this.filePath = outFile;
         this.modified = false;
@@ -281,7 +277,7 @@ export class GrammarStore {
 
         // Parse the combined grammar
         const errors: string[] = [];
-        const grammar = loadGrammarRules(
+        const grammar = loadGrammarRulesNoThrow(
             "dynamic-grammar",
             combinedGrammarText,
             errors,

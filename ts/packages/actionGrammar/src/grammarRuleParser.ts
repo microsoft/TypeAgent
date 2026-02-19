@@ -85,9 +85,9 @@ type RulesExpr = {
 type VarDefExpr = {
     type: "variable";
     name: string;
-    typeName: string;
     ruleReference: boolean;
-    ruleRefPos?: number | undefined;
+    refName: string;
+    refPos?: number | undefined;
     optional?: boolean;
     pos?: number | undefined;
 };
@@ -348,28 +348,28 @@ class GrammarRuleParser {
     private parseVariableSpecifier(): VarDefExpr {
         const pos = this.pos;
         const id = this.parseId("Variable name");
-        let typeName: string = "string";
+        let refName: string = "string";
         let ruleReference: boolean = false;
-        let ruleRefPos: number | undefined = undefined;
+        let refPos: number | undefined = undefined;
 
         if (this.isAt(":")) {
             // Consume colon
             this.skipWhitespace(1);
 
+            refPos = this.pos;
             if (this.isAt("<")) {
-                ruleRefPos = this.pos;
                 ruleReference = true;
-                typeName = this.parseRuleName();
+                refName = this.parseRuleName();
             } else {
-                typeName = this.parseId("Type name");
+                refName = this.parseId("Type name");
             }
         }
         return {
             type: "variable",
             name: id,
-            typeName,
+            refName,
             ruleReference,
-            ruleRefPos,
+            refPos,
             pos,
         };
     }

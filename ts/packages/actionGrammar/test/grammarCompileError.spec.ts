@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { loadGrammarRules } from "../src/grammarLoader.js";
+import { loadGrammarRulesNoThrow } from "../src/grammarLoader.js";
 
 describe("Grammar Compiler", () => {
     describe("Error", () => {
@@ -11,7 +11,7 @@ describe("Grammar Compiler", () => {
             @<Pause> = <Undefined>
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Missing rule definition for '<Undefined>'",
@@ -24,7 +24,7 @@ describe("Grammar Compiler", () => {
             @<Pause> = $(x:<Undefined>)
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Missing rule definition for '<Undefined>'",
@@ -42,7 +42,7 @@ describe("Grammar Compiler", () => {
             @<Stop> = stop
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Referenced rule '<Pause>' does not produce a value for variable 'x' in definition '<Start>'",
@@ -55,7 +55,7 @@ describe("Grammar Compiler", () => {
             @<Wait> = wait
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Referenced rule '<Pause>' does not produce a value for variable 'x' in definition '<Start>'",
@@ -70,7 +70,7 @@ describe("Grammar Compiler", () => {
             @<Stop> = stop now -> 2
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Referenced rule '<Pause>' does not produce a value for variable 'x' in definition '<Start>'",
@@ -82,7 +82,7 @@ describe("Grammar Compiler", () => {
             @<Start> = $(name) plays music -> { player: $(name), action: $(undefinedVar) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Variable 'undefinedVar' is referenced in the value but not defined in the rule",
@@ -91,10 +91,10 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable definition in same rule", () => {
             const grammarText = `
-            @<Start> = $(name) plays $(name)
+            @<Start> = $(name) plays $(name) -> { name: $(name) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Variable 'name' is already defined in this rule",
@@ -103,10 +103,10 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable with different types", () => {
             const grammarText = `
-            @<Start> = $(x:string) and $(x:number)
+            @<Start> = $(x:string) and $(x:number) -> { x: $(x) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Variable 'x' is already defined in this rule",
@@ -115,12 +115,12 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable with rule reference", () => {
             const grammarText = `
-            @<Start> = $(action:<Action>) $(action:<Action>)
+            @<Start> = $(action:<Action>) $(action:<Action>) -> { action: $(action) }
             @<Action> = play -> "play"
                       | pause -> "pause"
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Variable 'action' is already defined in this rule",
@@ -129,10 +129,10 @@ describe("Grammar Compiler", () => {
 
         it("Multiple duplicate variables in same rule", () => {
             const grammarText = `
-            @<Start> = $(x) $(y) $(x) $(y)
+            @<Start> = $(x) $(y) $(x) $(y) -> { x: $(x), y: $(y) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(2);
             expect(errors[0]).toContain(
                 "error: Variable 'x' is already defined in this rule",
@@ -147,7 +147,7 @@ describe("Grammar Compiler", () => {
             @<Start> = $(x) (and $(x))
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             // Nested inline rules have their own scope, so no error expected
             expect(errors.length).toBe(0);
         });
@@ -161,20 +161,95 @@ describe("Grammar Compiler", () => {
                 | pause $(name) -> { name: $(name) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(0);
         });
 
         it("Duplicate variable with optional modifier", () => {
             const grammarText = `
-            @<Start> = $(name)? $(name)
+            @<Start> = $(name)? $(name) -> { name: $(name) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Variable 'name' is already defined in this rule",
             );
+        });
+
+        it("Start rule without value", () => {
+            const grammarText = `
+            @<Start> = $(x:string) $(y:string) wait
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Start rule '<Start>' does not produce a value.",
+            );
+        });
+
+        it("Start rule with nested non-value rule", () => {
+            const grammarText = `
+            @<Start> = <Action>
+            @<Action> = $(x:string) $(y:string) wait
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Start rule '<Start>' does not produce a value.",
+            );
+        });
+
+        it("Start rule without value with startValueRequired:false option", () => {
+            const grammarText = `
+            @<Start> = $(x:string) $(y:string) wait
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                startValueRequired: false,
+            });
+            expect(errors.length).toBe(0);
+        });
+
+        it("Start rule with nested non-value rule and startValueRequired:false option", () => {
+            const grammarText = `
+            @<Start> = <Action>
+            @<Action> = $(x:string) $(y:string) wait
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                startValueRequired: false,
+            });
+            expect(errors.length).toBe(0);
+        });
+
+        it("Start rule with value expression is valid", () => {
+            const grammarText = `
+            @<Start> = $(x:string) $(y:string) wait -> { x: $(x), y: $(y) }
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors);
+            expect(errors.length).toBe(0);
+        });
+
+        it("Start rule with single variable is valid", () => {
+            const grammarText = `
+            @<Start> = $(x:string)
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors);
+            expect(errors.length).toBe(0);
+        });
+
+        it("Start rule with single part and no variables is valid", () => {
+            const grammarText = `
+            @<Start> = play -> "play"
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors);
+            expect(errors.length).toBe(0);
         });
     });
     describe("Warning", () => {
@@ -186,12 +261,63 @@ describe("Grammar Compiler", () => {
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
-            loadGrammarRules("test", grammarText, errors, warnings);
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
             expect(errors.length).toBe(0);
             expect(warnings.length).toBe(1);
             expect(warnings[0]).toContain(
                 "warning: Rule '<Unused>' is defined but never used.",
             );
+        });
+
+        it("Multiple variables without explicit value expression", () => {
+            const grammarText = `
+            @<Start> = <Action> -> "action"
+            @<Action> = $(x:string) $(y:string)
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(1);
+            expect(warnings[0]).toContain(
+                "warning: Rule with multiple variables and no explicit value expression doesn't have an implicit value.",
+            );
+        });
+
+        it("Single variable without explicit value does not warn", () => {
+            const grammarText = `
+            @<Start> = <Action>
+            @<Action> = $(x:string)
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(0);
+        });
+
+        it("Multiple variables with explicit value does not warn", () => {
+            const grammarText = `
+            @<Start> = <Action>
+            @<Action> = $(x:string) $(y:string) -> { x: $(x), y: $(y) }
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(0);
+        });
+
+        it("No variables without explicit value does not warn", () => {
+            const grammarText = `
+            @<Start> = <Action>
+            @<Action> = play music
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(0);
         });
     });
 
@@ -203,7 +329,7 @@ describe("Grammar Compiler", () => {
             @<Start> = $(value:CustomType)
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(0);
         });
 
@@ -211,10 +337,10 @@ describe("Grammar Compiler", () => {
             const grammarText = `
             @import * from "types.ts"
 
-            @<Start> = $(x:CustomType) and $(y:AnotherType)
+            @<Start> = $(x:CustomType) and $(y:AnotherType) -> { x: $(x), y: $(y) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(0);
         });
 
@@ -223,19 +349,19 @@ describe("Grammar Compiler", () => {
             @import { Type1 } from "file1.ts"
             @import { Type2 } from "file2.ts"
 
-            @<Start> = $(x:Type1) $(y:Type2)
+            @<Start> = $(x:Type1) $(y:Type2) -> { x: $(x), y: $(y) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(0);
         });
 
         it("Built-in types do not require imports", () => {
             const grammarText = `
-            @<Start> = $(x:string) $(y:number) $(z:wildcard)
+            @<Start> = $(x:string) $(y:number) $(z:wildcard) -> { x: $(x), y: $(y), z: $(z) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(0);
         });
 
@@ -243,10 +369,10 @@ describe("Grammar Compiler", () => {
             const grammarText = `
             @import { CustomType } from "types.ts"
 
-            @<Start> = $(x:CustomType) $(y:UndefinedType)
+            @<Start> = $(x:CustomType) $(y:UndefinedType) -> { x: $(x), y: $(y) }
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Undefined type 'UndefinedType' in variable 'y'",
@@ -260,7 +386,7 @@ describe("Grammar Compiler", () => {
             @<Start> = <SomeType>
         `;
             const errors: string[] = [];
-            loadGrammarRules("test", grammarText, errors);
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Missing rule definition for '<SomeType>'",
