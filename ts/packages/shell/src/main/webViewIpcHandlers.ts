@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ipcMain, session } from "electron";
+import { app, ipcMain, session } from "electron";
 import { debugShellError } from "./debug.js";
 import { ExtensionStorageManager } from "./extensionStorage.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
@@ -80,15 +80,13 @@ export function initializePDFViewerIpcHandlers() {
     });
 }
 
-export async function initializeBrowserExtension(appPath: string) {
-    const browserExtensionPath = path.join(
-        // HACK HACK for packaged build: The browser extension cannot be loaded from ASAR, so it is not packed.
-        // Assume we can just replace app.asar with app.asar.unpacked in all cases.
-        path.basename(appPath) === "app.asar"
-            ? path.join(path.dirname(appPath), "app.asar.unpacked")
-            : appPath,
-        "node_modules/browser-typeagent/dist/electron",
-    );
+export async function initializeBrowserExtension(_appPath: string) {
+   
+    const browserExtensionPath = app.isPackaged
+        ? path.join(process.resourcesPath, "browser-typeagent-extension")
+        : path.join(app.getAppPath(), "node_modules/browser-typeagent/dist/electron");
+
+
     const extension = await session.defaultSession.extensions.loadExtension(
         browserExtensionPath,
         {
