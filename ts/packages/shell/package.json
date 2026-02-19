@@ -28,7 +28,7 @@
     "dev:noenv": "npm run prepare-vite && electron-vite dev",
     "postinstall": "run-script-os",
     "package": "run-script-os",
-    "package:default": "pnpm run deploy && pushd deploy && electron-builder --config ../electron-builder.config.js -p never && popd",
+    "package:default": "pnpm run deploy && cd deploy && electron-builder --config ../electron-builder.config.js -p never && cd ..",
     "package:linux": "ELECTRON_BUILDER_ARCH=x64 pnpm run package:default --linux --x64",
     "package:macos": "pnpm run package:macos:x64 && pnpm run package:macos:arm64",
     "package:macos:arm64": "ELECTRON_BUILDER_ARCH=arm64 pnpm run package:default --mac --arm64",
