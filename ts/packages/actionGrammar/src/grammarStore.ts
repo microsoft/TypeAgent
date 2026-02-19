@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { loadGrammarRules } from "./grammarLoader.js";
+import { loadGrammarRulesNoThrow } from "./grammarLoader.js";
 import { Grammar } from "./grammarTypes.js";
 
 /**
@@ -277,7 +277,7 @@ export class GrammarStore {
 
         // Parse the combined grammar
         const errors: string[] = [];
-        const grammar = loadGrammarRules(
+        const grammar = loadGrammarRulesNoThrow(
             "dynamic-grammar",
             combinedGrammarText,
             errors,

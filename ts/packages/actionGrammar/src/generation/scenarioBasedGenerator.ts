@@ -7,7 +7,7 @@ import {
     ScenarioTemplate,
     getPrefixSuffixPatterns,
 } from "./scenarioTemplates.js";
-import { loadGrammarRules } from "../grammarLoader.js";
+import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
 
 /**
  * Configuration for scenario-based grammar generation
@@ -960,7 +960,7 @@ export class ScenarioBasedGrammarGenerator {
 
         while (retries <= this.maxRetries) {
             const errors: string[] = [];
-            loadGrammarRules("generated.agr", currentGrammar, errors);
+            loadGrammarRulesNoThrow("generated.agr", currentGrammar, errors);
 
             if (errors.length === 0) {
                 if (retries > 0) {
