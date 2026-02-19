@@ -95,6 +95,7 @@ export interface Client {
 
     searchMenuCompletion(id: number, item: SearchMenuItem);
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
+    tabRestoreStatus(count: number): void;
 }
 
 export interface ElectronWindowFields {

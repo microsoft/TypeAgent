@@ -148,6 +148,9 @@ async function initializeDispatcher(
                     "instanceDir is required when not in connect mode",
                 );
             }
+            const indexingServiceRegistry =
+                await getIndexingServiceRegistry(instanceDir);
+
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
                     createShellAgentProvider(shellWindow),
@@ -164,8 +167,7 @@ async function initializeDispatcher(
                 dblogging: true,
                 traceId: getTraceId(),
                 clientIO,
-                indexingServiceRegistry:
-                    await getIndexingServiceRegistry(instanceDir),
+                indexingServiceRegistry,
                 constructionProvider: getDefaultConstructionProvider(),
                 allowSharedLocalView: ["browser"],
                 portBase: isProd ? 9001 : 9050,

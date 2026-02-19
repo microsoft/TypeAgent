@@ -302,8 +302,8 @@ export class ChatView {
         const id = getMessageGroupId(requestId);
         const messageGroup = id ? this.idToMessageGroup.get(id) : undefined;
         if (messageGroup === undefined) {
-            // for agent initiated messages we need to create an associated message group
-            if (id?.startsWith("agent-")) {
+            // for agent initiated messages and notifications we need to create an associated message group
+            if (id?.startsWith("agent-") || id?.startsWith("notification-")) {
                 const mg: MessageGroup = new MessageGroup(
                     this,
                     this.settingsView!,

@@ -177,6 +177,8 @@ export default class Interactive extends Command {
 
         await withClientIO(async (clientIO) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
+            const indexingServiceRegistry =
+                await getIndexingServiceRegistry(persistDir);
             const dispatcher = await createDispatcher("cli interactive", {
                 appAgentProviders: defaultAppAgentProviders,
                 agentInstaller: getDefaultAppAgentInstaller(instanceDir),
@@ -191,8 +193,7 @@ export default class Interactive extends Command {
                         : undefined,
                 clientIO,
                 dblogging: true,
-                indexingServiceRegistry:
-                    await getIndexingServiceRegistry(persistDir),
+                indexingServiceRegistry,
                 traceId: getTraceId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });

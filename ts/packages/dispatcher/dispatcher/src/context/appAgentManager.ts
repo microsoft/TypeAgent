@@ -266,8 +266,9 @@ export class AppAgentManager implements ActionConfigProvider {
         agentGrammarRegistry?: AgentGrammarRegistry,
         useNFAGrammar?: boolean,
     ) {
+        const agentNames = provider.getAppAgentNames();
         const semanticMapP: Promise<void>[] = [];
-        for (const name of provider.getAppAgentNames()) {
+        for (const name of agentNames) {
             const manifest = await provider.getAppAgentManifest(name);
             this.addAgentManifest(
                 name,
