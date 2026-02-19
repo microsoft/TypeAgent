@@ -40,7 +40,7 @@ export class ChatView {
     private _settingsView: SettingsView | undefined;
     private _dispatcher: Dispatcher | undefined;
     private partialCompletionEnabled: boolean = false;
-    private partialCompletionDisableRemoteUI: boolean = false;
+    private partialCompletionInline: boolean = true;
     private partialCompletion: PartialCompletion | undefined;
     private commandBackStack: string[] = [];
     private commandBackStackIndex = 0;
@@ -150,18 +150,18 @@ export class ChatView {
                 this.inputContainer,
                 this.chatInput.textarea,
                 this.getDispatcher(),
-                this.partialCompletionDisableRemoteUI,
+                this.partialCompletionInline,
             );
         }
     }
 
-    public enablePartialInput(enabled: boolean, disableRemoteUI: boolean) {
+    public enablePartialInput(enabled: boolean, inline: boolean) {
         this.partialCompletionEnabled = enabled;
-        if (this.partialCompletionDisableRemoteUI !== disableRemoteUI) {
-            // Reinitialize partial completion
+        if (this.partialCompletionInline !== inline) {
+            // Reinitialize partial completion with new mode
             this.partialCompletion?.close();
             this.partialCompletion = undefined;
-            this.partialCompletionDisableRemoteUI = disableRemoteUI;
+            this.partialCompletionInline = inline;
         }
 
         if (enabled) {
@@ -411,6 +411,22 @@ export class ChatView {
                 : getMessageGroupId(requestId);
         if (id) {
             this.idToMessageGroup.get(id)?.notifyExplained(data);
+        }
+    }
+
+    updateGrammarResult(
+        requestId: string | RequestId,
+        success: boolean,
+        message?: string,
+    ) {
+        const id =
+            typeof requestId === "string"
+                ? requestId
+                : getMessageGroupId(requestId);
+        if (id) {
+            this.idToMessageGroup
+                .get(id)
+                ?.updateGrammarResult(success, message);
         }
     }
 

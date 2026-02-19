@@ -8,6 +8,7 @@ import {
     DisplayType,
     DisplayMessageKind,
     MessageContent,
+    getContentForType,
 } from "@typeagent/agent-sdk";
 import DOMPurify from "dompurify";
 import { SettingsView } from "./settingsView";
@@ -184,8 +185,15 @@ export function setContent(
         message = content;
         speak = false;
     } else {
-        type = content.type;
-        message = content.content;
+        // Shell prefers HTML alternates when available
+        const htmlContent = getContentForType(content, "html");
+        if (htmlContent !== undefined && content.type !== "html") {
+            type = "html";
+            message = htmlContent;
+        } else {
+            type = content.type;
+            message = content.content;
+        }
         kind = content.kind;
         speak = content.speak ?? false;
     }

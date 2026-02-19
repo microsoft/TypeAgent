@@ -227,6 +227,10 @@ export class MessageGroup {
         this.userMessage.notifyExplained(data);
     }
 
+    public updateGrammarResult(success: boolean, message?: string) {
+        this.userMessage.updateGrammarResult(success, message);
+    }
+
     public hideUserMessage() {
         this.userMessage.hide();
     }

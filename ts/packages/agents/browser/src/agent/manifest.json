@@ -15,6 +15,8 @@
   "schema": {
     "description": "Browser agent that allows you control browser windows and perform actions such as web browsing (opening, closing, reading pages), opening a new tab, closing a tab, scrolling, zooming and navigating to a specific URL.",
     "schemaFile": "./browserActionSchema.mts",
+    "compiledSchemaFile": "agents/browser/dist/agent/browserSchema.pas.json",
+    "grammarFile": "../../dist/agent/browserSchema.ag.json",
     "schemaType": {
       "action": "BrowserActions",
       "entity": "BrowserEntities"

@@ -18,14 +18,21 @@ export type DynamicDisplay = {
 // Single line, multiple lines, or table
 export type MessageContent = string | string[] | string[][];
 
+// A typed content entry with a specific display format
+export interface TypedDisplayContent {
+    type: DisplayType; // Type of the content
+    content: MessageContent; // each string in the MessageContext is treated as what `type` specifies
+    kind?: DisplayMessageKind | undefined; // Optional message kind for client specific styling
+    speak?: boolean; // Optional flag to indicate if the content should be spoken
+    // Alternative representations of the same content in different formats.
+    // Clients should pick the best format they support (e.g., shell prefers "html", CLI prefers "text").
+    // If no alternates match, clients fall back to the primary type/content.
+    alternates?: Array<{ type: DisplayType; content: MessageContent }>;
+}
+
 export type DisplayContent =
     | MessageContent // each string in the MessageContent is treated as DisplayType "text"
-    | {
-          type: DisplayType; // Type of the content
-          content: MessageContent; // each string in the MessageContext is treated as what `type` specifies
-          kind?: DisplayMessageKind | undefined; // Optional message kind for client specific styling
-          speak?: boolean; // Optional flag to indicate if the content should be spoken
-      };
+    | TypedDisplayContent;
 
 // Optional message kind for client specific styling
 export type DisplayMessageKind =
@@ -50,6 +57,28 @@ export type ClientAction =
     | "search-nearby"
     | "automate-phone-ui"
     | "open-folder";
+
+/**
+ * Given a TypedDisplayContent, find the content for a preferred type.
+ * Checks alternates first, then falls back to the primary content if it matches.
+ * Returns undefined if the preferred type is not available.
+ */
+export function getContentForType(
+    content: TypedDisplayContent,
+    preferredType: DisplayType,
+): MessageContent | undefined {
+    if (content.alternates) {
+        for (const alt of content.alternates) {
+            if (alt.type === preferredType) {
+                return alt.content;
+            }
+        }
+    }
+    if (content.type === preferredType) {
+        return content.content;
+    }
+    return undefined;
+}
 
 export interface ActionIO {
     // Set the display to the content provided

@@ -45,6 +45,7 @@ function parseAndCompileGrammar(
         errors,
         warnings,
         parseResult.imports,
+        parseResult.entities.length > 0 ? parseResult.entities : undefined,
     );
     if (errors.length === 0) {
         // Add entity declarations to the grammar.

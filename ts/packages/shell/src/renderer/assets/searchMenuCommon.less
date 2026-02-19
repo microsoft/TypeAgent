@@ -5,14 +5,18 @@
 .autocomplete-container {
   box-sizing: border-box;
   font-family: "Lato", sans-serif;
-  border-radius: 10px;
+  border-radius: 12px;
   position: absolute;
   bottom: 100%;
   z-index: 100;
   overflow: hidden;
-  outline: 2px solid cornflowerblue;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.06);
   background-color: #fffffff0;
   width: max-content;
+  backdrop-filter: blur(8px);
 }
 
 .autocomplete-container .search-input {
@@ -33,8 +37,13 @@
 
 .autocomplete-container .completions li {
   list-style-type: none;
-  padding: 4px 8px;
+  padding: 6px 12px;
   cursor: pointer;
+  transition: background-color 0.15s ease;
+
+  &:hover {
+    background-color: rgba(167, 139, 250, 0.08);
+  }
 }
 
 .autocomplete-container .completions li .search-prefix {
@@ -42,8 +51,12 @@
 }
 
 .autocomplete-container .completions .completion-selected {
-  background: #3498db;
+  background: linear-gradient(135deg, #a78bfa, #7c3aed);
   color: white;
+
+  &:hover {
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+  }
 }
 
 .autocomplete-container .completions li .search-symbol {
@@ -51,16 +64,18 @@
 }
 
 .autocomplete-scrollbar {
-  background-color: #6495ed25;
-  width: 5px;
-  top: 0;
-  bottom: 0;
-  right: 0;
+  background-color: rgba(0, 0, 0, 0.04);
+  width: 6px;
+  top: 4px;
+  bottom: 4px;
+  right: 2px;
   position: absolute;
+  border-radius: 3px;
 }
 
 .autocomplete-scrollbar-indicator {
-  background-color: #0062a466;
+  background-color: rgba(124, 58, 237, 0.3);
   width: 100%;
   position: absolute;
+  border-radius: 3px;
 }

@@ -126,7 +126,6 @@ export class GrammarStore {
 
         this.data.schemas[rule.schemaName].push(storedRule);
         this.modified = true;
-
         await this.doAutoSave();
     }
 
@@ -231,11 +230,8 @@ export class GrammarStore {
         }
 
         // Write the store data as JSON
-        await fs.promises.writeFile(
-            outFile,
-            JSON.stringify(this.data, null, 2),
-            "utf-8",
-        );
+        const jsonStr = JSON.stringify(this.data, null, 2);
+        await fs.promises.writeFile(outFile, jsonStr, "utf-8");
 
         this.filePath = outFile;
         this.modified = false;

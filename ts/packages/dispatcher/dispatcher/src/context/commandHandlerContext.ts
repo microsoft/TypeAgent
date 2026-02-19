@@ -602,10 +602,6 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     const config = context.session.getConfig();
     const useNFAGrammar = config.cache.grammarSystem === "nfa";
 
-    debug(
-        `setupGrammarGeneration: grammarSystem=${config.cache.grammarSystem}, grammar=${config.cache.grammar}`,
-    );
-
     if (!useNFAGrammar || !config.cache.grammar) {
         return;
     }
@@ -640,7 +636,9 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
                 schemaRules.get(rule.schemaName)!.push(rule.grammarText);
             }
 
-            // Merge rules into each agent's grammar
+            // Merge rules into each agent's grammar one at a time.
+            // Adding individually ensures one bad rule doesn't prevent
+            // all other rules for that schema from loading.
             for (const [schemaName, rules] of schemaRules) {
                 const agentGrammar =
                     context.agentGrammarRegistry.getAgent(schemaName);
@@ -651,21 +649,25 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
                     continue;
                 }
 
-                // Combine all rules for this schema
-                const combinedRules = rules.join("\n\n");
-
-                // Add to agent grammar (merges with static grammar)
-                const result = agentGrammar.addGeneratedRules(combinedRules);
-                if (result.success) {
-                    debug(
-                        `Merged ${rules.length} dynamic rules into ${schemaName}`,
-                    );
+                let merged = 0;
+                let failed = 0;
+                for (const ruleText of rules) {
+                    const result = agentGrammar.addGeneratedRules(ruleText);
+                    if (result.success) {
+                        merged++;
+                    } else {
+                        failed++;
+                        debug(
+                            `Skipping bad rule for ${schemaName}: ${result.errors.join("; ")}`,
+                        );
+                    }
+                }
+                debug(
+                    `Merge ${schemaName}: ${merged} merged, ${failed} failed (of ${rules.length})`,
+                );
+                if (merged > 0) {
                     // Sync to grammar store used for matching
                     context.agentCache.syncAgentGrammar(schemaName);
-                } else {
-                    debugError(
-                        `Failed to merge dynamic rules for ${schemaName}: ${result.errors.join(", ")}`,
-                    );
                 }
             }
         } catch (error) {
@@ -674,7 +676,6 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
         }
     } else {
         await grammarStore.newStore(grammarStorePath);
-        debug(`Created new grammar store at ${grammarStorePath}`);
     }
 
     // Enable auto-save

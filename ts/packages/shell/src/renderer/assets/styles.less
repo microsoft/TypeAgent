@@ -55,9 +55,112 @@ body {
     }
 
     .autocomplete-container {
-      background-color: #2a2a40;
+      background-color: #2a2a40f0;
       color: #e8e8f0;
+      border-color: rgba(255, 255, 255, 0.08);
+      box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.3),
+        0 1px 4px rgba(0, 0, 0, 0.2);
     }
+
+    .autocomplete-container .completions li:hover {
+      background-color: rgba(167, 139, 250, 0.12);
+    }
+
+    .autocomplete-scrollbar {
+      background-color: rgba(255, 255, 255, 0.06);
+    }
+
+    .autocomplete-scrollbar-indicator {
+      background-color: rgba(167, 139, 250, 0.4);
+    }
+  }
+
+  .inline-ghost {
+    color: #6b7280;
+  }
+
+  .chat-message-agent {
+    background-color: #2a2a40;
+  }
+
+  .chat-message-user {
+    background-color: #3b2d63;
+  }
+
+  .chat-message-content {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .chat-message-metrics-agent {
+    background-color: #232338;
+  }
+
+  .chat-message-metrics-user {
+    background-color: #322850;
+  }
+
+  .agent-icon {
+    background-color: #2a2a40;
+  }
+
+  .user-icon {
+    background: #4c1d95;
+    color: #c4b5fd;
+  }
+
+  .chat-timestamp {
+    color: #666;
+  }
+
+  .track-list {
+    h3 {
+      color: #ccc;
+    }
+
+    li {
+      border-bottom-color: rgba(255, 255, 255, 0.06);
+    }
+  }
+
+  .track-title {
+    color: #e8e8f0;
+  }
+
+  .track-artist {
+    color: #999;
+  }
+
+  .track-info div {
+    color: #888;
+  }
+
+  .now-playing-title {
+    color: #e8e8f0;
+  }
+
+  .now-playing-artist {
+    color: #bbb;
+  }
+
+  .now-playing-album {
+    color: #888;
+  }
+
+  .now-playing-times {
+    color: #888;
+  }
+
+  .now-playing-bar {
+    background: #3a3a50;
+  }
+
+  .now-playing-bar-fill {
+    background: #a78bfa;
+  }
+
+  .now-playing-device {
+    color: #666;
   }
 
   .chat-message-agent {
@@ -201,6 +304,12 @@ body {
   font-family: inherit;
   font-size: inherit;
   align-self: flex-start;
+}
+
+.inline-ghost {
+  color: #9ca3af;
+  pointer-events: none;
+  user-select: none;
 }
 
 .replacement-textarea {

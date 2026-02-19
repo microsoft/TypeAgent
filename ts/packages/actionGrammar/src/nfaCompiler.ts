@@ -29,6 +29,72 @@ interface RuleCompilationContext {
     checkedVariables: Set<string> | undefined;
     /** Parent slot index (for nested rule results) */
     parentSlotIndex: number | undefined;
+    /** Action name from the rule's value expression (for completion metadata) */
+    completionActionName?: string | undefined;
+    /** Map from variable name to property path (for completion metadata) */
+    completionPropertyPaths?: Map<string, string> | undefined;
+}
+
+/**
+ * Extract completion metadata (actionName and variable→propertyPath map) from a value expression.
+ * Only works for ActionExpression values; other expression types are ignored.
+ */
+function extractCompletionMetadata(expr: ValueExpression): {
+    actionName?: string;
+    propertyPaths: Map<string, string>;
+} {
+    const propertyPaths = new Map<string, string>();
+    if (expr.type !== "action") {
+        return { propertyPaths };
+    }
+    const actionName = expr.actionName;
+    // Walk parameters to find variable references
+    for (const [paramName, paramExpr] of expr.parameters) {
+        collectVariablePaths(
+            paramExpr,
+            `parameters.${paramName}`,
+            propertyPaths,
+        );
+    }
+    return { actionName, propertyPaths };
+}
+
+/**
+ * Recursively collect variable name → property path mappings from a value expression.
+ */
+function collectVariablePaths(
+    expr: ValueExpression,
+    currentPath: string,
+    result: Map<string, string>,
+): void {
+    switch (expr.type) {
+        case "variable":
+            if (expr.variableName) {
+                result.set(expr.variableName, currentPath);
+            }
+            break;
+        case "object":
+            for (const [key, value] of expr.properties) {
+                collectVariablePaths(value, `${currentPath}.${key}`, result);
+            }
+            break;
+        case "array":
+            // Don't append array index — completion metadata uses the base
+            // parameter name (e.g. "parameters.artists" not "parameters.artists[0]")
+            for (let i = 0; i < expr.elements.length; i++) {
+                collectVariablePaths(expr.elements[i], currentPath, result);
+            }
+            break;
+        case "action":
+            for (const [key, value] of expr.parameters) {
+                collectVariablePaths(
+                    value,
+                    `${currentPath}.parameters.${key}`,
+                    result,
+                );
+            }
+            break;
+    }
 }
 
 /**
@@ -387,6 +453,8 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
 
         // Compile and set the effective value expression on the state
         // Parse the raw value node, then compile with slot indices
+        let completionActionName: string | undefined;
+        let completionPropertyPaths: Map<string, string> | undefined;
         if (effectiveValue) {
             const parsedExpr = parseValueExpression(effectiveValue);
             const compiledExpr = compileValueExpression(
@@ -397,6 +465,13 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             builder.getState(ruleEntry).actionValue = compiledExpr;
             // Also store in actionValues array for priority tracking
             builder.setActionValue(ruleIndex, compiledExpr);
+
+            // Extract completion metadata from the parsed (uncompiled) expression
+            const meta = extractCompletionMetadata(parsedExpr);
+            completionActionName = meta.actionName;
+            if (meta.propertyPaths.size > 0) {
+                completionPropertyPaths = meta.propertyPaths;
+            }
         }
 
         builder.addEpsilonTransition(startState, ruleEntry);
@@ -407,6 +482,8 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             nextSlotIndex: slotMap.size,
             checkedVariables: normalizedGrammar.checkedVariables,
             parentSlotIndex: undefined,
+            completionActionName,
+            completionPropertyPaths,
         };
 
         const ruleEnd = compileRuleFromStateWithSlots(
@@ -765,6 +842,14 @@ function compileWildcardPartWithSlots(
         context.checkedVariables?.has(variableName) ?? false;
     const isChecked = hasEntityType || hasCheckedParamSpec;
 
+    // Completion metadata for checked wildcards
+    const completionActionName = isChecked
+        ? context.completionActionName
+        : undefined;
+    const completionPropertyPath = isChecked
+        ? context.completionPropertyPaths?.get(variableName)
+        : undefined;
+
     if (part.optional) {
         // Optional wildcard: can skip via epsilon or match one or more tokens
         builder.addEpsilonTransition(fromState, toState);
@@ -780,9 +865,12 @@ function compileWildcardPartWithSlots(
             isChecked,
             slotIndex,
             false, // First token, don't append
+            completionActionName,
+            completionPropertyPath,
         );
 
         // Loop: loopState -> loopState (append to slot)
+        // No completion metadata — same rationale as required wildcard.
         builder.addWildcardTransition(
             loopState,
             loopState,
@@ -810,9 +898,16 @@ function compileWildcardPartWithSlots(
         isChecked,
         slotIndex,
         false, // First token, don't append
+        completionActionName,
+        completionPropertyPath,
     );
 
     // Loop: loopState -> loopState (append to slot)
+    // No completion metadata on self-loop: property completions should only
+    // fire at the entry point (fromState), not after tokens have already been
+    // consumed.  Wildcard is token+ so once in the loop, completions come
+    // from whatever follows the wildcard (e.g. "by"), not from the wildcard
+    // entity list again.
     builder.addWildcardTransition(
         loopState,
         loopState,
@@ -971,6 +1066,19 @@ function compileRulesPartWithSlots(
         ? context.slotMap.get(effectiveVariable)
         : undefined;
 
+    // Annotate nested entry state with completion metadata from parent context
+    // This allows the completion system to identify property completions
+    // when the user types a prefix that reaches a nested rules reference
+    if (effectiveVariable && context.completionActionName) {
+        const propertyPath =
+            context.completionPropertyPaths?.get(effectiveVariable);
+        if (propertyPath) {
+            const entryState = builder.getState(nestedEntry);
+            entryState.completionActionName = context.completionActionName;
+            entryState.completionPropertyPath = propertyPath;
+        }
+    }
+
     // Track whether any rule in this RulesPart created an environment
     // (needed to decide whether to pop environment on exit)
     let anyRuleCreatedEnvironment = false;
@@ -995,6 +1103,8 @@ function compileRulesPartWithSlots(
         }
 
         let compiledValue: ValueExpression | undefined;
+        let nestedCompletionActionName: string | undefined;
+        let nestedCompletionPropertyPaths: Map<string, string> | undefined;
         if (effectiveValue) {
             const ruleIndex = findRuleIndex(grammar, rule);
             if (ruleIndex !== -1) {
@@ -1010,6 +1120,14 @@ function compileRulesPartWithSlots(
                 nestedTypeMap,
             );
             builder.getState(ruleEntry).actionValue = compiledValue;
+
+            // Extract completion metadata from the nested rule's value expression
+            // so that deeper nested rule references get properly annotated
+            const meta = extractCompletionMetadata(parsedExpr);
+            nestedCompletionActionName = meta.actionName;
+            if (meta.propertyPaths.size > 0) {
+                nestedCompletionPropertyPaths = meta.propertyPaths;
+            }
         }
 
         // Set slot info on the entry state if either:
@@ -1040,11 +1158,18 @@ function compileRulesPartWithSlots(
         // IMPORTANT: Don't propagate parentSlotIndex - each rule level computes its own
         // based on its variable capture. This prevents deeper rules from incorrectly
         // inheriting parent slot indices.
+        // Completion metadata: use the nested rule's own metadata if available,
+        // otherwise fall back to the parent context's metadata
         const nestedContext: RuleCompilationContext = {
             slotMap: nestedSlotMap,
             nextSlotIndex: nestedSlotMap.size,
             checkedVariables: context.checkedVariables,
             parentSlotIndex: undefined, // Each level computes its own from part.variable
+            completionActionName:
+                nestedCompletionActionName ?? context.completionActionName,
+            completionPropertyPaths:
+                nestedCompletionPropertyPaths ??
+                context.completionPropertyPaths,
         };
 
         // If we need to write to parent, create a per-rule exit state

@@ -158,7 +158,7 @@ export async function resolveCommand(
         parsedAppAgentName,
         actualAppAgentName: parsedAppAgentName ?? actualAppAgentName,
         commands,
-        suffix: curr.trim(),
+        suffix: curr.trimStart(),
         table,
         descriptor,
         matched,
@@ -179,7 +179,7 @@ export function normalizeCommand(
     originalInput: string,
     context: CommandHandlerContext,
 ) {
-    const input = originalInput.trim();
+    const input = originalInput.trimStart();
     if (!input.startsWith("@")) {
         const requestHandlerAgent = context.session.getConfig().request;
         return `${requestHandlerAgent} request ${input}`;
