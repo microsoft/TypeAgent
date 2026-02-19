@@ -34,6 +34,7 @@ type MatchedValue =
     | string
     | number
     | undefined
+    // Value from nested rule
     | { node: ValueNode | undefined; valueIds: ValueIdNode | undefined };
 
 type MatchedValueNode = {
@@ -330,7 +331,11 @@ function addValueWithId(
     };
 }
 
-function addValue(state: MatchState, name: string, matchedValue: MatchedValue) {
+function addValue(
+    state: MatchState,
+    name: string | undefined,
+    matchedValue: MatchedValue,
+) {
     const valueId = addValueId(state, name);
     if (valueId !== undefined) {
         addValueWithId(state, valueId, matchedValue, false);
@@ -538,6 +543,15 @@ function matchStringPartWithoutWildcard(
     }
 
     debugMatch(state, `Matched string ${part.value.join(" ")} to ${newIndex}`);
+
+    if (
+        state.value === undefined &&
+        state.parts.length === 1 &&
+        state.valueIds !== null
+    ) {
+        // default string part value
+        addValue(state, undefined, part.value.join(" "));
+    }
     state.index = newIndex;
     return true;
 }

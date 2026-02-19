@@ -8,7 +8,7 @@ import { Grammar } from "./grammarTypes.js";
 
 type LoadGrammarRulesOptions = {
     start?: string; // Optional start symbol (default: "Start")
-    startValueRequired?: boolean; // Whether the start rule must produce a value (default: false)
+    startValueRequired?: boolean; // Whether the start rule must produce a value (default: true)
 };
 
 function parseAndCompileGrammar(
@@ -32,7 +32,7 @@ function parseAndCompileGrammar(
     }
 
     const start = options?.start ?? "Start";
-    const startValueRequired = options?.startValueRequired ?? false;
+    const startValueRequired = options?.startValueRequired ?? true;
     const parseResult = parseGrammarRules(displayPath, content);
     const grammar = compileGrammar(
         displayPath,

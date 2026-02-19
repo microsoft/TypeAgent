@@ -182,9 +182,7 @@ describe("Grammar Compiler", () => {
             @<Start> = $(x:string) $(y:string) wait
         `;
             const errors: string[] = [];
-            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
-                startValueRequired: true,
-            });
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Start rule '<Start>' does not produce a value.",
@@ -197,13 +195,34 @@ describe("Grammar Compiler", () => {
             @<Action> = $(x:string) $(y:string) wait
         `;
             const errors: string[] = [];
-            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
-                startValueRequired: true,
-            });
+            loadGrammarRulesNoThrow("test", grammarText, errors);
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain(
                 "error: Start rule '<Start>' does not produce a value.",
             );
+        });
+
+        it("Start rule without value with startValueRequired:false option", () => {
+            const grammarText = `
+            @<Start> = $(x:string) $(y:string) wait
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                startValueRequired: false,
+            });
+            expect(errors.length).toBe(0);
+        });
+
+        it("Start rule with nested non-value rule and startValueRequired:false option", () => {
+            const grammarText = `
+            @<Start> = <Action>
+            @<Action> = $(x:string) $(y:string) wait
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                startValueRequired: false,
+            });
+            expect(errors.length).toBe(0);
         });
 
         it("Start rule with value expression is valid", () => {
@@ -252,23 +271,8 @@ describe("Grammar Compiler", () => {
 
         it("Multiple variables without explicit value expression", () => {
             const grammarText = `
-            @<Start> = <Action>
+            @<Start> = <Action> -> "action"
             @<Action> = $(x:string) $(y:string)
-        `;
-            const errors: string[] = [];
-            const warnings: string[] = [];
-            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
-            expect(errors.length).toBe(0);
-            expect(warnings.length).toBe(1);
-            expect(warnings[0]).toContain(
-                "warning: Rule with multiple variables and no explicit value expression doesn't have an implicit value.",
-            );
-        });
-
-        it("Two variables without explicit value expression warns", () => {
-            const grammarText = `
-            @<Start> = <Pause>
-            @<Pause> = $(x:string) and $(y:string) wait
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
