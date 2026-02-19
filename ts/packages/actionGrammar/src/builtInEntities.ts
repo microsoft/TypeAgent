@@ -379,6 +379,63 @@ export const CalendarTimeRange: EntityConverter<string> = createConverter(
 );
 
 // ============================================================================
+// Percentage Entity
+// ============================================================================
+
+function validatePercentage(token: string): boolean {
+    const lower = token.toLowerCase().trim();
+
+    // "35%" or "100%"
+    if (/^\d+%$/.test(lower)) {
+        return true;
+    }
+
+    // Bare numbers: "35", "100"
+    if (/^\d+$/.test(lower)) {
+        return true;
+    }
+
+    // Word numbers (reuse cardinal map keys)
+    if (lower in cardinalMap) {
+        return true;
+    }
+
+    return false;
+}
+
+function convertPercentage(token: string): number | undefined {
+    const lower = token.toLowerCase().trim();
+
+    // "35%" → 35
+    if (lower.endsWith("%")) {
+        const num = parseInt(lower.slice(0, -1), 10);
+        return isNaN(num) ? undefined : num;
+    }
+
+    // Bare number: "35" → 35
+    const num = parseInt(lower, 10);
+    if (!isNaN(num)) {
+        return num;
+    }
+
+    // Word number: "fifty" → 50 (via cardinal map)
+    if (lower in cardinalMap) {
+        return cardinalMap[lower];
+    }
+
+    return undefined;
+}
+
+/**
+ * Percentage entity converter
+ * Validates and converts percentage expressions: "35%", "100", "twenty"
+ */
+export const Percentage: EntityConverter<number> = createConverter(
+    validatePercentage,
+    convertPercentage,
+);
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -400,6 +457,8 @@ export function registerBuiltInEntities(): void {
         CalendarTimeRange,
     );
 
+    globalEntityRegistry.registerConverter("Percentage", Percentage);
+
     // Lowercase aliases (paramSpec convention from .pas.json schemas)
     globalEntityRegistry.registerConverter("ordinal", Ordinal);
     globalEntityRegistry.registerConverter("cardinal", Cardinal);
@@ -409,4 +468,5 @@ export function registerBuiltInEntities(): void {
         "calendarTimeRange",
         CalendarTimeRange,
     );
+    globalEntityRegistry.registerConverter("percentage", Percentage);
 }

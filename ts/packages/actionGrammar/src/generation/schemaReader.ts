@@ -255,46 +255,25 @@ function getConvertersForSchema(
         });
     }
 
-    // Note: EventDescription, ParticipantName, and LocationName are NOT included
-    // because they cannot be deterministically recognized. They can be arbitrary strings
-    // like "under the water tower" for location or any event description.
-    // For now, these must use plain string wildcards in grammars.
-    // Future strategy: Generate two rules - one with entity type (when recognizable)
-    // and one without (if it doesn't violate adjacent wildcard rules).
-
-    // Music player converters
-    if (entityTypes.has("MusicDevice")) {
-        converters.set("MusicDevice", {
-            name: "Player.MusicDevice",
-            description: "Validates and resolves music playback device names",
-            examples: [
-                "bedroom speaker → MusicDevice",
-                "kitchen → MusicDevice",
-                "living room → MusicDevice",
-            ],
-        });
-    }
-
     return converters;
 }
 
 /**
- * Get the wildcard type string for a parameter based on its validation info
+ * Get the wildcard type string for a parameter based on its paramSpec
  * This is used to generate the correct wildcard syntax in grammar rules
  *
- * Types:
- * - wildcard: matches 1+ words (default for most parameters)
- * - word: matches exactly 1 word
- * - number: matches numeric values
- * - EntityType: validated entity type (e.g., MusicDevice)
+ * Types determined by paramSpec:
+ * - "checked_wildcard" → "wildcard" (validated at runtime, but grammar uses wildcard matching)
+ * - "ordinal", "number", "percentage" → used as-is (built-in entity types)
+ * - no paramSpec → "wildcard" (default)
+ *
+ * Note: Schema entity types (e.g., MusicDevice) are NOT used here.
+ * Parameters referencing entity types already have checked_wildcard paramSpec,
+ * which provides property completions and match priority without needing
+ * entity type registration in the grammar compiler.
  */
 export function getWildcardType(info: ParameterValidationInfo): string {
-    // If it's an entity type, use the entity type name (new system)
-    if (info.isEntityType && info.entityTypeName) {
-        return info.entityTypeName;
-    }
-
-    // If it has a paramSpec that's not checked_wildcard, use it (old system)
+    // If it has a paramSpec that's not checked_wildcard, use it
     // checked_wildcard just means "validate this wildcard", so it maps to "wildcard"
     // but ordinal, number, percentage are specific types
     if (info.paramSpec && info.paramSpec !== "checked_wildcard") {
@@ -307,10 +286,8 @@ export function getWildcardType(info: ParameterValidationInfo): string {
 
 /**
  * Determine if a parameter should use a typed wildcard in the grammar
+ * Checked wildcards get property completions and higher match priority
  */
 export function shouldUseTypedWildcard(info: ParameterValidationInfo): boolean {
-    // Use typed wildcards for:
-    // 1. Entity types (e.g., MusicDevice)
-    // 2. Checked wildcards that might have validation
-    return info.isEntityType || info.paramSpec === "checked_wildcard";
+    return info.paramSpec === "checked_wildcard";
 }

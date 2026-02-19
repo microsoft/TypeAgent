@@ -57,14 +57,14 @@ export class PartialCompletion {
         private readonly container: HTMLDivElement,
         private readonly input: ExpandableTextArea,
         private readonly dispatcher: Dispatcher,
-        disableRemoteUI?: boolean,
+        private readonly inline: boolean = true,
     ) {
         this.searchMenu = new SearchMenu(
             (item) => {
                 this.handleSelect(item);
             },
-            undefined,
-            disableRemoteUI ? false : undefined,
+            this.inline,
+            this.input.getTextEntry(),
         );
         const selectionChangeHandler = () => {
             debug("Partial completion update on selection changed");
@@ -155,7 +155,15 @@ export class PartialCompletion {
         this.cleanupEventListeners();
     }
     private getCurrentInput() {
-        return this.input.getTextEntry().textContent ?? "";
+        // Strip inline ghost text if present
+        const textEntry = this.input.getTextEntry();
+        const ghost = textEntry.querySelector(".inline-ghost");
+        if (ghost) {
+            const ghostText = ghost.textContent ?? "";
+            const raw = textEntry.textContent ?? "";
+            return raw.slice(0, raw.length - ghostText.length);
+        }
+        return textEntry.textContent ?? "";
     }
     private getCurrentInputForCompletion() {
         return this.getCurrentInput().trimStart();
@@ -175,6 +183,40 @@ export class PartialCompletion {
         if (!r.collapsed) {
             if (trace) {
                 debug(`Partial completion skipped: non-collapsed range`);
+            }
+            return false;
+        }
+
+        const textEntry = this.input.getTextEntry();
+        const ghost = textEntry.querySelector(".inline-ghost");
+
+        if (ghost) {
+            // With inline ghost text, "at end" means the cursor is right
+            // before the ghost span. setCursorBeforeGhost places the cursor
+            // using setStartBefore(ghost), so endContainer=textEntry and
+            // endOffset=ghost's child index.
+            if (r.endContainer === textEntry) {
+                const ghostIndex = Array.from(textEntry.childNodes).indexOf(
+                    ghost as ChildNode,
+                );
+                if (r.endOffset === ghostIndex) {
+                    return true;
+                }
+            }
+            // Also handle: cursor at the end of a text node that is the
+            // immediate previous sibling of the ghost span.
+            if (r.endContainer.nodeType === Node.TEXT_NODE) {
+                if (
+                    r.endContainer.nextSibling === ghost &&
+                    r.endOffset === (r.endContainer.textContent?.length ?? 0)
+                ) {
+                    return true;
+                }
+            }
+            if (trace) {
+                debug(
+                    `Partial completion skipped: selection not at end (ghost present)`,
+                );
             }
             return false;
         }
@@ -283,43 +325,23 @@ export class PartialCompletion {
                         : input;
                 this.current = partial;
 
+                // Build completions preserving backend group order so that
+                // grammar completions (e.g. "by") appear before entity
+                // completions (e.g. song titles), matching CLI behavior.
                 const completions: SearchMenuItem[] = [];
-                const sortedGroups = result.completions.filter((g) => g.sorted);
-                let sortedGroupIndex = 0;
-                let maxSortedGroups = 0;
-                for (const group of sortedGroups) {
-                    let index = 0;
-                    maxSortedGroups = Math.max(
-                        maxSortedGroups,
-                        group.completions.length,
-                    );
-
-                    for (const choice of group.completions) {
+                let currentIndex = 0;
+                for (const group of result.completions) {
+                    const items = group.sorted
+                        ? group.completions
+                        : [...group.completions].sort();
+                    for (const choice of items) {
                         completions.push({
                             matchText: choice,
                             selectedText: choice,
-                            sortIndex:
-                                sortedGroups.length * index + sortedGroupIndex,
+                            sortIndex: currentIndex++,
                             needQuotes: group.needQuotes,
                             emojiChar: group.emojiChar,
                         });
-                        index++;
-                    }
-                    sortedGroupIndex++;
-                }
-                let baseIndex = sortedGroups.length * maxSortedGroups;
-                for (const group of result.completions) {
-                    if (!group.sorted) {
-                        const sorted = [...group.completions].sort();
-                        for (const choice of sorted) {
-                            completions.push({
-                                matchText: choice,
-                                selectedText: choice,
-                                sortIndex: baseIndex++,
-                                needQuotes: group.needQuotes,
-                                emojiChar: group.emojiChar,
-                            });
-                        }
                     }
                 }
 
@@ -429,9 +451,11 @@ export class PartialCompletion {
         // Make sure the text entry remains focused after replacement.
         this.input.getTextEntry().focus();
 
-        debug(
-            `Partial completion input suffix replaced at: ${replaceText} at offset ${prefix.length}`,
-        );
+        // Reset completion state so the next update requests fresh
+        // completions from the backend instead of reusing stale trie data.
+        this.current = undefined;
+
+        debug(`Partial completion replaced: ${replaceText}`);
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {

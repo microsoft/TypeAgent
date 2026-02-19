@@ -52,7 +52,28 @@ async function getCompletionsData(
     dispatcher: Dispatcher,
 ): Promise<CompletionData | null> {
     try {
-        const result = await dispatcher.getCommandCompletion(line);
+        // Token-boundary logic: for non-@ input, only send complete tokens
+        // to the backend. The NFA can only match whole tokens, so sending a
+        // partial word like "p" fails. Instead, send up to the last token
+        // boundary and let the CLI filter locally by the partial word.
+        let queryLine = line;
+        const trimmed = line.trimStart();
+        if (
+            trimmed.length > 0 &&
+            !trimmed.startsWith("@") &&
+            !/\s$/.test(line)
+        ) {
+            const lastSpace = line.lastIndexOf(" ");
+            if (lastSpace === -1) {
+                // First word being typed: send empty to get start-state completions
+                queryLine = "";
+            } else {
+                // Mid-word after spaces: send up to last token boundary
+                queryLine = line.substring(0, lastSpace + 1);
+            }
+        }
+
+        const result = await dispatcher.getCommandCompletion(queryLine);
         if (!result || !result.completions || result.completions.length === 0) {
             return null;
         }
@@ -65,8 +86,14 @@ async function getCompletionsData(
             }
         }
 
-        const prefix = line.substring(0, result.startIndex);
-        const filterStartIndex = result.startIndex;
+        // When we truncated the query, compute filter position from original input
+        const filterStartIndex =
+            queryLine !== line
+                ? line.lastIndexOf(" ") === -1
+                    ? 0
+                    : line.lastIndexOf(" ") + 1
+                : result.startIndex;
+        const prefix = line.substring(0, filterStartIndex);
 
         return {
             allCompletions,

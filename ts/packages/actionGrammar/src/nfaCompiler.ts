@@ -870,6 +870,7 @@ function compileWildcardPartWithSlots(
         );
 
         // Loop: loopState -> loopState (append to slot)
+        // No completion metadata — same rationale as required wildcard.
         builder.addWildcardTransition(
             loopState,
             loopState,
@@ -878,8 +879,6 @@ function compileWildcardPartWithSlots(
             isChecked,
             slotIndex,
             true, // Subsequent tokens, append
-            completionActionName,
-            completionPropertyPath,
         );
 
         builder.addEpsilonTransition(loopState, toState);
@@ -904,6 +903,11 @@ function compileWildcardPartWithSlots(
     );
 
     // Loop: loopState -> loopState (append to slot)
+    // No completion metadata on self-loop: property completions should only
+    // fire at the entry point (fromState), not after tokens have already been
+    // consumed.  Wildcard is token+ so once in the loop, completions come
+    // from whatever follows the wildcard (e.g. "by"), not from the wildcard
+    // entity list again.
     builder.addWildcardTransition(
         loopState,
         loopState,
@@ -912,8 +916,6 @@ function compileWildcardPartWithSlots(
         isChecked,
         slotIndex,
         true, // Subsequent tokens, append
-        completionActionName,
-        completionPropertyPath,
     );
 
     builder.addEpsilonTransition(loopState, toState);

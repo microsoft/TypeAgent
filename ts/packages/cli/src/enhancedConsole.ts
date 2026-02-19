@@ -17,6 +17,7 @@ import {
     DisplayAppendMode,
     DisplayContent,
     MessageContent,
+    getContentForType,
 } from "@typeagent/agent-sdk";
 import type {
     RequestId,
@@ -209,8 +210,15 @@ export function createEnhancedClientIO(
         if (typeof content === "string" || Array.isArray(content)) {
             message = content;
         } else {
-            message = content.content;
-            contentType = content.type || "text";
+            // CLI prefers text alternates when available
+            const textContent = getContentForType(content, "text");
+            if (textContent !== undefined && content.type !== "text") {
+                message = textContent;
+                contentType = "text";
+            } else {
+                message = content.content;
+                contentType = content.type || "text";
+            }
             switch (content.kind) {
                 case "status":
                     colorFn = chalk.grey;

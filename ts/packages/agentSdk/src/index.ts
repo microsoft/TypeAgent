@@ -48,8 +48,10 @@ export {
     DynamicDisplay,
     MessageContent,
     DisplayContent,
+    TypedDisplayContent,
     DisplayAppendMode,
     DisplayMessageKind,
+    getContentForType,
 } from "./display.js";
 
 export {
