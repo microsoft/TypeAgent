@@ -45,7 +45,7 @@ export const defaultUserSettings: ShellUserSettings = {
         provider: undefined,
         voice: undefined,
     },
-    agentGreeting: true,
+    agentGreeting: false,
     multiModalContent: true,
     ui: {
         verticalLayout: true,

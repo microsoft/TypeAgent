@@ -215,21 +215,37 @@ export class BrowserViewManager {
             webContentsView.setBounds({ x: 0, y: 0, width: 0, height: 0 });
         }
 
-        // Run CDP fingerprint masking before loading any URL.
-        // Use a timeout so a hung debugger doesn't block tab creation.
+        // CDP fingerprint masking: needed on all tabs (user may navigate to Google).
+        // For Google URLs: await CDP so masking is ready before page load.
+        // For non-Google URLs: fire-and-forget so tab loads instantly.
+        let isGoogle = false;
         try {
-            await Promise.race([
-                this.setupCDP(webContentsView.webContents, tabId),
-                new Promise<void>((_, reject) =>
-                    setTimeout(
-                        () => reject(new Error("CDP setup timed out")),
-                        3000,
+            isGoogle = isGoogleDomain(new URL(options.url).hostname);
+        } catch {
+            // about:blank or invalid URL
+        }
+
+        const cdpSetup = this.setupCDP(
+            webContentsView.webContents,
+            tabId,
+        ).catch((err) => {
+            debug(`CDP setup failed for tab ${tabId}: ${err}`);
+        });
+
+        if (isGoogle) {
+            try {
+                await Promise.race([
+                    cdpSetup,
+                    new Promise<void>((_, reject) =>
+                        setTimeout(
+                            () => reject(new Error("CDP setup timed out")),
+                            5000,
+                        ),
                     ),
-                ),
-            ]);
-        } catch (err) {
-            debug(`CDP setup skipped for tab ${tabId}: ${err}`);
-            // Chrome is the natural default — no fallback UA needed
+                ]);
+            } catch (err) {
+                debug(`CDP setup skipped for tab ${tabId}: ${err}`);
+            }
         }
 
         // Load the URL or show new tab page

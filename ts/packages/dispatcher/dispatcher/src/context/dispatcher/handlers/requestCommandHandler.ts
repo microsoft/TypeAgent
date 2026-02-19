@@ -39,6 +39,7 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
+import { executeReasoning } from "../../../reasoning/claude.js";
 import { getTranslatorForSchema } from "../../../translation/translateRequest.js";
 import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js";
 import { addRequestToMemory, addResultToMemory } from "../../memory.js";
@@ -51,6 +52,7 @@ import {
 } from "../../../translation/interpretRequest.js";
 
 const debugExplain = registerDebug("typeagent:explain");
+const debugRequest = registerDebug("typeagent:request");
 
 async function canTranslateWithoutContext(
     requestAction: RequestAction,
@@ -408,12 +410,32 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
 
-            // Execute the actions
-            await executeActions(
-                requestAction.actions,
-                requestAction.history?.entities,
-                context,
+            // If translation produced unknown actions, fall back to reasoning.
+            // If reasoning is unavailable (no API key, model error, etc.),
+            // fall through to executeActions which shows the original error.
+            const hasUnknownActions = requestAction.actions.some(({ action }) =>
+                isUnknownAction(action),
             );
+            let reasoningHandled = false;
+            if (hasUnknownActions) {
+                try {
+                    await executeReasoning(request, context, {
+                        engine: "claude",
+                    });
+                    reasoningHandled = true;
+                } catch (e: any) {
+                    debugRequest(
+                        `Reasoning fallback failed, using default handler: ${e.message}`,
+                    );
+                }
+            }
+            if (!reasoningHandled) {
+                await executeActions(
+                    requestAction.actions,
+                    requestAction.history?.entities,
+                    context,
+                );
+            }
 
             await requestExplain(
                 systemContext,

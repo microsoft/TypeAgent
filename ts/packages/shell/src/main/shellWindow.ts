@@ -266,7 +266,7 @@ export class ShellWindow {
         this.focusChatInput();
     }
 
-    private focusChatInput() {
+    public focusChatInput() {
         this.chatView.webContents.focus();
         this.chatView.webContents.send("focus-chat-input");
     }
@@ -279,28 +279,37 @@ export class ShellWindow {
                 const browserTabsState: BrowserTabState[] = JSON.parse(
                     states.browserTabsJson,
                 );
+
+                // Notify the chat view that tabs are being restored
+                this.chatView.webContents.send(
+                    "tab-restore-status",
+                    browserTabsState.length,
+                );
+
                 debugShellWindow(
                     `Restoring ${browserTabsState.length} browser tabs`,
                 );
 
-                // Restore each tab
-                for (const tabState of browserTabsState) {
-                    try {
-                        const tabId = await this.createBrowserTab(
-                            new URL(tabState.url),
-                            {
-                                background: !tabState.isActive,
-                            },
-                        );
-                        debugShellWindow(
-                            `Restored tab: ${tabId} - ${tabState.title} (${tabState.url})`,
-                        );
-                    } catch (e) {
-                        debugShellWindowError(
-                            `Failed to restore tab ${tabState.title} (${tabState.url}): ${e}`,
-                        );
-                    }
-                }
+                // Restore all tabs in parallel
+                await Promise.all(
+                    browserTabsState.map(async (tabState) => {
+                        try {
+                            const tabId = await this.createBrowserTab(
+                                new URL(tabState.url),
+                                {
+                                    background: !tabState.isActive,
+                                },
+                            );
+                            debugShellWindow(
+                                `Restored tab: ${tabId} - ${tabState.title} (${tabState.url})`,
+                            );
+                        } catch (e) {
+                            debugShellWindowError(
+                                `Failed to restore tab ${tabState.title} (${tabState.url}): ${e}`,
+                            );
+                        }
+                    }),
+                );
             } catch (e) {
                 debugShellWindowError(
                     `Failed to parse browser tabs JSON: ${e}`,
@@ -308,8 +317,11 @@ export class ShellWindow {
             }
         }
 
+        // Notify chat view that tab restoration is complete
+        this.chatView.webContents.send("tab-restore-status", 0);
+
         this.browserTabRestored = true;
-        this.ensureAutoEmptyTab();
+        await this.ensureAutoEmptyTab();
     }
 
     private async ensureAutoEmptyTab() {
@@ -332,18 +344,17 @@ export class ShellWindow {
                 this.chatView.webContents.send("send-demo-event", "Alt+Right");
             });
 
-            // Register Ctrl+L / Cmd+L and Ctrl+E / Cmd+E to focus chat input
+            // Register global shortcuts to focus chat input from any app
             globalShortcut.register("CommandOrControl+L", () => {
                 this.showAndFocus();
             });
 
-            globalShortcut.register("CommandOrControl+E", () => {
+            globalShortcut.register("Alt+E", () => {
                 this.showAndFocus();
             });
 
             // Make sure content is loaded so we can adjust the size including the divider.
             await Promise.all(this.contentLoadP);
-            await this.restoreBrowserTabs();
 
             if (!isLinux) {
                 // REVIEW: on linux, setting windows bound before showing has not affect?
@@ -353,6 +364,9 @@ export class ShellWindow {
             const mainWindow = this.mainWindow;
             this.setZoomFactor(1, mainWindow.webContents);
             this.showAndFocus();
+
+            // Restore browser tabs after window is visible so startup isn't blocked
+            await this.restoreBrowserTabs();
 
             if (isLinux) {
                 // REVIEW: on linux, setting windows bound before showing has not affect?
@@ -422,7 +436,7 @@ export class ShellWindow {
 
         globalShortcut.unregister("Alt+Right");
         globalShortcut.unregister("CommandOrControl+L");
-        globalShortcut.unregister("CommandOrControl+E");
+        globalShortcut.unregister("Alt+E");
 
         // shutdown chat server
         if (this.chatViewServer) {

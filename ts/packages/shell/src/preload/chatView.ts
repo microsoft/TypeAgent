@@ -92,6 +92,10 @@ function registerClient(client: Client) {
         client.dispatcherInitialized(dispatcher);
     });
 
+    ipcRenderer.on("tab-restore-status", (_, count: number) => {
+        client.tabRestoreStatus(count);
+    });
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
 
