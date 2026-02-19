@@ -99,9 +99,24 @@ export class PartialCompletion {
         const input = this.getCurrentInputForCompletion();
         debug(`Partial completion input: '${input}'`);
 
-        // @ commands: use existing command completion path (delegates to reuseSearchMenu)
+        // @ commands: use existing command completion path.
+        // Same token-boundary logic as grammar completions: only re-fetch
+        // at word boundaries so partial words (e.g. "@config c") don't hit
+        // the backend, which would fail to resolve "c" and poison noCompletion.
         if (input.trimStart().startsWith("@")) {
-            if (!this.reuseSearchMenu(input)) {
+            if (this.reuseSearchMenu(input)) {
+                return;
+            }
+            // Re-fetch at the last word boundary so the backend sees only
+            // complete command tokens and returns proper subcommand completions.
+            const lastSpaceIdx = input.lastIndexOf(" ");
+            if (/\s$/.test(input)) {
+                this.updatePartialCompletion(input);
+            } else if (lastSpaceIdx >= 0) {
+                this.updatePartialCompletion(
+                    input.substring(0, lastSpaceIdx + 1),
+                );
+            } else {
                 this.updatePartialCompletion(input);
             }
             return;
