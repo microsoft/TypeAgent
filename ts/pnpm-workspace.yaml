@@ -1,3 +1,4 @@
+forceLegacyDeploy: true
 packages:
   - packages/*
   - packages/memory/*
