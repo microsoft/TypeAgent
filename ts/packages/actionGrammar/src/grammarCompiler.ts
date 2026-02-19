@@ -14,6 +14,7 @@ import {
     parseGrammarRules,
     ValueNode,
 } from "./grammarRuleParser.js";
+import { getLineCol } from "./utils.js";
 
 export type FileLoader = {
     resolvePath: (name: string, ref?: string) => string;
@@ -21,42 +22,35 @@ export type FileLoader = {
     readContent: (fullPath: string) => string;
 };
 
-type DefinitionMap = Map<
-    string,
-    {
-        rules: Rule[];
-        pos: number | undefined;
-        grammarRules?: GrammarRule[];
-        hasValue: boolean;
-    }
->;
-
-type GrammarCompileResult = {
-    grammar: Grammar;
-    errors: GrammarCompileError[];
-    warnings: GrammarCompileError[];
-    // Type names imported from .ts files that are actually used as variable types.
-    // These should be treated as entity declarations for runtime validation.
-    usedImportedTypes: string[];
+type DefinitionRecord = {
+    rules: Rule[];
+    pos: number | undefined;
+    grammarRules?: GrammarRule[];
+    hasValue: boolean;
 };
 
-export type GrammarCompileError = {
+type CompletedDefinitionRecord = DefinitionRecord & {
+    grammarRules: GrammarRule[];
+};
+type DefinitionMap = Map<string, DefinitionRecord>;
+
+type GrammarCompileError = {
     message: string;
-    displayPath: string;
     definition?: string | undefined;
     pos?: number | undefined;
 };
 
 type CompileContext = {
     grammarFileMap: Map<string, CompileContext>;
+    content: string;
     displayPath: string;
     ruleDefMap: DefinitionMap;
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     importedTypeNames: Set<string>; // Type names imported from .ts files
     usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
     currentDefinition?: string | undefined;
-    errors: Omit<GrammarCompileError, "displayPath">[];
-    warnings: Omit<GrammarCompileError, "displayPath">[];
+    errors: GrammarCompileError[];
+    warnings: GrammarCompileError[];
 };
 
 function createImportCompileContext(
@@ -77,6 +71,7 @@ function createImportCompileContext(
     const result = parseGrammarRules(displayPath, content);
     const importContext = createCompileContext(
         grammarFileMap,
+        content,
         displayPath,
         fullPath,
         fileLoader,
@@ -88,6 +83,7 @@ function createImportCompileContext(
 
 function createCompileContext(
     grammarFileMap: Map<string, CompileContext>,
+    content: string,
     displayPath: string,
     fullPath: string,
     fileUtils: FileLoader | undefined,
@@ -107,16 +103,17 @@ function createCompileContext(
             importedTypeNames.add(name);
         }
     }
-
+    const usedImportedTypes = new Set<string>();
     // Create the context early and add to the map BEFORE processing anything
     // This prevents infinite recursion on circular dependencies
     const context: CompileContext = {
         grammarFileMap,
+        content,
         displayPath,
         ruleDefMap,
         importedRuleMap,
         importedTypeNames,
-        usedImportedTypes: new Set<string>(),
+        usedImportedTypes,
         errors: [],
         warnings: [],
     };
@@ -193,18 +190,23 @@ function createCompileContext(
 }
 
 export function compileGrammar(
-    relativePath: string,
+    displayPath: string,
+    content: string,
     fullPath: string,
     fileUtils: FileLoader | undefined,
     definitions: RuleDefinition[],
     start: string,
+    startValueRequired: boolean,
+    errors: string[],
+    warnings?: string[],
     imports?: ImportStatement[],
     entityNames?: string[],
-): GrammarCompileResult {
+): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
         grammarFileMap,
-        relativePath,
+        content,
+        displayPath,
         fullPath,
         fileUtils,
         definitions,
@@ -212,7 +214,14 @@ export function compileGrammar(
         entityNames,
     );
 
-    const grammar = { rules: createNamedGrammarRules(context, start) };
+    const { grammarRules, hasValue } = createNamedGrammarRules(context, start);
+
+    if (startValueRequired && !hasValue) {
+        context.errors.push({
+            message: `Start rule '<${start}>' does not produce a value.`,
+            definition: start,
+        });
+    }
 
     for (const [name, record] of context.ruleDefMap.entries()) {
         if (record.grammarRules === undefined) {
@@ -223,20 +232,20 @@ export function compileGrammar(
         }
     }
 
-    const errors: GrammarCompileError[] = [];
-    const warnings: GrammarCompileError[] = [];
     for (const [, compileContext] of context.grammarFileMap) {
         errors.push(
-            ...compileContext.errors.map((e) => ({
-                ...e,
-                displayPath: compileContext.displayPath,
-            })),
+            ...convertCompileError(
+                compileContext,
+                "error",
+                compileContext.errors,
+            ),
         );
-        warnings.push(
-            ...compileContext.warnings.map((w) => ({
-                ...w,
-                displayPath: compileContext.displayPath,
-            })),
+        warnings?.push(
+            ...convertCompileError(
+                compileContext,
+                "warning",
+                compileContext.warnings,
+            ),
         );
     }
 
@@ -248,12 +257,23 @@ export function compileGrammar(
         }
     }
 
-    return {
-        grammar,
-        errors,
-        warnings,
-        usedImportedTypes: Array.from(usedImportedTypes),
-    };
+    const grammar: Grammar = { rules: grammarRules };
+    if (usedImportedTypes.size > 0) {
+        grammar.entities = Array.from(usedImportedTypes);
+    }
+    return grammar;
+}
+
+function convertCompileError(
+    compileContext: CompileContext,
+    type: "error" | "warning",
+    errors: GrammarCompileError[],
+) {
+    const { content, displayPath } = compileContext;
+    return errors.map((e) => {
+        const lineCol = getLineCol(content, e.pos ?? 0);
+        return `${displayPath}(${lineCol.line},${lineCol.col}): ${type}: ${e.message}${e.definition ? ` in definition '<${e.definition}>'` : ""}`;
+    });
 }
 
 const emptyRecord = {
@@ -305,7 +325,7 @@ function createNamedGrammarRules(
     referencePosition?: number,
     referenceVariable?: string,
     referenceContext: CompileContext = context,
-): GrammarRule[] {
+): CompletedDefinitionRecord {
     const record = context.ruleDefMap.get(name);
     if (record === undefined) {
         // Check if this rule name is imported from a grammar file
@@ -317,7 +337,7 @@ function createNamedGrammarRules(
                 pos: referencePosition,
             });
             context.ruleDefMap.set(name, emptyRecord);
-            return emptyRecord.grammarRules;
+            return emptyRecord;
         }
         return createNamedGrammarRules(
             importedContext,
@@ -346,7 +366,7 @@ function createNamedGrammarRules(
             pos: record.pos,
         });
     }
-    return record.grammarRules;
+    return record as CompletedDefinitionRecord;
 }
 
 function createGrammarRules(
@@ -371,6 +391,7 @@ function createGrammarRule(
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
     let variableCount = 0;
+    let defaultValue = false;
     for (const expr of expressions) {
         switch (expr.type) {
             case "string": {
@@ -380,11 +401,13 @@ function createGrammarRule(
                 };
                 // TODO: create regexp
                 parts.push(part);
+                // default value of the string
+                defaultValue = true;
                 break;
             }
             case "variable": {
                 variableCount++;
-                const { name, typeName, ruleReference, ruleRefPos, pos } = expr;
+                const { name, refName, ruleReference, refPos, pos } = expr;
                 // Check for duplicate variable definition
                 if (availableVariables.has(name)) {
                     context.errors.push({
@@ -395,20 +418,20 @@ function createGrammarRule(
                 }
                 availableVariables.add(name);
                 if (ruleReference) {
-                    const rules = createNamedGrammarRules(
+                    const { grammarRules } = createNamedGrammarRules(
                         context,
-                        typeName,
-                        ruleRefPos,
+                        refName,
+                        refPos,
                         name,
                     );
                     parts.push({
                         type: "rules",
-                        rules,
+                        rules: grammarRules,
                         variable: name,
-                        name: typeName,
+                        name: refName,
                         optional: expr.optional,
                     });
-                } else if (typeName === "number") {
+                } else if (refName === "number") {
                     parts.push({
                         type: "number",
                         variable: name,
@@ -419,24 +442,24 @@ function createGrammarRule(
                     // All non-built-in types must be explicitly imported
                     // Built-in types: string, wildcard, word, number
                     const isBuiltInType =
-                        typeName === "string" ||
-                        typeName === "wildcard" ||
-                        typeName === "word";
+                        refName === "string" ||
+                        refName === "wildcard" ||
+                        refName === "word";
                     if (!isBuiltInType) {
                         const isImportedType =
-                            context.importedTypeNames.has(typeName) ||
+                            context.importedTypeNames.has(refName) ||
                             context.importedTypeNames.has("*");
 
                         if (!isImportedType) {
                             context.errors.push({
-                                message: `Undefined type '${typeName}' in variable '${name}'`,
+                                message: `Undefined type '${refName}' in variable '${name}'`,
                                 definition: context.currentDefinition,
-                                pos: ruleRefPos,
+                                pos: refPos,
                             });
                         } else {
                             // Track imported .ts types used as variable types.
                             // These need runtime entity validation (like old "entity" declarations).
-                            context.usedImportedTypes.add(typeName);
+                            context.usedImportedTypes.add(refName);
                         }
                     }
 
@@ -444,26 +467,30 @@ function createGrammarRule(
                         type: "wildcard",
                         variable: name,
                         optional: expr.optional,
-                        typeName,
+                        typeName: refName,
                     });
                 }
                 break;
             }
             case "ruleReference":
+                const { grammarRules, hasValue } = createNamedGrammarRules(
+                    context,
+                    expr.name,
+                    expr.pos,
+                );
+                // defaule value of the rule reference
+                defaultValue = hasValue;
                 parts.push({
                     type: "rules",
-                    rules: createNamedGrammarRules(
-                        context,
-                        expr.name,
-                        expr.pos,
-                    ),
+                    rules: grammarRules,
                     name: expr.name,
                 });
                 break;
             case "rules": {
                 const { rules, optional } = expr;
                 const grammarRules: GrammarRule[] = [];
-                createGrammarRules(context, rules, grammarRules);
+                // default value of the nested rules
+                defaultValue = createGrammarRules(context, rules, grammarRules);
                 parts.push({
                     type: "rules",
                     rules: grammarRules,
@@ -482,20 +509,13 @@ function createGrammarRule(
     // Validate that all variables referenced in the value are defined
     if (value !== undefined) {
         validateVariableReferences(context, value, availableVariables);
+    } else if (variableCount > 1) {
+        // warn about unused variables if there are more than 1 (since 1 variable rules can be used for simple extraction without value)
+        context.warnings.push({
+            message: `Rule with multiple variables and no explicit value expression doesn't have an implicit value. Add an explicit value expression or remove unused variables.`,
+            definition: context.currentDefinition,
+        });
     }
-
-    // Determine if this rule produces a value:
-    // 1. It has an explicit value expression (value !== undefined)
-    // 2. It has exactly one variable (implicit variable value)
-    // 3. It has exactly one non-empty string literal (NFA normalization will add -> "literal")
-    // 4. It has exactly one rule reference without variable (passthrough - NFA normalization will add capture)
-    const isSingleLiteral =
-        parts.length === 1 &&
-        parts[0].type === "string" &&
-        parts[0].value.length > 0;
-
-    const isPassthrough =
-        parts.length === 1 && parts[0].type === "rules" && !parts[0].variable;
 
     return {
         grammarRule: {
@@ -505,7 +525,6 @@ function createGrammarRule(
         hasValue:
             value !== undefined ||
             variableCount === 1 ||
-            isSingleLiteral ||
-            isPassthrough,
+            (variableCount === 0 && parts.length === 1 && defaultValue),
     };
 }

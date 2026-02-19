@@ -98,7 +98,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
                 name: "name",
-                typeName: "string",
+                refName: "string",
                 ruleReference: false,
             });
         });
@@ -110,7 +110,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
                 name: "count",
-                typeName: "number",
+                refName: "number",
                 ruleReference: false,
             });
         });
@@ -122,7 +122,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
                 name: "item",
-                typeName: "ItemType",
+                refName: "ItemType",
                 ruleReference: true,
             });
         });
@@ -134,7 +134,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
                 name: "item",
-                typeName: "ItemType",
+                refName: "ItemType",
                 ruleReference: true,
                 optional: true,
             });
@@ -453,7 +453,7 @@ describe("Grammar Rule Parser", () => {
                                                 {
                                                     type: "variable",
                                                     name: "action",
-                                                    typeName: "string",
+                                                    refName: "string",
                                                     ruleReference: false,
                                                 },
                                             ],
@@ -485,7 +485,7 @@ describe("Grammar Rule Parser", () => {
                                 {
                                     type: "variable",
                                     name: "object",
-                                    typeName: "string",
+                                    refName: "string",
                                     ruleReference: false,
                                 },
                                 {
@@ -496,7 +496,7 @@ describe("Grammar Rule Parser", () => {
                                                 {
                                                     type: "variable",
                                                     name: "adverb",
-                                                    typeName: "string",
+                                                    refName: "string",
                                                     ruleReference: false,
                                                 },
                                             ],

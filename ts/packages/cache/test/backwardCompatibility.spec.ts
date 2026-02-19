@@ -32,7 +32,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     }
 }`;
 
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             expect(grammar).toBeDefined();
 
             // Create cache without any NFA configuration
@@ -43,7 +43,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
             );
 
             // Add grammar the old way - just to GrammarStoreImpl
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             // Match should work without any NFA setup
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
@@ -68,7 +68,6 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
         track: $(track)
     }
 }`,
-                [],
             );
 
             const calendarGrammar = loadGrammarRules(
@@ -80,7 +79,6 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
         event: $(event)
     }
 }`,
-                [],
             );
 
             const cache = new AgentCache(
@@ -89,8 +87,8 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
                 undefined,
             );
 
-            cache.grammarStore.addGrammar("player", playerGrammar!);
-            cache.grammarStore.addGrammar("calendar", calendarGrammar!);
+            cache.grammarStore.addGrammar("player", playerGrammar);
+            cache.grammarStore.addGrammar("calendar", calendarGrammar);
 
             // Should match player
             const playerKeys = cache.getNamespaceKeys(["player"], undefined);
@@ -128,13 +126,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     }
 }`;
 
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
             const matches = cache.match("set volume to 50", { namespaceKeys });
@@ -157,13 +155,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     }
 }`;
 
-            const grammar = loadGrammarRules("search", grammarText, []);
+            const grammar = loadGrammarRules("search", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
-            cache.grammarStore.addGrammar("search", grammar!);
+            cache.grammarStore.addGrammar("search", grammar);
 
             const namespaceKeys = cache.getNamespaceKeys(["search"], undefined);
             const matches = cache.match(
@@ -199,13 +197,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     parameters: {}
 }`;
 
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
 
@@ -240,13 +238,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     }
 }`;
 
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
 
@@ -281,7 +279,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     }
 }`;
 
-            const grammar = loadGrammarRules("test", grammarText, []);
+            const grammar = loadGrammarRules("test", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
@@ -289,7 +287,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
             );
 
             // Add grammar WITHOUT calling configureGrammarGeneration
-            cache.grammarStore.addGrammar("test", grammar!);
+            cache.grammarStore.addGrammar("test", grammar);
 
             // Should still match
             const namespaceKeys = cache.getNamespaceKeys(["test"], undefined);
@@ -311,14 +309,14 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     }
 }`;
 
-            const grammar = loadGrammarRules("test", grammarText, []);
+            const grammar = loadGrammarRules("test", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
 
-            cache.grammarStore.addGrammar("test", grammar!);
+            cache.grammarStore.addGrammar("test", grammar);
 
             // Explicitly configure as completionBased (no NFA infrastructure)
             cache.configureGrammarGeneration(undefined, undefined, false);
@@ -343,13 +341,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     }
 }`;
 
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
             const matches = cache.match("schedule meeting", { namespaceKeys });
@@ -366,13 +364,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     }
 }`;
 
-            const grammar = loadGrammarRules("player", grammarText, []);
+            const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
                 mockExplainerFactory,
                 undefined,
             );
-            cache.grammarStore.addGrammar("player", grammar!);
+            cache.grammarStore.addGrammar("player", grammar);
 
             // Use wrong namespace key
             const wrongKeys = cache.getNamespaceKeys(["calendar"], undefined);

@@ -7,9 +7,29 @@ export {
     ChildLogger,
     MultiSinkLogger,
     LogEvent,
+    CosmosContainerClient,
+    CosmosContainerClientFactory,
+    CosmosPartitionKeyBuilder,
+    CosmosBulkOperation,
+    CosmosBulkOperationResult,
+    CosmosBulkOperationResponse,
+    CosmosPartitionKey,
 } from "./logger/logger.js";
 export { createMongoDBLoggerSink } from "./logger/mongoLoggerSink.js";
+export {
+    createCosmosDBLoggerSink,
+    CosmosPartitionKeyBuilderFactory,
+} from "./logger/cosmosDBLoggerSink.js";
+export {
+    createDatabaseLoggerSink,
+    DatabaseLoggerSinkOptions,
+} from "./logger/databaseLoggerSink.js";
 export { createDebugLoggerSink } from "./logger/debugLoggerSink.js";
+export {
+    PromptLogger,
+    PromptLoggerOptions,
+    createPromptLogger,
+} from "./logger/promptLogger.js";
 
 export * from "./stopWatch.js";
 

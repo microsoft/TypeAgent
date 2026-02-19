@@ -81,6 +81,9 @@ import {
     PolitenessGeneralizer,
 } from "./politenessGeneralizationV5.js";
 import { PolitenessGeneralization } from "./politenessGeneralizationSchemaV5.js";
+import { createPromptLogger } from "telemetry";
+
+const promptLogger = createPromptLogger();
 
 type Explanation = PropertyExplanation &
     SubPhraseExplanation &
@@ -334,7 +337,12 @@ variations: ParameterVariation[];
 For every value V that is within the range of ${paramRange.min} to ${paramRange.max} by step ${paramRange.step}, generate a phrase P that only changes the phrase '${subPhrase}' enough to change the value to V.
 Emit the generated phrases and values as a JSON object of type ParameterVariationResult with 2 spaces of indentation and no properties with the value undefined:
 `;
-                    const result = await model.complete(prompt);
+                    const result = await model.complete(
+                        prompt,
+                        undefined,
+                        undefined,
+                        promptLogger.logModelRequest,
+                    );
                     if (result.success) {
                         const generatedAlternatives = JSON.parse(
                             result.data,

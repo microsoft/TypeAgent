@@ -23,12 +23,12 @@
     "build:electron:cjs": "electron-vite build src/preload --config electron.vite.preload-cjs.config.mts --logLevel error",
     "build:electron:esm": "electron-vite build",
     "clean": "rimraf --glob out dist deploy *.tsbuildinfo *.done.build.log",
-    "deploy": "rimraf ./deploy && pnpm deploy --filter=agent-shell --prod ./deploy --config.node-linker=hoisted --legacy --ignore-scripts && pnpm -C deploy run postinstall ",
+    "deploy": "rimraf ./deploy && pnpm deploy --filter=agent-shell --prod ./deploy --ignore-scripts && pnpm -C deploy run postinstall ",
     "dev": "npm run prepare-vite && electron-vite dev -- --env ../../.env",
     "dev:noenv": "npm run prepare-vite && electron-vite dev",
     "postinstall": "run-script-os",
     "package": "run-script-os",
-    "package:default": "pnpm run deploy && electron-builder --config electron-builder.config.js -p never",
+    "package:default": "pnpm run deploy && electron-builder --projectDir deploy --config ../electron-builder.config.js -p never ",
     "package:linux": "ELECTRON_BUILDER_ARCH=x64 pnpm run package:default --linux --x64",
     "package:macos": "pnpm run package:macos:x64 && pnpm run package:macos:arm64",
     "package:macos:arm64": "ELECTRON_BUILDER_ARCH=arm64 pnpm run package:default --mac --arm64",
@@ -87,8 +87,9 @@
     "@types/debug": "^4.1.12",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
-    "electron": "^37.4.0",
-    "electron-builder": "^26.3.1",
+    "electron": "37.4.0",
+    "electron-builder": "26.3.1",
+    "electron-builder-squirrel-windows": "26.3.1",
     "electron-vite": "^4.0.1",
     "less": "^4.2.0",
     "rimraf": "^6.0.1",
@@ -97,6 +98,7 @@
     "typescript": "~5.4.5",
     "vite": "^6.4.1"
   },
+  "packageManager": "pnpm@10.24.0",
   "fluidBuild": {
     "tasks": {
       "build:electron:esm": {
