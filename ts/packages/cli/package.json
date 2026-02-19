@@ -44,6 +44,7 @@
     }
   },
   "dependencies": {
+    "@github/copilot-sdk": "^0.1.25",
     "@oclif/core": "^4.8.0",
     "@oclif/plugin-help": "^6",
     "@typeagent/action-schema": "workspace:*",

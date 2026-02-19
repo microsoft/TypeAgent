@@ -60,6 +60,17 @@
     {
       "type": "node",
       "request": "launch",
+      "name": "CLI Agent Mode",
+      "skipFiles": ["<node_internals>/**"],
+      "cwd": "${workspaceFolder}/packages/cli",
+      "program": "./bin/run.js",
+      "args": ["interactive", "--agentMode"],
+      "console": "externalTerminal",
+      "outFiles": ["${workspaceFolder}/**/*.js"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
       "name": "API",
       "skipFiles": ["<node_internals>/**"],
       "cwd": "${workspaceFolder}/packages/api",
