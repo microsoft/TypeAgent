@@ -98,7 +98,6 @@
     "typescript": "~5.4.5",
     "vite": "^6.4.1"
   },
-  "packageManager": "pnpm@10.24.0",
   "fluidBuild": {
     "tasks": {
       "build:electron:esm": {
