@@ -108,9 +108,14 @@ async function startShell(testGreetings: boolean = false): Promise<Page> {
             // get the main window
             const mainWindow: Page = await getChatViewWindow(app);
 
-            // wait for agent greeting
-
-            await waitForAgentMessage(mainWindow, 30000, 1, false, ["..."]);
+            // Wait for the chat input to become editable (dispatcher initialized)
+            const inputLocator = mainWindow.locator(`#${inputDivId}`);
+            await inputLocator.waitFor({ timeout: 30000, state: "visible" });
+            await expect(inputLocator).toHaveAttribute(
+                "contenteditable",
+                "true",
+                { timeout: 30000 },
+            );
 
             return mainWindow;
         } catch (e) {

@@ -382,6 +382,25 @@ function registerClient(
                 }
             }
         },
+        tabRestoreStatus(count: number): void {
+            // Ensure shell has an icon in the agents map
+            if (!agents.has("shell")) {
+                agents.set("shell", "\uD83D\uDC1A");
+            }
+            if (count > 0) {
+                chatView.addNotificationMessage(
+                    `Restoring ${count} browser tab${count > 1 ? "s" : ""}...`,
+                    "shell",
+                    "tab-restore",
+                );
+            } else {
+                chatView.addNotificationMessage(
+                    `Browser tabs restored.`,
+                    "shell",
+                    "tab-restore",
+                );
+            }
+        },
     };
 
     getClientAPI().registerClient(client);

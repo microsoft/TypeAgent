@@ -478,6 +478,17 @@ app.on("second-instance", () => {
 app.on("web-contents-created", async (_, webContents) => {
     webContents.on("before-input-event", (_event, input) => {
         if (input.type === "keyDown") {
+            // Ctrl+E / Cmd+E: focus chat input from any shell webContents
+            if (
+                input.code === "KeyE" &&
+                (input.control || input.meta) &&
+                !input.alt &&
+                !input.shift
+            ) {
+                _event.preventDefault();
+                getShellWindow()?.focusChatInput();
+            }
+
             if (isProd) {
                 // Ignore CommandOrControl + R
                 if (input.code === "KeyR" && (input.control || input.meta))
