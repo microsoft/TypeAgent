@@ -392,5 +392,64 @@ describe("Grammar Compiler", () => {
                 "error: Missing rule definition for '<SomeType>'",
             );
         });
+
+        it("Unused imported type warns", () => {
+            const grammarText = `
+            @import { UnusedType } from "types.ts"
+
+            @<Start> = play music
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(1);
+            expect(warnings[0]).toContain(
+                "warning: Imported type 'UnusedType' is declared but never used.",
+            );
+        });
+
+        it("Used imported type does not warn", () => {
+            const grammarText = `
+            @import { UsedType } from "types.ts"
+
+            @<Start> = $(x:UsedType)
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(0);
+        });
+
+        it("Only unused imported types warn when mixed with used ones", () => {
+            const grammarText = `
+            @import { UsedType } from "types.ts"
+            @import { UnusedType } from "types.ts"
+
+            @<Start> = $(x:UsedType)
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(1);
+            expect(warnings[0]).toContain(
+                "warning: Imported type 'UnusedType' is declared but never used.",
+            );
+        });
+
+        it("Wildcard type import does not warn when types are unused", () => {
+            const grammarText = `
+            @import * from "types.ts"
+
+            @<Start> = play music
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(0);
+        });
     });
 });
