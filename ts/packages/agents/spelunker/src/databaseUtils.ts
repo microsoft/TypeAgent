@@ -53,6 +53,10 @@ function getDbOptions() {
         betterSqlitePath,
         "../build/Release-Node/better_sqlite3.node",
     );
+    // Fall back to default (build/Release) when Release-Node doesn't exist (e.g. CI without Electron)
+    if (!fs.existsSync(nativeBinding)) {
+        return undefined;
+    }
     return { nativeBinding };
 }
 

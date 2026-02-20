@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import Database, * as sqlite from "better-sqlite3";
+import fs from "node:fs";
 import path from "node:path";
 import { removeFile, ensureDir } from "../fileSystem.js";
 import { createRequire } from "node:module";
@@ -16,6 +17,10 @@ function getDbOptions() {
         betterSqlitePath,
         "../build/Release-Node/better_sqlite3.node",
     );
+    // Fall back to default (build/Release) when Release-Node doesn't exist (e.g. CI without Electron)
+    if (!fs.existsSync(nativeBinding)) {
+        return undefined;
+    }
     return { nativeBinding };
 }
 
