@@ -81,11 +81,12 @@ export function initializePDFViewerIpcHandlers() {
 }
 
 export async function initializeBrowserExtension(_appPath: string) {
-   
     const browserExtensionPath = app.isPackaged
         ? path.join(process.resourcesPath, "browser-typeagent-extension")
-        : path.join(app.getAppPath(), "node_modules/browser-typeagent/dist/electron");
-
+        : path.join(
+              app.getAppPath(),
+              "node_modules/browser-typeagent/dist/electron",
+          );
 
     const extension = await session.defaultSession.extensions.loadExtension(
         browserExtensionPath,

@@ -864,10 +864,17 @@ async function playPlaylistAction(
                 playlist,
                 playlistResponse.items.map((item) => item.track!),
             );
-            let actionResult = await playTrackCollection(collection, clientContext);
+            let actionResult = await playTrackCollection(
+                collection,
+                clientContext,
+            );
 
             // add the playlist as an entity
-            actionResult.entities.push({ name: playlist.name, type: ["playlist"], uniqueId: playlist.id });
+            actionResult.entities.push({
+                name: playlist.name,
+                type: ["playlist"],
+                uniqueId: playlist.id,
+            });
 
             return actionResult;
         }
