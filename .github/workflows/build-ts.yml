@@ -81,4 +81,6 @@ jobs:
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.ts != 'false' }}
         working-directory: ts
         run: |
+          
+          pnpm -w rebuild better-sqlite
           npm run test:local
