@@ -56,7 +56,7 @@
     "email": "workspace:*",
     "exifreader": "^4.30.1",
     "file-size": "^1.0.0",
-    "glob": "^11.1.0",
+    "glob": "^13.0.0",
     "greeting-agent": "workspace:*",
     "image-agent": "workspace:*",
     "knowledge-processor": "workspace:*",
@@ -83,7 +83,6 @@
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "@types/file-size": "^1.0.3",
-    "@types/glob": "^8.1.0",
     "@types/jest": "^29.5.7",
     "@types/proper-lockfile": "^4.1.4",
     "@types/ws": "^8.5.10",

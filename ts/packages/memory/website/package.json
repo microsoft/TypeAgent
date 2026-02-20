@@ -31,7 +31,7 @@
   "dependencies": {
     "@typeagent/common-utils": "workspace:*",
     "aiclient": "workspace:*",
-    "better-sqlite3": "12.2.0",
+    "better-sqlite3": "12.6.2",
     "cheerio": "^1.0.0",
     "conversation-memory": "workspace:*",
     "debug": "^4.4.0",
@@ -40,6 +40,7 @@
     "graphology": "^0.25.4",
     "graphology-communities-louvain": "^2.0.1",
     "graphology-metrics": "^2.1.0",
+    "graphology-types": "^0.24.7",
     "jsdom": "^26.1.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
@@ -49,7 +50,7 @@
     "typechat": "^0.1.1"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "7.6.11",
+    "@types/better-sqlite3": "7.6.13",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/jsdom": "^21.1.7",

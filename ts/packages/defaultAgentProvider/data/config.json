@@ -56,8 +56,7 @@
       "execMode": "dispatcher"
     },
     "weather": {
-      "name": "weather-agent",
-      "path": "../agents/weather"
+      "name": "weather-agent"
     }
   },
   "mcpServers": {

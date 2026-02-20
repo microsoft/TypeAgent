@@ -52,10 +52,14 @@ export default {
             ],
         },
     ],
-    asarUnpack: [
-        // electron can't load the browser extension from the ASAR
-        "node_modules/browser-typeagent/dist/electron/**/*",
+    // electron can't load the browser extension from the ASAR
+    extraResources: [
+        {
+            from: "node_modules/browser-typeagent/dist/electron",
+            to: "browser-typeagent-extension",
+        },
     ],
+
     // Don't need to install
     npmRebuild: false,
     artifactName: name + "-${version}-${platform}-${arch}.${ext}",

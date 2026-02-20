@@ -34,7 +34,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "aiclient": "workspace:*",
-    "better-sqlite3": "12.2.0",
+    "better-sqlite3": "12.6.2",
     "debug": "^4.4.0",
     "typechat": "^0.1.1"
   },
