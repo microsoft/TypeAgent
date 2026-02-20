@@ -80,6 +80,9 @@
       "puppeteer",
       "sharp"
     ],
+    "allowedDeprecatedVersions": {
+      "crx": "5"
+    },
     "supportedArchitectures": {
       "cpu": [
         "x64",
@@ -88,10 +91,7 @@
     },
     "ignoredBuiltDependencies": [
       "leveldown"
-    ],
-    "allowedDeprecatedVersions": {
-      "crx": "5"
-    }
+    ]
   },
   "peerDependencyRules": {
     "ignoreMissing": [
