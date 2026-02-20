@@ -1,13 +1,15 @@
-// Replicate the old postinstall for better-sqlite3:
-//   1. Remove the build dir (may have been rebuilt for Electron by electron-builder)
-//   2. Run prebuild-install to download the correct Node.js-compatible prebuilt binary
-//   3. Copy the binary to build/Release-Node/ for use outside Electron
+// Save the Node.js-compatible better-sqlite3 native binary to a safe location.
+//
+// Problem: electron-builder's install-app-deps (in packages/shell postinstall)
+// rebuilds better-sqlite3 for Electron, wiping the entire build/ directory.
+// This runs in the root postinstall BEFORE electron-builder, so we save the
+// correct Node.js binary to prebuild-node/ (outside build/) where
+// electron-builder won't touch it.
 //
 // Works with pnpm's store layout on Windows, macOS, and Linux.
 
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
 
 // Find all better-sqlite3 installations in the pnpm store
 const pnpmDir = path.resolve(__dirname, "..", "..", "node_modules", ".pnpm");
@@ -29,34 +31,15 @@ for (const entry of entries) {
   console.log(`\n📦 Processing ${entry}:`);
   console.log("   ", pkgDir);
 
-  // 1. Remove existing build directory (may contain Electron-rebuilt binary)
-  const buildDir = path.join(pkgDir, "build");
-  if (fs.existsSync(buildDir)) {
-    fs.rmSync(buildDir, { recursive: true, force: true });
-    console.log("🗑️  Removed existing build directory");
-  }
-
-  // 2. Run prebuild-install to get the correct Node.js prebuilt binary
-  try {
-    console.log("⬇️  Running prebuild-install...");
-    execSync("npx prebuild-install", {
-      cwd: pkgDir,
-      stdio: "inherit",
-      env: { ...process.env, npm_config_runtime: "node" },
-    });
-  } catch (e) {
-    console.error(`❌ prebuild-install failed for ${entry}:`, e.message);
-    hasError = true;
-    continue;
-  }
-
-  // 3. Copy to Release-Node
   const src = path.join(pkgDir, "build", "Release", "better_sqlite3.node");
-  const dstDir = path.join(pkgDir, "build", "Release-Node");
+
+  // Save to prebuild-node/ at the package root (outside build/ so
+  // electron-builder's rebuild won't wipe it)
+  const dstDir = path.join(pkgDir, "prebuild-node");
   const dst = path.join(dstDir, "better_sqlite3.node");
 
   if (!fs.existsSync(src)) {
-    console.error("❌ Native binary not found after prebuild-install:", src);
+    console.error("❌ Native binary not found:", src);
     hasError = true;
     continue;
   }
@@ -64,7 +47,7 @@ for (const entry of entries) {
   fs.mkdirSync(dstDir, { recursive: true });
   fs.copyFileSync(src, dst);
 
-  console.log("✅ Node.js binary copied:");
+  console.log("✅ Node.js binary saved:");
   console.log("   ", src);
   console.log(" → ", dst);
 }

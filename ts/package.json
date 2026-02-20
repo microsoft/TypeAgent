@@ -25,7 +25,7 @@
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
-    "postinstall": "pnpm run postinstall:better-sqlite3-node-copy",
+    "postinstall": "pnpm rebuild better-sqlite3 && pnpm run postinstall:better-sqlite3-node-copy",
     "postinstall:better-sqlite3-node-copy": "node ./tools/scripts/copy-better-sqlite3-node.js",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
