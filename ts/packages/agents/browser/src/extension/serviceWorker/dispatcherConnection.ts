@@ -114,6 +114,9 @@ function createChatPanelClientIO(): ClientIO {
             // Not supported in extension
         },
 
+        requestChoice() {
+            // Not supported in extension
+        },
         takeAction(requestId, action, data) {
             send("dispatcher:takeAction", { requestId, action, data });
         },

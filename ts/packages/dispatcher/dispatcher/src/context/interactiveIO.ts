@@ -107,6 +107,7 @@ export const nullClientIO: ClientIO = {
     notify: () => {},
     openLocalView: async () => {},
     closeLocalView: async () => {},
+    requestChoice: () => {},
     takeAction: (requestId: RequestId, action: string) => {
         throw new Error(`Action ${action} not supported`);
     },

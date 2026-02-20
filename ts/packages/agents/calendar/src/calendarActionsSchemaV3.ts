@@ -20,7 +20,8 @@ export type CalendarActionV3 =
     | FindEventsAction
     | AddParticipantAction
     | FindTodaysEventsAction
-    | FindThisWeeksEventsAction;
+    | FindThisWeeksEventsAction
+    | RemoveEventAction;
 
 // Schedule a new event on the calendar
 // Examples: "schedule a meeting tomorrow at 2pm", "add dentist appointment on Friday at 3pm"
@@ -81,4 +82,21 @@ export type FindTodaysEventsAction = {
 export type FindThisWeeksEventsAction = {
     actionName: "findThisWeeksEvents";
     parameters: {};
+};
+
+// Remove an event from the calendar
+// Examples: "delete my meeting", "remove the dentist appointment", "cancel lunch with Bob"
+// Behavior based on number of matches:
+// - 1 match: prompts for confirmation
+// - 2-5 matches: prompts with list to select which event to delete
+// - More than 5 matches: returns error asking user to be more specific
+export type RemoveEventAction = {
+    actionName: "removeEvent";
+    parameters: {
+        // What event to remove (required) - plain string describing the event
+        description: string;
+        // Optional date filter to narrow down which event to remove
+        // Use the user's EXACT words like "today", "tomorrow", "this week" - do NOT convert to ISO date
+        date?: CalendarDate;
+    };
 };

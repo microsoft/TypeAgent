@@ -15,6 +15,8 @@ import {
     SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import registerDebug from "debug";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod/v4";
 import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
@@ -38,20 +40,122 @@ const model = "claude-sonnet-4-5-20250929";
 
 const mcpServerName = "action-executor";
 const allowedTools = [
-    // "Read",
-    // "Write",
-    // "Edit",
-    // "Bash",
-    // "Glob",
-    // "Grep",
+    "Read",
+    "Write",
+    "Edit",
+    "Bash",
+    "Glob",
+    "Grep",
     "WebSearch",
     "WebFetch",
     "Task",
-    // "NotebookEdit",
+    "NotebookEdit",
     "TodoWrite",
     // Allow all tools from the command-executor MCP server
     `mcp__${mcpServerName}__*`,
 ];
+
+/**
+ * Compute the TypeAgent repo root from this module's location.
+ * Compiled path: packages/dispatcher/dispatcher/dist/reasoning/claude.js
+ * We go up 5 levels to reach ts/ (the monorepo TypeScript root).
+ */
+function getRepoRoot(): string {
+    const thisFile = fileURLToPath(import.meta.url);
+    return path.resolve(path.dirname(thisFile), "../../../../..");
+}
+
+// Track reasoning session per dispatcher instance (WeakMap so GC cleans up)
+const reasoningSessionIds = new WeakMap<object, string>();
+
+function getSessionId(
+    context: ActionContext<CommandHandlerContext>,
+): string | undefined {
+    return reasoningSessionIds.get(context.sessionContext.agentContext);
+}
+
+function setSessionId(
+    context: ActionContext<CommandHandlerContext>,
+    sessionId: string,
+): void {
+    reasoningSessionIds.set(context.sessionContext.agentContext, sessionId);
+}
+
+/**
+ * Get recent chat history as formatted text for reasoning context.
+ * Returns the last k user/assistant turn pairs from the shell conversation.
+ */
+function getRecentChatContext(
+    context: ActionContext<CommandHandlerContext>,
+    k: number = 4,
+): string {
+    const chatHistory = context.sessionContext.agentContext.chatHistory;
+    const exported = chatHistory.export();
+    if (!exported) return "";
+
+    const entries = Array.isArray(exported) ? exported : [exported];
+    const recent = entries.slice(-k);
+    if (recent.length === 0) return "";
+
+    const lines = ["[Recent conversation context]"];
+    for (const entry of recent) {
+        lines.push(`User: ${entry.user}`);
+        const assistants = Array.isArray(entry.assistant)
+            ? entry.assistant
+            : [entry.assistant];
+        for (const a of assistants) {
+            lines.push(`Assistant (${a.source}): ${a.text}`);
+        }
+    }
+    return lines.join("\n");
+}
+
+/**
+ * Build the full prompt with chat history context prepended.
+ */
+function buildPromptWithContext(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+): string {
+    const chatContext = getRecentChatContext(context);
+    if (chatContext) {
+        return `${chatContext}\n\n[Current request]\n${originalRequest}`;
+    }
+    return originalRequest;
+}
+
+/**
+ * Format a tool call as a persistent display line.
+ */
+function formatToolCallDisplay(toolName: string, input: any): string {
+    const mcpPrefix = `mcp__${mcpServerName}__`;
+    if (toolName === `${mcpPrefix}discover_actions`) {
+        return `**Tool:** discover_actions — schema: \`${input.schemaName}\``;
+    } else if (toolName === `${mcpPrefix}execute_action`) {
+        const actionName = input.action?.actionName ?? "unknown";
+        return `**Tool:** execute_action — \`${input.schemaName}.${actionName}\``;
+    } else if (toolName.startsWith(mcpPrefix)) {
+        return `**Tool:** ${toolName.slice(mcpPrefix.length)}`;
+    }
+    return `**Tool:** ${toolName}`;
+}
+
+/**
+ * Render thinking content as a collapsible HTML details/summary block.
+ */
+function formatThinkingDisplay(thinkingText: string): string {
+    // Escape HTML entities in thinking text for safe embedding
+    const escaped = thinkingText
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    return [
+        `<details class="reasoning-thinking">`,
+        `<summary>Thinking</summary>`,
+        `<pre>${escaped}</pre>`,
+        `</details>`,
+    ].join("");
+}
 
 function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
@@ -161,14 +265,34 @@ function getClaudeOptions(
         },
     };
 
+    const sessionId = getSessionId(context);
     const claudeOptions: Options = {
         model,
         permissionMode: "acceptEdits",
+        // Auto-allow all tool calls — we've already curated allowedTools
+        canUseTool: async () => ({ behavior: "allow" as const }),
         allowedTools,
-        cwd: process.cwd(),
-        // settingSources: ["project"],
+        cwd: getRepoRoot(),
+        settingSources: ["project"],
         maxTurns: 20,
         maxThinkingTokens: 10000,
+        systemPrompt: {
+            type: "preset",
+            preset: "claude_code",
+            append: [
+                "# TypeAgent Integration",
+                "",
+                "You are the reasoning engine for TypeAgent, a multi-agent system.",
+                "You have access to TypeAgent action execution via MCP tools:",
+                "- `discover_actions`: Find available actions by schema name",
+                "- `execute_action`: Execute actions conforming to discovered schemas",
+                "",
+                "You also have full code tools (Read, Glob, Grep, Edit, Bash) for investigating and modifying the codebase.",
+                "",
+                "When the user asks about agent capabilities, use discover_actions first.",
+                "When the user asks to perform an action, discover the schema then execute_action.",
+            ].join("\n"),
+        },
         mcpServers: {
             [mcpServerName]: createSdkMcpServer({
                 name: mcpServerName,
@@ -176,6 +300,11 @@ function getClaudeOptions(
             }),
         },
     };
+
+    if (sessionId) {
+        claudeOptions.resume = sessionId;
+    }
+
     return claudeOptions;
 }
 
@@ -196,9 +325,9 @@ async function executeReasoningWithoutPlanning(
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
 
-    // Create query to Claude Agent SDK
+    // Create query to Claude Agent SDK with chat history context
     const queryInstance = query({
-        prompt: originalRequest,
+        prompt: buildPromptWithContext(originalRequest, context),
         options: getClaudeOptions(context),
     });
 
@@ -206,6 +335,10 @@ async function executeReasoningWithoutPlanning(
     // Process streaming response
     for await (const message of queryInstance) {
         debug(message);
+        // Capture session ID from first message for future resume
+        if ("session_id" in message && !getSessionId(context)) {
+            setSessionId(context, (message as any).session_id);
+        }
         if (message.type === "assistant") {
             for (const content of message.message.content) {
                 if (content.type === "text") {
@@ -219,32 +352,28 @@ async function executeReasoningWithoutPlanning(
                         "block",
                     );
                 } else if (content.type === "tool_use") {
-                    const toolName = content.name;
-                    if (
-                        toolName === `mcp__${mcpServerName}__discover_actions`
-                    ) {
-                        displayStatus(
-                            `Discovering actions in '${(content.input as any).schemaName}'...`,
-                            context,
-                        );
-                    } else if (
-                        toolName === `mcp__${mcpServerName}__execute_action`
-                    ) {
-                        const schemaName = (content.input as any).schemaName;
-                        const actionName = (content.input as any).action
-                            .actionName;
-                        displayStatus(
-                            `Executing action '${schemaName}.${actionName}'...`,
-                            context,
-                        );
-                    } else {
-                        displayStatus(
-                            `Calling tool '${content.name}'...'`,
-                            context,
+                    context.actionIO.appendDisplay(
+                        {
+                            type: "markdown",
+                            content: formatToolCallDisplay(
+                                content.name,
+                                content.input,
+                            ),
+                            kind: "info",
+                        },
+                        "block",
+                    );
+                } else if ((content as any).type === "thinking") {
+                    const thinkingContent = (content as any).thinking;
+                    if (thinkingContent) {
+                        context.actionIO.appendDisplay(
+                            {
+                                type: "html",
+                                content: formatThinkingDisplay(thinkingContent),
+                            },
+                            "block",
                         );
                     }
-                } else if ((content as any).type === "thinking") {
-                    displayStatus("Thinking...", context);
                 }
             }
         } else if (message.type === "result") {
@@ -296,9 +425,9 @@ async function executeReasoningWithTracing(
         // Display initial message
         context.actionIO.appendDisplay("Thinking...", "temporary");
 
-        // Create query to Claude Agent SDK
+        // Create query to Claude Agent SDK with chat history context
         const queryInstance = query({
-            prompt: originalRequest,
+            prompt: buildPromptWithContext(originalRequest, context),
             options: getClaudeOptions(context),
         });
 
@@ -307,6 +436,10 @@ async function executeReasoningWithTracing(
         // Process streaming response with tracing
         for await (const message of queryInstance) {
             debug(message);
+            // Capture session ID from first message for future resume
+            if ("session_id" in message && !getSessionId(context)) {
+                setSessionId(context, (message as any).session_id);
+            }
 
             if (message.type === "assistant") {
                 // Record thinking
@@ -320,38 +453,32 @@ async function executeReasoningWithTracing(
                             content: content.text,
                         });
                     } else if (content.type === "tool_use") {
-                        const toolName = content.name;
+                        // Record tool call for tracing
+                        tracer.recordToolCall(content.name, content.input);
 
-                        // Record tool call
-                        tracer.recordToolCall(toolName, content.input);
-
-                        if (
-                            toolName ===
-                            `mcp__${mcpServerName}__discover_actions`
-                        ) {
-                            displayStatus(
-                                `Discovering actions in '${(content.input as any).schemaName}'...`,
-                                context,
-                            );
-                        } else if (
-                            toolName === `mcp__${mcpServerName}__execute_action`
-                        ) {
-                            const schemaName = (content.input as any)
-                                .schemaName;
-                            const actionName = (content.input as any).action
-                                .actionName;
-                            displayStatus(
-                                `Executing action '${schemaName}.${actionName}'...`,
-                                context,
-                            );
-                        } else {
-                            displayStatus(
-                                `Calling tool '${content.name}'...'`,
-                                context,
+                        context.actionIO.appendDisplay(
+                            {
+                                type: "markdown",
+                                content: formatToolCallDisplay(
+                                    content.name,
+                                    content.input,
+                                ),
+                                kind: "info",
+                            },
+                            "block",
+                        );
+                    } else if ((content as any).type === "thinking") {
+                        const thinkingContent = (content as any).thinking;
+                        if (thinkingContent) {
+                            context.actionIO.appendDisplay(
+                                {
+                                    type: "html",
+                                    content:
+                                        formatThinkingDisplay(thinkingContent),
+                                },
+                                "block",
                             );
                         }
-                    } else if ((content as any).type === "thinking") {
-                        displayStatus("Thinking...", context);
                     }
                 }
             } else if (message.type === "result") {

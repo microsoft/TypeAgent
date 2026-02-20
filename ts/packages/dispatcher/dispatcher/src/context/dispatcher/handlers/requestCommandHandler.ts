@@ -38,7 +38,11 @@ import {
     CompletionGroup,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
-import { DispatcherName, isUnknownAction } from "../dispatcherUtils.js";
+import {
+    DispatcherClarifyName,
+    DispatcherName,
+    isUnknownAction,
+} from "../dispatcherUtils.js";
 import { executeReasoning } from "../../../reasoning/claude.js";
 import { getTranslatorForSchema } from "../../../translation/translateRequest.js";
 import { getActivityNamespaceSuffix } from "../../../translation/matchRequest.js";
@@ -410,14 +414,17 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
 
-            // If translation produced unknown actions, fall back to reasoning.
+            // If translation produced unknown or clarification actions,
+            // fall back to reasoning which can handle ambiguity directly.
             // If reasoning is unavailable (no API key, model error, etc.),
             // fall through to executeActions which shows the original error.
-            const hasUnknownActions = requestAction.actions.some(({ action }) =>
-                isUnknownAction(action),
+            const needsReasoning = requestAction.actions.some(
+                ({ action }) =>
+                    isUnknownAction(action) ||
+                    action.schemaName === DispatcherClarifyName,
             );
             let reasoningHandled = false;
-            if (hasUnknownActions) {
+            if (needsReasoning) {
                 try {
                     await executeReasoning(request, context, {
                         engine: "claude",

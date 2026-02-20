@@ -92,6 +92,24 @@ body {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   }
 
+  .chat-message-kind-info {
+    color: #999;
+  }
+
+  details.reasoning-thinking {
+    border-color: #3a3a50;
+  }
+
+  details.reasoning-thinking summary {
+    color: #aaa;
+  }
+
+  details.reasoning-thinking pre {
+    border-top-color: #3a3a50;
+    background: rgba(255, 255, 255, 0.03);
+    color: #ccc;
+  }
+
   .chat-message-metrics-agent {
     background-color: #232338;
   }
@@ -361,6 +379,34 @@ body {
     0px 0.5px 1px rgba(0, 0, 0, 0.1),
     0px 0px 0px 3.5px rgba(58, 108, 217, 0.5);
   outline: 0;
+}
+
+.checkbox-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  height: auto;
+  padding: 4px 0;
+  gap: 2px;
+}
+
+.checkbox-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.checkbox-choice:hover {
+  background-color: #f0f0f0;
+}
+
+.checkbox-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .action-text {
@@ -683,6 +729,53 @@ body {
 .chat-message-kind-success {
   font-style: italic;
   color: green;
+}
+
+.chat-message-kind-info {
+  font-size: 0.85em;
+  color: #666;
+  padding: 2px 0;
+}
+
+/* Collapsible thinking block for reasoning engine */
+details.reasoning-thinking {
+  margin: 4px 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 0;
+  font-size: 0.85em;
+}
+
+details.reasoning-thinking summary {
+  cursor: pointer;
+  padding: 4px 10px;
+  font-weight: 600;
+  color: #888;
+  user-select: none;
+  list-style: none;
+}
+
+details.reasoning-thinking summary::before {
+  content: "\25B6";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 0.15s ease;
+  font-size: 0.7em;
+}
+
+details.reasoning-thinking[open] summary::before {
+  transform: rotate(90deg);
+}
+
+details.reasoning-thinking pre {
+  margin: 0;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  border-top: 1px solid #e0e0e0;
+  background: rgba(0, 0, 0, 0.02);
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .chat-message-agent-text {

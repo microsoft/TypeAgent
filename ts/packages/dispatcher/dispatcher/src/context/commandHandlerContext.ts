@@ -160,6 +160,14 @@ export type CommandHandlerContext = {
     constructionProvider?: ConstructionProvider | undefined;
 
     batchMode: boolean;
+    pendingChoiceRoutes: Map<
+        string,
+        {
+            agentName: string;
+            requestId: RequestId;
+            actionIndex: number | undefined;
+        }
+    >;
     streamingActionContext?: ActionContextWithClose | undefined;
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
@@ -588,6 +596,7 @@ export async function initializeCommandHandlerContext(
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             promptLogger: createPromptLogger(getCosmosFactories()),
             batchMode: false,
+            pendingChoiceRoutes: new Map(),
             instanceDirLock,
             constructionProvider,
             collectCommandResult: options?.collectCommandResult ?? false,

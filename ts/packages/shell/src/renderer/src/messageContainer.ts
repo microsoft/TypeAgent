@@ -245,15 +245,6 @@ export class MessageContainer {
         source: string,
         appendMode?: DisplayAppendMode, // default to not appending.
     ) {
-        if (
-            typeof content !== "string" &&
-            !Array.isArray(content) &&
-            content.kind === "info"
-        ) {
-            // Don't display info
-            return;
-        }
-
         if (this.messageStart === undefined) {
             // Don't count dispatcher status messages as first response.
             if (source !== "dispatcher") {
@@ -298,6 +289,78 @@ export class MessageContainer {
                 }
             },
         );
+    }
+
+    public addCheckboxPanel(
+        labels: string[],
+        onConfirm: (selectedIndices: number[]) => void,
+    ) {
+        const panelDiv = document.createElement("div");
+        panelDiv.className = "checkbox-panel";
+
+        const checkboxes: HTMLInputElement[] = [];
+        for (let i = 0; i < labels.length; i++) {
+            const label = document.createElement("label");
+            label.className = "checkbox-choice";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.dataset.index = String(i);
+            checkboxes.push(cb);
+            label.appendChild(cb);
+            const span = document.createElement("span");
+            span.textContent = labels[i];
+            label.appendChild(span);
+            panelDiv.appendChild(label);
+        }
+
+        const buttonDiv = document.createElement("div");
+        buttonDiv.className = "checkbox-buttons";
+
+        const confirmBtn = document.createElement("button");
+        confirmBtn.className = "choice-button";
+        confirmBtn.textContent = "Confirm (Enter)";
+        confirmBtn.addEventListener("click", submit);
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.className = "choice-button";
+        cancelBtn.textContent = "Cancel (Del)";
+        cancelBtn.addEventListener("click", cancel);
+
+        buttonDiv.appendChild(confirmBtn);
+        buttonDiv.appendChild(cancelBtn);
+        panelDiv.appendChild(buttonDiv);
+
+        this.messageDiv.after(panelDiv);
+
+        const keyHandler = (ev: KeyboardEvent) => {
+            if (!panelDiv.isConnected) {
+                window.removeEventListener("keydown", keyHandler);
+                return;
+            }
+            if (ev.key === "Enter") {
+                ev.preventDefault();
+                submit();
+            } else if (ev.key === "Delete") {
+                ev.preventDefault();
+                cancel();
+            }
+        };
+        window.addEventListener("keydown", keyHandler);
+
+        function submit() {
+            const selected = checkboxes
+                .filter((cb) => cb.checked)
+                .map((cb) => parseInt(cb.dataset.index!, 10));
+            window.removeEventListener("keydown", keyHandler);
+            panelDiv.remove();
+            onConfirm(selected);
+        }
+
+        function cancel() {
+            window.removeEventListener("keydown", keyHandler);
+            panelDiv.remove();
+            onConfirm([]);
+        }
     }
 
     public async proposeAction(

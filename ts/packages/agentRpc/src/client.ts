@@ -578,6 +578,19 @@ export async function createAgentRpcClient(
                 entityTypeName,
             });
         },
+        handleChoice(
+            choiceId: string,
+            response: boolean | number[],
+            context: ActionContext<ShimContext>,
+        ) {
+            return withActionContextAsync(context, (contextParams) =>
+                rpc.invoke("handleChoice", {
+                    ...contextParams,
+                    choiceId,
+                    response,
+                }),
+            );
+        },
     };
 
     // Now pick out the one that is actually implemented

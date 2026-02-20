@@ -35,6 +35,9 @@ export function createDispatcherRpcServer(
         getStatus: async () => {
             return dispatcher.getStatus();
         },
+        respondToChoice: async (...args) => {
+            return dispatcher.respondToChoice(...args);
+        },
     };
 
     createRpc("dispatcher", channel, dispatcherInvokeHandler);

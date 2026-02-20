@@ -22,6 +22,7 @@ import {
 import type {
     RequestId,
     ClientIO,
+    Dispatcher,
     IAgentMessage,
     TemplateEditConfig,
 } from "agent-dispatcher";
@@ -37,6 +38,9 @@ import { markedTerminal } from "marked-terminal";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
+
+// Pending choice promise — main loop awaits this before showing next prompt
+let pendingChoicePromise: Promise<void> | null = null;
 
 // Grammar log file path
 const grammarLogPath = path.join(
@@ -196,6 +200,7 @@ export function stopSpinner(
  */
 export function createEnhancedClientIO(
     rl?: readline.promises.Interface,
+    dispatcherRef?: { current?: Dispatcher },
 ): ClientIO {
     let lastAppendMode: DisplayAppendMode | undefined;
 
@@ -564,6 +569,81 @@ export function createEnhancedClientIO(
             port: number,
         ): Promise<void> {
             // TODO: Ignored
+        },
+        requestChoice(
+            _requestId: RequestId,
+            choiceId: string,
+            type: "yesNo" | "multiChoice",
+            message: string,
+            choices: string[],
+            source: string,
+        ): void {
+            // Set up a promise so the main loop waits before
+            // showing "Complete" and the next prompt.
+            let resolveChoice: () => void;
+            pendingChoicePromise = new Promise<void>((resolve) => {
+                resolveChoice = resolve;
+            });
+
+            (async () => {
+                try {
+                    // Stop and clear spinner — the main loop will
+                    // handle completion after the choice resolves.
+                    if (currentSpinner) {
+                        currentSpinner.stop();
+                        currentSpinner = null;
+                    }
+
+                    const width = process.stdout.columns || 80;
+                    const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
+
+                    process.stdout.write("\n");
+                    process.stdout.write(line + "\n");
+
+                    let response: boolean | number[];
+                    if (type === "yesNo") {
+                        const prompt = `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
+                        const input = await question(prompt, rl);
+                        response =
+                            input.toLowerCase() === "y" ||
+                            input.toLowerCase() === "yes";
+                    } else {
+                        // multiChoice — show numbered list, accept comma-separated
+                        process.stdout.write(
+                            `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message}\n`,
+                        );
+                        for (let i = 0; i < choices.length; i++) {
+                            process.stdout.write(
+                                `  ${chalk.cyan(`${i + 1}.`)} ${choices[i]}\n`,
+                            );
+                        }
+                        const input = await question(
+                            `${chalk.dim("Enter choice numbers (comma-separated):")} `,
+                            rl,
+                        );
+                        response = input
+                            .split(",")
+                            .map((s) => parseInt(s.trim(), 10) - 1)
+                            .filter(
+                                (n) =>
+                                    !isNaN(n) && n >= 0 && n < choices.length,
+                            );
+                    }
+
+                    process.stdout.write(line + "\n");
+
+                    if (dispatcherRef?.current) {
+                        await dispatcherRef.current.respondToChoice(
+                            choiceId,
+                            response,
+                        );
+                    }
+                } catch (err) {
+                    console.error(chalk.red(`Choice error: ${err}`));
+                } finally {
+                    resolveChoice!();
+                }
+            })();
         },
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {
@@ -1056,7 +1136,10 @@ let usingEnhancedConsole = false;
  * Wrapper for using enhanced console ClientIO
  */
 export async function withEnhancedConsoleClientIO(
-    callback: (clientIO: ClientIO) => Promise<void>,
+    callback: (
+        clientIO: ClientIO,
+        bindDispatcher: (d: Dispatcher) => void,
+    ) => Promise<void>,
     rl?: readline.promises.Interface,
 ) {
     if (usingEnhancedConsole) {
@@ -1077,7 +1160,13 @@ export async function withEnhancedConsoleClientIO(
         console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
         console.log("");
 
-        await callback(createEnhancedClientIO(rl));
+        const dispatcherRef: { current?: Dispatcher } = {};
+        await callback(
+            createEnhancedClientIO(rl, dispatcherRef),
+            (d: Dispatcher) => {
+                dispatcherRef.current = d;
+            },
+        );
     } finally {
         if (currentSpinner) {
             currentSpinner.stop();
@@ -1173,7 +1262,14 @@ export async function processCommandsEnhanced<T>(
 
             await processCommand(request, context);
 
-            // Stop spinner on success
+            // Wait for any pending choice prompt to complete
+            // before showing "Complete" and the next prompt.
+            if (pendingChoicePromise) {
+                await pendingChoicePromise;
+                pendingChoicePromise = null;
+            }
+
+            // Stop spinner on success (no-op if choice already cleared it)
             stopSpinner("success", "Complete");
 
             history.push(request);

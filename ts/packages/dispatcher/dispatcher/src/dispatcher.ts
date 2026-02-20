@@ -6,6 +6,7 @@ import {
     DynamicDisplay,
     TemplateSchema,
 } from "@typeagent/agent-sdk";
+import { displayError } from "@typeagent/agent-sdk/helpers/display";
 import {
     ConnectionId,
     Dispatcher,
@@ -13,6 +14,7 @@ import {
 } from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
+import { getActionContext } from "./execute/actionContext.js";
 import {
     closeCommandHandlerContext,
     CommandHandlerContext,
@@ -189,6 +191,60 @@ export function createDispatcherFromContext(
         },
         async getStatus() {
             return getDispatcherStatus(context);
+        },
+        async respondToChoice(choiceId: string, response: boolean | number[]) {
+            return context.commandLock(async () => {
+                const pending = context.pendingChoiceRoutes.get(choiceId);
+                if (!pending) {
+                    throw new Error("Choice not found or expired");
+                }
+                context.pendingChoiceRoutes.delete(choiceId);
+
+                // Use original requestId so display appends to same message group
+                context.currentRequestId = pending.requestId;
+                context.commandResult = undefined;
+                try {
+                    const appAgent = context.agents.getAppAgent(
+                        pending.agentName,
+                    );
+                    if (!appAgent.handleChoice) {
+                        throw new Error(
+                            `Agent '${pending.agentName}' does not support choices`,
+                        );
+                    }
+                    const { actionContext, closeActionContext } =
+                        getActionContext(
+                            pending.agentName,
+                            context,
+                            pending.requestId,
+                            pending.actionIndex,
+                        );
+                    try {
+                        const result = await appAgent.handleChoice(
+                            choiceId,
+                            response,
+                            actionContext,
+                        );
+                        if (result) {
+                            if (result.error !== undefined) {
+                                displayError(result.error, actionContext);
+                            } else if (result.displayContent !== undefined) {
+                                actionContext.actionIO.appendDisplay(
+                                    result.displayContent,
+                                    "block",
+                                );
+                            }
+                        }
+                    } finally {
+                        closeActionContext();
+                    }
+                } finally {
+                    const result = context.commandResult;
+                    context.commandResult = undefined;
+                    context.currentRequestId = undefined;
+                    return result;
+                }
+            });
         },
     };
     return dispatcher;

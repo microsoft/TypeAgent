@@ -2,15 +2,12 @@
 // Licensed under the MIT License.
 
 import { ActionContext } from "@typeagent/agent-sdk";
-import { displayInfo } from "@typeagent/agent-sdk/helpers/display";
 import {
     toExecutableActions,
     ExecutableAction,
     FullAction,
     RequestAction,
 } from "agent-cache";
-import chalk from "chalk";
-import { getColorElapsedString } from "@typeagent/common-utils";
 import { getActionTemplateEditConfig } from "./actionTemplate.js";
 import {
     type CommandHandlerContext,
@@ -60,18 +57,8 @@ export async function confirmTranslation(
     const actions = requestAction.actions;
     const systemContext = context.sessionContext.agentContext;
     if (!systemContext.developerMode || systemContext.batchMode) {
-        const messages = [];
-
-        messages.push(
-            `${source}: ${chalk.blueBright(
-                ` ${requestAction.toString()}`,
-            )} ${getColorElapsedString(elapsedMs)}`,
-        );
-        messages.push();
-
-        const prettyStr = JSON.stringify(actions, undefined, 2);
-        messages.push(`${chalk.italic(chalk.cyanBright(prettyStr))}`);
-        displayInfo(messages.join("\n"), context);
+        // Non-developer mode: skip inline display of translation result.
+        // Action data is still accessible via the clickable label above the bubble.
         return { requestAction };
     }
     const preface =

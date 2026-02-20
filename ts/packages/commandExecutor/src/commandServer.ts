@@ -283,6 +283,9 @@ function createMcpClientIO(
         async closeLocalView(requestId: RequestId, port: number) {
             logger.log(`ClientIO: closeLocalView(port=${port})`);
         },
+        requestChoice(): void {
+            // Not supported in command executor
+        },
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             logger.log(
                 `ClientIO: takeAction(action=${action}) - ${JSON.stringify(data)}`,

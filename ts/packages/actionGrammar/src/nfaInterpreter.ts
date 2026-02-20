@@ -55,6 +55,13 @@ interface NFAExecutionState {
     environment?: Environment | undefined;
     // Slot map for debugging (variable name -> slot index, not used at runtime)
     slotMap?: Map<string, number> | undefined;
+
+    // Multi-token entity matching: when an entity converter matches a span of
+    // multiple tokens (e.g. "from 1-2pm" as CalendarTimeRange), the thread
+    // consumes the first token normally and sets skipCount to the number of
+    // remaining tokens to skip. On each subsequent token, skipCount is
+    // decremented and no transitions are attempted until it reaches 0.
+    skipCount?: number | undefined;
 }
 
 /**
@@ -109,6 +116,20 @@ export function matchNFA(
 
         // Try each current state
         for (const state of currentStates) {
+            // Multi-token entity skip: this thread already matched a multi-token
+            // entity span and is skipping the remaining tokens in that span
+            if (state.skipCount && state.skipCount > 0) {
+                debugNFA(
+                    `  State ${state.stateId} SKIP (${state.skipCount} remaining)`,
+                );
+                nextStates.push({
+                    ...state,
+                    tokenIndex: tokenIndex + 1,
+                    skipCount: state.skipCount - 1,
+                });
+                continue;
+            }
+
             const nfaState = nfa.states[state.stateId];
             if (!nfaState) continue;
 
@@ -124,10 +145,11 @@ export function matchNFA(
                     token,
                     state,
                     tokenIndex,
+                    tokens,
                 );
                 if (result) {
                     debugNFA(
-                        `    Transition ${trans.type} → state ${result.stateId} succeeded`,
+                        `    Transition ${trans.type} → state ${result.stateId} succeeded${result.skipCount ? ` (skip ${result.skipCount})` : ""}`,
                     );
                     nextStates.push(result);
                     allVisitedStates.add(result.stateId);
@@ -257,12 +279,16 @@ export function matchNFA(
  * Try a single transition
  * Returns new state if transition succeeds, undefined otherwise
  */
+// Maximum number of extra tokens to look ahead for multi-token entity matching
+const MAX_ENTITY_LOOKAHEAD = 3;
+
 function tryTransition(
     nfa: NFA,
     trans: NFATransition,
     token: string,
     currentState: NFAExecutionState,
     tokenIndex: number,
+    tokens?: string[],
 ): NFAExecutionState | undefined {
     switch (trans.type) {
         case "token":
@@ -286,6 +312,7 @@ function tryTransition(
         case "wildcard": {
             // Match token and write to slot (variables compile to slot indices)
             let slotValue: string | number = token;
+            let skipCount = 0;
 
             // Check type constraints and validate/convert token
             if (trans.typeName) {
@@ -301,21 +328,32 @@ function tryTransition(
                     const validator = globalEntityRegistry.getValidator(
                         trans.typeName,
                     );
+                    const isBuiltInWildcardType =
+                        trans.typeName === "wildcard" ||
+                        trans.typeName === "string" ||
+                        trans.typeName === "word";
+
                     if (validator) {
                         if (!validator.validate(token)) {
+                            // Single-token validation failed — try multi-token
+                            // lookahead for entity types (e.g. "from 1-2pm"
+                            // as CalendarTimeRange)
+                            if (tokens && !isBuiltInWildcardType) {
+                                const multiResult = tryMultiTokenEntity(
+                                    trans,
+                                    tokens,
+                                    tokenIndex,
+                                    currentState,
+                                    validator,
+                                );
+                                if (multiResult) {
+                                    return multiResult;
+                                }
+                            }
                             return undefined; // Validation failed
                         }
-                    } else {
-                        // No validator registered — only built-in wildcard
-                        // types (wildcard, string, word) are allowed without
-                        // a validator. Custom entity types must have one.
-                        const isBuiltInWildcardType =
-                            trans.typeName === "wildcard" ||
-                            trans.typeName === "string" ||
-                            trans.typeName === "word";
-                        if (!isBuiltInWildcardType) {
-                            return undefined; // No validator for custom entity type
-                        }
+                    } else if (!isBuiltInWildcardType) {
+                        return undefined; // No validator for custom entity type
                     }
                     // Try converter if available
                     const converter = globalEntityRegistry.getConverter(
@@ -366,6 +404,7 @@ function tryTransition(
                 actionValue: currentState.actionValue,
                 environment: newEnvironment,
                 slotMap: currentState.slotMap,
+                skipCount,
             };
         }
 
@@ -376,6 +415,79 @@ function tryTransition(
         default:
             return undefined;
     }
+}
+
+/**
+ * Try to match a multi-token span against an entity type.
+ * Called when single-token validation fails for a typed wildcard.
+ * Tries progressively longer spans (maximal match first) by joining
+ * tokens[tokenIndex..tokenIndex+len] and testing against the validator.
+ *
+ * Returns an NFAExecutionState with skipCount set to skip the extra tokens,
+ * or undefined if no multi-token span validates.
+ */
+function tryMultiTokenEntity(
+    trans: NFATransition,
+    tokens: string[],
+    tokenIndex: number,
+    currentState: NFAExecutionState,
+    validator: { validate(token: string): boolean },
+): NFAExecutionState | undefined {
+    const maxLen = Math.min(
+        MAX_ENTITY_LOOKAHEAD + 1,
+        tokens.length - tokenIndex,
+    );
+
+    // Try longest spans first (maximal munch)
+    for (let len = maxLen; len >= 2; len--) {
+        const span = tokens.slice(tokenIndex, tokenIndex + len).join(" ");
+        if (!validator.validate(span)) {
+            continue;
+        }
+
+        // Multi-token span validated — try converter
+        let slotValue: string | number = span;
+        const converter = globalEntityRegistry.getConverter(trans.typeName!);
+        if (converter) {
+            const converted = converter.convert(span);
+            if (converted === undefined) {
+                continue; // Conversion failed for this span length
+            }
+            slotValue = converted as string | number;
+        }
+
+        debugNFA(
+            `    Multi-token entity: "${span}" (${len} tokens) matched ${trans.typeName}, skip ${len - 1}`,
+        );
+
+        // Write to slot
+        let newEnvironment = currentState.environment;
+        if (trans.slotIndex !== undefined && currentState.environment) {
+            newEnvironment = cloneEnvironment(currentState.environment);
+            setSlotValue(
+                newEnvironment,
+                trans.slotIndex,
+                slotValue,
+                trans.appendToSlot ?? false,
+            );
+        }
+
+        return {
+            stateId: trans.to,
+            tokenIndex: tokenIndex + 1,
+            path: [...currentState.path, trans.to],
+            fixedStringPartCount: currentState.fixedStringPartCount,
+            checkedWildcardCount: currentState.checkedWildcardCount + 1,
+            uncheckedWildcardCount: currentState.uncheckedWildcardCount,
+            ruleIndex: currentState.ruleIndex,
+            actionValue: currentState.actionValue,
+            environment: newEnvironment,
+            slotMap: currentState.slotMap,
+            skipCount: len - 1,
+        };
+    }
+
+    return undefined;
 }
 
 /**
@@ -520,7 +632,8 @@ function epsilonClosure(
         }
 
         const slotHash = getSlotHash(currentEnvironment, state.stateId === 1);
-        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}-${envDepth}-${slotHash}`;
+        const skipPart = state.skipCount ? `-skip${state.skipCount}` : "";
+        const key = `${state.stateId}-${state.fixedStringPartCount}-${state.checkedWildcardCount}-${state.uncheckedWildcardCount}-${envDepth}-${slotHash}${skipPart}`;
 
         if (visited.has(key)) {
             continue;
@@ -761,9 +874,10 @@ export function printMatchResult(
  *
  * Priority rules (highest to lowest):
  * 1. Rules without unchecked wildcards always beat rules with them
- * 2. More fixed string parts > fewer fixed string parts
- * 3. More checked wildcards > fewer checked wildcards
- * 4. Fewer unchecked wildcards > more unchecked wildcards
+ * 2. More verified parts (fixed strings + checked/entity wildcards combined)
+ *    Entity-validated matches (e.g. CalendarTimeRange) are as trustworthy
+ *    as fixed string matches — both confirm the token's role.
+ * 3. Fewer unchecked wildcards > more unchecked wildcards
  */
 export function sortNFAMatches<T extends NFAMatchResult>(matches: T[]): T[] {
     return matches.sort((a, b) => {
@@ -778,17 +892,14 @@ export function sortNFAMatches<T extends NFAMatchResult>(matches: T[]): T[] {
             }
         }
 
-        // Rule 2: Prefer more fixed string parts
-        if (a.fixedStringPartCount !== b.fixedStringPartCount) {
-            return b.fixedStringPartCount - a.fixedStringPartCount;
+        // Rule 2: Prefer more verified parts (fixed + checked combined)
+        const aVerified = a.fixedStringPartCount + a.checkedWildcardCount;
+        const bVerified = b.fixedStringPartCount + b.checkedWildcardCount;
+        if (aVerified !== bVerified) {
+            return bVerified - aVerified;
         }
 
-        // Rule 3: Prefer more checked wildcards
-        if (a.checkedWildcardCount !== b.checkedWildcardCount) {
-            return b.checkedWildcardCount - a.checkedWildcardCount;
-        }
-
-        // Rule 4: Prefer fewer unchecked wildcards
+        // Rule 3: Prefer fewer unchecked wildcards
         return a.uncheckedWildcardCount - b.uncheckedWildcardCount;
     });
 }
