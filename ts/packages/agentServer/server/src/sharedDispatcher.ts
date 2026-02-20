@@ -143,6 +143,10 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.closeLocalView(requestId, ...args),
             ),
+        requestChoice: (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.requestChoice(requestId, ...args),
+            ),
         takeAction: (requestId, ...args) =>
             callback(requestId, (clientIO) =>
                 clientIO.takeAction(requestId, ...args),

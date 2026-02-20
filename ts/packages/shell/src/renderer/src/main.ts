@@ -172,6 +172,23 @@ function registerClient(
         askYesNo: async (requestId, message, _defaultValue) => {
             return chatView.askYesNo(requestId, message, "");
         },
+        requestChoice: (
+            requestId,
+            choiceId,
+            type,
+            message,
+            choices,
+            source,
+        ) => {
+            chatView.showChoice(
+                requestId,
+                choiceId,
+                type,
+                message,
+                choices,
+                source,
+            );
+        },
         proposeAction: async (requestId, actionTemplates, source) => {
             return chatView.proposeAction(requestId, actionTemplates, source);
         },
@@ -187,28 +204,14 @@ function registerClient(
                     chatView.randomCommandSelected(requestId, data.message);
                     break;
                 case "grammarRule":
-                    // Update roadrunner color based on grammar result
+                    // Update roadrunner color based on grammar result.
+                    // Grammar details are diagnostic-only — accessible via
+                    // the clickable label, not displayed inline.
                     chatView.updateGrammarResult(
                         requestId,
                         data.success,
                         data.message,
                     );
-                    // Display grammar rule generation result
-                    if (data.success && data.rule) {
-                        chatView.addNotificationMessage(
-                            `Grammar +RULE: ${data.message}\n${data.rule}`,
-                            source,
-                            requestId,
-                        );
-                    } else if (!data.success && data.rule) {
-                        // Rejected but show the rule for diagnostics
-                        chatView.addNotificationMessage(
-                            `Grammar REJECTED: ${data.message}\nRule: ${data.rule}`,
-                            source,
-                            requestId,
-                        );
-                    }
-                    // Don't show anything for rejected without rule
                     break;
                 case "showNotifications":
                     switch (data) {

@@ -215,6 +215,12 @@ export type AgentInvokeFunctions = {
             entityTypeName: string | undefined;
         },
     ): Promise<string[] | undefined>;
+    handleChoice(
+        param: Partial<ActionContextParams> & {
+            choiceId: string;
+            response: boolean | number[];
+        },
+    ): Promise<ActionResult | undefined>;
 };
 
 export type ContextParams = {

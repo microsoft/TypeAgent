@@ -11,6 +11,7 @@ import {
 import type {
     RequestId,
     ClientIO,
+    Dispatcher,
     IAgentMessage,
     TemplateEditConfig,
 } from "@typeagent/dispatcher-types";
@@ -67,7 +68,10 @@ function messageContentToText(message: MessageContent): string {
     return displayRows.join("\n");
 }
 
-function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
+function createConsoleClientIO(
+    rl?: readline.promises.Interface,
+    dispatcherRef?: { current?: Dispatcher },
+): ClientIO {
     let lastAppendMode: DisplayAppendMode | undefined;
     function displayContent(
         content: DisplayContent,
@@ -258,6 +262,57 @@ function createConsoleClientIO(rl?: readline.promises.Interface): ClientIO {
         ): Promise<void> {
             // TODO: Ignored
         },
+        requestChoice(
+            _requestId: RequestId,
+            choiceId: string,
+            type: "yesNo" | "multiChoice",
+            message: string,
+            choices: string[],
+            source: string,
+        ): void {
+            // Prompt asynchronously and call back to the dispatcher
+            (async () => {
+                if (type === "yesNo") {
+                    const input = await question(
+                        `${chalk.cyan(`[${source}]`)} ${message} (y/n) `,
+                        rl,
+                    );
+                    const confirmed =
+                        input.toLowerCase() === "y" ||
+                        input.toLowerCase() === "yes";
+                    if (dispatcherRef?.current) {
+                        await dispatcherRef.current.respondToChoice(
+                            choiceId,
+                            confirmed,
+                        );
+                    }
+                } else {
+                    // multiChoice — show numbered list, accept comma-separated indices
+                    console.log(`${chalk.cyan(`[${source}]`)} ${message}`);
+                    for (let i = 0; i < choices.length; i++) {
+                        console.log(`  ${i + 1}. ${choices[i]}`);
+                    }
+                    const input = await question(
+                        `Enter choice numbers (comma-separated): `,
+                        rl,
+                    );
+                    const indices = input
+                        .split(",")
+                        .map((s) => parseInt(s.trim(), 10) - 1)
+                        .filter(
+                            (n) => !isNaN(n) && n >= 0 && n < choices.length,
+                        );
+                    if (dispatcherRef?.current) {
+                        await dispatcherRef.current.respondToChoice(
+                            choiceId,
+                            indices,
+                        );
+                    }
+                }
+            })().catch((err) => {
+                console.error(chalk.red(`Choice error: ${err}`));
+            });
+        },
         // Host specific (TODO: Formalize the API)
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {
@@ -377,7 +432,10 @@ function formatDisplayContent(content: string | DisplayContent): string {
 
 let usingConsole = false;
 export async function withConsoleClientIO(
-    callback: (clientIO: ClientIO) => Promise<void>,
+    callback: (
+        clientIO: ClientIO,
+        bindDispatcher: (d: Dispatcher) => void,
+    ) => Promise<void>,
     rl?: readline.promises.Interface,
 ) {
     if (usingConsole) {
@@ -386,7 +444,13 @@ export async function withConsoleClientIO(
     usingConsole = true;
     try {
         initializeConsole(rl);
-        await callback(createConsoleClientIO(rl));
+        const dispatcherRef: { current?: Dispatcher } = {};
+        await callback(
+            createConsoleClientIO(rl, dispatcherRef),
+            (d: Dispatcher) => {
+                dispatcherRef.current = d;
+            },
+        );
     } finally {
         process.stdin.pause();
         usingConsole = false;

@@ -22,6 +22,7 @@ import {
 import type {
     RequestId,
     ClientIO,
+    Dispatcher,
     IAgentMessage,
     TemplateEditConfig,
 } from "agent-dispatcher";
@@ -196,6 +197,7 @@ export function stopSpinner(
  */
 export function createEnhancedClientIO(
     rl?: readline.promises.Interface,
+    dispatcherRef?: { current?: Dispatcher },
 ): ClientIO {
     let lastAppendMode: DisplayAppendMode | undefined;
 
@@ -564,6 +566,77 @@ export function createEnhancedClientIO(
             port: number,
         ): Promise<void> {
             // TODO: Ignored
+        },
+        requestChoice(
+            _requestId: RequestId,
+            choiceId: string,
+            type: "yesNo" | "multiChoice",
+            message: string,
+            choices: string[],
+            source: string,
+        ): void {
+            // Prompt asynchronously and call back to the dispatcher
+            (async () => {
+                // Pause spinner during input
+                const wasSpinning = currentSpinner?.isActive();
+                if (wasSpinning) {
+                    currentSpinner!.stop();
+                }
+
+                const width = process.stdout.columns || 80;
+                const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
+
+                process.stdout.write("\n");
+                process.stdout.write(line + "\n");
+
+                let response: boolean | number[];
+                if (type === "yesNo") {
+                    const prompt = `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
+                    const input = await question(prompt, rl);
+                    response =
+                        input.toLowerCase() === "y" ||
+                        input.toLowerCase() === "yes";
+                } else {
+                    // multiChoice — show numbered list, accept comma-separated
+                    process.stdout.write(
+                        `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message}\n`,
+                    );
+                    for (let i = 0; i < choices.length; i++) {
+                        process.stdout.write(
+                            `  ${chalk.cyan(`${i + 1}.`)} ${choices[i]}\n`,
+                        );
+                    }
+                    const input = await question(
+                        `${chalk.dim("Enter choice numbers (comma-separated):")} `,
+                        rl,
+                    );
+                    response = input
+                        .split(",")
+                        .map((s) => parseInt(s.trim(), 10) - 1)
+                        .filter(
+                            (n) => !isNaN(n) && n >= 0 && n < choices.length,
+                        );
+                }
+
+                process.stdout.write(line + "\n");
+
+                // Resume spinner if it was active
+                if (wasSpinning) {
+                    currentSpinner = new EnhancedSpinner({
+                        text: "Processing...",
+                    });
+                    currentSpinner.start();
+                }
+
+                if (dispatcherRef?.current) {
+                    await dispatcherRef.current.respondToChoice(
+                        choiceId,
+                        response,
+                    );
+                }
+            })().catch((err) => {
+                console.error(chalk.red(`Choice error: ${err}`));
+            });
         },
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {
@@ -1056,7 +1129,10 @@ let usingEnhancedConsole = false;
  * Wrapper for using enhanced console ClientIO
  */
 export async function withEnhancedConsoleClientIO(
-    callback: (clientIO: ClientIO) => Promise<void>,
+    callback: (
+        clientIO: ClientIO,
+        bindDispatcher: (d: Dispatcher) => void,
+    ) => Promise<void>,
     rl?: readline.promises.Interface,
 ) {
     if (usingEnhancedConsole) {
@@ -1077,7 +1153,13 @@ export async function withEnhancedConsoleClientIO(
         console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
         console.log("");
 
-        await callback(createEnhancedClientIO(rl));
+        const dispatcherRef: { current?: Dispatcher } = {};
+        await callback(
+            createEnhancedClientIO(rl, dispatcherRef),
+            (d: Dispatcher) => {
+                dispatcherRef.current = d;
+            },
+        );
     } finally {
         if (currentSpinner) {
             currentSpinner.stop();

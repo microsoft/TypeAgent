@@ -42,6 +42,7 @@ export function createClientIORpcServer(
         },
         setDynamicDisplay: (...args) => clientIO.setDynamicDisplay(...args),
         notify: (...args) => clientIO.notify(...args),
+        requestChoice: (...args) => clientIO.requestChoice(...args),
         takeAction: (...args) => clientIO.takeAction(...args),
     };
     createRpc(

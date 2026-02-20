@@ -40,5 +40,8 @@ export function createDispatcherRpcClient(
         async getStatus() {
             return rpc.invoke("getStatus");
         },
+        async respondToChoice(...args) {
+            return rpc.invoke("respondToChoice", ...args);
+        },
     };
 }

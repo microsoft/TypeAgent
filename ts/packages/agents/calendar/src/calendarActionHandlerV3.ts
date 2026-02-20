@@ -23,6 +23,9 @@ import {
 import {
     createActionResultFromHtmlDisplay,
     createActionResultFromError,
+    createYesNoChoiceResult,
+    createMultiChoiceResult,
+    ChoiceManager,
 } from "@typeagent/agent-sdk/helpers/action";
 import { CalendarActionV3 } from "./calendarActionsSchemaV3.js";
 import {
@@ -223,6 +226,7 @@ function formatEventsAsHtml(events: any[]): string {
 
 // Calendar action handler V3 - with multi-provider calendar integration
 export class CalendarActionHandlerV3 implements AppAgent {
+    public choiceManager = new ChoiceManager();
     public async initializeAgentContext(): Promise<CalendarActionContext> {
         return {
             calendarClient: undefined,
@@ -328,6 +332,12 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 return await this.handleFindTodaysEvents(context, provider);
             case "findThisWeeksEvents":
                 return await this.handleFindThisWeeksEvents(context, provider);
+            case "removeEvent":
+                return await this.handleRemoveEvent(
+                    calendarAction,
+                    context,
+                    provider,
+                );
             default:
                 console.log(
                     chalk.red(
@@ -352,8 +362,8 @@ export class CalendarActionHandlerV3 implements AppAgent {
         try {
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-            // Parse the natural language date
-            let eventDate = this.parseNaturalDate(date);
+            // Parse the natural language date (default to today if not provided)
+            let eventDate = date ? this.parseNaturalDate(date) : new Date();
             if (!eventDate) {
                 return createActionResultFromError(
                     `Could not parse date: ${date}`,
@@ -806,6 +816,148 @@ export class CalendarActionHandlerV3 implements AppAgent {
             );
         }
     }
+
+    private async handleRemoveEvent(
+        action: CalendarActionV3 & { actionName: "removeEvent" },
+        _context: ActionContext<CalendarActionContext>,
+        provider: ICalendarProvider,
+    ): Promise<ActionResult | undefined> {
+        const { description, date } = action.parameters;
+
+        console.log(
+            chalk.green(
+                `\n✓ Searching for events to remove: ${description}${date ? ` (${date})` : ""}`,
+            ),
+        );
+
+        try {
+            let events = await provider.findEventsBySubject(description);
+
+            // Filter by date if provided
+            if (date && events.length > 0) {
+                const parsedDate = this.parseNaturalDate(date);
+                if (parsedDate) {
+                    const startDate = new Date(parsedDate);
+                    startDate.setHours(0, 0, 0, 0);
+                    const endDate = new Date(parsedDate);
+                    endDate.setHours(23, 59, 59, 999);
+
+                    events = events.filter((event) => {
+                        if (!event.start?.dateTime) return false;
+                        const eventDate = new Date(event.start.dateTime);
+                        return eventDate >= startDate && eventDate <= endDate;
+                    });
+                } else {
+                    return createActionResultFromError(
+                        `Could not parse date: ${date}`,
+                    );
+                }
+            }
+
+            if (!events || events.length === 0) {
+                return createActionResultFromError(
+                    `No events found matching "${description}"${date ? ` on ${date}` : ""}`,
+                );
+            }
+
+            if (events.length === 1) {
+                // Single match — confirm with the user before deleting
+                const event = events[0];
+                const subject = event.subject || "No subject";
+                const startTime = event.start?.dateTime
+                    ? new Date(event.start.dateTime).toLocaleString()
+                    : "Unknown time";
+
+                return createYesNoChoiceResult(
+                    this.choiceManager,
+                    `Delete "${subject}" (${startTime})?`,
+                    async (confirmed: boolean) => {
+                        if (!confirmed) {
+                            return createActionResultFromHtmlDisplay(
+                                `<p>Cancelled removal of <strong>${subject}</strong></p>`,
+                                `Cancelled removal of "${subject}"`,
+                            );
+                        }
+                        const deleted = await provider.deleteEvent(event.id);
+                        if (deleted) {
+                            return createActionResultFromHtmlDisplay(
+                                `<p>Deleted: <strong>${subject}</strong> (${startTime})</p>`,
+                                `Deleted event "${subject}" at ${startTime}`,
+                            );
+                        }
+                        return createActionResultFromError(
+                            `Failed to delete "${subject}"`,
+                        );
+                    },
+                    `<p>Delete <strong>${subject}</strong> (${startTime})?</p>`,
+                );
+            }
+
+            if (events.length <= 5) {
+                // Multiple matches — show checkboxes to select which to delete
+                const choiceLabels = events.map((event) => {
+                    const subject = event.subject || "No subject";
+                    const startTime = event.start?.dateTime
+                        ? new Date(event.start.dateTime).toLocaleString()
+                        : "Unknown time";
+                    return `${subject} (${startTime})`;
+                });
+
+                let html = `<p>Found ${events.length} events matching "${description}". Select which to delete:</p><ol>`;
+                for (const label of choiceLabels) {
+                    html += `<li>${label}</li>`;
+                }
+                html += `</ol>`;
+
+                return createMultiChoiceResult(
+                    this.choiceManager,
+                    `Select events to delete:`,
+                    choiceLabels,
+                    async (selectedIndices: number[]) => {
+                        if (selectedIndices.length === 0) {
+                            return createActionResultFromHtmlDisplay(
+                                `<p>No events selected for deletion.</p>`,
+                                `Cancelled removal`,
+                            );
+                        }
+                        const results: string[] = [];
+                        for (const idx of selectedIndices) {
+                            const event = events[idx];
+                            const subject = event.subject || "No subject";
+                            const deleted = await provider.deleteEvent(
+                                event.id,
+                            );
+                            if (deleted) {
+                                results.push(
+                                    `Deleted: <strong>${subject}</strong>`,
+                                );
+                            } else {
+                                results.push(
+                                    `Failed to delete: <strong>${subject}</strong>`,
+                                );
+                            }
+                        }
+                        return createActionResultFromHtmlDisplay(
+                            `<p>${results.join("<br>")}</p>`,
+                            results
+                                .map((r) => r.replace(/<[^>]+>/g, ""))
+                                .join("; "),
+                        );
+                    },
+                    html,
+                );
+            }
+
+            return createActionResultFromError(
+                `Found ${events.length} events matching "${description}". Please be more specific (try adding a date or more details).`,
+            );
+        } catch (error: any) {
+            console.error(chalk.red(`Error removing event: ${error.message}`));
+            return createActionResultFromError(
+                `Failed to remove event: ${error.message}`,
+            );
+        }
+    }
 }
 
 // Instantiate function required by the agent loader
@@ -821,6 +973,11 @@ export function instantiate(): AppAgent {
             action: AppAction,
             context: ActionContext<CalendarActionContext>,
         ) => handler.executeAction(action, context),
+        handleChoice: (
+            choiceId: string,
+            response: boolean | number[],
+            _context: ActionContext<CalendarActionContext>,
+        ) => handler.choiceManager.handleChoice(choiceId, response),
         ...getCommandInterface(handlers),
     };
 }
