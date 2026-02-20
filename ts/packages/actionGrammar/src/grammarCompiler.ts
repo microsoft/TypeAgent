@@ -46,8 +46,10 @@ type CompileContext = {
     displayPath: string;
     ruleDefMap: DefinitionMap;
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
-    importedTypeNames: Set<string>; // Type names imported from .ts files
+    knownTypeNames: Set<string>; // Type names imported from .ts files
+    importedTypeNames: Map<string, number | undefined>; // Explicitly named .ts type imports with positions (excludes entity names and wildcards)
     usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
+    hasStarImport: boolean; // Indicates if there's a star import
     currentDefinition?: string | undefined;
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
@@ -95,14 +97,15 @@ function createCompileContext(
 
     // Build separate sets of imported rule names and type names
     const importedRuleMap = new Map<string, CompileContext>();
-    const importedTypeNames = new Set<string>();
+    const knownTypeNames = new Set<string>();
 
     // Entity declarations (e.g., "entity CalendarDate;") are valid type names
     if (entityNames) {
         for (const name of entityNames) {
-            importedTypeNames.add(name);
+            knownTypeNames.add(name);
         }
     }
+    const importedTypeNames = new Map<string, number | undefined>();
     const usedImportedTypes = new Set<string>();
     // Create the context early and add to the map BEFORE processing anything
     // This prevents infinite recursion on circular dependencies
@@ -112,8 +115,10 @@ function createCompileContext(
         displayPath,
         ruleDefMap,
         importedRuleMap,
+        knownTypeNames,
         importedTypeNames,
         usedImportedTypes,
+        hasStarImport: false,
         errors: [],
         warnings: [],
     };
@@ -176,10 +181,10 @@ function createCompileContext(
                     // For wildcard imports, we can't know all names at compile time
                     // They will be validated at runtime instead
                     // Mark with a special sentinel to indicate wildcard import
-                    importedTypeNames.add("*");
+                    context.hasStarImport = true;
                 } else {
                     for (const name of importStmt.names) {
-                        importedTypeNames.add(name);
+                        importedTypeNames.set(name, importStmt.pos);
                     }
                 }
             }
@@ -229,6 +234,18 @@ export function compileGrammar(
                 message: `Rule '<${name}>' is defined but never used.`,
                 pos: record.pos,
             });
+        }
+    }
+
+    // Warn about imported types that are declared but never used in any variable
+    for (const [, compileContext] of context.grammarFileMap) {
+        for (const [typeName, pos] of compileContext.importedTypeNames) {
+            if (!compileContext.usedImportedTypes.has(typeName)) {
+                compileContext.warnings.push({
+                    message: `Imported type '${typeName}' is declared but never used.`,
+                    pos,
+                });
+            }
         }
     }
 
@@ -447,8 +464,9 @@ function createGrammarRule(
                         refName === "word";
                     if (!isBuiltInType) {
                         const isImportedType =
-                            context.importedTypeNames.has(refName) ||
-                            context.importedTypeNames.has("*");
+                            context.hasStarImport ||
+                            context.knownTypeNames.has(refName) ||
+                            context.importedTypeNames.has(refName);
 
                         if (!isImportedType) {
                             context.errors.push({
