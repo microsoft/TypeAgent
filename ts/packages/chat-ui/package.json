@@ -27,7 +27,6 @@
     "markdown-it": "^14.1.0"
   },
   "devDependencies": {
-    "@types/dompurify": "^3.0.5",
     "@types/markdown-it": "^14.1.2",
     "typescript": "~5.4.5"
   }
