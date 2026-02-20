@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import Database, * as sqlite from "better-sqlite3";
+import fs from "node:fs";
 import { ValueDataType, ValueType } from "knowledge-processor";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -21,8 +22,12 @@ function getDbOptions() {
     const betterSqlitePath = r.resolve("better-sqlite3/package.json");
     const nativeBinding = path.join(
         betterSqlitePath,
-        "../build/Release-Node/better_sqlite3.node",
+        "../prebuild-node/better_sqlite3.node",
     );
+    // Fall back to default (build/Release) when prebuild-node doesn't exist
+    if (!fs.existsSync(nativeBinding)) {
+        return undefined;
+    }
     return { nativeBinding };
 }
 

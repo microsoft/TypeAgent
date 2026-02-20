@@ -51,8 +51,12 @@ function getDbOptions() {
     const betterSqlitePath = r.resolve("better-sqlite3/package.json");
     const nativeBinding = path.join(
         betterSqlitePath,
-        "../build/Release-Node/better_sqlite3.node",
+        "../prebuild-node/better_sqlite3.node",
     );
+    // Fall back to default (build/Release) when prebuild-node doesn't exist
+    if (!fs.existsSync(nativeBinding)) {
+        return undefined;
+    }
     return { nativeBinding };
 }
 

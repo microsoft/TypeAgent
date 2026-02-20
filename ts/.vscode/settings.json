@@ -45,5 +45,8 @@
     "[typescript]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
     },
-    "jest.jestCommandLine": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js"
+    "jest.jestCommandLine": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "chat.tools.terminal.autoApprove": {
+        "ForEach-Object": true
+    }
 }

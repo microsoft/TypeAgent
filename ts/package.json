@@ -25,12 +25,13 @@
     "elevate": "node tools/scripts/elevate.js",
     "getKeys": "node tools/scripts/getKeys.mjs",
     "getKeys:build": "node tools/scripts/getKeys.mjs --vault build-pipeline-kv",
-    "postinstall": "cd node_modules/.pnpm/node_modules/better-sqlite3 && shx rm -rf ./build && pnpm exec prebuild-install && shx mkdir build/Release-Node && shx cp build/Release/better_sqlite3.node build/Release-Node/better_sqlite3.node",
+    "postinstall": "pnpm run postinstall:better-sqlite3-node-copy",
     "knowledgeVisualizer": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "kv": "pnpm -C packages/knowledgeVisualizer exec npm run start",
     "lint": "fluid-build . -t prettier",
     "lint:fix": "pnpm run prettier:fix",
     "montage": "pnpm -C packages/montage exec npm run start",
+    "postinstall:better-sqlite3-node-copy": "node ./tools/scripts/copy-better-sqlite3-node.js",
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write .",
     "rebuild": "fluid-build . -t build --rebuild",
@@ -58,7 +59,7 @@
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
-  "packageManager": "pnpm@10.24.0+sha512.01ff8ae71b4419903b65c60fb2dc9d34cf8bb6e06d03bde112ef38f7a34d6904c424ba66bea5cdcf12890230bf39f9580473140ed9c946fef328b6e5238a345a",
+  "packageManager": "pnpm@10.30.1+sha512.3590e550d5384caa39bd5c7c739f72270234b2f6059e13018f975c313b1eb9fefcc09714048765d4d9efe961382c312e624572c0420762bdc5d5940cdf9be73a",
   "engines": {
     "node": ">=20",
     "pnpm": ">=10"
@@ -76,10 +77,14 @@
       "exifreader",
       "keytar",
       "koffi",
+      "node-pty",
       "protobufjs",
       "puppeteer",
       "sharp"
     ],
+    "allowedDeprecatedVersions": {
+      "crx": "5"
+    },
     "supportedArchitectures": {
       "cpu": [
         "x64",
@@ -93,6 +98,11 @@
   "peerDependencyRules": {
     "ignoreMissing": [
       "eslint"
-    ]
+    ],
+    "allowedVersions": {
+      "zod": "*",
+      "jest": "*",
+      "@azure/core-rest-pipeline": "*"
+    }
   }
 }

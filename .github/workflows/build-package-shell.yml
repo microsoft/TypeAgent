@@ -23,7 +23,6 @@ permissions:
   contents: read
 
 env:
-
   ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
 

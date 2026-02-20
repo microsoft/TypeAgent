@@ -26,11 +26,11 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "better-sqlite3": "12.2.0",
+    "better-sqlite3": "12.6.2",
     "typeagent": "workspace:*"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "7.6.11",
+    "@types/better-sqlite3": "7.6.13",
     "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",

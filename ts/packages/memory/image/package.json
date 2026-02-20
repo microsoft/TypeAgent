@@ -27,7 +27,7 @@
   "dependencies": {
     "@azure-rest/maps-search": "^2.0.0-beta.3",
     "aiclient": "workspace:*",
-    "better-sqlite3": "12.2.0",
+    "better-sqlite3": "12.6.2",
     "debug": "^4.4.0",
     "get-folder-size": "^5.0.0",
     "knowledge-processor": "workspace:*",
@@ -39,7 +39,7 @@
     "typechat-utils": "workspace:*"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "7.6.11",
+    "@types/better-sqlite3": "7.6.13",
     "@types/debug": "^4.1.12",
     "copyfiles": "^2.4.1",
     "dotenv": "^16.3.1",

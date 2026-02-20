@@ -337,12 +337,12 @@
         "${jest.testFile}"
       ],
       //"cwd": "${workspaceFolder}/packages/knowpro",
-      //"cwd": "${workspaceFolder}/packages/memory/storage",
+      "cwd": "${workspaceFolder}/packages/memory/storage",
       //"cwd": "${workspaceFolder}/packages/memory/conversation",
       //"cwd": "${workspaceFolder}/packages/actionSchema",
       //"cwd": "${workspaceFolder}/packages/defaultAgentProvider",
       //"cwd": "${workspaceFolder}/packages/knowledgeProcessor",
-      "cwd": "${workspaceFolder}/packages/knowPro",
+      //"cwd": "${workspaceFolder}/packages/knowPro",
       //"cwd": "${workspaceFolder}/packages/aiclient",
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen"
