@@ -39,7 +39,7 @@ export default class Connect extends Command {
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Connect);
 
-        await withConsoleClientIO(async (clientIO) => {
+        await withConsoleClientIO(async (clientIO, bindDispatcher) => {
             const dispatcher = await connectDispatcher(
                 clientIO,
                 `ws://localhost:${flags.port}`,
@@ -49,6 +49,7 @@ export default class Connect extends Command {
                     process.exit(1);
                 },
             );
+            bindDispatcher?.(dispatcher);
             try {
                 let processed = false;
                 if (flags.request) {

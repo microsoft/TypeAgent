@@ -187,6 +187,22 @@ export async function executeAction(
                 result.dynamicDisplayNextRefreshMs!,
             );
         }
+        if (result.pendingChoice !== undefined) {
+            const pc = result.pendingChoice;
+            systemContext.pendingChoiceRoutes.set(pc.choiceId, {
+                agentName: appAgentName,
+                requestId,
+                actionIndex,
+            });
+            systemContext.clientIO.requestChoice(
+                requestId,
+                pc.choiceId,
+                pc.type,
+                pc.message,
+                pc.type === "multiChoice" ? pc.choices : [],
+                schemaName,
+            );
+        }
     }
 
     closeActionContext();

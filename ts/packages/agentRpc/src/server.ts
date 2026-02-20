@@ -233,6 +233,16 @@ export function createAgentRpcServer(
                 param.entityTypeName,
             );
         },
+        async handleChoice(param) {
+            if (agent.handleChoice === undefined) {
+                throw new Error("Invalid invocation of handleChoice");
+            }
+            return agent.handleChoice(
+                param.choiceId,
+                param.response,
+                getActionContextShim(param),
+            );
+        },
     };
 
     const agentCallHandlers: AgentCallFunctions = {

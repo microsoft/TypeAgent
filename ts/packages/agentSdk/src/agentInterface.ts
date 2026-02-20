@@ -116,6 +116,13 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         context: ActionContext<unknown>,
     ): Promise<ActionResult | undefined>;
 
+    // Choice (yes/no confirmation or multi-select)
+    handleChoice?(
+        choiceId: string,
+        response: boolean | number[],
+        context: ActionContext<unknown>,
+    ): Promise<ActionResult | undefined>;
+
     // Cache extensions
     validateWildcardMatch?(
         action: AppAction,

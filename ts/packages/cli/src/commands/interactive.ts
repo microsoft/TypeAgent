@@ -175,7 +175,7 @@ export default class Interactive extends Command {
                   terminal: true,
               });
 
-        await withClientIO(async (clientIO) => {
+        await withClientIO(async (clientIO, bindDispatcher) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
             const indexingServiceRegistry =
                 await getIndexingServiceRegistry(persistDir);
@@ -197,6 +197,7 @@ export default class Interactive extends Command {
                 traceId: getTraceId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });
+            bindDispatcher?.(dispatcher);
 
             try {
                 if (args.input) {

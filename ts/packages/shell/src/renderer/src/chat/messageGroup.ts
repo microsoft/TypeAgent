@@ -219,6 +219,15 @@ export class MessageGroup {
         return this.agentMessages[index];
     }
 
+    public getLastAgentMessage(): MessageContainer | undefined {
+        for (let i = this.agentMessages.length - 1; i >= 0; i--) {
+            if (this.agentMessages[i] !== undefined) {
+                return this.agentMessages[i];
+            }
+        }
+        return undefined;
+    }
+
     public updateUserMessage(message: string) {
         this.userMessage.setMessage(message, this.chatView.userGivenName);
     }
