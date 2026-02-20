@@ -920,7 +920,8 @@ export class CalendarActionHandlerV3 implements AppAgent {
                                 `Cancelled removal`,
                             );
                         }
-                        const results: string[] = [];
+                        const htmlResults: string[] = [];
+                        const textResults: string[] = [];
                         for (const idx of selectedIndices) {
                             const event = events[idx];
                             const subject = event.subject || "No subject";
@@ -928,20 +929,22 @@ export class CalendarActionHandlerV3 implements AppAgent {
                                 event.id,
                             );
                             if (deleted) {
-                                results.push(
+                                htmlResults.push(
                                     `Deleted: <strong>${subject}</strong>`,
                                 );
+                                textResults.push(`Deleted: ${subject}`);
                             } else {
-                                results.push(
+                                htmlResults.push(
                                     `Failed to delete: <strong>${subject}</strong>`,
+                                );
+                                textResults.push(
+                                    `Failed to delete: ${subject}`,
                                 );
                             }
                         }
                         return createActionResultFromHtmlDisplay(
-                            `<p>${results.join("<br>")}</p>`,
-                            results
-                                .map((r) => r.replace(/<[^>]+>/g, ""))
-                                .join("; "),
+                            `<p>${htmlResults.join("<br>")}</p>`,
+                            textResults.join("; "),
                         );
                     },
                     html,
