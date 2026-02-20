@@ -39,6 +39,9 @@ import { markedTerminal } from "marked-terminal";
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
 
+// Pending choice promise — main loop awaits this before showing next prompt
+let pendingChoicePromise: Promise<void> | null = null;
+
 // Grammar log file path
 const grammarLogPath = path.join(
     process.env.HOME || process.env.USERPROFILE || ".",
@@ -575,68 +578,75 @@ export function createEnhancedClientIO(
             choices: string[],
             source: string,
         ): void {
-            // Prompt asynchronously and call back to the dispatcher
+            // Set up a promise so the main loop waits before
+            // showing "Complete" and the next prompt.
+            let resolveChoice: () => void;
+            pendingChoicePromise = new Promise<void>((resolve) => {
+                resolveChoice = resolve;
+            });
+
             (async () => {
-                // Pause spinner during input
-                const wasSpinning = currentSpinner?.isActive();
-                if (wasSpinning) {
-                    currentSpinner!.stop();
-                }
+                try {
+                    // Stop and clear spinner — the main loop will
+                    // handle completion after the choice resolves.
+                    if (currentSpinner) {
+                        currentSpinner.stop();
+                        currentSpinner = null;
+                    }
 
-                const width = process.stdout.columns || 80;
-                const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
+                    const width = process.stdout.columns || 80;
+                    const line =
+                        ANSI.dim + "─".repeat(width) + ANSI.reset;
 
-                process.stdout.write("\n");
-                process.stdout.write(line + "\n");
+                    process.stdout.write("\n");
+                    process.stdout.write(line + "\n");
 
-                let response: boolean | number[];
-                if (type === "yesNo") {
-                    const prompt = `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
-                    const input = await question(prompt, rl);
-                    response =
-                        input.toLowerCase() === "y" ||
-                        input.toLowerCase() === "yes";
-                } else {
-                    // multiChoice — show numbered list, accept comma-separated
-                    process.stdout.write(
-                        `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message}\n`,
-                    );
-                    for (let i = 0; i < choices.length; i++) {
+                    let response: boolean | number[];
+                    if (type === "yesNo") {
+                        const prompt = `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
+                        const input = await question(prompt, rl);
+                        response =
+                            input.toLowerCase() === "y" ||
+                            input.toLowerCase() === "yes";
+                    } else {
+                        // multiChoice — show numbered list, accept comma-separated
                         process.stdout.write(
-                            `  ${chalk.cyan(`${i + 1}.`)} ${choices[i]}\n`,
+                            `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message}\n`,
+                        );
+                        for (let i = 0; i < choices.length; i++) {
+                            process.stdout.write(
+                                `  ${chalk.cyan(`${i + 1}.`)} ${choices[i]}\n`,
+                            );
+                        }
+                        const input = await question(
+                            `${chalk.dim("Enter choice numbers (comma-separated):")} `,
+                            rl,
+                        );
+                        response = input
+                            .split(",")
+                            .map((s) => parseInt(s.trim(), 10) - 1)
+                            .filter(
+                                (n) =>
+                                    !isNaN(n) &&
+                                    n >= 0 &&
+                                    n < choices.length,
+                            );
+                    }
+
+                    process.stdout.write(line + "\n");
+
+                    if (dispatcherRef?.current) {
+                        await dispatcherRef.current.respondToChoice(
+                            choiceId,
+                            response,
                         );
                     }
-                    const input = await question(
-                        `${chalk.dim("Enter choice numbers (comma-separated):")} `,
-                        rl,
-                    );
-                    response = input
-                        .split(",")
-                        .map((s) => parseInt(s.trim(), 10) - 1)
-                        .filter(
-                            (n) => !isNaN(n) && n >= 0 && n < choices.length,
-                        );
+                } catch (err) {
+                    console.error(chalk.red(`Choice error: ${err}`));
+                } finally {
+                    resolveChoice!();
                 }
-
-                process.stdout.write(line + "\n");
-
-                // Resume spinner if it was active
-                if (wasSpinning) {
-                    currentSpinner = new EnhancedSpinner({
-                        text: "Processing...",
-                    });
-                    currentSpinner.start();
-                }
-
-                if (dispatcherRef?.current) {
-                    await dispatcherRef.current.respondToChoice(
-                        choiceId,
-                        response,
-                    );
-                }
-            })().catch((err) => {
-                console.error(chalk.red(`Choice error: ${err}`));
-            });
+            })();
         },
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {
@@ -1255,7 +1265,14 @@ export async function processCommandsEnhanced<T>(
 
             await processCommand(request, context);
 
-            // Stop spinner on success
+            // Wait for any pending choice prompt to complete
+            // before showing "Complete" and the next prompt.
+            if (pendingChoicePromise) {
+                await pendingChoicePromise;
+                pendingChoicePromise = null;
+            }
+
+            // Stop spinner on success (no-op if choice already cleared it)
             stopSpinner("success", "Complete");
 
             history.push(request);
