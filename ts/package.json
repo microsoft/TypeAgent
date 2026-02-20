@@ -97,6 +97,11 @@
   "peerDependencyRules": {
     "ignoreMissing": [
       "eslint"
-    ]
+    ],
+    "allowedVersions": {
+      "zod": "*",
+      "jest": "*",
+      "@azure/core-rest-pipeline": "*"
+    }
   }
 }

@@ -1330,6 +1330,9 @@ importers:
       '@mozilla/readability':
         specifier: ^0.6.0
         version: 0.6.0
+      '@popperjs/core':
+        specifier: ^2.11.8
+        version: 2.11.8
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../actionSchema
@@ -1405,6 +1408,9 @@ importers:
       graphology-layout-noverlap:
         specifier: ^0.4.1
         version: 0.4.2(graphology-types@0.24.8)
+      graphology-types:
+        specifier: ^0.24.7
+        version: 0.24.8
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -2008,6 +2014,9 @@ importers:
       ws:
         specifier: ^8.14.2
         version: 8.18.2
+      y-prosemirror:
+        specifier: ^1.2.3
+        version: 1.3.5(prosemirror-model@1.25.1)(prosemirror-state@1.4.3)(prosemirror-view@1.40.0)(y-protocols@1.0.6(yjs@13.6.27))(yjs@13.6.27)
       y-protocols:
         specifier: ^1.0.5
         version: 1.0.6(yjs@13.6.27)
@@ -3268,6 +3277,12 @@ importers:
       '@azure/ai-projects':
         specifier: ^1.0.0-beta.8
         version: 1.0.0-beta.8(ws@8.19.0)(zod@4.1.13)
+      '@azure/core-client':
+        specifier: ^1.10.0
+        version: 1.10.1
+      '@azure/core-rest-pipeline':
+        specifier: ^1.22.0
+        version: 1.22.2
       '@azure/cosmos':
         specifier: ^4.2.1
         version: 4.9.1(@azure/core-client@1.10.1)
@@ -3972,6 +3987,9 @@ importers:
       graphology-metrics:
         specifier: ^2.1.0
         version: 2.4.0(graphology-types@0.24.8)
+      graphology-types:
+        specifier: ^0.24.7
+        version: 0.24.8
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0
@@ -14699,7 +14717,7 @@ snapshots:
       '@azure/abort-controller': 2.1.2
       '@azure/core-auth': 1.9.0
       '@azure/core-lro': 2.7.2
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-rest-pipeline': 1.22.2
       '@azure/core-tracing': 1.2.0
       '@azure/logger': 1.2.0
       tslib: 2.8.1
@@ -14710,7 +14728,7 @@ snapshots:
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-auth': 1.9.0
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-rest-pipeline': 1.22.2
       '@azure/core-tracing': 1.2.0
       '@typespec/ts-http-runtime': 0.2.2
       tslib: 2.8.1
@@ -14722,7 +14740,7 @@ snapshots:
       '@azure-rest/core-client': 2.4.0
       '@azure/core-auth': 1.9.0
       '@azure/core-lro': 2.7.2
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-rest-pipeline': 1.22.2
       '@azure/logger': 1.2.0
       '@azure/maps-common': 1.0.0-beta.2
       tslib: 2.8.1
@@ -14822,9 +14840,9 @@ snapshots:
   '@azure/arm-authorization@9.0.0':
     dependencies:
       '@azure/core-auth': 1.9.0
-      '@azure/core-client': 1.9.2
+      '@azure/core-client': 1.10.1
       '@azure/core-paging': 1.6.2
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-rest-pipeline': 1.22.2
       tslib: 2.6.2
     transitivePeerDependencies:
       - supports-color
@@ -14859,7 +14877,7 @@ snapshots:
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-auth': 1.9.0
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-rest-pipeline': 1.22.2
       '@azure/core-tracing': 1.2.0
       '@azure/core-util': 1.11.0
       '@azure/logger': 1.2.0
@@ -14870,22 +14888,22 @@ snapshots:
   '@azure/core-http-compat@2.1.2':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-client': 1.9.2
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-client': 1.10.1
+      '@azure/core-rest-pipeline': 1.22.2
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/core-http-compat@2.3.2(@azure/core-client@1.10.1)(@azure/core-rest-pipeline@1.20.0)':
+  '@azure/core-http-compat@2.3.2(@azure/core-client@1.10.1)(@azure/core-rest-pipeline@1.22.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-client': 1.10.1
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-rest-pipeline': 1.22.2
 
   '@azure/core-lro@2.7.2':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-util': 1.11.0
-      '@azure/logger': 1.2.0
+      '@azure/core-util': 1.13.1
+      '@azure/logger': 1.3.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -14961,7 +14979,7 @@ snapshots:
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-auth': 1.9.0
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-rest-pipeline': 1.22.2
       '@azure/core-tracing': 1.2.0
       '@azure/core-util': 1.11.0
       '@azure/keyvault-keys': 4.10.0(@azure/core-client@1.10.1)
@@ -15004,12 +15022,12 @@ snapshots:
   '@azure/keyvault-common@2.0.0':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.9.0
-      '@azure/core-client': 1.9.2
-      '@azure/core-rest-pipeline': 1.20.0
-      '@azure/core-tracing': 1.2.0
-      '@azure/core-util': 1.11.0
-      '@azure/logger': 1.2.0
+      '@azure/core-auth': 1.10.1
+      '@azure/core-client': 1.10.1
+      '@azure/core-rest-pipeline': 1.22.2
+      '@azure/core-tracing': 1.3.1
+      '@azure/core-util': 1.13.1
+      '@azure/logger': 1.3.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -15018,15 +15036,15 @@ snapshots:
     dependencies:
       '@azure-rest/core-client': 2.4.0
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.9.0
-      '@azure/core-http-compat': 2.3.2(@azure/core-client@1.10.1)(@azure/core-rest-pipeline@1.20.0)
+      '@azure/core-auth': 1.10.1
+      '@azure/core-http-compat': 2.3.2(@azure/core-client@1.10.1)(@azure/core-rest-pipeline@1.22.2)
       '@azure/core-lro': 2.7.2
       '@azure/core-paging': 1.6.2
-      '@azure/core-rest-pipeline': 1.20.0
-      '@azure/core-tracing': 1.2.0
-      '@azure/core-util': 1.11.0
+      '@azure/core-rest-pipeline': 1.22.2
+      '@azure/core-tracing': 1.3.1
+      '@azure/core-util': 1.13.1
       '@azure/keyvault-common': 2.0.0
-      '@azure/logger': 1.2.0
+      '@azure/logger': 1.3.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - '@azure/core-client'
@@ -15049,10 +15067,10 @@ snapshots:
   '@azure/maps-common@1.0.0-beta.2':
     dependencies:
       '@azure/abort-controller': 1.1.0
-      '@azure/core-auth': 1.9.0
-      '@azure/core-client': 1.9.2
+      '@azure/core-auth': 1.10.1
+      '@azure/core-client': 1.10.1
       '@azure/core-lro': 2.7.2
-      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-rest-pipeline': 1.22.2
     transitivePeerDependencies:
       - supports-color
 
@@ -27011,7 +27029,7 @@ snapshots:
   y-leveldb@0.1.2(yjs@13.6.27):
     dependencies:
       level: 6.0.1
-      lib0: 0.2.108
+      lib0: 0.2.117
       yjs: 13.6.27
     optional: true
 
