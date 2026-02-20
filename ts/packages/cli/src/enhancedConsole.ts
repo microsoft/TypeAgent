@@ -595,8 +595,7 @@ export function createEnhancedClientIO(
                     }
 
                     const width = process.stdout.columns || 80;
-                    const line =
-                        ANSI.dim + "─".repeat(width) + ANSI.reset;
+                    const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
 
                     process.stdout.write("\n");
                     process.stdout.write(line + "\n");
@@ -627,9 +626,7 @@ export function createEnhancedClientIO(
                             .map((s) => parseInt(s.trim(), 10) - 1)
                             .filter(
                                 (n) =>
-                                    !isNaN(n) &&
-                                    n >= 0 &&
-                                    n < choices.length,
+                                    !isNaN(n) && n >= 0 && n < choices.length,
                             );
                     }
 
