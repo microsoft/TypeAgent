@@ -23,7 +23,6 @@ permissions:
   contents: read
 
 env:
-  ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
   ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
   ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
 
