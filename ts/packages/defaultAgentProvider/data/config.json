@@ -42,8 +42,7 @@
       "execMode": "dispatcher"
     },
     "markdown": {
-      "name": "markdown-agent",
-      "execMode": "dispatcher"
+      "name": "markdown-agent"
     },
     "montage": {
       "name": "montage-agent"
