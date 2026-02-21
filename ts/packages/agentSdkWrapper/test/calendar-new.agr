@@ -5,11 +5,11 @@
 @ <Start> = <scheduleEvent> | <findEvents> | <addParticipant> | <findTodaysEvents> | <findThisWeeksEvents>
 
 // Action rules (using exact action names)
-@ <scheduleEvent> = <Polite> ('schedule' | 'set up' | 'book' | 'create') <EventDescription> <DateSpec> <TimeSpec>? <LocationSpec>? <ParticipantSpec>? -> { actionName: "scheduleEvent", parameters: { description: $(description), date: $(date), time: $(time), location: $(location), participant: $(participant) } }
+@ <scheduleEvent> = <Polite> ('schedule' | 'set up' | 'book' | 'create') <EventDescription> <DateSpec> <TimeSpec>? <LocationSpec>? <ParticipantSpec>? -> { actionName: "scheduleEvent", parameters: { description: description, date: date, time: time, location: location, participant: participant } }
 
-@ <findEvents> = <Polite> ('find' | 'show me' | 'get' | 'search for') ('events' | 'meetings' | 'appointments')? <EventDescriptionFilter>? <DateSpec>? <ParticipantFilter>? -> { actionName: "findEvents", parameters: { description: $(description), date: $(date), participant: $(participant) } }
+@ <findEvents> = <Polite> ('find' | 'show me' | 'get' | 'search for') ('events' | 'meetings' | 'appointments')? <EventDescriptionFilter>? <DateSpec>? <ParticipantFilter>? -> { actionName: "findEvents", parameters: { description: description, date: date, participant: participant } }
 
-@ <addParticipant> = <Polite> ('add' | 'invite' | 'include') <ParticipantName> ('to' | 'in') <EventDescriptionTarget> -> { actionName: "addParticipant", parameters: { description: $(description), participant: $(participant) } }
+@ <addParticipant> = <Polite> ('add' | 'invite' | 'include') <ParticipantName> ('to' | 'in') <EventDescriptionTarget> -> { actionName: "addParticipant", parameters: { description: description, participant: participant } }
 
 @ <findTodaysEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s') ('on my calendar'? 'today' | 'today\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')?) -> { actionName: "findTodaysEvents", parameters: {} }
 

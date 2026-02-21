@@ -9,10 +9,10 @@
           | <SetPowerModeOnBattery>
 
 @ <BatterySaverActivationLevel> =
-    set battery saver to $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
-  | battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
-  | activate battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
-  | turn on battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: $(level) } }
+    set battery saver to $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: level } }
+  | battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: level } }
+  | activate battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: level } }
+  | turn on battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: level } }
 
 @ <SetPowerModePluggedIn> =
     set power mode to best performance -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }

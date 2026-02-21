@@ -40,17 +40,17 @@
 
 // Program is either a known program or any wildcard text
 @ <Program> = <KnownProgram>
-            | $(name:wildcard) -> $(name)
+            | $(name:wildcard) -> name
 
 // ===== Program Launch/Close =====
-@ <LaunchProgram> = launch $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
-                  | open $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
-                  | start $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
-                  | run $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: $(program) } }
+@ <LaunchProgram> = launch $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: program } }
+                  | open $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: program } }
+                  | start $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: program } }
+                  | run $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: program } }
 
-@ <CloseProgram> = close $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
-                 | quit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
-                 | exit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: $(program) } }
+@ <CloseProgram> = close $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: program } }
+                 | quit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: program } }
+                 | exit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: program } }
 
 // ===== Window Management =====
 @ <WindowManagement> = <MaximizeWindow>
@@ -58,23 +58,23 @@
                      | <SwitchToWindow>
                      | <TileWindows>
 
-@ <MaximizeWindow> = maximize $(program:<Program>) -> { actionName: "maximize", parameters: { name: $(program) } }
-                   | make $(program:<Program>) full screen -> { actionName: "maximize", parameters: { name: $(program) } }
+@ <MaximizeWindow> = maximize $(program:<Program>) -> { actionName: "maximize", parameters: { name: program } }
+                   | make $(program:<Program>) full screen -> { actionName: "maximize", parameters: { name: program } }
 
-@ <MinimizeWindow> = minimize $(program:<Program>) -> { actionName: "minimize", parameters: { name: $(program) } }
-                   | hide $(program:<Program>) -> { actionName: "minimize", parameters: { name: $(program) } }
+@ <MinimizeWindow> = minimize $(program:<Program>) -> { actionName: "minimize", parameters: { name: program } }
+                   | hide $(program:<Program>) -> { actionName: "minimize", parameters: { name: program } }
 
-@ <SwitchToWindow> = switch to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
-                   | focus (on)? $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
-                   | go to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: $(program) } }
+@ <SwitchToWindow> = switch to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: program } }
+                   | focus (on)? $(program:<Program>) -> { actionName: "switchTo", parameters: { name: program } }
+                   | go to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: program } }
 
-@ <TileWindows> = tile $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
-                | put $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
-                | tile $(left:<Program>) and $(right:<Program>) -> { actionName: "tile", parameters: { leftWindow: $(left), rightWindow: $(right) } }
+@ <TileWindows> = tile $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: left, rightWindow: right } }
+                | put $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: left, rightWindow: right } }
+                | tile $(left:<Program>) and $(right:<Program>) -> { actionName: "tile", parameters: { leftWindow: left, rightWindow: right } }
 
 // ===== Volume Control =====
-@ <VolumeControl> = set volume to $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: $(level) } }
-                  | volume $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: $(level) } }
+@ <VolumeControl> = set volume to $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: level } }
+                  | volume $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: level } }
                   | mute -> { actionName: "mute", parameters: { on: true } }
                   | unmute -> { actionName: "mute", parameters: { on: false } }
                   | restore volume -> { actionName: "restoreVolume" }
@@ -89,8 +89,8 @@
               | switch to light (mode)? -> { actionName: "setThemeMode", parameters: { mode: "light" } }
 
 // ===== WiFi Control =====
-@ <WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "connectWifi", parameters: { ssid: $(ssid) } }
-                | connect to wifi $(ssid:wildcard) -> { actionName: "connectWifi", parameters: { ssid: $(ssid) } }
+@ <WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "connectWifi", parameters: { ssid: ssid } }
+                | connect to wifi $(ssid:wildcard) -> { actionName: "connectWifi", parameters: { ssid: ssid } }
                 | disconnect (from)? wifi -> { actionName: "disconnectWifi", parameters: {} }
                 | enable airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: true } }
                 | disable airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: false } }
@@ -99,10 +99,10 @@
 
 // ===== Desktop Management =====
 @ <DesktopManagement> = create (new)? desktop -> { actionName: "createDesktop", parameters: { names: [] } }
-                      | create desktop $(name:wildcard) -> { actionName: "createDesktop", parameters: { names: [$(name)] } }
-                      | move $(program:<Program>) to desktop $(id:number) -> { actionName: "moveWindowToDesktop", parameters: { name: $(program), desktopId: $(id) } }
-                      | pin $(program:<Program>) (to all desktops)? -> { actionName: "pinWindow", parameters: { name: $(program) } }
-                      | switch to desktop $(id:number) -> { actionName: "switchDesktop", parameters: { desktopId: $(id) } }
+                      | create desktop $(name:wildcard) -> { actionName: "createDesktop", parameters: { names: [name] } }
+                      | move $(program:<Program>) to desktop $(id:number) -> { actionName: "moveWindowToDesktop", parameters: { name: program, desktopId: id } }
+                      | pin $(program:<Program>) (to all desktops)? -> { actionName: "pinWindow", parameters: { name: program } }
+                      | switch to desktop $(id:number) -> { actionName: "switchDesktop", parameters: { desktopId: id } }
                       | next desktop -> { actionName: "nextDesktop", parameters: {} }
                       | previous desktop -> { actionName: "previousDesktop", parameters: {} }
                       | show notifications -> { actionName: "toggleNotifications", parameters: { enable: true } }

@@ -15,11 +15,11 @@
           | <Screenshot>
 
 // ===== Open Web Page =====
-@ <OpenPage> = open $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
-             | go to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
-             | navigate to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
-             | browse to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
-             | visit $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: $(site) } }
+@ <OpenPage> = open $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: site } }
+             | go to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: site } }
+             | navigate to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: site } }
+             | browse to $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: site } }
+             | visit $(site:wildcard) -> { actionName: "openWebPage", parameters: { site: site } }
 
 // ===== Close Page =====
 @ <ClosePage> = close (the)? (web)? page -> { actionName: "closeWebPage", parameters: {} }
@@ -42,13 +42,13 @@
               | page up -> { actionName: "scrollUp", parameters: {} }
 
 // ===== Follow Link =====
-@ <FollowLink> = follow (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: $(keywords) } }
-               | click (on)? (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: $(keywords) } }
-               | click (on)? $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: $(keywords) } }
+@ <FollowLink> = follow (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: keywords } }
+               | click (on)? (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: keywords } }
+               | click (on)? $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords: keywords } }
 
 // ===== Tab Control =====
-@ <TabControl> = switch to tab $(n:number) -> { actionName: "changeTabs", parameters: { tabNumber: $(n) } }
-               | go to tab $(n:number) -> { actionName: "changeTabs", parameters: { tabNumber: $(n) } }
+@ <TabControl> = switch to tab $(n:number) -> { actionName: "changeTabs", parameters: { tabNumber: n } }
+               | go to tab $(n:number) -> { actionName: "changeTabs", parameters: { tabNumber: n } }
                | next tab -> { actionName: "changeTabs", parameters: { tabNumber: 0 } }
 
 // ===== Zoom =====

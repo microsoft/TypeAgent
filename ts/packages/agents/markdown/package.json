@@ -16,6 +16,10 @@
     "./agent/manifest": "./src/agent/markdownManifest.json",
     "./agent/handlers": "./dist/agent/markdownActionHandler.js"
   },
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "concurrently npm:tsc npm:build:frontend",
     "build:frontend": "vite build",

@@ -36,19 +36,19 @@ entity Ordinal, Cardinal;
     play (the)? $(n:Ordinal) (track | song)? -> {
         actionName: "playFromQueue",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
     }
 | play track $(n:Cardinal) -> {
         actionName: "playFromQueue",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
    }
 | play track #$(n:number) -> {
         actionName: "playFromQueue",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
    }
 
@@ -63,7 +63,7 @@ entity Ordinal, Cardinal;
     -> { actionName: "changeVolume", parameters: { amount: -10 } }
 
 @ <SetVolume> = <LocalPlayerPrefix> set volume (to)? $(n:number) (percent)?
-    -> { actionName: "setVolume", parameters: { level: $(n) } }
+    -> { actionName: "setVolume", parameters: { level: n } }
 
 @ <Mute> = mute (the)? (music | sound | audio)?   ->  { actionName: "mute", parameters: { isMuted: true } }
 

@@ -74,21 +74,21 @@ describe("Grammar Rule Writer", () => {
     });
     it("with variable", () => {
         validateRoundTrip(
-            `@<test> = hello $(x) world -> { "type": "test", "var": $(x) }`,
+            `@<test> = hello $(x) world -> { "type": "test", "var": x }`,
         );
     });
     it("with number variable", () => {
         validateRoundTrip(
-            `@<test> = hello $(x: number) world -> { "type": "test", "var": $(x) }`,
+            `@<test> = hello $(x: number) world -> { "type": "test", "var": x }`,
         );
     });
     it("with rules reference variable", () => {
-        validateRoundTrip(`@<test> = hello $(x:<other>) world -> { "type": "test", "var": $(x) }
+        validateRoundTrip(`@<test> = hello $(x:<other>) world -> { "type": "test", "var": x }
             @<other> = one -> 1 | two ->2 | three -> 3`);
     });
     it("with optional variable", () => {
         validateRoundTrip(
-            `@<test> = hello $(x: number)? world -> { "type": "test", "var": $(x) }`,
+            `@<test> = hello $(x: number)? world -> { "type": "test", "var": x }`,
         );
     });
 });

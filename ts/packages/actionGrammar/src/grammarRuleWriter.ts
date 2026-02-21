@@ -137,7 +137,7 @@ function writeValueNode(result: string[], value: ValueNode) {
             result.push(JSON.stringify(value.value));
             break;
         case "variable":
-            result.push(`$(${value.name})`);
+            result.push(value.name);
             break;
         case "object": {
             result.push("{");
