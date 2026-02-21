@@ -23,6 +23,7 @@ import {
 } from "../speech";
 import { getSpeechToken, SpeechToken } from "../speechToken";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
+import { OrbState } from "./voiceOrb";
 
 export class ChatInput {
     private inputContainer: HTMLDivElement;
@@ -56,6 +57,11 @@ export class ChatInput {
     private speechRefCount: number = 0;
     private speechIntervalTimeout: number = 1200; // milliseconds
     private lastSpeechArrived: number = 0;
+
+    public wakeWord: string = "type agent";
+    public onSpeechStateChange: ((state: OrbState) => void) | undefined =
+        undefined;
+    private _waitingForCommand: boolean = false;
 
     constructor(
         handlers: ExpandableTextareaHandlers,
@@ -208,6 +214,9 @@ export class ChatInput {
             this.continuous = !this.continuous;
             this.waitForWakeWord = waitForWakeWord;
             this.listening = this.continuous;
+            console.log(
+                `[voice] toggleContinuous: continuous=${this.continuous} waitForWakeWord=${waitForWakeWord} micDisabled=${this.micButton.disabled}`,
+            );
 
             // indicate to the user that we are actively processing
             // wakeword mode: only show listening if we have detected the wake word
@@ -236,11 +245,14 @@ export class ChatInput {
 
                 if (waitForWakeWord) {
                     this.wakeWordMic.classList.remove("chat-message-hidden");
+                    this.onSpeechStateChange?.("wake-word-waiting");
                 } else {
                     this.alwaysOnMic.classList.remove("chat-message-hidden");
+                    this.onSpeechStateChange?.("listening");
                 }
             } else {
                 this.continuous = false;
+                this._waitingForCommand = false;
                 this.continousRecognizer?.stop();
                 this.micReady();
             }
@@ -286,12 +298,17 @@ export class ChatInput {
     private onRecognizing(text: string) {
         // user cancelled speech recognition
         if (!this.listening) {
+            console.log(
+                `[voice] onRecognizing: DROPPED (listening=false) text="${text}"`,
+            );
             return;
         }
 
         this.lastSpeechArrived = Date.now();
 
-        console.log("Running Recognizing step");
+        console.log(
+            `[voice] onRecognizing: text="${text}" continuous=${this.continuous} waitForWakeWord=${this.waitForWakeWord}`,
+        );
 
         // if (this.continuous && this.waitForWakeWord) {
         //     text = this.textarea.getTextContent() + " " + text;
@@ -314,19 +331,26 @@ export class ChatInput {
             // if we are waiting for a wake word, look for it and ignore anything before it
             // also remove the wakeword from the text.
             if (this.waitForWakeWord) {
-                const wakeWord = "hey type agent";
-                const lowerText = text.toLowerCase();
-                const wakeWordIndex = lowerText.indexOf(wakeWord);
+                // normalize "typeagent" (one word) to "type agent" before matching
+                const normalizedText = text
+                    .toLowerCase()
+                    .replace(/typeagent/gi, "type agent");
+                const wakeWordIndex = normalizedText.indexOf(this.wakeWord);
+                console.log(
+                    `[voice] wake word check: normalized="${normalizedText}" wakeWord="${this.wakeWord}" index=${wakeWordIndex}`,
+                );
                 if (wakeWordIndex === -1) {
                     return;
                 } else {
                     // remove everything before and including the wake word
                     text = text
-                        .substring(wakeWordIndex + wakeWord.length)
+                        .substring(wakeWordIndex + this.wakeWord.length)
                         .trim();
 
                     // indicate to the user that we are now actively processing
                     this.inputContainer.classList.add("listening");
+                    this.onSpeechStateChange?.("listening");
+                    this._waitingForCommand = true;
                 }
             }
 
@@ -369,6 +393,7 @@ export class ChatInput {
                         if (this.waitForWakeWord) {
                             // indicate to the user that we are no longer actively processing
                             this.inputContainer.classList.remove("listening");
+                            this.onSpeechStateChange?.("wake-word-waiting");
                         }
                     });
             } else if (this.speechRefCount > 0) {
@@ -380,7 +405,41 @@ export class ChatInput {
     }
 
     private onRecognized(text: string) {
-        // only update the text if the user didn't cancel speech recognition
+        if (this.continuous && this.waitForWakeWord) {
+            // Check if this utterance contains the wake word
+            const normalizedText = text
+                .toLowerCase()
+                .replace(/typeagent/gi, "type agent");
+            const wakeWordIndex = normalizedText.indexOf(this.wakeWord);
+            if (wakeWordIndex !== -1) {
+                // Strip wake word; submit the remainder if non-empty
+                const command = text
+                    .substring(wakeWordIndex + this.wakeWord.length)
+                    .trim();
+                if (command) {
+                    this._waitingForCommand = false;
+                    this.inputContainer.classList.remove("listening");
+                    this.onSpeechStateChange?.("wake-word-waiting");
+                    this.textarea.setTextContent(command);
+                    this.textarea.send();
+                } else {
+                    // Wake word only — keep listening for the command
+                    this._waitingForCommand = true;
+                    this.textarea.setTextContent();
+                }
+            } else if (this._waitingForCommand) {
+                // Command utterance following a wake-word-only utterance
+                this._waitingForCommand = false;
+                this.inputContainer.classList.remove("listening");
+                this.onSpeechStateChange?.("wake-word-waiting");
+                this.textarea.setTextContent(text);
+                this.textarea.send();
+            }
+            // Pre-wake-word utterance — ignore
+            return;
+        }
+
+        // One-shot or always-on continuous mode
         if (this.listening || !this.continuous) {
             this.textarea.setTextContent(text);
             this.textarea.send();
@@ -407,6 +466,7 @@ export class ChatInput {
         this.disabledMic.classList.add("chat-message-hidden");
         this.alwaysOnMic.classList.add("chat-message-hidden");
         this.wakeWordMic.classList.add("chat-message-hidden");
+        this.onSpeechStateChange?.("idle");
     }
 
     private micListening() {
@@ -418,6 +478,7 @@ export class ChatInput {
         this.disabledMic.classList.add("chat-message-hidden");
         this.alwaysOnMic.classList.add("chat-message-hidden");
         this.wakeWordMic.classList.add("chat-message-hidden");
+        this.onSpeechStateChange?.("listening");
     }
 
     private micNotReady() {
@@ -516,6 +577,26 @@ export class ChatInput {
 
     public focus() {
         this.textarea.focus();
+    }
+
+    /**
+     * Enables or disables voice mode. When enabled, starts wake word continuous
+     * recognition automatically. When disabled, stops continuous recognition.
+     */
+    public setVoiceMode(enabled: boolean): void {
+        console.log(
+            `[voice] setVoiceMode: enabled=${enabled} continuous=${this.continuous} micDisabled=${this.micButton.disabled}`,
+        );
+        if (enabled && !this.continuous) {
+            // defer if mic isn't ready yet (token not loaded)
+            if (this.micButton.disabled) {
+                console.log(`[voice] setVoiceMode: deferred — mic not ready`);
+                return;
+            }
+            this.toggleContinuous(true); // wake word mode
+        } else if (!enabled && this.continuous) {
+            this.toggleContinuous(this.waitForWakeWord); // stop
+        }
     }
 
     /**

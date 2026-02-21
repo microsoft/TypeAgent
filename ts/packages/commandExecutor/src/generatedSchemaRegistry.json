@@ -1,0 +1,1043 @@
+[
+  {
+    "name": "calendar",
+    "emoji": "📅",
+    "description": "Agent integration with MS Graph's calendar",
+    "subSchemas": [
+      {
+        "schemaName": "calendar",
+        "description": "Calendar agent that keeps track of important dates and events. Use it to schedule appointments, set reminders, and organize activities.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\calendar\\src\\calendarActionsSchemaV3.ts",
+        "actions": [
+          {
+            "name": "scheduleEvent",
+            "description": "Schedule a new event on the calendar"
+          },
+          {
+            "name": "findEvents",
+            "description": "Find events on the calendar"
+          },
+          {
+            "name": "addParticipant",
+            "description": "Add a participant to an event"
+          },
+          {
+            "name": "findTodaysEvents",
+            "description": "Find all events happening today"
+          },
+          {
+            "name": "findThisWeeksEvents",
+            "description": "Find all events happening this week"
+          },
+          {
+            "name": "removeEvent",
+            "description": "Remove an event from the calendar"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "code",
+    "emoji": "⚛️",
+    "description": "Agent for VSCode integration",
+    "subSchemas": [
+      {
+        "schemaName": "code",
+        "description": "Code agent helps you with productivity in using an editor and performing actions like creating files, editor customization, writing code, intelligent code suggestions, real-time error detection, debugging, and source control tasks etc.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\codeActionsSchema.ts",
+        "actions": [
+          {
+            "name": "changeColorScheme",
+            "description": "Change the color scheme of the editor"
+          },
+          {
+            "name": "splitEditor",
+            "description": "ACTION: Split an editor window into multiple panes showing the same file or different files side-by-side."
+          },
+          {
+            "name": "changeEditorLayout",
+            "description": "Change the editor layout to single, double or three column layout"
+          },
+          {
+            "name": "newFile",
+            "description": "Create a new file, this is not same as opening a file or finding a file in the workspace"
+          },
+          {
+            "name": "launchVSCode",
+            "description": "Launch or Start VSCode"
+          }
+        ]
+      },
+      {
+        "schemaName": "code.code-debug",
+        "description": "Code agent that helps you debug code including handling actions like showing the debug panel, adding/toggling breakpoints, stepping in/out of code etc.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\debugActionsSchema.ts",
+        "actions": [
+          {
+            "name": "showDebugPanel",
+            "description": "Show debug panel or window in the editor or code window, if not already visible"
+          },
+          {
+            "name": "startDebugging",
+            "description": "Start/Continue debugging"
+          },
+          {
+            "name": "step",
+            "description": "Step into/out/over"
+          },
+          {
+            "name": "stopDebugging",
+            "description": "Stop debugging"
+          },
+          {
+            "name": "showHover",
+            "description": "Show hover"
+          },
+          {
+            "name": "toggleBreakpoint",
+            "description": "Toggle Breakpoint"
+          },
+          {
+            "name": "setBreakpoint",
+            "description": "Set Breakpoint"
+          },
+          {
+            "name": "removeBreakpoint",
+            "description": "Remove Breakpoint"
+          },
+          {
+            "name": "removeAllBreakpoints",
+            "description": "Remove All Breakpoints"
+          }
+        ]
+      },
+      {
+        "schemaName": "code.code-display",
+        "description": "Code agent that helps you work with display keyboard bindings, Zoom in, Zoom out, do text search and replace, show extensions etc.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\displayActionsSchema.ts",
+        "actions": [
+          {
+            "name": "zoomIn",
+            "description": "Zoom in the editor"
+          },
+          {
+            "name": "zoomOut",
+            "description": "Zoom out the editor"
+          },
+          {
+            "name": "fontZoomReset",
+            "description": "Zoom reset"
+          },
+          {
+            "name": "showExplorer",
+            "description": "Show explorer/show the file explorer"
+          },
+          {
+            "name": "showSearch",
+            "description": "Show search or replace pane/window in the sidebar to search for text in the files"
+          },
+          {
+            "name": "showSourceControl",
+            "description": "Show source control"
+          },
+          {
+            "name": "showOutputPanel",
+            "description": "Show output panel"
+          },
+          {
+            "name": "toggleSearchDetails",
+            "description": "Toggle search details"
+          },
+          {
+            "name": "replaceInFiles",
+            "description": "Replace in files"
+          },
+          {
+            "name": "openMarkdownPreview",
+            "description": "Open markdown preview"
+          },
+          {
+            "name": "openMarkdownPreviewToSide",
+            "description": "Open markdown preview to the side"
+          },
+          {
+            "name": "zenMode",
+            "description": "Code in Zen Mode"
+          },
+          {
+            "name": "closeEditor",
+            "description": "Close the current editor"
+          },
+          {
+            "name": "openSettings",
+            "description": "Open settings"
+          }
+        ]
+      },
+      {
+        "schemaName": "code.code-general",
+        "description": "Code agent that helps you perform actions like finding a file, go to a symbol or a line in a file, Open new vscode window, show the command palette, user settings json etc.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\generalActionsSchema.ts",
+        "actions": [
+          {
+            "name": "showCommandPalette",
+            "description": "Show or open the command palette that allows to search and execute commands"
+          },
+          {
+            "name": "gotoFileOrLineOrSymbol",
+            "description": "Quick option to access a file, alternate way to search a file by name using keyboard shortcuts"
+          },
+          {
+            "name": "showUserSettings",
+            "description": "Show user settings"
+          },
+          {
+            "name": "showKeyboardShortcuts",
+            "description": "Show keyboard shortcuts"
+          }
+        ]
+      },
+      {
+        "schemaName": "code.code-editor",
+        "description": "Code agent that helps you perform vscode editor actions like create a new file, go to a reference, reveal a declaration, clipboard copy or paste, add a comment line etc.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\editorCodeActionsSchema.ts",
+        "actions": [
+          {
+            "name": "createFunction",
+            "description": "Schema to generate a function"
+          },
+          {
+            "name": "createCodeBlock",
+            "description": "Create Code Block"
+          },
+          {
+            "name": "fixCodeProblem",
+            "description": "schema to fix a problem (diagnostic) in the code."
+          },
+          {
+            "name": "moveCursorInFile",
+            "description": "ACTION: Move the cursor to a specific position within a file (for navigation or editing preparation)."
+          },
+          {
+            "name": "insertOrDeleteLines",
+            "description": "Action for inserting or deleting lines in a file."
+          },
+          {
+            "name": "insertComment",
+            "description": "Insert Comment"
+          },
+          {
+            "name": "generateWithCopilot",
+            "description": "Generate With Copilot"
+          },
+          {
+            "name": "createFile",
+            "description": "Action to create a new file in the editor"
+          },
+          {
+            "name": "saveCurrentFile",
+            "description": "Save Current File"
+          },
+          {
+            "name": "saveAllFiles",
+            "description": "Save All Files"
+          }
+        ]
+      },
+      {
+        "schemaName": "code.code-workbench",
+        "description": "Code agent that helps you perform vscode workbench actions like open a file, close a file etc.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\workbenchCommandActionsSchema.ts",
+        "actions": [
+          {
+            "name": "workbenchOpenFile",
+            "description": "Workbench Open File"
+          },
+          {
+            "name": "workbenchOpenFolder",
+            "description": "Workbench Open Folder"
+          },
+          {
+            "name": "workbenchCreateFolderFromExplorer",
+            "description": "Workbench Create Folder From Explorer"
+          },
+          {
+            "name": "workbenchBuildRelatedTask",
+            "description": "Workbench Build Related Task"
+          },
+          {
+            "name": "openInIntegratedTerminal",
+            "description": "Open In Integrated Terminal"
+          }
+        ]
+      },
+      {
+        "schemaName": "code.code-extension",
+        "description": "Code agent that helps you perform vscode extension actions like show, install, update, enable, disable, uninstall extensions etc.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\extensionsActionsSchema.ts",
+        "actions": [
+          {
+            "name": "checkExtensionAvailable",
+            "description": "The action checks/searches if an extension is available based on user requests like is the copilot extension available?"
+          },
+          {
+            "name": "installExtension",
+            "description": "Install Extension"
+          },
+          {
+            "name": "reloadWindow",
+            "description": "Reload Window"
+          },
+          {
+            "name": "showExtensions",
+            "description": "Show the extensions panel"
+          },
+          {
+            "name": "enableExtension",
+            "description": "Enable Extension"
+          },
+          {
+            "name": "disableExtension",
+            "description": "Disable Extension"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "desktop",
+    "emoji": "🪟",
+    "description": "Agent to control the desktop",
+    "subSchemas": [
+      {
+        "schemaName": "desktop",
+        "description": "Desktop agent that allows you to manage the programs running on a computer, change Windows settings, control the desktop environment, and perform actions such as opening a file, closing a window, tiling windows, launching a program, maximizing windows, adjusting display settings, managing privacy settings, and controlling system features.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\actionsSchema.ts",
+        "actions": [
+          {
+            "name": "launchProgram",
+            "description": "Launches a new program window on a Windows Desktop"
+          },
+          {
+            "name": "closeProgram",
+            "description": "Closes a program window on a Windows Desktop"
+          },
+          {
+            "name": "tile",
+            "description": "Positions program windows on a program window on a Windows Desktop"
+          },
+          {
+            "name": "maximize",
+            "description": "Maximizes a program window on a Windows Desktop"
+          },
+          {
+            "name": "minimize",
+            "description": "Minimizes a program window on a Windows Desktop"
+          },
+          {
+            "name": "switchTo",
+            "description": "Sets focus to a program window on a Windows Desktop"
+          },
+          {
+            "name": "volume",
+            "description": "Volume"
+          },
+          {
+            "name": "restoreVolume",
+            "description": "Restore Volume"
+          },
+          {
+            "name": "mute",
+            "description": "Mute"
+          },
+          {
+            "name": "setWallpaper",
+            "description": "Set Wallpaper"
+          },
+          {
+            "name": "setThemeMode",
+            "description": "Sets the theme mode of the current [windows] desktop"
+          },
+          {
+            "name": "connectWifi",
+            "description": "Connect Wifi"
+          },
+          {
+            "name": "disconnectWifi",
+            "description": "Disconnects from the current wifi network"
+          },
+          {
+            "name": "toggleAirplaneMode",
+            "description": "Toggle Airplane Mode"
+          },
+          {
+            "name": "createDesktop",
+            "description": "creates a new Windows Desktop"
+          },
+          {
+            "name": "moveWindowToDesktop",
+            "description": "Move Window To Desktop"
+          },
+          {
+            "name": "pinWindow",
+            "description": "Pin Window"
+          },
+          {
+            "name": "switchDesktop",
+            "description": "Switch Desktop"
+          },
+          {
+            "name": "nextDesktop",
+            "description": "switches to the next Windows Desktop"
+          },
+          {
+            "name": "previousDesktop",
+            "description": "switches to the previous Windows Desktop"
+          },
+          {
+            "name": "toggleNotifications",
+            "description": "Shows/hides windows notification center"
+          },
+          {
+            "name": "debug",
+            "description": "Attaches the debugger to the AutoShell process"
+          },
+          {
+            "name": "setTextSize",
+            "description": "Changes the text size that appears throughout Windows and your apps"
+          },
+          {
+            "name": "setScreenResolution",
+            "description": "Change screen resolution"
+          },
+          {
+            "name": "BluetoothToggle",
+            "description": "===== Common Settings Actions ====="
+          },
+          {
+            "name": "enableWifi",
+            "description": "Enables or disables WiFi adapter"
+          },
+          {
+            "name": "AdjustScreenBrightness",
+            "description": "Adjusts screen brightness (increase or decrease)"
+          }
+        ]
+      },
+      {
+        "schemaName": "desktop.desktop-display",
+        "description": "Desktop agent for display and screen settings including night light, color temperature, scaling, orientation, and rotation lock.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\displayActionsSchema.ts",
+        "actions": [
+          {
+            "name": "EnableBlueLightFilterSchedule",
+            "description": "Enables or disables blue light filter schedule (Night Light)"
+          },
+          {
+            "name": "adjustColorTemperature",
+            "description": "Adjusts the color temperature for Night Light"
+          },
+          {
+            "name": "DisplayScaling",
+            "description": "Sets display scaling percentage (100, 125, 150, 175, 200)"
+          },
+          {
+            "name": "AdjustScreenOrientation",
+            "description": "Adjusts screen orientation between portrait and landscape"
+          },
+          {
+            "name": "RotationLock",
+            "description": "Locks or unlocks screen rotation"
+          }
+        ]
+      },
+      {
+        "schemaName": "desktop.desktop-personalization",
+        "description": "Desktop agent for personalization settings including transparency effects, title bar colors, and high contrast themes.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\personalizationActionsSchema.ts",
+        "actions": [
+          {
+            "name": "EnableTransparency",
+            "description": "Enables or disables transparency effects"
+          },
+          {
+            "name": "ApplyColorToTitleBar",
+            "description": "Applies accent color to title bars"
+          },
+          {
+            "name": "HighContrastTheme",
+            "description": "Enables high contrast theme"
+          }
+        ]
+      },
+      {
+        "schemaName": "desktop.desktop-taskbar",
+        "description": "Desktop agent for taskbar settings including auto-hide, alignment, task view, widgets, badges, and system clock options.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\taskbarActionsSchema.ts",
+        "actions": [
+          {
+            "name": "AutoHideTaskbar",
+            "description": "Auto-hides the taskbar"
+          },
+          {
+            "name": "TaskbarAlignment",
+            "description": "Sets taskbar alignment (left or center)"
+          },
+          {
+            "name": "TaskViewVisibility",
+            "description": "Shows or hides the Task View button"
+          },
+          {
+            "name": "ToggleWidgetsButtonVisibility",
+            "description": "Shows or hides the Widgets button"
+          },
+          {
+            "name": "ShowBadgesOnTaskbar",
+            "description": "Shows or hides badges on taskbar icons"
+          },
+          {
+            "name": "DisplayTaskbarOnAllMonitors",
+            "description": "Shows taskbar on all monitors"
+          },
+          {
+            "name": "DisplaySecondsInSystrayClock",
+            "description": "Shows seconds in the system tray clock"
+          }
+        ]
+      },
+      {
+        "schemaName": "desktop.desktop-input",
+        "description": "Desktop agent for mouse and touchpad settings including cursor speed, scroll lines, button configuration, pointer precision, and touchpad controls.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\inputActionsSchema.ts",
+        "actions": [
+          {
+            "name": "MouseCursorSpeed",
+            "description": "Adjusts mouse cursor speed"
+          },
+          {
+            "name": "MouseWheelScrollLines",
+            "description": "Sets the number of lines to scroll per mouse wheel notch"
+          },
+          {
+            "name": "setPrimaryMouseButton",
+            "description": "Sets the primary mouse button"
+          },
+          {
+            "name": "EnhancePointerPrecision",
+            "description": "Enables or disables enhanced pointer precision (mouse acceleration)"
+          },
+          {
+            "name": "AdjustMousePointerSize",
+            "description": "Adjusts mouse pointer size"
+          },
+          {
+            "name": "mousePointerCustomization",
+            "description": "Customizes mouse pointer color"
+          },
+          {
+            "name": "EnableTouchPad",
+            "description": "Enables or disables the touchpad"
+          },
+          {
+            "name": "TouchpadCursorSpeed",
+            "description": "Adjusts touchpad cursor speed"
+          }
+        ]
+      },
+      {
+        "schemaName": "desktop.desktop-privacy",
+        "description": "Desktop agent for privacy settings to manage microphone, camera, and location access for applications.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\privacyActionsSchema.ts",
+        "actions": [
+          {
+            "name": "ManageMicrophoneAccess",
+            "description": "Manages microphone access for apps"
+          },
+          {
+            "name": "ManageCameraAccess",
+            "description": "Manages camera access for apps"
+          },
+          {
+            "name": "ManageLocationAccess",
+            "description": "Manages location access for apps"
+          }
+        ]
+      },
+      {
+        "schemaName": "desktop.desktop-power",
+        "description": "Desktop agent for power management settings including battery saver and power mode configuration.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\powerActionsSchema.ts",
+        "actions": [
+          {
+            "name": "BatterySaverActivationLevel",
+            "description": "Sets the battery saver activation threshold"
+          },
+          {
+            "name": "setPowerModePluggedIn",
+            "description": "Sets power mode when plugged in"
+          },
+          {
+            "name": "SetPowerModeOnBattery",
+            "description": "Sets power mode when on battery"
+          }
+        ]
+      },
+      {
+        "schemaName": "desktop.desktop-system",
+        "description": "Desktop agent for system settings including accessibility features, file explorer options, time settings, focus assist, multi-monitor configuration, and other system-level controls.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\systemActionsSchema.ts",
+        "actions": [
+          {
+            "name": "enableMeteredConnections",
+            "description": "Enables or disables metered connection settings"
+          },
+          {
+            "name": "enableGameMode",
+            "description": "Enables or disables Game Mode"
+          },
+          {
+            "name": "EnableNarratorAction",
+            "description": "Enables or disables Narrator"
+          },
+          {
+            "name": "EnableMagnifier",
+            "description": "Enables or disables Magnifier"
+          },
+          {
+            "name": "enableStickyKeys",
+            "description": "Enables or disables Sticky Keys"
+          },
+          {
+            "name": "EnableFilterKeysAction",
+            "description": "Enables or disables Filter Keys"
+          },
+          {
+            "name": "MonoAudioToggle",
+            "description": "Enables or disables mono audio"
+          },
+          {
+            "name": "ShowFileExtensions",
+            "description": "Shows or hides file extensions in File Explorer"
+          },
+          {
+            "name": "ShowHiddenAndSystemFiles",
+            "description": "Shows or hides hidden and system files in File Explorer"
+          },
+          {
+            "name": "AutomaticTimeSettingAction",
+            "description": "Enables or disables automatic time synchronization"
+          },
+          {
+            "name": "AutomaticDSTAdjustment",
+            "description": "Enables or disables automatic DST adjustment"
+          },
+          {
+            "name": "EnableQuietHours",
+            "description": "Enables or disables Focus Assist (Quiet Hours)"
+          },
+          {
+            "name": "RememberWindowLocations",
+            "description": "Remembers window locations based on monitor configuration"
+          },
+          {
+            "name": "MinimizeWindowsOnMonitorDisconnectAction",
+            "description": "Minimizes windows when a monitor is disconnected"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "email",
+    "emoji": "📩",
+    "description": "Agent integration with MS Graph's email",
+    "subSchemas": [
+      {
+        "schemaName": "email",
+        "description": "Email agent helps manage email messages. Use it to send, reply, forward, find messages etc.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\email\\src\\emailActionsSchema.ts",
+        "actions": [
+          {
+            "name": "sendEmail",
+            "description": "Type for sending a simple email"
+          },
+          {
+            "name": "replyEmail",
+            "description": "Type for replying to an email"
+          },
+          {
+            "name": "forwardEmail",
+            "description": "Type for forwarding an email"
+          },
+          {
+            "name": "findEmail",
+            "description": "Type for finding an email message (search for emails)"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "image",
+    "emoji": "🖼️",
+    "description": "Agent to create AI images",
+    "subSchemas": [
+      {
+        "schemaName": "image",
+        "description": "Image agent that creates images using AI image modes.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\image\\src\\imageActionSchema.ts",
+        "actions": [
+          {
+            "name": "createImageAction",
+            "description": "creates an image based on the supplied description"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "list",
+    "emoji": "📝",
+    "description": "Agent to create and manage lists",
+    "subSchemas": [
+      {
+        "schemaName": "list",
+        "description": "List agent with actions to create lists, show list items, add and remove list items",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\list\\src\\listSchema.ts",
+        "actions": [
+          {
+            "name": "addItems",
+            "description": "add one or more items to a list; if the list does not exist, create it"
+          },
+          {
+            "name": "removeItems",
+            "description": "remove one or more items from a list"
+          },
+          {
+            "name": "createList",
+            "description": "Create List"
+          },
+          {
+            "name": "getList",
+            "description": "use this action to show the user what's on the list, for example, \"What's on my grocery list?\" or \"what are the contents of my to do list?\""
+          },
+          {
+            "name": "clearList",
+            "description": "Clear List"
+          },
+          {
+            "name": "startEditList",
+            "description": "Start Edit List"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "photo",
+    "emoji": "📷",
+    "description": "Agent to take and upload photos",
+    "subSchemas": [
+      {
+        "schemaName": "photo",
+        "description": "Photo agent that helps the user provide images to the system either by taking pictures or uploading existing images.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\photo\\src\\photoSchema.ts",
+        "actions": [
+          {
+            "name": "takePhoto",
+            "description": "uses a camera attached to the system to take a photo"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "player",
+    "emoji": "🎧",
+    "description": "Agent to play music",
+    "subSchemas": [
+      {
+        "schemaName": "player",
+        "description": "Music Player agent that lets you search for, play and control music.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\player\\src\\agent\\playerSchema.ts",
+        "actions": [
+          {
+            "name": "playRandom",
+            "description": "Use playRandom when the user asks for some music to play"
+          },
+          {
+            "name": "playTrack",
+            "description": "Play a specific track"
+          },
+          {
+            "name": "playFromCurrentTrackList",
+            "description": "play the track single track at index 'trackNumber' in the current track list"
+          },
+          {
+            "name": "playAlbum",
+            "description": "Play a specific album"
+          },
+          {
+            "name": "playArtist",
+            "description": "Play Artist"
+          },
+          {
+            "name": "playGenre",
+            "description": "Play Genre"
+          },
+          {
+            "name": "status",
+            "description": "show now playing including track information, and playback status including playback device"
+          },
+          {
+            "name": "pause",
+            "description": "pause playback"
+          },
+          {
+            "name": "resume",
+            "description": "resume playback"
+          },
+          {
+            "name": "next",
+            "description": "next track"
+          },
+          {
+            "name": "previous",
+            "description": "previous track"
+          },
+          {
+            "name": "shuffle",
+            "description": "turn shuffle on or off"
+          },
+          {
+            "name": "listDevices",
+            "description": "list available playback devices"
+          },
+          {
+            "name": "setDefaultDevice",
+            "description": "Set Default Device"
+          },
+          {
+            "name": "selectDevice",
+            "description": "select playback device by keyword"
+          },
+          {
+            "name": "showSelectedDevice",
+            "description": "show the selected playback device"
+          },
+          {
+            "name": "setVolume",
+            "description": "set volume"
+          },
+          {
+            "name": "setMaxVolume",
+            "description": "set max volume for the current device"
+          },
+          {
+            "name": "changeVolume",
+            "description": "change volume plus or minus a specified percentage"
+          },
+          {
+            "name": "searchTracks",
+            "description": "this action is only used when the user asks for a search as in 'search', 'find', 'look for'"
+          },
+          {
+            "name": "searchForPlaylists",
+            "description": "this action is used when the user asks to search for public playlists that match a query string like 'search playlist bach hilary hahn'; it is not used to get a specific playlist by name (use GetPlaylistAction for that); it is not used to search for tracks (use SearchTracksAction for that)"
+          },
+          {
+            "name": "listPlaylists",
+            "description": "list all playlists"
+          },
+          {
+            "name": "getPlaylist",
+            "description": "get playlist by name"
+          },
+          {
+            "name": "getFromCurrentPlaylistList",
+            "description": "Get From Current Playlist List"
+          },
+          {
+            "name": "getAlbum",
+            "description": "get currently playing album"
+          },
+          {
+            "name": "getFavorites",
+            "description": "result of this action is an entity of type 'track-list' with the user's favorites"
+          },
+          {
+            "name": "createPlaylist",
+            "description": "create a new playlist, optionally with a list of songs specified by title and artist"
+          },
+          {
+            "name": "deletePlaylist",
+            "description": "delete a playlist"
+          },
+          {
+            "name": "addCurrentTrackToPlaylist",
+            "description": "add the currently playing track to a playlist"
+          },
+          {
+            "name": "addToPlaylistFromCurrentTrackList",
+            "description": "add to the named playlist one or more tracks starting at index 'trackNumber' in the current track list"
+          },
+          {
+            "name": "addSongsToPlaylist",
+            "description": "add songs to a playlist by specifying track names and optional artists"
+          },
+          {
+            "name": "getQueue",
+            "description": "set the current track list to the queue of upcoming tracks"
+          },
+          {
+            "name": "playPlaylist",
+            "description": "play the named play list"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "playerLocal",
+    "emoji": "🎵",
+    "description": "Agent to play local music files",
+    "subSchemas": [
+      {
+        "schemaName": "playerLocal",
+        "description": "Local Music Player agent that lets you play and control local audio files.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\playerLocal\\src\\agent\\localPlayerSchema.ts",
+        "actions": [
+          {
+            "name": "playFile",
+            "description": "Play a specific audio file by path or name"
+          },
+          {
+            "name": "playFolder",
+            "description": "Play all audio files in a folder"
+          },
+          {
+            "name": "playFromQueue",
+            "description": "Play a specific track from the current queue by index"
+          },
+          {
+            "name": "status",
+            "description": "Show now playing status including track information and playback state"
+          },
+          {
+            "name": "pause",
+            "description": "Pause playback"
+          },
+          {
+            "name": "resume",
+            "description": "Resume playback"
+          },
+          {
+            "name": "stop",
+            "description": "Stop playback completely"
+          },
+          {
+            "name": "next",
+            "description": "Skip to next track"
+          },
+          {
+            "name": "previous",
+            "description": "Go to previous track"
+          },
+          {
+            "name": "shuffle",
+            "description": "Turn shuffle on or off"
+          },
+          {
+            "name": "repeat",
+            "description": "Set repeat mode"
+          },
+          {
+            "name": "setVolume",
+            "description": "Set volume to a specific level (0-100)"
+          },
+          {
+            "name": "changeVolume",
+            "description": "Change volume by a relative amount"
+          },
+          {
+            "name": "mute",
+            "description": "Mute or unmute audio"
+          },
+          {
+            "name": "listFiles",
+            "description": "List audio files in the music folder or a specified folder"
+          },
+          {
+            "name": "searchFiles",
+            "description": "Search for audio files by name"
+          },
+          {
+            "name": "addToQueue",
+            "description": "Add a file or files to the playback queue"
+          },
+          {
+            "name": "clearQueue",
+            "description": "Clear the playback queue"
+          },
+          {
+            "name": "showQueue",
+            "description": "Show the current playback queue"
+          },
+          {
+            "name": "setMusicFolder",
+            "description": "Set the default music folder path"
+          },
+          {
+            "name": "showMusicFolder",
+            "description": "Show the current music folder path"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "video",
+    "emoji": "📹",
+    "description": "Agent to create AI videos",
+    "subSchemas": [
+      {
+        "schemaName": "video",
+        "description": "Video agent that creates videos using AI text to video modes.",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\video\\src\\videoActionSchema.ts",
+        "actions": [
+          {
+            "name": "createVideoAction",
+            "description": "creates a video based on the supplied description"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "weather",
+    "emoji": "⛅",
+    "description": "Agent to get weather information including current conditions, forecasts, and alerts",
+    "subSchemas": [
+      {
+        "schemaName": "weather",
+        "description": "Weather agent with actions to get current conditions, forecasts, and alerts",
+        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\weather\\src\\weatherSchema.ts",
+        "actions": [
+          {
+            "name": "getCurrentConditions",
+            "description": "Get Current Conditions"
+          },
+          {
+            "name": "getForecast",
+            "description": "Get Forecast"
+          },
+          {
+            "name": "getAlerts",
+            "description": "Get Alerts"
+          }
+        ]
+      }
+    ]
+  }
+]

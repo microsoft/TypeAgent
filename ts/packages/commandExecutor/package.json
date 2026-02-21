@@ -17,8 +17,9 @@
   },
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "npm run tsc",
+    "build": "npm run generate && npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "generate": "node scripts/generateSchemaRegistry.mjs",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node dist/server.js",

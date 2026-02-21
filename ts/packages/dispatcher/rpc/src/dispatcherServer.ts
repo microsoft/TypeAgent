@@ -35,6 +35,9 @@ export function createDispatcherRpcServer(
         getStatus: async () => {
             return dispatcher.getStatus();
         },
+        getAgentSchemas: async (...args) => {
+            return dispatcher.getAgentSchemas(...args);
+        },
         respondToChoice: async (...args) => {
             return dispatcher.respondToChoice(...args);
         },

@@ -192,36 +192,119 @@ const handlers: CommandHandlerTable = {
     },
 };
 
+// Escape HTML special characters to prevent injection
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+// Format a date portion: "Mon, Jan 20"
+function formatEventDate(iso: string): string {
+    return new Date(iso).toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+    });
+}
+
+// Format a time portion: "9:00 AM"
+function formatEventTime(iso: string): string {
+    return new Date(iso).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+    });
+}
+
+// Format a time range: "9:00 AM – 9:30 AM"
+function formatEventTimeRange(startIso: string, endIso: string): string {
+    return `${formatEventTime(startIso)} \u2013 ${formatEventTime(endIso)}`;
+}
+
+// Return location string from an event object (handles both string and object forms)
+function getEventLocation(event: any): string {
+    return (
+        event.location?.displayName ||
+        (typeof event.location === "string" ? event.location : "")
+    );
+}
+
+// Styled empty-state message for when no events are found
+function emptyStateHtml(message: string): string {
+    return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:#888;padding:8px 12px;border-left:3px solid #ddd;background:#f8f9fa;">${escapeHtml(message)}</div>`;
+}
+
 // Helper function to format events as HTML
 function formatEventsAsHtml(events: any[]): string {
     if (!events || events.length === 0) {
         return "<p>No events found.</p>";
     }
 
-    let html = "<ul>";
-    for (const event of events) {
-        const start = event.start?.dateTime
-            ? new Date(event.start.dateTime).toLocaleString()
-            : "Unknown";
-        const end = event.end?.dateTime
-            ? new Date(event.end.dateTime).toLocaleString()
-            : "Unknown";
-        const subject = event.subject || "No subject";
-        if (event.htmlLink) {
-            html += `<li><a href="${event.htmlLink}" target="_blank"><strong>${subject}</strong></a><br/>`;
-        } else {
-            html += `<li><strong>${subject}</strong><br/>`;
-        }
-        html += `${start} - ${end}`;
-        if (event.location?.displayName) {
-            html += `<br/>Location: ${event.location.displayName}`;
-        } else if (event.location && typeof event.location === "string") {
-            html += `<br/>Location: ${event.location}`;
-        }
-        html += "</li>";
+    const items = events.map((event) => {
+        const subject = escapeHtml(event.subject || "Untitled");
+        const datePart = event.start?.dateTime
+            ? formatEventDate(event.start.dateTime)
+            : "";
+        const timePart =
+            event.start?.dateTime && event.end?.dateTime
+                ? formatEventTimeRange(event.start.dateTime, event.end.dateTime)
+                : "";
+        const location = escapeHtml(getEventLocation(event));
+
+        const subjectHtml = event.htmlLink
+            ? `<a href="${escapeHtml(event.htmlLink)}" target="_system" style="color:#1a73e8;text-decoration:none;font-weight:600;">${subject}</a>`
+            : `<span style="font-weight:600;">${subject}</span>`;
+
+        const metaParts = [datePart, timePart].filter(Boolean);
+        const metaLine = metaParts.length
+            ? `<div style="color:#555;font-size:12px;margin-top:2px;">${metaParts.join(" &nbsp;&middot;&nbsp; ")}</div>`
+            : "";
+        const locationLine = location
+            ? `<div style="color:#777;font-size:12px;margin-top:1px;">${location}</div>`
+            : "";
+
+        return `<div style="border-left:3px solid #1a73e8;padding:6px 10px;margin-bottom:8px;background:#f8f9fa;">${subjectHtml}${metaLine}${locationLine}</div>`;
+    });
+
+    return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;">${items.join("")}</div>`;
+}
+
+// Helper function to format events as professional plain text
+function formatEventsAsText(events: any[]): string {
+    if (!events || events.length === 0) {
+        return "No events found.";
     }
-    html += "</ul>";
-    return html;
+
+    const lines: string[] = [];
+    for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        const subject = event.subject || "Untitled";
+        const num = `${i + 1}.`;
+
+        const datePart = event.start?.dateTime
+            ? formatEventDate(event.start.dateTime)
+            : "";
+        const timePart =
+            event.start?.dateTime && event.end?.dateTime
+                ? formatEventTimeRange(event.start.dateTime, event.end.dateTime)
+                : "";
+        const location = getEventLocation(event);
+
+        lines.push(`${num.padEnd(4)}${subject}`);
+        const meta = [datePart, timePart].filter(Boolean).join("  \u00B7  ");
+        if (meta) {
+            lines.push(`    ${meta}`);
+        }
+        if (location) {
+            lines.push(`    ${location}`);
+        }
+        if (i < events.length - 1) {
+            lines.push("");
+        }
+    }
+    return lines.join("\n");
 }
 
 // Calendar action handler V3 - with multi-provider calendar integration
@@ -446,10 +529,21 @@ export class CalendarActionHandlerV3 implements AppAgent {
                 // Show time range if end time differs from start + 1 hour (explicit end time was specified)
                 const timeDisplay =
                     endHour !== undefined
-                        ? `${startTimeStr} - ${endTimeStr}`
+                        ? `${startTimeStr} \u2013 ${endTimeStr}`
                         : startTimeStr;
+                const longDate = eventDate.toLocaleDateString(undefined, {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                });
+                const textResult = [
+                    `Event scheduled: "${description}"`,
+                    `  Date:  ${longDate}`,
+                    `  Time:  ${timeDisplay}`,
+                ].join("\n");
                 return createActionResultFromHtmlDisplay(
-                    `<p>✓ Event created: <strong>${description}</strong> on ${dateStr} at ${timeDisplay}</p>`,
+                    `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;"><div style="border-left:3px solid #34a853;padding:6px 10px;background:#f8f9fa;"><div style="font-weight:600;color:#34a853;">Event Scheduled</div><div style="margin-top:4px;">${escapeHtml(description)}</div><div style="color:#555;font-size:12px;margin-top:2px;">${dateStr} &nbsp;&middot;&nbsp; ${timeDisplay}</div></div></div>`,
+                    textResult,
                 );
             } else {
                 return createActionResultFromError("Failed to create event");
@@ -668,12 +762,14 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
             if (!events || events.length === 0) {
                 return createActionResultFromHtmlDisplay(
-                    "<p>No events found matching your criteria.</p>",
+                    emptyStateHtml("No events found matching your criteria."),
+                    "No events found matching your criteria.",
                 );
             }
 
             return createActionResultFromHtmlDisplay(
                 formatEventsAsHtml(events),
+                formatEventsAsText(events),
             );
         } catch (error: any) {
             console.error(chalk.red(`Error finding events: ${error.message}`));
@@ -716,8 +812,13 @@ export class CalendarActionHandlerV3 implements AppAgent {
             ]);
 
             if (success) {
+                const textResult = [
+                    `Participant added: ${participant}`,
+                    `  Event: ${description}`,
+                ].join("\n");
                 return createActionResultFromHtmlDisplay(
-                    `<p>✓ Added <strong>${participant}</strong> to <strong>${description}</strong></p>`,
+                    `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;"><div style="border-left:3px solid #34a853;padding:6px 10px;background:#f8f9fa;"><div style="font-weight:600;color:#34a853;">Participant Added</div><div style="margin-top:4px;">${escapeHtml(participant)}</div><div style="color:#555;font-size:12px;margin-top:2px;">Event: ${escapeHtml(description)}</div></div></div>`,
+                    textResult,
                 );
             } else {
                 return createActionResultFromError(
@@ -768,12 +869,21 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
             if (!events || events.length === 0) {
                 return createActionResultFromHtmlDisplay(
-                    "<p>No events scheduled for today.</p>",
+                    emptyStateHtml("No events scheduled for today."),
+                    "No events scheduled for today.",
                 );
             }
 
+            const todayLabel = today.toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+            });
+            const heading = `Today's Schedule  \u2014  ${todayLabel}`;
+            const textResult = `${heading}\n${"=".repeat(heading.length)}\n\n${formatEventsAsText(events)}`;
             return createActionResultFromHtmlDisplay(
-                `<h3>Today's Schedule</h3>${formatEventsAsHtml(events)}`,
+                `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"><div style="font-size:14px;font-weight:600;margin-bottom:8px;">Today's Schedule <span style="font-weight:400;color:#555;">\u2014 ${todayLabel}</span></div>${formatEventsAsHtml(events)}</div>`,
+                textResult,
             );
         } catch (error: any) {
             console.error(
@@ -800,12 +910,19 @@ export class CalendarActionHandlerV3 implements AppAgent {
 
             if (!events || events.length === 0) {
                 return createActionResultFromHtmlDisplay(
-                    "<p>No events scheduled for this week.</p>",
+                    emptyStateHtml("No events scheduled for this week."),
+                    "No events scheduled for this week.",
                 );
             }
 
+            const weekStart = new Date(dateRange.startDateTime);
+            const weekEnd = new Date(dateRange.endDateTime);
+            const weekRangeLabel = `${weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })} \u2013 ${weekEnd.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+            const weekHeading = `This Week's Schedule  \u2014  ${weekRangeLabel}`;
+            const textResult = `${weekHeading}\n${"=".repeat(weekHeading.length)}\n\n${formatEventsAsText(events)}`;
             return createActionResultFromHtmlDisplay(
-                `<h3>This Week's Schedule</h3>${formatEventsAsHtml(events)}`,
+                `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"><div style="font-size:14px;font-weight:600;margin-bottom:8px;">This Week's Schedule <span style="font-weight:400;color:#555;">\u2014 ${weekRangeLabel}</span></div>${formatEventsAsHtml(events)}</div>`,
+                textResult,
             );
         } catch (error: any) {
             console.error(
@@ -863,51 +980,62 @@ export class CalendarActionHandlerV3 implements AppAgent {
             if (events.length === 1) {
                 // Single match — confirm with the user before deleting
                 const event = events[0];
-                const subject = event.subject || "No subject";
+                const subject = event.subject || "Untitled";
                 const startTime = event.start?.dateTime
-                    ? new Date(event.start.dateTime).toLocaleString()
+                    ? event.end?.dateTime
+                        ? `${formatEventDate(event.start.dateTime)}, ${formatEventTimeRange(event.start.dateTime, event.end.dateTime)}`
+                        : `${formatEventDate(event.start.dateTime)}, ${formatEventTime(event.start.dateTime)}`
                     : "Unknown time";
 
                 return createYesNoChoiceResult(
                     this.choiceManager,
-                    `Delete "${subject}" (${startTime})?`,
+                    `Remove "${subject}" scheduled for ${startTime}?`,
                     async (confirmed: boolean) => {
                         if (!confirmed) {
                             return createActionResultFromHtmlDisplay(
-                                `<p>Cancelled removal of <strong>${subject}</strong></p>`,
-                                `Cancelled removal of "${subject}"`,
+                                `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;"><div style="border-left:3px solid #888;padding:6px 10px;background:#f8f9fa;color:#555;">Removal cancelled: ${escapeHtml(subject)}</div></div>`,
+                                `Removal cancelled: "${subject}"`,
                             );
                         }
                         const deleted = await provider.deleteEvent(event.id);
                         if (deleted) {
                             return createActionResultFromHtmlDisplay(
-                                `<p>Deleted: <strong>${subject}</strong> (${startTime})</p>`,
-                                `Deleted event "${subject}" at ${startTime}`,
+                                `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;"><div style="border-left:3px solid #ea4335;padding:6px 10px;background:#f8f9fa;"><div style="font-weight:600;color:#ea4335;">Event Removed</div><div style="margin-top:4px;">${escapeHtml(subject)}</div><div style="color:#555;font-size:12px;margin-top:2px;">${startTime}</div></div></div>`,
+                                `Event removed: "${subject}" (${startTime})`,
                             );
                         }
                         return createActionResultFromError(
                             `Failed to delete "${subject}"`,
                         );
                     },
-                    `<p>Delete <strong>${subject}</strong> (${startTime})?</p>`,
+                    `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;padding:6px 0;">Remove <strong>${escapeHtml(subject)}</strong> scheduled for ${startTime}?</div>`,
                 );
             }
 
             if (events.length <= 5) {
                 // Multiple matches — show checkboxes to select which to delete
                 const choiceLabels = events.map((event) => {
-                    const subject = event.subject || "No subject";
-                    const startTime = event.start?.dateTime
-                        ? new Date(event.start.dateTime).toLocaleString()
+                    const subject = event.subject || "Untitled";
+                    const when = event.start?.dateTime
+                        ? event.end?.dateTime
+                            ? `${formatEventDate(event.start.dateTime)}, ${formatEventTimeRange(event.start.dateTime, event.end.dateTime)}`
+                            : `${formatEventDate(event.start.dateTime)}, ${formatEventTime(event.start.dateTime)}`
                         : "Unknown time";
-                    return `${subject} (${startTime})`;
+                    return `${subject} — ${when}`;
                 });
 
-                let html = `<p>Found ${events.length} events matching "${description}". Select which to delete:</p><ol>`;
-                for (const label of choiceLabels) {
-                    html += `<li>${label}</li>`;
-                }
-                html += `</ol>`;
+                const choiceItems = events
+                    .map((event, i) => {
+                        const subject = escapeHtml(event.subject || "Untitled");
+                        const when = event.start?.dateTime
+                            ? event.end?.dateTime
+                                ? `${formatEventDate(event.start.dateTime)}, ${formatEventTimeRange(event.start.dateTime, event.end.dateTime)}`
+                                : `${formatEventDate(event.start.dateTime)}, ${formatEventTime(event.start.dateTime)}`
+                            : "Unknown time";
+                        return `<div style="border-left:3px solid #fbbc04;padding:6px 10px;margin-bottom:6px;background:#f8f9fa;"><span style="font-weight:600;">${i + 1}. ${subject}</span><div style="color:#555;font-size:12px;margin-top:2px;">${when}</div></div>`;
+                    })
+                    .join("");
+                const html = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;"><div style="color:#555;margin-bottom:8px;">Found ${events.length} events matching <strong>${escapeHtml(description)}</strong>. Select which to remove:</div>${choiceItems}</div>`;
 
                 return createMultiChoiceResult(
                     this.choiceManager,
@@ -916,35 +1044,35 @@ export class CalendarActionHandlerV3 implements AppAgent {
                     async (selectedIndices: number[]) => {
                         if (selectedIndices.length === 0) {
                             return createActionResultFromHtmlDisplay(
-                                `<p>No events selected for deletion.</p>`,
-                                `Cancelled removal`,
+                                `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;"><div style="border-left:3px solid #888;padding:6px 10px;background:#f8f9fa;color:#555;">No events selected. Removal cancelled.</div></div>`,
+                                `Removal cancelled — no events selected.`,
                             );
                         }
                         const htmlResults: string[] = [];
                         const textResults: string[] = [];
                         for (const idx of selectedIndices) {
                             const event = events[idx];
-                            const subject = event.subject || "No subject";
+                            const subject = event.subject || "Untitled";
                             const deleted = await provider.deleteEvent(
                                 event.id,
                             );
                             if (deleted) {
                                 htmlResults.push(
-                                    `Deleted: <strong>${subject}</strong>`,
+                                    `<div style="color:#ea4335;">Removed: <strong>${escapeHtml(subject)}</strong></div>`,
                                 );
-                                textResults.push(`Deleted: ${subject}`);
+                                textResults.push(`Removed: ${subject}`);
                             } else {
                                 htmlResults.push(
-                                    `Failed to delete: <strong>${subject}</strong>`,
+                                    `<div style="color:#888;">Failed to remove: <strong>${escapeHtml(subject)}</strong></div>`,
                                 );
                                 textResults.push(
-                                    `Failed to delete: ${subject}`,
+                                    `Failed to remove: ${subject}`,
                                 );
                             }
                         }
                         return createActionResultFromHtmlDisplay(
-                            `<p>${htmlResults.join("<br>")}</p>`,
-                            textResults.join("; "),
+                            `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;padding:6px 0;">${htmlResults.join("")}</div>`,
+                            textResults.join("\n"),
                         );
                     },
                     html,

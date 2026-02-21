@@ -15,6 +15,8 @@ export type UISettings = {
     darkMode: boolean;
     disableCompletionRemoteUI: boolean;
     inlineCompletions: boolean;
+    voiceMode: boolean;
+    wakeWord: string;
 };
 export type ShellUserSettings = {
     microphoneId: string | undefined;
@@ -56,6 +58,8 @@ export const defaultUserSettings: ShellUserSettings = {
         darkMode: false,
         disableCompletionRemoteUI: false,
         inlineCompletions: true,
+        voiceMode: false,
+        wakeWord: "type agent",
     },
     partialCompletion: true,
     disallowedDisplayType: "",

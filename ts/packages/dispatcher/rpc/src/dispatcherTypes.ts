@@ -7,6 +7,7 @@ import type {
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 import type {
+    AgentSchemaInfo,
     CommandCompletionResult,
     CommandResult,
     DispatcherStatus,
@@ -46,6 +47,8 @@ export type DispatcherInvokeFunctions = {
     close(): Promise<void>;
 
     getStatus(): Promise<DispatcherStatus>;
+
+    getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
 
     respondToChoice(
         choiceId: string,

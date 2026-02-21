@@ -1281,3 +1281,194 @@ input[type="file"] {
   width: 100%;
   height: 100%;
 }
+
+// ─── Voice Orb ───────────────────────────────────────────────────────────────
+
+// Hidden by default; shown only in voice mode
+.voice-orb {
+  display: none;
+}
+
+.voice-orb {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 8px auto 4px auto;
+}
+
+.orb-rings {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  top: 0;
+  left: 0;
+}
+
+.orb-ring {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  border: 2px solid aquamarine;
+  top: 10px;
+  left: 10px;
+  width: 80px;
+  height: 80px;
+}
+
+.orb-inner {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #aaa, #555);
+  transition: background 0.3s;
+  position: relative;
+  z-index: 1;
+}
+
+.orb-label {
+  font-size: 0.7rem;
+  color: #888;
+  margin-top: 4px;
+  text-align: center;
+  height: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+// idle: slow pulse
+.orb-idle .orb-inner {
+  animation: orb-pulse 3s ease-in-out infinite;
+}
+
+// wake-word-waiting: gentle cyan tint, slow pulse
+.orb-wake-word-waiting .orb-inner {
+  background: radial-gradient(circle, #7dd3d8, #2d7d82);
+  animation: orb-pulse 2.5s ease-in-out infinite;
+}
+
+// listening: expanding rings, aquamarine inner
+.orb-listening .orb-inner {
+  background: radial-gradient(circle, aquamarine, teal);
+}
+
+.orb-listening .ring1 {
+  animation: orb-ring 1.2s ease-out infinite;
+}
+
+.orb-listening .ring2 {
+  animation: orb-ring 1.2s ease-out 0.4s infinite;
+}
+
+// thinking: amber spinner
+.orb-thinking .orb-inner {
+  background: conic-gradient(#f59e0b, #f97316, #f59e0b);
+  animation: orb-spin 1s linear infinite;
+}
+
+// speaking: blue pulse
+.orb-speaking .orb-inner {
+  background: radial-gradient(circle, #60a5fa, #2563eb);
+  animation: orb-pulse 1s ease-in-out infinite;
+}
+
+// claude focus: copper border
+.voice-orb.claude-focus .orb-inner {
+  box-shadow: 0 0 0 3px #c87137;
+}
+
+@keyframes orb-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.07);
+    opacity: 0.85;
+  }
+}
+
+@keyframes orb-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes orb-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ─── Voice Mode Banner ────────────────────────────────────────────────────────
+
+.voice-mode-banner {
+  display: none;
+  padding: 4px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 2px solid teal;
+  border-radius: 6px;
+  color: teal;
+  text-align: center;
+  margin: 4px 8px;
+  letter-spacing: 0.05em;
+}
+
+.voice-mode-banner.claude-focus {
+  border-color: #c87137;
+  color: #c87137;
+}
+
+// ─── Voice Mode Layout ────────────────────────────────────────────────────────
+
+.voice-mode {
+  // Show orb and banner
+  .voice-orb {
+    display: flex;
+  }
+
+  .voice-mode-banner {
+    display: block;
+  }
+
+  // Hide all message history except the last result
+  .chat-message-container:not(:last-child) {
+    display: none;
+  }
+
+  // Make the last result a large, glanceable card
+  .chat-message-container:last-child {
+    width: 100%;
+    margin: 0;
+    padding: 0 8px;
+
+    .chat-message-content {
+      font-size: 1.4rem;
+      line-height: 1.6;
+      padding: 20px 24px;
+      border-radius: 16px;
+    }
+  }
+
+  // Larger chat input
+  .chat-input {
+    .user-textarea {
+      font-size: 1.1rem;
+      line-height: 1.6;
+      min-height: 40px;
+    }
+  }
+}

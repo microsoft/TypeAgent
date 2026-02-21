@@ -72,6 +72,30 @@ export type DispatcherStatus = {
 
 export type ConnectionId = string;
 
+/** A single action exposed by an agent sub-schema. */
+export type ActionInfo = {
+    name: string;
+    description: string;
+};
+
+/** One schema group within an agent (main schema or sub-schema). */
+export type AgentSubSchemaInfo = {
+    /** Exact schemaName to supply to @action dispatch, e.g. "desktop.desktop-taskbar" */
+    schemaName: string;
+    description: string;
+    /** Absolute path to the TypeScript source file for this sub-schema, if available. */
+    schemaFilePath: string | undefined;
+    actions: ActionInfo[];
+};
+
+/** Top-level agent with its grouped sub-schemas. */
+export type AgentSchemaInfo = {
+    name: string;
+    emoji: string;
+    description: string;
+    subSchemas: AgentSubSchemaInfo[];
+};
+
 /**
  * A dispatcher instance
  */
@@ -131,6 +155,12 @@ export interface Dispatcher {
     checkCache(request: string): Promise<CommandResult | undefined>;
 
     getStatus(): Promise<DispatcherStatus>;
+
+    /**
+     * Get schema and action metadata for all active agents, or a specific agent.
+     * @param agentName optional — if provided, returns only the named agent
+     */
+    getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
 
     /**
      * Respond to a pending choice from an agent.

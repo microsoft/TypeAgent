@@ -241,17 +241,9 @@ export class ContinousSpeechRecognizer {
             this.reco.recognizing = (_s, e) => {
                 this.onRecognizing(e.result.text);
             };
-            // Note: this scenario sample demonstrates result handling via continuation on the recognizeOnceAsync call.
-            // The 'recognized' event handler can be used in a similar fashion.
-            this.reco?.recognizeOnceAsync(
-                (result) => {
-                    onRecognizedResult(result, this.onRecognized, this.onError);
-                },
-                (err) => {
-                    debugError(err);
-                    this.onError(`[ERROR: ${err}]`);
-                },
-            );
+            this.reco.recognized = (_s, e) => {
+                onRecognizedResult(e.result, this.onRecognized, this.onError);
+            };
         }
     }
 
@@ -264,12 +256,16 @@ export class ContinousSpeechRecognizer {
         if (this.whisperRecognizer) {
             this.whisperRecognizer.startRecording();
         } else {
+            console.log("[voice] startContinuousRecognitionAsync called");
             this.reco!.startContinuousRecognitionAsync(
                 () => {
-                    console.log("continuous recognition started");
+                    console.log("[voice] continuous recognition started OK");
                 },
                 (error) => {
-                    console.log(error);
+                    console.log(
+                        "[voice] continuous recognition start ERROR:",
+                        error,
+                    );
                 },
             );
         }

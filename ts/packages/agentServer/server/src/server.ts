@@ -26,8 +26,9 @@ async function main() {
     const instanceDir = getInstanceDir();
 
     // did the launch request a specific config? (e.g. "test" to load "config.test.json")
+    const configIdx = process.argv.indexOf("--config");
     const configName =
-        process.argv[process.argv.indexOf("--config") + 1] || undefined;
+        configIdx !== -1 ? process.argv[configIdx + 1] : undefined;
 
     // Create single shared dispatcher with routing ClientIO
     const sharedDispatcher = await createSharedDispatcher("agent server", {

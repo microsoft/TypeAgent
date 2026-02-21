@@ -97,6 +97,7 @@ export class SettingsView {
     }
     private devUICheckBox: HTMLInputElement;
     private saveChatHistoryCheckBox: HTMLInputElement;
+    private voiceModeCheckBox: HTMLInputElement;
 
     public set shellSettings(value: ShellUserSettings) {
         this._shellSettings = value;
@@ -107,6 +108,7 @@ export class SettingsView {
         this.agentGreetingCheckBox.checked = value.agentGreeting;
         this.devUICheckBox.checked = !value.ui.dev;
         this.saveChatHistoryCheckBox.checked = value.chatHistory;
+        this.voiceModeCheckBox.checked = value.ui.voiceMode ?? false;
         this.updateFromSettings();
     }
 
@@ -260,11 +262,21 @@ export class SettingsView {
 
         updateTTSSelections();
 
+        const updateVoiceMode = () => {
+            const enabled = this._shellSettings.ui.voiceMode ?? false;
+            chatView.setVoiceMode(enabled);
+            if (chatView.chatInput) {
+                chatView.chatInput.wakeWord =
+                    this._shellSettings.ui.wakeWord ?? "type agent";
+            }
+        };
+
         this.updateFromSettings = async () => {
             updateTheme();
             updateChatView();
             await updateTTSSelections();
             updateInputs();
+            updateVoiceMode();
         };
 
         try {
@@ -313,6 +325,12 @@ export class SettingsView {
                     this.saveChatHistoryCheckBox.checked;
             },
         );
+
+        this.voiceModeCheckBox = this.addCheckbox("Voice mode", () => {
+            this._shellSettings.ui.voiceMode = this.voiceModeCheckBox.checked;
+            chatView.setVoiceMode(this.voiceModeCheckBox.checked);
+            this.saveSettings();
+        });
     }
 
     getContainer() {

@@ -40,6 +40,9 @@ export function createDispatcherRpcClient(
         async getStatus() {
             return rpc.invoke("getStatus");
         },
+        async getAgentSchemas(...args) {
+            return rpc.invoke("getAgentSchemas", ...args);
+        },
         async respondToChoice(...args) {
             return rpc.invoke("respondToChoice", ...args);
         },
