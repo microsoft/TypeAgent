@@ -4,6 +4,7 @@
   "schema": {
     "description": "Image agent that creates images using AI image modes.",
     "schemaFile": "./imageActionSchema.ts",
+    "compiledSchemaFile": "agents/image/dist/imageSchema.pas.json",
     "schemaType": "ImageAction"
   }
 }

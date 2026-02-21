@@ -17,7 +17,15 @@
     "./agent/handlers": "./dist/codeActionHandler.js"
   },
   "scripts": {
-    "build": "npm run tsc",
+    "asc": "asc -i ./src/codeActionsSchema.ts -o ./dist/codeSchema.pas.json -t CodeActions -a CodeActivity",
+    "asc:debug": "asc -i ./src/vscode/debugActionsSchema.ts -o ./dist/debugSchema.pas.json -t CodeDebugActions",
+    "asc:display": "asc -i ./src/vscode/displayActionsSchema.ts -o ./dist/displaySchema.pas.json -t CodeDisplayActions",
+    "asc:general": "asc -i ./src/vscode/generalActionsSchema.ts -o ./dist/generalSchema.pas.json -t CodeGeneralActions",
+    "asc:editor": "asc -i ./src/vscode/editorCodeActionsSchema.ts -o ./dist/editorSchema.pas.json -t EditorCodeActions",
+    "asc:workbench": "asc -i ./src/vscode/workbenchCommandActionsSchema.ts -o ./dist/workbenchSchema.pas.json -t CodeWorkbenchActions",
+    "asc:extension": "asc -i ./src/vscode/extensionsActionsSchema.ts -o ./dist/extensionSchema.pas.json -t CodeWorkbenchExtensionActions",
+    "asc:all": "concurrently npm:asc npm:asc:debug npm:asc:display npm:asc:general npm:asc:editor npm:asc:workbench npm:asc:extension",
+    "build": "concurrently npm:tsc npm:asc:all",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -33,9 +41,11 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
     "@types/better-sqlite3": "7.6.13",
     "@types/debug": "^4.1.12",
     "@types/ws": "^8.5.10",
+    "concurrently": "^9.1.2",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
