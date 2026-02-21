@@ -1,0 +1,98 @@
+[
+  {
+    "request": "Please install the Python extension and ask me before doing it",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "installExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Install prettier, don't prompt me, and reload automatically when done",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "installExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you add the GitLens extension? I'd like to confirm first though",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "installExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Install eslint extension without asking and skip the reload",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "installExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Please enable the React DevTools extension and ask me before doing it",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "enableExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Turn on ESLint extension, auto-reload, no prompts needed",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "enableExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Enable the Prettier extension",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "enableExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Could you activate the GitLens extension with auto-reload but please confirm with me first?",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "enableExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you disable the ESLint extension for me? I'd like to confirm before you do it, and please reload the editor automatically afterwards.",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "disableExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Turn off that annoying Copilot extension without asking me first - just do it and restart everything",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "disableExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Please disable the Python extension but ask me before you actually do it",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "disableExtension",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Deactivate the vim extension and reload VS Code when you're done",
+    "schemaName": "extensionSchema",
+    "action": {
+      "actionName": "disableExtension",
+      "parameters": {}
+    }
+  }
+]

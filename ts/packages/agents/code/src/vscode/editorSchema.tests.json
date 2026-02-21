@@ -1,0 +1,162 @@
+[
+  {
+    "request": "Create a new Python file called 'data_processor.py' in the utils folder with some basic imports and a main function",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "createFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you make a README.md file in the project root? I want it to open in the editor so I can add content",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "createFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need a new JavaScript component - create 'UserProfile.js' in src/components and overwrite the existing one if it's there",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "createFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Quick - make an untitled CSS file in the styles directory, just need a blank one to start working with",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "createFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Save the current file please",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "saveCurrentFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you save this file? But only if it has unsaved changes and don't worry about untitled files",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "saveCurrentFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Quick save - just the dirty files, skip any untitled ones, and let me know if there's no active editor",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "saveCurrentFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Save what I'm working on right now, but show an error if nothing's open",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "saveCurrentFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Could you please create a JavaScript function called 'calculateTax' that takes in a price and taxRate as parameters and returns the total with tax? Make it async and add some documentation explaining what it does.",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "createFunction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need a Python function to validate email addresses. Call it 'is_valid_email', it should take an email string and return a boolean. Put it in utils.py at the top of the file.",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "createFunction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Write me a quick TypeScript function 'formatCurrency' - takes amount (number) and currency (string), returns formatted string. No need for async.",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "createFunction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Add a new function getUserById in the users.js file. Should be async, take a userId parameter, return Promise<User>. Include proper JSDoc comments and put it after the existing getUsers function.",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "createFunction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Hey, can you fix the authentication bug in src/auth/login.js? I think it's related to token validation",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "fixCodeProblem",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "There's a memory leak somewhere in the UserService class - could you take a look at utils/UserService.ts and see what's going on?",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "fixCodeProblem",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Fix the crash in main.py please",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "fixCodeProblem",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "The form validation isn't working properly in components/ContactForm.vue - I suspect it's the email regex pattern that's causing issues",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "fixCodeProblem",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Add a comment above this function that says 'Calculate monthly payment based on loan amount and interest rate' in JavaScript style",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "insertComment",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Please insert a Python comment here explaining what this loop does - make it '# Process each item in the queue' with a blank line after",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "insertComment",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you put a quick C++ comment before this variable declaration? Just say 'Store user preferences' and add some spacing around it",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "insertComment",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need a TODO comment in Java style right at this position: 'TODO: Implement error handling for edge cases' - no extra newlines needed",
+    "schemaName": "editorSchema",
+    "action": {
+      "actionName": "insertComment",
+      "parameters": {}
+    }
+  }
+]

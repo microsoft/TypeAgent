@@ -6,6 +6,7 @@
     "description": "Code agent helps you with productivity in using an editor and performing actions like creating files, editor customization, writing code, intelligent code suggestions, real-time error detection, debugging, and source control tasks etc.",
     "schemaFile": "./codeActionsSchema.ts",
     "compiledSchemaFile": "agents/code/dist/codeSchema.pas.json",
+    "grammarFile": "../dist/codeSchema.ag.json",
     "schemaType": {
       "action": "CodeActions",
       "activity": "CodeActivity"
@@ -17,6 +18,7 @@
         "description": "Code agent that helps you debug code including handling actions like showing the debug panel, adding/toggling breakpoints, stepping in/out of code etc.",
         "schemaFile": "./vscode/debugActionsSchema.ts",
         "compiledSchemaFile": "agents/code/dist/debugSchema.pas.json",
+        "grammarFile": "../dist/debugSchema.ag.json",
         "schemaType": "CodeDebugActions"
       }
     },
@@ -25,6 +27,7 @@
         "description": "Code agent that helps you work with display keyboard bindings, Zoom in, Zoom out, do text search and replace, show extensions etc.",
         "schemaFile": "./vscode/displayActionsSchema.ts",
         "compiledSchemaFile": "agents/code/dist/displaySchema.pas.json",
+        "grammarFile": "../dist/displaySchema.ag.json",
         "schemaType": "CodeDisplayActions"
       }
     },
@@ -33,6 +36,7 @@
         "description": "Code agent that helps you perform actions like finding a file, go to a symbol or a line in a file, Open new vscode window, show the command palette, user settings json etc.",
         "schemaFile": "./vscode/generalActionsSchema.ts",
         "compiledSchemaFile": "agents/code/dist/generalSchema.pas.json",
+        "grammarFile": "../dist/generalSchema.ag.json",
         "schemaType": "CodeGeneralActions"
       }
     },
@@ -41,6 +45,7 @@
         "description": "Code agent that helps you perform vscode editor actions like create a new file, go to a reference, reveal a declaration, clipboard copy or paste, add a comment line etc.",
         "schemaFile": "./vscode/editorCodeActionsSchema.ts",
         "compiledSchemaFile": "agents/code/dist/editorSchema.pas.json",
+        "grammarFile": "../dist/editorSchema.ag.json",
         "schemaType": "EditorCodeActions"
       }
     },
@@ -49,6 +54,7 @@
         "description": "Code agent that helps you perform vscode workbench actions like open a file, close a file etc.",
         "schemaFile": "./vscode/workbenchCommandActionsSchema.ts",
         "compiledSchemaFile": "agents/code/dist/workbenchSchema.pas.json",
+        "grammarFile": "../dist/workbenchSchema.ag.json",
         "schemaType": "CodeWorkbenchActions"
       }
     },
@@ -57,6 +63,7 @@
         "description": "Code agent that helps you perform vscode extension actions like show, install, update, enable, disable, uninstall extensions etc.",
         "schemaFile": "./vscode/extensionsActionsSchema.ts",
         "compiledSchemaFile": "agents/code/dist/extensionSchema.pas.json",
+        "grammarFile": "../dist/extensionSchema.ag.json",
         "schemaType": "CodeWorkbenchExtensionActions"
       }
     }

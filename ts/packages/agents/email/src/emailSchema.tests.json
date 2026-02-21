@@ -1,0 +1,82 @@
+[
+  {
+    "request": "Can you send an email to john.smith@company.com with the subject 'Meeting Follow-up' and let me know we discussed the quarterly projections and next steps?",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "sendEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to email sarah@marketing.com and mike@sales.com about the product launch timeline - cc my manager boss@company.com - make it professional but friendly",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "sendEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Send a quick email to the team at team@startup.io saying we're moving the deadline to Friday, subject should be 'Updated Project Deadline'",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "sendEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Please draft and send an email to client@bigcorp.com with our quarterly report attached (Q3_Report.pdf) - subject 'Q3 Performance Summary' - and include a brief overview of the key metrics",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "sendEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Email mom@family.com about dinner plans Sunday, keep it casual and ask what time works best for her",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "sendEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you find the email with message reference MSG-2024-0847?",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "findEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Look up email MSG-ABC-12345 for me please",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "findEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Find message ref TICKET-789-XYZ",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "findEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to locate the email with reference ID INV-2024-03-156",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "findEmail",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Pull up that email - the message reference is SUPPORT-REQ-4421",
+    "schemaName": "emailSchema",
+    "action": {
+      "actionName": "findEmail",
+      "parameters": {}
+    }
+  }
+]

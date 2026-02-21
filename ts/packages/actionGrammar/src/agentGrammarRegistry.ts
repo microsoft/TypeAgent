@@ -419,12 +419,24 @@ export class AgentGrammarRegistry {
         errors: string[];
         unresolvedEntities?: string[];
     } {
-        const agent = this.agents.get(agentId);
+        let agent = this.agents.get(agentId);
         if (!agent) {
-            return {
-                success: false,
-                errors: [`Agent '${agentId}' not found in registry`],
-            };
+            // Auto-register with empty grammar so dynamic rules accumulate even
+            // for agents that have no pre-compiled base grammar file.
+            debug(
+                `Agent '%s' not in registry; creating empty grammar for dynamic rule addition`,
+                agentId,
+            );
+            try {
+                agent = this.registerAgent(agentId, { rules: [] });
+            } catch (e) {
+                return {
+                    success: false,
+                    errors: [
+                        `Agent '${agentId}' not found and could not create empty grammar: ${e instanceof Error ? e.message : String(e)}`,
+                    ],
+                };
+            }
         }
 
         return agent.addGeneratedRules(agrText);

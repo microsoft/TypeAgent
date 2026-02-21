@@ -1,0 +1,25 @@
+// Copyright 2024 Anthropic, Inc.
+// 
+// This Action Grammar file defines natural language patterns for workbench operations.
+
+// Main entry point - references all action rules by their exact action names
+@ <Start> = <workbenchOpenFile> | <workbenchOpenFolder> | <workbenchCreateFolderFromExplorer> | <workbenchBuildRelatedTask> | <openInIntegratedTerminal>
+
+// Shared sub-rules for common patterns
+@ <Polite> = ('can you' | 'please' | 'would you' | 'could you')?
+@ <FileRequest> = ('open' | 'show' | 'display' | 'view' | 'load')
+@ <FolderRequest> = ('open' | 'show' | 'browse' | 'explore' | 'navigate to')
+@ <CreateRequest> = ('create' | 'make' | 'add' | 'new')
+@ <TerminalRequest> = ('open' | 'launch' | 'start') ('terminal' | 'command line' | 'shell')
+@ <BuildRequest> = ('build' | 'run' | 'execute') ('task' | 'build task' | 'related task')
+
+// Action rules using exact action names - with inline variable captures
+@ <workbenchOpenFile> = <Polite> <FileRequest> ('the')? $(fileName:string) ('file')? -> { actionName: "workbenchOpenFile", parameters: { fileName: fileName } }
+
+@ <workbenchOpenFolder> = <Polite> <FolderRequest> ('the')? $(folderName:string) ('folder' | 'directory')? -> { actionName: "workbenchOpenFolder", parameters: { folderName: folderName } }
+
+@ <workbenchCreateFolderFromExplorer> = <Polite> <CreateRequest> ('folder' | 'directory') $(folderName:string) -> { actionName: "workbenchCreateFolderFromExplorer", parameters: { folderName: folderName } }
+
+@ <workbenchBuildRelatedTask> = <Polite> <BuildRequest> ('in' | 'for') $(folderName:string) ('folder' | 'directory')? -> { actionName: "workbenchBuildRelatedTask", parameters: { folderName: folderName } }
+
+@ <openInIntegratedTerminal> = <Polite> <TerminalRequest> ('in' | 'at') ('the')? $(folderName:string) ('folder' | 'directory')? ('and' | 'to')? ('run' | 'execute')? $(commandToExecute:string)? -> { actionName: "openInIntegratedTerminal", parameters: { folderName: folderName, commandToExecute: commandToExecute } }

@@ -1,0 +1,98 @@
+[
+  {
+    "request": "Can you create a new Python file called main.py with a basic hello world function?",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "newFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Make a new JavaScript file utils.js and add some helper functions for string manipulation",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "newFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need a new CSS file styles.css - just put some basic reset styles in there",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "newFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Create config.json with some sample configuration settings",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "newFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you split the editor vertically and open config.js on the right side?",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "splitEditor",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Split horizontally, put main.py in the bottom panel",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "splitEditor",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Open utils.ts in a new split to the left please",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "splitEditor",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to split the current editor - put dashboard.component.tsx in the top half",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "splitEditor",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you switch the editor to a 3-column layout?",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "changeEditorLayout",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Change to dual pane view please",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "changeEditorLayout",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Set up 4 columns in the editor",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "changeEditorLayout",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Go back to single column mode",
+    "schemaName": "codeSchema",
+    "action": {
+      "actionName": "changeEditorLayout",
+      "parameters": {}
+    }
+  }
+]

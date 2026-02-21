@@ -1,0 +1,98 @@
+[
+  {
+    "request": "Start debugging with the 'Production API' configuration",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "startDebugging",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you please run the debug session using my local-dev setup without actually debugging?",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "startDebugging",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Debug main-server config",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "startDebugging",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Launch debugging for the 'test-environment' configuration but just run it normally without breakpoints",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "startDebugging",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Stop debugging",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "stopDebugging",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you please stop the debugging session?",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "stopDebugging",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "End debugging mode",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "stopDebugging",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Exit the debugger",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "stopDebugging",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you toggle a breakpoint on line 42 in auth.js in the src folder?",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "toggleBreakpoint",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Set a breakpoint at line 156 of UserService.java in the services directory",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "toggleBreakpoint",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Toggle breakpoint line 23, file main.py, utils folder",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "toggleBreakpoint",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Please add or remove the breakpoint on line 89 in database.ts within the backend folder",
+    "schemaName": "debugSchema",
+    "action": {
+      "actionName": "toggleBreakpoint",
+      "parameters": {}
+    }
+  }
+]

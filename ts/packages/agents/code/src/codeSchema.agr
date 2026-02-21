@@ -1,0 +1,21 @@
+// Copyright (c) 2024 Code Grammar
+// Natural language interface for code editor actions
+
+// Start rule - all available actions
+@ <Start> = <changeColorScheme> | <splitEditor> | <changeEditorLayout> | <newFile> | <launchVSCode>
+
+// Main action rules
+@ <changeColorScheme> = <Polite> ('change' | 'switch' | 'set') ('to' | 'the')? $(theme:string) ('color scheme' | 'theme') -> { actionName: "changeColorScheme", parameters: { theme: theme } }
+
+@ <splitEditor> = <Polite> 'split' ('the'? 'editor')? $(direction:string) ('and'? ('open' | 'put' | 'place'))? $(fileName:string) ('in' | 'on' | 'to') 'the'? $(editorPosition:string) ('side' | 'panel' | 'half')? -> { actionName: "splitEditor", parameters: { direction: direction, editorPosition: editorPosition, fileName: fileName } }
+
+@ <changeEditorLayout> = <Polite> ('change' | 'switch' | 'set' | 'go back') ('to' | 'the'? 'editor' 'to')? ('a'? | 'up')? $(columnCount:string) ('column' | 'pane') ('layout' | 'view' | 'mode')? -> { actionName: "changeEditorLayout", parameters: { columnCount: columnCount } }
+
+@ <newFile> = <Polite> ('create' | 'make') ('a'? 'new')? $(language:string)? 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add')? $(content:string)? -> { actionName: "newFile", parameters: { fileName: fileName, language: language, content: content } }
+
+@ <launchVSCode> = <Polite> ('launch' | 'open' | 'start') ('vs code' | 'vscode' | 'code') ('in' $(mode:string) 'mode')? ('at' | 'with' | 'for')? $(path:string)? -> { actionName: "launchVSCode", parameters: { path: path } }
+
+// Shared sub-rules
+@ <Polite> = ("can you" | "please" | "would you" | "i need" | "let's")?
+
+@ <DirectionSpec> = ('vertically' | 'vertical' | 'horizontally' | 'horizontal')

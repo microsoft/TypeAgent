@@ -5,6 +5,7 @@
     "description": "Video agent that creates videos using AI text to video modes.",
     "schemaFile": "./videoActionSchema.ts",
     "compiledSchemaFile": "agents/video/dist/videoSchema.pas.json",
+    "grammarFile": "../dist/videoSchema.ag.json",
     "schemaType": "VideoAction"
   }
 }
