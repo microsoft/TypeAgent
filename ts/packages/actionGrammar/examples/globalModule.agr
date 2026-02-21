@@ -13,12 +13,12 @@ entity Ordinal, Cardinal;
     play (the)? $(n:Ordinal) (track | song)? -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
     }
 | play track $(n:Cardinal) -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
    }

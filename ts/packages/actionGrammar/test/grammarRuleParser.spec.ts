@@ -374,7 +374,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("variable reference values", () => {
-            const grammar = "@<rule> = $(name) -> $(name)";
+            const grammar = "@<rule> = $(name) -> name";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -411,13 +411,13 @@ describe("Grammar Rule Parser", () => {
         it("should handle nested groups and complex expressions", () => {
             const grammar = `
                 @<complex> = (please)? ($(action) | do) (the)? $(object) ($(adverb))? -> {
-                    politeness: $(politeness),
-                    actions: [$(action), "execute"],
+                    politeness: politeness,
+                    actions: [action, "execute"],
                     target: {
-                        name: $(object),
+                        name: object,
                         metadata: {
                             hasArticle: true,
-                            modifier: $(adverb)
+                            modifier: adverb
                         }
                     }
                 }
@@ -789,7 +789,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("should throw error for invalid number", () => {
-            const grammar = "@<rule> = test -> abc123";
+            const grammar = "@<rule> = test -> 1abc";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Invalid literal",
             );
@@ -841,7 +841,7 @@ describe("Grammar Rule Parser", () => {
                             features: ["async", "cache"]
                         }
                     },
-                    variables: [$(param1), $(param2)]
+                    variables: [param1, param2]
                 }
             `;
 
@@ -859,26 +859,26 @@ describe("Grammar Rule Parser", () => {
                 // Weather queries
                 @<weather> = (what's | what is) the weather (like)? (in $(location))? -> {
                     intent: "weather.query",
-                    location: $(location),
+                    location: location,
                     type: "current"
                 }
-                
-                // Calendar operations  
+
+                // Calendar operations
                 @<calendar> = (schedule | book) (a)? $(event) (for | on) $(date) (at $(time))? -> {
                     intent: "calendar.create",
                     event: {
-                        title: $(event),
-                        date: $(date),
-                        time: $(time)
+                        title: event,
+                        date: date,
+                        time: time
                     }
                 }
-                
+
                 // Music control
                 @<music> = (play | start) $(song)? (by $(artist))? -> {
                     intent: "music.play",
                     query: {
-                        song: $(song),
-                        artist: $(artist)
+                        song: song,
+                        artist: artist
                     },
                     shuffle: false
                 }

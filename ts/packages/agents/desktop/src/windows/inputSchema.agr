@@ -14,14 +14,14 @@
           | <TouchpadCursorSpeed>
 
 @ <MouseCursorSpeed> =
-    set mouse speed to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: $(level) } }
-  | adjust mouse speed to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: $(level) } }
-  | change mouse sensitivity to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: $(level) } }
-  | mouse speed $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: $(level) } }
+    set mouse speed to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } }
+  | adjust mouse speed to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } }
+  | change mouse sensitivity to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } }
+  | mouse speed $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } }
 
 @ <MouseWheelScrollLines> =
-    set scroll (wheel)? lines to $(lines:number) -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: $(lines) } }
-  | scroll $(lines:number) lines (per notch)? -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: $(lines) } }
+    set scroll (wheel)? lines to $(lines:number) -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: lines } }
+  | scroll $(lines:number) lines (per notch)? -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: lines } }
 
 @ <SetPrimaryMouseButton> =
     set primary mouse button to left -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "left" } }
@@ -58,6 +58,6 @@
   | turn off touchpad -> { actionName: "EnableTouchPad", parameters: { enable: false } }
 
 @ <TouchpadCursorSpeed> =
-    set touchpad speed to $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed: $(speed) } }
+    set touchpad speed to $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed: speed } }
   | adjust touchpad sensitivity -> { actionName: "TouchpadCursorSpeed", parameters: {} }
-  | touchpad speed $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed: $(speed) } }
+  | touchpad speed $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed: speed } }
