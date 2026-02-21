@@ -35,7 +35,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <BooleanValue> = "true" | "false"
  *   <NumberValue> = <NumberLiteral>
  *   <StringValue> = <StringLiteral>>
- *   <VarReference> = "$(" <VarName> ")"
+ *   <VarReference> = <VarName>
  *
  *   <VarName> = <Identifier>
  *   <TypeName> = <Identifier>
@@ -530,15 +530,6 @@ class GrammarRuleParser {
                 arr.push(v);
             }
         }
-        if (this.isAt("$(")) {
-            this.skipWhitespace(2);
-            const id = this.parseId("Variable name");
-            this.consume(")", "at end of variable reference");
-            return {
-                type: "variable",
-                name: id,
-            };
-        }
         if (this.isAt('"') || this.isAt("'")) {
             return this.parseStringValue();
         }
@@ -549,6 +540,14 @@ class GrammarRuleParser {
         if (this.isAt("false")) {
             this.skipWhitespace(5);
             return { type: "literal", value: false };
+        }
+        if (
+            !this.isAtEnd() &&
+            isIdStart(this.content[this.curr]) &&
+            !this.isAt("Infinity")
+        ) {
+            const id = this.parseId("Variable name");
+            return { type: "variable", name: id };
         }
         return this.parseNumberValue();
     }

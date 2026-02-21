@@ -12,7 +12,7 @@
     hello $(name:PersonName) -> {
         actionName: "greet",
         parameters: {
-            name: $(name)
+            name: name
         }
     }
   | hi there -> { actionName: "greet" }
@@ -23,8 +23,8 @@
     by $(artist:ArtistName) -> {
         actionName: "playTrack",
         parameters: {
-            trackName: $(track),
-            artists: [$(artist)]
+            trackName: track,
+            artists: [artist]
         }
     }
   | pause (the)? music? -> { actionName: "pause" }
@@ -33,7 +33,7 @@
 @ <Volume> =
     (turn | set) (the)? volume to $(level:number) -> {
         actionName: "setVolume",
-        parameters: { level: $(level) }
+        parameters: { level: level }
     }
   | volume up -> { actionName: "volumeUp" }
   | volume down -> { actionName: "volumeDown" }
@@ -60,7 +60,7 @@
     play track $(n:<Cardinal>) -> {
         actionName: "playTrackNumber",
         parameters: {
-            trackNumber: $(n),
+            trackNumber: n,
             source: "current"
         }
     }
@@ -68,13 +68,13 @@
 @ <PlayAlbum> =
     play (the)? album $(album:<AlbumName>) -> {
         actionName: "playAlbum",
-        parameters: { albumName: $(album) }
+        parameters: { albumName: album }
     }
 
 @ <PlayArtist> =
     play music by $(artist:<ArtistName>) -> {
         actionName: "playArtist",
-        parameters: { artistName: $(artist) }
+        parameters: { artistName: artist }
     }
 
 @ <AlbumName> = $(x:string)

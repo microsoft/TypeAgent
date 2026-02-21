@@ -26,9 +26,9 @@
   | cooler (screen)? colors -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "increase" } }
 
 @ <DisplayScaling> =
-    set (display)? scaling to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: $(size) } }
-  | set text scaling to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: $(size) } }
-  | set zoom to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: $(size) } }
+    set (display)? scaling to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: size } }
+  | set text scaling to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: size } }
+  | set zoom to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: size } }
 
 @ <AdjustScreenOrientation> =
     set (screen)? orientation to landscape -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "landscape" } }

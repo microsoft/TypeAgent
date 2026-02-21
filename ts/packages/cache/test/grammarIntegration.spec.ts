@@ -61,7 +61,7 @@ describe("Grammar Integration", () => {
 @ <playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track: track
     }
 }
             `.trim();
@@ -99,7 +99,7 @@ describe("Grammar Integration", () => {
 @ <playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track: track
     }
 }
             `.trim();
@@ -173,7 +173,7 @@ describe("Grammar Integration", () => {
 @ <playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track: track
     }
 }
             `.trim();
@@ -263,7 +263,7 @@ describe("Grammar Integration", () => {
 @ <playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track: track
     }
 }
             `.trim();
@@ -358,7 +358,7 @@ describe("Grammar Integration", () => {
                 grammarText: `@ <scheduleEvent> = schedule $(event:string) -> {
     actionName: "scheduleEvent",
     parameters: {
-        event: $(event)
+        event: event
     }
 }`,
                 schemaName: "calendar",
@@ -374,7 +374,7 @@ describe("Grammar Integration", () => {
 @ <playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track: track
     }
 }`,
             );
@@ -384,7 +384,7 @@ describe("Grammar Integration", () => {
 @ <addEvent> = add $(event:string) -> {
     actionName: "addEvent",
     parameters: {
-        event: $(event)
+        event: event
     }
 }`,
             );
@@ -476,7 +476,7 @@ describe("Grammar Integration", () => {
 @ <playTrack> = "play" $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track: track
     }
 }
 @ <pause> = pause music -> {
@@ -541,7 +541,7 @@ describe("Grammar Integration", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track: track
     }
 }`,
             );
@@ -551,7 +551,7 @@ describe("Grammar Integration", () => {
 @ <schedule> = schedule $(event:string) -> {
     actionName: "schedule",
     parameters: {
-        event: $(event)
+        event: event
     }
 }`,
             );
@@ -606,7 +606,7 @@ describe("Grammar Integration", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track: track
     }
 }`;
             const grammar = loadGrammarRules("player", grammarText);
@@ -644,7 +644,7 @@ describe("Grammar Integration", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track: track
     }
 }`;
             const grammar = loadGrammarRules("player", grammarText);
@@ -673,7 +673,7 @@ describe("Grammar Integration", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track: track
     }
 }
 @ <pause> = pause -> {
@@ -727,7 +727,7 @@ describe("Grammar Integration", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track: track
     }
 }
 @ <pause> = pause -> {
@@ -766,8 +766,8 @@ describe("Grammar Integration", () => {
 @ <play> = play $(track:string) by $(artist:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track),
-        artist: $(artist)
+        track: track,
+        artist: artist
     }
 }`;
             const grammar = loadGrammarRules("player", grammarText);
@@ -831,7 +831,7 @@ describe("Grammar Integration", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track: track
     }
 }`;
                 const grammar = loadGrammarRules("player", staticGrammarText);
@@ -1076,8 +1076,8 @@ describe("Grammar Integration", () => {
 @ <play> = play $(track:string) on $(device:string) -> {
     actionName: "playOnDevice",
     parameters: {
-        track: $(track),
-        device: $(device)
+        track: track,
+        device: device
     }
 }
             `.trim();
@@ -1087,7 +1087,7 @@ describe("Grammar Integration", () => {
 @ <simplePlay> = play $(track:string) -> {
     actionName: "playSimple",
     parameters: {
-        track: $(track)
+        track: track
     }
 }
             `.trim();
@@ -1165,7 +1165,7 @@ describe("Grammar Integration", () => {
 @ <general> = turn on $(item:string) -> {
     actionName: "turnOn",
     parameters: {
-        item: $(item)
+        item: item
     }
 }
             `.trim();

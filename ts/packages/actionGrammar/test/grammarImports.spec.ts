@@ -42,7 +42,7 @@ describe("Grammar Imports with File Loading", () => {
                 "greeting.agr": `@<Greeting> = (hello | hi | hey) -> "greeting"`,
                 "main.agr": `
                     @import { Greeting } from "./greeting.agr"
-                    @<Start> = $(greeting:<Greeting>) world -> { greeting: $(greeting), target: "world" }
+                    @<Start> = $(greeting:<Greeting>) world -> { greeting: greeting, target: "world" }
                 `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -72,7 +72,7 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "actions.agr": `
-                                @<Play> = play $(track) -> { action: "play", track: $(track) }
+                                @<Play> = play $(track) -> { action: "play", track: track }
                                 @<Pause> = pause -> { action: "pause" }
                                 @<Stop> = stop -> { action: "stop" }
                             `,
@@ -134,7 +134,7 @@ describe("Grammar Imports with File Loading", () => {
                 "main.agr": `
                                 @import { Number } from "./numbers.agr"
 
-                                @<Start> = count to $(num:<Number>) -> { count: $(num) }
+                                @<Start> = count to $(num:<Number>) -> { count: num }
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -530,8 +530,8 @@ describe("Grammar Imports with File Loading", () => {
                                 @<Subject> = ( cat | dog | bird ) -> "subject"
                                 @<Verb> = ( runs | jumps | flies ) -> "verb"
                                 @<Sentence> = the $(subject:<Subject>) $(verb:<Verb>) -> {
-                                    subject: $(subject),
-                                    verb: $(verb)
+                                    subject: subject,
+                                    verb: verb
                                 }
                             `,
                 "main.agr": `
@@ -603,9 +603,9 @@ describe("Grammar Imports with File Loading", () => {
                                 @import { Priority, Status } from "./values.agr"
 
                                 @<Start> = task $(name) priority $(p:<Priority>) status $(s:<Status>) -> {
-                                    name: $(name),
-                                    priority: $(p),
-                                    status: $(s)
+                                    name: name,
+                                    priority: p,
+                                    status: s
                                 }
                             `,
             };
@@ -631,7 +631,7 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "optional.agr": `
-                                @<Polite> = (please)? $(action) (thank you)? -> $(action)
+                                @<Polite> = (please)? $(action) (thank you)? -> action
                             `,
                 "main.agr": `
                                 @import { Polite } from "./optional.agr"
@@ -671,9 +671,9 @@ describe("Grammar Imports with File Loading", () => {
             const grammarFiles: Record<string, string> = {
                 "alternatives.agr": `
                                 @<Command> =
-                                    start $(service) -> { action: "start", service: $(service) } |
-                                    stop $(service) -> { action: "stop", service: $(service) } |
-                                    restart $(service) -> { action: "restart", service: $(service) }
+                                    start $(service) -> { action: "start", service: service } |
+                                    stop $(service) -> { action: "stop", service: service } |
+                                    restart $(service) -> { action: "restart", service: service }
                             `,
                 "main.agr": `
                                 @import { Command } from "./alternatives.agr"
@@ -740,7 +740,7 @@ describe("Grammar Imports with File Loading", () => {
             const grammarFiles: Record<string, string> = {
                 "main.agr": `
                                 @import { CustomType } from "./types.ts"
-                                @<Start> = value $(x:CustomType) -> $(x)
+                                @<Start> = value $(x:CustomType) -> x
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -767,7 +767,7 @@ describe("Grammar Imports with File Loading", () => {
                                 @import { MyRule } from "./rules.agr"
                                 @import { MyType } from "./types.ts"
 
-                                @<Start> = <MyRule> $(value:MyType) -> { value: $(value) }
+                                @<Start> = <MyRule> $(value:MyType) -> { value: value }
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
