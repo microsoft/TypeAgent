@@ -70,7 +70,7 @@ CRITICAL SYNTAX RULES:
 4. Wildcard type annotations CANNOT contain pipes or unions
    For parameters with union types (e.g., CalendarTime | CalendarTimeRange):
    OPTION A: Create a sub-rule with alternation
-     @ <TimeSpec> = $(t:CalendarTime) -> $(t) | $(t:CalendarTimeRange) -> $(t)
+     @ <TimeSpec> = $(t:CalendarTime) -> t | $(t:CalendarTimeRange) -> t
    OPTION B: Just use one of the types
      @ <TimeExpr> = $(time:CalendarTime)
    WRONG: $(time:CalendarTime | CalendarTimeRange)
