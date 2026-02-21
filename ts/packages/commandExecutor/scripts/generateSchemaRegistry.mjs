@@ -265,7 +265,7 @@ function main() {
         }
     }
 
-    const json = JSON.stringify(registry, null, 2);
+    const json = JSON.stringify(registry, null, 2) + "\n";
     fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
     fs.writeFileSync(OUTPUT_PATH, json);
     fs.mkdirSync(path.dirname(OUTPUT_PATH_DIST), { recursive: true });
