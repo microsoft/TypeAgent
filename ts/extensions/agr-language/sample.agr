@@ -4,6 +4,10 @@
 // Sample Action Grammar file demonstrating syntax highlighting
 // This file shows all the major syntax elements
 
+// Import syntax
+@import { Cardinal, TrackName, ArtistName } from "./base.agr"
+@import * from "./shared.agr"
+
 // Simple rule definition
 @ <Start> = <Greeting> | <Command>
 
@@ -37,6 +41,18 @@
     }
   | volume up -> { actionName: "volumeUp" }
   | volume down -> { actionName: "volumeDown" }
+
+// Bare -> results (non-object): string literal, number, or variable reference
+@ <PromptSpec> = (
+    ('ask me' | 'confirm' | 'please confirm') -> "true" |
+    ("don't ask" | 'without asking' | 'skip') -> "false"
+)
+
+@ <FilterSpec> = (
+    'by query' $(userQuery:string) -> userQuery |
+    'by category' $(category:string) -> category |
+    'all' -> "all"
+)
 
 // Numeric patterns
 @ <Cardinal> =

@@ -135,6 +135,9 @@ CRITICAL SYNTAX RULES:
     WRONG:   $(location:LocationSpec)     — rule name without angle brackets (will cause "Undefined type" error)
     Built-in types do NOT use angle brackets: $(t:CalendarTime), $(n:number), $(s:string), $(x:wildcard)
     Custom rule names always need angle brackets: $(var:<MyRule>)
+    Built-in type names are CASE-SENSITIVE and LOWERCASE:
+    CORRECT: $(n:number) $(s:string) $(x:wildcard)
+    WRONG:   $(n:Number) $(s:String) $(x:Wildcard)  (capital letters cause "Undefined type" errors)
 
 EFFICIENCY GUIDELINES:
 1. Identify common patterns across actions and extract them as sub-rules
@@ -511,6 +514,18 @@ export class SchemaToGrammarGenerator {
     }
 
     /**
+     * Normalize common LLM mistakes in grammar text before compilation.
+     * Fixes capitalized built-in type names inside wildcard captures.
+     */
+    private normalizeGrammar(grammar: string): string {
+        // $(name:Number) -> $(name:number), $(name:String) -> $(name:string), etc.
+        return grammar.replace(
+            /\$\(([A-Za-z_][A-Za-z0-9_]*):(Number|String|Wildcard)\)/g,
+            (_, name, type) => `$(${name}:${type.toLowerCase()})`,
+        );
+    }
+
+    /**
      * Validate grammar and attempt fixes if needed
      */
     private async validateAndFixGrammar(
@@ -520,6 +535,7 @@ export class SchemaToGrammarGenerator {
         let retries = 0;
 
         while (retries <= this.maxRetries) {
+            currentGrammar = this.normalizeGrammar(currentGrammar);
             const errors: string[] = [];
             loadGrammarRulesNoThrow("generated.agr", currentGrammar, errors);
 
@@ -612,6 +628,9 @@ Remember the CRITICAL SYNTAX RULES:
    WRONG:   @ <DurationSpec> = ($(m:number) 'minutes' | $(s:number) 'seconds') -> d  (d is undefined!)
 10. Custom sub-rule names as wildcard types need angle brackets: $(var:<MyRule>) not $(var:MyRule).
     Only built-in types skip angle brackets: string, number, wildcard, CalendarDate, CalendarTime, etc.
+    Built-in type names are CASE-SENSITIVE and LOWERCASE:
+    CORRECT: $(n:number) $(s:string) $(x:wildcard)
+    WRONG:   $(n:Number) $(s:String) — capital letters cause "Undefined type" errors
 11. Action body values must be SIMPLE variable names only — no dot notation:
     CORRECT: { name: name, language: language }
     WRONG:   { declaration: details.declaration }  (dot notation not valid)
