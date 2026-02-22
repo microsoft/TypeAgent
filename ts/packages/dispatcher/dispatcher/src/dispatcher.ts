@@ -229,7 +229,7 @@ export function createDispatcherFromContext(
         get connectionId() {
             return connectionId;
         },
-        processCommand(command, clientRequestId, attachments) {
+        processCommand(command, clientRequestId, attachments, options) {
             return processCommand(
                 command,
                 context,
@@ -239,6 +239,7 @@ export function createDispatcherFromContext(
                     clientRequestId,
                 },
                 attachments,
+                options,
             );
         },
         getCommandCompletion(prefix) {
