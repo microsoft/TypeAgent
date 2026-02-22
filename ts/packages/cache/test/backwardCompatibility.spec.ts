@@ -28,7 +28,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 
@@ -65,7 +65,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`,
             );
@@ -76,7 +76,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <schedule> = schedule $(event:string) -> {
     actionName: "schedule",
     parameters: {
-        event: event
+        event
     }
 }`,
             );
@@ -122,7 +122,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <setVolume> = set volume to $(level:number) -> {
     actionName: "setVolume",
     parameters: {
-        level: level
+        level
     }
 }`;
 
@@ -151,7 +151,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <search> = search for $(query:string) -> {
     actionName: "search",
     parameters: {
-        query: query
+        query
     }
 }`;
 
@@ -185,7 +185,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }
 @ <pause> = pause -> {
@@ -234,7 +234,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <play> = play (the)? (song)? $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 
@@ -275,7 +275,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <test> = test $(value:string) -> {
     actionName: "test",
     parameters: {
-        value: value
+        value
     }
 }`;
 
@@ -305,7 +305,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <test> = test $(value:string) -> {
     actionName: "test",
     parameters: {
-        value: value
+        value
     }
 }`;
 
@@ -337,7 +337,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 
@@ -360,7 +360,7 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 

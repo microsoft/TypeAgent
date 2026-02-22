@@ -291,7 +291,7 @@ describe("Grammar Matcher", () => {
 
         it("nested rules - single string part in complex expression", () => {
             const g = `
-            @<Start> = $(a:<First>) and $(b:<Second>) -> { a: a, b: b }
+            @<Start> = $(a:<First>) and $(b:<Second>) -> { a, b }
             @<First> = first
             @<Second> = second
             `;

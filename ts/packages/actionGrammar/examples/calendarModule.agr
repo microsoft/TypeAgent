@@ -14,7 +14,7 @@ entity CalendarDate, Ordinal;
         actionName: "scheduleEvent",
         parameters: {
             eventName: event,
-            date: date
+            date
         }
     }
 
@@ -35,12 +35,12 @@ entity CalendarDate, Ordinal;
     find events on $(date:CalendarDate) -> {
         actionName: "findEvents",
         parameters: {
-            date: date
+            date
         }
     }
 |   what\'s on $(date:CalendarDate) -> {
         actionName: "findEvents",
         parameters: {
-            date: date
+            date
         }
     }
