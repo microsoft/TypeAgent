@@ -24,7 +24,7 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 
@@ -54,8 +54,8 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = play $(track:string) by $(artist:string) -> {
     actionName: "play",
     parameters: {
-        track: track,
-        artist: artist
+        track,
+        artist
     }
 }`;
 
@@ -86,7 +86,7 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = (please)? play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 
@@ -118,7 +118,7 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = play (the)? $(n:Ordinal) track -> {
     actionName: "play",
     parameters: {
-        n: n
+        n
     }
 }`;
 
@@ -144,8 +144,8 @@ describe("Dynamic Grammar Loader", () => {
 @ <schedule> = schedule $(event:string) on $(date:UnknownDateType) -> {
     actionName: "schedule",
     parameters: {
-        event: event,
-        date: date
+        event,
+        date
     }
 }`;
 
@@ -175,7 +175,7 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 
@@ -226,8 +226,8 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = play $(track:string) by $(artist:string) -> {
     actionName: "play",
     parameters: {
-        track: track,
-        artist: artist
+        track,
+        artist
     }
 }`;
 
@@ -273,7 +273,7 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
             const result = cache.addRules(agrText);
@@ -308,7 +308,7 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
             const result1 = cache.addRules(rule1);
@@ -329,8 +329,8 @@ describe("Dynamic Grammar Loader", () => {
 @ <play> = play $(track:string) by $(artist:string) -> {
     actionName: "play",
     parameters: {
-        track: track,
-        artist: artist
+        track,
+        artist
     }
 }`;
             const result3 = cache.addRules(rule3);
@@ -366,8 +366,8 @@ describe("Dynamic Grammar Loader", () => {
 @ <schedule> = schedule $(event:string) on $(date:InvalidDateType) -> {
     actionName: "schedule",
     parameters: {
-        event: event,
-        date: date
+        event,
+        date
     }
 }`;
             const result = cache.addRules(invalidRule);
@@ -392,8 +392,8 @@ describe("Dynamic Grammar Loader", () => {
 @ <playTrack> = play $(trackName:string) by $(artist:string) -> {
     actionName: "playTrack",
     parameters: {
-        trackName: trackName,
-        artist: artist
+        trackName,
+        artist
     }
 }`;
 
@@ -425,8 +425,8 @@ describe("Dynamic Grammar Loader", () => {
 @ <scheduleEvent> = schedule $(event:string) on $(date:CalendarDate) -> {
     actionName: "scheduleEvent",
     parameters: {
-        event: event,
-        date: date
+        event,
+        date
     }
 }`;
 

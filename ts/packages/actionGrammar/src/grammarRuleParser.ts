@@ -26,11 +26,12 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <RuleRefExpr> ::= <RuleName>
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" )      // TODO: support for + and *?
  *
- *
  *   <Value> = BooleanValue | NumberValue | StringValue | ObjectValue | ArrayValue | VarReference
  *   <ArrayValue> = "[" <Value> ("," <Value>)* )? "]"
  *   <ObjectValue> = "{" <ObjectProperty> ("," <ObjectProperty>)* "}"
- *   <ObjectProperty> = <ObjectPropertyName> ":" <Value>
+ *   <ObjectProperty> = <ObjectPropertyFull> | <ObjectPropertyShort>
+ *   <ObjectPropertyFull> = <ObjectPropertyName> ":" <Value>
+ *   <ObjectPropertyShort> = <VarReference>
  *   <ObjectPropertyName> = <Identifier> | {{ Javascript string literal }}
  *   <BooleanValue> = "true" | "false"
  *   <NumberValue> = <NumberLiteral>
@@ -47,7 +48,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ID_Start> = {{ Unicode ID_Start character }}
  *   <ID_Continue> = {{ Unicode ID_Continue character }}
  *
- * In the above grammar, all whitespace or comments can appear between any two symbols (terminal or non-terminal).
+ * In the above grammar, all whitespace or comments can appear between any two symbols in this grammar(terminal or non-terminal).
  *   <WS> ::= {{ Javascript Whitespace and Line terminators character ( [\s] in JS regexp )}}*
  *   <SingleLineComment> ::= "//" [^\n]* "\n"
  *   <MultiLineComment> ::= "/*" .* "*\/"
@@ -100,10 +101,16 @@ export type ValueNode =
     | VariableValueNode;
 
 type LiteralValueNode = { type: "literal"; value: boolean | string | number };
+
+// Fields of an ObjectValueNode
+// null means the value is the same as the VariableValueNode of the same name
+type ObjectValueField = { [key: string]: ValueNode | null };
 type ObjectValueNode = {
     type: "object";
-    value: { [key: string]: ValueNode };
+
+    value: ObjectValueField;
 };
+
 type ArrayValueNode = {
     type: "array";
     value: ValueNode[];
@@ -476,7 +483,7 @@ class GrammarRuleParser {
             this.skipWhitespace(1);
 
             let first = true;
-            const obj: { [key: string]: ValueNode } = {};
+            const obj: ObjectValueField = {};
             while (true) {
                 if (this.isAtEnd()) {
                     this.throwError("Unexpected end of file in object value.");
@@ -494,12 +501,30 @@ class GrammarRuleParser {
                 } else {
                     first = false;
                 }
-                const id =
-                    this.isAt('"') || this.isAt("'")
-                        ? this.parseStringLiteral()
-                        : this.parseId("Object property name");
-                this.consume(":", "after object property name");
-                const v = this.parseValue();
+
+                // Parse property name (identifier or string literal)
+                const isStringLiteral = this.isAt('"') || this.isAt("'");
+
+                const id = isStringLiteral
+                    ? this.parseStringLiteral()
+                    : this.parseId("Object property name");
+
+                // Check for full form (name: value) or short form (name)
+                let v: ValueNode | null;
+                if (this.isAt(",") || this.isAt("}")) {
+                    // Short form: only valid for identifiers (not string literals)
+                    // Represents { id: id } where id is a variable reference
+                    if (isStringLiteral) {
+                        this.throwError(
+                            "Shorthand property syntax requires an identifier, not a string literal",
+                        );
+                    }
+                    v = null;
+                } else {
+                    // Full form: propertyName: value
+                    this.consume(":", "between property name and value");
+                    v = this.parseValue();
+                }
                 obj[id] = v;
             }
         }

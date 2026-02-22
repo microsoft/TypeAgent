@@ -411,7 +411,7 @@ describe("Grammar Rule Parser", () => {
         it("should handle nested groups and complex expressions", () => {
             const grammar = `
                 @<complex> = (please)? ($(action) | do) (the)? $(object) ($(adverb))? -> {
-                    politeness: politeness,
+                    politeness,
                     actions: [action, "execute"],
                     target: {
                         name: object,
@@ -508,10 +508,7 @@ describe("Grammar Rule Parser", () => {
                             value: {
                                 type: "object",
                                 value: {
-                                    politeness: {
-                                        type: "variable",
-                                        name: "politeness",
-                                    },
+                                    politeness: null,
                                     actions: {
                                         type: "array",
                                         value: [
@@ -859,7 +856,7 @@ describe("Grammar Rule Parser", () => {
                 // Weather queries
                 @<weather> = (what's | what is) the weather (like)? (in $(location))? -> {
                     intent: "weather.query",
-                    location: location,
+                    location,
                     type: "current"
                 }
 
@@ -868,8 +865,8 @@ describe("Grammar Rule Parser", () => {
                     intent: "calendar.create",
                     event: {
                         title: event,
-                        date: date,
-                        time: time
+                        date,
+                        time
                     }
                 }
 
@@ -877,8 +874,8 @@ describe("Grammar Rule Parser", () => {
                 @<music> = (play | start) $(song)? (by $(artist))? -> {
                     intent: "music.play",
                     query: {
-                        song: song,
-                        artist: artist
+                        song,
+                        artist
                     },
                     shuffle: false
                 }

@@ -16,7 +16,7 @@
     hello $(name:PersonName) -> {
         actionName: "greet",
         parameters: {
-            name: name
+            name
         }
     }
   | hi there -> { actionName: "greet" }
@@ -37,7 +37,7 @@
 @ <Volume> =
     (turn | set) (the)? volume to $(level:number) -> {
         actionName: "setVolume",
-        parameters: { level: level }
+        parameters: { level }
     }
   | volume up -> { actionName: "volumeUp" }
   | volume down -> { actionName: "volumeDown" }

@@ -9,29 +9,29 @@
 @ <ScheduleEvent> = schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) in $(location:wildcard) with $(participant:wildcard) -> {
     actionName: "scheduleEvent",
     parameters: {
-        description: description,
-        date: date,
-        time: time,
-        location: location,
-        participant: participant
+        description,
+        date,
+        time,
+        location,
+        participant
     }
 }
   | (can you)? set up $(description:wildcard) on $(date:wildcard) at $(time:word) -> {
     actionName: "scheduleEvent",
     parameters: {
-        description: description,
-        date: date,
-        time: time
+        description,
+        date,
+        time
     }
 }
   | book $(description:wildcard) with $(participant:wildcard) at $(location:wildcard) $(date:wildcard) at $(time:word) -> {
     actionName: "scheduleEvent",
     parameters: {
-        description: description,
-        date: date,
-        time: time,
-        location: location,
-        participant: participant
+        description,
+        date,
+        time,
+        location,
+        participant
     }
 }
 
@@ -39,23 +39,23 @@
 @ <FindEvents> = find all events on $(date:wildcard) that include $(participant:wildcard) -> {
     actionName: "findEvents",
     parameters: {
-        date: date,
-        participant: participant
+        date,
+        participant
     }
 }
   | show me meetings about $(description:wildcard) scheduled for $(date:wildcard) -> {
     actionName: "findEvents",
     parameters: {
-        description: description,
-        date: date
+        description,
+        date
     }
 }
   | what events do I have with $(participant:wildcard) on $(date:wildcard) about (the)? $(description:wildcard) -> {
     actionName: "findEvents",
     parameters: {
-        date: date,
-        participant: participant,
-        description: description
+        date,
+        participant,
+        description
     }
 }
 
@@ -63,22 +63,22 @@
 @ <AddParticipant> = include $(participant:wildcard) in $(description:wildcard) -> {
     actionName: "addParticipant",
     parameters: {
-        description: description,
-        participant: participant
+        description,
+        participant
     }
 }
 
 // findTodaysEvents
-@ <FindTodaysEvents> = "what's" on my calendar $(date:wildcard) -> {
+@ <FindTodaysEvents> = what's on my calendar $(date:wildcard) -> {
     actionName: "findTodaysEvents",
     parameters: {
-        date: date
+        date
     }
 }
   | show me all my appointments and meetings for $(date:wildcard) -> {
     actionName: "findTodaysEvents",
     parameters: {
-        date: date
+        date
     }
 }
   | (can you)? (tell me)? what (do)? I have scheduled for today -> {
@@ -93,13 +93,13 @@
   | <FindTodaysEvents>
   | <FindThisWeeksEvents>
 
-@ <FindThisWeeksEvents> = "what's" happening this week -> {
+@ <FindThisWeeksEvents> = what's happening this week -> {
     actionName: "findThisWeeksEvents"
 }
   | show me all my events for this week starting $(startDay:word) -> {
     actionName: "findThisWeeksEvents",
     parameters: {
-        startDay: startDay
+        startDay
     }
 }
   | (can you)? find what I have scheduled this week -> {

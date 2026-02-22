@@ -58,6 +58,6 @@
   | turn off touchpad -> { actionName: "EnableTouchPad", parameters: { enable: false } }
 
 @ <TouchpadCursorSpeed> =
-    set touchpad speed to $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed: speed } }
+    set touchpad speed to $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed } }
   | adjust touchpad sensitivity -> { actionName: "TouchpadCursorSpeed", parameters: {} }
-  | touchpad speed $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed: speed } }
+  | touchpad speed $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed } }
