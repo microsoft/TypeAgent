@@ -11,6 +11,7 @@ import type {
     CommandCompletionResult,
     CommandResult,
     DispatcherStatus,
+    ProcessCommandOptions,
 } from "@typeagent/dispatcher-types";
 
 export type DispatcherInvokeFunctions = {
@@ -18,6 +19,7 @@ export type DispatcherInvokeFunctions = {
         command: string,
         clientRequestId?: unknown,
         attachments?: string[],
+        options?: ProcessCommandOptions,
     ): Promise<CommandResult | undefined>;
 
     getDynamicDisplay(

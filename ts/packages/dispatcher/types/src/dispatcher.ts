@@ -96,6 +96,15 @@ export type AgentSchemaInfo = {
     subSchemas: AgentSubSchemaInfo[];
 };
 
+export type ProcessCommandOptions = {
+    /**
+     * When true, skip reasoning, clarification, and chat fallback.
+     * Use when the caller (e.g. an AI agent) handles reasoning itself
+     * and TypeAgent should act as a pure action executor.
+     */
+    noReasoning?: boolean;
+};
+
 /**
  * A dispatcher instance
  */
@@ -108,11 +117,13 @@ export interface Dispatcher {
      * @param command user request to process.  Request that starts with '@' are direct commands, otherwise they are treaded as a natural language request.
      * @param requestId an optional request id to track the command
      * @param attachments encoded image attachments for the model
+     * @param options optional processing options
      */
     processCommand(
         command: string,
         clientRequestId?: unknown,
         attachments?: string[],
+        options?: ProcessCommandOptions,
     ): Promise<CommandResult | undefined>;
 
     /**

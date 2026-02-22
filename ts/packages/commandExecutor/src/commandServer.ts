@@ -7,6 +7,7 @@ import { z } from "zod/v4";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { connectDispatcher } from "@typeagent/agent-server-client";
 import type {
+    AgentSchemaInfo,
     ClientIO,
     IAgentMessage,
     RequestId,
@@ -17,13 +18,10 @@ import { DisplayAppendMode } from "@typeagent/agent-sdk";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import { fileURLToPath } from "url";
 import { convert } from "html-to-text";
 import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// ── Schema registry ───────────────────────────────────────────────────────────
+// ── Agent filter ──────────────────────────────────────────────────────────────
 
 /**
  * Agents skipped for MCP exposure — not useful via Claude Code.
@@ -42,41 +40,6 @@ const SKIP_AGENTS = new Set([
     "oracle",
     "spelunker",
 ]);
-
-type AgentAction = {
-    name: string;
-    description: string;
-};
-
-type AgentSubSchema = {
-    schemaName: string; // exact value for execute_action (e.g. "desktop.desktop-taskbar")
-    description: string;
-    schemaFilePath: string | null; // absolute path to TypeScript source; null if unavailable
-    actions: AgentAction[];
-};
-
-type AgentSchema = {
-    name: string;
-    emoji: string;
-    description: string;
-    subSchemas: AgentSubSchema[];
-};
-
-/** Load the pre-built agent schema registry (lightweight fallback when dispatcher is not connected). */
-function loadSchemaRegistry(): AgentSchema[] {
-    const registryPath = path.resolve(
-        __dirname,
-        "generatedSchemaRegistry.json",
-    );
-    try {
-        const content = fs.readFileSync(registryPath, "utf-8");
-        return JSON.parse(content) as AgentSchema[];
-    } catch {
-        return [];
-    }
-}
-
-const AGENT_REGISTRY: AgentSchema[] = loadSchemaRegistry();
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -373,9 +336,7 @@ export class CommandServer {
             process.env.AGENT_SERVER_URL ??
             "ws://localhost:8999";
 
-        this.logger.log(
-            `CommandServer initializing. Agent registry: ${AGENT_REGISTRY.length} agents loaded.`,
-        );
+        this.logger.log(`CommandServer initializing.`);
         this.logger.log(`TypeAgent server URL: ${this.agentServerUrl}`);
 
         this.addTools();
@@ -661,37 +622,15 @@ export class CommandServer {
         }
     }
 
-    /** Resolve AgentSchema list — live from dispatcher when connected, registry fallback for level-1. */
+    /** Resolve AgentSchemaInfo list — live from dispatcher. Returns empty if disconnected. */
     private async resolveAgentSchemas(
         agentName?: string,
-    ): Promise<AgentSchema[]> {
-        if (this.dispatcher) {
-            try {
-                const live = await this.dispatcher.getAgentSchemas(agentName);
-                return live
-                    .filter((a) => !SKIP_AGENTS.has(a.name))
-                    .map((a) => ({
-                        name: a.name,
-                        emoji: a.emoji,
-                        description: a.description,
-                        subSchemas: a.subSchemas.map((s) => ({
-                            schemaName: s.schemaName,
-                            description: s.description,
-                            schemaFilePath: s.schemaFilePath ?? null,
-                            actions: s.actions,
-                        })),
-                    }));
-            } catch {
-                // Fall through to registry fallback
-            }
+    ): Promise<AgentSchemaInfo[]> {
+        if (!this.dispatcher) {
+            return [];
         }
-        // Offline fallback — static registry (already filtered by SKIP_AGENTS at generation time)
-        if (agentName) {
-            return AGENT_REGISTRY.filter(
-                (a) => a.name.toLowerCase() === agentName.toLowerCase(),
-            );
-        }
-        return AGENT_REGISTRY;
+        const schemas = await this.dispatcher.getAgentSchemas(agentName);
+        return schemas.filter((a) => !SKIP_AGENTS.has(a.name));
     }
 
     private async discoverAgents(request: {

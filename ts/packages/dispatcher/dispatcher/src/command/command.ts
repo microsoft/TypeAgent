@@ -24,6 +24,7 @@ import { getHandlerTableUsage, getUsage } from "./commandHelp.js";
 import {
     CommandResult,
     DispatcherStatus,
+    ProcessCommandOptions,
     RequestId,
 } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "../context/dispatcher/dispatcherUtils.js";
@@ -310,9 +311,11 @@ export async function processCommandNoLock(
 function beginProcessCommand(
     requestId: RequestId,
     context: CommandHandlerContext,
+    options?: ProcessCommandOptions,
 ) {
     context.currentRequestId = requestId;
     context.commandResult = undefined;
+    context.noReasoning = options?.noReasoning ?? false;
 
     context.commandProfiler = context.metricsManager?.beginCommand(
         requestIdToString(requestId),
@@ -363,10 +366,11 @@ export async function processCommand(
     context: CommandHandlerContext,
     requestId: RequestId,
     attachments?: string[],
+    options?: ProcessCommandOptions,
 ): Promise<CommandResult | undefined> {
     // Process one command at at time.
     return context.commandLock(async () => {
-        beginProcessCommand(requestId, context);
+        beginProcessCommand(requestId, context, options);
         try {
             await processCommandNoLock(originalInput, context, attachments);
         } finally {
