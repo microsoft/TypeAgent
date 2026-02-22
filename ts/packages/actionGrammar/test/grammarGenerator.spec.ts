@@ -48,10 +48,6 @@ describe("Grammar Generator", () => {
 
             // Skip if schema doesn't exist
             if (!fileExists(playerSchemaPath)) {
-                console.log(
-                    "Skipping test - player schema not found:",
-                    playerSchemaPath,
-                );
                 return;
             }
 
@@ -101,10 +97,6 @@ describe("Grammar Generator", () => {
 
             // Skip if schema doesn't exist
             if (!fileExists(calendarSchemaPath)) {
-                console.log(
-                    "Skipping test - calendar schema not found:",
-                    calendarSchemaPath,
-                );
                 return;
             }
 
@@ -144,10 +136,6 @@ describe("Grammar Generator", () => {
 
             // Skip if schema doesn't exist
             if (!fileExists(playerSchemaPath)) {
-                console.log(
-                    "Skipping test - player schema not found:",
-                    playerSchemaPath,
-                );
                 return;
             }
 
@@ -178,10 +166,6 @@ describe("Grammar Generator", () => {
 
             // Skip if schema doesn't exist
             if (!fileExists(calendarSchemaPath)) {
-                console.log(
-                    "Skipping test - calendar schema not found:",
-                    calendarSchemaPath,
-                );
                 return;
             }
 
@@ -214,10 +198,6 @@ describe("Grammar Generator", () => {
 
             // Skip if schema doesn't exist
             if (!fileExists(playerSchemaPath)) {
-                console.log(
-                    "Skipping test - player schema not found:",
-                    playerSchemaPath,
-                );
                 return;
             }
 
@@ -241,7 +221,6 @@ describe("Grammar Generator", () => {
             );
 
             if (!fileExists(playerSchemaPath)) {
-                console.log("Skipping test - player schema not found");
                 return;
             }
 
@@ -284,7 +263,6 @@ describe("Grammar Generator", () => {
             );
 
             if (!fileExists(playerSchemaPath)) {
-                console.log("Skipping test - player schema not found");
                 return;
             }
 
@@ -331,7 +309,6 @@ describe("Grammar Generator", () => {
             );
 
             if (!fileExists(playerSchemaPath)) {
-                console.log("Skipping test - player schema not found");
                 return;
             }
 
@@ -378,7 +355,6 @@ describe("Grammar Generator", () => {
             );
 
             if (!fileExists(playerSchemaPath)) {
-                console.log("Skipping test - player schema not found");
                 return;
             }
 
@@ -422,7 +398,6 @@ describe("Grammar Generator", () => {
             );
 
             if (!fileExists(playerSchemaPath)) {
-                console.log("Skipping test - player schema not found");
                 return;
             }
 
@@ -528,7 +503,6 @@ describe("Grammar Generator", () => {
             );
 
             if (!fileExists(playerSchemaPath)) {
-                console.log("Skipping test - player schema not found");
                 return;
             }
 
@@ -584,7 +558,6 @@ describe("Grammar Generator", () => {
             );
 
             if (!fileExists(playerSchemaPath)) {
-                console.log("Skipping test - player schema not found");
                 return;
             }
 
@@ -622,10 +595,6 @@ describe("Grammar Generator", () => {
             } else {
                 // If rejected, it should have a reasonable rejection reason
                 expect(analysis.rejectionReason).toBeDefined();
-                console.log(
-                    "Complex request rejected:",
-                    analysis.rejectionReason,
-                );
             }
         }, 30000);
 
@@ -636,7 +605,6 @@ describe("Grammar Generator", () => {
             );
 
             if (!fileExists(playerSchemaPath)) {
-                console.log("Skipping test - player schema not found");
                 return;
             }
 
