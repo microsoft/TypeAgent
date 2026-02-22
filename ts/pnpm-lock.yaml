@@ -1703,9 +1703,6 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -1834,9 +1831,6 @@ importers:
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -1917,9 +1911,6 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2222,9 +2213,6 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2511,9 +2499,6 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -2536,9 +2521,6 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2

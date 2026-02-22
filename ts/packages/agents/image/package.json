@@ -17,9 +17,8 @@
     "./agent/handlers": "./dist/imageActionHandler.js"
   },
   "scripts": {
-    "agc": "agc -i ./src/imageSchema.agr -o ./dist/imageSchema.ag.json",
     "asc": "asc -i ./src/imageActionSchema.ts -o ./dist/imageSchema.pas.json -t ImageAction",
-    "build": "concurrently npm:tsc npm:asc npm:agc",
+    "build": "concurrently npm:tsc npm:asc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -33,27 +32,9 @@
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",
-    "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
-  },
-  "fluidBuild": {
-    "tasks": {
-      "agc": {
-        "dependsOn": [
-          "action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/imageSchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/imageSchema.ag.json"
-          ]
-        }
-      }
-    }
   }
 }

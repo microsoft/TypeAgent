@@ -17,14 +17,6 @@
     "./agent/handlers": "./dist/codeActionHandler.js"
   },
   "scripts": {
-    "agc": "agc -i ./src/codeSchema.agr -o ./dist/codeSchema.ag.json",
-    "agc:all": "concurrently npm:agc npm:agc:debug npm:agc:display npm:agc:editor npm:agc:extension npm:agc:general npm:agc:workbench",
-    "agc:debug": "agc -i ./src/vscode/debugSchema.agr -o ./dist/debugSchema.ag.json",
-    "agc:display": "agc -i ./src/vscode/displaySchema.agr -o ./dist/displaySchema.ag.json",
-    "agc:editor": "agc -i ./src/vscode/editorSchema.agr -o ./dist/editorSchema.ag.json",
-    "agc:extension": "agc -i ./src/vscode/extensionSchema.agr -o ./dist/extensionSchema.ag.json",
-    "agc:general": "agc -i ./src/vscode/generalSchema.agr -o ./dist/generalSchema.ag.json",
-    "agc:workbench": "agc -i ./src/vscode/workbenchSchema.agr -o ./dist/workbenchSchema.ag.json",
     "asc": "asc -i ./src/codeActionsSchema.ts -o ./dist/codeSchema.pas.json -t CodeActions -a CodeActivity",
     "asc:all": "concurrently npm:asc npm:asc:debug npm:asc:display npm:asc:general npm:asc:editor npm:asc:workbench npm:asc:extension",
     "asc:debug": "asc -i ./src/vscode/debugActionsSchema.ts -o ./dist/debugSchema.pas.json -t CodeDebugActions",
@@ -33,7 +25,7 @@
     "asc:extension": "asc -i ./src/vscode/extensionsActionsSchema.ts -o ./dist/extensionSchema.pas.json -t CodeWorkbenchExtensionActions",
     "asc:general": "asc -i ./src/vscode/generalActionsSchema.ts -o ./dist/generalSchema.pas.json -t CodeGeneralActions",
     "asc:workbench": "asc -i ./src/vscode/workbenchCommandActionsSchema.ts -o ./dist/workbenchSchema.pas.json -t CodeWorkbenchActions",
-    "build": "concurrently npm:tsc npm:asc:all npm:agc:all",
+    "build": "concurrently npm:tsc npm:asc:all",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -53,105 +45,9 @@
     "@types/better-sqlite3": "7.6.13",
     "@types/debug": "^4.1.12",
     "@types/ws": "^8.5.10",
-    "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
-  },
-  "fluidBuild": {
-    "tasks": {
-      "agc": {
-        "dependsOn": [
-          "action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/codeSchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/codeSchema.ag.json"
-          ]
-        }
-      },
-      "agc:debug": {
-        "dependsOn": [
-          "action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/vscode/debugSchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/debugSchema.ag.json"
-          ]
-        }
-      },
-      "agc:display": {
-        "dependsOn": [
-          "action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/vscode/displaySchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/displaySchema.ag.json"
-          ]
-        }
-      },
-      "agc:editor": {
-        "dependsOn": [
-          "action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/vscode/editorSchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/editorSchema.ag.json"
-          ]
-        }
-      },
-      "agc:extension": {
-        "dependsOn": [
-          "action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/vscode/extensionSchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/extensionSchema.ag.json"
-          ]
-        }
-      },
-      "agc:general": {
-        "dependsOn": [
-          "action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/vscode/generalSchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/generalSchema.ag.json"
-          ]
-        }
-      },
-      "agc:workbench": {
-        "dependsOn": [
-          "action-grammar-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/vscode/workbenchSchema.agr"
-          ],
-          "outputGlobs": [
-            "dist/workbenchSchema.ag.json"
-          ]
-        }
-      }
-    }
   }
 }
