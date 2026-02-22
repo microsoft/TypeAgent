@@ -326,14 +326,18 @@ describe("Agent Grammar Registry", () => {
             expect(agent!.getGrammar().rules.length).toBe(2);
         });
 
-        it("should fail to add rules to non-existent agent", () => {
+        it("should auto-register non-existent agent and attempt to add rules", () => {
+            // Non-existent agents are auto-created so dynamic rules can accumulate.
+            // Grammar parse errors (e.g. missing <Start>) still cause failure.
             const result = registry.addGeneratedRules(
                 "non-existent",
                 "@ <test> = test",
             );
 
             expect(result.success).toBe(false);
-            expect(result.errors[0]).toContain("not found");
+            expect(result.errors.every((e) => !e.includes("not found"))).toBe(
+                true,
+            );
         });
 
         it("should match across multiple agents", () => {

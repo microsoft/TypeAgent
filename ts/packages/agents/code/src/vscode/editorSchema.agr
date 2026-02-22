@@ -1,0 +1,47 @@
+//
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+
+// Editor Schema Grammar - Natural language interface for code editing actions
+
+@ <Start> = <createFunction> | <createCodeBlock> | <fixCodeProblem> | <moveCursorInFile> | <insertOrDeleteLines> | <insertComment> | <generateWithCopilot> | <createFile> | <saveCurrentFile> | <saveAllFiles>
+
+// Common patterns and sub-rules
+@ <Polite> = ('can you'? | 'please'? | 'could you'?)
+@ <QuickPhrase> = ('quick' | 'quickly' | 'fast')?
+@ <LanguageSpec> = ('in' | 'using' | 'as') $(language:string) -> language
+@ <FileSpec> = ('in' | 'to' | 'at') $(file:string) ('file' | 'document')? -> file
+@ <PositionSpec> = ('at' | 'after' | 'before' | 'above' | 'below' | 'on' | 'near') $(position:string) -> position
+@ <NameSpec> = ('called' | 'named') $(name:string) -> name
+@ <FolderSpec> = ('in' | 'inside') ('the')? $(folderName:string) ('folder' | 'directory') -> folderName
+
+// Function creation
+@ <createFunction> = <Polite> ('create' | 'make' | 'add' | 'write') ('a' | 'new')? ('function' | 'method') $(name:<NameSpec>)? $(language:<LanguageSpec>)? ('that' | 'to' | 'which')? $(functionDeclaration:string)? ('with' ('body' | 'implementation'))? $(body:string)? ('with' ('documentation' | 'docstring' | 'comments'))? $(docstring:string)? ('taking' | 'with' | 'accepts')? ('parameters' | 'params' | 'arguments' | 'args')? $(args:string)? ('returning' | 'returns')? $(returnType:string)? ('make it' | 'as')? $(isAsync:string)? $(file:<FileSpec>)? $(position:<PositionSpec>)? -> { actionName: "createFunction", parameters: { language: language, functionDeclaration: functionDeclaration, body: body, docstring: docstring, name: name, args: args, returnType: returnType, isAsync: isAsync, file: file, position: position } }
+
+// Code block creation
+@ <createCodeBlock> = <Polite> ('create' | 'make' | 'add' | 'write' | 'insert') ('a' | 'new')? ('code' ('block' | 'snippet') | 'snippet') $(language:<LanguageSpec>)? ('with' ('documentation' | 'docstring' | 'comments'))? $(docstring:string)? ('with' ('declaration' | 'signature'))? $(declaration:string)? ('with' ('body' | 'implementation' | 'content'))? $(body:string)? $(codeSnippet:string)? ('as' ('partial' | 'incomplete'))? $(isPartial:string)? $(file:<FileSpec>)? $(position:<PositionSpec>)? -> { actionName: "createCodeBlock", parameters: { language: language, docstring: docstring, declaration: declaration, body: body, codeSnippet: codeSnippet, isPartial: isPartial, file: file, position: position } }
+
+// Fix code problems
+@ <fixCodeProblem> = <Polite> ('fix' | 'solve' | 'resolve' | 'debug' | 'repair') ('the')? $(target:string) ('problem' | 'issue' | 'bug' | 'error' | 'crash')? $(file:<FileSpec>)? ('hint' | 'suggestion' | 'related to' | 'caused by')? $(hint:string)? -> { actionName: "fixCodeProblem", parameters: { target: target, hint: hint, file: file } }
+
+// Move cursor
+@ <moveCursorInFile> = <Polite> ('move' | 'go' | 'jump' | 'navigate') ('cursor' | 'to' | 'position')? $(target:string) $(file:<FileSpec>)? ('hint' | 'near' | 'around')? $(hint:string)? -> { actionName: "moveCursorInFile", parameters: { target: target, file: file, hint: hint } }
+
+// Insert or delete lines
+@ <insertOrDeleteLines> = <Polite> $(operation:string) $(count:string)? ('lines' | 'line')? $(position:<PositionSpec>)? $(file:<FileSpec>)? ('force' | 'forcibly')? $(force:string)? -> { actionName: "insertOrDeleteLines", parameters: { operation: operation, count: count, position: position, file: file, force: force } }
+
+// Insert comments
+@ <insertComment> = <Polite> ('add' | 'insert' | 'put') ('a' | 'new')? ('comment' | 'note') $(text:string) $(language:<LanguageSpec>)? ('style' | 'format')? $(commentStyle:string)? $(position:<PositionSpec>)? ('with' ('newline' | 'blank line') 'before')? $(newlineBefore:string)? ('with' ('newline' | 'blank line') 'after')? $(newlineAfter:string)? -> { actionName: "insertComment", parameters: { text: text, language: language, commentStyle: commentStyle, position: position, newlineBefore: newlineBefore, newlineAfter: newlineAfter } }
+
+// Generate with Copilot
+@ <generateWithCopilot> = <Polite> ('generate' | 'create' | 'suggest' | 'auto' 'generate') ('with' | 'using')? ('copilot' | 'ai' | 'assistant')? ('using' ('strategy' | 'approach'))? $(strategy:string)? $(position:<PositionSpec>)? $(language:<LanguageSpec>)? ('with' ('prompt' | 'instruction'))? $(prompt:string)? ('with' ('context' | 'background'))? $(context:string)? ('attempt' ('limit' | 'max'))? $(attemptLimit:string)? ('auto' ('accept' | 'apply'))? $(autoAccept:string)? ('explanation' ('mode' | 'level'))? $(explanationMode:string)? -> { actionName: "generateWithCopilot", parameters: { strategy: strategy, position: position, language: language, prompt: prompt, context: context, attemptLimit: attemptLimit, autoAccept: autoAccept, explanationMode: explanationMode } }
+
+// Create file
+@ <createFile> = <Polite> <QuickPhrase> ('create' | 'make' | 'add') ('a' | 'new')? $(fileName:string) ('file' | 'document')? $(folderName:<FolderSpec>)? ('relative to' | 'from')? $(folderRelativeTo:string)? $(language:<LanguageSpec>)? ('as' ('untitled' | 'temporary'))? $(untitled:string)? ('open' 'in' ('editor' | 'tab'))? $(openInEditor:string)? ('with' ('content' | 'text'))? $(content:string)? ('overwrite' ('if' 'exists' | 'existing'))? $(overwriteIfExists:string)? ('focus' 'existing' 'if' 'open')? $(focusExistingIfOpen:string)? -> { actionName: "createFile", parameters: { fileName: fileName, folderName: folderName, folderRelativeTo: folderRelativeTo, language: language, untitled: untitled, openInEditor: openInEditor, content: content, overwriteIfExists: overwriteIfExists, focusExistingIfOpen: focusExistingIfOpen } }
+
+// Save current file
+@ <saveCurrentFile> = <Polite> <QuickPhrase> ('save' ('current' | 'active' | 'this')? ('file' | 'document') | 'save') ('show error' 'if' 'no' 'active' 'editor')? $(showErrorIfNoActiveEditor:string)? ('only' ('dirty' | 'unsaved' | 'changed'))? $(onlyDirty:string)? ('exclude' ('untitled' | 'temporary'))? $(excludeUntitled:string)? -> { actionName: "saveCurrentFile", parameters: { showErrorIfNoActiveEditor: showErrorIfNoActiveEditor, onlyDirty: onlyDirty, excludeUntitled: excludeUntitled } }
+
+// Save all files
+@ <saveAllFiles> = <Polite> <QuickPhrase> ('save' ('all' | 'everything') ('files' | 'documents')? | 'save all') ('only' ('dirty' | 'unsaved' | 'changed'))? $(onlyDirty:string)? ('exclude' ('untitled' | 'temporary'))? $(excludeUntitled:string)? ('log' ('result' | 'outcome'))? $(logResult:string)? -> { actionName: "saveAllFiles", parameters: { onlyDirty: onlyDirty, excludeUntitled: excludeUntitled, logResult: logResult } }

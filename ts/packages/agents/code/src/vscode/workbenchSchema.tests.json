@@ -1,0 +1,98 @@
+[
+  {
+    "request": "Can you open the main.py file for me?",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "workbenchOpenFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Please open any JavaScript file - maybe index.js or app.js would work",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "workbenchOpenFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Open the config file, try looking for .json or .yaml extensions",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "workbenchOpenFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to see a CSS file, open one that matches 'style' and include any generated files too",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "workbenchOpenFile",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you please open the components folder in my src directory?",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "workbenchOpenFolder",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Open the tests folder",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "workbenchOpenFolder",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to browse the utils folder relative to my current project, and make sure to include any generated files",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "workbenchOpenFolder",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me what's in the docs/api folder",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "workbenchOpenFolder",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you open a terminal in the src folder and run npm test? It's safe to reuse an existing terminal if one's already open.",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "openInIntegratedTerminal",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Open terminal in project-root, execute 'docker build -t myapp .' - this is a medium risk build command, please use a fresh terminal window",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "openInIntegratedTerminal",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to run 'rm -rf node_modules && npm install' in the frontend directory - this is high risk so definitely use a new terminal",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "openInIntegratedTerminal",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Quick terminal in utils folder to run 'ls -la' please",
+    "schemaName": "workbenchSchema",
+    "action": {
+      "actionName": "openInIntegratedTerminal",
+      "parameters": {}
+    }
+  }
+]

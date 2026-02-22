@@ -2,6 +2,7 @@
   "scopeName": "source.agr",
   "patterns": [
     { "include": "#comments" },
+    { "include": "#import-statement" },
     { "include": "#rule-definition" },
     { "include": "#action-object" }
   ],
@@ -11,6 +12,38 @@
         {
           "name": "comment.line.double-slash.agr",
           "match": "//.*$"
+        }
+      ]
+    },
+    "import-statement": {
+      "patterns": [
+        {
+          "comment": "Named import: @import { RuleA, RuleB } from './path.agr'",
+          "begin": "^\\s*(@)(import)\\b",
+          "end": "(?=$|//)",
+          "beginCaptures": {
+            "1": { "name": "keyword.operator.rule.agr" },
+            "2": { "name": "keyword.control.import.agr" }
+          },
+          "patterns": [
+            {
+              "match": "(\\{)([^}]*)(\\})",
+              "captures": {
+                "1": { "name": "punctuation.definition.import-list.begin.agr" },
+                "2": { "name": "variable.other.agr" },
+                "3": { "name": "punctuation.definition.import-list.end.agr" }
+              }
+            },
+            {
+              "name": "keyword.operator.wildcard.agr",
+              "match": "\\*"
+            },
+            {
+              "name": "keyword.control.from.agr",
+              "match": "\\b(from)\\b"
+            },
+            { "include": "#string-literal" }
+          ]
         }
       ]
     },
@@ -48,7 +81,7 @@
           "captures": {
             "1": { "name": "keyword.operator.capture.agr" },
             "2": { "name": "punctuation.definition.capture.begin.agr" },
-            "3": { "name": "variable.parameter.capture.agr" },
+            "3": { "name": "variable.other.agr" },
             "4": { "name": "punctuation.separator.type.agr" },
             "5": { "name": "entity.name.type.agr" },
             "6": { "name": "punctuation.definition.capture.end.agr" }
@@ -57,10 +90,10 @@
         {
           "match": "(\\$)(\\()([A-Za-z_][A-Za-z0-9_]*)(\\))",
           "captures": {
-            "1": { "name": "keyword.operator.capture-ref.agr" },
-            "2": { "name": "punctuation.definition.capture-ref.begin.agr" },
-            "3": { "name": "variable.parameter.capture-ref.agr" },
-            "4": { "name": "punctuation.definition.capture-ref.end.agr" }
+            "1": { "name": "keyword.operator.capture.agr" },
+            "2": { "name": "punctuation.definition.capture.begin.agr" },
+            "3": { "name": "variable.other.agr" },
+            "4": { "name": "punctuation.definition.capture.end.agr" }
           }
         }
       ]
@@ -122,6 +155,10 @@
     },
     "operators": {
       "patterns": [
+        {
+          "name": "keyword.operator.arrow.agr",
+          "match": "->"
+        },
         {
           "name": "keyword.operator.alternation.agr",
           "match": "\\|"

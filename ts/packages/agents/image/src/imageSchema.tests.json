@@ -1,0 +1,82 @@
+[
+  {
+    "request": "Can you create 3 images of a sunset over mountains with the caption 'Nature's Beauty'?",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Generate an image showing a cozy coffee shop interior, caption it 'Morning Vibes'",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need 5 different images of modern office spaces for my presentation, use the caption 'Workspace Design Ideas'",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Create a single image of a golden retriever playing in a park, caption should be 'Happy Dog Day'",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Make me 2 images of futuristic cityscapes with 'Tomorrow's World' as the caption",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Generate an image of homemade pizza on a wooden table, caption it 'Delicious Dinner'",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you create 4 images showing different seasons in the same location? Caption them 'Four Seasons View'",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I want an image of a vintage car on a country road, use 'Classic Journey' for the caption",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Create 3 images of abstract art with vibrant colors, caption should be 'Creative Expression'",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Generate a single image of a person reading in a library, caption it 'Quiet Moments'",
+    "schemaName": "imageSchema",
+    "action": {
+      "actionName": "createImageAction",
+      "parameters": {}
+    }
+  }
+]
