@@ -115,7 +115,7 @@
     parameters: {
         listName
     }
-}
+};
 
 // clearList - clear all items from a list
 <ClearList> = clear (the)? (my)? $(listName:wildcard) list -> {

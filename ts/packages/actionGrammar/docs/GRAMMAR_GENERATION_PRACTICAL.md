@@ -43,7 +43,7 @@ Create reusable prefix/suffix rules that can be combined with any action.
 #### Politeness Prefixes
 
 ```
-@ <PolitePrefix> =
+<PolitePrefix> =
     (can you)? (please)?
   | could you (please)?
   | would you (please)?
@@ -53,21 +53,21 @@ Create reusable prefix/suffix rules that can be combined with any action.
   | would you mind
   | (I'd)? (I would)? like you to
   | (I was)? hoping you (could)? (would)?
-  | if you (could)? (would)?
+  | if you (could)? (would)?;
 
 // French equivalents
-@ <PolitePrefixFr> =
+<PolitePrefixFr> =
     pouvez-vous
   | pourriez-vous
   | (s'il)? (vous)? plaît
   | (je)? voudrais (que vous)?
-  | (je)? souhaiterais (que vous)?
+  | (je)? souhaiterais (que vous)?;
 ```
 
 #### Desire/Intent Prefixes
 
 ```
-@ <DesirePrefix> =
+<DesirePrefix> =
     I want to
   | I'd like to
   | I would like to
@@ -78,32 +78,32 @@ Create reusable prefix/suffix rules that can be combined with any action.
   | I'm trying to
   | help me
   | can I
-  | could I
+  | could I;
 
 // French
-@ <DesirePrefixFr> =
+<DesirePrefixFr> =
     je veux
   | je voudrais
   | j'aimerais
   | (je)? (dois)?
   | laisse-moi
-  | aide-moi
+  | aide-moi;
 ```
 
 #### Action Initiators
 
 ```
-@ <ActionInitiator> =
+<ActionInitiator> =
     go ahead and
   | please go ahead and
   | just
-  | (just)? quickly
+  | (just)? quickly;
 ```
 
 #### Politeness Suffixes
 
 ```
-@ <PoliteSuffix> =
+<PoliteSuffix> =
     please
   | (if you)? (would)? (could)? please
   | (if you)? don't mind
@@ -111,7 +111,7 @@ Create reusable prefix/suffix rules that can be combined with any action.
   | (if)? (that's)? alright
   | thanks
   | thank you
-  | for me
+  | for me;
 ```
 
 #### Usage Pattern
@@ -119,10 +119,10 @@ Create reusable prefix/suffix rules that can be combined with any action.
 Actions can then reference these:
 
 ```
-@ <Pause> =
+<Pause> =
     <PolitePrefix>? pause ((the)? music)? <PoliteSuffix>? -> { actionName: "pause" }
   | <DesirePrefix> pause ((the)? music)? <PoliteSuffix>? -> { actionName: "pause" }
-  | <ActionInitiator> pause ((the)? music)? -> { actionName: "pause" }
+  | <ActionInitiator> pause ((the)? music)? -> { actionName: "pause" };
 ```
 
 ### 2. Scenario-Based Generation
@@ -249,7 +249,7 @@ Create reusable grammar modules:
 // Licensed under the MIT License.
 
 // Politeness prefixes for English
-@ <PolitePrefix_EN> =
+<PolitePrefix_EN> =
     (can you)? (please)?
   | could you (please)?
   | would you (please)?
@@ -261,9 +261,9 @@ Create reusable grammar modules:
   | (I'd)? (I would)? like you to
   | (I was)? hoping you (could)? (would)?
   | if you (could)? (would)?
-  | (would)? you be able to
+  | (would)? you be able to;
 
-@ <DesirePrefix_EN> =
+<DesirePrefix_EN> =
     I want to
   | I'd like to
   | I would like to
@@ -276,17 +276,17 @@ Create reusable grammar modules:
   | help me
   | can I
   | could I
-  | may I
+  | may I;
 
-@ <ActionInitiator_EN> =
+<ActionInitiator_EN> =
     go ahead and
   | please go ahead and
   | just
   | (just)? quickly
   | now
-  | right now
+  | right now;
 
-@ <PoliteSuffix_EN> =
+<PoliteSuffix_EN> =
     please
   | (if you)? (would)? (could)? please
   | (if you)? don't mind
@@ -295,37 +295,37 @@ Create reusable grammar modules:
   | (if)? possible
   | thanks
   | thank you
-  | for me
+  | for me;
 
 // French equivalents
-@ <PolitePrefix_FR> =
+<PolitePrefix_FR> =
     pouvez-vous
   | pourriez-vous
   | (s'il)? (vous)? plaît
   | (je)? voudrais (que vous)?
   | (je)? souhaiterais (que vous)?
-  | serait-il possible de
+  | serait-il possible de;
 
-@ <DesirePrefix_FR> =
+<DesirePrefix_FR> =
     je veux
   | je voudrais
   | j'aimerais
   | (je)? (dois)?
   | laisse-moi
   | aide-moi
-  | (je)? (peux)?
+  | (je)? (peux)?;
 
-@ <ActionInitiator_FR> =
+<ActionInitiator_FR> =
     allez-y
   | juste
   | maintenant
-  | tout de suite
+  | tout de suite;
 
-@ <PoliteSuffix_FR> =
+<PoliteSuffix_FR> =
     s'il vous plaît
   | s'il te plaît
   | merci
-  | pour moi
+  | pour moi;
 ```
 
 #### Phase 2: Scenario Template System
@@ -548,7 +548,7 @@ class GrammarExpander {
     for (const [actionName, actionPatterns] of patterns) {
       const ruleName = this.toRuleName(actionName);
       output += `// ${actionName} - ${actionPatterns.length} patterns\n`;
-      output += `@ <${ruleName}> = \n`;
+      output += `<${ruleName}> = \n`;
 
       // Use prefix/suffix references where applicable
       const withPrefixes = actionPatterns.map((p) =>
@@ -557,7 +557,7 @@ class GrammarExpander {
 
       output += withPrefixes
         .map((p, i) => {
-          const separator = i < withPrefixes.length - 1 ? " |" : "";
+          const separator = i < withPrefixes.length - 1 ? " |" : ";";
           return `    ${p}${separator}`;
         })
         .join("\n");
@@ -566,13 +566,13 @@ class GrammarExpander {
     }
 
     // Add <Start> rule
-    output += "@ <Start> = \n";
+    output += "<Start> = \n";
     const ruleNames = Array.from(patterns.keys()).map((a) =>
       this.toRuleName(a),
     );
     output += ruleNames
       .map((name, i) => {
-        const separator = i < ruleNames.length - 1 ? " |" : "";
+        const separator = i < ruleNames.length - 1 ? " |" : ";";
         return `    <${name}>${separator}`;
       })
       .join("\n");
@@ -734,8 +734,8 @@ class GrammarValidator {
 **Before (playerSchema.agr):**
 
 ```
-@ <Pause> = pause ((the)? music)? -> { actionName: "pause" }
-@ <Resume> = resume ((the)? music)? -> { actionName: "resume" }
+<Pause> = pause ((the)? music)? -> { actionName: "pause" };
+<Resume> = resume ((the)? music)? -> { actionName: "resume" };
 ```
 
 **After (playerSchema.generated.agr):**
@@ -746,12 +746,12 @@ class GrammarValidator {
 // Total patterns: 847
 
 // Common prefix/suffix patterns
-@ <PolitePrefix_EN> = (can you)? (please)? | could you (please)? | would you (please)? | ...
-@ <DesirePrefix_EN> = I want to | I'd like to | I need to | ...
-@ <PoliteSuffix_EN> = please | thank you | for me | ...
+<PolitePrefix_EN> = (can you)? (please)? | could you (please)? | would you (please)? | ...;
+<DesirePrefix_EN> = I want to | I'd like to | I need to | ...;
+<PoliteSuffix_EN> = please | thank you | for me | ...;
 
 // pause - 106 patterns
-@ <Pause> =
+<Pause> =
     <PolitePrefix_EN>? pause ((the)? music)? <PoliteSuffix_EN>? -> { actionName: "pause" }
   | <DesirePrefix_EN> pause ((the)? music)? <PoliteSuffix_EN>? -> { actionName: "pause" }
   | hit pause -> { actionName: "pause" }
@@ -778,9 +778,10 @@ class GrammarValidator {
   | mets en pause -> { actionName: "pause" }
   | pouvez-vous mettre en pause -> { actionName: "pause" }
   // ... 8 more French patterns
+  ;
 
 // resume - 94 patterns
-@ <Resume> =
+<Resume> =
     <PolitePrefix_EN>? resume ((the)? music)? <PoliteSuffix_EN>? -> { actionName: "resume" }
   | <DesirePrefix_EN> resume ((the)? music)? <PoliteSuffix_EN>? -> { actionName: "resume" }
   | keep playing -> { actionName: "resume" }
@@ -791,6 +792,7 @@ class GrammarValidator {
   | (let's)? continue (the)? music -> { actionName: "resume" }
   | start (it)? again -> { actionName: "resume" }
   // ... 85 more patterns
+  ;
 ```
 
 ## Implementation Plan

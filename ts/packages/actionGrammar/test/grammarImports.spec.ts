@@ -1,14 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import path from "node:path";;
+import path from "node:path";
 import {
     loadGrammarRules,
     loadGrammarRulesNoThrow,
-} from "../src/grammarLoader.js";;
-import { FileLoader } from "../src/grammarCompiler.js";;
-import { defaultFileLoader } from "../src/defaultFileLoader.js";;
-import { matchGrammar } from "../src/grammarMatcher.js";;
+} from "../src/grammarLoader.js";
+import { FileLoader } from "../src/grammarCompiler.js";
+import { defaultFileLoader } from "../src/defaultFileLoader.js";
+import { matchGrammar } from "../src/grammarMatcher.js";
 
 function getTestFileLoader(grammarFiles: Record<string, string>): FileLoader {
     const fileMap = new Map(
