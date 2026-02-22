@@ -27,15 +27,15 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" )      // TODO: support for + and *?
  *
  *   <Value> = BooleanValue | NumberValue | StringValue | ObjectValue | ArrayValue | VarReference
- *   <ArrayValue> = "[" <Value> ("," <Value>)* )? "]"
- *   <ObjectValue> = "{" <ObjectProperty> ("," <ObjectProperty>)* "}"
+ *   <ArrayValue> = "[" (<Value> ("," <Value>)*)? "]"
+ *   <ObjectValue> = "{" (<ObjectProperty> ("," <ObjectProperty>)*)? "}"
  *   <ObjectProperty> = <ObjectPropertyFull> | <ObjectPropertyShort>
  *   <ObjectPropertyFull> = <ObjectPropertyName> ":" <Value>
  *   <ObjectPropertyShort> = <VarReference>
  *   <ObjectPropertyName> = <Identifier> | {{ Javascript string literal }}
  *   <BooleanValue> = "true" | "false"
  *   <NumberValue> = <NumberLiteral>
- *   <StringValue> = <StringLiteral>>
+ *   <StringValue> = <StringLiteral>
  *   <VarReference> = <VarName>
  *
  *   <VarName> = <Identifier>
@@ -48,7 +48,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ID_Start> = {{ Unicode ID_Start character }}
  *   <ID_Continue> = {{ Unicode ID_Continue character }}
  *
- * In the above grammar, all whitespace or comments can appear between any two symbols in this grammar(terminal or non-terminal).
+ * In the above grammar, all whitespace or comments can appear between any two symbols in this grammar (terminal or non-terminal).
  *   <WS> ::= {{ Javascript Whitespace and Line terminators character ( [\s] in JS regexp )}}*
  *   <SingleLineComment> ::= "//" [^\n]* "\n"
  *   <MultiLineComment> ::= "/*" .* "*\/"
