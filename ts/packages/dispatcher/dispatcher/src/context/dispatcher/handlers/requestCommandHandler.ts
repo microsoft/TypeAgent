@@ -424,7 +424,7 @@ export class RequestCommandHandler implements CommandHandler {
                     action.schemaName === DispatcherClarifyName,
             );
             let reasoningHandled = false;
-            if (needsReasoning) {
+            if (needsReasoning && !systemContext.noReasoning) {
                 try {
                     await executeReasoning(request, context, {
                         engine: "claude",

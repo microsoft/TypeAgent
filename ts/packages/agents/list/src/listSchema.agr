@@ -79,7 +79,7 @@
 };
 
 // getList - show what's on the list
-// Note: Each rule must have at least one required word to avoid matching everything before "list"
+// Note: Each rule must have at least one distinctive required word before the wildcard
 <GetList> = what's on (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "getList",
     parameters: {
@@ -116,18 +116,6 @@
         listName
     }
 }
-  | the $(listName:wildcard) list -> {
-    actionName: "getList",
-    parameters: {
-        listName
-    }
-}
-  | my $(listName:wildcard) list -> {
-    actionName: "getList",
-    parameters: {
-        listName
-    }
-};
 
 // clearList - clear all items from a list
 <ClearList> = clear (the)? (my)? $(listName:wildcard) list -> {
