@@ -7,7 +7,7 @@
       {
         "schemaName": "calendar",
         "description": "Calendar agent that keeps track of important dates and events. Use it to schedule appointments, set reminders, and organize activities.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\calendar\\src\\calendarActionsSchemaV3.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/calendar/src/calendarActionsSchemaV3.ts",
         "actions": [
           {
             "name": "scheduleEvent",
@@ -45,7 +45,7 @@
       {
         "schemaName": "code",
         "description": "Code agent helps you with productivity in using an editor and performing actions like creating files, editor customization, writing code, intelligent code suggestions, real-time error detection, debugging, and source control tasks etc.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\codeActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/code/src/codeActionsSchema.ts",
         "actions": [
           {
             "name": "changeColorScheme",
@@ -72,7 +72,7 @@
       {
         "schemaName": "code.code-debug",
         "description": "Code agent that helps you debug code including handling actions like showing the debug panel, adding/toggling breakpoints, stepping in/out of code etc.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\debugActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/code/src/vscode/debugActionsSchema.ts",
         "actions": [
           {
             "name": "showDebugPanel",
@@ -115,7 +115,7 @@
       {
         "schemaName": "code.code-display",
         "description": "Code agent that helps you work with display keyboard bindings, Zoom in, Zoom out, do text search and replace, show extensions etc.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\displayActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/code/src/vscode/displayActionsSchema.ts",
         "actions": [
           {
             "name": "zoomIn",
@@ -178,7 +178,7 @@
       {
         "schemaName": "code.code-general",
         "description": "Code agent that helps you perform actions like finding a file, go to a symbol or a line in a file, Open new vscode window, show the command palette, user settings json etc.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\generalActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/code/src/vscode/generalActionsSchema.ts",
         "actions": [
           {
             "name": "showCommandPalette",
@@ -201,7 +201,7 @@
       {
         "schemaName": "code.code-editor",
         "description": "Code agent that helps you perform vscode editor actions like create a new file, go to a reference, reveal a declaration, clipboard copy or paste, add a comment line etc.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\editorCodeActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/code/src/vscode/editorCodeActionsSchema.ts",
         "actions": [
           {
             "name": "createFunction",
@@ -248,7 +248,7 @@
       {
         "schemaName": "code.code-workbench",
         "description": "Code agent that helps you perform vscode workbench actions like open a file, close a file etc.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\workbenchCommandActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/code/src/vscode/workbenchCommandActionsSchema.ts",
         "actions": [
           {
             "name": "workbenchOpenFile",
@@ -275,7 +275,7 @@
       {
         "schemaName": "code.code-extension",
         "description": "Code agent that helps you perform vscode extension actions like show, install, update, enable, disable, uninstall extensions etc.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\code\\src\\vscode\\extensionsActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/code/src/vscode/extensionsActionsSchema.ts",
         "actions": [
           {
             "name": "checkExtensionAvailable",
@@ -313,7 +313,7 @@
       {
         "schemaName": "desktop",
         "description": "Desktop agent that allows you to manage the programs running on a computer, change Windows settings, control the desktop environment, and perform actions such as opening a file, closing a window, tiling windows, launching a program, maximizing windows, adjusting display settings, managing privacy settings, and controlling system features.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\actionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/desktop/src/actionsSchema.ts",
         "actions": [
           {
             "name": "launchProgram",
@@ -428,7 +428,7 @@
       {
         "schemaName": "desktop.desktop-display",
         "description": "Desktop agent for display and screen settings including night light, color temperature, scaling, orientation, and rotation lock.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\displayActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/desktop/src/windows/displayActionsSchema.ts",
         "actions": [
           {
             "name": "EnableBlueLightFilterSchedule",
@@ -455,7 +455,7 @@
       {
         "schemaName": "desktop.desktop-personalization",
         "description": "Desktop agent for personalization settings including transparency effects, title bar colors, and high contrast themes.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\personalizationActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/desktop/src/windows/personalizationActionsSchema.ts",
         "actions": [
           {
             "name": "EnableTransparency",
@@ -474,7 +474,7 @@
       {
         "schemaName": "desktop.desktop-taskbar",
         "description": "Desktop agent for taskbar settings including auto-hide, alignment, task view, widgets, badges, and system clock options.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\taskbarActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/desktop/src/windows/taskbarActionsSchema.ts",
         "actions": [
           {
             "name": "AutoHideTaskbar",
@@ -509,7 +509,7 @@
       {
         "schemaName": "desktop.desktop-input",
         "description": "Desktop agent for mouse and touchpad settings including cursor speed, scroll lines, button configuration, pointer precision, and touchpad controls.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\inputActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/desktop/src/windows/inputActionsSchema.ts",
         "actions": [
           {
             "name": "MouseCursorSpeed",
@@ -548,7 +548,7 @@
       {
         "schemaName": "desktop.desktop-privacy",
         "description": "Desktop agent for privacy settings to manage microphone, camera, and location access for applications.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\privacyActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/desktop/src/windows/privacyActionsSchema.ts",
         "actions": [
           {
             "name": "ManageMicrophoneAccess",
@@ -567,7 +567,7 @@
       {
         "schemaName": "desktop.desktop-power",
         "description": "Desktop agent for power management settings including battery saver and power mode configuration.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\powerActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/desktop/src/windows/powerActionsSchema.ts",
         "actions": [
           {
             "name": "BatterySaverActivationLevel",
@@ -586,7 +586,7 @@
       {
         "schemaName": "desktop.desktop-system",
         "description": "Desktop agent for system settings including accessibility features, file explorer options, time settings, focus assist, multi-monitor configuration, and other system-level controls.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\desktop\\src\\windows\\systemActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/desktop/src/windows/systemActionsSchema.ts",
         "actions": [
           {
             "name": "enableMeteredConnections",
@@ -656,7 +656,7 @@
       {
         "schemaName": "email",
         "description": "Email agent helps manage email messages. Use it to send, reply, forward, find messages etc.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\email\\src\\emailActionsSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/email/src/emailActionsSchema.ts",
         "actions": [
           {
             "name": "sendEmail",
@@ -686,7 +686,7 @@
       {
         "schemaName": "image",
         "description": "Image agent that creates images using AI image modes.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\image\\src\\imageActionSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/image/src/imageActionSchema.ts",
         "actions": [
           {
             "name": "createImageAction",
@@ -704,7 +704,7 @@
       {
         "schemaName": "list",
         "description": "List agent with actions to create lists, show list items, add and remove list items",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\list\\src\\listSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/list/src/listSchema.ts",
         "actions": [
           {
             "name": "addItems",
@@ -742,7 +742,7 @@
       {
         "schemaName": "photo",
         "description": "Photo agent that helps the user provide images to the system either by taking pictures or uploading existing images.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\photo\\src\\photoSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/photo/src/photoSchema.ts",
         "actions": [
           {
             "name": "takePhoto",
@@ -760,7 +760,7 @@
       {
         "schemaName": "player",
         "description": "Music Player agent that lets you search for, play and control music.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\player\\src\\agent\\playerSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/player/src/agent/playerSchema.ts",
         "actions": [
           {
             "name": "playRandom",
@@ -906,7 +906,7 @@
       {
         "schemaName": "playerLocal",
         "description": "Local Music Player agent that lets you play and control local audio files.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\playerLocal\\src\\agent\\localPlayerSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/playerLocal/src/agent/localPlayerSchema.ts",
         "actions": [
           {
             "name": "playFile",
@@ -1004,7 +1004,7 @@
       {
         "schemaName": "video",
         "description": "Video agent that creates videos using AI text to video modes.",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\video\\src\\videoActionSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/video/src/videoActionSchema.ts",
         "actions": [
           {
             "name": "createVideoAction",
@@ -1022,7 +1022,7 @@
       {
         "schemaName": "weather",
         "description": "Weather agent with actions to get current conditions, forecasts, and alerts",
-        "schemaFilePath": "C:\\Users\\stevenlucco\\src\\TypeAgent\\ts\\packages\\agents\\weather\\src\\weatherSchema.ts",
+        "schemaFilePath": "/home/curtism/src/TypeAgent/ts/packages/agents/weather/src/weatherSchema.ts",
         "actions": [
           {
             "name": "getCurrentConditions",

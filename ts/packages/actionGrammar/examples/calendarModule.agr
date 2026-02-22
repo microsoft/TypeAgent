@@ -6,32 +6,32 @@ entity CalendarDate, Ordinal;
 
 // CalendarDate - matches date-like strings
 // Note: The actual matching/conversion logic is in the TypeScript converter
-@ <CalendarDate> = $(date:CalendarDate)
+<CalendarDate> = $(date:CalendarDate);
 
 // Example: Schedule event with date
-@ <ScheduleEvent> =
+<ScheduleEvent> =
     schedule $(event:string) on $(date:CalendarDate) -> {
         actionName: "scheduleEvent",
         parameters: {
             eventName: event,
             date
         }
-    }
+    };
 
 // Example: Using imported Ordinal from Global module
 // Within this module, we can use Ordinal without qualification
 // External modules would reference it as Global.Ordinal
-@ <ScheduleOrdinalEvent> =
+<ScheduleOrdinalEvent> =
     schedule $(event:string) on (the)? $(ordinal:Ordinal) -> {
         actionName: "scheduleEvent",
         parameters: {
             eventName: event,
             dayOfMonth: ordinal
         }
-    }
+    };
 
 // Example: Find events by date
-@ <FindEvents> =
+<FindEvents> =
     find events on $(date:CalendarDate) -> {
         actionName: "findEvents",
         parameters: {
@@ -43,4 +43,4 @@ entity CalendarDate, Ordinal;
         parameters: {
             date
         }
-    }
+    };

@@ -6,7 +6,7 @@
 // Types: wildcard = 1+ words, word = exactly 1 word
 
 // addItems - add one or more items to a list
-@ <AddItems> = add $(item:wildcard) to (the)? (my)? $(listName:wildcard) list -> {
+<AddItems> = add $(item:wildcard) to (the)? (my)? $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
         items: [item],
@@ -33,10 +33,10 @@
         items: [item1, item2],
         listName
     }
-}
+};
 
 // removeItems - remove one or more items from a list
-@ <RemoveItems> = remove $(item:wildcard) from (the)? (my)? $(listName:wildcard) list -> {
+<RemoveItems> = remove $(item:wildcard) from (the)? (my)? $(listName:wildcard) list -> {
     actionName: "removeItems",
     parameters: {
         items: [item],
@@ -56,10 +56,10 @@
         items: [item],
         listName
     }
-}
+};
 
 // createList - create a new list
-@ <CreateList> = create (a)? (new)? $(listName:wildcard) list -> {
+<CreateList> = create (a)? (new)? $(listName:wildcard) list -> {
     actionName: "createList",
     parameters: {
         listName
@@ -76,11 +76,11 @@
     parameters: {
         listName
     }
-}
+};
 
 // getList - show what's on the list
 // Note: Each rule must have at least one required word to avoid matching everything before "list"
-@ <GetList> = what's on (the)? (my)? $(listName:wildcard) (list)? -> {
+<GetList> = what's on (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "getList",
     parameters: {
         listName
@@ -127,10 +127,10 @@
     parameters: {
         listName
     }
-}
+};
 
 // clearList - clear all items from a list
-@ <ClearList> = clear (the)? (my)? $(listName:wildcard) list -> {
+<ClearList> = clear (the)? (my)? $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
         listName
@@ -147,10 +147,10 @@
     parameters: {
         listName
     }
-}
+};
 
-@ <Start> = <AddItems>
+<Start> = <AddItems>
   | <RemoveItems>
   | <CreateList>
   | <GetList>
-  | <ClearList>
+  | <ClearList>;

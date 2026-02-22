@@ -4,38 +4,38 @@
 // Email Management Grammar
 // Covers: sendEmail, replyEmail, forwardEmail, findEmail actions
 
-@ <Start> = <sendEmail> | <replyEmail> | <forwardEmail> | <findEmail>
+<Start> = <sendEmail> | <replyEmail> | <forwardEmail> | <findEmail>;
 
 // ===== Main Action Rules =====
 
-@ <sendEmail> = <SendEmailPhrase> $(to:string) <WithSubject> $(subject:string) <WithBody> $(body:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "sendEmail", parameters: { to: to, subject: subject, body: body, cc: cc, bcc: bcc, attachments: attachments } }
+<sendEmail> = <SendEmailPhrase> $(to:string) <WithSubject> $(subject:string) <WithBody> $(body:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "sendEmail", parameters: { to: to, subject: subject, body: body, cc: cc, bcc: bcc, attachments: attachments } }
               | <SendEmailPhrase> $(to:string) <WithBody> $(body:string) <WithSubject> $(subject:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "sendEmail", parameters: { to: to, subject: subject, body: body, cc: cc, bcc: bcc, attachments: attachments } }
               | <SendEmailPhrase> $(to:string) <AboutSubject> $(subject:string) $(body:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "sendEmail", parameters: { to: to, subject: subject, body: body, cc: cc, bcc: bcc, attachments: attachments } }
-              | <SendEmailPhrase> $(to:string) $(body:string) <SubjectPhrase> $(subject:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "sendEmail", parameters: { to: to, subject: subject, body: body, cc: cc, bcc: bcc, attachments: attachments } }
+              | <SendEmailPhrase> $(to:string) $(body:string) <SubjectPhrase> $(subject:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "sendEmail", parameters: { to: to, subject: subject, body: body, cc: cc, bcc: bcc, attachments: attachments } };
 
-@ <replyEmail> = <ReplyPhrase> $(messageRef:string) $(body:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "replyEmail", parameters: { messageRef: messageRef, body: body, cc: cc, bcc: bcc, attachments: attachments } }
-               | <ReplyPhrase> $(body:string) ('to' | 'for') $(messageRef:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "replyEmail", parameters: { messageRef: messageRef, body: body, cc: cc, bcc: bcc, attachments: attachments } }
+<replyEmail> = <ReplyPhrase> $(messageRef:string) $(body:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "replyEmail", parameters: { messageRef: messageRef, body: body, cc: cc, bcc: bcc, attachments: attachments } }
+               | <ReplyPhrase> $(body:string) ('to' | 'for') $(messageRef:string) $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? $(attachments:<AttachmentsOptional>)? -> { actionName: "replyEmail", parameters: { messageRef: messageRef, body: body, cc: cc, bcc: bcc, attachments: attachments } };
 
-@ <forwardEmail> = <ForwardPhrase> $(messageRef:string) ('to' | 'for') $(to:string) $(additionalMessage:string)? $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? -> { actionName: "forwardEmail", parameters: { messageRef: messageRef, to: to, additionalMessage: additionalMessage, cc: cc, bcc: bcc } }
-                 | <ForwardPhrase> $(to:string) $(messageRef:string) $(additionalMessage:string)? $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? -> { actionName: "forwardEmail", parameters: { messageRef: messageRef, to: to, additionalMessage: additionalMessage, cc: cc, bcc: bcc } }
+<forwardEmail> = <ForwardPhrase> $(messageRef:string) ('to' | 'for') $(to:string) $(additionalMessage:string)? $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? -> { actionName: "forwardEmail", parameters: { messageRef: messageRef, to: to, additionalMessage: additionalMessage, cc: cc, bcc: bcc } }
+                 | <ForwardPhrase> $(to:string) $(messageRef:string) $(additionalMessage:string)? $(cc:<CCOptional>)? $(bcc:<BCCOptional>)? -> { actionName: "forwardEmail", parameters: { messageRef: messageRef, to: to, additionalMessage: additionalMessage, cc: cc, bcc: bcc } };
 
-@ <findEmail> = <FindPhrase> $(messageRef:string) -> { actionName: "findEmail", parameters: { messageRef: messageRef } }
-              | <FindPhrase> ('with' | 'having')? ('message' | 'msg')? ('reference' | 'ref' | 'id') $(messageRef:string) -> { actionName: "findEmail", parameters: { messageRef: messageRef } }
+<findEmail> = <FindPhrase> $(messageRef:string) -> { actionName: "findEmail", parameters: { messageRef: messageRef } }
+              | <FindPhrase> ('with' | 'having')? ('message' | 'msg')? ('reference' | 'ref' | 'id') $(messageRef:string) -> { actionName: "findEmail", parameters: { messageRef: messageRef } };
 
 // ===== Shared Sub-Rules =====
 
-@ <SendEmailPhrase> = <Polite>? (('send' ('an' | 'a')? 'email') | 'email') ('to' | 'for')?
-@ <ReplyPhrase> = <Polite>? ('reply' | 'respond') ('to' | 'for')?
-@ <ForwardPhrase> = <Polite>? ('forward' | 'fwd') ('the' | 'this')? ('email' | 'message')?
-@ <FindPhrase> = <Polite>? (('find' | 'look' 'up' | 'locate' | 'pull' 'up') ('the' | 'that')? ('email' | 'message'))
+<SendEmailPhrase> = <Polite>? (('send' ('an' | 'a')? 'email') | 'email') ('to' | 'for')?;
+<ReplyPhrase> = <Polite>? ('reply' | 'respond') ('to' | 'for')?;
+<ForwardPhrase> = <Polite>? ('forward' | 'fwd') ('the' | 'this')? ('email' | 'message')?;
+<FindPhrase> = <Polite>? (('find' | 'look' 'up' | 'locate' | 'pull' 'up') ('the' | 'that')? ('email' | 'message'));
 
-@ <WithSubject> = ('with' ('the' | 'a')? 'subject' | 'subject' ('should' 'be' | 'is' | ':')?)
-@ <WithBody> = ('and' | 'with')? ('let' ('me' | 'them') 'know' | 'saying' | 'that' | 'about' | 'body' | 'message')?
-@ <AboutSubject> = 'about' | 'regarding' | 'concerning'
-@ <SubjectPhrase> = ('subject' ('should' 'be' | 'is' | ':')? | 'title')
+<WithSubject> = ('with' ('the' | 'a')? 'subject' | 'subject' ('should' 'be' | 'is' | ':')?);
+<WithBody> = ('and' | 'with')? ('let' ('me' | 'them') 'know' | 'saying' | 'that' | 'about' | 'body' | 'message')?;
+<AboutSubject> = 'about' | 'regarding' | 'concerning';
+<SubjectPhrase> = ('subject' ('should' 'be' | 'is' | ':')? | 'title');
 
-@ <CCOptional> = ('cc' | 'copy') $(cc:string) -> cc
-@ <BCCOptional> = ('bcc' | 'blind' 'copy') $(bcc:string) -> bcc
-@ <AttachmentsOptional> = ('with' | 'attach' | 'include') $(attachments:string) ('attached' | 'included')? -> attachments
+<CCOptional> = ('cc' | 'copy') $(cc:string) -> cc;
+<BCCOptional> = ('bcc' | 'blind' 'copy') $(bcc:string) -> bcc;
+<AttachmentsOptional> = ('with' | 'attach' | 'include') $(attachments:string) ('attached' | 'included')? -> attachments;
 
-@ <Polite> = ('can' 'you' | 'please' | 'would' 'you' | 'i' 'need' 'to')
+<Polite> = ('can' 'you' | 'please' | 'would' 'you' | 'i' 'need' 'to');

@@ -4,71 +4,71 @@
 // Display Schema Grammar - Comprehensive coverage of VS Code display actions
 
 // Start rule - all available actions
-@ <Start> = <zoomIn> | <zoomOut> | <fontZoomReset> | <showExplorer> | <showSearch> | <showSourceControl> | <showOutputPanel> | <toggleSearchDetails> | <replaceInFiles> | <openMarkdownPreview> | <openMarkdownPreviewToSide> | <zenMode> | <closeEditor> | <openSettings>
+<Start> = <zoomIn> | <zoomOut> | <fontZoomReset> | <showExplorer> | <showSearch> | <showSourceControl> | <showOutputPanel> | <toggleSearchDetails> | <replaceInFiles> | <openMarkdownPreview> | <openMarkdownPreviewToSide> | <zenMode> | <closeEditor> | <openSettings>;
 
 // Shared sub-rules for common patterns
-@ <Polite> = ('can you' | 'could you' | 'please' | 'would you')?
-@ <Open> = 'open' | 'show' | 'display' | 'bring up'
-@ <Close> = 'close' | 'hide' | 'dismiss'
-@ <ZoomDirection> = 'in' | 'out'
-@ <SizeAdjust> = ('make it' | 'make this' | 'make the text' | 'make everything')? ('bigger' | 'smaller' | 'larger')
-@ <NeedPhrase> = ('I need to' | 'I want to' | 'I would like to')?
-@ <PanelRef> = ('panel' | 'view' | 'interface' | 'window')?
-@ <PreviewSide> = ('to the side' | 'side by side' | 'in a new tab')?
+<Polite> = ('can you' | 'could you' | 'please' | 'would you')?;
+<Open> = 'open' | 'show' | 'display' | 'bring up';
+<Close> = 'close' | 'hide' | 'dismiss';
+<ZoomDirection> = 'in' | 'out';
+<SizeAdjust> = ('make it' | 'make this' | 'make the text' | 'make everything')? ('bigger' | 'smaller' | 'larger');
+<NeedPhrase> = ('I need to' | 'I want to' | 'I would like to')?;
+<PanelRef> = ('panel' | 'view' | 'interface' | 'window')?;
+<PreviewSide> = ('to the side' | 'side by side' | 'in a new tab')?;
 
 // Zoom actions
-@ <zoomIn> = <Polite> (('zoom' <ZoomDirection>) | <SizeAdjust>) -> { actionName: "zoomIn", parameters: {} }
+<zoomIn> = <Polite> (('zoom' <ZoomDirection>) | <SizeAdjust>) -> { actionName: "zoomIn", parameters: {} }
             | <Polite> <NeedPhrase> 'see this closer' ('zoom in'?)? -> { actionName: "zoomIn", parameters: {} }
-            | <Polite> <SizeAdjust> ('so I can see better' | 'please')? -> { actionName: "zoomIn", parameters: {} }
+            | <Polite> <SizeAdjust> ('so I can see better' | 'please')? -> { actionName: "zoomIn", parameters: {} };
 
-@ <zoomOut> = <Polite> 'zoom out' ('a bit' | 'please' | 'so I can see more')? -> { actionName: "zoomOut", parameters: {} }
+<zoomOut> = <Polite> 'zoom out' ('a bit' | 'please' | 'so I can see more')? -> { actionName: "zoomOut", parameters: {} }
              | <Polite> <SizeAdjust> ('so I can see more' | 'so I can get a better overview' | 'for a better view')? -> { actionName: "zoomOut", parameters: {} }
-             | <Polite> <NeedPhrase> ('see the bigger picture' | 'see more of the page') ('zoom out'?)? -> { actionName: "zoomOut", parameters: {} }
+             | <Polite> <NeedPhrase> ('see the bigger picture' | 'see more of the page') ('zoom out'?)? -> { actionName: "zoomOut", parameters: {} };
 
-@ <fontZoomReset> = <Polite> ('reset' | 'restore') ('font' | 'text')? ('zoom' | 'size') ('to default' | 'to normal')? -> { actionName: "fontZoomReset", parameters: {} }
-                   | <Polite> ('default' | 'normal' | 'original') ('font' | 'text') ('size' | 'zoom') -> { actionName: "fontZoomReset", parameters: {} }
+<fontZoomReset> = <Polite> ('reset' | 'restore') ('font' | 'text')? ('zoom' | 'size') ('to default' | 'to normal')? -> { actionName: "fontZoomReset", parameters: {} }
+                   | <Polite> ('default' | 'normal' | 'original') ('font' | 'text') ('size' | 'zoom') -> { actionName: "fontZoomReset", parameters: {} };
 
 // Panel and view actions
-@ <showExplorer> = <Polite> <Open> ('the'? ('file' | 'project')? ('explorer' | 'tree' | 'browser') <PanelRef>?) -> { actionName: "showExplorer", parameters: {} }
+<showExplorer> = <Polite> <Open> ('the'? ('file' | 'project')? ('explorer' | 'tree' | 'browser') <PanelRef>?) -> { actionName: "showExplorer", parameters: {} }
                   | <Polite> <NeedPhrase> 'see the project files' ('show explorer'?)? -> { actionName: "showExplorer", parameters: {} }
-                  | <Polite> 'explorer' -> { actionName: "showExplorer", parameters: {} }
+                  | <Polite> 'explorer' -> { actionName: "showExplorer", parameters: {} };
 
-@ <showSearch> = <Polite> <Open> ('the'? 'search' ('for me' | <PanelRef> | 'interface')?) -> { actionName: "showSearch", parameters: {} }
+<showSearch> = <Polite> <Open> ('the'? 'search' ('for me' | <PanelRef> | 'interface')?) -> { actionName: "showSearch", parameters: {} }
                 | <Polite> <NeedPhrase> ('search for something' | 'find something') ('bring up the search interface'?)? -> { actionName: "showSearch", parameters: {} }
-                | <Polite> 'search' -> { actionName: "showSearch", parameters: {} }
+                | <Polite> 'search' -> { actionName: "showSearch", parameters: {} };
 
-@ <showSourceControl> = <Polite> <Open> ('the'? 'source control' <PanelRef>?) -> { actionName: "showSourceControl", parameters: {} }
+<showSourceControl> = <Polite> <Open> ('the'? 'source control' <PanelRef>?) -> { actionName: "showSourceControl", parameters: {} }
                        | <Polite> <NeedPhrase> ('see the git status' | 'check my changes' | 'see source control') ('show source control please'?)? -> { actionName: "showSourceControl", parameters: {} }
-                       | <Polite> ('git' | 'version control' | 'scm') <PanelRef>? -> { actionName: "showSourceControl", parameters: {} }
+                       | <Polite> ('git' | 'version control' | 'scm') <PanelRef>? -> { actionName: "showSourceControl", parameters: {} };
 
-@ <showOutputPanel> = <Polite> <Open> ('the'? 'output' <PanelRef>?) -> { actionName: "showOutputPanel", parameters: {} }
+<showOutputPanel> = <Polite> <Open> ('the'? 'output' <PanelRef>?) -> { actionName: "showOutputPanel", parameters: {} }
                      | <Polite> <NeedPhrase> 'see the output' ('show output panel'?)? -> { actionName: "showOutputPanel", parameters: {} }
-                     | <Polite> 'output' -> { actionName: "showOutputPanel", parameters: {} }
+                     | <Polite> 'output' -> { actionName: "showOutputPanel", parameters: {} };
 
 // Search and replace actions  
-@ <toggleSearchDetails> = <Polite> ('toggle' | 'show' | 'hide') 'search details' -> { actionName: "toggleSearchDetails", parameters: {} }
+<toggleSearchDetails> = <Polite> ('toggle' | 'show' | 'hide') 'search details' -> { actionName: "toggleSearchDetails", parameters: {} }
                          | <Polite> ('expand' | 'collapse') 'search' ('options' | 'details')? -> { actionName: "toggleSearchDetails", parameters: {} }
-                         | 'search details' -> { actionName: "toggleSearchDetails", parameters: {} }
+                         | 'search details' -> { actionName: "toggleSearchDetails", parameters: {} };
 
-@ <replaceInFiles> = <Polite> ('replace in files' | 'find and replace' | 'global replace') -> { actionName: "replaceInFiles", parameters: {} }
-                    | <Polite> <NeedPhrase> ('replace text across files' | 'do a global find and replace') -> { actionName: "replaceInFiles", parameters: {} }
+<replaceInFiles> = <Polite> ('replace in files' | 'find and replace' | 'global replace') -> { actionName: "replaceInFiles", parameters: {} }
+                    | <Polite> <NeedPhrase> ('replace text across files' | 'do a global find and replace') -> { actionName: "replaceInFiles", parameters: {} };
 
 // Markdown preview actions
-@ <openMarkdownPreview> = <Polite> <Open> ('the'? 'markdown preview' | 'preview' ('of this markdown' | 'for this file')?) -> { actionName: "openMarkdownPreview", parameters: {} }
-                         | <Polite> 'preview this markdown' ('file' | 'document')? -> { actionName: "openMarkdownPreview", parameters: {} }
+<openMarkdownPreview> = <Polite> <Open> ('the'? 'markdown preview' | 'preview' ('of this markdown' | 'for this file')?) -> { actionName: "openMarkdownPreview", parameters: {} }
+                         | <Polite> 'preview this markdown' ('file' | 'document')? -> { actionName: "openMarkdownPreview", parameters: {} };
 
-@ <openMarkdownPreviewToSide> = <Polite> <Open> ('markdown preview' | 'preview') <PreviewSide> -> { actionName: "openMarkdownPreviewToSide", parameters: {} }
+<openMarkdownPreviewToSide> = <Polite> <Open> ('markdown preview' | 'preview') <PreviewSide> -> { actionName: "openMarkdownPreviewToSide", parameters: {} }
                                 | <Polite> 'preview this markdown' <PreviewSide> -> { actionName: "openMarkdownPreviewToSide", parameters: {} }
-                                | <Polite> 'side by side preview' ('of this markdown')? -> { actionName: "openMarkdownPreviewToSide", parameters: {} }
+                                | <Polite> 'side by side preview' ('of this markdown')? -> { actionName: "openMarkdownPreviewToSide", parameters: {} };
 
 // Mode and editor actions
-@ <zenMode> = <Polite> ('enter' | 'enable' | 'turn on')? 'zen mode' -> { actionName: "zenMode", parameters: {} }
+<zenMode> = <Polite> ('enter' | 'enable' | 'turn on')? 'zen mode' -> { actionName: "zenMode", parameters: {} }
              | <Polite> <NeedPhrase> ('focus' | 'concentrate') ('enter zen mode'?)? -> { actionName: "zenMode", parameters: {} }
-             | 'zen mode' -> { actionName: "zenMode", parameters: {} }
+             | 'zen mode' -> { actionName: "zenMode", parameters: {} };
 
-@ <closeEditor> = <Polite> <Close> ('the'? ('current'? ('editor' | 'tab' | 'file') | 'this' ('file' | 'tab'))) -> { actionName: "closeEditor", parameters: {} }
-                 | <Polite> <NeedPhrase> 'close this' ('file' | 'tab' | 'editor')? -> { actionName: "closeEditor", parameters: {} }
+<closeEditor> = <Polite> <Close> ('the'? ('current'? ('editor' | 'tab' | 'file') | 'this' ('file' | 'tab'))) -> { actionName: "closeEditor", parameters: {} }
+                 | <Polite> <NeedPhrase> 'close this' ('file' | 'tab' | 'editor')? -> { actionName: "closeEditor", parameters: {} };
 
-@ <openSettings> = <Polite> <Open> ('the'? ('settings' | 'preferences' | 'configuration' | 'options')) -> { actionName: "openSettings", parameters: {} }
+<openSettings> = <Polite> <Open> ('the'? ('settings' | 'preferences' | 'configuration' | 'options')) -> { actionName: "openSettings", parameters: {} }
                   | <Polite> <NeedPhrase> ('change settings' | 'configure something') ('open settings'?)? -> { actionName: "openSettings", parameters: {} }
-                  | <Polite> ('settings' | 'preferences') -> { actionName: "openSettings", parameters: {} }
+                  | <Polite> ('settings' | 'preferences') -> { actionName: "openSettings", parameters: {} };

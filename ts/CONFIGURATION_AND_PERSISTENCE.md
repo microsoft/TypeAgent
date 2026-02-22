@@ -171,14 +171,14 @@ The `dynamic.json` file contains all dynamically learned rules:
   "schemas": {
     "player": [
       {
-        "grammarText": "@ <playTrack> = \"play\" $(trackName:string) \"by\" $(artistName:string)",
+        "grammarText": "<playTrack> = \"play\" $(trackName:string) \"by\" $(artistName:string)",
         "timestamp": 1737850800000,
         "sourceRequest": "play Bohemian Rhapsody by Queen",
         "actionName": "playTrack",
         "schemaName": "player"
       },
       {
-        "grammarText": "@ <pause> = \"pause\" (\"the\")? (\"music\")?",
+        "grammarText": "<pause> = \"pause\" (\"the\")? (\"music\")?",
         "timestamp": 1737850900000,
         "sourceRequest": "pause music",
         "actionName": "pause",
@@ -187,7 +187,7 @@ The `dynamic.json` file contains all dynamically learned rules:
     ],
     "calendar": [
       {
-        "grammarText": "@ <scheduleEvent> = \"schedule\" $(event:string) $(time:CalendarTime)",
+        "grammarText": "<scheduleEvent> = \"schedule\" $(event:string) $(time:CalendarTime)",
         "timestamp": 1737851000000,
         "sourceRequest": "schedule meeting tomorrow at 2pm",
         "actionName": "scheduleEvent",
@@ -212,7 +212,7 @@ await store.setAutoSave(true);
 
 // Add a new rule (auto-saves if enabled)
 await store.addRule({
-  grammarText: '@ <playTrack> = "play" $(track:string)',
+  grammarText: '<playTrack> = "play" $(track:string)',
   schemaName: "player",
   sourceRequest: "play music",
   actionName: "playTrack",

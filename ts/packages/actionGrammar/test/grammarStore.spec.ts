@@ -46,7 +46,7 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
                 sourceRequest: "play Bohemian Rhapsody",
                 actionName: "playTrack",
@@ -68,12 +68,12 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
             });
 
             await store.addRule({
-                grammarText: '@ <scheduleEvent> = "schedule" $(event:string)',
+                grammarText: '<scheduleEvent> = "schedule" $(event:string)',
                 schemaName: "calendar",
             });
 
@@ -89,12 +89,12 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
             });
 
             await store.addRule({
-                grammarText: '@ <pause> = "pause"',
+                grammarText: '<pause> = "pause"',
                 schemaName: "player",
             });
 
@@ -109,7 +109,7 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
             });
 
@@ -126,7 +126,7 @@ describe("GrammarStore", () => {
             const store1 = new GrammarStore();
 
             await store1.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
                 sourceRequest: "play music",
                 actionName: "playTrack",
@@ -154,7 +154,7 @@ describe("GrammarStore", () => {
             await store.setAutoSave(true);
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
             });
 
@@ -188,13 +188,13 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
                 sourceRequest: "play music",
             });
 
             await store.addRule({
-                grammarText: '@ <pause> = "pause"',
+                grammarText: '<pause> = "pause"',
                 schemaName: "player",
                 sourceRequest: "pause",
             });
@@ -203,8 +203,8 @@ describe("GrammarStore", () => {
 
             expect(agr).toContain("# Dynamic Grammar Rules for player");
             expect(agr).toContain("# 2 rule(s)");
-            expect(agr).toContain('@ <playTrack> = "play" $(track:string)');
-            expect(agr).toContain('@ <pause> = "pause"');
+            expect(agr).toContain('<playTrack> = "play" $(track:string)');
+            expect(agr).toContain('<pause> = "pause"');
             expect(agr).toContain('Source: "play music"');
         });
 
@@ -212,13 +212,13 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             store.addRule({
-                grammarText: "@ <Start> = <playTrack>",
+                grammarText: "<Start> = <playTrack>;",
                 schemaName: "player",
             });
 
             store.addRule({
                 grammarText:
-                    '@ <playTrack> = "play" $(track:string) -> { actionName: "playTrack", parameters: { track } }',
+                    '<playTrack> = "play" $(track:string) -> { actionName: "playTrack", parameters: { track } };',
                 schemaName: "player",
             });
 

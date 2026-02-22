@@ -6,7 +6,7 @@
 // Types: wildcard = 1+ words, word = exactly 1 word
 
 // scheduleEvent
-@ <ScheduleEvent> = schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) in $(location:wildcard) with $(participant:wildcard) -> {
+<ScheduleEvent> = schedule a $(description:wildcard) for $(date:wildcard) at $(time:word) in $(location:wildcard) with $(participant:wildcard) -> {
     actionName: "scheduleEvent",
     parameters: {
         description,
@@ -33,10 +33,10 @@
         location,
         participant
     }
-}
+};
 
 // findEvents
-@ <FindEvents> = find all events on $(date:wildcard) that include $(participant:wildcard) -> {
+<FindEvents> = find all events on $(date:wildcard) that include $(participant:wildcard) -> {
     actionName: "findEvents",
     parameters: {
         date,
@@ -57,19 +57,19 @@
         participant,
         description
     }
-}
+};
 
 // addParticipant
-@ <AddParticipant> = include $(participant:wildcard) in $(description:wildcard) -> {
+<AddParticipant> = include $(participant:wildcard) in $(description:wildcard) -> {
     actionName: "addParticipant",
     parameters: {
         description,
         participant
     }
-}
+};
 
 // findTodaysEvents
-@ <FindTodaysEvents> = what's on my calendar $(date:wildcard) -> {
+<FindTodaysEvents> = what's on my calendar $(date:wildcard) -> {
     actionName: "findTodaysEvents",
     parameters: {
         date
@@ -83,17 +83,17 @@
 }
   | (can you)? (tell me)? what (do)? I have scheduled for today -> {
     actionName: "findTodaysEvents"
-}
+};
 
 // findThisWeeksEvents
 
-@ <Start> = <ScheduleEvent>
+<Start> = <ScheduleEvent>
   | <FindEvents>
   | <AddParticipant>
   | <FindTodaysEvents>
-  | <FindThisWeeksEvents>
+  | <FindThisWeeksEvents>;
 
-@ <FindThisWeeksEvents> = what's happening this week -> {
+<FindThisWeeksEvents> = what's happening this week -> {
     actionName: "findThisWeeksEvents"
 }
   | show me all my events for this week starting $(startDay:word) -> {
@@ -104,4 +104,4 @@
 }
   | (can you)? find what I have scheduled this week -> {
     actionName: "findThisWeeksEvents"
-}
+};
