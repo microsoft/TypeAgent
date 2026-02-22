@@ -346,6 +346,26 @@ export function compileValueExpression(
 }
 
 /**
+ * Helper function to parse object properties, handling shorthand syntax
+ * Converts object entries to a Map of ValueExpression, where null values
+ * are converted to variable references with the same name as the key
+ */
+function parseObjectProperties(
+    entries: Record<string, any>,
+): Map<string, ValueExpression> {
+    const props = new Map<string, ValueExpression>();
+    for (const [key, propValue] of Object.entries(entries)) {
+        // Shorthand form: null means { key: key }
+        if (propValue === null) {
+            props.set(key, { type: "variable", variableName: key });
+        } else {
+            props.set(key, parseValueExpression(propValue));
+        }
+    }
+    return props;
+}
+
+/**
  * Parse a value expression from the grammar's action value format.
  * The grammar parser produces ValueNode objects with the following structure:
  * - { type: "literal", value: ... }
@@ -379,7 +399,7 @@ export function parseValueExpression(value: any): ValueExpression {
                 };
 
             case "object": {
-                // ValueNode format: { type: "object", value: { [key: string]: ValueNode } }
+                // ValueNode format: { type: "object", value: { [key: string]: ValueNode | null } }
                 const objValue = value.value as Record<string, any>;
 
                 // Check if it's an action object
@@ -387,19 +407,14 @@ export function parseValueExpression(value: any): ValueExpression {
                     "actionName" in objValue &&
                     objValue.actionName.type === "literal"
                 ) {
-                    const params = new Map<string, ValueExpression>();
                     const parametersNode = objValue.parameters;
-                    if (
+                    const params =
                         parametersNode &&
                         parametersNode.type === "object" &&
                         parametersNode.value
-                    ) {
-                        for (const [key, paramValue] of Object.entries(
-                            parametersNode.value,
-                        )) {
-                            params.set(key, parseValueExpression(paramValue));
-                        }
-                    }
+                            ? parseObjectProperties(parametersNode.value)
+                            : new Map<string, ValueExpression>();
+
                     return {
                         type: "action",
                         actionName: objValue.actionName.value,
@@ -408,13 +423,9 @@ export function parseValueExpression(value: any): ValueExpression {
                 }
 
                 // Generic object
-                const props = new Map<string, ValueExpression>();
-                for (const [key, propValue] of Object.entries(objValue)) {
-                    props.set(key, parseValueExpression(propValue));
-                }
                 return {
                     type: "object",
-                    properties: props,
+                    properties: parseObjectProperties(objValue),
                 };
             }
         }
@@ -447,14 +458,10 @@ export function parseValueExpression(value: any): ValueExpression {
     // Objects (plain JSON format) - check if it's an action object
     if (typeof value === "object") {
         if ("actionName" in value && typeof value.actionName === "string") {
-            const params = new Map<string, ValueExpression>();
-            if (value.parameters) {
-                for (const [key, paramValue] of Object.entries(
-                    value.parameters,
-                )) {
-                    params.set(key, parseValueExpression(paramValue));
-                }
-            }
+            const params = value.parameters
+                ? parseObjectProperties(value.parameters)
+                : new Map<string, ValueExpression>();
+
             return {
                 type: "action",
                 actionName: value.actionName,
@@ -463,13 +470,9 @@ export function parseValueExpression(value: any): ValueExpression {
         }
 
         // Generic object
-        const props = new Map<string, ValueExpression>();
-        for (const [key, propValue] of Object.entries(value)) {
-            props.set(key, parseValueExpression(propValue));
-        }
         return {
             type: "object",
-            properties: props,
+            properties: parseObjectProperties(value),
         };
     }
 

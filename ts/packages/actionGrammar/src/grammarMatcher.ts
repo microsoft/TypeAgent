@@ -170,6 +170,42 @@ function createMatchedValue(
     return value;
 }
 
+/**
+ * Find a variable by name in the valueIds linked list and create its matched value
+ */
+function createValueForVariable(
+    variableName: string,
+    valueIds: ValueIdNode | undefined,
+    values: MatchedValueNode | undefined,
+    propertyName: string,
+    wildcardPropertyNames: string[],
+    partialValueId?: number,
+    stat?: GrammarMatchStat,
+): unknown {
+    let valueIdNode: ValueIdNode | undefined = valueIds;
+    while (valueIdNode !== undefined && valueIdNode.name !== variableName) {
+        valueIdNode = valueIdNode.prev;
+    }
+    if (valueIdNode === undefined) {
+        if (partialValueId !== undefined) {
+            // Partial match, missing variable is ok
+            return undefined;
+        }
+        throw new Error(
+            `Internal error: No value for variable '${variableName}'. Values: ${JSON.stringify(valueIds)}'`,
+        );
+    }
+
+    return createMatchedValue(
+        valueIdNode,
+        values,
+        propertyName,
+        wildcardPropertyNames,
+        partialValueId,
+        stat,
+    );
+}
+
 function createValue(
     node: ValueNode | undefined,
     valueIds: ValueIdNode | undefined,
@@ -207,15 +243,28 @@ function createValue(
             const obj: Record<string, any> = {};
 
             for (const [k, v] of Object.entries(node.value)) {
-                obj[k] = createValue(
-                    v,
-                    valueIds,
-                    values,
-                    propertyName ? `${propertyName}.${k}` : k,
-                    wildcardPropertyNames,
-                    partialValueId,
-                    stat,
-                );
+                if (v === null) {
+                    // Shorthand form: { k } means { k: k }
+                    obj[k] = createValueForVariable(
+                        k,
+                        valueIds,
+                        values,
+                        propertyName ? `${propertyName}.${k}` : k,
+                        wildcardPropertyNames,
+                        partialValueId,
+                        stat,
+                    );
+                } else {
+                    obj[k] = createValue(
+                        v,
+                        valueIds,
+                        values,
+                        propertyName ? `${propertyName}.${k}` : k,
+                        wildcardPropertyNames,
+                        partialValueId,
+                        stat,
+                    );
+                }
             }
             return obj;
         }
@@ -239,22 +288,9 @@ function createValue(
             return arr;
         }
         case "variable": {
-            let v: ValueIdNode | undefined = valueIds;
-            while (v !== undefined && v.name !== node.name) {
-                v = v.prev;
-            }
-            if (v === undefined) {
-                if (partialValueId !== undefined) {
-                    // Partial match, missing variable is ok
-                    return undefined;
-                }
-                throw new Error(
-                    `Internal error: No value for variable '${node.name}'. Values: ${JSON.stringify(valueIds)}'`,
-                );
-            }
-
-            return createMatchedValue(
-                v,
+            return createValueForVariable(
+                node.name,
+                valueIds,
                 values,
                 propertyName,
                 wildcardPropertyNames,

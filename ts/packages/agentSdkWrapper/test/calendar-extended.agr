@@ -5,11 +5,11 @@
 @ <Start> = <scheduleEvent> | <findEvents> | <addParticipant> | <findTodaysEvents> | <findThisWeeksEvents>
 
 // Action rules (using exact action names)
-@ <scheduleEvent> = <Polite> ('schedule' | 'set up' | 'book' | 'create' | 'add') <EventDescription> <DateSpec> <TimeSpec>? <LocationSpec>? <ParticipantSpec>? -> { actionName: "scheduleEvent", parameters: { description: description, date: date, time: time, location: location, participant: participant } }
+@ <scheduleEvent> = <Polite> ('schedule' | 'set up' | 'book' | 'create' | 'add') <EventDescription> <DateSpec> <TimeSpec>? <LocationSpec>? <ParticipantSpec>? -> { actionName: "scheduleEvent", parameters: { description, date, time, location, participant } }
 
-@ <findEvents> = <Polite> ('find' | 'show me' | 'get' | 'search for' | 'look for' | 'pull up') ('events' | 'meetings' | 'appointments' | 'calendar entries')? <EventDescriptionFilter>? <DateSpec>? <ParticipantFilter>? -> { actionName: "findEvents", parameters: { description: description, date: date, participant: participant } }
+@ <findEvents> = <Polite> ('find' | 'show me' | 'get' | 'search for' | 'look for' | 'pull up') ('events' | 'meetings' | 'appointments' | 'calendar entries')? <EventDescriptionFilter>? <DateSpec>? <ParticipantFilter>? -> { actionName: "findEvents", parameters: { description, date, participant } }
 
-@ <addParticipant> = <Polite> ('add' | 'invite' | 'include' | 'bring in') <ParticipantName> ('to' | 'in' | 'on') <EventDescriptionTarget> -> { actionName: "addParticipant", parameters: { description: description, participant: participant } }
+@ <addParticipant> = <Polite> ('add' | 'invite' | 'include' | 'bring in') <ParticipantName> ('to' | 'in' | 'on') <EventDescriptionTarget> -> { actionName: "addParticipant", parameters: { description, participant } }
 
 @ <findTodaysEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s' | 'tell me' | 'can you tell me') ('on my calendar'? 'today' | 'today\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')? | ('what I have' | 'what\'s scheduled') ('for'? 'today')) -> { actionName: "findTodaysEvents", parameters: {} }
 

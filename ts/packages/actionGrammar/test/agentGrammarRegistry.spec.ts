@@ -62,7 +62,7 @@ describe("Agent Grammar Registry", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 
@@ -99,7 +99,7 @@ describe("Agent Grammar Registry", () => {
             const invalidRule = `@ <Start> = <schedule>
 @ <schedule> = schedule $(event:string) on $(date:UnknownEntity) -> {
     actionName: "schedule",
-    parameters: { event: event, date: date }
+    parameters: { event, date }
 }`;
 
             const result = agentGrammar.addGeneratedRules(invalidRule);
@@ -130,7 +130,7 @@ describe("Agent Grammar Registry", () => {
 @ <Start> = <schedule>
 @ <schedule> = schedule $(event:string) on $(date:CalendarDate) -> {
     actionName: "schedule",
-    parameters: { event: event, date: date }
+    parameters: { event, date }
 }`;
 
             const result = agentGrammar.addGeneratedRules(ruleWithEntity);
@@ -178,7 +178,7 @@ describe("Agent Grammar Registry", () => {
 
             // Add first rule - simpler format like in cache hit workflow test
             const firstRule = `@ <Start> = <play>
-@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: track } }`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track } }`;
 
             const firstResult = agentGrammar.addGeneratedRules(firstRule);
             expect(firstResult.success).toBe(true);
@@ -266,7 +266,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should register agents from text", () => {
             const agrText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: track } }`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track } }`;
 
             const result = registry.registerAgentFromText("player", agrText);
 
@@ -317,7 +317,7 @@ describe("Agent Grammar Registry", () => {
             registry.registerAgent("player", baseGrammar);
 
             const generatedRule = `@ <Start> = <play>
-@ <play> = play $(track:string) -> { actionName: "play", parameters: { track: track } }`;
+@ <play> = play $(track:string) -> { actionName: "play", parameters: { track } }`;
 
             const result = registry.addGeneratedRules("player", generatedRule);
             expect(result.success).toBe(true);
@@ -508,7 +508,7 @@ describe("Agent Grammar Registry", () => {
 @ <play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: track
+        track
     }
 }`;
 

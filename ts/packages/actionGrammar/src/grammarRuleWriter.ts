@@ -147,8 +147,14 @@ function writeValueNode(result: string[], value: ValueNode) {
                     result.push(", ");
                 }
                 first = false;
-                result.push(`${key}:`);
-                writeValueNode(result, val);
+                if (val === null) {
+                    // Shorthand form: { key } instead of { key: key }
+                    result.push(key);
+                } else {
+                    // Full form: { key: value }
+                    result.push(`${key}:`);
+                    writeValueNode(result, val);
+                }
             }
             result.push("}");
             break;

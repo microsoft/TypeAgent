@@ -45,18 +45,18 @@ entity Ordinal, Cardinal;
                 | the <TrackTerm> $(trackName:<TrackName>)  -> trackName
                 | <TrackTerm> $(trackName:<TrackName>)  -> trackName
                 | $(trackName:<TrackName>) <TrackTerm>  -> trackName
-@ <PlaySpecificTrack> = play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playTrack", parameters: { trackName: trackName, artists: [artist] } }
-                      | play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: trackName, albumName: albumName } }
-                      | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName: trackName, artists: [artist], albumName: albumName } }                      
+@ <PlaySpecificTrack> = play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } }
+                      | play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName, albumName } }
+                      | play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName, artists: [artist], albumName } }                      
 
-@ <SelectDevice> = select $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: deviceName } }
-                 | select (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: deviceName } }
-                 | switch to $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: deviceName } }
-                 | switch to (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: deviceName } }
-                 | use (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: deviceName } }
-                 | use device $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: deviceName } }
-                 | play on $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName: deviceName } }
-                 | play on (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName: deviceName } }
+@ <SelectDevice> = select $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }
+                 | select (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } }
+                 | switch to $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }
+                 | switch to (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } }
+                 | use (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } }
+                 | use device $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }
+                 | play on $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }
+                 | play on (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } }
 
 // Entity types: wildcard = 1+ words, word = exactly 1 word
 @ <TrackName> = $(x:wildcard)

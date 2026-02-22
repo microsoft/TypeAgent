@@ -89,8 +89,8 @@
               | switch to light (mode)? -> { actionName: "setThemeMode", parameters: { mode: "light" } }
 
 // ===== WiFi Control =====
-@ <WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "connectWifi", parameters: { ssid: ssid } }
-                | connect to wifi $(ssid:wildcard) -> { actionName: "connectWifi", parameters: { ssid: ssid } }
+@ <WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "connectWifi", parameters: { ssid } }
+                | connect to wifi $(ssid:wildcard) -> { actionName: "connectWifi", parameters: { ssid } }
                 | disconnect (from)? wifi -> { actionName: "disconnectWifi", parameters: {} }
                 | enable airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: true } }
                 | disable airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: false } }

@@ -91,7 +91,7 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable definition in same rule", () => {
             const grammarText = `
-            @<Start> = $(name) plays $(name) -> { name: name }
+            @<Start> = $(name) plays $(name) -> { name }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -103,7 +103,7 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable with different types", () => {
             const grammarText = `
-            @<Start> = $(x:string) and $(x:number) -> { x: x }
+            @<Start> = $(x:string) and $(x:number) -> { x }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -115,7 +115,7 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable with rule reference", () => {
             const grammarText = `
-            @<Start> = $(action:<Action>) $(action:<Action>) -> { action: action }
+            @<Start> = $(action:<Action>) $(action:<Action>) -> { action }
             @<Action> = play -> "play"
                       | pause -> "pause"
         `;
@@ -129,7 +129,7 @@ describe("Grammar Compiler", () => {
 
         it("Multiple duplicate variables in same rule", () => {
             const grammarText = `
-            @<Start> = $(x) $(y) $(x) $(y) -> { x: x, y: y }
+            @<Start> = $(x) $(y) $(x) $(y) -> { x, y }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -155,10 +155,10 @@ describe("Grammar Compiler", () => {
         it("Same variable in different rules should not error", () => {
             const grammarText = `
             @<Start> = <Rule1> | <Rule2>
-            @<Rule1> = play $(name) -> { name: name }
-            @<Rule1> = stop $(name) -> { name: name }
-            @<Rule2> = resume $(name) -> { name: name }
-                | pause $(name) -> { name: name }
+            @<Rule1> = play $(name) -> { name }
+            @<Rule1> = stop $(name) -> { name }
+            @<Rule2> = resume $(name) -> { name }
+                | pause $(name) -> { name }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -167,7 +167,7 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable with optional modifier", () => {
             const grammarText = `
-            @<Start> = $(name)? $(name) -> { name: name }
+            @<Start> = $(name)? $(name) -> { name }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -227,7 +227,7 @@ describe("Grammar Compiler", () => {
 
         it("Start rule with value expression is valid", () => {
             const grammarText = `
-            @<Start> = $(x:string) $(y:string) wait -> { x: x, y: y }
+            @<Start> = $(x:string) $(y:string) wait -> { x, y }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -299,7 +299,7 @@ describe("Grammar Compiler", () => {
         it("Multiple variables with explicit value does not warn", () => {
             const grammarText = `
             @<Start> = <Action>
-            @<Action> = $(x:string) $(y:string) -> { x: x, y: y }
+            @<Action> = $(x:string) $(y:string) -> { x, y }
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -337,7 +337,7 @@ describe("Grammar Compiler", () => {
             const grammarText = `
             @import * from "types.ts"
 
-            @<Start> = $(x:CustomType) and $(y:AnotherType) -> { x: x, y: y }
+            @<Start> = $(x:CustomType) and $(y:AnotherType) -> { x, y }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -349,7 +349,7 @@ describe("Grammar Compiler", () => {
             @import { Type1 } from "file1.ts"
             @import { Type2 } from "file2.ts"
 
-            @<Start> = $(x:Type1) $(y:Type2) -> { x: x, y: y }
+            @<Start> = $(x:Type1) $(y:Type2) -> { x, y }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -358,7 +358,7 @@ describe("Grammar Compiler", () => {
 
         it("Built-in types do not require imports", () => {
             const grammarText = `
-            @<Start> = $(x:string) $(y:number) $(z:wildcard) -> { x: x, y: y, z: z }
+            @<Start> = $(x:string) $(y:number) $(z:wildcard) -> { x, y, z }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -369,7 +369,7 @@ describe("Grammar Compiler", () => {
             const grammarText = `
             @import { CustomType } from "types.ts"
 
-            @<Start> = $(x:CustomType) $(y:UndefinedType) -> { x: x, y: y }
+            @<Start> = $(x:CustomType) $(y:UndefinedType) -> { x, y }
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
