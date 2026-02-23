@@ -29,7 +29,7 @@ import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
  * settings: dead stub, real settings are in desktop sub-schemas
  * montage: requires the shell embedded browser
  * androidMobile: requires a connected Android device
- * markdown / oracle / spelunker: not applicable for MCP use
+ * markdown / spelunker: not applicable for MCP use
  */
 const SKIP_AGENTS = new Set([
     "browser",
@@ -37,7 +37,6 @@ const SKIP_AGENTS = new Set([
     "montage",
     "androidMobile",
     "markdown",
-    "oracle",
     "spelunker",
 ]);
 

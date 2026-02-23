@@ -39,9 +39,6 @@
     "montage": {
       "name": "montage-agent"
     },
-    "oracle": {
-      "name": "oracle-agent"
-    },
     "spelunker": {
       "name": "spelunker-agent"
     },
