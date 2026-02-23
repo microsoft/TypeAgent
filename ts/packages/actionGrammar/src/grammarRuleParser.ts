@@ -9,10 +9,10 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  * The grammar for cache grammar files is defined as follows (in BNF and regular expressions):
  *   <AgentCacheGrammar> ::= (<EntityDeclaration> | <ImportStatement> | <RuleDefinition>)*
  *   <EntityDeclaration> ::= "entity" <Identifier> ("," <Identifier>)* ";"
- *   <ImportStatement> ::= "@import" (<ImportAll> | <ImportNames>) "from" <StringLiteral>
+ *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) "from" <StringLiteral> ";"
  *   <ImportAll> ::= "*"
  *   <ImportNames> ::= "{" <Identifier> ("," <Identifier>)* "}"
- *   <RuleDefinition> ::= "@" <RuleName> "=" <Rules>
+ *   <RuleDefinition> ::= <RuleName> "=" <Rules> ";"
  *   <Rules> ::= <Rule> ( "|" <Rule> )*
  *   <Rule> ::= <Expression> ( "->" <Value> )?
  *
@@ -27,15 +27,15 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" )      // TODO: support for + and *?
  *
  *   <Value> = BooleanValue | NumberValue | StringValue | ObjectValue | ArrayValue | VarReference
- *   <ArrayValue> = "[" <Value> ("," <Value>)* )? "]"
- *   <ObjectValue> = "{" <ObjectProperty> ("," <ObjectProperty>)* "}"
+ *   <ArrayValue> = "[" (<Value> ("," <Value>)*)? "]"
+ *   <ObjectValue> = "{" (<ObjectProperty> ("," <ObjectProperty>)*)? "}"
  *   <ObjectProperty> = <ObjectPropertyFull> | <ObjectPropertyShort>
  *   <ObjectPropertyFull> = <ObjectPropertyName> ":" <Value>
  *   <ObjectPropertyShort> = <VarReference>
  *   <ObjectPropertyName> = <Identifier> | {{ Javascript string literal }}
  *   <BooleanValue> = "true" | "false"
  *   <NumberValue> = <NumberLiteral>
- *   <StringValue> = <StringLiteral>>
+ *   <StringValue> = <StringLiteral>
  *   <VarReference> = <VarName>
  *
  *   <VarName> = <Identifier>
@@ -48,7 +48,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ID_Start> = {{ Unicode ID_Start character }}
  *   <ID_Continue> = {{ Unicode ID_Continue character }}
  *
- * In the above grammar, all whitespace or comments can appear between any two symbols in this grammar(terminal or non-terminal).
+ * In the above grammar, all whitespace or comments can appear between any two symbols in this grammar (terminal or non-terminal).
  *   <WS> ::= {{ Javascript Whitespace and Line terminators character ( [\s] in JS regexp )}}*
  *   <SingleLineComment> ::= "//" [^\n]* "\n"
  *   <MultiLineComment> ::= "/*" .* "*\/"
@@ -159,7 +159,6 @@ function isIdContinue(char: string) {
 // Even some of these are not used yet, include them for future use.
 export const expressionsSpecialChar = [
     // Must escape
-    "@",
     "|",
     "(",
     ")",
@@ -167,6 +166,7 @@ export const expressionsSpecialChar = [
     ">",
     "$", // for $(
     "-", // for ->
+    ";", // terminator
     // Reserved for future use
     "{",
     "}",
@@ -589,7 +589,7 @@ class GrammarRuleParser {
             result.value = this.parseValue();
         } else if (
             !this.isAtEnd() &&
-            !this.isAt("@") &&
+            !this.isAt(";") &&
             !this.isAt("|") &&
             !this.isAt(")")
         ) {
@@ -635,6 +635,7 @@ class GrammarRuleParser {
         const name = this.parseRuleName();
         this.consume("=", "after rule identifier");
         const rules = this.parseRules();
+        this.consume(";", "at end of rule definition");
         return { name, rules, pos };
     }
 
@@ -714,8 +715,8 @@ class GrammarRuleParser {
     }
 
     private parseImportStatement(): ImportStatement {
-        // @import { Name1, Name2 } from "file"
-        // @import * from "file"
+        // import { Name1, Name2 } from "file";
+        // import * from "file";
         this.skipWhitespace(6); // skip "import"
         const pos = this.pos;
 
@@ -756,9 +757,7 @@ class GrammarRuleParser {
                 );
             }
         } else {
-            this.throwUnexpectedCharError(
-                "Expected '{' or '*' after '@import'",
-            );
+            this.throwUnexpectedCharError("Expected '{' or '*' after 'import'");
         }
 
         // Parse "from"
@@ -777,6 +776,8 @@ class GrammarRuleParser {
         }
         const source = this.parseStringLiteral();
 
+        this.consume(";", "at end of import statement");
+
         return { names, source, pos };
     }
 
@@ -786,22 +787,20 @@ class GrammarRuleParser {
         const definitions: RuleDefinition[] = [];
         this.skipWhitespace();
         while (!this.isAtEnd()) {
-            if (this.isAt("@")) {
-                this.skipWhitespace(1);
-                if (this.isAt("<")) {
-                    definitions.push(this.parseRuleDefinition());
-                    continue;
-                }
-                if (this.isAt("import")) {
-                    imports.push(this.parseImportStatement());
-                    continue;
-                }
-            } else if (this.isAt("entity")) {
+            if (this.isAt("<")) {
+                definitions.push(this.parseRuleDefinition());
+                continue;
+            }
+            if (this.isAt("import")) {
+                imports.push(this.parseImportStatement());
+                continue;
+            }
+            if (this.isAt("entity")) {
                 entities.push(...this.parseEntityDeclaration());
                 continue;
             }
             this.throwUnexpectedCharError(
-                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
+                "Expected rule definition, 'import' statement, or 'entity' declaration",
             );
         }
         return { entities, imports, definitions };

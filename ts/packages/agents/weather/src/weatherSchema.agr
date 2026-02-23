@@ -1,17 +1,17 @@
 // Copyright (c) 2024 Anthropic PBC. All rights reserved.
 // Weather Action Grammar
 
-@ <Start> = <getCurrentConditions> | <getForecast> | <getAlerts>
+<Start> = <getCurrentConditions> | <getForecast> | <getAlerts>;
 
 // Action Rules
-@ <getCurrentConditions> = <Polite>? <CurrentWeatherPatterns> $(location:<LocationSpec>) $(units:<UnitsSpec>)? -> { actionName: "getCurrentConditions", parameters: { location: location, units: units } }
+<getCurrentConditions> = <Polite>? <CurrentWeatherPatterns> $(location:<LocationSpec>) $(units:<UnitsSpec>)? -> { actionName: "getCurrentConditions", parameters: { location: location, units: units } };
 
-@ <getForecast> = <Polite>? <ForecastPatterns> $(location:<LocationSpec>) $(days:<DaysSpec>)? $(units:<UnitsSpec>)? -> { actionName: "getForecast", parameters: { location: location, days: days, units: units } }
+<getForecast> = <Polite>? <ForecastPatterns> $(location:<LocationSpec>) $(days:<DaysSpec>)? $(units:<UnitsSpec>)? -> { actionName: "getForecast", parameters: { location: location, days: days, units: units } };
 
-@ <getAlerts> = <Polite>? <AlertPatterns> $(location:<LocationSpec>) -> { actionName: "getAlerts", parameters: { location: location } }
+<getAlerts> = <Polite>? <AlertPatterns> $(location:<LocationSpec>) -> { actionName: "getAlerts", parameters: { location: location } };
 
 // Weather Pattern Rules
-@ <CurrentWeatherPatterns> = (
+<CurrentWeatherPatterns> = (
   "what's the weather like" |
   "check the current conditions" |
   "current weather" |
@@ -21,9 +21,9 @@
   "current conditions" |
   "weather conditions" |
   "how's the weather"
-)
+);
 
-@ <ForecastPatterns> = (
+<ForecastPatterns> = (
   "weather forecast" |
   "forecast" |
   "weather outlook" |
@@ -33,9 +33,9 @@
   "what's the forecast" |
   "weather prediction" |
   "upcoming weather"
-)
+);
 
-@ <AlertPatterns> = (
+<AlertPatterns> = (
   "weather alerts" |
   "get alerts" |
   "check alerts" |
@@ -43,47 +43,47 @@
   "any alerts" |
   "weather advisories" |
   "storm warnings"
-)
+);
 
 // Location Specification
-@ <LocationSpec> = (
+<LocationSpec> = (
   ("in" | "for") $(location:string) -> location |
   $(location:string) -> location
-)
+);
 
 // Days Specification
-@ <DaysSpec> = (
+<DaysSpec> = (
   ("for the next" | "over the next") $(days:number) ("day" | "days") -> days |
   $(days:number) ("day" | "days") -> days |
   ("for" | "next") $(days:number) ("day" | "days") -> days |
   "tomorrow" -> 1 |
   "next week" -> 7
-)
+);
 
 // Units Specification
-@ <UnitsSpec> = (
+<UnitsSpec> = (
   ("in" | "with" | "using") $(units:<Units>) -> units |
   $(units:<Units>) -> units
-)
+);
 
-@ <Units> = (
+<Units> = (
   ("celsius" | "metric" | "metric units") -> "celsius" |
   ("fahrenheit" | "imperial" | "fahrenheit units") -> "fahrenheit"
-)
+);
 
 // Common Patterns
-@ <Polite> = (
+<Polite> = (
   "can you" |
   "please" |
   "would you" |
   "could you" |
   "i need" |
   "show me"
-)?
+)?;
 
-@ <TimeContext> = (
+<TimeContext> = (
   "right now" |
   "currently" |
   "at the moment" |
   "today"
-)?
+)?;

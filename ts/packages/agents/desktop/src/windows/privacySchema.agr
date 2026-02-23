@@ -4,30 +4,30 @@
 // Desktop Privacy Settings Grammar
 // Microphone, camera, and location access
 
-@ <Start> = <ManageMicrophoneAccess>
+<Start> = <ManageMicrophoneAccess>
           | <ManageCameraAccess>
-          | <ManageLocationAccess>
+          | <ManageLocationAccess>;
 
-@ <ManageMicrophoneAccess> =
+<ManageMicrophoneAccess> =
     allow microphone access -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "allow" } }
   | deny microphone access -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "deny" } }
   | enable microphone (access)? -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "allow" } }
   | disable microphone (access)? -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "deny" } }
   | turn on microphone -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "allow" } }
-  | turn off microphone -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "deny" } }
+  | turn off microphone -> { actionName: "ManageMicrophoneAccess", parameters: { accessSetting: "deny" } };
 
-@ <ManageCameraAccess> =
+<ManageCameraAccess> =
     allow camera access -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "allow" } }
   | deny camera access -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "deny" } }
   | enable camera (access)? -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "allow" } }
   | disable camera (access)? -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "deny" } }
   | turn on camera -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "allow" } }
-  | turn off camera -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "deny" } }
+  | turn off camera -> { actionName: "ManageCameraAccess", parameters: { accessSetting: "deny" } };
 
-@ <ManageLocationAccess> =
+<ManageLocationAccess> =
     allow location access -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "allow" } }
   | deny location access -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "deny" } }
   | enable location (services)? -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "allow" } }
   | disable location (services)? -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "deny" } }
   | turn on location -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "allow" } }
-  | turn off location -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "deny" } }
+  | turn off location -> { actionName: "ManageLocationAccess", parameters: { accessSetting: "deny" } };

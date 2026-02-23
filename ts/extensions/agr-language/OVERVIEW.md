@@ -24,11 +24,12 @@ extensions/agr-language/
 
 ### 1. Syntax Elements Highlighted
 
-- **Rule Definitions**: `@ <RuleName> = ...`
+- **Rule Definitions**: `<RuleName> = ...;`
 
-  - `@` operator in keyword color
   - Rule names in type color
   - Assignment operator `=` highlighted
+  - Semicolon terminator `;` highlighted
+  - Multi-line rules supported (span from `=` to `;`)
 
 - **Rule References**: `<RuleName>`
 
@@ -74,13 +75,19 @@ The grammar uses a repository-based pattern system:
   "scopeName": "source.agr",
   "patterns": [
     { "include": "#comments" },
+    { "include": "#import-statement" },
     { "include": "#rule-definition" },
     { "include": "#action-object" }
   ],
   "repository": {
-    "rule-definition": { ... },
+    "rule-definition": {
+      "begin": "^\\s*(<)([A-Za-z_][A-Za-z0-9_]*)(>)\\s*(=)",
+      "end": "(;)|(?=^\\s*<[A-Za-z_]|^\\s*//|^\\s*import\\b|\\z)",
+      "..."
+    },
     "capture": { ... },
     "rule-reference": { ... },
+    "import-statement": { ... },
     ...
   }
 }
@@ -90,9 +97,10 @@ The grammar uses a repository-based pattern system:
 
 Uses standard TextMate scope names for compatibility with all VS Code themes:
 
-- `keyword.operator.rule.agr` - Rule operators
-- `entity.name.type.rule.agr` - Rule names
-- `variable.parameter.capture.agr` - Capture variables
+- `entity.name.type.rule.agr` - Rule names in definitions
+- `entity.name.type.rule-reference.agr` - Rule names in references
+- `punctuation.terminator.statement.agr` - Rule-ending semicolons
+- `variable.other.agr` - Capture variable names
 - `comment.line.double-slash.agr` - Comments
 - `meta.embedded.block.javascript` - Embedded JS in action objects
 
@@ -116,7 +124,7 @@ Test file: [playerSchema.agr](../../packages/agents/player/src/agent/playerSchem
 Expected highlighting:
 
 - Green/gray comments
-- Colorized rule names in `@ <Name>`
+- Colorized rule names in `<Name> = ...;`
 - Distinct colors for captures `$(name:Type)`
 - Blue/purple keywords for operators
 - JS syntax in action objects

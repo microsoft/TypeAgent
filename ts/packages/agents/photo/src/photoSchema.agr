@@ -2,16 +2,16 @@
 // Photo Action Grammar
 
 // Main entry point
-@ <Start> = <takePhoto>
+<Start> = <takePhoto>;
 
 // Action rules
-@ <takePhoto> = <PhotoRequest> $(originalRequest:string) -> { actionName: "takePhoto", parameters: { originalRequest: originalRequest } }
+<takePhoto> = <PhotoRequest> $(originalRequest:string) -> { actionName: "takePhoto", parameters: { originalRequest: originalRequest } };
 
 // Sub-rules for common patterns
-@ <PhotoRequest> = <Polite> <PhotoCommand> <OptionalOf>
+<PhotoRequest> = <Polite> <PhotoCommand> <OptionalOf>;
 
-@ <Polite> = ('can you' | 'could you' | 'please' | 'would you')?
+<Polite> = ('can you' | 'could you' | 'please' | 'would you')?;
 
-@ <PhotoCommand> = ('take' ('a' ('photo' | 'picture' | 'pic' | 'shot'))?) | 'snap' ('a' ('picture' | 'pic' | 'shot'))? | 'photograph' | 'photo'
+<PhotoCommand> = ('take' ('a' ('photo' | 'picture' | 'pic' | 'shot'))?) | 'snap' ('a' ('picture' | 'pic' | 'shot'))? | 'photograph' | 'photo';
 
-@ <OptionalOf> = 'of'?
+<OptionalOf> = 'of'?;

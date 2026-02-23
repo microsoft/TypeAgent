@@ -4,41 +4,41 @@
 // Extension Management Grammar
 // Handles VS Code extension operations including installation, enabling/disabling, and querying
 
-@ <Start> = <checkExtensionAvailable> | <installExtension> | <reloadWindow> | <showExtensions> | <enableExtension> | <disableExtension>
+<Start> = <checkExtensionAvailable> | <installExtension> | <reloadWindow> | <showExtensions> | <enableExtension> | <disableExtension>;
 
 // Shared sub-rules for common patterns
-@ <Polite> = ("can you" | "could you" | "please" | "would you")?
+<Polite> = ("can you" | "could you" | "please" | "would you")?;
 
-@ <ExtensionQuery> = $(query:string)
+<ExtensionQuery> = $(query:string);
 
-@ <PromptSpec> = (
+<PromptSpec> = (
     ('ask me' | 'confirm' | 'prompt me' | "I'd like to confirm" | 'check with me') -> "true" |
     ("don't ask" | "don't prompt" | 'without asking' | 'no prompts' | 'skip confirmation') -> "false" |
     ('prompt me' | 'ask first') -> "true"
-)
+);
 
-@ <AutoReloadSpec> = (
+<AutoReloadSpec> = (
     ('auto reload' | 'reload automatically' | 'restart' | 'auto restart' | 'reload editor' | 'reload when done') -> "true" |
     ('skip reload' | "don't reload" | 'no reload' | 'without reload') -> "false" |
     ('reload' | 'restart everything') -> "true"
-)
+);
 
-@ <FilterSpec> = (
+<FilterSpec> = (
     'by user query' $(userQuery:string) -> userQuery |
     'by known query' $(knownQuery:string) -> knownQuery |
     'by category' $(category:string) -> category |
     'for' $(general:string) -> general
-)
+);
 
 // Action rules
-@ <checkExtensionAvailable> = <Polite> ('check' | 'find' | 'search for' | 'look for') ('extensions' | 'extension') $(filter:<FilterSpec>)? -> { actionName: "checkExtensionAvailable", parameters: { filter: filter } }
+<checkExtensionAvailable> = <Polite> ('check' | 'find' | 'search for' | 'look for') ('extensions' | 'extension') $(filter:<FilterSpec>)? -> { actionName: "checkExtensionAvailable", parameters: { filter: filter } };
 
-@ <installExtension> = <Polite> ('install' | 'add' | 'get') ('the')? $(extensionQuery:<ExtensionQuery>) ('extension')? $(prompt:<PromptSpec>)? $(autoReload:<AutoReloadSpec>)? -> { actionName: "installExtension", parameters: { extensionQuery: extensionQuery, promptUser: prompt, autoReload: autoReload } }
+<installExtension> = <Polite> ('install' | 'add' | 'get') ('the')? $(extensionQuery:<ExtensionQuery>) ('extension')? $(prompt:<PromptSpec>)? $(autoReload:<AutoReloadSpec>)? -> { actionName: "installExtension", parameters: { extensionQuery: extensionQuery, promptUser: prompt, autoReload: autoReload } };
 
-@ <reloadWindow> = <Polite> ('reload' | 'restart') ('window' | 'editor' | 'vs code' | 'vscode') -> { actionName: "reloadWindow", parameters: {} }
+<reloadWindow> = <Polite> ('reload' | 'restart') ('window' | 'editor' | 'vs code' | 'vscode') -> { actionName: "reloadWindow", parameters: {} };
 
-@ <showExtensions> = <Polite> ('show' | 'list' | 'display') ('all')? 'extensions' -> { actionName: "showExtensions", parameters: {} }
+<showExtensions> = <Polite> ('show' | 'list' | 'display') ('all')? 'extensions' -> { actionName: "showExtensions", parameters: {} };
 
-@ <enableExtension> = <Polite> ('enable' | 'turn on' | 'activate') ('the')? $(extensionQuery:<ExtensionQuery>) ('extension')? $(prompt:<PromptSpec>)? $(autoReload:<AutoReloadSpec>)? -> { actionName: "enableExtension", parameters: { extensionQuery: extensionQuery, promptUser: prompt, autoReload: autoReload } }
+<enableExtension> = <Polite> ('enable' | 'turn on' | 'activate') ('the')? $(extensionQuery:<ExtensionQuery>) ('extension')? $(prompt:<PromptSpec>)? $(autoReload:<AutoReloadSpec>)? -> { actionName: "enableExtension", parameters: { extensionQuery: extensionQuery, promptUser: prompt, autoReload: autoReload } };
 
-@ <disableExtension> = <Polite> ('disable' | 'turn off' | 'deactivate') ('the')? $(extensionQuery:<ExtensionQuery>) ('extension')? $(prompt:<PromptSpec>)? $(autoReload:<AutoReloadSpec>)? -> { actionName: "disableExtension", parameters: { extensionQuery: extensionQuery, promptUser: prompt, autoReload: autoReload } }
+<disableExtension> = <Polite> ('disable' | 'turn off' | 'deactivate') ('the')? $(extensionQuery:<ExtensionQuery>) ('extension')? $(prompt:<PromptSpec>)? $(autoReload:<AutoReloadSpec>)? -> { actionName: "disableExtension", parameters: { extensionQuery: extensionQuery, promptUser: prompt, autoReload: autoReload } };

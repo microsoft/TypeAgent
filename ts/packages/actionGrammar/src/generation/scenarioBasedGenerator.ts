@@ -584,7 +584,7 @@ export class ScenarioBasedGrammarGenerator {
         for (const [categoryName, info] of categories) {
             const verbsList = Array.from(info.verbs).sort();
             if (verbsList.length > 0) {
-                output += `@ <${categoryName}> =\n`;
+                output += `<${categoryName}> =\n`;
                 verbsList.forEach((verb, index) => {
                     const separator = index < verbsList.length - 1 ? " |" : "";
                     // Escape backslashes first, then single quotes in verb phrases
@@ -686,7 +686,7 @@ export class ScenarioBasedGrammarGenerator {
                     const ruleName = `${actionName}_Verb${structureIndex}`;
                     structureRules.set(structure, ruleName);
 
-                    output += `@ <${ruleName}> =\n`;
+                    output += `<${ruleName}> =\n`;
                     data.verbPhrases.forEach((verb, index) => {
                         const escapedVerb = this.escapePatternHyphens(verb);
                         const separator =
@@ -700,14 +700,14 @@ export class ScenarioBasedGrammarGenerator {
                             output += `    ${escapedVerb}${separator}\n`;
                         }
                     });
-                    output += `\n`;
+                    output += `;\n`;
 
                     structureIndex++;
                 }
             }
 
             // Now generate the action rule
-            output += `@ <${actionName}> =\n`;
+            output += `<${actionName}> =\n`;
 
             const structureArray = Array.from(structureToVerbs.entries());
             structureArray.forEach(([structure, data], index) => {
@@ -740,51 +740,52 @@ export class ScenarioBasedGrammarGenerator {
                 output += `    ${ruleWithAction}${separator}\n`;
             });
 
-            output += `\n`;
+            output += `;\n`;
         }
 
         // Add <ActionStart> rule (all action alternatives)
-        output += `@ <ActionStart> =\n`;
+        output += `<ActionStart> =\n`;
         const actionNames = Array.from(allPatterns.keys());
         actionNames.forEach((name, index) => {
             const separator = index < actionNames.length - 1 ? " |" : "";
             output += `    <${name}>${separator}\n`;
         });
-        output += `\n`;
+        output += `;\n`;
 
         // Add combined prefix rules for each language
         output += `// Combined prefix categories\n`;
-        output += `@ <Prefix_EN> =\n`;
+        output += `<Prefix_EN> =\n`;
         output += `    <PolitePrefix_EN> |\n`;
         output += `    <DesirePrefix_EN> |\n`;
         output += `    <ActionInitiator_EN> |\n`;
         output += `    <Greeting_EN>\n`;
-        output += `\n`;
+        output += `;\n`;
 
-        output += `@ <Prefix_FR> =\n`;
+        output += `<Prefix_FR> =\n`;
         output += `    <PolitePrefix_FR> |\n`;
         output += `    <DesirePrefix_FR> |\n`;
         output += `    <ActionInitiator_FR> |\n`;
         output += `    <Greeting_FR>\n`;
-        output += `\n`;
+        output += `;\n`;
 
         // Add combined suffix rules for each language
         output += `// Combined suffix categories\n`;
-        output += `@ <Suffix_EN> =\n`;
+        output += `<Suffix_EN> =\n`;
         output += `    <PoliteSuffix_EN> |\n`;
         output += `    <Acknowledgement_EN>\n`;
-        output += `\n`;
+        output += `;\n`;
 
-        output += `@ <Suffix_FR> =\n`;
+        output += `<Suffix_FR> =\n`;
         output += `    <PoliteSuffix_FR> |\n`;
         output += `    <Acknowledgement_FR>\n`;
-        output += `\n`;
+        output += `;\n`;
 
         // Add <Start> rule with optional prefix and suffix
         output += `// Main Start rule with optional prefixes and suffixes\n`;
-        output += `@ <Start> =\n`;
+        output += `<Start> =\n`;
         output += `    (<Prefix_EN>)? <ActionStart> (<Suffix_EN>)? |\n`;
         output += `    (<Prefix_FR>)? <ActionStart> (<Suffix_FR>)?\n`;
+        output += `;\n`;
 
         return output;
     }
@@ -879,12 +880,13 @@ export class ScenarioBasedGrammarGenerator {
         ruleName: string,
         patterns: string[],
     ): string {
-        let output = `@ <${ruleName}> =\n`;
+        let output = `<${ruleName}> =\n`;
         patterns.forEach((pattern, index) => {
             const separator = index < patterns.length - 1 ? " |" : "";
             const escaped = this.escapeSpecialChars(pattern);
             output += `    '${escaped}'${separator}\n`;
         });
+        output += `;\n`;
         return output;
     }
 

@@ -5,24 +5,24 @@
 // This file shows all the major syntax elements
 
 // Import syntax
-@import { Cardinal, TrackName, ArtistName } from "./base.agr"
-@import * from "./shared.agr"
+import { Cardinal, TrackName, ArtistName } from "./base.agr";
+import * from "./shared.agr";
 
 // Simple rule definition
-@ <Start> = <Greeting> | <Command>
+<Start> = <Greeting> | <Command>;
 
 // Rule with captures and types
-@ <Greeting> =
+<Greeting> =
     hello $(name:PersonName) -> {
         actionName: "greet",
         parameters: {
             name
         }
     }
-  | hi there -> { actionName: "greet" }
+  | hi there -> { actionName: "greet" };
 
 // Rule with optional elements
-@ <Command> =
+<Command> =
     play (the)? $(track:TrackName)
     by $(artist:ArtistName) -> {
         actionName: "playTrack",
@@ -31,71 +31,71 @@
             artists: [artist]
         }
     }
-  | pause (the)? music? -> { actionName: "pause" }
+  | pause (the)? music? -> { actionName: "pause" };
 
 // Rule with multiple patterns
-@ <Volume> =
+<Volume> =
     (turn | set) (the)? volume to $(level:number) -> {
         actionName: "setVolume",
         parameters: { level }
     }
   | volume up -> { actionName: "volumeUp" }
-  | volume down -> { actionName: "volumeDown" }
+  | volume down -> { actionName: "volumeDown" };
 
 // Bare -> results (non-object): string literal, number, or variable reference
-@ <PromptSpec> = (
+<PromptSpec> = (
     ('ask me' | 'confirm' | 'please confirm') -> "true" |
     ("don't ask" | 'without asking' | 'skip') -> "false"
-)
+);
 
-@ <FilterSpec> = (
+<FilterSpec> = (
     'by query' $(userQuery:string) -> userQuery |
     'by category' $(category:string) -> category |
     'all' -> "all"
-)
+);
 
 // Numeric patterns
-@ <Cardinal> =
+<Cardinal> =
     $(x:number)
   | one -> 1
   | two -> 2
   | three -> 3
   | four -> 4
-  | five -> 5
+  | five -> 5;
 
 // String type references
-@ <TrackName> = $(x:string)
-@ <ArtistName> = $(x:string)
-@ <PersonName> = $(x:string)
+<TrackName> = $(x:string);
+<ArtistName> = $(x:string);
+<PersonName> = $(x:string);
 
 // Complex nested rule
-@ <PlayCommand> =
-    <PlayTrack> | <PlayAlbum> | <PlayArtist>
+<PlayCommand> =
+    <PlayTrack> | <PlayAlbum> | <PlayArtist>;
 
-@ <PlayTrack> =
+<PlayTrack> =
     play track $(n:<Cardinal>) -> {
         actionName: "playTrackNumber",
         parameters: {
             trackNumber: n,
             source: "current"
         }
-    }
+    };
 
-@ <PlayAlbum> =
+<PlayAlbum> =
     play (the)? album $(album:<AlbumName>) -> {
         actionName: "playAlbum",
         parameters: { albumName: album }
-    }
+    };
 
-@ <PlayArtist> =
+<PlayArtist> =
     play music by $(artist:<ArtistName>) -> {
         actionName: "playArtist",
         parameters: { artistName: artist }
-    }
+    };
 
-@ <AlbumName> = $(x:string)
+<AlbumName> = $(x:string);
 
 // Operators demonstration
-@ <Operators> =
+<Operators> =
     one? two* three+ four  // optional, zero-or-more, one-or-more
-  | (first | second | third)  // alternation with grouping
+  | (first | second | third)  // alternation with grouping;

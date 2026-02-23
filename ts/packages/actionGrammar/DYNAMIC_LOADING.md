@@ -61,7 +61,7 @@ const baseNFA = compileGrammarToNFA(baseGrammar, "base");
 const cache = new DynamicGrammarCache(baseGrammar, baseNFA);
 
 // Add generated rule dynamically
-const generatedRule = `@ <play> = play $(track:string) by $(artist:string)`;
+const generatedRule = `<play> = play $(track:string) by $(artist:string);`;
 const result = cache.addRules(generatedRule);
 
 if (result.success) {
@@ -129,7 +129,7 @@ Before loading, the system validates that all referenced symbols are resolved:
 const loader = new DynamicGrammarLoader();
 
 // Rule references CalendarDate symbol
-const rule = `@ <schedule> = schedule $(event:string) on $(date:CalendarDate)`;
+const rule = `<schedule> = schedule $(event:string) on $(date:CalendarDate);`;
 
 const result = loader.load(rule);
 
@@ -185,10 +185,10 @@ When multiple rules target the same action, they become alternatives:
 const cache = new DynamicGrammarCache(baseGrammar, baseNFA);
 
 // Add first play pattern
-cache.addRules(`@ <play> = play $(track:string)`);
+cache.addRules(`<play> = play $(track:string);`);
 
 // Add second play pattern (alternative)
-cache.addRules(`@ <play> = play $(track:string) by $(artist:string)`);
+cache.addRules(`<play> = play $(track:string) by $(artist:string);`);
 
 // Both patterns now work
 const result1 = matchNFA(cache.getNFA(), ["play", "Song"]);
@@ -203,7 +203,7 @@ const result2 = matchNFA(cache.getNFA(), ["play", "Song", "by", "Artist"]);
 ### Parse Errors
 
 ```typescript
-const result = cache.addRules(`@ <invalid> = this is not valid grammar`);
+const result = cache.addRules(`<invalid> = this is not valid grammar;`);
 
 if (!result.success) {
   console.error("Parse errors:", result.errors);
@@ -215,7 +215,7 @@ if (!result.success) {
 
 ```typescript
 const result = cache.addRules(
-  `@ <schedule> = schedule $(event:string) on $(date:UnknownType)`,
+  `<schedule> = schedule $(event:string) on $(date:UnknownType);`,
 );
 
 if (!result.success) {
@@ -274,10 +274,10 @@ const loader = new DynamicGrammarLoader();
 
 // Load multiple rules at once
 const agrText = `
-@ <play> = play $(track:string)
-@ <play> = play $(track:string) by $(artist:string)
-@ <pause> = pause
-@ <resume> = resume
+<play> = play $(track:string);
+<play> = play $(track:string) by $(artist:string);
+<pause> = pause;
+<resume> = resume;
 `;
 
 const result = loader.load(agrText);

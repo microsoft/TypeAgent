@@ -4,60 +4,60 @@
 // Desktop Input Settings Grammar
 // Mouse and touchpad settings
 
-@ <Start> = <MouseCursorSpeed>
+<Start> = <MouseCursorSpeed>
           | <MouseWheelScrollLines>
           | <SetPrimaryMouseButton>
           | <EnhancePointerPrecision>
           | <AdjustMousePointerSize>
           | <MousePointerCustomization>
           | <EnableTouchPad>
-          | <TouchpadCursorSpeed>
+          | <TouchpadCursorSpeed>;
 
-@ <MouseCursorSpeed> =
+<MouseCursorSpeed> =
     set mouse speed to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } }
   | adjust mouse speed to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } }
   | change mouse sensitivity to $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } }
-  | mouse speed $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } }
+  | mouse speed $(level:number) -> { actionName: "MouseCursorSpeed", parameters: { speedLevel: level } };
 
-@ <MouseWheelScrollLines> =
+<MouseWheelScrollLines> =
     set scroll (wheel)? lines to $(lines:number) -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: lines } }
-  | scroll $(lines:number) lines (per notch)? -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: lines } }
+  | scroll $(lines:number) lines (per notch)? -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: lines } };
 
-@ <SetPrimaryMouseButton> =
+<SetPrimaryMouseButton> =
     set primary mouse button to left -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "left" } }
   | set primary mouse button to right -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "right" } }
   | swap mouse buttons -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "right" } }
   | use left handed mouse -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "right" } }
-  | use right handed mouse -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "left" } }
+  | use right handed mouse -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "left" } };
 
-@ <EnhancePointerPrecision> =
+<EnhancePointerPrecision> =
     enable enhanced pointer precision -> { actionName: "EnhancePointerPrecision", parameters: { enable: true } }
   | disable enhanced pointer precision -> { actionName: "EnhancePointerPrecision", parameters: { enable: false } }
   | enable mouse acceleration -> { actionName: "EnhancePointerPrecision", parameters: { enable: true } }
   | disable mouse acceleration -> { actionName: "EnhancePointerPrecision", parameters: { enable: false } }
   | turn on mouse acceleration -> { actionName: "EnhancePointerPrecision", parameters: { enable: true } }
-  | turn off mouse acceleration -> { actionName: "EnhancePointerPrecision", parameters: { enable: false } }
+  | turn off mouse acceleration -> { actionName: "EnhancePointerPrecision", parameters: { enable: false } };
 
-@ <AdjustMousePointerSize> =
+<AdjustMousePointerSize> =
     increase pointer size -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "increase" } }
   | decrease pointer size -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "decrease" } }
   | make pointer bigger -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "increase" } }
   | make pointer smaller -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "decrease" } }
   | bigger cursor -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "increase" } }
-  | smaller cursor -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "decrease" } }
+  | smaller cursor -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "decrease" } };
 
-@ <MousePointerCustomization> =
+<MousePointerCustomization> =
     customize mouse pointer -> { actionName: "mousePointerCustomization", parameters: {} }
   | change mouse pointer style -> { actionName: "mousePointerCustomization", parameters: {} }
-  | open pointer settings -> { actionName: "mousePointerCustomization", parameters: {} }
+  | open pointer settings -> { actionName: "mousePointerCustomization", parameters: {} };
 
-@ <EnableTouchPad> =
+<EnableTouchPad> =
     enable touchpad -> { actionName: "EnableTouchPad", parameters: { enable: true } }
   | disable touchpad -> { actionName: "EnableTouchPad", parameters: { enable: false } }
   | turn on touchpad -> { actionName: "EnableTouchPad", parameters: { enable: true } }
-  | turn off touchpad -> { actionName: "EnableTouchPad", parameters: { enable: false } }
+  | turn off touchpad -> { actionName: "EnableTouchPad", parameters: { enable: false } };
 
-@ <TouchpadCursorSpeed> =
+<TouchpadCursorSpeed> =
     set touchpad speed to $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed } }
   | adjust touchpad sensitivity -> { actionName: "TouchpadCursorSpeed", parameters: {} }
-  | touchpad speed $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed } }
+  | touchpad speed $(speed:number) -> { actionName: "TouchpadCursorSpeed", parameters: { speed } };

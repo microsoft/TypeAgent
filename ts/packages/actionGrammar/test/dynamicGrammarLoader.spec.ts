@@ -20,13 +20,13 @@ describe("Dynamic Grammar Loader", () => {
             const loader = new DynamicGrammarLoader();
 
             // Simulated output from grammarGenerator
-            const agrText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const agrText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
         track
     }
-}`;
+};`;
 
             const result = loader.load(agrText);
 
@@ -50,14 +50,14 @@ describe("Dynamic Grammar Loader", () => {
             const loader = new DynamicGrammarLoader();
 
             // Generated rule with multiple wildcards
-            const agrText = `@ <Start> = <play>
-@ <play> = play $(track:string) by $(artist:string) -> {
+            const agrText = `<Start> = <play>;
+<play> = play $(track:string) by $(artist:string) -> {
     actionName: "play",
     parameters: {
         track,
         artist
     }
-}`;
+};`;
 
             const result = loader.load(agrText);
 
@@ -82,13 +82,13 @@ describe("Dynamic Grammar Loader", () => {
             const loader = new DynamicGrammarLoader();
 
             // Generated rule with optional politeness
-            const agrText = `@ <Start> = <play>
-@ <play> = (please)? play $(track:string) -> {
+            const agrText = `<Start> = <play>;
+<play> = (please)? play $(track:string) -> {
     actionName: "play",
     parameters: {
         track
     }
-}`;
+};`;
 
             const result = loader.load(agrText);
 
@@ -113,14 +113,14 @@ describe("Dynamic Grammar Loader", () => {
             const loader = new DynamicGrammarLoader();
 
             // Generated rule using imported type
-            const agrText = `@ import { Ordinal } from "types.ts"
-@ <Start> = <play>
-@ <play> = play (the)? $(n:Ordinal) track -> {
+            const agrText = `import { Ordinal } from "types.ts";
+<Start> = <play>;
+<play> = play (the)? $(n:Ordinal) track -> {
     actionName: "play",
     parameters: {
         n
     }
-}`;
+};`;
 
             const result = loader.load(agrText);
 
@@ -140,14 +140,14 @@ describe("Dynamic Grammar Loader", () => {
             const loader = new DynamicGrammarLoader();
 
             // Rule references unknown type (not imported)
-            const agrText = `@ <Start> = <schedule>
-@ <schedule> = schedule $(event:string) on $(date:UnknownDateType) -> {
+            const agrText = `<Start> = <schedule>;
+<schedule> = schedule $(event:string) on $(date:UnknownDateType) -> {
     actionName: "schedule",
     parameters: {
         event,
         date
     }
-}`;
+};`;
 
             const result = loader.load(agrText);
 
@@ -171,13 +171,13 @@ describe("Dynamic Grammar Loader", () => {
             };
 
             // New rule to add
-            const agrText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const agrText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
         track
     }
-}`;
+};`;
 
             const result = loader.loadAndMerge(
                 agrText,
@@ -222,14 +222,14 @@ describe("Dynamic Grammar Loader", () => {
             };
 
             // Add another play rule with different structure
-            const agrText = `@ <Start> = <play>
-@ <play> = play $(track:string) by $(artist:string) -> {
+            const agrText = `<Start> = <play>;
+<play> = play $(track:string) by $(artist:string) -> {
     actionName: "play",
     parameters: {
         track,
         artist
     }
-}`;
+};`;
 
             const result = loader.loadAndMerge(agrText, existingGrammar);
 
@@ -269,13 +269,13 @@ describe("Dynamic Grammar Loader", () => {
             expect(stats1.ruleCount).toBe(1);
 
             // Add new rule
-            const agrText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const agrText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
         track
     }
-}`;
+};`;
             const result = cache.addRules(agrText);
 
             expect(result.success).toBe(true);
@@ -304,35 +304,35 @@ describe("Dynamic Grammar Loader", () => {
             const cache = new DynamicGrammarCache(initialGrammar, initialNFA);
 
             // Add first rule
-            const rule1 = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const rule1 = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
         track
     }
-}`;
+};`;
             const result1 = cache.addRules(rule1);
             expect(result1.success).toBe(true);
             expect(cache.getGrammar().rules.length).toBe(2); // pause + play (Start refs play)
 
             // Add second rule
-            const rule2 = `@ <Start> = <resume>
-@ <resume> = resume -> {
+            const rule2 = `<Start> = <resume>;
+<resume> = resume -> {
     actionName: "resume"
-}`;
+};`;
             const result2 = cache.addRules(rule2);
             expect(result2.success).toBe(true);
             expect(cache.getGrammar().rules.length).toBe(3); // + resume (Start refs resume)
 
             // Add third rule with same action as first (alternative)
-            const rule3 = `@ <Start> = <play>
-@ <play> = play $(track:string) by $(artist:string) -> {
+            const rule3 = `<Start> = <play>;
+<play> = play $(track:string) by $(artist:string) -> {
     actionName: "play",
     parameters: {
         track,
         artist
     }
-}`;
+};`;
             const result3 = cache.addRules(rule3);
             expect(result3.success).toBe(true);
             expect(cache.getGrammar().rules.length).toBe(4); // + play (another play alternative)
@@ -362,14 +362,14 @@ describe("Dynamic Grammar Loader", () => {
             const statsBefore = cache.getStats();
 
             // Try to add rule with unimported type
-            const invalidRule = `@ <Start> = <schedule>
-@ <schedule> = schedule $(event:string) on $(date:InvalidDateType) -> {
+            const invalidRule = `<Start> = <schedule>;
+<schedule> = schedule $(event:string) on $(date:InvalidDateType) -> {
     actionName: "schedule",
     parameters: {
         event,
         date
     }
-}`;
+};`;
             const result = cache.addRules(invalidRule);
 
             expect(result.success).toBe(false);
@@ -388,14 +388,14 @@ describe("Dynamic Grammar Loader", () => {
             const loader = new DynamicGrammarLoader();
 
             // Complete output from grammarGenerator.formatAsGrammarRule()
-            const generatedRule = `@ <Start> = <playTrack>
-@ <playTrack> = play $(trackName:string) by $(artist:string) -> {
+            const generatedRule = `<Start> = <playTrack>;
+<playTrack> = play $(trackName:string) by $(artist:string) -> {
     actionName: "playTrack",
     parameters: {
         trackName,
         artist
     }
-}`;
+};`;
 
             const result = loader.load(generatedRule);
 
@@ -421,14 +421,14 @@ describe("Dynamic Grammar Loader", () => {
             const loader = new DynamicGrammarLoader();
 
             const generatedRule = `@ import { CalendarDate } from "types.ts"
-@ <Start> = <scheduleEvent>
-@ <scheduleEvent> = schedule $(event:string) on $(date:CalendarDate) -> {
+<Start> = <scheduleEvent>;
+<scheduleEvent> = schedule $(event:string) on $(date:CalendarDate) -> {
     actionName: "scheduleEvent",
     parameters: {
         event,
         date
     }
-}`;
+};`;
 
             const result = loader.load(generatedRule);
 
