@@ -75,6 +75,7 @@ interface MissEntry {
 const statsByFile = new Map<string, FileStats>();
 const totals = emptyStats();
 const misses: MissEntry[] = [];
+const constructionFailures: { file: string; request: string; error: string }[] = [];
 
 for (const filePath of filePaths) {
     const fileName = path.basename(filePath, ".json");
@@ -105,8 +106,9 @@ for (const filePath of filePaths) {
             );
             const text = convertConstructionsToGrammar([construction]);
             grammarText = text !== "" ? text : undefined;
-        } catch {
+        } catch (e) {
             // Construction failed — skip entry
+            constructionFailures.push({ file: fileName, request: requestAction.request, error: String(e) });
         }
 
         if (grammarText === undefined) {
@@ -202,6 +204,12 @@ function buildTable(): string {
 describe("NFA Grammar Coverage", () => {
     it("reports NFA match rate vs old matcher per action file (informational)", () => {
         console.log("\n" + buildTable() + "\n");
+        if (constructionFailures.length > 0) {
+            console.log(`Construction failures (${constructionFailures.length}):`);
+            for (const f of constructionFailures) {
+                console.log(`  [${f.file}] "${f.request}": ${f.error}`);
+            }
+        }
         if (misses.length > 0) {
             console.log(`NFA misses (${misses.length}):`);
             for (const m of misses) {

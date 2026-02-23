@@ -10228,7 +10228,7 @@
       }
     },
     {
-      "request": "Let's hear some Snoop Dogg's 'Drop It Like It's Hot'!",
+      "request": "Let's hear some Snoop Dogg by Drop It Like It's Hot!",
       "action": {
         "fullActionName": "player.playTrack",
         "parameters": {
@@ -10279,17 +10279,17 @@
             ]
           },
           {
-            "text": "'s",
+            "text": "by",
             "category": "preposition",
             "synonyms": [
-              "by",
+              "'s",
               "from",
               "of"
             ],
             "isOptional": true
           },
           {
-            "text": "'Drop It Like It's Hot'",
+            "text": "Drop It Like It's Hot",
             "category": "track",
             "propertyNames": [
               "parameters.trackName"
@@ -15192,7 +15192,7 @@
       }
     },
     {
-      "request": "Yo, let's get down to some of that 'Young, Wild & Free' with Wiz Khalifa.",
+      "request": "Yo, let's get down to some of that Young, Wild & Free with Wiz Khalifa.",
       "action": {
         "fullActionName": "player.playTrack",
         "parameters": {
@@ -15246,31 +15246,11 @@
             "isOptional": true
           },
           {
-            "text": "'",
-            "category": "punctuation",
-            "synonyms": [
-              "\"",
-              "“",
-              "‘"
-            ],
-            "isOptional": true
-          },
-          {
             "text": "Young, Wild & Free",
             "category": "trackName",
             "propertyNames": [
               "parameters.trackName"
             ]
-          },
-          {
-            "text": "'",
-            "category": "punctuation",
-            "synonyms": [
-              "\"",
-              "”",
-              "’"
-            ],
-            "isOptional": true
           },
           {
             "text": "with",
