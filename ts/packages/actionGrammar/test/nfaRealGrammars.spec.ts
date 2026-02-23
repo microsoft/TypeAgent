@@ -114,7 +114,6 @@ describe("NFA with Real Grammars", () => {
             // const result2 = matchNFA(nfa, ["switch", "to", "bedroom"]);
             // expect(result2.matched).toBe(true);
             // expect(result2.captures.get("x")).toBe("bedroom");
-
         });
 
         it("should match 'play track by artist' patterns", () => {
@@ -369,7 +368,10 @@ describe("NFA with Real Grammars", () => {
             const grammar = loadGrammarRules("playerSchema.agr", content);
             const nfa = compileGrammarToNFA(grammar, "player-simple");
 
-            const output = printNFA({ ...nfa, states: nfa.states.slice(0, 20) });
+            const output = printNFA({
+                ...nfa,
+                states: nfa.states.slice(0, 20),
+            });
             expect(output.length).toBeGreaterThan(0);
         });
     });
