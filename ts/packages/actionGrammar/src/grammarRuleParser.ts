@@ -18,13 +18,14 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *
  *   <Expression> ::= ( <StringExpr> | <VariableExpr> | <RuleRefExpr> | <GroupExpr> )+
  *
- *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash.
- *   // Whitespace (<WS>) is not stored literally; instead each run of whitespace creates a
- *   // "flex space" boundary, splitting the string into segments that can match any amount
- *   // of whitespace at runtime.  An escaped whitespace character (e.g. "\ ") bypasses this
- *   // behavior and is stored as a literal space within the current segment.
+ *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash,
+ *   // and not the start of a comment sequence ("//" or "/*").
+ *   // Whitespace (<WS>) and comments (<Comment>) are not stored literally; instead each
+ *   // occurrence creates a "flex space" boundary, splitting the string into segments that can
+ *   // match any amount of whitespace at runtime.  An escaped whitespace character (e.g. "\ ")
+ *   // bypasses this behavior and is stored as a literal space within the current segment.
  *   // Special chars must be escaped with backslash to appear as literal text.
- *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Char> )+
+ *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Comment> | <Char> )+
  *   <EscapeSequence> ::= "\\"<EscapedChar>
  *   <EscapedChar> ::= "0"                        // null character \0
  *                   | "n"                        // newline \n
@@ -56,7 +57,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ObjectProperty> = <ObjectPropertyFull> | <ObjectPropertyShort>
  *   <ObjectPropertyFull> = <ObjectPropertyName> ":" <Value>
  *   <ObjectPropertyShort> = <VarReference>
- *   <ObjectPropertyName> = <Identifier> | {{ Javascript string literal }}
+ *   <ObjectPropertyName> = <Identifier> | <StringLiteral>
  *   <BooleanValue> = "true" | "false"
  *   <NumberValue> = <NumberLiteral>
  *   <StringValue> = <StringLiteral>
@@ -72,7 +73,9 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ID_Start> = {{ Unicode ID_Start character }}
  *   <ID_Continue> = {{ Unicode ID_Continue character }}
  *
- * In the above grammar, all whitespace or comments can appear between any two symbols in this grammar (terminal or non-terminal).
+ * Between structural tokens in the above grammar, all whitespace and comments are skipped.
+ * Within <StringExpr>, whitespace and comments act as flex space delimiters rather than
+ * being silently ignored (see notes above).
  *   <WS> ::= {{ Javascript Whitespace and Line terminators character ( [\s] in JS regexp )}}*
  *   <SingleLineComment> ::= "//" [^\n]* "\n"
  *   <MultiLineComment> ::= "/*" .* "*\/"
@@ -225,7 +228,8 @@ class GrammarRuleParser {
         this.curr = index === -1 ? this.content.length : index + after.length;
     }
 
-    private skipWhitespace(skip: number = 0): void {
+    private skipWhitespace(skip: number = 0): boolean {
+        const start = this.curr;
         this.curr += skip;
         while (true) {
             if (this.isAtWhiteSpace()) {
@@ -242,6 +246,7 @@ class GrammarRuleParser {
             }
             break;
         }
+        return this.curr > start;
     }
 
     private parseId(expected: string): string {
@@ -344,28 +349,29 @@ class GrammarRuleParser {
 
     private parseStrExpr(): StrExpr | undefined {
         const str: string[] = [];
-        const curr: string[] = [];
+        const word: string[] = [];
         while (!this.isAtEnd()) {
-            let ch = this.content[this.curr];
+            // Collapse all whitespace and comments to flex space
+            if (this.skipWhitespace()) {
+                str.push(word.join(""));
+                word.length = 0;
+                continue;
+            }
+
+            const ch = this.content[this.curr];
             if (isExpressionSpecialChar(ch)) {
                 break;
             }
+            // Append literal character, expanding escape sequences
+            // Escaped spaces are treated as literal spaces rather than flex space
 
-            // Collapse all whitespace to flex space
-            if (isWhitespace(ch)) {
-                str.push(curr.join(""));
-                curr.length = 0;
-                this.skipWhitespace(1);
-                continue;
-            }
             this.curr++;
-
-            // Whitespace are keep as is if escaped
-            curr.push(ch === "\\" ? this.parseEscapedChar() : ch);
+            word.push(ch === "\\" ? this.parseEscapedChar() : ch);
         }
 
-        if (curr.length !== 0) {
-            str.push(curr.join(""));
+        if (word.length !== 0) {
+            // Flush the final segment
+            str.push(word.join(""));
         } else if (str.length === 0) {
             return undefined;
         }
