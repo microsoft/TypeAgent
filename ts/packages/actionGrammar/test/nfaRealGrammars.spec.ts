@@ -115,16 +115,6 @@ describe("NFA with Real Grammars", () => {
             // expect(result2.matched).toBe(true);
             // expect(result2.captures.get("x")).toBe("bedroom");
 
-            // Test: "play on living room device"
-            // Note: This might not match because "living room" is two tokens
-            const result3 = matchNFA(nfa, [
-                "play",
-                "on",
-                "the",
-                "living",
-                "room",
-                "device",
-            ]);
         });
 
         it("should match 'play track by artist' patterns", () => {
