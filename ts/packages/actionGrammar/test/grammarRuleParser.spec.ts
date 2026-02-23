@@ -698,6 +698,46 @@ describe("Grammar Rule Parser", () => {
                 },
             });
         });
+
+        it("should treat // comment with no preceding space as flex space in string expression", () => {
+            const grammar = "<rule> = hello//comment\nworld;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "string",
+                value: ["hello", "world"],
+            });
+        });
+
+        it("should treat /* */ comment with no preceding space as flex space in string expression", () => {
+            const grammar = "<rule> = hello/*comment*/world;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "string",
+                value: ["hello", "world"],
+            });
+        });
+
+        it("should collapse multiple consecutive comments to a single flex space", () => {
+            const grammar = "<rule> = hello//c1\n//c2\nworld;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "string",
+                value: ["hello", "world"],
+            });
+        });
+
+        it("should collapse mixed adjacent comment styles to a single flex space", () => {
+            const grammar = "<rule> = hello//line\n/*block*/world;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "string",
+                value: ["hello", "world"],
+            });
+        });
     });
 
     describe("Error Handling", () => {
