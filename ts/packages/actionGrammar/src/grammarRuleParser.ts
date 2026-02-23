@@ -17,7 +17,31 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <Rule> ::= <Expression> ( "->" <Value> )?
  *
  *   <Expression> ::= ( <StringExpr> | <VariableExpr> | <RuleRefExpr> | <GroupExpr> )+
- *   <StringExpr> ::= [^$()|-+*[]{}?]+*
+ *
+ *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash.
+ *   // Whitespace (<WS>) is not stored literally; instead each run of whitespace creates a
+ *   // "flex space" boundary, splitting the string into segments that can match any amount
+ *   // of whitespace at runtime.  An escaped whitespace character (e.g. "\ ") bypasses this
+ *   // behavior and is stored as a literal space within the current segment.
+ *   // Special chars must be escaped with backslash to appear as literal text.
+ *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Char> )+
+ *   <EscapeSequence> ::= "\\"<EscapedChar>
+ *   <EscapedChar> ::= "0"                        // null character \0
+ *                   | "n"                        // newline \n
+ *                   | "r"                        // carriage return \r
+ *                   | "v"                        // vertical tab \v
+ *                   | "t"                        // horizontal tab \t
+ *                   | "b"                        // backspace \b
+ *                   | "f"                        // form feed \f
+ *                   | <LineTerminator>           // line continuation: backslash and newline are both discarded
+ *                   | "x"<Hex2Digit>             // hex escape \xXX
+ *                   | "u"<Unicode4Digit>         // Unicode escape \uXXXX
+ *                   | "u{"<UnicodeCodePoint>"}"  // Unicode code point \u{X…} (up to U+10FFFF)
+ *                   | <AnyChar>                  // identity escape: any other character is kept as-is
+ *
+ *   <Hex2Digit> ::= [0-9A-Fa-f]{2}
+ *   <Unicode4Digit> ::= [0-9A-Fa-f]{4}
+ *   <UnicodeCodePoint> ::= [0-9A-Fa-f]+
  *   <VariableExpr> ::= "$(" <VariableSpecifier> ( ")" | ")?" )
  *
  *    // TODO: Support nested instead of just Rule Ref
