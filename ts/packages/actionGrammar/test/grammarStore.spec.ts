@@ -6,9 +6,11 @@ import * as fs from "fs";
 import { fileURLToPath } from "url";
 import {
     GrammarStore,
+    GrammarStoreData,
     getSessionGrammarDirPath,
     getSessionGrammarStorePath,
 } from "../src/grammarStore.js";
+import { matchGrammar } from "../src/grammarMatcher.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -225,6 +227,74 @@ describe("GrammarStore", () => {
             const grammar = store.compileToGrammar();
             expect(grammar).toBeDefined();
             expect(grammar!.rules.length).toBeGreaterThan(0);
+        });
+
+        it("should persist compiledGrammar in the saved JSON", async () => {
+            const store = new GrammarStore();
+
+            await store.addRule({
+                grammarText: '<Start> = pause -> { actionName: "pause" };',
+                schemaName: "player",
+            });
+
+            // Compile first, then save — compiledGrammar should appear in file
+            store.compileToGrammar();
+            await store.save(testFile);
+
+            const raw: GrammarStoreData = JSON.parse(
+                fs.readFileSync(testFile, "utf-8"),
+            );
+            expect(raw.compiledGrammar).toBeDefined();
+        });
+
+        it("should restore compiled grammar from JSON on load (no re-parse)", async () => {
+            const store = new GrammarStore();
+
+            await store.addRule({
+                grammarText: '<Start> = pause -> { actionName: "pause" };',
+                schemaName: "player",
+            });
+
+            await store.save(testFile);
+
+            // Load into a new store; compiledGrammar in the file means no
+            // text re-parsing is needed
+            const store2 = new GrammarStore();
+            await store2.load(testFile);
+
+            const grammar = store2.compileToGrammar();
+            expect(grammar).toBeDefined();
+
+            const matches = matchGrammar(grammar!, "pause");
+            expect(matches.length).toBeGreaterThan(0);
+            expect(matches[0].match).toMatchObject({ actionName: "pause" });
+        });
+
+        it("should fall back to parsing grammarText when compiledGrammar absent (backward compat)", async () => {
+            const store = new GrammarStore();
+
+            await store.addRule({
+                grammarText: '<Start> = resume -> { actionName: "resume" };',
+                schemaName: "player",
+            });
+
+            // Write a file that lacks compiledGrammar (old format)
+            const oldFormat: GrammarStoreData = {
+                version: "1.0",
+                schemas: store["data"].schemas,
+            };
+            fs.mkdirSync(path.dirname(testFile), { recursive: true });
+            fs.writeFileSync(testFile, JSON.stringify(oldFormat, null, 2));
+
+            const store2 = new GrammarStore();
+            await store2.load(testFile);
+
+            const grammar = store2.compileToGrammar();
+            expect(grammar).toBeDefined();
+
+            const matches = matchGrammar(grammar!, "resume");
+            expect(matches.length).toBeGreaterThan(0);
+            expect(matches[0].match).toMatchObject({ actionName: "resume" });
         });
     });
 
