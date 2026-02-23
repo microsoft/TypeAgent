@@ -39,9 +39,20 @@ function stripTrailingPunctuation(token: string): string {
 }
 
 /**
- * Tokenize a request string into an array of tokens
- * Simple whitespace-based tokenization for NFA matching
- * Strips trailing punctuation from tokens for better matching
+ * Normalize a single token for NFA matching: lowercase and strip trailing
+ * punctuation.  Applied to both input tokens and grammar tokens so that both
+ * sides of the comparison are on the same canonical form.
+ */
+export function normalizeToken(token: string): string {
+    return stripTrailingPunctuation(token.toLowerCase());
+}
+
+/**
+ * Tokenize a request string into an array of tokens.
+ * Splits on whitespace and strips trailing punctuation, but preserves
+ * original case so that wildcard captures retain the user's casing.
+ * Normalization (lowercasing) for fixed-token comparisons is done
+ * separately at match time via normalizeToken().
  */
 export function tokenizeRequest(request: string): string[] {
     return request

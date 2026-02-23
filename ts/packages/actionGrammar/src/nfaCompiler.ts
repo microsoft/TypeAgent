@@ -16,6 +16,7 @@ import {
     compileValueExpression,
     ValueExpression,
 } from "./environment.js";
+import { normalizeToken } from "./nfaMatcher.js";
 
 /**
  * Context for compiling a rule, including slot information
@@ -678,24 +679,28 @@ function compileStringPart(
     fromState: number,
     toState: number,
 ): number {
-    if (part.value.length === 0) {
+    // Normalize grammar tokens (lowercase + strip trailing punctuation) so they
+    // compare correctly against the normalized input tokens from tokenizeRequest().
+    const normalized = part.value.map(normalizeToken).filter((t) => t.length > 0);
+
+    if (normalized.length === 0) {
         // Empty string - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
         return toState;
     }
 
     // For single token, direct transition
-    if (part.value.length === 1) {
-        builder.addTokenTransition(fromState, toState, part.value);
+    if (normalized.length === 1) {
+        builder.addTokenTransition(fromState, toState, normalized);
         return toState;
     }
 
     // For multiple tokens, create a sequence chain
     // Each token must match in order: state1 --token1--> state2 --token2--> ... --> toState
     let currentState = fromState;
-    for (let i = 0; i < part.value.length; i++) {
-        const token = part.value[i];
-        const isLast = i === part.value.length - 1;
+    for (let i = 0; i < normalized.length; i++) {
+        const token = normalized[i];
+        const isLast = i === normalized.length - 1;
         const nextState = isLast ? toState : builder.createState(false);
         builder.addTokenTransition(currentState, nextState, [token]);
         currentState = nextState;

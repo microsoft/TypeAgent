@@ -79,6 +79,7 @@ export {
 export {
     matchGrammarWithNFA,
     tokenizeRequest,
+    normalizeToken,
     type NFAGrammarMatchResult,
 } from "./nfaMatcher.js";
 export { computeNFACompletions } from "./nfaCompletion.js";

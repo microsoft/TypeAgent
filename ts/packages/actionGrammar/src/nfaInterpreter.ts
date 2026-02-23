@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { NFA, NFATransition } from "./nfa.js";
+import { normalizeToken } from "./nfaMatcher.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import {
     Environment,
@@ -292,8 +293,9 @@ function tryTransition(
 ): NFAExecutionState | undefined {
     switch (trans.type) {
         case "token":
-            // Match specific token(s)
-            if (trans.tokens && trans.tokens.includes(token)) {
+            // Match specific token(s); normalize input token so that
+            // case and trailing punctuation don't prevent a match
+            if (trans.tokens && trans.tokens.includes(normalizeToken(token))) {
                 return {
                     stateId: trans.to,
                     tokenIndex: tokenIndex + 1,
