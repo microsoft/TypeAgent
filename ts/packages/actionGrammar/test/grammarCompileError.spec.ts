@@ -7,8 +7,8 @@ describe("Grammar Compiler", () => {
     describe("Error", () => {
         it("Undefined rule reference", () => {
             const grammarText = `
-            @<Start> = <Pause>
-            @<Pause> = <Undefined>
+            <Start> = <Pause>;
+            <Pause> = <Undefined>;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -20,8 +20,8 @@ describe("Grammar Compiler", () => {
 
         it("Undefined rule reference in variable", () => {
             const grammarText = `
-            @<Start> = <Pause>
-            @<Pause> = $(x:<Undefined>)
+            <Start> = <Pause>;
+            <Pause> = $(x:<Undefined>);
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -36,10 +36,10 @@ describe("Grammar Compiler", () => {
             // produce a value (the literal string itself). Rules with multiple parts
             // (e.g., two rule references) do NOT produce an implicit value.
             const grammarText = `
-            @<Start> = $(x:<Pause>)
-            @<Pause> = <Wait> <Stop>
-            @<Wait> = wait
-            @<Stop> = stop
+            <Start> = $(x:<Pause>);
+            <Pause> = <Wait> <Stop>;
+            <Wait> = wait;
+            <Stop> = stop;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -50,9 +50,9 @@ describe("Grammar Compiler", () => {
         });
         it("Variable reference to non-value rule in nested rule", () => {
             const grammarText = `
-            @<Start> = $(x:<Pause>)
-            @<Pause> = please <Wait>
-            @<Wait> = wait
+            <Start> = $(x:<Pause>);
+            <Pause> = please <Wait>;
+            <Wait> = wait;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -63,11 +63,11 @@ describe("Grammar Compiler", () => {
         });
         it("Variable reference to non-value rules with multiple values", () => {
             const grammarText = `
-            @<Start> = $(x:<Pause>)
+            <Start> = $(x:<Pause>);
             // This rule has multiple variable references, so cannot produce a single (implicit) value
-            @<Pause> = $(y:<Wait>) and $(z:<Stop>)
-            @<Wait> = please wait -> 1
-            @<Stop> = stop now -> 2
+            <Pause> = $(y:<Wait>) and $(z:<Stop>);
+            <Wait> = please wait -> 1;
+            <Stop> = stop now -> 2;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -79,7 +79,7 @@ describe("Grammar Compiler", () => {
 
         it("Undefined variable reference in value expression", () => {
             const grammarText = `
-            @<Start> = $(name) plays music -> { player: name, action: undefinedVar }
+            <Start> = $(name) plays music -> { player: name, action: undefinedVar };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -91,7 +91,7 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable definition in same rule", () => {
             const grammarText = `
-            @<Start> = $(name) plays $(name) -> { name }
+            <Start> = $(name) plays $(name) -> { name };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -103,7 +103,7 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable with different types", () => {
             const grammarText = `
-            @<Start> = $(x:string) and $(x:number) -> { x }
+            <Start> = $(x:string) and $(x:number) -> { x };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -115,9 +115,9 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable with rule reference", () => {
             const grammarText = `
-            @<Start> = $(action:<Action>) $(action:<Action>) -> { action }
-            @<Action> = play -> "play"
-                      | pause -> "pause"
+            <Start> = $(action:<Action>) $(action:<Action>) -> { action };
+            <Action> = play -> "play"
+                      | pause -> "pause";
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -129,7 +129,7 @@ describe("Grammar Compiler", () => {
 
         it("Multiple duplicate variables in same rule", () => {
             const grammarText = `
-            @<Start> = $(x) $(y) $(x) $(y) -> { x, y }
+            <Start> = $(x) $(y) $(x) $(y) -> { x, y };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -144,7 +144,7 @@ describe("Grammar Compiler", () => {
 
         it("Variables in nested inline rules have separate scope", () => {
             const grammarText = `
-            @<Start> = $(x) (and $(x))
+            <Start> = $(x) (and $(x));
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -154,11 +154,11 @@ describe("Grammar Compiler", () => {
 
         it("Same variable in different rules should not error", () => {
             const grammarText = `
-            @<Start> = <Rule1> | <Rule2>
-            @<Rule1> = play $(name) -> { name }
-            @<Rule1> = stop $(name) -> { name }
-            @<Rule2> = resume $(name) -> { name }
-                | pause $(name) -> { name }
+            <Start> = <Rule1> | <Rule2>;
+            <Rule1> = play $(name) -> { name };
+            <Rule1> = stop $(name) -> { name };
+            <Rule2> = resume $(name) -> { name }
+                | pause $(name) -> { name };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -167,7 +167,7 @@ describe("Grammar Compiler", () => {
 
         it("Duplicate variable with optional modifier", () => {
             const grammarText = `
-            @<Start> = $(name)? $(name) -> { name }
+            <Start> = $(name)? $(name) -> { name };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -179,7 +179,7 @@ describe("Grammar Compiler", () => {
 
         it("Start rule without value", () => {
             const grammarText = `
-            @<Start> = $(x:string) $(y:string) wait
+            <Start> = $(x:string) $(y:string) wait;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -191,8 +191,8 @@ describe("Grammar Compiler", () => {
 
         it("Start rule with nested non-value rule", () => {
             const grammarText = `
-            @<Start> = <Action>
-            @<Action> = $(x:string) $(y:string) wait
+            <Start> = <Action>;
+            <Action> = $(x:string) $(y:string) wait;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -204,7 +204,7 @@ describe("Grammar Compiler", () => {
 
         it("Start rule without value with startValueRequired:false option", () => {
             const grammarText = `
-            @<Start> = $(x:string) $(y:string) wait
+            <Start> = $(x:string) $(y:string) wait;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
@@ -215,8 +215,8 @@ describe("Grammar Compiler", () => {
 
         it("Start rule with nested non-value rule and startValueRequired:false option", () => {
             const grammarText = `
-            @<Start> = <Action>
-            @<Action> = $(x:string) $(y:string) wait
+            <Start> = <Action>;
+            <Action> = $(x:string) $(y:string) wait;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
@@ -227,7 +227,7 @@ describe("Grammar Compiler", () => {
 
         it("Start rule with value expression is valid", () => {
             const grammarText = `
-            @<Start> = $(x:string) $(y:string) wait -> { x, y }
+            <Start> = $(x:string) $(y:string) wait -> { x, y };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -236,7 +236,7 @@ describe("Grammar Compiler", () => {
 
         it("Start rule with single variable is valid", () => {
             const grammarText = `
-            @<Start> = $(x:string)
+            <Start> = $(x:string);
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -245,7 +245,7 @@ describe("Grammar Compiler", () => {
 
         it("Start rule with single part and no variables is valid", () => {
             const grammarText = `
-            @<Start> = play -> "play"
+            <Start> = play -> "play";
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -255,9 +255,9 @@ describe("Grammar Compiler", () => {
     describe("Warning", () => {
         it("Unused", () => {
             const grammarText = `
-            @<Start> = <Pause>
-            @<Pause> = pause
-            @<Unused> = unused
+            <Start> = <Pause>;
+            <Pause> = pause;
+            <Unused> = unused;
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -271,8 +271,8 @@ describe("Grammar Compiler", () => {
 
         it("Multiple variables without explicit value expression", () => {
             const grammarText = `
-            @<Start> = <Action> -> "action"
-            @<Action> = $(x:string) $(y:string)
+            <Start> = <Action> -> "action";
+            <Action> = $(x:string) $(y:string);
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -286,8 +286,8 @@ describe("Grammar Compiler", () => {
 
         it("Single variable without explicit value does not warn", () => {
             const grammarText = `
-            @<Start> = <Action>
-            @<Action> = $(x:string)
+            <Start> = <Action>;
+            <Action> = $(x:string);
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -298,8 +298,8 @@ describe("Grammar Compiler", () => {
 
         it("Multiple variables with explicit value does not warn", () => {
             const grammarText = `
-            @<Start> = <Action>
-            @<Action> = $(x:string) $(y:string) -> { x, y }
+            <Start> = <Action>;
+            <Action> = $(x:string) $(y:string) -> { x, y };
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -310,8 +310,8 @@ describe("Grammar Compiler", () => {
 
         it("No variables without explicit value does not warn", () => {
             const grammarText = `
-            @<Start> = <Action>
-            @<Action> = play music
+            <Start> = <Action>;
+            <Action> = play music;
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -324,9 +324,9 @@ describe("Grammar Compiler", () => {
     describe("Type Imports", () => {
         it("Imported type reference should not error", () => {
             const grammarText = `
-            @import { CustomType } from "types.ts"
+            import { CustomType } from "types.ts";
 
-            @<Start> = $(value:CustomType)
+            <Start> = $(value:CustomType);
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -335,9 +335,9 @@ describe("Grammar Compiler", () => {
 
         it("Wildcard type import allows any type reference", () => {
             const grammarText = `
-            @import * from "types.ts"
+            import * from "types.ts";
 
-            @<Start> = $(x:CustomType) and $(y:AnotherType) -> { x, y }
+            <Start> = $(x:CustomType) and $(y:AnotherType) -> { x, y };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -346,10 +346,10 @@ describe("Grammar Compiler", () => {
 
         it("Multiple type imports work together", () => {
             const grammarText = `
-            @import { Type1 } from "file1.ts"
-            @import { Type2 } from "file2.ts"
+            import { Type1 } from "file1.ts";
+            import { Type2 } from "file2.ts";
 
-            @<Start> = $(x:Type1) $(y:Type2) -> { x, y }
+            <Start> = $(x:Type1) $(y:Type2) -> { x, y };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -358,7 +358,7 @@ describe("Grammar Compiler", () => {
 
         it("Built-in types do not require imports", () => {
             const grammarText = `
-            @<Start> = $(x:string) $(y:number) $(z:wildcard) -> { x, y, z }
+            <Start> = $(x:string) $(y:number) $(z:wildcard) -> { x, y, z };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -367,9 +367,9 @@ describe("Grammar Compiler", () => {
 
         it("Non-imported type errors", () => {
             const grammarText = `
-            @import { CustomType } from "types.ts"
+            import { CustomType } from "types.ts";
 
-            @<Start> = $(x:CustomType) $(y:UndefinedType) -> { x, y }
+            <Start> = $(x:CustomType) $(y:UndefinedType) -> { x, y };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -381,9 +381,9 @@ describe("Grammar Compiler", () => {
 
         it("Type imports do not affect rule validation", () => {
             const grammarText = `
-            @import { SomeType } from "types.ts"
+            import { SomeType } from "types.ts";
 
-            @<Start> = <SomeType>
+            <Start> = <SomeType>;
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
@@ -395,9 +395,9 @@ describe("Grammar Compiler", () => {
 
         it("Unused imported type warns", () => {
             const grammarText = `
-            @import { UnusedType } from "types.ts"
+            import { UnusedType } from "types.ts";
 
-            @<Start> = play music
+            <Start> = play music;
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -411,9 +411,9 @@ describe("Grammar Compiler", () => {
 
         it("Used imported type does not warn", () => {
             const grammarText = `
-            @import { UsedType } from "types.ts"
+            import { UsedType } from "types.ts";
 
-            @<Start> = $(x:UsedType)
+            <Start> = $(x:UsedType);
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -424,10 +424,10 @@ describe("Grammar Compiler", () => {
 
         it("Only unused imported types warn when mixed with used ones", () => {
             const grammarText = `
-            @import { UsedType } from "types.ts"
-            @import { UnusedType } from "types.ts"
+            import { UsedType } from "types.ts";
+            import { UnusedType } from "types.ts";
 
-            @<Start> = $(x:UsedType)
+            <Start> = $(x:UsedType);
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -441,9 +441,9 @@ describe("Grammar Compiler", () => {
 
         it("Wildcard type import does not warn when types are unused", () => {
             const grammarText = `
-            @import * from "types.ts"
+            import * from "types.ts";
 
-            @<Start> = play music
+            <Start> = play music;
         `;
             const errors: string[] = [];
             const warnings: string[] = [];

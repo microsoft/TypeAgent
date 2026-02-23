@@ -27,8 +27,8 @@ The unit tests are currently failing due to a variable capture issue in how nest
 The player grammar defines nested rules:
 
 ```
-@ <TrackName> = $(x:string)
-@ <ArtistName> = $(x:string)
+<TrackName> = $(x:string);
+<ArtistName> = $(x:string);
 ```
 
 When referenced as `$(trackName:<TrackName>)`, the inner `$(x:string)` captures override the outer variable name `trackName`.

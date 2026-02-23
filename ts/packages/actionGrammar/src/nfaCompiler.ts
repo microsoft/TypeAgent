@@ -99,7 +99,7 @@ function collectVariablePaths(
 
 /**
  * Check if a rule is a passthrough rule (single RulesPart without variable or value)
- * Passthrough rules need normalization: @ <S> = <C> becomes @ <S> = $(v:<C>) -> $(v)
+ * Passthrough rules need normalization: <S> = <C>; becomes <S> = $(_result:<C>) -> _result;
  */
 function isPassthroughRule(rule: GrammarRule): boolean {
     // A passthrough rule has:
@@ -122,7 +122,7 @@ function isPassthroughRule(rule: GrammarRule): boolean {
 }
 
 /**
- * Check if a rule is a single-literal rule (e.g., @ <KnownProgram> = chrome)
+ * Check if a rule is a single-literal rule (e.g., <KnownProgram> = chrome;)
  * Such rules should implicitly produce the matched literal as their value: -> "chrome"
  */
 function isSingleLiteralRule(rule: GrammarRule): { literal: string } | false {
@@ -149,8 +149,8 @@ function isSingleLiteralRule(rule: GrammarRule): { literal: string } | false {
 /**
  * Normalize a grammar for matching.
  * This converts:
- * - Passthrough rules: @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
- * - Single-literal rules: @ <S> = chrome becomes @ <S> = chrome -> "chrome"
+ * - Passthrough rules: <S> = <C>; becomes <S> = $(_result:<C>) -> _result;
+ * - Single-literal rules: <S> = chrome; becomes <S> = chrome -> "chrome";
  *
  * Normalization is done as a preprocessing step so matchers don't need special handling.
  * Both completion-based and NFA-based matchers benefit from this normalization.
@@ -208,7 +208,7 @@ function normalizeRule(
 
     // Check if this is a passthrough rule that needs transformation
     if (isPassthroughRule(rule)) {
-        // Transform: @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
+        // Transform: <S> = <C>; becomes <S> = $(_result:<C>) -> _result;
         const rulesPart = normalizedParts[0] as RulesPart;
         return {
             parts: [
@@ -224,7 +224,7 @@ function normalizeRule(
     // Check if this is a single-literal rule that needs transformation
     const singleLiteral = isSingleLiteralRule(rule);
     if (singleLiteral) {
-        // Transform: @ <S> = chrome becomes @ <S> = chrome -> "chrome"
+        // Transform: <S> = chrome; becomes <S> = chrome -> "chrome";
         return {
             parts: normalizedParts,
             value: { type: "literal", value: singleLiteral.literal },
@@ -257,7 +257,7 @@ function normalizePart(
 }
 
 /**
- * Check if a rule is a single-variable rule (e.g., @ <ArtistName> = $(x:wildcard))
+ * Check if a rule is a single-variable rule (e.g., <ArtistName> = $(x:wildcard);)
  * Such rules should implicitly produce their variable's value: -> $(x)
  */
 function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
@@ -399,7 +399,7 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
  */
 export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
     // Normalize grammar first: convert passthrough rules to explicit form
-    // @ <S> = <C> becomes @ <S> = $(_result:<C>) -> $(_result)
+    // <S> = <C>; becomes <S> = $(_result:<C>) -> _result;
     const normalizedGrammar = normalizeGrammar(grammar);
 
     const builder = new NFABuilder();
@@ -427,8 +427,8 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             );
         }
 
-        // Check for single-variable rules like @ <ArtistName> = $(x:wildcard)
-        // These should implicitly produce their variable's value: -> $(x)
+        // Check for single-variable rules like <ArtistName> = $(x:wildcard);
+        // These should implicitly produce their variable's value: -> x
         let effectiveValue = rule.value;
         if (!effectiveValue) {
             const singleVar = isSingleVariableRule(rule);
@@ -1093,7 +1093,7 @@ function compileRulesPartWithSlots(
         // Compile and store the action value on the entry state FIRST
         // We need to know if there's a value before deciding about environments
         // Passthrough normalization is done upfront, so rules already have explicit values
-        // Just check for single-variable rules like @ <ArtistName> = $(x:wildcard)
+        // Just check for single-variable rules like <ArtistName> = $(x:wildcard);
         let effectiveValue = rule.value;
         if (!effectiveValue) {
             const singleVar = isSingleVariableRule(rule);

@@ -14,57 +14,57 @@
 
 // Video Schema Grammar
 
-@ <Start> = <createVideoAction>
+<Start> = <createVideoAction>;
 
 // Main action rule
-@ <createVideoAction> = $(request:<VideoRequest>) $(files:<FileSpec>)? $(duration:<DurationSpec>)? $(caption:<CaptionSpec>)? -> { actionName: "createVideoAction", parameters: { originalRequest: request, relatedFiles: files, duration: duration, caption: caption } }
+<createVideoAction> = $(request:<VideoRequest>) $(files:<FileSpec>)? $(duration:<DurationSpec>)? $(caption:<CaptionSpec>)? -> { actionName: "createVideoAction", parameters: { originalRequest: request, relatedFiles: files, duration: duration, caption: caption } };
 
 // Video request patterns
-@ <VideoRequest> = <VideoPhrase> -> "video_request"
+<VideoRequest> = <VideoPhrase> -> "video_request";
 
-@ <VideoPhrase> = <Polite>? <CreateVerb> <VideoTarget> <VideoContent>? | <VideoTarget> <FromFiles> | <NeedPhrase> <VideoTarget>
+<VideoPhrase> = <Polite>? <CreateVerb> <VideoTarget> <VideoContent>? | <VideoTarget> <FromFiles> | <NeedPhrase> <VideoTarget>;
 
-@ <Polite> = ('can you' | 'could you' | 'please' | 'would you')?
+<Polite> = ('can you' | 'could you' | 'please' | 'would you')?;
 
-@ <CreateVerb> = 'create' | 'make' | 'generate' | 'build' | 'produce'
+<CreateVerb> = 'create' | 'make' | 'generate' | 'build' | 'produce';
 
-@ <VideoTarget> = ('a' | 'an')? ('video' | 'slideshow' | 'compilation' | 'clip' | 'presentation')
+<VideoTarget> = ('a' | 'an')? ('video' | 'slideshow' | 'compilation' | 'clip' | 'presentation');
 
-@ <VideoContent> = ('promotional' | 'quick' | 'brief' | 'social media' | 'professional')?
+<VideoContent> = ('promotional' | 'quick' | 'brief' | 'social media' | 'professional')?;
 
-@ <FromFiles> = 'from' ('these' | 'the')?
+<FromFiles> = 'from' ('these' | 'the')?;
 
-@ <NeedPhrase> = ('i need' | 'need') ('a' | 'an')?
+<NeedPhrase> = ('i need' | 'need') ('a' | 'an')?;
 
 // File specification patterns
-@ <FileSpec> = <FilePhrase> -> "file_spec"
+<FileSpec> = <FilePhrase> -> "file_spec";
 
-@ <FilePhrase> = <UsingFiles> | <FromFiles> <FileLocation>
+<FilePhrase> = <UsingFiles> | <FromFiles> <FileLocation>;
 
-@ <UsingFiles> = 'using' ('the' | 'these')? <FileDescription>
+<UsingFiles> = 'using' ('the' | 'these')? <FileDescription>;
 
-@ <FileDescription> = ('product images' | 'vacation photos' | 'screenshots' | 'presentation slides' | 'team photos' | 'recipe photos' | 'renovation pics' | 'before' 'after' 'pics' | 'charts and graphs' | 'files' | 'photos' | 'images')
+<FileDescription> = ('product images' | 'vacation photos' | 'screenshots' | 'presentation slides' | 'team photos' | 'recipe photos' | 'renovation pics' | 'before' 'after' 'pics' | 'charts and graphs' | 'files' | 'photos' | 'images');
 
-@ <FileLocation> = ('in' 'the')? ('marketing folder' | 'food folder' | 'app demo' | 'folder' | 'directory')
+<FileLocation> = ('in' 'the')? ('marketing folder' | 'food folder' | 'app demo' | 'folder' | 'directory');
 
 // Duration specification patterns
-@ <DurationSpec> = <DurationPhrase> -> "duration_spec"
+<DurationSpec> = <DurationPhrase> -> "duration_spec";
 
-@ <DurationPhrase> = <DurationValue> | <KeepDuration> | <AboutDuration> | <AroundDuration>
+<DurationPhrase> = <DurationValue> | <KeepDuration> | <AboutDuration> | <AroundDuration>;
 
-@ <DurationValue> = $(time:string) ('seconds' | 'second' | 'minutes' | 'minute' | 'mins' | 'min')
+<DurationValue> = $(time:string) ('seconds' | 'second' | 'minutes' | 'minute' | 'mins' | 'min');
 
-@ <KeepDuration> = ('keep it' | 'make it') ('under' | 'about' | 'around')? $(time:string) ('seconds' | 'second' | 'minutes' | 'minute')
+<KeepDuration> = ('keep it' | 'make it') ('under' | 'about' | 'around')? $(time:string) ('seconds' | 'second' | 'minutes' | 'minute');
 
-@ <AboutDuration> = ('about' | 'around' | 'maybe') $(time:string) ('seconds' | 'second' | 'minutes' | 'minute') ('long' | 'duration')?
+<AboutDuration> = ('about' | 'around' | 'maybe') $(time:string) ('seconds' | 'second' | 'minutes' | 'minute') ('long' | 'duration')?;
 
-@ <AroundDuration> = $(time:string) ('seconds' | 'second' | 'minutes' | 'minute') ('would be perfect' | 'duration')?
+<AroundDuration> = $(time:string) ('seconds' | 'second' | 'minutes' | 'minute') ('would be perfect' | 'duration')?;
 
 // Caption specification patterns
-@ <CaptionSpec> = <CaptionPhrase> -> "caption_spec"
+<CaptionSpec> = <CaptionPhrase> -> "caption_spec";
 
-@ <CaptionPhrase> = <CaptionIntro> $(text:string) | <CaptionAs> $(text:string)
+<CaptionPhrase> = <CaptionIntro> $(text:string) | <CaptionAs> $(text:string);
 
-@ <CaptionIntro> = ('add a caption that says' | 'with the caption' | 'caption should be' | 'with caption')
+<CaptionIntro> = ('add a caption that says' | 'with the caption' | 'caption should be' | 'with caption');
 
-@ <CaptionAs> = ('as the caption' | 'for the caption')
+<CaptionAs> = ('as the caption' | 'for the caption');

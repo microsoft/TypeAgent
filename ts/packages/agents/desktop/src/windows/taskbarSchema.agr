@@ -4,55 +4,55 @@
 // Desktop Taskbar Settings Grammar
 // Auto-hide, alignment, task view, widgets, badges, multi-monitor, clock
 
-@ <Start> = <AutoHideTaskbar>
+<Start> = <AutoHideTaskbar>
           | <TaskbarAlignment>
           | <TaskViewVisibility>
           | <ToggleWidgetsButton>
           | <ShowBadgesOnTaskbar>
           | <DisplayTaskbarOnAllMonitors>
-          | <DisplaySecondsInClock>
+          | <DisplaySecondsInClock>;
 
-@ <AutoHideTaskbar> =
+<AutoHideTaskbar> =
     auto hide (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: true, alwaysShow: false } }
   | automatically hide (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: true, alwaysShow: false } }
   | always show (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: false, alwaysShow: true } }
   | hide (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: true, alwaysShow: false } }
-  | show (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: false, alwaysShow: true } }
+  | show (the)? taskbar -> { actionName: "AutoHideTaskbar", parameters: { hideWhenNotUsing: false, alwaysShow: true } };
 
-@ <TaskbarAlignment> =
+<TaskbarAlignment> =
     center (the)? taskbar -> { actionName: "TaskbarAlignment", parameters: { alignment: "center" } }
   | align taskbar (to)? center -> { actionName: "TaskbarAlignment", parameters: { alignment: "center" } }
   | left align (the)? taskbar -> { actionName: "TaskbarAlignment", parameters: { alignment: "left" } }
-  | align taskbar (to)? left -> { actionName: "TaskbarAlignment", parameters: { alignment: "left" } }
+  | align taskbar (to)? left -> { actionName: "TaskbarAlignment", parameters: { alignment: "left" } };
 
-@ <TaskViewVisibility> =
+<TaskViewVisibility> =
     show task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: true } }
   | hide task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: false } }
   | enable task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: true } }
-  | disable task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: false } }
+  | disable task view (button)? -> { actionName: "TaskViewVisibility", parameters: { visibility: false } };
 
-@ <ToggleWidgetsButton> =
+<ToggleWidgetsButton> =
     show widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "show" } }
   | hide widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "hide" } }
   | enable widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "show" } }
-  | disable widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "hide" } }
+  | disable widgets (button)? -> { actionName: "ToggleWidgetsButtonVisibility", parameters: { visibility: "hide" } };
 
-@ <ShowBadgesOnTaskbar> =
+<ShowBadgesOnTaskbar> =
     show taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: true } }
   | hide taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: false } }
   | enable taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: true } }
-  | disable taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: false } }
+  | disable taskbar badges -> { actionName: "ShowBadgesOnTaskbar", parameters: { enableBadging: false } };
 
-@ <DisplayTaskbarOnAllMonitors> =
+<DisplayTaskbarOnAllMonitors> =
     show taskbar on all monitors -> { actionName: "DisplayTaskbarOnAllMonitors", parameters: { enable: true } }
   | show taskbar on all displays -> { actionName: "DisplayTaskbarOnAllMonitors", parameters: { enable: true } }
   | hide taskbar from other monitors -> { actionName: "DisplayTaskbarOnAllMonitors", parameters: { enable: false } }
-  | show taskbar only on main monitor -> { actionName: "DisplayTaskbarOnAllMonitors", parameters: { enable: false } }
+  | show taskbar only on main monitor -> { actionName: "DisplayTaskbarOnAllMonitors", parameters: { enable: false } };
 
-@ <DisplaySecondsInClock> =
+<DisplaySecondsInClock> =
     show seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: true } }
   | hide seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
   | display seconds in (system)? clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: true } }
   | show only hours and minutes -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
   | turn off seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
-  | disable seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } }
+  | disable seconds in clock -> { actionName: "DisplaySecondsInSystrayClock", parameters: { enable: false } };

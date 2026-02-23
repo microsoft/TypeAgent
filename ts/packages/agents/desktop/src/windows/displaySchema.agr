@@ -4,40 +4,40 @@
 // Desktop Display Settings Grammar
 // Night light, color temperature, scaling, orientation, rotation lock
 
-@ <Start> = <EnableBlueLightFilter>
+<Start> = <EnableBlueLightFilter>
           | <AdjustColorTemperature>
           | <DisplayScaling>
           | <AdjustScreenOrientation>
-          | <RotationLock>
+          | <RotationLock>;
 
-@ <EnableBlueLightFilter> =
+<EnableBlueLightFilter> =
     enable night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "sunset to sunrise", nightLightScheduleDisabled: false } }
   | disable night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "", nightLightScheduleDisabled: true } }
   | turn on night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "sunset to sunrise", nightLightScheduleDisabled: false } }
   | turn off night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "", nightLightScheduleDisabled: true } }
   | enable blue light filter -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "sunset to sunrise", nightLightScheduleDisabled: false } }
-  | disable blue light filter -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "", nightLightScheduleDisabled: true } }
+  | disable blue light filter -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "", nightLightScheduleDisabled: true } };
 
-@ <AdjustColorTemperature> =
+<AdjustColorTemperature> =
     adjust color temperature -> { actionName: "adjustColorTemperature", parameters: {} }
   | reduce blue light -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "reduce" } }
   | increase blue light -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "increase" } }
   | warmer (screen)? colors -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "reduce" } }
-  | cooler (screen)? colors -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "increase" } }
+  | cooler (screen)? colors -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "increase" } };
 
-@ <DisplayScaling> =
+<DisplayScaling> =
     set (display)? scaling to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: size } }
   | set text scaling to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: size } }
-  | set zoom to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: size } }
+  | set zoom to $(size:number) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: size } };
 
-@ <AdjustScreenOrientation> =
+<AdjustScreenOrientation> =
     set (screen)? orientation to landscape -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "landscape" } }
   | set (screen)? orientation to portrait -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "portrait" } }
   | rotate screen to landscape -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "landscape" } }
-  | rotate screen to portrait -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "portrait" } }
+  | rotate screen to portrait -> { actionName: "AdjustScreenOrientation", parameters: { orientation: "portrait" } };
 
-@ <RotationLock> =
+<RotationLock> =
     lock (screen)? rotation -> { actionName: "RotationLock", parameters: { enable: true } }
   | unlock (screen)? rotation -> { actionName: "RotationLock", parameters: { enable: false } }
   | enable rotation lock -> { actionName: "RotationLock", parameters: { enable: true } }
-  | disable rotation lock -> { actionName: "RotationLock", parameters: { enable: false } }
+  | disable rotation lock -> { actionName: "RotationLock", parameters: { enable: false } };

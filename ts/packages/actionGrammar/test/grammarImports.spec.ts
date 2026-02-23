@@ -39,10 +39,10 @@ describe("Grammar Imports with File Loading", () => {
         it("should import and use a simple rule from another file", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "greeting.agr": `@<Greeting> = (hello | hi | hey) -> "greeting"`,
+                "greeting.agr": `<Greeting> = (hello | hi | hey) -> "greeting";`,
                 "main.agr": `
-                    @import { Greeting } from "./greeting.agr"
-                    @<Start> = $(greeting:<Greeting>) world -> { greeting, target: "world" }
+                    import { Greeting } from "./greeting.agr";
+                    <Start> = $(greeting:<Greeting>) world -> { greeting, target: "world" };
                 `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -72,14 +72,14 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "actions.agr": `
-                                @<Play> = play $(track) -> { action: "play", track }
-                                @<Pause> = pause -> { action: "pause" }
-                                @<Stop> = stop -> { action: "stop" }
+                                <Play> = play $(track) -> { action: "play", track };
+                                <Pause> = pause -> { action: "pause" };
+                                <Stop> = stop -> { action: "stop" };
                             `,
                 "main.agr": `
-                                @import { Play, Pause, Stop } from "./actions.agr"
+                                import { Play, Pause, Stop } from "./actions.agr";
 
-                                @<Start> = <Play> | <Pause> | <Stop>
+                                <Start> = <Play> | <Pause> | <Stop>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -102,13 +102,13 @@ describe("Grammar Imports with File Loading", () => {
         it("should import from multiple files", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "greeting.agr": `@<Greeting> = (hello | hi) -> "greeting"`,
-                "farewell.agr": `@<Farewell> = (goodbye | bye) -> "farewell"`,
+                "greeting.agr": `<Greeting> = (hello | hi) -> "greeting";`,
+                "farewell.agr": `<Farewell> = (goodbye | bye) -> "farewell";`,
                 "main.agr": `
-                                @import { Greeting } from "./greeting.agr"
-                                @import { Farewell } from "./farewell.agr"
+                                import { Greeting } from "./greeting.agr";
+                                import { Farewell } from "./farewell.agr";
 
-                                @<Start> = <Greeting> | <Farewell>
+                                <Start> = <Greeting> | <Farewell>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -130,11 +130,11 @@ describe("Grammar Imports with File Loading", () => {
         it("should use imported rule in a variable reference", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "numbers.agr": `@<Number> = one -> 1 | two -> 2 | three -> 3`,
+                "numbers.agr": `<Number> = one -> 1 | two -> 2 | three -> 3;`,
                 "main.agr": `
-                                @import { Number } from "./numbers.agr"
+                                import { Number } from "./numbers.agr";
 
-                                @<Start> = count to $(num:<Number>) -> { count: num }
+                                <Start> = count to $(num:<Number>) -> { count: num };
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -160,14 +160,14 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "colors.agr": `
-                                @<Red> = red -> "red"
-                                @<Blue> = blue -> "blue"
-                                @<Green> = green -> "green"
+                                <Red> = red -> "red";
+                                <Blue> = blue -> "blue";
+                                <Green> = green -> "green";
                             `,
                 "main.agr": `
-                                @import * from "./colors.agr"
+                                import * from "./colors.agr";
 
-                                @<Start> = <Red> | <Blue> | <Green>
+                                <Start> = <Red> | <Blue> | <Green>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -189,13 +189,13 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "actions.agr": `
-                                @<Action1> = action one -> 1
-                                @<Action2> = action two -> 2
+                                <Action1> = action one -> 1;
+                                <Action2> = action two -> 2;
                             `,
                 "main.agr": `
-                                @import * from "./actions.agr"
+                                import * from "./actions.agr";
 
-                                @<Start> = <Action1> | <Action2>
+                                <Start> = <Action1> | <Action2>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -217,16 +217,16 @@ describe("Grammar Imports with File Loading", () => {
         it("should handle transitive imports (A imports B, B imports C)", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "base.agr": `@<BaseRule> = base value -> "base"`,
+                "base.agr": `<BaseRule> = base value -> "base";`,
                 "middle.agr": `
-                                @import { BaseRule } from "./base.agr"
+                                import { BaseRule } from "./base.agr";
 
-                                @<MiddleRule> = middle <BaseRule> -> "middle"
+                                <MiddleRule> = middle <BaseRule> -> "middle";
                             `,
                 "main.agr": `
-                                @import { MiddleRule } from "./middle.agr"
+                                import { MiddleRule } from "./middle.agr";
 
-                                @<Start> = start <MiddleRule> -> "start"
+                                <Start> = start <MiddleRule> -> "start";
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -247,18 +247,18 @@ describe("Grammar Imports with File Loading", () => {
         it("should handle complex import chains", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "level3.agr": `@<L3> = level three -> 3`,
+                "level3.agr": `<L3> = level three -> 3;`,
                 "level2.agr": `
-                                @import { L3 } from "./level3.agr"
-                                @<L2> = level two <L3> -> 2
+                                import { L3 } from "./level3.agr";
+                                <L2> = level two <L3> -> 2;
                             `,
                 "level1.agr": `
-                                @import { L2 } from "./level2.agr"
-                                @<L1> = level one <L2> -> 1
+                                import { L2 } from "./level2.agr";
+                                <L1> = level one <L2> -> 1;
                             `,
                 "main.agr": `
-                                @import { L1 } from "./level1.agr"
-                                @<Start> = <L1>
+                                import { L1 } from "./level1.agr";
+                                <Start> = <L1>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -279,10 +279,10 @@ describe("Grammar Imports with File Loading", () => {
         it("should handle imports from subdirectories", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "lib/utils.agr": `@<UtilRule> = utility -> "util"`,
+                "lib/utils.agr": `<UtilRule> = utility -> "util";`,
                 "main.agr": `
-                                @import { UtilRule } from "./lib/utils.agr"
-                                @<Start> = <UtilRule> rule -> "result"
+                                import { UtilRule } from "./lib/utils.agr";
+                                <Start> = <UtilRule> rule -> "result";
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -302,16 +302,16 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 // Deepest level: /dir1/dir2/base.agr
-                "dir1/dir2/base.agr": `@<Base> = base -> "base"`,
+                "dir1/dir2/base.agr": `<Base> = base -> "base";`,
                 // Middle level: /dir1/middle.agr imports from ./dir2/base.agr (relative to /dir1/)
                 "dir1/middle.agr": `
-                                @import { Base } from "./dir2/base.agr"
-                                @<Middle> = middle <Base> -> "middle"
+                                import { Base } from "./dir2/base.agr";
+                                <Middle> = middle <Base> -> "middle";
                             `,
                 // Top level: /main.agr imports from ./dir1/middle.agr (relative to /)
                 "main.agr": `
-                                @import { Middle } from "./dir1/middle.agr"
-                                @<Start> = start <Middle> -> "start"
+                                import { Middle } from "./dir1/middle.agr";
+                                <Start> = start <Middle> -> "start";
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -331,21 +331,21 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 // Shared utility in /shared/common.agr
-                "shared/common.agr": `@<Common> = common -> "common"`,
+                "shared/common.agr": `<Common> = common -> "common";`,
                 // Module in /modules/sub/feature.agr imports from ../../shared/common.agr
                 "modules/sub/feature.agr": `
-                                @import { Common } from "../../shared/common.agr"
-                                @<Feature> = feature <Common> -> "feature"
+                                import { Common } from "../../shared/common.agr";
+                                <Feature> = feature <Common> -> "feature";
                             `,
                 // Wrapper in /modules/wrapper.agr imports from ./sub/feature.agr
                 "modules/wrapper.agr": `
-                                @import { Feature } from "./sub/feature.agr"
-                                @<Wrapper> = wrapper <Feature> -> "wrapper"
+                                import { Feature } from "./sub/feature.agr";
+                                <Wrapper> = wrapper <Feature> -> "wrapper";
                             `,
                 // Main imports from ./modules/wrapper.agr
                 "main.agr": `
-                                @import { Wrapper } from "./modules/wrapper.agr"
-                                @<Start> = <Wrapper>
+                                import { Wrapper } from "./modules/wrapper.agr";
+                                <Start> = <Wrapper>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -367,8 +367,8 @@ describe("Grammar Imports with File Loading", () => {
         it("should throw when imported file does not exist", () => {
             const grammarFiles: Record<string, string> = {
                 "main.agr": `
-                                @import { Missing } from "./nonexistent.agr"
-                                @<Start> = <Missing>
+                                import { Missing } from "./nonexistent.agr";
+                                <Start> = <Missing>;
                             `,
             };
             expect(() => {
@@ -377,10 +377,10 @@ describe("Grammar Imports with File Loading", () => {
         });
         it("should throw when imported file has syntax errors", () => {
             const grammarFiles: Record<string, string> = {
-                "bad.agr": `@<Bad> = invalid syntax {{{`,
+                "bad.agr": `<Bad> = invalid syntax {{{`,
                 "main.agr": `
-                                @import { Bad } from "./bad.agr"
-                                @<Start> = <Bad>
+                                import { Bad } from "./bad.agr";
+                                <Start> = <Bad>;
                             `,
             };
             expect(() => {
@@ -393,8 +393,8 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "main.agr": `
-                                @import { Missing } from "./nonexistent.agr"
-                                @<Start> = <Missing>
+                                import { Missing } from "./nonexistent.agr";
+                                <Start> = <Missing>;
                             `,
             };
             expect(
@@ -410,10 +410,10 @@ describe("Grammar Imports with File Loading", () => {
         it("should error when imported rule is not defined in the file", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "actions.agr": `@<Play> = play -> "play"`,
+                "actions.agr": `<Play> = play -> "play";`,
                 "main.agr": `
-                                @import { Stop } from "./actions.agr"
-                                @<Start> = <Stop>
+                                import { Stop } from "./actions.agr";
+                                <Start> = <Stop>;
                             `,
             };
             loadGrammarRulesNoThrow(
@@ -429,12 +429,12 @@ describe("Grammar Imports with File Loading", () => {
         it("should error when trying to import a locally defined rule", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "rules.agr": `@<Action> = imported action -> "imported"`,
+                "rules.agr": `<Action> = imported action -> "imported";`,
                 "main.agr": `
-                                @import { Action } from "./rules.agr"
+                                import { Action } from "./rules.agr";
 
-                                @<Start> = <Action>
-                                @<Action> = local action -> "local"
+                                <Start> = <Action>;
+                                <Action> = local action -> "local";
                             `,
             };
             loadGrammarRulesNoThrow(
@@ -452,10 +452,10 @@ describe("Grammar Imports with File Loading", () => {
         it("should error when imported file has syntax errors", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "bad.agr": `@<Bad> = invalid syntax {{{`,
+                "bad.agr": `<Bad> = invalid syntax {{{`,
                 "main.agr": `
-                                @import { Bad } from "./bad.agr"
-                                @<Start> = <Bad>
+                                import { Bad } from "./bad.agr";
+                                <Start> = <Bad>;
                             `,
             };
             expect(
@@ -472,10 +472,10 @@ describe("Grammar Imports with File Loading", () => {
         it("should refer to files using relative paths in error messages - parse error", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "lib/broken.agr": `@<Broken> = syntax error ->`,
+                "lib/broken.agr": `<Broken> = syntax error ->;`,
                 "main.agr": `
-                                @import { Broken } from "./lib/broken.agr"
-                                @<Start> = <Broken>
+                                import { Broken } from "./lib/broken.agr";
+                                <Start> = <Broken>;
                             `,
             };
 
@@ -497,10 +497,10 @@ describe("Grammar Imports with File Loading", () => {
         it("should refer to files using relative paths in error messages - compile error", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "lib/broken.agr": `@<Broken> = $(x:UndefinedType)`,
+                "lib/broken.agr": `<Broken> = $(x:UndefinedType);`,
                 "main.agr": `
-                                @import { Broken } from "./lib/broken.agr"
-                                @<Start> = <Broken>
+                                import { Broken } from "./lib/broken.agr";
+                                <Start> = <Broken>;
                             `,
             };
 
@@ -527,16 +527,16 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "base.agr": `
-                                @<Subject> = ( cat | dog | bird ) -> "subject"
-                                @<Verb> = ( runs | jumps | flies ) -> "verb"
-                                @<Sentence> = the $(subject:<Subject>) $(verb:<Verb>) -> {
+                                <Subject> = ( cat | dog | bird ) -> "subject";
+                                <Verb> = ( runs | jumps | flies ) -> "verb";
+                                <Sentence> = the $(subject:<Subject>) $(verb:<Verb>) -> {
                                     subject,
                                     verb
-                                }
+                                };
                             `,
                 "main.agr": `
-                                @import { Sentence } from "./base.agr"
-                                @<Start> = <Sentence>
+                                import { Sentence } from "./base.agr";
+                                <Start> = <Sentence>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -564,16 +564,16 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "imported.agr": `
-                                @<ImportedRule1> = imported one -> 1
-                                @<ImportedRule2> = imported two -> 2
+                                <ImportedRule1> = imported one -> 1;
+                                <ImportedRule2> = imported two -> 2;
                             `,
                 "main.agr": `
-                                @import { ImportedRule1, ImportedRule2 } from "./imported.agr"
+                                import { ImportedRule1, ImportedRule2 } from "./imported.agr";
 
-                                @<LocalRule1> = local one -> 3
-                                @<LocalRule2> = local two -> 4
+                                <LocalRule1> = local one -> 3;
+                                <LocalRule2> = local two -> 4;
 
-                                @<Start> = <ImportedRule1> | <ImportedRule2> | <LocalRule1> | <LocalRule2>
+                                <Start> = <ImportedRule1> | <ImportedRule2> | <LocalRule1> | <LocalRule2>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -596,17 +596,17 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "values.agr": `
-                                @<Priority> = high -> 1 | medium -> 2 | low -> 3
-                                @<Status> = active -> "active" | inactive -> "inactive"
+                                <Priority> = high -> 1 | medium -> 2 | low -> 3;
+                                <Status> = active -> "active" | inactive -> "inactive";
                             `,
                 "main.agr": `
-                                @import { Priority, Status } from "./values.agr"
+                                import { Priority, Status } from "./values.agr";
 
-                                @<Start> = task $(name) priority $(p:<Priority>) status $(s:<Status>) -> {
+                                <Start> = task $(name) priority $(p:<Priority>) status $(s:<Status>) -> {
                                     name,
                                     priority: p,
                                     status: s
-                                }
+                                };
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -631,11 +631,11 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "optional.agr": `
-                                @<Polite> = (please)? $(action) (thank you)? -> action
+                                <Polite> = (please)? $(action) (thank you)? -> action;
                             `,
                 "main.agr": `
-                                @import { Polite } from "./optional.agr"
-                                @<Start> = <Polite>
+                                import { Polite } from "./optional.agr";
+                                <Start> = <Polite>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -670,14 +670,14 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "alternatives.agr": `
-                                @<Command> =
+                                <Command> =
                                     start $(service) -> { action: "start", service } |
                                     stop $(service) -> { action: "stop", service } |
-                                    restart $(service) -> { action: "restart", service }
+                                    restart $(service) -> { action: "restart", service };
                             `,
                 "main.agr": `
-                                @import { Command } from "./alternatives.agr"
-                                @<Start> = <Command>
+                                import { Command } from "./alternatives.agr";
+                                <Start> = <Command>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -704,19 +704,19 @@ describe("Grammar Imports with File Loading", () => {
         it("should handle same file imported from multiple places", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "utils.agr": `@<Common> = common -> "common"`,
+                "utils.agr": `<Common> = common -> "common";`,
                 "module1.agr": `
-                                @import { Common } from "./utils.agr"
-                                @<Module1> = module1 <Common> -> "m1"
+                                import { Common } from "./utils.agr";
+                                <Module1> = module1 <Common> -> "m1";
                             `,
                 "module2.agr": `
-                                @import { Common } from "./utils.agr"
-                                @<Module2> = module2 <Common> -> "m2"
+                                import { Common } from "./utils.agr";
+                                <Module2> = module2 <Common> -> "m2";
                             `,
                 "main.agr": `
-                                @import { Module1 } from "./module1.agr"
-                                @import { Module2 } from "./module2.agr"
-                                @<Start> = <Module1> | <Module2>
+                                import { Module1 } from "./module1.agr";
+                                import { Module2 } from "./module2.agr";
+                                <Start> = <Module1> | <Module2>;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -739,8 +739,8 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "main.agr": `
-                                @import { CustomType } from "./types.ts"
-                                @<Start> = value $(x:CustomType) -> x
+                                import { CustomType } from "./types.ts";
+                                <Start> = value $(x:CustomType) -> x;
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -762,12 +762,12 @@ describe("Grammar Imports with File Loading", () => {
         it("should distinguish between grammar imports and type imports", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
-                "rules.agr": `@<MyRule> = my rule -> "rule"`,
+                "rules.agr": `<MyRule> = my rule -> "rule";`,
                 "main.agr": `
-                                @import { MyRule } from "./rules.agr"
-                                @import { MyType } from "./types.ts"
+                                import { MyRule } from "./rules.agr";
+                                import { MyType } from "./types.ts";
 
-                                @<Start> = <MyRule> $(value:MyType) -> { value }
+                                <Start> = <MyRule> $(value:MyType) -> { value };
                             `,
             };
             const grammar = loadGrammarRulesNoThrow(
@@ -791,13 +791,13 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "fileA.agr": `
-                    @import { RuleB } from "./fileB.agr"
-                    @<RuleA> = a <RuleB> -> "a"
-                    @<Start> = <RuleA>
+                    import { RuleB } from "./fileB.agr";
+                    <RuleA> = a <RuleB> -> "a";
+                    <Start> = <RuleA>;
                 `,
                 "fileB.agr": `
-                    @import { RuleA } from "./fileA.agr"
-                    @<RuleB> = b value -> "b"
+                    import { RuleA } from "./fileA.agr";
+                    <RuleB> = b value -> "b";
                 `,
             };
 
@@ -820,9 +820,9 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "fileA.agr": `
-                    @import { RuleA } from "./fileA.agr"
-                    @<RuleA> = a value -> "a"
-                    @<Start> = <RuleA>
+                    import { RuleA } from "./fileA.agr";
+                    <RuleA> = a value -> "a";
+                    <Start> = <RuleA>;
                 `,
             };
 
@@ -844,17 +844,17 @@ describe("Grammar Imports with File Loading", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
                 "fileA.agr": `
-                    @import { RuleB } from "./fileB.agr"
-                    @<RuleA> = a <RuleB> -> "a"
-                    @<Start> = <RuleA>
+                    import { RuleB } from "./fileB.agr";
+                    <RuleA> = a <RuleB> -> "a";
+                    <Start> = <RuleA>;
                 `,
                 "fileB.agr": `
-                    @import { RuleC } from "./fileC.agr"
-                    @<RuleB> = b <RuleC> -> "b"
+                    import { RuleC } from "./fileC.agr";
+                    <RuleB> = b <RuleC> -> "b";
                 `,
                 "fileC.agr": `
-                    @import { RuleA } from "./fileA.agr"
-                    @<RuleC> = c value -> "c"
+                    import { RuleA } from "./fileA.agr";
+                    <RuleC> = c value -> "c";
                 `,
             };
 

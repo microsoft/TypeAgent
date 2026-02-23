@@ -2,59 +2,59 @@
 // Auto-generated grammar for imageSchema
 
 // Start rule - references all action rules by exact action names
-@ <Start> = <createImageAction>
+<Start> = <createImageAction>;
 
 // Main action rule for creating images
-@ <createImageAction> = <CreateImagePhrase> $(originalRequest:string) <WithCaption> $(caption:string) <NumImagesSpec> $(numImages:string) -> { 
+<createImageAction> = <CreateImagePhrase> $(originalRequest:string) <WithCaption> $(caption:string) <NumImagesSpec> $(numImages:string) -> { 
     actionName: "createImageAction", 
     parameters: { 
         originalRequest: originalRequest, 
         caption: caption, 
         numImages: numImages 
     } 
-}
+};
 
 // Alternative action rule that captures number first
-@ <createImageAction> = <CreateImagePhrase> $(numImages:number) <ImageWord> 'of' $(originalRequest:string) <WithCaption> $(caption:string) -> { 
+<createImageAction> = <CreateImagePhrase> $(numImages:number) <ImageWord> 'of' $(originalRequest:string) <WithCaption> $(caption:string) -> { 
     actionName: "createImageAction", 
     parameters: { 
         originalRequest: originalRequest, 
         caption: caption, 
         numImages: numImages 
     } 
-}
+};
 
 // Alternative action rule for single image requests
-@ <createImageAction> = <CreateImagePhrase> <SingleImagePhrase> $(originalRequest:string) <WithCaption> $(caption:string) -> { 
+<createImageAction> = <CreateImagePhrase> <SingleImagePhrase> $(originalRequest:string) <WithCaption> $(caption:string) -> { 
     actionName: "createImageAction", 
     parameters: { 
         originalRequest: originalRequest, 
         caption: caption, 
         numImages: "1" 
     } 
-}
+};
 
 // Shared sub-rules for common patterns
 
 // Polite request phrases
-@ <Polite> = ('can you' | 'could you' | 'please' | 'would you')?
+<Polite> = ('can you' | 'could you' | 'please' | 'would you')?;
 
 // Create/generate action phrases
-@ <CreateImagePhrase> = <Polite> ('create' | 'generate' | 'make' ('me')?) 
+<CreateImagePhrase> = <Polite> ('create' | 'generate' | 'make' ('me')?) ;
 
 // Caption specification patterns
-@ <WithCaption> = ('with' ('the')? 'caption' | 'caption' ('it' | 'them' | 'should be')? | 'use' ('the')? 'caption' | 'captioned')
+<WithCaption> = ('with' ('the')? 'caption' | 'caption' ('it' | 'them' | 'should be')? | 'use' ('the')? 'caption' | 'captioned');
 
 // Number of images specification
-@ <NumImagesSpec> = $(numImages:number) <ImageWord> -> numImages
-@ <NumImagesSpec> = 'single' <ImageWord> -> "1"
-@ <NumImagesSpec> = ('a' | 'an') <ImageWord> -> "1"
+<NumImagesSpec> = $(numImages:number) <ImageWord> -> numImages;
+<NumImagesSpec> = 'single' <ImageWord> -> "1";
+<NumImagesSpec> = ('a' | 'an') <ImageWord> -> "1";
 
 // Single image phrases
-@ <SingleImagePhrase> = ('an' | 'a' | 'single') <ImageWord> ('of' | 'showing')?
+<SingleImagePhrase> = ('an' | 'a' | 'single') <ImageWord> ('of' | 'showing')?;
 
 // Image-related words
-@ <ImageWord> = ('image' | 'images' | 'picture' | 'pictures' | 'photo' | 'photos')
+<ImageWord> = ('image' | 'images' | 'picture' | 'pictures' | 'photo' | 'photos');
 
 // Common conversational fillers
-@ <Filler> = ('I' ('need' | 'want') | 'I\'d like')
+<Filler> = ('I' ('need' | 'want') | 'I\'d like');

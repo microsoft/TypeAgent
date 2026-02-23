@@ -43,7 +43,7 @@ const SCHEMA_GRAMMAR_PROMPT = `You are an expert at creating comprehensive Actio
 Your task is to analyze a complete action schema and generate an efficient, maintainable grammar that covers all actions with shared sub-rules where appropriate.
 
 The Action Grammar format uses:
-- Rule definitions: @ <RuleName> = pattern
+- Rule definitions: <RuleName> = pattern;
 - Literal text: "play" or 'play'
 - Wildcards with types: $(name:Type) - captures any text and assigns it to 'name' with validation type 'Type'
 - Optional elements: element?
@@ -70,22 +70,22 @@ CRITICAL SYNTAX RULES:
 4. Wildcard type annotations CANNOT contain pipes or unions
    For parameters with union types (e.g., CalendarTime | CalendarTimeRange):
    OPTION A: Create a sub-rule with alternation
-     @ <TimeSpec> = $(t:CalendarTime) -> $(t) | $(t:CalendarTimeRange) -> $(t)
+     <TimeSpec> = $(t:CalendarTime) -> t | $(t:CalendarTimeRange) -> t;
    OPTION B: Just use one of the types
-     @ <TimeExpr> = $(time:CalendarTime)
+     <TimeExpr> = $(time:CalendarTime);
    WRONG: $(time:CalendarTime | CalendarTimeRange)
 
 5. Action rule names MUST match the exact action name (not capitalized)
-   CORRECT: @ <scheduleEvent> = ... for action "scheduleEvent"
-   WRONG: @ <ScheduleEvent> = ... for action "scheduleEvent"
+   CORRECT: <scheduleEvent> = ... ; for action "scheduleEvent"
+   WRONG: <ScheduleEvent> = ... ; for action "scheduleEvent"
    This enables easy targeting of specific actions when extending grammars incrementally.
 
 EFFICIENCY GUIDELINES:
 1. Identify common patterns across actions and extract them as sub-rules
-   Example: If multiple actions use date expressions, create @ <DateExpr> = ('on' | 'for') $(date:CalendarDate)
+   Example: If multiple actions use date expressions, create <DateExpr> = ('on' | 'for') $(date:CalendarDate);
 
 2. Create shared vocabulary rules for common phrases
-   Example: @ <Polite> = 'can you'? | 'please'? | 'would you'?
+   Example: <Polite> = 'can you'? | 'please'? | 'would you'?;
 
 3. Reuse entity type rules across actions
    Example: If multiple actions need participant names, reference the same wildcard pattern
@@ -95,13 +95,13 @@ EFFICIENCY GUIDELINES:
 5. The Start rule should reference all top-level action rules
 
 GRAMMAR STRUCTURE:
-1. Start with @ <Start> rule listing all actions by their exact action names
-   Example: @ <Start> = <scheduleEvent> | <findEvents> | <addParticipant>
+1. Start with <Start> rule listing all actions by their exact action names
+   Example: <Start> = <scheduleEvent> | <findEvents> | <addParticipant>;
 2. Define action rules using EXACT action names as rule names (not capitalized)
-   Example: @ <scheduleEvent> = ... for action "scheduleEvent"
-   Example: @ <findEvents> = ... for action "findEvents"
+   Example: <scheduleEvent> = ... ; for action "scheduleEvent"
+   Example: <findEvents> = ... ; for action "findEvents"
 3. Define shared sub-rules used by multiple actions (these can be capitalized)
-   Example: @ <Polite> = ..., @ <DateSpec> = ...
+   Example: <Polite> = ... ;, <DateSpec> = ... ;
 4. Include common patterns (Cardinal, Ordinal, etc.)
 
 AVAILABLE ENTITY TYPES AND CONVERTERS:
@@ -149,7 +149,7 @@ Your task:
 5. Ensure all actions in the schema are covered
 6. Keep shared sub-rules and don't duplicate patterns
 7. Follow all AGR syntax rules (see above)
-8. IMPORTANT: Use exact action names for action rules (e.g., @ <scheduleEvent> = ..., not @ <ScheduleEvent> = ...)
+8. IMPORTANT: Use exact action names for action rules (e.g., <scheduleEvent> = ... ;, not <ScheduleEvent> = ... ;)
    This enables easy targeting of specific actions when extending grammars incrementally
 
 Response format: Return ONLY the complete improved .agr file content, starting with copyright header.`;

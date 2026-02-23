@@ -501,7 +501,7 @@ export class ClaudeGrammarGenerator {
      * Convert the analysis into a full .agr format grammar rule
      * Returns empty string if grammar should not be generated
      *
-     * Uses the exact action name as the rule name (e.g., @ <scheduleEvent> = ...)
+     * Uses the exact action name as the rule name (e.g., <scheduleEvent> = ... ;)
      * to enable easy targeting when extending grammars for specific actions.
      */
     formatAsGrammarRule(
@@ -552,10 +552,10 @@ export class ClaudeGrammarGenerator {
         }
 
         // Include <Start> rule that references the action rule
-        let grammar = `@ <Start> = <${actionName}>\n`;
+        let grammar = `<Start> = <${actionName}>;\n`;
 
         // Use exact action name as rule name for easy targeting
-        grammar += `@ <${actionName}> = `;
+        grammar += `<${actionName}> = `;
         grammar += matchPattern;
         grammar += ` -> {\n`;
         grammar += `    actionName: "${actionName}"`;
@@ -575,7 +575,7 @@ export class ClaudeGrammarGenerator {
             grammar += `\n    }`;
         }
 
-        grammar += `\n}`;
+        grammar += `\n};`;
 
         return grammar;
     }

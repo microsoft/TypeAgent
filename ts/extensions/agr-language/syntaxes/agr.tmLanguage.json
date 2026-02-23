@@ -18,12 +18,14 @@
     "import-statement": {
       "patterns": [
         {
-          "comment": "Named import: @import { RuleA, RuleB } from './path.agr'",
-          "begin": "^\\s*(@)(import)\\b",
-          "end": "(?=$|//)",
+          "comment": "Named import: import { RuleA, RuleB } from './path.agr';",
+          "begin": "^\\s*(import)\\b",
+          "end": "(;)|(?=$|//)",
           "beginCaptures": {
-            "1": { "name": "keyword.operator.rule.agr" },
-            "2": { "name": "keyword.control.import.agr" }
+            "1": { "name": "keyword.control.import.agr" }
+          },
+          "endCaptures": {
+            "1": { "name": "punctuation.terminator.statement.agr" }
           },
           "patterns": [
             {
@@ -50,14 +52,16 @@
     "rule-definition": {
       "patterns": [
         {
-          "begin": "^\\s*(@)\\s*(<)([A-Za-z_][A-Za-z0-9_]*)(>)\\s*(=)",
-          "end": "(?=^\\s*@|^\\s*//|\\z)",
+          "begin": "^\\s*(<)([A-Za-z_][A-Za-z0-9_]*)(>)\\s*(=)",
+          "end": "(;)|(?=^\\s*<[A-Za-z_]|^\\s*//|^\\s*import\\b|\\z)",
           "beginCaptures": {
-            "1": { "name": "keyword.operator.rule.agr" },
-            "2": { "name": "punctuation.definition.rule-name.begin.agr" },
-            "3": { "name": "entity.name.type.rule.agr" },
-            "4": { "name": "punctuation.definition.rule-name.end.agr" },
-            "5": { "name": "keyword.operator.assignment.agr" }
+            "1": { "name": "punctuation.definition.rule-name.begin.agr" },
+            "2": { "name": "entity.name.type.rule.agr" },
+            "3": { "name": "punctuation.definition.rule-name.end.agr" },
+            "4": { "name": "keyword.operator.assignment.agr" }
+          },
+          "endCaptures": {
+            "1": { "name": "punctuation.terminator.statement.agr" }
           },
           "patterns": [{ "include": "#rule-body" }]
         }

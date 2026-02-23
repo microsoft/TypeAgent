@@ -9,7 +9,7 @@ Syntax highlighting for Action Grammar (.agr) files used in TypeAgent.
 
 - Syntax highlighting for AGR grammar rules
 - Comment support (`//`)
-- Rule definition highlighting (`@ <RuleName> = ...`)
+- Rule definition highlighting (`<RuleName> = ...;`)
 - Rule reference highlighting (`<RuleName>`)
 - Capture syntax highlighting (`$(name:Type)` and `$(name)`)
 - Action object highlighting with embedded JavaScript syntax
@@ -21,7 +21,7 @@ Syntax highlighting for Action Grammar (.agr) files used in TypeAgent.
 ### Rule Definitions
 
 ```agr
-@ <RuleName> = pattern1 | pattern2
+<RuleName> = pattern1 | pattern2;
 ```
 
 ### Captures

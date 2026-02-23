@@ -21,9 +21,10 @@ export function writeGrammarRules(grammar: RuleDefinition[]): string {
 }
 
 function writeRuleDefinition(result: string[], def: RuleDefinition) {
-    const ruleStart = `@ <${def.name}> = `;
+    const ruleStart = `<${def.name}> = `;
     result.push(ruleStart);
     writeRules(result, def.rules, ruleStart.length);
+    result.push(";");
 }
 
 function writeRules(result: string[], rules: Rule[], indent: number) {
