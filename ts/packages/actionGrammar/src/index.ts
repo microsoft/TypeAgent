@@ -15,7 +15,7 @@ export type {
 } from "./grammarRuleParser.js";
 
 // Writer / formatter
-export { writeGrammarRules, writeGrammarFile } from "./grammarRuleWriter.js";
+export { writeGrammarRules } from "./grammarRuleWriter.js";
 
 export {
     matchGrammar,

@@ -10,7 +10,7 @@ import { escapedSpaces, spaces } from "./testUtils.js";
 
 function validateRoundTrip(grammar: string) {
     const result = parseGrammarRules("orig", grammar, false);
-    const str = writeGrammarRules(result.definitions);
+    const str = writeGrammarRules(result);
     const parsedResult = parseGrammarRules("test", str, false);
     expect(parsedResult).toStrictEqual(result);
 }
@@ -90,5 +90,18 @@ describe("Grammar Rule Writer", () => {
         validateRoundTrip(
             `<test> = hello $(x: number)? world -> { "type": "test", "var": x };`,
         );
+    });
+    it("with wildcard import", () => {
+        validateRoundTrip(`import * from "someGrammar";
+<test> = hello world;`);
+    });
+    it("with named imports", () => {
+        validateRoundTrip(`import { RuleA, RuleB } from "someGrammar";
+<test> = hello world;`);
+    });
+    it("with multiple imports", () => {
+        validateRoundTrip(`import * from "grammarA";
+import { RuleX } from "grammarB";
+<test> = hello world;`);
     });
 });

@@ -52,7 +52,11 @@ export async function convertConstructionFileToGrammar(fileName: string) {
         }
         convertConstructions(state, constructions.constructions);
     }
-    return writeGrammarRules(Array.from(state.definitions));
+    return writeGrammarRules({
+        definitions: Array.from(state.definitions),
+        imports: [],
+        entities: [],
+    });
 }
 
 export function convertConstructionsToGrammar(constructions: Construction[]) {
@@ -62,7 +66,11 @@ export function convertConstructionsToGrammar(constructions: Construction[]) {
         ruleNameNextIds: new Map(),
     };
     convertConstructions(state, constructions);
-    return writeGrammarRules(Array.from(state.definitions));
+    return writeGrammarRules({
+        definitions: Array.from(state.definitions),
+        imports: [],
+        entities: [],
+    });
 }
 
 function convertConstructions(state: State, constructions: Construction[]) {
