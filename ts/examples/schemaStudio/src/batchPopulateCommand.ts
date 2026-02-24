@@ -619,7 +619,10 @@ function writeCSVReport(
 ): void {
     const header =
         "Prompt,SchemaName,TranslatedAction,Translated," +
-        "Explained,Explanation,CacheHitBefore,CacheHitAfter,Error";
+        "Explained,Error";
+    // const header =
+    //     "Prompt,SchemaName,TranslatedAction,Translated," +
+    //     "Explained,Explanation,CacheHitBefore,CacheHitAfter,Error";
     const rows = results.map((r) => {
         const escapeCsv = (s: string) =>
             `"${s.replace(/"/g, '""')}"`;
@@ -629,9 +632,9 @@ function writeCSVReport(
             escapeCsv(r.translatedAction),
             r.translated,
             r.explained,
-            escapeCsv(r.explanation),
-            r.cacheHitBefore,
-            r.cacheHitAfter,
+            // escapeCsv(r.explanation),
+            // r.cacheHitBefore,
+            // r.cacheHitAfter,
             escapeCsv(r.errorMessage ?? ""),
         ].join(",");
     });
