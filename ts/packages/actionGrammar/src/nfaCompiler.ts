@@ -9,6 +9,7 @@ import {
     VarStringPart,
     VarNumberPart,
     RulesPart,
+    PhraseSetPart,
 } from "./grammarTypes.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
@@ -315,7 +316,8 @@ function collectVariables(rule: GrammarRule): string[] {
                 // Don't recurse into nested rule's inner variables - they use their own slots
                 break;
             case "string":
-                // No variables in string parts
+            case "phraseSet":
+                // No variables in string or phraseSet parts
                 break;
         }
     }
@@ -371,7 +373,8 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
                 }
                 break;
             case "string":
-                // StringPart has no variables
+            case "phraseSet":
+                // No variables
                 break;
         }
     }
@@ -616,6 +619,9 @@ function compilePart(
                 overrideVariableName,
             );
 
+        case "phraseSet":
+            return compilePhraseSetPart(builder, part, fromState, toState);
+
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
     }
@@ -665,9 +671,33 @@ function compilePartWithSlots(
                 context,
             );
 
+        case "phraseSet":
+            return compilePhraseSetPart(builder, part, fromState, toState);
+
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
     }
+}
+
+/**
+ * Compile a phraseSet part.
+ *
+ * Emits a single "phraseSet" NFA transition from fromState to toState.
+ * The NFA interpreter resolves the actual phrases at match time, generating
+ * one thread per matching phrase — identical to how entity converters work
+ * with skipCount for multi-token spans.
+ *
+ * PhraseSetParts are always non-optional at this level; optionality is handled
+ * by the enclosing RulesPart (e.g., from "(<Polite>)?").
+ */
+function compilePhraseSetPart(
+    builder: NFABuilder,
+    part: PhraseSetPart,
+    fromState: number,
+    toState: number,
+): number {
+    builder.addPhraseSetTransition(fromState, toState, part.matcherName);
+    return toState;
 }
 
 /**
@@ -1028,8 +1058,12 @@ function compileRulesPart(
 
     // Connect exit
     if (part.optional) {
-        // Optional: can skip the entire nested section
+        // Optional (and Kleene star): can skip the entire nested section
         builder.addEpsilonTransition(fromState, toState);
+    }
+    if (part.repeat) {
+        // Kleene star: loop back from nestedExit to nestedEntry for another iteration
+        builder.addEpsilonTransition(nestedExit, nestedEntry);
     }
     builder.addEpsilonTransition(nestedExit, toState);
 
@@ -1209,8 +1243,12 @@ function compileRulesPartWithSlots(
 
     // Connect exit
     if (part.optional) {
-        // Optional: can skip the entire nested section
+        // Optional (and Kleene star): can skip the entire nested section
         builder.addEpsilonTransition(fromState, toState);
+    }
+    if (part.repeat) {
+        // Kleene star: loop back from nestedExit to nestedEntry for another iteration
+        builder.addEpsilonTransition(nestedExit, nestedEntry);
     }
 
     // If no parent slot index (nested rule doesn't write to parent), we need to

@@ -108,6 +108,7 @@ type RulesExpr = {
     type: "rules";
     rules: Rule[];
     optional?: boolean;
+    repeat?: boolean; // Kleene star: zero or more
 };
 
 type VarDefExpr = {
@@ -441,6 +442,12 @@ class GrammarRuleParser {
 
                 if (this.isAt(")?")) {
                     node.optional = true;
+                    this.skipWhitespace(2);
+                    continue;
+                }
+                if (this.isAt(")*")) {
+                    node.optional = true;
+                    node.repeat = true;
                     this.skipWhitespace(2);
                     continue;
                 }

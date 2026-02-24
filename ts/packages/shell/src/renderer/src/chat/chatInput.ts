@@ -23,7 +23,6 @@ import {
 } from "../speech";
 import { getSpeechToken, SpeechToken } from "../speechToken";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
-import { OrbState } from "./voiceOrb";
 
 export class ChatInput {
     private inputContainer: HTMLDivElement;
@@ -59,8 +58,6 @@ export class ChatInput {
     private lastSpeechArrived: number = 0;
 
     public wakeWord: string = "type agent";
-    public onSpeechStateChange: ((state: OrbState) => void) | undefined =
-        undefined;
     private _waitingForCommand: boolean = false;
 
     constructor(
@@ -245,11 +242,9 @@ export class ChatInput {
 
                 if (waitForWakeWord) {
                     this.wakeWordMic.classList.remove("chat-message-hidden");
-                    this.onSpeechStateChange?.("wake-word-waiting");
-                } else {
+                                    } else {
                     this.alwaysOnMic.classList.remove("chat-message-hidden");
-                    this.onSpeechStateChange?.("listening");
-                }
+                                    }
             } else {
                 this.continuous = false;
                 this._waitingForCommand = false;
@@ -349,8 +344,7 @@ export class ChatInput {
 
                     // indicate to the user that we are now actively processing
                     this.inputContainer.classList.add("listening");
-                    this.onSpeechStateChange?.("listening");
-                    this._waitingForCommand = true;
+                                        this._waitingForCommand = true;
                 }
             }
 
@@ -393,8 +387,7 @@ export class ChatInput {
                         if (this.waitForWakeWord) {
                             // indicate to the user that we are no longer actively processing
                             this.inputContainer.classList.remove("listening");
-                            this.onSpeechStateChange?.("wake-word-waiting");
-                        }
+                                                    }
                     });
             } else if (this.speechRefCount > 0) {
                 this.processSpeech(text);
@@ -419,8 +412,7 @@ export class ChatInput {
                 if (command) {
                     this._waitingForCommand = false;
                     this.inputContainer.classList.remove("listening");
-                    this.onSpeechStateChange?.("wake-word-waiting");
-                    this.textarea.setTextContent(command);
+                                        this.textarea.setTextContent(command);
                     this.textarea.send();
                 } else {
                     // Wake word only — keep listening for the command
@@ -431,8 +423,7 @@ export class ChatInput {
                 // Command utterance following a wake-word-only utterance
                 this._waitingForCommand = false;
                 this.inputContainer.classList.remove("listening");
-                this.onSpeechStateChange?.("wake-word-waiting");
-                this.textarea.setTextContent(text);
+                                this.textarea.setTextContent(text);
                 this.textarea.send();
             }
             // Pre-wake-word utterance — ignore
@@ -466,8 +457,7 @@ export class ChatInput {
         this.disabledMic.classList.add("chat-message-hidden");
         this.alwaysOnMic.classList.add("chat-message-hidden");
         this.wakeWordMic.classList.add("chat-message-hidden");
-        this.onSpeechStateChange?.("idle");
-    }
+            }
 
     private micListening() {
         this.listening = true;
@@ -478,8 +468,7 @@ export class ChatInput {
         this.disabledMic.classList.add("chat-message-hidden");
         this.alwaysOnMic.classList.add("chat-message-hidden");
         this.wakeWordMic.classList.add("chat-message-hidden");
-        this.onSpeechStateChange?.("listening");
-    }
+            }
 
     private micNotReady() {
         this.listening = false;

@@ -65,6 +65,10 @@ export function tokenizeRequest(request: string): string[] {
 /**
  * Match a request string against a grammar using NFA
  *
+ * The grammar rule itself is expected to account for all tokens in the request,
+ * using optional built-in categories ((<Polite>)?, (<FillerWord>)?, etc.) for
+ * leading/trailing courtesy words and hesitations.
+ *
  * @param _grammar The grammar structure (unused, kept for API compatibility)
  * @param nfa The compiled NFA
  * @param request The request string to match
@@ -75,7 +79,6 @@ export function matchGrammarWithNFA(
     nfa: NFA,
     request: string,
 ): NFAGrammarMatchResult[] {
-    // Tokenize the request
     const tokens = tokenizeRequest(request);
 
     debug(`Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`);
@@ -84,29 +87,18 @@ export function matchGrammarWithNFA(
         return [];
     }
 
-    // Match against NFA
     const nfaResult = matchNFA(nfa, tokens);
-
-    debug(`Match result: ${nfaResult.matched ? "MATCHED" : "NO MATCH"}`);
-    if (nfaResult.matched) {
-        debug(`Action value: %O`, nfaResult.actionValue);
-    }
-
     if (!nfaResult.matched) {
+        debug(`Match result: NO MATCH`);
         return [];
     }
 
-    // The action object is already evaluated in the NFA interpreter using the slot-based
-    // environment system. nfaResult.actionValue contains the final computed action object.
+    debug(`Match result: MATCHED`);
+    debug(`Action value: %O`, nfaResult.actionValue);
+
     const actionObject = nfaResult.actionValue ?? request;
-
-    // Wildcard character count is approximated from unchecked wildcard count
-    // (each unchecked wildcard captures some characters)
     const wildcardCharCount = nfaResult.uncheckedWildcardCount;
-
-    // Determine entity wildcard property names
     const entityWildcardPropertyNames: string[] = [];
-    // TODO: Implement entity wildcard detection if needed
 
     return [
         {

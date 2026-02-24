@@ -70,7 +70,14 @@ export class TokenProvider {
         const params = new URLSearchParams(body);
         options.body = params.toString();
 
-        const result = await fetch(tokenUri, options);
+        let result: Response;
+        try {
+            result = await fetch(tokenUri, options);
+        } catch (e: any) {
+            const cause = e.cause?.message || e.cause?.code || e.cause?.toString();
+            const msg = cause || e.message || String(e);
+            throw new Error(`Spotify token refresh failed: ${msg}`);
+        }
         if (result.status === 400) {
             const data: any = await result.json();
             if (data.error === "invalid_grant") {

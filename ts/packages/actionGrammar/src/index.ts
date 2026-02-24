@@ -28,6 +28,18 @@ export {
     registerBuiltInEntities,
 } from "./builtInEntities.js";
 
+export type { BuiltInGrammarCategory } from "./builtInGrammarCategories.js";
+export {
+    BUILT_IN_GRAMMAR_CATEGORIES,
+    getBuiltInCategory,
+    getBuiltInCategoryNames,
+    getBuiltInCategoryDescriptions,
+    getReferencedCategories,
+} from "./builtInGrammarCategories.js";
+
+export type { PhraseSetMatcher } from "./builtInPhraseMatchers.js";
+export { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
+
 // Dynamic loading
 export type { DynamicLoadResult } from "./dynamicGrammarLoader.js";
 export {

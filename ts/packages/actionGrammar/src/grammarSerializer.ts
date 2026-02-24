@@ -30,14 +30,18 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                     json[index] = p.rules.map(grammarRuleToJson);
                 }
 
-                return {
+                const part: import("./grammarTypes.js").RulePartJson = {
                     name: p.name,
                     type: "rules",
                     index,
                     variable: p.variable,
                     optional: p.optional,
                 };
+                if (p.repeat) part.repeat = true;
+                return part;
             }
+            case "phraseSet":
+                return { type: "phraseSet", matcherName: p.matcherName };
         }
     }
 
