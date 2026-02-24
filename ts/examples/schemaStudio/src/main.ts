@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import dotenv from "dotenv";
+import findConfig from "find-config";
 import {
     CommandHandler,
     CommandMetadata,
@@ -33,9 +34,13 @@ import {
     createURLValidateCommands,
 } from "./urlCommands.js";
 import { createSettingsSchemaCommand } from "./schemaCommands.js";
+import { createBatchPopulateCommand } from "./batchPopulateCommand.js";
+import { createMergeCacheCommand } from "./mergeCacheCommand.js";
 
-const envPath = new URL("../../../.env", import.meta.url);
-dotenv.config({ path: envPath });
+const envPath = findConfig(".env");
+if (envPath) {
+    dotenv.config({ path: envPath });
+}
 
 interface VariationOptions extends VariationSettings {
     depth: number;
@@ -59,9 +64,11 @@ async function runStudio(): Promise<void> {
         urlResolver: createURLResolverCommands(studio),
         urlValidate: createURLValidateCommands(studio),
         generateSettingsSchemas: createSettingsSchemaCommand(studio),
+        batchPopulate: createBatchPopulateCommand(studio),
+        mergeCache: createMergeCacheCommand(studio),
     };
 
-    studio.commands = commands;
+   studio.commands = commands;
     await runConsole({ inputHandler, commandHandler });
 
     async function inputHandler(line: string, io: InteractiveIo) {

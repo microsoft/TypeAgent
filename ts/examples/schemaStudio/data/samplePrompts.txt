@@ -1,0 +1,153 @@
+# Sample user prompts for batch cache population
+# One prompt per line
+# Covering all desktop agent schemas
+
+# ===== Player (player) =====
+play something random
+play 5 random songs
+shuffle me 10 tracks
+play Purple Rain by Prince
+play Bohemian Rhapsody
+play Stairway to Heaven by Led Zeppelin
+play Hotel California from the Hotel California album
+play the album Abbey Road by The Beatles
+play Nevermind by Nirvana starting from track 3
+play the album Thriller
+play track number 4 from the current list
+play songs by Taylor Swift
+play some jazz by Miles Davis
+give me 20 Adele songs
+play some rock music
+play classical music
+give me 15 hip hop tracks
+what's currently playing
+what song is this
+pause the music
+stop playing
+resume playback
+unpause
+skip to the next song
+next track please
+go back to the previous song
+play the last song again
+turn on shuffle
+disable shuffle mode
+show me available devices
+set volume to 75
+turn the volume up by 20 percent
+turn down the volume by 10 percent
+search for songs about love
+find playlists with workout in the name
+show me all my playlists
+show me the Road Trip playlist
+what album is this from
+show me my top 10 favorites
+create a playlist called Morning Vibes
+delete the playlist called Old Stuff
+add this song to my Chill playlist
+show me the queue
+play my Running playlist
+
+# ===== Calendar (calendar) =====
+schedule a meeting with John tomorrow at 3pm
+add a dentist appointment on March 5th at 10am
+create an event called team standup on Monday at 9am in the conference room
+find my meetings for next Tuesday
+do I have anything scheduled with Sarah
+what events do I have about the project review
+add Bob to the team standup meeting
+what's on my calendar today
+show me today's schedule
+what do I have this week
+
+# ===== Email (email) =====
+send an email to alice@example.com about the project update
+email Bob and Carol about the meeting notes
+forward that email to my manager
+find emails from Sarah about the budget
+search for emails about the quarterly report
+
+# ===== Browser (browser) =====
+open google.com
+go to wikipedia in a new tab
+open YouTube
+switch to the email tab
+close this tab
+close all browser tabs
+go back to the previous page
+go forward
+scroll down
+scroll up
+click on the Getting Started link
+zoom in
+zoom out
+reset zoom to default
+read the page content out loud
+take a screenshot of this page
+reload the page
+show me website statistics
+
+# ===== Desktop (desktop) =====
+open Notepad
+launch Visual Studio Code
+open the calculator app
+close Notepad
+maximize the current window
+minimize this window
+switch to Chrome
+tile Word on the left and Excel on the right
+set the system volume to 50
+mute the computer
+unmute the sound
+switch to dark mode
+switch to light mode
+toggle the theme
+connect to the WiFi network HomeNet
+disconnect from WiFi
+turn on airplane mode
+create a new virtual desktop called Work
+switch to desktop 2
+go to the next desktop
+turn off notifications
+set text size to 125
+change screen resolution to 1920 by 1080
+turn on bluetooth
+increase screen brightness
+
+# ===== Code (code) =====
+switch VS Code to dark theme
+split the editor vertically
+create a new file called app.ts in TypeScript
+
+# ===== List (list) =====
+add milk and eggs to my grocery list
+remove bread from the shopping list
+create a new list called vacation packing
+show me my todo list
+clear the grocery list
+
+# ===== Weather (weather) =====
+what's the weather in Seattle
+is it raining in New York
+what's the temperature in London in celsius
+show me the 5 day forecast for Chicago
+what's the weather forecast for San Francisco this week
+are there any weather alerts for Miami
+
+# ===== Image (image) =====
+generate an image of a sunset over mountains
+create 3 pictures of a futuristic city
+
+# ===== Photo (photo) =====
+take a photo
+snap a picture
+
+# ===== Markdown (markdown) =====
+create a new document called meeting notes
+open the project plan document
+
+# ===== Montage (montage) =====
+show me all my montages
+delete all montages
+switch montage view to filmstrip mode
+switch montage to grid view
