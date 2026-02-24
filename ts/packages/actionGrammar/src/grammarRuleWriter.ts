@@ -3,12 +3,37 @@
 
 import {
     Expr,
+    GrammarParseResult,
+    ImportStatement,
     isExpressionSpecialChar,
     isWhitespace,
     Rule,
     RuleDefinition,
     ValueNode,
 } from "./grammarRuleParser.js";
+
+export function writeGrammarFile(result: GrammarParseResult): string {
+    const parts: string[] = [];
+
+    if (result.entities.length > 0) {
+        parts.push(`entity ${result.entities.join(", ")};\n\n`);
+    }
+
+    if (result.imports.length > 0) {
+        for (const imp of result.imports) {
+            parts.push(writeImportStatement(imp));
+        }
+        parts.push("\n");
+    }
+
+    parts.push(writeGrammarRules(result.definitions));
+    return parts.join("");
+}
+
+function writeImportStatement(imp: ImportStatement): string {
+    const names = imp.names === "*" ? "*" : `{ ${imp.names.join(", ")} }`;
+    return `import ${names} from "${imp.source}";\n`;
+}
 
 export function writeGrammarRules(grammar: RuleDefinition[]): string {
     const result: string[] = [];
@@ -43,7 +68,7 @@ function writeRule(result: string[], rule: Rule, indent: number) {
     writeExpression(result, rule.expressions, indent);
     if (rule.value !== undefined) {
         result.push(" -> ");
-        writeValueNode(result, rule.value);
+        writeValueNode(result, rule.value, 0);
     }
 }
 
@@ -132,7 +157,7 @@ function writeExpression(
         }
     }
 }
-function writeValueNode(result: string[], value: ValueNode) {
+function writeValueNode(result: string[], value: ValueNode, indent: number) {
     switch (value.type) {
         case "literal":
             result.push(JSON.stringify(value.value));
@@ -141,23 +166,30 @@ function writeValueNode(result: string[], value: ValueNode) {
             result.push(value.name);
             break;
         case "object": {
-            result.push("{");
+            const entries = Object.entries(value.value);
+            if (entries.length === 0) {
+                result.push("{}");
+                break;
+            }
+            result.push("{\n");
             let first = true;
-            for (const [key, val] of Object.entries(value.value)) {
+            const innerIndent = indent + 4;
+            for (const [key, val] of entries) {
                 if (!first) {
-                    result.push(", ");
+                    result.push(",\n");
                 }
                 first = false;
+                result.push(" ".repeat(innerIndent));
                 if (val === null) {
                     // Shorthand form: { key } instead of { key: key }
                     result.push(key);
                 } else {
                     // Full form: { key: value }
-                    result.push(`${key}:`);
-                    writeValueNode(result, val);
+                    result.push(`${key}: `);
+                    writeValueNode(result, val, innerIndent);
                 }
             }
-            result.push("}");
+            result.push(`\n${" ".repeat(indent)}}`);
             break;
         }
         case "array": {
@@ -168,7 +200,7 @@ function writeValueNode(result: string[], value: ValueNode) {
                     result.push(", ");
                 }
                 first = false;
-                writeValueNode(result, item);
+                writeValueNode(result, item, indent);
             }
             result.push("]");
             break;

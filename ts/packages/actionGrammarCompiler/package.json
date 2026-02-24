@@ -31,8 +31,9 @@
   "oclif": {
     "bin": "agc",
     "commands": {
-      "strategy": "single",
-      "target": "./dist/index.js"
+      "strategy": "explicit",
+      "target": "./dist/index.js",
+      "identifier": "COMMANDS"
     },
     "dirname": "agc",
     "plugins": [
