@@ -4,6 +4,7 @@
 import { HistoryContext } from "agent-cache";
 import { CachedImageWithDetails, TypeAgentJsonValidator } from "typechat-utils";
 import { PromptSection } from "typechat";
+import { getLocationString } from "./geolocation.js";
 
 export function createTypeAgentRequestPrompt(
     validator: TypeAgentJsonValidator<object>,
@@ -96,6 +97,10 @@ export function createTypeAgentRequestPrompt(
         prompts.push(
             `Current Date is ${new Date().toLocaleDateString("en-US")}. The time is ${new Date().toLocaleTimeString()}.`,
         );
+        const locationInfo = getLocationString();
+        if (locationInfo) {
+            prompts.push(locationInfo);
+        }
     }
     prompts.push("###");
     prompts.push(`The following is the current user request:`);

@@ -38,6 +38,7 @@ import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { nullClientIO } from "./interactiveIO.js";
 import { ClientIO, RequestId } from "@typeagent/dispatcher-types";
+import { initializeGeolocation } from "./geolocation.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 
 import {
@@ -617,6 +618,9 @@ export async function initializeCommandHandlerContext(
 
         await initializeMemory(context, sessionDirPath);
         await addAppAgentProviders(context, options?.appAgentProviders);
+
+        // Initialize geolocation in the background (non-blocking)
+        initializeGeolocation().catch(() => {});
 
         // Initialize grammar generation if using NFA system
         await setupGrammarGeneration(context);

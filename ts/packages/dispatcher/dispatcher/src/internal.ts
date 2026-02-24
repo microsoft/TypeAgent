@@ -56,3 +56,5 @@ export {
     getSessionConstructionDirPath,
     getSessionConstructionDirPaths,
 } from "./context/session.js";
+
+export { initializeGeolocation } from "./context/geolocation.js";
