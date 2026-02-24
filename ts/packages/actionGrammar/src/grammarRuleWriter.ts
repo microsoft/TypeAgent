@@ -240,6 +240,10 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
         case "array": {
             let first = true;
             const nestedCol = col + result.indentSize;
+            if (value.value.length === 0) {
+                result.write("[]");
+                break;
+            }
             for (const item of value.value) {
                 result.writeLine(first ? "[" : ", ");
                 first = false;
