@@ -9,15 +9,40 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  * The grammar for cache grammar files is defined as follows (in BNF and regular expressions):
  *   <AgentCacheGrammar> ::= (<EntityDeclaration> | <ImportStatement> | <RuleDefinition>)*
  *   <EntityDeclaration> ::= "entity" <Identifier> ("," <Identifier>)* ";"
- *   <ImportStatement> ::= "@import" (<ImportAll> | <ImportNames>) "from" <StringLiteral>
+ *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) "from" <StringLiteral> ";"
  *   <ImportAll> ::= "*"
  *   <ImportNames> ::= "{" <Identifier> ("," <Identifier>)* "}"
- *   <RuleDefinition> ::= "@" <RuleName> "=" <Rules>
+ *   <RuleDefinition> ::= <RuleName> "=" <Rules> ";"
  *   <Rules> ::= <Rule> ( "|" <Rule> )*
  *   <Rule> ::= <Expression> ( "->" <Value> )?
  *
  *   <Expression> ::= ( <StringExpr> | <VariableExpr> | <RuleRefExpr> | <GroupExpr> )+
- *   <StringExpr> ::= [^$()|-+*[]{}?]+*
+ *
+ *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash,
+ *   // and not the start of a comment sequence ("//" or "/*").
+ *   // Whitespace (<WS>) and comments (<Comment>) are not stored literally; instead each
+ *   // occurrence creates a "flex space" boundary, splitting the string into segments that can
+ *   // match any amount of whitespace at runtime.  An escaped whitespace character (e.g. "\ ")
+ *   // bypasses this behavior and is stored as a literal space within the current segment.
+ *   // Special chars must be escaped with backslash to appear as literal text.
+ *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Comment> | <Char> )+
+ *   <EscapeSequence> ::= "\\"<EscapedChar>
+ *   <EscapedChar> ::= "0"                        // null character \0
+ *                   | "n"                        // newline \n
+ *                   | "r"                        // carriage return \r
+ *                   | "v"                        // vertical tab \v
+ *                   | "t"                        // horizontal tab \t
+ *                   | "b"                        // backspace \b
+ *                   | "f"                        // form feed \f
+ *                   | <LineTerminator>           // line continuation: backslash and newline are both discarded
+ *                   | "x"<Hex2Digit>             // hex escape \xXX
+ *                   | "u"<Unicode4Digit>         // Unicode escape \uXXXX
+ *                   | "u{"<UnicodeCodePoint>"}"  // Unicode code point \u{X…} (up to U+10FFFF)
+ *                   | <AnyChar>                  // identity escape: any other character is kept as-is
+ *
+ *   <Hex2Digit> ::= [0-9A-Fa-f]{2}
+ *   <Unicode4Digit> ::= [0-9A-Fa-f]{4}
+ *   <UnicodeCodePoint> ::= [0-9A-Fa-f]+
  *   <VariableExpr> ::= "$(" <VariableSpecifier> ( ")" | ")?" )
  *
  *    // TODO: Support nested instead of just Rule Ref
@@ -26,16 +51,17 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <RuleRefExpr> ::= <RuleName>
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" )      // TODO: support for + and *?
  *
- *
  *   <Value> = BooleanValue | NumberValue | StringValue | ObjectValue | ArrayValue | VarReference
- *   <ArrayValue> = "[" <Value> ("," <Value>)* )? "]"
- *   <ObjectValue> = "{" <ObjectProperty> ("," <ObjectProperty>)* "}"
- *   <ObjectProperty> = <ObjectPropertyName> ":" <Value>
- *   <ObjectPropertyName> = <Identifier> | {{ Javascript string literal }}
+ *   <ArrayValue> = "[" (<Value> ("," <Value>)*)? "]"
+ *   <ObjectValue> = "{" (<ObjectProperty> ("," <ObjectProperty>)*)? "}"
+ *   <ObjectProperty> = <ObjectPropertyFull> | <ObjectPropertyShort>
+ *   <ObjectPropertyFull> = <ObjectPropertyName> ":" <Value>
+ *   <ObjectPropertyShort> = <VarReference>
+ *   <ObjectPropertyName> = <Identifier> | <StringLiteral>
  *   <BooleanValue> = "true" | "false"
  *   <NumberValue> = <NumberLiteral>
- *   <StringValue> = <StringLiteral>>
- *   <VarReference> = "$(" <VarName> ")"
+ *   <StringValue> = <StringLiteral>
+ *   <VarReference> = <VarName>
  *
  *   <VarName> = <Identifier>
  *   <TypeName> = <Identifier>
@@ -47,7 +73,9 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ID_Start> = {{ Unicode ID_Start character }}
  *   <ID_Continue> = {{ Unicode ID_Continue character }}
  *
- * In the above grammar, all whitespace or comments can appear between any two symbols (terminal or non-terminal).
+ * Between structural tokens in the above grammar, all whitespace and comments are skipped.
+ * Within <StringExpr>, whitespace and comments act as flex space delimiters rather than
+ * being silently ignored (see notes above).
  *   <WS> ::= {{ Javascript Whitespace and Line terminators character ( [\s] in JS regexp )}}*
  *   <SingleLineComment> ::= "//" [^\n]* "\n"
  *   <MultiLineComment> ::= "/*" .* "*\/"
@@ -100,10 +128,16 @@ export type ValueNode =
     | VariableValueNode;
 
 type LiteralValueNode = { type: "literal"; value: boolean | string | number };
+
+// Fields of an ObjectValueNode
+// null means the value is the same as the VariableValueNode of the same name
+type ObjectValueField = { [key: string]: ValueNode | null };
 type ObjectValueNode = {
     type: "object";
-    value: { [key: string]: ValueNode };
+
+    value: ObjectValueField;
 };
+
 type ArrayValueNode = {
     type: "array";
     value: ValueNode[];
@@ -152,7 +186,6 @@ function isIdContinue(char: string) {
 // Even some of these are not used yet, include them for future use.
 export const expressionsSpecialChar = [
     // Must escape
-    "@",
     "|",
     "(",
     ")",
@@ -160,6 +193,7 @@ export const expressionsSpecialChar = [
     ">",
     "$", // for $(
     "-", // for ->
+    ";", // terminator
     // Reserved for future use
     "{",
     "}",
@@ -194,7 +228,8 @@ class GrammarRuleParser {
         this.curr = index === -1 ? this.content.length : index + after.length;
     }
 
-    private skipWhitespace(skip: number = 0): void {
+    private skipWhitespace(skip: number = 0): boolean {
+        const start = this.curr;
         this.curr += skip;
         while (true) {
             if (this.isAtWhiteSpace()) {
@@ -211,6 +246,7 @@ class GrammarRuleParser {
             }
             break;
         }
+        return this.curr > start;
     }
 
     private parseId(expected: string): string {
@@ -313,28 +349,29 @@ class GrammarRuleParser {
 
     private parseStrExpr(): StrExpr | undefined {
         const str: string[] = [];
-        const curr: string[] = [];
+        const word: string[] = [];
         while (!this.isAtEnd()) {
-            let ch = this.content[this.curr];
+            // Collapse all whitespace and comments to flex space
+            if (this.skipWhitespace()) {
+                str.push(word.join(""));
+                word.length = 0;
+                continue;
+            }
+
+            const ch = this.content[this.curr];
             if (isExpressionSpecialChar(ch)) {
                 break;
             }
+            // Append literal character, expanding escape sequences
+            // Escaped spaces are treated as literal spaces rather than flex space
 
-            // Collapse all whitespace to flex space
-            if (isWhitespace(ch)) {
-                str.push(curr.join(""));
-                curr.length = 0;
-                this.skipWhitespace(1);
-                continue;
-            }
             this.curr++;
-
-            // Whitespace are keep as is if escaped
-            curr.push(ch === "\\" ? this.parseEscapedChar() : ch);
+            word.push(ch === "\\" ? this.parseEscapedChar() : ch);
         }
 
-        if (curr.length !== 0) {
-            str.push(curr.join(""));
+        if (word.length !== 0) {
+            // Flush the final segment
+            str.push(word.join(""));
         } else if (str.length === 0) {
             return undefined;
         }
@@ -476,7 +513,7 @@ class GrammarRuleParser {
             this.skipWhitespace(1);
 
             let first = true;
-            const obj: { [key: string]: ValueNode } = {};
+            const obj: ObjectValueField = {};
             while (true) {
                 if (this.isAtEnd()) {
                     this.throwError("Unexpected end of file in object value.");
@@ -494,12 +531,30 @@ class GrammarRuleParser {
                 } else {
                     first = false;
                 }
-                const id =
-                    this.isAt('"') || this.isAt("'")
-                        ? this.parseStringLiteral()
-                        : this.parseId("Object property name");
-                this.consume(":", "after object property name");
-                const v = this.parseValue();
+
+                // Parse property name (identifier or string literal)
+                const isStringLiteral = this.isAt('"') || this.isAt("'");
+
+                const id = isStringLiteral
+                    ? this.parseStringLiteral()
+                    : this.parseId("Object property name");
+
+                // Check for full form (name: value) or short form (name)
+                let v: ValueNode | null;
+                if (this.isAt(",") || this.isAt("}")) {
+                    // Short form: only valid for identifiers (not string literals)
+                    // Represents { id: id } where id is a variable reference
+                    if (isStringLiteral) {
+                        this.throwError(
+                            "Shorthand property syntax requires an identifier, not a string literal",
+                        );
+                    }
+                    v = null;
+                } else {
+                    // Full form: propertyName: value
+                    this.consume(":", "between property name and value");
+                    v = this.parseValue();
+                }
                 obj[id] = v;
             }
         }
@@ -530,15 +585,6 @@ class GrammarRuleParser {
                 arr.push(v);
             }
         }
-        if (this.isAt("$(")) {
-            this.skipWhitespace(2);
-            const id = this.parseId("Variable name");
-            this.consume(")", "at end of variable reference");
-            return {
-                type: "variable",
-                name: id,
-            };
-        }
         if (this.isAt('"') || this.isAt("'")) {
             return this.parseStringValue();
         }
@@ -549,6 +595,14 @@ class GrammarRuleParser {
         if (this.isAt("false")) {
             this.skipWhitespace(5);
             return { type: "literal", value: false };
+        }
+        if (
+            !this.isAtEnd() &&
+            isIdStart(this.content[this.curr]) &&
+            !this.isAt("Infinity")
+        ) {
+            const id = this.parseId("Variable name");
+            return { type: "variable", name: id };
         }
         return this.parseNumberValue();
     }
@@ -565,7 +619,7 @@ class GrammarRuleParser {
             result.value = this.parseValue();
         } else if (
             !this.isAtEnd() &&
-            !this.isAt("@") &&
+            !this.isAt(";") &&
             !this.isAt("|") &&
             !this.isAt(")")
         ) {
@@ -611,6 +665,7 @@ class GrammarRuleParser {
         const name = this.parseRuleName();
         this.consume("=", "after rule identifier");
         const rules = this.parseRules();
+        this.consume(";", "at end of rule definition");
         return { name, rules, pos };
     }
 
@@ -690,8 +745,8 @@ class GrammarRuleParser {
     }
 
     private parseImportStatement(): ImportStatement {
-        // @import { Name1, Name2 } from "file"
-        // @import * from "file"
+        // import { Name1, Name2 } from "file";
+        // import * from "file";
         this.skipWhitespace(6); // skip "import"
         const pos = this.pos;
 
@@ -732,9 +787,7 @@ class GrammarRuleParser {
                 );
             }
         } else {
-            this.throwUnexpectedCharError(
-                "Expected '{' or '*' after '@import'",
-            );
+            this.throwUnexpectedCharError("Expected '{' or '*' after 'import'");
         }
 
         // Parse "from"
@@ -753,6 +806,8 @@ class GrammarRuleParser {
         }
         const source = this.parseStringLiteral();
 
+        this.consume(";", "at end of import statement");
+
         return { names, source, pos };
     }
 
@@ -762,22 +817,20 @@ class GrammarRuleParser {
         const definitions: RuleDefinition[] = [];
         this.skipWhitespace();
         while (!this.isAtEnd()) {
-            if (this.isAt("@")) {
-                this.skipWhitespace(1);
-                if (this.isAt("<")) {
-                    definitions.push(this.parseRuleDefinition());
-                    continue;
-                }
-                if (this.isAt("import")) {
-                    imports.push(this.parseImportStatement());
-                    continue;
-                }
-            } else if (this.isAt("entity")) {
+            if (this.isAt("<")) {
+                definitions.push(this.parseRuleDefinition());
+                continue;
+            }
+            if (this.isAt("import")) {
+                imports.push(this.parseImportStatement());
+                continue;
+            }
+            if (this.isAt("entity")) {
                 entities.push(...this.parseEntityDeclaration());
                 continue;
             }
             this.throwUnexpectedCharError(
-                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
+                "Expected rule definition, 'import' statement, or 'entity' declaration",
             );
         }
         return { entities, imports, definitions };

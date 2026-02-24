@@ -271,7 +271,7 @@ function getThemeCommandHandlers(): CommandHandlerTable {
                 run: async (context: ActionContext<ShellContext>) => {
                     const shellWindow =
                         context.sessionContext.agentContext.shellWindow;
-                    shellWindow.setUserSettingValue("darkMode", false);
+                    shellWindow.setUserSettingValue("ui.darkMode", false);
                 },
             },
             dark: {
@@ -279,7 +279,31 @@ function getThemeCommandHandlers(): CommandHandlerTable {
                 run: async (context: ActionContext<ShellContext>) => {
                     const shellWindow =
                         context.sessionContext.agentContext.shellWindow;
-                    shellWindow.setUserSettingValue("darkMode", true);
+                    shellWindow.setUserSettingValue("ui.darkMode", true);
+                },
+            },
+        },
+    };
+}
+
+function getVoiceCommandHandlers(): CommandHandlerTable {
+    return {
+        description: "Set voice mode",
+        commands: {
+            on: {
+                description: "Enable voice mode",
+                run: async (context: ActionContext<ShellContext>) => {
+                    const shellWindow =
+                        context.sessionContext.agentContext.shellWindow;
+                    shellWindow.setUserSettingValue("ui.voiceMode", true);
+                },
+            },
+            off: {
+                description: "Disable voice mode",
+                run: async (context: ActionContext<ShellContext>) => {
+                    const shellWindow =
+                        context.sessionContext.agentContext.shellWindow;
+                    shellWindow.setUserSettingValue("ui.voiceMode", false);
                 },
             },
         },
@@ -311,6 +335,7 @@ const handlers: CommandHandlerTable = {
         topmost: new ShellSetTopMostCommandHandler(),
         localWhisper: getLocalWhisperCommandHandlers(),
         theme: getThemeCommandHandlers(),
+        voice: getVoiceCommandHandlers(),
         update: updateHandlerTable,
         restart: {
             description: "Restart the shell",

@@ -7,6 +7,11 @@ import {
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 import { displayError } from "@typeagent/agent-sdk/helpers/display";
+import type {
+    ActionInfo,
+    AgentSchemaInfo,
+    AgentSubSchemaInfo,
+} from "@typeagent/dispatcher-types";
 import {
     ConnectionId,
     Dispatcher,
@@ -22,6 +27,8 @@ import {
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
 import { randomUUID } from "node:crypto";
+import * as fs from "node:fs";
+import { getPackageFilePath } from "./utils/getPackageFilePath.js";
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
@@ -121,6 +128,98 @@ async function checkCache(
     return await processCommand(request, context, requestId);
 }
 
+/** Extract action names + descriptions from a compiled .pas.json file. */
+function extractActionsFromPas(compiledSchemaFilePath: string): ActionInfo[] {
+    try {
+        const fullPath = getPackageFilePath(compiledSchemaFilePath);
+        const pas = JSON.parse(fs.readFileSync(fullPath, "utf-8")) as Record<
+            string,
+            unknown
+        >;
+        const types = pas.types as
+            | Record<string, Record<string, unknown>>
+            | undefined;
+        const actions: ActionInfo[] = [];
+        for (const typeDef of Object.values(types ?? {})) {
+            const fields = (typeDef.type as Record<string, unknown> | undefined)
+                ?.fields as Record<string, unknown> | undefined;
+            if (!fields?.actionName) continue;
+            const actionNameEnum = (
+                (fields.actionName as Record<string, unknown>).type as
+                    | Record<string, unknown>
+                    | undefined
+            )?.typeEnum as string[] | undefined;
+            if (!actionNameEnum?.length) continue;
+            const name = actionNameEnum[0];
+            const comments = typeDef.comments as string[] | undefined;
+            const description =
+                (comments?.[0] ?? "").trim() ||
+                name
+                    .replace(/([A-Z])/g, " $1")
+                    .replace(/^./, (c) => c.toUpperCase())
+                    .trim();
+            actions.push({ name, description });
+        }
+        return actions;
+    } catch {
+        return [];
+    }
+}
+
+function getAgentSchemas(
+    context: CommandHandlerContext,
+    agentName?: string,
+): AgentSchemaInfo[] {
+    const configs = context.agents.getActionConfigs();
+    // Group configs by top-level agent name (part before first '.')
+    const agentMap = new Map<string, typeof configs>();
+    for (const config of configs) {
+        const topName = config.schemaName.split(".")[0];
+        if (agentName !== undefined && topName !== agentName) continue;
+        const list = agentMap.get(topName) ?? [];
+        list.push(config);
+        agentMap.set(topName, list);
+    }
+
+    const result: AgentSchemaInfo[] = [];
+    for (const [name, configList] of agentMap) {
+        // Sort: main schema (schemaName === name) first, sub-schemas after
+        const sorted = [...configList].sort((a, b) => {
+            if (a.schemaName === name) return -1;
+            if (b.schemaName === name) return 1;
+            return a.schemaName.localeCompare(b.schemaName);
+        });
+
+        const subSchemas: AgentSubSchemaInfo[] = [];
+        for (const config of sorted) {
+            const actions = config.compiledSchemaFilePath
+                ? extractActionsFromPas(config.compiledSchemaFilePath)
+                : [];
+            if (actions.length === 0) continue;
+            const schemaFilePath = config.schemaFilePath
+                ? getPackageFilePath(config.schemaFilePath)
+                : undefined;
+            subSchemas.push({
+                schemaName: config.schemaName,
+                description: config.description,
+                schemaFilePath,
+                actions,
+            });
+        }
+        if (subSchemas.length === 0) continue;
+
+        const mainConfig =
+            configList.find((c) => c.schemaName === name) ?? configList[0];
+        result.push({
+            name,
+            emoji: mainConfig.emojiChar,
+            description: context.agents.getAppAgentDescription(name),
+            subSchemas,
+        });
+    }
+    return result;
+}
+
 export function createDispatcherFromContext(
     context: CommandHandlerContext,
     connectionId?: ConnectionId,
@@ -130,7 +229,7 @@ export function createDispatcherFromContext(
         get connectionId() {
             return connectionId;
         },
-        processCommand(command, clientRequestId, attachments) {
+        processCommand(command, clientRequestId, attachments, options) {
             return processCommand(
                 command,
                 context,
@@ -140,6 +239,7 @@ export function createDispatcherFromContext(
                     clientRequestId,
                 },
                 attachments,
+                options,
             );
         },
         getCommandCompletion(prefix) {
@@ -191,6 +291,9 @@ export function createDispatcherFromContext(
         },
         async getStatus() {
             return getDispatcherStatus(context);
+        },
+        async getAgentSchemas(agentName?: string) {
+            return getAgentSchemas(context, agentName);
         },
         async respondToChoice(choiceId: string, response: boolean | number[]) {
             return context.commandLock(async () => {

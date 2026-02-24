@@ -57,13 +57,13 @@ describe("Grammar Integration", () => {
         it("should add grammar to AgentCache's internal grammar store", () => {
             // Create test grammar
             const grammarText = `
-@ <Start> = <playTrack>
-@ <playTrack> = play $(track:string) -> {
+<Start> = <playTrack>;
+<playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track
     }
-}
+};
             `.trim();
 
             const grammar = loadGrammarRules("player", grammarText);
@@ -95,13 +95,13 @@ describe("Grammar Integration", () => {
         it("should sync dynamic rules from AgentGrammarRegistry to GrammarStoreImpl", () => {
             // Create test grammar
             const staticGrammarText = `
-@ <Start> = <playTrack>
-@ <playTrack> = play $(track:string) -> {
+<Start> = <playTrack>;
+<playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track
     }
-}
+};
             `.trim();
 
             const staticGrammar = loadGrammarRules("player", staticGrammarText);
@@ -120,11 +120,11 @@ describe("Grammar Integration", () => {
             agentGrammarRegistry.registerAgent("player", staticGrammar, nfa);
 
             // Add dynamic rule to AgentGrammarRegistry
-            const dynamicRule = `@ <Start> = <pause>
-@ <pause> = pause -> {
+            const dynamicRule = `<Start> = <pause>;
+<pause> = pause -> {
     actionName: "pause",
     parameters: {}
-}`;
+};`;
             const agentGrammar = agentGrammarRegistry.getAgent("player");
             const result = agentGrammar!.addGeneratedRules(dynamicRule);
             if (!result.success) {
@@ -169,13 +169,13 @@ describe("Grammar Integration", () => {
 
         it("should handle multiple dynamic rule additions with sync", () => {
             const staticGrammarText = `
-@ <Start> = <playTrack>
-@ <playTrack> = play $(track:string) -> {
+<Start> = <playTrack>;
+<playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track
     }
-}
+};
             `.trim();
 
             const staticGrammar = loadGrammarRules("player", staticGrammarText);
@@ -200,19 +200,21 @@ describe("Grammar Integration", () => {
             const agentGrammar = agentGrammarRegistry.getAgent("player");
 
             // Add first dynamic rule
-            agentGrammar!.addGeneratedRules(`@ <Start> = <pause>
-@ <pause> = pause -> {
+            agentGrammar!.addGeneratedRules(`
+<Start> = <pause>;
+<pause> = pause -> {
     actionName: "pause",
     parameters: {}
-}`);
+};`);
             cache.syncAgentGrammar("player");
 
             // Add second dynamic rule
-            agentGrammar!.addGeneratedRules(`@ <Start> = <stop>
-@ <stop> = stop -> {
+            agentGrammar!.addGeneratedRules(`
+<Start> = <stop>;
+<stop> = stop -> {
     actionName: "stop",
     parameters: {}
-}`);
+};`);
             cache.syncAgentGrammar("player");
 
             const namespaceKeys = cache.getNamespaceKeys(["player"], undefined);
@@ -236,20 +238,20 @@ describe("Grammar Integration", () => {
             await persistedStore.newStore(grammarStoreFile);
 
             await persistedStore.addRule({
-                grammarText: `@ <pause> = pause -> {
+                grammarText: `<pause> = pause -> {
     actionName: "pause",
     parameters: {}
-}`,
+};`,
                 schemaName: "player",
                 sourceRequest: "pause",
                 actionName: "pause",
             });
 
             await persistedStore.addRule({
-                grammarText: `@ <stop> = stop -> {
+                grammarText: `<stop> = stop -> {
     actionName: "stop",
     parameters: {}
-}`,
+};`,
                 schemaName: "player",
                 sourceRequest: "stop",
                 actionName: "stop",
@@ -259,13 +261,13 @@ describe("Grammar Integration", () => {
 
             // Now simulate initialization - load static grammar and merge persisted rules
             const staticGrammarText = `
-@ <Start> = <playTrack>
-@ <playTrack> = play $(track:string) -> {
+<Start> = <playTrack>;
+<playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track
     }
-}
+};
             `.trim();
 
             const staticGrammar = loadGrammarRules("player", staticGrammarText);
@@ -301,7 +303,7 @@ describe("Grammar Integration", () => {
                 expect(agentGrammar).toBeDefined();
 
                 // Add Start rule to make dynamic rules reachable
-                const startRule = "@ <Start> = <pause> | <stop>";
+                const startRule = "<Start> = <pause> | <stop>;";
                 const combinedRules = startRule + "\n\n" + rules.join("\n\n");
                 const result = agentGrammar!.addGeneratedRules(combinedRules);
                 if (!result.success) {
@@ -346,21 +348,21 @@ describe("Grammar Integration", () => {
 
             // Add rules for two different schemas
             await persistedStore.addRule({
-                grammarText: `@ <pause> = pause -> {
+                grammarText: `<pause> = pause -> {
     actionName: "pause",
     parameters: {}
-}`,
+};`,
                 schemaName: "player",
                 actionName: "pause",
             });
 
             await persistedStore.addRule({
-                grammarText: `@ <scheduleEvent> = schedule $(event:string) -> {
+                grammarText: `<scheduleEvent> = schedule $(event:string) -> {
     actionName: "scheduleEvent",
     parameters: {
-        event: $(event)
+        event
     }
-}`,
+};`,
                 schemaName: "calendar",
                 actionName: "scheduleEvent",
             });
@@ -370,23 +372,23 @@ describe("Grammar Integration", () => {
             // Load static grammars for both schemas
             const playerGrammar = loadGrammarRules(
                 "player",
-                `@ <Start> = <playTrack>
-@ <playTrack> = play $(track:string) -> {
+                `<Start> = <playTrack>;
+<playTrack> = play $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track
     }
-}`,
+};`,
             );
             const calendarGrammar = loadGrammarRules(
                 "calendar",
-                `@ <Start> = <addEvent>
-@ <addEvent> = add $(event:string) -> {
+                `<Start> = <addEvent>;
+<addEvent> = add $(event:string) -> {
     actionName: "addEvent",
     parameters: {
-        event: $(event)
+        event
     }
-}`,
+};`,
             );
 
             const cache = new AgentCache(
@@ -435,9 +437,9 @@ describe("Grammar Integration", () => {
                 // Add Start rule appropriate for each schema
                 let startRule = "";
                 if (schemaName === "player") {
-                    startRule = "@ <Start> = <pause>";
+                    startRule = "<Start> = <pause>;";
                 } else if (schemaName === "calendar") {
-                    startRule = "@ <Start> = <scheduleEvent>";
+                    startRule = "<Start> = <scheduleEvent>;";
                 }
                 const combinedRules = startRule + "\n\n" + rules.join("\n\n");
                 const result = agentGrammar!.addGeneratedRules(combinedRules);
@@ -472,17 +474,17 @@ describe("Grammar Integration", () => {
     describe("Cache Matching with Combined Grammars", () => {
         it("should match requests against combined static + dynamic grammars", () => {
             const staticGrammarText = `
-@ <Start> = <playTrack> | <pause>
-@ <playTrack> = "play" $(track:string) -> {
+<Start> = <playTrack> | <pause>;
+<playTrack> = "play" $(track:string) -> {
     actionName: "playTrack",
     parameters: {
-        track: $(track)
+        track
     }
-}
-@ <pause> = pause music -> {
+};
+<pause> = pause music -> {
     actionName: "pause",
     parameters: {}
-}
+};
             `.trim();
 
             const staticGrammar = loadGrammarRules("player", staticGrammarText);
@@ -503,11 +505,11 @@ describe("Grammar Integration", () => {
 
             // Add dynamic rule for simple "pause" without "music"
             const agentGrammar = agentGrammarRegistry.getAgent("player");
-            agentGrammar!.addGeneratedRules(`@ <Start> = <pauseShort>
-@ <pauseShort> = pause -> {
+            agentGrammar!.addGeneratedRules(`<Start> = <pauseShort>;
+<pauseShort> = pause -> {
     actionName: "pauseShort",
     parameters: {}
-}`);
+};`);
 
             cache.configureGrammarGeneration(
                 agentGrammarRegistry,
@@ -537,23 +539,23 @@ describe("Grammar Integration", () => {
             // Setup two schemas
             const playerGrammar = loadGrammarRules(
                 "player",
-                `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+                `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`,
+};`,
             );
             const calendarGrammar = loadGrammarRules(
                 "calendar",
-                `@ <Start> = <schedule>
-@ <schedule> = schedule $(event:string) -> {
+                `<Start> = <schedule>;
+<schedule> = schedule $(event:string) -> {
     actionName: "schedule",
     parameters: {
-        event: $(event)
+        event
     }
-}`,
+};`,
             );
 
             const cache = new AgentCache(
@@ -602,13 +604,13 @@ describe("Grammar Integration", () => {
 
     describe("Dual System Support", () => {
         it("should support NFA system when configured", () => {
-            const grammarText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const grammarText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`;
+};`;
             const grammar = loadGrammarRules("player", grammarText);
 
             const cache = new AgentCache(
@@ -640,13 +642,13 @@ describe("Grammar Integration", () => {
         });
 
         it("should support completionBased system when configured", () => {
-            const grammarText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const grammarText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`;
+};`;
             const grammar = loadGrammarRules("player", grammarText);
 
             const cache = new AgentCache(
@@ -669,21 +671,21 @@ describe("Grammar Integration", () => {
 
     describe("Partial Matching / Completions", () => {
         it("should provide completions for partial requests in NFA mode", () => {
-            const grammarText = `@ <Start> = <play> | <pause> | <stop>
-@ <play> = play $(track:string) -> {
+            const grammarText = `<Start> = <play> | <pause> | <stop>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}
-@ <pause> = pause -> {
+};
+<pause> = pause -> {
     actionName: "pause",
     parameters: {}
-}
-@ <stop> = stop -> {
+};
+<stop> = stop -> {
     actionName: "stop",
     parameters: {}
-}`;
+};`;
             const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
@@ -723,17 +725,17 @@ describe("Grammar Integration", () => {
         });
 
         it("should provide completions for partial requests in completion-based mode", () => {
-            const grammarText = `@ <Start> = <play> | <pause>
-@ <play> = play $(track:string) -> {
+            const grammarText = `<Start> = <play> | <pause>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}
-@ <pause> = pause -> {
+};
+<pause> = pause -> {
     actionName: "pause",
     parameters: {}
-}`;
+};`;
             const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
@@ -762,14 +764,14 @@ describe("Grammar Integration", () => {
         });
 
         it("should provide parameter completions for partial requests", () => {
-            const grammarText = `@ <Start> = <play>
-@ <play> = play $(track:string) by $(artist:string) -> {
+            const grammarText = `<Start> = <play>;
+<play> = play $(track:string) by $(artist:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track),
-        artist: $(artist)
+        track,
+        artist
     }
-}`;
+};`;
             const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
                 "test",
@@ -827,13 +829,13 @@ describe("Grammar Integration", () => {
         () => hasTestKeys(),
         () => {
             it("should generate and add grammar rules from request/action pairs", async () => {
-                const staticGrammarText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+                const staticGrammarText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`;
+};`;
                 const grammar = loadGrammarRules("player", staticGrammarText);
                 const cache = new AgentCache(
                     "test",
@@ -861,7 +863,7 @@ describe("Grammar Integration", () => {
                 // Verify schema file exists
                 if (!fs.existsSync(playerSchemaPath)) {
                     console.log(
-                        `⚠ Player schema not found at ${playerSchemaPath}`,
+                        `⚠ Player schema not found at ${playerSchemaPath};`,
                     );
                     console.log(
                         "Run 'npm run build' in packages/agents/player to generate the schema",
@@ -869,7 +871,7 @@ describe("Grammar Integration", () => {
                     return; // Skip test if schema not built
                 }
 
-                console.log(`Using player schema: ${playerSchemaPath}`);
+                console.log(`Using player schema: ${playerSchemaPath};`);
 
                 // Configure with schema path getter
                 cache.configureGrammarGeneration(
@@ -1002,19 +1004,19 @@ describe("Grammar Integration", () => {
     describe("Grammar Merging - Comprehensive Tests", () => {
         it("should handle multi-token sequences correctly after merging", () => {
             const grammar1Text = `
-@ <Start> = <longCommand>
-@ <longCommand> = turn on the lights -> {
+<Start> = <longCommand>;
+<longCommand> = turn on the lights -> {
     actionName: "lightsOn",
     parameters: {}
-}
+};
             `.trim();
 
             const grammar2Text = `
-@ <Start> = <shortCommand>
-@ <shortCommand> = lights on -> {
+<Start> = <shortCommand>;
+<shortCommand> = lights on -> {
     actionName: "lightsOnShort",
     parameters: {}
-}
+};
             `.trim();
 
             const grammar1 = loadGrammarRules("test1", grammar1Text);
@@ -1072,24 +1074,24 @@ describe("Grammar Integration", () => {
 
         it("should handle merging with parameters and wildcards", () => {
             const staticGrammar = `
-@ <Start> = <play>
-@ <play> = play $(track:string) on $(device:string) -> {
+<Start> = <play>;
+<play> = play $(track:string) on $(device:string) -> {
     actionName: "playOnDevice",
     parameters: {
-        track: $(track),
-        device: $(device)
+        track,
+        device
     }
-}
+};
             `.trim();
 
             const dynamicGrammar = `
-@ <Start> = <simplePlay>
-@ <simplePlay> = play $(track:string) -> {
+<Start> = <simplePlay>;
+<simplePlay> = play $(track:string) -> {
     actionName: "playSimple",
     parameters: {
-        track: $(track)
+        track
     }
-}
+};
             `.trim();
 
             const grammar1 = loadGrammarRules("player", staticGrammar);
@@ -1153,21 +1155,21 @@ describe("Grammar Integration", () => {
 
         it("should prioritize more specific patterns over general ones", () => {
             const specificGrammar = `
-@ <Start> = <specific>
-@ <specific> = turn on kitchen lights -> {
+<Start> = <specific>;
+<specific> = turn on kitchen lights -> {
     actionName: "kitchenLightsOn",
     parameters: {}
-}
+};
             `.trim();
 
             const generalGrammar = `
-@ <Start> = <general>
-@ <general> = turn on $(item:string) -> {
+<Start> = <general>;
+<general> = turn on $(item:string) -> {
     actionName: "turnOn",
     parameters: {
-        item: $(item)
+        item
     }
-}
+};
             `.trim();
 
             const grammar1 = loadGrammarRules("home", specificGrammar);
@@ -1211,18 +1213,18 @@ describe("Grammar Integration", () => {
 
         it("should handle multiple Start rules from different merges", () => {
             const grammar1 = `
-@ <Start> = <cmd1>
-@ <cmd1> = command one -> { actionName: "one", parameters: {} }
+<Start> = <cmd1>;
+<cmd1> = command one -> { actionName: "one", parameters: {} };
             `.trim();
 
             const grammar2 = `
-@ <Start> = <cmd2>
-@ <cmd2> = command two -> { actionName: "two", parameters: {} }
+<Start> = <cmd2>;
+<cmd2> = command two -> { actionName: "two", parameters: {} };
             `.trim();
 
             const grammar3 = `
-@ <Start> = <cmd3>
-@ <cmd3> = command three -> { actionName: "three", parameters: {} }
+<Start> = <cmd3>;
+<cmd3> = command three -> { actionName: "three", parameters: {} };
             `.trim();
 
             const g1 = loadGrammarRules("test", grammar1);
@@ -1271,13 +1273,13 @@ describe("Grammar Integration", () => {
 
         it("should handle edge case of single token vs multi-token", () => {
             const multiToken = `
-@ <Start> = <multi>
-@ <multi> = stop playing -> { actionName: "stop", parameters: {} }
+<Start> = <multi>;
+<multi> = stop playing -> { actionName: "stop", parameters: {} };
             `.trim();
 
             const singleToken = `
-@ <Start> = <single>
-@ <single> = stop -> { actionName: "stopShort", parameters: {} }
+<Start> = <single>;
+<single> = stop -> { actionName: "stopShort", parameters: {} };
             `.trim();
 
             const g1 = loadGrammarRules("player", multiToken);

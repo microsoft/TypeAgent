@@ -1,0 +1,98 @@
+[
+  {
+    "request": "What's the weather like in New York right now?",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getCurrentConditions",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you check the current conditions in London with metric units please?",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getCurrentConditions",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Current weather for Tokyo",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getCurrentConditions",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need the weather conditions in Los Angeles, but use Fahrenheit",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getCurrentConditions",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me what it's like outside in Sydney, Australia right now",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getCurrentConditions",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Get current weather for Chicago in Celsius",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getCurrentConditions",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "What's the weather forecast for New York City for the next 5 days?",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getForecast",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you please show me the 7-day forecast for London in Celsius?",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getForecast",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Give me a 3-day weather outlook for Tokyo",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getForecast",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need the forecast for San Francisco over the next week in Fahrenheit",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getForecast",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Weather forecast for Paris, next 4 days please",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getForecast",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me tomorrow's weather for Miami in metric units",
+    "schemaName": "weatherSchema",
+    "action": {
+      "actionName": "getForecast",
+      "parameters": {}
+    }
+  }
+]

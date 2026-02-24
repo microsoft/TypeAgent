@@ -1,0 +1,89 @@
+// Copyright (c) 2024 Anthropic PBC. All rights reserved.
+// Weather Action Grammar
+
+<Start> = <getCurrentConditions> | <getForecast> | <getAlerts>;
+
+// Action Rules
+<getCurrentConditions> = <Polite>? <CurrentWeatherPatterns> $(location:<LocationSpec>) $(units:<UnitsSpec>)? -> { actionName: "getCurrentConditions", parameters: { location: location, units: units } };
+
+<getForecast> = <Polite>? <ForecastPatterns> $(location:<LocationSpec>) $(days:<DaysSpec>)? $(units:<UnitsSpec>)? -> { actionName: "getForecast", parameters: { location: location, days: days, units: units } };
+
+<getAlerts> = <Polite>? <AlertPatterns> $(location:<LocationSpec>) -> { actionName: "getAlerts", parameters: { location: location } };
+
+// Weather Pattern Rules
+<CurrentWeatherPatterns> = (
+  "what's the weather like" |
+  "check the current conditions" |
+  "current weather" |
+  "get current weather" |
+  "show me what it's like outside" |
+  "what's it like outside" |
+  "current conditions" |
+  "weather conditions" |
+  "how's the weather"
+);
+
+<ForecastPatterns> = (
+  "weather forecast" |
+  "forecast" |
+  "weather outlook" |
+  "show me the forecast" |
+  "give me the forecast" |
+  "get the forecast" |
+  "what's the forecast" |
+  "weather prediction" |
+  "upcoming weather"
+);
+
+<AlertPatterns> = (
+  "weather alerts" |
+  "get alerts" |
+  "check alerts" |
+  "weather warnings" |
+  "any alerts" |
+  "weather advisories" |
+  "storm warnings"
+);
+
+// Location Specification
+<LocationSpec> = (
+  ("in" | "for") $(location:string) -> location |
+  $(location:string) -> location
+);
+
+// Days Specification
+<DaysSpec> = (
+  ("for the next" | "over the next") $(days:number) ("day" | "days") -> days |
+  $(days:number) ("day" | "days") -> days |
+  ("for" | "next") $(days:number) ("day" | "days") -> days |
+  "tomorrow" -> 1 |
+  "next week" -> 7
+);
+
+// Units Specification
+<UnitsSpec> = (
+  ("in" | "with" | "using") $(units:<Units>) -> units |
+  $(units:<Units>) -> units
+);
+
+<Units> = (
+  ("celsius" | "metric" | "metric units") -> "celsius" |
+  ("fahrenheit" | "imperial" | "fahrenheit units") -> "fahrenheit"
+);
+
+// Common Patterns
+<Polite> = (
+  "can you" |
+  "please" |
+  "would you" |
+  "could you" |
+  "i need" |
+  "show me"
+)?;
+
+<TimeContext> = (
+  "right now" |
+  "currently" |
+  "at the moment" |
+  "today"
+)?;

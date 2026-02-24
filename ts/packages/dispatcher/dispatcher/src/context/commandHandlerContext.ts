@@ -155,6 +155,7 @@ export type CommandHandlerContext = {
     currentScriptDir: string;
     logger?: Logger | undefined;
     currentRequestId: RequestId | undefined;
+    noReasoning: boolean;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
@@ -577,6 +578,7 @@ export async function initializeCommandHandlerContext(
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
             currentRequestId: undefined,
+            noReasoning: false,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,

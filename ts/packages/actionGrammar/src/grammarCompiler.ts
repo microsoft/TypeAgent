@@ -301,6 +301,22 @@ const emptyRecord = {
 };
 
 /**
+ * Validate that a variable reference exists in the available variables set
+ */
+function validateVariableReference(
+    context: CompileContext,
+    variableName: string,
+    availableVariables: Set<string>,
+): void {
+    if (!availableVariables.has(variableName)) {
+        context.errors.push({
+            message: `Variable '${variableName}' is referenced in the value but not defined in the rule`,
+            definition: context.currentDefinition,
+        });
+    }
+}
+
+/**
  * Validate variable references in a ValueNode while traversing the structure
  */
 function validateVariableReferences(
@@ -310,20 +326,26 @@ function validateVariableReferences(
 ): void {
     switch (valueNode.type) {
         case "variable":
-            if (!availableVariables.has(valueNode.name)) {
-                context.errors.push({
-                    message: `Variable '${valueNode.name}' is referenced in the value but not defined in the rule`,
-                    definition: context.currentDefinition,
-                });
-            }
+            validateVariableReference(
+                context,
+                valueNode.name,
+                availableVariables,
+            );
             break;
         case "object":
             for (const key in valueNode.value) {
-                validateVariableReferences(
-                    context,
-                    valueNode.value[key],
-                    availableVariables,
-                );
+                const val = valueNode.value[key];
+                if (val === null) {
+                    // Shorthand form: { key } means { key: key }
+                    // Validate that 'key' is an available variable
+                    validateVariableReference(context, key, availableVariables);
+                } else {
+                    validateVariableReferences(
+                        context,
+                        val,
+                        availableVariables,
+                    );
+                }
             }
             break;
         case "array":

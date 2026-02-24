@@ -119,7 +119,7 @@ describe("NFA Cache Integration", () => {
         process.env.AGENT_SERVER_CONFIG = configPath;
 
         // Create CommandServer instance
-        server = new CommandServer(false); // debugMode = false
+        server = new CommandServer();
 
         // Verify configuration was loaded correctly
         const config = server.getConfig();

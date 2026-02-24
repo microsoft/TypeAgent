@@ -130,10 +130,8 @@ describe("Base Grammar Pattern Tests", () => {
                 nfa,
                 "play Hello by Adele",
             );
-            console.log("DEBUG: result =", JSON.stringify(result, null, 2));
             expect(result.length).toBeGreaterThan(0);
             const action = result[0].match as any;
-            console.log("DEBUG: action =", JSON.stringify(action, null, 2));
             expect(action.actionName).toBe("playTrack");
             expect(action.parameters.trackName).toBe("Hello");
             expect(action.parameters.artists).toEqual(["Adele"]);
@@ -266,7 +264,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match 'what I have scheduled for today'", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -282,7 +279,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match 'what do I have scheduled for today'", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -298,7 +294,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match 'tell me what I have scheduled for today'", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -314,7 +309,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match with 'can you' prefix", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -357,7 +351,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match 'what's happening this week'", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -373,7 +366,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match 'find what I have scheduled this week'", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -389,7 +381,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match with 'can you' prefix", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -432,7 +423,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match 'set up meeting on Monday at 3pm'", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -451,7 +441,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match with 'can you' prefix", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 
@@ -470,7 +459,6 @@ describe("Base Grammar Pattern Tests", () => {
 
         it("should match multi-word descriptions", () => {
             if (!grammar || !nfa) {
-                console.log("Skipping - calendar grammar not available");
                 return;
             }
 

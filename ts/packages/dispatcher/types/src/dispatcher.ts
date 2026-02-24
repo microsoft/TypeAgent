@@ -72,6 +72,39 @@ export type DispatcherStatus = {
 
 export type ConnectionId = string;
 
+/** A single action exposed by an agent sub-schema. */
+export type ActionInfo = {
+    name: string;
+    description: string;
+};
+
+/** One schema group within an agent (main schema or sub-schema). */
+export type AgentSubSchemaInfo = {
+    /** Exact schemaName to supply to @action dispatch, e.g. "desktop.desktop-taskbar" */
+    schemaName: string;
+    description: string;
+    /** Absolute path to the TypeScript source file for this sub-schema, if available. */
+    schemaFilePath: string | undefined;
+    actions: ActionInfo[];
+};
+
+/** Top-level agent with its grouped sub-schemas. */
+export type AgentSchemaInfo = {
+    name: string;
+    emoji: string;
+    description: string;
+    subSchemas: AgentSubSchemaInfo[];
+};
+
+export type ProcessCommandOptions = {
+    /**
+     * When true, skip reasoning, clarification, and chat fallback.
+     * Use when the caller (e.g. an AI agent) handles reasoning itself
+     * and TypeAgent should act as a pure action executor.
+     */
+    noReasoning?: boolean;
+};
+
 /**
  * A dispatcher instance
  */
@@ -84,11 +117,13 @@ export interface Dispatcher {
      * @param command user request to process.  Request that starts with '@' are direct commands, otherwise they are treaded as a natural language request.
      * @param requestId an optional request id to track the command
      * @param attachments encoded image attachments for the model
+     * @param options optional processing options
      */
     processCommand(
         command: string,
         clientRequestId?: unknown,
         attachments?: string[],
+        options?: ProcessCommandOptions,
     ): Promise<CommandResult | undefined>;
 
     /**
@@ -131,6 +166,12 @@ export interface Dispatcher {
     checkCache(request: string): Promise<CommandResult | undefined>;
 
     getStatus(): Promise<DispatcherStatus>;
+
+    /**
+     * Get schema and action metadata for all active agents, or a specific agent.
+     * @param agentName optional — if provided, returns only the named agent
+     */
+    getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
 
     /**
      * Respond to a pending choice from an agent.

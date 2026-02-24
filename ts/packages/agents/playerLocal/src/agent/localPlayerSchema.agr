@@ -5,7 +5,7 @@
 
 entity Ordinal, Cardinal;
 
-@ <Start> = <Pause>
+<Start> = <Pause>
           | <Resume>
           | <Stop>
           | <Next>
@@ -16,60 +16,60 @@ entity Ordinal, Cardinal;
           | <Mute>
           | <Unmute>
           | <ShowQueue>
-          | <ClearQueue>
+          | <ClearQueue>;
 
-@ <Pause> = pause ((the)? music)?   ->  { actionName: "pause" }
+<Pause> = pause ((the)? music)?   ->  { actionName: "pause" };
 
-@ <Resume> = resume ((the)? music)?   ->  { actionName: "resume" }
+<Resume> = resume ((the)? music)?   ->  { actionName: "resume" };
 
-@ <Stop> = stop ((the)? music)?   ->  { actionName: "stop" }
+<Stop> = stop ((the)? music)?   ->  { actionName: "stop" };
 
-@ <Next> = (next | skip) (track | song)?   ->  { actionName: "next" }
+<Next> = (next | skip) (track | song)?   ->  { actionName: "next" };
 
-@ <Previous> = (previous | back | last) (track | song)?   ->  { actionName: "previous" }
+<Previous> = (previous | back | last) (track | song)?   ->  { actionName: "previous" };
 
-@ <Status> = (what('s | is) | show) (playing | status | now playing)?   ->  { actionName: "status" }
+<Status> = (what('s | is) | show) (playing | status | now playing)?   ->  { actionName: "status" };
 
-@ <PlayCommand> = <PlayTrackNumberCommand>
+<PlayCommand> = <PlayTrackNumberCommand>;
 
-@ <PlayTrackNumberCommand> =
+<PlayTrackNumberCommand> =
     play (the)? $(n:Ordinal) (track | song)? -> {
         actionName: "playFromQueue",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
     }
 | play track $(n:Cardinal) -> {
         actionName: "playFromQueue",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
    }
 | play track #$(n:number) -> {
         actionName: "playFromQueue",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
-   }
+   };
 
-@ <VolumeCommand> = <VolumeUp> | <VolumeDown> | <SetVolume>
+<VolumeCommand> = <VolumeUp> | <VolumeDown> | <SetVolume>;
 
-@ <LocalPlayerPrefix> = (local player | local music player | music player)?
+<LocalPlayerPrefix> = (local player | local music player | music player)?;
 
-@ <VolumeUp> = <LocalPlayerPrefix> (turn up | increase | raise) (the)? volume
-    -> { actionName: "changeVolume", parameters: { amount: 10 } }
+<VolumeUp> = <LocalPlayerPrefix> (turn up | increase | raise) (the)? volume
+    -> { actionName: "changeVolume", parameters: { amount: 10 } };
 
-@ <VolumeDown> = <LocalPlayerPrefix> (turn down | decrease | lower) (the)? volume
-    -> { actionName: "changeVolume", parameters: { amount: -10 } }
+<VolumeDown> = <LocalPlayerPrefix> (turn down | decrease | lower) (the)? volume
+    -> { actionName: "changeVolume", parameters: { amount: -10 } };
 
-@ <SetVolume> = <LocalPlayerPrefix> set volume (to)? $(n:number) (percent)?
-    -> { actionName: "setVolume", parameters: { level: $(n) } }
+<SetVolume> = <LocalPlayerPrefix> set volume (to)? $(n:number) (percent)?
+    -> { actionName: "setVolume", parameters: { level: n } };
 
-@ <Mute> = mute (the)? (music | sound | audio)?   ->  { actionName: "mute", parameters: { isMuted: true } }
+<Mute> = mute (the)? (music | sound | audio)?   ->  { actionName: "mute", parameters: { isMuted: true } };
 
-@ <Unmute> = unmute (the)? (music | sound | audio)?   ->  { actionName: "mute", parameters: { isMuted: false } }
+<Unmute> = unmute (the)? (music | sound | audio)?   ->  { actionName: "mute", parameters: { isMuted: false } };
 
-@ <ShowQueue> = (show | list | display) (the)? queue   ->  { actionName: "showQueue" }
+<ShowQueue> = (show | list | display) (the)? queue   ->  { actionName: "showQueue" };
 
-@ <ClearQueue> = clear (the)? queue   ->  { actionName: "clearQueue" }
+<ClearQueue> = clear (the)? queue   ->  { actionName: "clearQueue" };
 

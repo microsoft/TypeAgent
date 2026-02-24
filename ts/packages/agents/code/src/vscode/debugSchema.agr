@@ -1,0 +1,46 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
+// Debug Schema Grammar - Comprehensive debugging interface
+
+<Start> = <showDebugPanel> | <startDebugging> | <step> | <stopDebugging> | <showHover> | <toggleBreakpoint> | <setBreakpoint> | <removeBreakpoint> | <removeAllBreakpoints>;
+
+// Action Rules
+
+<showDebugPanel> = <Polite> ('show' | 'open' | 'display') ('debug' | 'debugging') ('panel' | 'window' | 'view') -> { actionName: "showDebugPanel", parameters: {} };
+
+<startDebugging> = <Polite> (<StartDebugPhrase>) ('with' | 'using') ('the'?) $(configurationName:string) ('configuration' | 'config' | 'setup') $(noDebug:<NoDebugPhrase>) -> { actionName: "startDebugging", parameters: { configurationName: configurationName, noDebug: noDebug } }
+                   | <Polite> (<StartDebugPhrase>) ('with' | 'using') ('the'?) $(configurationName:string) ('configuration' | 'config' | 'setup') -> { actionName: "startDebugging", parameters: { configurationName: configurationName, noDebug: "false" } }
+                   | <Polite> (<StartDebugPhrase>) $(configurationName:string) ('config' | 'configuration') $(noDebug:<NoDebugPhrase>) -> { actionName: "startDebugging", parameters: { configurationName: configurationName, noDebug: noDebug } }
+                   | <Polite> (<StartDebugPhrase>) $(configurationName:string) ('config' | 'configuration') -> { actionName: "startDebugging", parameters: { configurationName: configurationName, noDebug: "false" } }
+                   | <Polite> ('debug' | 'launch') $(configurationName:string) $(noDebug:<NoDebugPhrase>) -> { actionName: "startDebugging", parameters: { configurationName: configurationName, noDebug: noDebug } }
+                   | <Polite> ('debug' | 'launch') $(configurationName:string) -> { actionName: "startDebugging", parameters: { configurationName: configurationName, noDebug: "false" } };
+
+<step> = <Polite> ('step' | 'continue' | 'next') $(stepType:string) -> { actionName: "step", parameters: { stepType: stepType } }
+         | <Polite> ('step' | 'continue' | 'next') -> { actionName: "step", parameters: { stepType: "over" } };
+
+<stopDebugging> = <Polite> ('stop' | 'end' | 'exit' | 'quit') ('debugging' | 'debug' | 'the debugger' | 'debugging session' | 'debug mode') -> { actionName: "stopDebugging", parameters: {} };
+
+<showHover> = <Polite> ('show' | 'display') ('hover' | 'hover info' | 'hover information') -> { actionName: "showHover", parameters: {} };
+
+<toggleBreakpoint> = <Polite> ('toggle' | 'add or remove' | 'set') ('a'?) ('breakpoint') ('on' | 'at') ('line')? $(line:string) ('in' | 'of') $(fileName:string) ('in' | 'within') ('the')? $(folderName:string) ('folder' | 'directory')? -> { actionName: "toggleBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } }
+                     | <Polite> ('toggle' | 'add or remove' | 'set') ('a'?) ('breakpoint') ('line') $(line:string) ('file' | 'in') $(fileName:string) ('folder' | 'directory') $(folderName:string) -> { actionName: "toggleBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } }
+                     | <Polite> ('toggle' | 'add or remove' | 'set') ('a'?) ('breakpoint') ('line') $(line:string) (',' | 'in') ('file')? $(fileName:string) (',' | 'in') $(folderName:string) ('folder')? -> { actionName: "toggleBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } };
+
+<setBreakpoint> = <Polite> ('set' | 'add' | 'place') ('a'?) ('breakpoint') ('on' | 'at') ('line')? $(line:string) ('in' | 'of') $(fileName:string) ('in' | 'within') ('the')? $(folderName:string) ('folder' | 'directory')? -> { actionName: "setBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } }
+                  | <Polite> ('set' | 'add' | 'place') ('a'?) ('breakpoint') ('line') $(line:string) ('file' | 'in') $(fileName:string) ('folder' | 'directory') $(folderName:string) -> { actionName: "setBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } }
+                  | <Polite> ('set' | 'add' | 'place') ('a'?) ('breakpoint') ('line') $(line:string) (',' | 'in') ('file')? $(fileName:string) (',' | 'in') $(folderName:string) ('folder')? -> { actionName: "setBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } };
+
+<removeBreakpoint> = <Polite> ('remove' | 'delete' | 'clear') ('the'?) ('breakpoint') ('on' | 'at') ('line')? $(line:string) ('in' | 'of') $(fileName:string) ('in' | 'within') ('the')? $(folderName:string) ('folder' | 'directory')? -> { actionName: "removeBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } }
+                     | <Polite> ('remove' | 'delete' | 'clear') ('the'?) ('breakpoint') ('line') $(line:string) ('file' | 'in') $(fileName:string) ('folder' | 'directory') $(folderName:string) -> { actionName: "removeBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } }
+                     | <Polite> ('remove' | 'delete' | 'clear') ('the'?) ('breakpoint') ('line') $(line:string) (',' | 'in') ('file')? $(fileName:string) (',' | 'in') $(folderName:string) ('folder')? -> { actionName: "removeBreakpoint", parameters: { line: line, fileName: fileName, folderName: folderName } };
+
+<removeAllBreakpoints> = <Polite> ('remove' | 'delete' | 'clear') ('all') ('breakpoints' | 'the breakpoints') -> { actionName: "removeAllBreakpoints", parameters: {} };
+
+// Shared Sub-Rules
+
+<Polite> = ('can you' | 'please' | 'would you')?;
+
+<StartDebugPhrase> = ('start' | 'begin' | 'launch' | 'run') ('debugging' | 'debug session' | 'the debugger');
+
+<NoDebugPhrase> = ('without' ('actually')? 'debugging' | 'but' ('just')? 'run' ('it')? ('normally')? ('without breakpoints')? | 'just run' ('it')? ('normally')?) -> "true";

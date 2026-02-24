@@ -1,0 +1,82 @@
+[
+  {
+    "request": "Take a photo of this sunset for my Instagram story",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you snap a picture? I want to capture this moment with my family",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Photo please - need to document this recipe I'm making",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Take a quick pic of my outfit so I can ask my friends what they think",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Could you photograph this document? I need to save it for later",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Snap a shot of my garden - the flowers are blooming beautifully today",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Take a picture of this error message on my screen so I can show tech support",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Photo of my parking spot number so I don't forget where I left my car",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you take a pic of this whiteboard before the meeting ends?",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Take a photo - want to remember what this place looks like",
+    "schemaName": "photoSchema",
+    "action": {
+      "actionName": "takePhoto",
+      "parameters": {}
+    }
+  }
+]

@@ -2,40 +2,40 @@
 // Calendar Management Action Grammar
 
 // Start rule - references all action rules by exact action names
-@ <Start> = <scheduleEvent> | <findEvents> | <addParticipant> | <findTodaysEvents> | <findThisWeeksEvents>
+<Start> = <scheduleEvent> | <findEvents> | <addParticipant> | <findTodaysEvents> | <findThisWeeksEvents>;
 
 // Action rules (using exact action names)
-@ <scheduleEvent> = <Polite> ('schedule' | 'set up' | 'book' | 'create') <EventDescription> <DateSpec> <TimeSpec>? <LocationSpec>? <ParticipantSpec>? -> { actionName: "scheduleEvent", parameters: { description: $(description), date: $(date), time: $(time), location: $(location), participant: $(participant) } }
+<scheduleEvent> = <Polite> ('schedule' | 'set up' | 'book' | 'create') <EventDescription> <DateSpec> <TimeSpec>? <LocationSpec>? <ParticipantSpec>? -> { actionName: "scheduleEvent", parameters: { description, date, time, location, participant } };
 
-@ <findEvents> = <Polite> ('find' | 'show me' | 'get' | 'search for') ('events' | 'meetings' | 'appointments')? <EventDescriptionFilter>? <DateSpec>? <ParticipantFilter>? -> { actionName: "findEvents", parameters: { description: $(description), date: $(date), participant: $(participant) } }
+<findEvents> = <Polite> ('find' | 'show me' | 'get' | 'search for') ('events' | 'meetings' | 'appointments')? <EventDescriptionFilter>? <DateSpec>? <ParticipantFilter>? -> { actionName: "findEvents", parameters: { description, date, participant } };
 
-@ <addParticipant> = <Polite> ('add' | 'invite' | 'include') <ParticipantName> ('to' | 'in') <EventDescriptionTarget> -> { actionName: "addParticipant", parameters: { description: $(description), participant: $(participant) } }
+<addParticipant> = <Polite> ('add' | 'invite' | 'include') <ParticipantName> ('to' | 'in') <EventDescriptionTarget> -> { actionName: "addParticipant", parameters: { description, participant } };
 
-@ <findTodaysEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s') ('on my calendar'? 'today' | 'today\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')?) -> { actionName: "findTodaysEvents", parameters: {} }
+<findTodaysEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s') ('on my calendar'? 'today' | 'today\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')?) -> { actionName: "findTodaysEvents", parameters: {} };
 
-@ <findThisWeeksEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s') ('on my calendar'? ('this week' | 'for this week') | 'this week\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')?) -> { actionName: "findThisWeeksEvents", parameters: {} }
+<findThisWeeksEvents> = <Polite> ('show me' | 'find' | 'get' | 'what is' | 'what\'s') ('on my calendar'? ('this week' | 'for this week') | 'this week\'s' ('events' | 'schedule' | 'calendar' | 'meetings' | 'appointments')?) -> { actionName: "findThisWeeksEvents", parameters: {} };
 
 // Shared sub-rules
-@ <Polite> = ('can you' | 'please' | 'would you')?
+<Polite> = ('can you' | 'please' | 'would you')?;
 
-@ <EventDescription> = ('a' | 'an')? $(description:string) ('meeting' | 'event' | 'appointment')?
+<EventDescription> = ('a' | 'an')? $(description:string) ('meeting' | 'event' | 'appointment')?;
 
-@ <EventDescriptionFilter> = (('all' | 'any')? ('meetings' | 'events' | 'appointments') ('with' | 'about' | 'for' | 'that have anything to do with')? $(description:string)) | ($(description:string) ('meeting' | 'event' | 'appointment')?)
+<EventDescriptionFilter> = (('all' | 'any')? ('meetings' | 'events' | 'appointments') ('with' | 'about' | 'for' | 'that have anything to do with')? $(description:string)) | ($(description:string) ('meeting' | 'event' | 'appointment')?);
 
-@ <EventDescriptionTarget> = ('the' | 'my')? $(description:string) ('meeting' | 'event' | 'appointment')?
+<EventDescriptionTarget> = ('the' | 'my')? $(description:string) ('meeting' | 'event' | 'appointment')?;
 
-@ <DateSpec> = ('on' | 'for') $(date:CalendarDate)
+<DateSpec> = ('on' | 'for') $(date:CalendarDate);
 
-@ <TimeSpec> = ('at' | 'from') <TimeExpression>
+<TimeSpec> = ('at' | 'from') <TimeExpression>;
 
-@ <TimeExpression> = $(time:CalendarTime) | $(time:CalendarTimeRange)
+<TimeExpression> = $(time:CalendarTime) | $(time:CalendarTimeRange);
 
-@ <LocationSpec> = ('in' | 'at') $(location:string)
+<LocationSpec> = ('in' | 'at') $(location:string);
 
-@ <ParticipantSpec> = ('please'? ('invite' | 'include') | 'with') <ParticipantList>
+<ParticipantSpec> = ('please'? ('invite' | 'include') | 'with') <ParticipantList>;
 
-@ <ParticipantList> = $(participant:string) ((',' | 'and') $(participant:string))*
+<ParticipantList> = $(participant:string) ((',' | 'and') $(participant:string))*;
 
-@ <ParticipantFilter> = ('with' | 'including') <ParticipantName>
+<ParticipantFilter> = ('with' | 'including') <ParticipantName>;
 
-@ <ParticipantName> = $(participant:string)
+<ParticipantName> = $(participant:string);

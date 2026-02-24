@@ -7,9 +7,11 @@ import type {
     TemplateSchema,
 } from "@typeagent/agent-sdk";
 import type {
+    AgentSchemaInfo,
     CommandCompletionResult,
     CommandResult,
     DispatcherStatus,
+    ProcessCommandOptions,
 } from "@typeagent/dispatcher-types";
 
 export type DispatcherInvokeFunctions = {
@@ -17,6 +19,7 @@ export type DispatcherInvokeFunctions = {
         command: string,
         clientRequestId?: unknown,
         attachments?: string[],
+        options?: ProcessCommandOptions,
     ): Promise<CommandResult | undefined>;
 
     getDynamicDisplay(
@@ -46,6 +49,8 @@ export type DispatcherInvokeFunctions = {
     close(): Promise<void>;
 
     getStatus(): Promise<DispatcherStatus>;
+
+    getAgentSchemas(agentName?: string): Promise<AgentSchemaInfo[]>;
 
     respondToChoice(
         choiceId: string,

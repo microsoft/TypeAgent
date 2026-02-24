@@ -1,0 +1,162 @@
+[
+  {
+    "request": "Can you show me the file explorer?",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showExplorer",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Open the explorer panel",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showExplorer",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to see the project files - show explorer",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showExplorer",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Display the file tree please",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showExplorer",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you open the search for me?",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showSearch",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me the search",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showSearch",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to search for something - bring up the search interface",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showSearch",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Open search",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showSearch",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you show me the source control panel?",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showSourceControl",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Open source control",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showSourceControl",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to see the git status - show source control please",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showSourceControl",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Display the source control view so I can check my changes",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "showSourceControl",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you zoom in a bit?",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "zoomIn",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Zoom in please",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "zoomIn",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to see this closer - zoom in",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "zoomIn",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Make it bigger",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "zoomIn",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you zoom out a bit so I can see more of the page?",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "zoomOut",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Zoom out please",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "zoomOut",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need to see the bigger picture - zoom out",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "zoomOut",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Make it smaller so I can get a better overview",
+    "schemaName": "displaySchema",
+    "action": {
+      "actionName": "zoomOut",
+      "parameters": {}
+    }
+  }
+]

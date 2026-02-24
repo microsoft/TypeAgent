@@ -6,9 +6,11 @@ import * as fs from "fs";
 import { fileURLToPath } from "url";
 import {
     GrammarStore,
+    GrammarStoreData,
     getSessionGrammarDirPath,
     getSessionGrammarStorePath,
 } from "../src/grammarStore.js";
+import { matchGrammar } from "../src/grammarMatcher.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -46,7 +48,7 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
                 sourceRequest: "play Bohemian Rhapsody",
                 actionName: "playTrack",
@@ -68,12 +70,12 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
             });
 
             await store.addRule({
-                grammarText: '@ <scheduleEvent> = "schedule" $(event:string)',
+                grammarText: '<scheduleEvent> = "schedule" $(event:string)',
                 schemaName: "calendar",
             });
 
@@ -89,12 +91,12 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
             });
 
             await store.addRule({
-                grammarText: '@ <pause> = "pause"',
+                grammarText: '<pause> = "pause"',
                 schemaName: "player",
             });
 
@@ -109,7 +111,7 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
             });
 
@@ -126,7 +128,7 @@ describe("GrammarStore", () => {
             const store1 = new GrammarStore();
 
             await store1.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
                 sourceRequest: "play music",
                 actionName: "playTrack",
@@ -154,7 +156,7 @@ describe("GrammarStore", () => {
             await store.setAutoSave(true);
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
             });
 
@@ -188,13 +190,13 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             await store.addRule({
-                grammarText: '@ <playTrack> = "play" $(track:string)',
+                grammarText: '<playTrack> = "play" $(track:string)',
                 schemaName: "player",
                 sourceRequest: "play music",
             });
 
             await store.addRule({
-                grammarText: '@ <pause> = "pause"',
+                grammarText: '<pause> = "pause"',
                 schemaName: "player",
                 sourceRequest: "pause",
             });
@@ -203,8 +205,8 @@ describe("GrammarStore", () => {
 
             expect(agr).toContain("# Dynamic Grammar Rules for player");
             expect(agr).toContain("# 2 rule(s)");
-            expect(agr).toContain('@ <playTrack> = "play" $(track:string)');
-            expect(agr).toContain('@ <pause> = "pause"');
+            expect(agr).toContain('<playTrack> = "play" $(track:string)');
+            expect(agr).toContain('<pause> = "pause"');
             expect(agr).toContain('Source: "play music"');
         });
 
@@ -212,19 +214,87 @@ describe("GrammarStore", () => {
             const store = new GrammarStore();
 
             store.addRule({
-                grammarText: "@ <Start> = <playTrack>",
+                grammarText: "<Start> = <playTrack>;",
                 schemaName: "player",
             });
 
             store.addRule({
                 grammarText:
-                    '@ <playTrack> = "play" $(track:string) -> { actionName: "playTrack", parameters: { track: $(track) } }',
+                    '<playTrack> = "play" $(track:string) -> { actionName: "playTrack", parameters: { track } };',
                 schemaName: "player",
             });
 
             const grammar = store.compileToGrammar();
             expect(grammar).toBeDefined();
             expect(grammar!.rules.length).toBeGreaterThan(0);
+        });
+
+        it("should persist compiledGrammar in the saved JSON", async () => {
+            const store = new GrammarStore();
+
+            await store.addRule({
+                grammarText: '<Start> = pause -> { actionName: "pause" };',
+                schemaName: "player",
+            });
+
+            // Compile first, then save — compiledGrammar should appear in file
+            store.compileToGrammar();
+            await store.save(testFile);
+
+            const raw: GrammarStoreData = JSON.parse(
+                fs.readFileSync(testFile, "utf-8"),
+            );
+            expect(raw.compiledGrammar).toBeDefined();
+        });
+
+        it("should restore compiled grammar from JSON on load (no re-parse)", async () => {
+            const store = new GrammarStore();
+
+            await store.addRule({
+                grammarText: '<Start> = pause -> { actionName: "pause" };',
+                schemaName: "player",
+            });
+
+            await store.save(testFile);
+
+            // Load into a new store; compiledGrammar in the file means no
+            // text re-parsing is needed
+            const store2 = new GrammarStore();
+            await store2.load(testFile);
+
+            const grammar = store2.compileToGrammar();
+            expect(grammar).toBeDefined();
+
+            const matches = matchGrammar(grammar!, "pause");
+            expect(matches.length).toBeGreaterThan(0);
+            expect(matches[0].match).toMatchObject({ actionName: "pause" });
+        });
+
+        it("should fall back to parsing grammarText when compiledGrammar absent (backward compat)", async () => {
+            const store = new GrammarStore();
+
+            await store.addRule({
+                grammarText: '<Start> = resume -> { actionName: "resume" };',
+                schemaName: "player",
+            });
+
+            // Write a file that lacks compiledGrammar (old format)
+            const oldFormat: GrammarStoreData = {
+                version: "1.0",
+                schemas: store["data"].schemas,
+            };
+            fs.mkdirSync(path.dirname(testFile), { recursive: true });
+            fs.writeFileSync(testFile, JSON.stringify(oldFormat, null, 2));
+
+            const store2 = new GrammarStore();
+            await store2.load(testFile);
+
+            const grammar = store2.compileToGrammar();
+            expect(grammar).toBeDefined();
+
+            const matches = matchGrammar(grammar!, "resume");
+            expect(matches.length).toBeGreaterThan(0);
+            expect(matches[0].match).toMatchObject({ actionName: "resume" });
         });
     });
 

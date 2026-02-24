@@ -17,7 +17,7 @@ export interface RuleRHS {
     // Parameters that map to the action
     actionParameters: Array<{
         parameterName: string;
-        parameterValue: string; // e.g., "$(track)" or fixed value like "kitchen"
+        parameterValue: string; // e.g., "track" (bare var name) or fixed value like "kitchen"; arrays: "[artist]"
     }>;
 }
 
@@ -97,7 +97,7 @@ WILDCARD RULES:
 2. Structure words (the, a, in, by, to, for, etc.) = fixed text
 3. Question words (what, where, when, who, why, how) = fixed text
 4. For array parameters: if only one item is given, use singular variable name
-   - Example Pattern: "by $(artist:wildcard)" → maps to artists: [$(artist)]
+   - Example Pattern: "by $(artist:wildcard)" → maps to artists: [artist]
 
 WILDCARD TYPES:
 - Built-in entity types: $(varName:CalendarDate), $(varName:CalendarTime), $(varName:CalendarTimeRange)
@@ -125,7 +125,7 @@ interface RuleRHS {
     matchPattern: string;  // The grammar pattern like "play $(track:wildcard) by $(artist:wildcard)"
     actionParameters: Array<{
         parameterName: string;
-        parameterValue: string; // e.g., "$(track)" or fixed value like "kitchen"
+        parameterValue: string; // e.g., "track" (bare var name) or fixed value like "kitchen"; arrays: "[artist]"
     }>;
 }
     
@@ -172,7 +172,7 @@ Output:
     { "parameterName": "deviceName", "sourceText": "kitchen", "targetValue": "kitchen", "isWildcard": true }
   ],
   "fixedPhrases": ["select", "device"],
-  "grammarPattern": { "matchPattern": "select $(deviceName:wildcard) device", "actionParameters": [ { "parameterName": "deviceName", "parameterValue": "$(deviceName)" } ] },
+  "grammarPattern": { "matchPattern": "select $(deviceName:wildcard) device", "actionParameters": [ { "parameterName": "deviceName", "parameterValue": "deviceName" } ] },
   "reasoning": "Fixed structure 'select...device'. Parameter deviceName is validated (checked_wildcard), use wildcard type."
 }
 
@@ -191,7 +191,7 @@ Output:
     { "parameterName": "artists", "sourceText": "queen", "targetValue": ["queen"], "isWildcard": true }
   ],
   "fixedPhrases": ["play", "by"],
-  "grammarPattern": { "matchPattern": "play $(trackName:wildcard) by $(artist:wildcard)", "actionParameters": [ { "parameterName": "trackName", "parameterValue": "$(trackName)" }, { "parameterName": "artists", "parameterValue": "[$(artist)]" } ] },
+  "grammarPattern": { "matchPattern": "play $(trackName:wildcard) by $(artist:wildcard)", "actionParameters": [ { "parameterName": "trackName", "parameterValue": "trackName" }, { "parameterName": "artists", "parameterValue": "[artist]" } ] },
   "reasoning": "Fixed structure 'play...by'. Both parameters are validated so adjacent wildcards are OK. Use singular 'artist' for array parameter 'artists'."
 }`;
 
@@ -501,7 +501,7 @@ export class ClaudeGrammarGenerator {
      * Convert the analysis into a full .agr format grammar rule
      * Returns empty string if grammar should not be generated
      *
-     * Uses the exact action name as the rule name (e.g., @ <scheduleEvent> = ...)
+     * Uses the exact action name as the rule name (e.g., <scheduleEvent> = ... ;)
      * to enable easy targeting when extending grammars for specific actions.
      */
     formatAsGrammarRule(
@@ -552,10 +552,10 @@ export class ClaudeGrammarGenerator {
         }
 
         // Include <Start> rule that references the action rule
-        let grammar = `@ <Start> = <${actionName}>\n`;
+        let grammar = `<Start> = <${actionName}>;\n`;
 
         // Use exact action name as rule name for easy targeting
-        grammar += `@ <${actionName}> = `;
+        grammar += `<${actionName}> = `;
         grammar += matchPattern;
         grammar += ` -> {\n`;
         grammar += `    actionName: "${actionName}"`;
@@ -575,7 +575,7 @@ export class ClaudeGrammarGenerator {
             grammar += `\n    }`;
         }
 
-        grammar += `\n}`;
+        grammar += `\n};`;
 
         return grammar;
     }

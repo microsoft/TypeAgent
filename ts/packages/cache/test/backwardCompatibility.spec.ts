@@ -24,13 +24,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
     describe("Basic Grammar Loading and Matching", () => {
         it("should load and match grammar without any NFA infrastructure", () => {
             // This is how grammars were loaded before NFA integration
-            const grammarText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const grammarText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`;
+};`;
 
             const grammar = loadGrammarRules("player", grammarText);
             expect(grammar).toBeDefined();
@@ -61,24 +61,24 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
         it("should match multiple grammars without NFA", () => {
             const playerGrammar = loadGrammarRules(
                 "player",
-                `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+                `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`,
+};`,
             );
 
             const calendarGrammar = loadGrammarRules(
                 "calendar",
-                `@ <Start> = <schedule>
-@ <schedule> = schedule $(event:string) -> {
+                `<Start> = <schedule>;
+<schedule> = schedule $(event:string) -> {
     actionName: "schedule",
     parameters: {
-        event: $(event)
+        event
     }
-}`,
+};`,
             );
 
             const cache = new AgentCache(
@@ -118,13 +118,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 
     describe("Wildcard Matching", () => {
         it("should match wildcards in completion-based mode", () => {
-            const grammarText = `@ <Start> = <setVolume>
-@ <setVolume> = set volume to $(level:number) -> {
+            const grammarText = `<Start> = <setVolume>;
+<setVolume> = set volume to $(level:number) -> {
     actionName: "setVolume",
     parameters: {
-        level: $(level)
+        level
     }
-}`;
+};`;
 
             const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
@@ -147,13 +147,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
         });
 
         it("should handle string wildcards", () => {
-            const grammarText = `@ <Start> = <search>
-@ <search> = search for $(query:string) -> {
+            const grammarText = `<Start> = <search>;
+<search> = search for $(query:string) -> {
     actionName: "search",
     parameters: {
-        query: $(query)
+        query
     }
-}`;
+};`;
 
             const grammar = loadGrammarRules("search", grammarText);
             const cache = new AgentCache(
@@ -181,21 +181,21 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 
     describe("Grammar Alternatives", () => {
         it("should match multiple alternatives in completion-based mode", () => {
-            const grammarText = `@ <Start> = <play> | <pause> | <stop>
-@ <play> = play $(track:string) -> {
+            const grammarText = `<Start> = <play> | <pause> | <stop>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}
-@ <pause> = pause -> {
+};
+<pause> = pause -> {
     actionName: "pause",
     parameters: {}
-}
-@ <stop> = stop -> {
+};
+<stop> = stop -> {
     actionName: "stop",
     parameters: {}
-}`;
+};`;
 
             const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
@@ -230,13 +230,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 
     describe("Optional Patterns", () => {
         it("should match optional tokens", () => {
-            const grammarText = `@ <Start> = <play>
-@ <play> = play (the)? (song)? $(track:string) -> {
+            const grammarText = `<Start> = <play>;
+<play> = play (the)? (song)? $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`;
+};`;
 
             const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
@@ -271,13 +271,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 
     describe("No NFA Configuration", () => {
         it("should work without ever calling configureGrammarGeneration", () => {
-            const grammarText = `@ <Start> = <test>
-@ <test> = test $(value:string) -> {
+            const grammarText = `<Start> = <test>;
+<test> = test $(value:string) -> {
     actionName: "test",
     parameters: {
-        value: $(value)
+        value
     }
-}`;
+};`;
 
             const grammar = loadGrammarRules("test", grammarText);
             const cache = new AgentCache(
@@ -301,13 +301,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
         });
 
         it("should work when configureGrammarGeneration is called with completionBased mode", () => {
-            const grammarText = `@ <Start> = <test>
-@ <test> = test $(value:string) -> {
+            const grammarText = `<Start> = <test>;
+<test> = test $(value:string) -> {
     actionName: "test",
     parameters: {
-        value: $(value)
+        value
     }
-}`;
+};`;
 
             const grammar = loadGrammarRules("test", grammarText);
             const cache = new AgentCache(
@@ -333,13 +333,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
 
     describe("Empty and No-Match Cases", () => {
         it("should return empty array when no grammar matches", () => {
-            const grammarText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const grammarText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`;
+};`;
 
             const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(
@@ -356,13 +356,13 @@ describe("Backward Compatibility - Completion-Based Cache", () => {
         });
 
         it("should return empty array when namespace key doesn't match", () => {
-            const grammarText = `@ <Start> = <play>
-@ <play> = play $(track:string) -> {
+            const grammarText = `<Start> = <play>;
+<play> = play $(track:string) -> {
     actionName: "play",
     parameters: {
-        track: $(track)
+        track
     }
-}`;
+};`;
 
             const grammar = loadGrammarRules("player", grammarText);
             const cache = new AgentCache(

@@ -1,0 +1,70 @@
+// Copyright 2024 Anthropic, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Video Schema Grammar
+
+<Start> = <createVideoAction>;
+
+// Main action rule
+<createVideoAction> = $(request:<VideoRequest>) $(files:<FileSpec>)? $(duration:<DurationSpec>)? $(caption:<CaptionSpec>)? -> { actionName: "createVideoAction", parameters: { originalRequest: request, relatedFiles: files, duration: duration, caption: caption } };
+
+// Video request patterns
+<VideoRequest> = <VideoPhrase> -> "video_request";
+
+<VideoPhrase> = <Polite>? <CreateVerb> <VideoTarget> <VideoContent>? | <VideoTarget> <FromFiles> | <NeedPhrase> <VideoTarget>;
+
+<Polite> = ('can you' | 'could you' | 'please' | 'would you')?;
+
+<CreateVerb> = 'create' | 'make' | 'generate' | 'build' | 'produce';
+
+<VideoTarget> = ('a' | 'an')? ('video' | 'slideshow' | 'compilation' | 'clip' | 'presentation');
+
+<VideoContent> = ('promotional' | 'quick' | 'brief' | 'social media' | 'professional')?;
+
+<FromFiles> = 'from' ('these' | 'the')?;
+
+<NeedPhrase> = ('i need' | 'need') ('a' | 'an')?;
+
+// File specification patterns
+<FileSpec> = <FilePhrase> -> "file_spec";
+
+<FilePhrase> = <UsingFiles> | <FromFiles> <FileLocation>;
+
+<UsingFiles> = 'using' ('the' | 'these')? <FileDescription>;
+
+<FileDescription> = ('product images' | 'vacation photos' | 'screenshots' | 'presentation slides' | 'team photos' | 'recipe photos' | 'renovation pics' | 'before' 'after' 'pics' | 'charts and graphs' | 'files' | 'photos' | 'images');
+
+<FileLocation> = ('in' 'the')? ('marketing folder' | 'food folder' | 'app demo' | 'folder' | 'directory');
+
+// Duration specification patterns
+<DurationSpec> = <DurationPhrase> -> "duration_spec";
+
+<DurationPhrase> = <DurationValue> | <KeepDuration> | <AboutDuration> | <AroundDuration>;
+
+<DurationValue> = $(time:string) ('seconds' | 'second' | 'minutes' | 'minute' | 'mins' | 'min');
+
+<KeepDuration> = ('keep it' | 'make it') ('under' | 'about' | 'around')? $(time:string) ('seconds' | 'second' | 'minutes' | 'minute');
+
+<AboutDuration> = ('about' | 'around' | 'maybe') $(time:string) ('seconds' | 'second' | 'minutes' | 'minute') ('long' | 'duration')?;
+
+<AroundDuration> = $(time:string) ('seconds' | 'second' | 'minutes' | 'minute') ('would be perfect' | 'duration')?;
+
+// Caption specification patterns
+<CaptionSpec> = <CaptionPhrase> -> "caption_spec";
+
+<CaptionPhrase> = <CaptionIntro> $(text:string) | <CaptionAs> $(text:string);
+
+<CaptionIntro> = ('add a caption that says' | 'with the caption' | 'caption should be' | 'with caption');
+
+<CaptionAs> = ('as the caption' | 'for the caption');

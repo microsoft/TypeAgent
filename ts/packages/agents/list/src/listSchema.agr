@@ -6,151 +6,139 @@
 // Types: wildcard = 1+ words, word = exactly 1 word
 
 // addItems - add one or more items to a list
-@ <AddItems> = add $(item:wildcard) to (the)? (my)? $(listName:wildcard) list -> {
+<AddItems> = add $(item:wildcard) to (the)? (my)? $(listName:wildcard) list -> {
     actionName: "addItems",
     parameters: {
-        items: [$(item)],
-        listName: $(listName)
+        items: [item],
+        listName
     }
 }
   | (can you)? add $(item:wildcard) to (the)? $(listName:wildcard) -> {
     actionName: "addItems",
     parameters: {
-        items: [$(item)],
-        listName: $(listName)
+        items: [item],
+        listName
     }
 }
   | put $(item:wildcard) on (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "addItems",
     parameters: {
-        items: [$(item)],
-        listName: $(listName)
+        items: [item],
+        listName
     }
 }
   | add $(item1:wildcard) and $(item2:wildcard) to (the)? $(listName:wildcard) -> {
     actionName: "addItems",
     parameters: {
-        items: [$(item1), $(item2)],
-        listName: $(listName)
+        items: [item1, item2],
+        listName
     }
-}
+};
 
 // removeItems - remove one or more items from a list
-@ <RemoveItems> = remove $(item:wildcard) from (the)? (my)? $(listName:wildcard) list -> {
+<RemoveItems> = remove $(item:wildcard) from (the)? (my)? $(listName:wildcard) list -> {
     actionName: "removeItems",
     parameters: {
-        items: [$(item)],
-        listName: $(listName)
+        items: [item],
+        listName
     }
 }
   | (can you)? delete $(item:wildcard) from (the)? $(listName:wildcard) -> {
     actionName: "removeItems",
     parameters: {
-        items: [$(item)],
-        listName: $(listName)
+        items: [item],
+        listName
     }
 }
   | take $(item:wildcard) off (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "removeItems",
     parameters: {
-        items: [$(item)],
-        listName: $(listName)
+        items: [item],
+        listName
     }
-}
+};
 
 // createList - create a new list
-@ <CreateList> = create (a)? (new)? $(listName:wildcard) list -> {
+<CreateList> = create (a)? (new)? $(listName:wildcard) list -> {
     actionName: "createList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | (can you)? make (me)? (a)? (new)? $(listName:wildcard) list -> {
     actionName: "createList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | start (a)? (new)? $(listName:wildcard) list -> {
     actionName: "createList",
     parameters: {
-        listName: $(listName)
+        listName
     }
-}
+};
 
 // getList - show what's on the list
-// Note: Each rule must have at least one required word to avoid matching everything before "list"
-@ <GetList> = what's on (the)? (my)? $(listName:wildcard) (list)? -> {
+// Note: Each rule must have at least one distinctive required word before the wildcard
+<GetList> = what's on (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "getList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | what (is)? on (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "getList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | what's (the)? (my)? $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | show (me)? (the)? (my)? $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | (can you)? show (me)? (the)? $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | what (do)? I have on (the)? (my)? $(listName:wildcard) list -> {
     actionName: "getList",
     parameters: {
-        listName: $(listName)
+        listName
     }
-}
-  | the $(listName:wildcard) list -> {
-    actionName: "getList",
-    parameters: {
-        listName: $(listName)
-    }
-}
-  | my $(listName:wildcard) list -> {
-    actionName: "getList",
-    parameters: {
-        listName: $(listName)
-    }
-}
+};
 
 // clearList - clear all items from a list
-@ <ClearList> = clear (the)? (my)? $(listName:wildcard) list -> {
+<ClearList> = clear (the)? (my)? $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | (can you)? empty (the)? (my)? $(listName:wildcard) (list)? -> {
     actionName: "clearList",
     parameters: {
-        listName: $(listName)
+        listName
     }
 }
   | delete (everything)? (all items)? from (the)? (my)? $(listName:wildcard) list -> {
     actionName: "clearList",
     parameters: {
-        listName: $(listName)
+        listName
     }
-}
+};
 
-@ <Start> = <AddItems>
+<Start> = <AddItems>
   | <RemoveItems>
   | <CreateList>
   | <GetList>
-  | <ClearList>
+  | <ClearList>;

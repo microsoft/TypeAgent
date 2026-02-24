@@ -6,18 +6,24 @@
  *
  * Similar to ConstructionStore, this stores grammar rules that are learned
  * from user interactions. Grammars are stored per-session in JSON format.
+ *
+ * The compiled Grammar AST (GrammarJson) is stored alongside the per-rule
+ * grammar text so that subsequent loads can skip re-parsing. The grammarText
+ * fields are retained for human readability and debugging.
  */
 
 import fs from "node:fs";
 import path from "node:path";
 import { loadGrammarRulesNoThrow } from "./grammarLoader.js";
-import { Grammar } from "./grammarTypes.js";
+import { Grammar, GrammarJson } from "./grammarTypes.js";
+import { grammarFromJson } from "./grammarDeserializer.js";
+import { grammarToJson } from "./grammarSerializer.js";
 
 /**
  * Stored grammar rule with metadata
  */
 export interface StoredGrammarRule {
-    // The raw grammar text (.agr format)
+    // The raw grammar text (.agr format) — retained for debugging and export
     grammarText: string;
     // When this rule was added
     timestamp: number;
@@ -36,6 +42,10 @@ export interface GrammarStoreData {
     version: string;
     // Map from schema name to array of grammar rules
     schemas: Record<string, StoredGrammarRule[]>;
+    // Pre-compiled Grammar AST of all rules combined.
+    // Written on save() so subsequent loads skip re-parsing grammarText.
+    // Absent in older files — compileToGrammar() falls back to parsing text.
+    compiledGrammar?: GrammarJson;
 }
 
 export interface GrammarStoreInfo {
@@ -53,6 +63,8 @@ export class GrammarStore {
     private modified: boolean = false;
     private filePath: string | undefined = undefined;
     private autoSave: boolean = false;
+    // In-memory cache of the compiled Grammar; invalidated on addRule/deleteRule
+    private _compiledCache: Grammar | undefined = undefined;
 
     constructor() {
         this.data = {
@@ -125,6 +137,7 @@ export class GrammarStore {
         }
 
         this.data.schemas[rule.schemaName].push(storedRule);
+        this._compiledCache = undefined;
         this.modified = true;
         await this.doAutoSave();
     }
@@ -166,6 +179,7 @@ export class GrammarStore {
             delete this.data.schemas[schemaName];
         }
 
+        this._compiledCache = undefined;
         this.modified = true;
         await this.doAutoSave();
         return true;
@@ -179,6 +193,7 @@ export class GrammarStore {
             version: "1.0",
             schemas: {},
         };
+        this._compiledCache = undefined;
         this.modified = true;
     }
 
@@ -204,12 +219,21 @@ export class GrammarStore {
             this.data = JSON.parse(fileContent);
         }
 
+        // Restore pre-compiled grammar from JSON if present, avoiding re-parse
+        if (this.data.compiledGrammar !== undefined) {
+            this._compiledCache = grammarFromJson(this.data.compiledGrammar);
+        } else {
+            this._compiledCache = undefined;
+        }
+
         this.filePath = resolvedPath;
         this.modified = false;
     }
 
     /**
-     * Save grammar store to a file
+     * Save grammar store to a file.
+     * The combined compiled Grammar AST is serialized alongside rule text so
+     * that the next load() can skip re-parsing.
      */
     public async save(filePath?: string): Promise<boolean> {
         const outFile = filePath ? path.resolve(filePath) : this.filePath;
@@ -221,6 +245,14 @@ export class GrammarStore {
         // Don't save if nothing has changed
         if (outFile === this.filePath && !this.modified) {
             return false;
+        }
+
+        // Ensure the compiled grammar is up to date before writing
+        const compiled = this.compileToGrammar();
+        if (compiled !== undefined) {
+            this.data.compiledGrammar = grammarToJson(compiled);
+        } else {
+            delete this.data.compiledGrammar;
         }
 
         // Create directory if it doesn't exist
@@ -260,17 +292,26 @@ export class GrammarStore {
     }
 
     /**
-     * Compile all stored grammars into a single Grammar object
-     * This can be used to load the dynamic rules into the agent grammar registry
+     * Compile all stored grammars into a single Grammar object.
+     * Returns the cached result when the store has not been modified since the
+     * last compilation or load.  When the cache is stale, all grammarText
+     * entries are concatenated and re-parsed so that cross-rule references
+     * (e.g. <Start> referencing <playTrack> defined in another stored rule)
+     * continue to resolve correctly.
      */
     public compileToGrammar(): Grammar | undefined {
+        // Return cached result if still valid
+        if (this._compiledCache !== undefined) {
+            return this._compiledCache;
+        }
+
         const allRules = this.getAllRules();
 
         if (allRules.length === 0) {
             return undefined;
         }
 
-        // Concatenate all grammar texts
+        // Concatenate all grammar texts so cross-rule references resolve
         const combinedGrammarText = allRules
             .map((rule) => rule.grammarText)
             .join("\n\n");
@@ -287,6 +328,7 @@ export class GrammarStore {
             console.warn("Errors compiling dynamic grammar:", errors);
         }
 
+        this._compiledCache = grammar;
         return grammar;
     }
 

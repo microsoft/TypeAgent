@@ -142,7 +142,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@24.10.13)(ts-node@10.9.2(@types/node@24.10.13)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -603,12 +603,6 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
-      agent-cache:
-        specifier: workspace:*
-        version: link:../../packages/cache
-      agent-dispatcher:
-        specifier: workspace:*
-        version: link:../../packages/dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -618,15 +612,9 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1
-      default-agent-provider:
-        specifier: workspace:*
-        version: link:../../packages/defaultAgentProvider
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
-      find-config:
-        specifier: ^1.0.0
-        version: 1.0.0
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -646,9 +634,6 @@ importers:
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
-      '@types/find-config':
-        specifier: 1.0.4
-        version: 1.0.4
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
@@ -891,7 +876,7 @@ importers:
         version: 12.0.2(webpack@5.105.0)
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
+        version: 29.7.0(@types/node@24.10.13)(ts-node@10.9.2(@types/node@24.10.13)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1706,6 +1691,9 @@ importers:
         specifier: ^8.17.1
         version: 8.18.2
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
       '@types/better-sqlite3':
         specifier: 7.6.13
         version: 7.6.13
@@ -1715,6 +1703,9 @@ importers:
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1834,9 +1825,15 @@ importers:
         specifier: workspace:*
         version: link:../../typeagent
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -1911,6 +1908,12 @@ importers:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2185,28 +2188,18 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
 
-  packages/agents/oracle:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../../agentSdk
-    devDependencies:
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-
   packages/agents/photo:
     dependencies:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2487,6 +2480,12 @@ importers:
         specifier: workspace:*
         version: link:../../utils/typechatUtils
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2506,6 +2505,9 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -3207,9 +3209,6 @@ importers:
       music-local:
         specifier: workspace:*
         version: link:../agents/playerLocal
-      oracle-agent:
-        specifier: workspace:*
-        version: link:../agents/oracle
       photo-agent:
         specifier: workspace:*
         version: link:../agents/photo
@@ -4539,6 +4538,9 @@ importers:
       '@azure/identity':
         specifier: ^4.9.1
         version: 4.10.0
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../packages/agentServer/client
       chalk:
         specifier: ^5.3.0
         version: 5.6.2

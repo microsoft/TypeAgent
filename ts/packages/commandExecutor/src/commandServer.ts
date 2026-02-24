@@ -7,6 +7,7 @@ import { z } from "zod/v4";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { connectDispatcher } from "@typeagent/agent-server-client";
 import type {
+    AgentSchemaInfo,
     ClientIO,
     IAgentMessage,
     RequestId,
@@ -19,7 +20,27 @@ import * as path from "path";
 import * as os from "os";
 import { convert } from "html-to-text";
 import { loadConfig, type ResolvedAgentServerConfig } from "./config/index.js";
-import { registerBrowserActionTools } from "./browserActionTools.js";
+
+// ── Agent filter ──────────────────────────────────────────────────────────────
+
+/**
+ * Agents skipped for MCP exposure — not useful via Claude Code.
+ * browser: use the Claude browser extension instead
+ * settings: dead stub, real settings are in desktop sub-schemas
+ * montage: requires the shell embedded browser
+ * androidMobile: requires a connected Android device
+ * markdown / spelunker: not applicable for MCP use
+ */
+const SKIP_AGENTS = new Set([
+    "browser",
+    "settings",
+    "montage",
+    "androidMobile",
+    "markdown",
+    "spelunker",
+]);
+
+// ── Zod schemas ───────────────────────────────────────────────────────────────
 
 function executeCommandRequestSchema() {
     return {
@@ -29,57 +50,83 @@ function executeCommandRequestSchema() {
     };
 }
 const ExecuteCommandRequestSchema = z.object(executeCommandRequestSchema());
-
 export type ExecuteCommandRequest = z.infer<typeof ExecuteCommandRequestSchema>;
 
-function discoverSchemasRequestSchema() {
+function discoverAgentsRequestSchema() {
     return {
-        query: z.string(),
-        includeActions: z.boolean().optional(),
+        agentName: z
+            .string()
+            .optional()
+            .describe(
+                "If omitted, returns a list of all available agents. If provided, returns sub-schema groups with action names and descriptions for that agent.",
+            ),
+        actionName: z
+            .string()
+            .optional()
+            .describe(
+                "If provided along with agentName, returns the full TypeScript schema source for that specific action.",
+            ),
     };
 }
-const DiscoverSchemasRequestSchema = z.object(discoverSchemasRequestSchema());
-export type DiscoverSchemasRequest = z.infer<
-    typeof DiscoverSchemasRequestSchema
->;
 
-function loadSchemaRequestSchema() {
+function executeActionRequestSchema() {
     return {
-        schemaName: z.string(),
-        exposeAs: z.enum(["individual", "composite"]).optional(),
+        schemaName: z.string().describe("The agent name (e.g. 'player')"),
+        actionName: z
+            .string()
+            .describe("The action name (e.g. 'createPlaylist')"),
+        parameters: z
+            .record(z.string(), z.any())
+            .optional()
+            .describe("Action-specific parameters"),
+        naturalLanguage: z
+            .string()
+            .optional()
+            .describe(
+                "The original natural language request from the user. When provided, the dispatcher stores this as a cache entry mapping the phrase to this action+parameters, so future identical or similar requests can be handled without LLM translation.",
+            ),
     };
 }
-const LoadSchemaRequestSchema = z.object(loadSchemaRequestSchema());
-export type LoadSchemaRequest = z.infer<typeof LoadSchemaRequestSchema>;
+type ExecuteActionRequest = {
+    schemaName: string;
+    actionName: string;
+    parameters?: Record<string, unknown> | undefined;
+    naturalLanguage?: string | undefined;
+};
 
-function typeagentActionRequestSchema() {
-    return {
-        agent: z.string(),
-        action: z.string(),
-        parameters: z.record(z.string(), z.any()).optional(),
-        naturalLanguage: z.string(),
-    };
-}
-const TypeagentActionRequestSchema = z.object(typeagentActionRequestSchema());
-export type TypeagentActionRequest = z.infer<
-    typeof TypeagentActionRequestSchema
->;
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
 function toolResult(result: string): CallToolResult {
-    return {
-        content: [{ type: "text", text: result }],
-    };
+    return { content: [{ type: "text", text: result }] };
 }
 
-/**
- * Logger utility that writes to both console and a log file
- */
+function stripAnsi(text: string): string {
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+function htmlToPlainText(html: string): string {
+    return convert(html, {
+        wordwrap: false,
+        preserveNewlines: true,
+        selectors: [
+            { selector: "img", format: "skip" },
+            { selector: "a", options: { ignoreHref: true } },
+        ],
+    });
+}
+
+async function processHtmlContent(content: string): Promise<string> {
+    return htmlToPlainText(content);
+}
+
+// ── Logger ────────────────────────────────────────────────────────────────────
+
 class Logger {
     private logFilePath: string;
     private logStream: fs.WriteStream;
 
     constructor() {
-        // Use ~/.tmp instead of system temp directory
         const logDir = path.join(os.homedir(), ".tmp", "typeagent-mcp");
         if (!fs.existsSync(logDir)) {
             fs.mkdirSync(logDir, { recursive: true });
@@ -89,31 +136,26 @@ class Logger {
         this.log(`Log file created at: ${this.logFilePath}`);
     }
 
-    private formatMessage(level: string, message: string): string {
-        const timestamp = new Date().toISOString();
-        return `[${timestamp}] [${level}] ${message}`;
+    private format(level: string, message: string): string {
+        return `[${new Date().toISOString()}] [${level}] ${message}`;
     }
 
     log(message: string): void {
-        const formatted = this.formatMessage("INFO", message);
-        console.log(formatted);
-        this.logStream.write(formatted + "\n");
+        const s = this.format("INFO", message);
+        console.log(s);
+        this.logStream.write(s + "\n");
     }
 
-    error(message: string, error?: any): void {
-        const errorDetails = error
+    error(message: string, error?: unknown): void {
+        const detail = error
             ? ` - ${error instanceof Error ? error.message : String(error)}`
             : "";
-        const formatted = this.formatMessage("ERROR", message + errorDetails);
-        console.error(formatted);
-        this.logStream.write(formatted + "\n");
-        if (error?.stack) {
+        const s = this.format("ERROR", message + detail);
+        console.error(s);
+        this.logStream.write(s + "\n");
+        if (error instanceof Error && error.stack) {
             this.logStream.write(error.stack + "\n");
         }
-    }
-
-    getLogFilePath(): string {
-        return this.logFilePath;
     }
 
     close(): void {
@@ -121,58 +163,21 @@ class Logger {
     }
 }
 
-/**
- * Remove ANSI escape codes from a string
- */
-function stripAnsi(text: string): string {
-    // eslint-disable-next-line no-control-regex
-    return text.replace(/\x1b\[[0-9;]*m/g, "");
-}
+// ── ClientIO ──────────────────────────────────────────────────────────────────
 
-/**
- * Convert HTML content to plain text using html-to-text library
- * This provides secure HTML parsing instead of regex-based sanitization
- */
-function htmlToPlainText(html: string): string {
-    return convert(html, {
-        wordwrap: false,
-        preserveNewlines: true,
-        selectors: [
-            { selector: "img", format: "skip" }, // Skip images entirely
-            { selector: "a", options: { ignoreHref: true } }, // Keep link text, ignore URLs
-        ],
-    });
-}
-
-/**
- * Process HTML content to convert it to plain text
- */
-async function processHtmlImages(content: string): Promise<string> {
-    return htmlToPlainText(content);
-}
-
-/**
- * Minimal ClientIO implementation for MCP server
- * Most methods are no-ops since we just need to satisfy the interface
- */
 function createMcpClientIO(
     logger: Logger,
     responseCollector: { messages: string[] },
     getConfirmedFlag: () => boolean,
 ): ClientIO {
     return {
-        clear(): void {
-            logger.log("ClientIO: clear() called");
-        },
-        exit(): void {
-            logger.log("ClientIO: exit() called");
-        },
+        clear(): void {},
+        exit(): void {},
         setDisplayInfo(): void {},
         setDisplay(message: IAgentMessage): void {
             logger.log(`ClientIO: setDisplay() - ${JSON.stringify(message)}`);
             if (typeof message === "object" && "message" in message) {
                 const msg = message.message;
-                // Filter out "info" kind messages (technical translation details)
                 if (
                     typeof msg === "object" &&
                     msg &&
@@ -181,7 +186,6 @@ function createMcpClientIO(
                 ) {
                     return;
                 }
-
                 if (typeof msg === "string") {
                     responseCollector.messages.push(stripAnsi(msg));
                 } else if (typeof msg === "object" && msg && "content" in msg) {
@@ -195,14 +199,12 @@ function createMcpClientIO(
             logger.log(
                 `ClientIO: appendDisplay(mode=${mode}) - ${JSON.stringify(message)}`,
             );
-            // Only capture block mode messages (final results), not temporary status messages
             if (
                 mode === "block" &&
                 typeof message === "object" &&
                 "message" in message
             ) {
                 const msg = message.message;
-                // Filter out "info" kind messages (technical translation details)
                 if (
                     typeof msg === "object" &&
                     msg &&
@@ -211,7 +213,6 @@ function createMcpClientIO(
                 ) {
                     return;
                 }
-
                 if (typeof msg === "string") {
                     responseCollector.messages.push(stripAnsi(msg));
                 } else if (typeof msg === "object" && msg && "content" in msg) {
@@ -221,38 +222,30 @@ function createMcpClientIO(
                 }
             }
         },
-        appendDiagnosticData(requestId: RequestId, data: any): void {
+        appendDiagnosticData(requestId: RequestId, data: unknown): void {
             logger.log(
-                `ClientIO: appendDiagnosticData(requestId=${requestId}) - ${JSON.stringify(data)}`,
+                `ClientIO: appendDiagnosticData(requestId=${JSON.stringify(requestId)}) - ${JSON.stringify(data)}`,
             );
         },
         setDynamicDisplay(): void {},
         async askYesNo(
-            requestId: RequestId,
+            _requestId: RequestId,
             message: string,
             defaultValue?: boolean,
         ): Promise<boolean> {
-            // Check if this request was pre-confirmed
             if (getConfirmedFlag()) {
-                logger.log(
-                    `ClientIO: askYesNo(requestId=${requestId}) - "${message}" (auto-approved due to confirmed=true)`,
-                );
+                logger.log(`ClientIO: askYesNo - "${message}" (auto-approved)`);
                 return true;
             }
-
-            // Otherwise, throw error requiring user confirmation
-            logger.log(
-                `ClientIO: askYesNo(requestId=${requestId}) - "${message}" (requires user confirmation)`,
-            );
             throw new Error(`USER_CONFIRMATION_REQUIRED: ${message}`);
         },
         async proposeAction(
-            requestId: RequestId,
+            _requestId: RequestId,
             actionTemplates: TemplateEditConfig,
             source: string,
         ): Promise<unknown> {
             logger.log(
-                `ClientIO: proposeAction(requestId=${requestId}, source=${source}) - ${JSON.stringify(actionTemplates)}`,
+                `ClientIO: proposeAction(source=${source}) - ${JSON.stringify(actionTemplates)}`,
             );
             return undefined;
         },
@@ -268,25 +261,23 @@ function createMcpClientIO(
             return defaultId ?? 0;
         },
         notify(
-            requestId: RequestId,
+            _requestId: RequestId,
             event: string,
-            data: any,
+            data: unknown,
             source: string,
         ): void {
             logger.log(
-                `ClientIO: notify(event=${event}, requestId=${requestId}, source=${source}) - ${JSON.stringify(data)}`,
+                `ClientIO: notify(event=${event}, source=${source}) - ${JSON.stringify(data)}`,
             );
         },
-        async openLocalView(requestId: RequestId, port: number) {
+        async openLocalView(_requestId: RequestId, port: number) {
             logger.log(`ClientIO: openLocalView(port=${port})`);
         },
-        async closeLocalView(requestId: RequestId, port: number) {
+        async closeLocalView(_requestId: RequestId, port: number) {
             logger.log(`ClientIO: closeLocalView(port=${port})`);
         },
-        requestChoice(): void {
-            // Not supported in command executor
-        },
-        takeAction(requestId: RequestId, action: string, data: unknown): void {
+        requestChoice(): void {},
+        takeAction(_requestId: RequestId, action: string, data: unknown): void {
             logger.log(
                 `ClientIO: takeAction(action=${action}) - ${JSON.stringify(data)}`,
             );
@@ -294,372 +285,20 @@ function createMcpClientIO(
     };
 }
 
-/**
- * Load weather schema and manifest from the actual weather agent package
- */
-function getWeatherAgentInfo(): { manifest: any; schemaSource: string } {
-    // Resolve the path to the weather agent's src directory
-    const weatherAgentSrcPath = path.join(
-        process.cwd(),
-        "packages/agents/weather/src",
-    );
-
-    try {
-        // Read the manifest
-        const manifestPath = path.join(
-            weatherAgentSrcPath,
-            "weatherManifest.json",
-        );
-        const manifestContent = fs.readFileSync(manifestPath, "utf-8");
-        const manifest = JSON.parse(manifestContent);
-
-        // Read the schema source file
-        const schemaPath = path.join(weatherAgentSrcPath, "weatherSchema.ts");
-        const schemaSource = fs.readFileSync(schemaPath, "utf-8");
-
-        return { manifest, schemaSource };
-    } catch (error) {
-        // Fallback: return hardcoded values if file reading fails
-        const fallbackSchema = `export type WeatherAction =
-    | GetCurrentConditionsAction
-    | GetForecastAction
-    | GetAlertsAction;
-
-export type GetCurrentConditionsAction = {
-    actionName: "getCurrentConditions";
-    parameters: {
-        location: string;
-        units?: "celsius" | "fahrenheit";
-    };
-};
-
-export type GetForecastAction = {
-    actionName: "getForecast";
-    parameters: {
-        location: string;
-        days?: number; // 1-7 days
-        units?: "celsius" | "fahrenheit";
-    };
-};
-
-export type GetAlertsAction = {
-    actionName: "getAlerts";
-    parameters: {
-        location: string;
-    };
-};`;
-
-        const fallbackManifest = {
-            emojiChar: "⛅",
-            description:
-                "Agent to get weather information including current conditions, forecasts, and alerts",
-            schema: {
-                description:
-                    "Weather agent with actions to get current conditions, forecasts, and alerts",
-                schemaFile: "./weatherSchema.ts",
-                schemaType: {
-                    action: "WeatherAction",
-                },
-            },
-        };
-
-        return { manifest: fallbackManifest, schemaSource: fallbackSchema };
-    }
-}
+// ── CommandServer ─────────────────────────────────────────────────────────────
 
 /**
- * Schema registry using real TypeAgent agents
- * Currently includes the weather agent for testing discovery
- */
-interface SchemaInfo {
-    name: string;
-    description: string;
-    schemaSource: string; // TypeScript schema definition
-    actions: {
-        name: string;
-        description: string;
-        parameters: any;
-    }[];
-}
-
-// Load weather agent info at module initialization
-const weatherAgentInfo = getWeatherAgentInfo();
-
-const SCHEMA_REGISTRY: SchemaInfo[] = [
-    {
-        name: "weather",
-        description: weatherAgentInfo.manifest.description,
-        schemaSource: weatherAgentInfo.schemaSource,
-        actions: [
-            {
-                name: "getCurrentConditions",
-                description: "Get current weather conditions for a location",
-                parameters: {
-                    location: {
-                        type: "string",
-                        description: "City name or zip code",
-                    },
-                    units: {
-                        type: "string",
-                        enum: ["celsius", "fahrenheit"],
-                        description: "Temperature units (optional)",
-                    },
-                },
-            },
-            {
-                name: "getForecast",
-                description: "Get weather forecast for upcoming days",
-                parameters: {
-                    location: {
-                        type: "string",
-                        description: "City name or zip code",
-                    },
-                    days: {
-                        type: "number",
-                        description: "Number of days (1-7, optional)",
-                    },
-                    units: {
-                        type: "string",
-                        enum: ["celsius", "fahrenheit"],
-                        description: "Temperature units (optional)",
-                    },
-                },
-            },
-            {
-                name: "getAlerts",
-                description: "Get active weather alerts for a location",
-                parameters: {
-                    location: {
-                        type: "string",
-                        description: "City name or zip code",
-                    },
-                },
-            },
-        ],
-    },
-    {
-        name: "browser",
-        description:
-            "Browser automation agent for web navigation, interaction, and content extraction",
-        schemaSource:
-            "export type BrowserActions = OpenWebPage | CloseWebPage | ClickOnElement | EnterTextInElement | GetHTML | ...",
-        actions: [
-            {
-                name: "openWebPage",
-                description: "Open a web page in the browser",
-                parameters: {
-                    site: {
-                        type: "string",
-                        description: "Website name, URL, or search terms",
-                    },
-                    tab: {
-                        type: "string",
-                        enum: ["new", "current", "existing"],
-                        description:
-                            "Tab to open in (optional, default: current)",
-                    },
-                },
-            },
-            {
-                name: "clickOnElement",
-                description: "Click on an element on the page",
-                parameters: {
-                    cssSelector: {
-                        type: "string",
-                        description: "CSS selector for the element to click",
-                    },
-                },
-            },
-            {
-                name: "enterTextInElement",
-                description: "Enter text into an input element",
-                parameters: {
-                    value: {
-                        type: "string",
-                        description: "Text to enter",
-                    },
-                    cssSelector: {
-                        type: "string",
-                        description: "CSS selector for the input element",
-                    },
-                    submitForm: {
-                        type: "boolean",
-                        description:
-                            "Submit form after entering text (optional)",
-                    },
-                },
-            },
-            {
-                name: "getHTML",
-                description: "Get HTML content from the current page",
-                parameters: {
-                    fullHTML: {
-                        type: "boolean",
-                        description: "Get full HTML (optional)",
-                    },
-                    extractText: {
-                        type: "boolean",
-                        description: "Extract only text content (optional)",
-                    },
-                },
-            },
-            {
-                name: "awaitPageLoad",
-                description: "Wait for page to finish loading",
-                parameters: {},
-            },
-            {
-                name: "scrollDown",
-                description: "Scroll down the page",
-                parameters: {},
-            },
-            {
-                name: "scrollUp",
-                description: "Scroll up the page",
-                parameters: {},
-            },
-            {
-                name: "goBack",
-                description: "Navigate back in browser history",
-                parameters: {},
-            },
-            {
-                name: "goForward",
-                description: "Navigate forward in browser history",
-                parameters: {},
-            },
-            {
-                name: "reloadPage",
-                description: "Reload the current page",
-                parameters: {},
-            },
-            {
-                name: "getElementByDescription",
-                description:
-                    "Find UI element on page using natural language description (PREFERRED over raw HTML parsing)",
-                parameters: {
-                    elementDescription: {
-                        type: "string",
-                        description:
-                            "Natural language description of element (e.g., 'Add to Cart button', 'search input')",
-                    },
-                    elementType: {
-                        type: "string",
-                        description:
-                            "Optional element type hint (button, input, link, etc.)",
-                    },
-                },
-            },
-            {
-                name: "isPageStateMatched",
-                description:
-                    "Verify current page state matches expected condition (PREFERRED for state validation)",
-                parameters: {
-                    expectedStateDescription: {
-                        type: "string",
-                        description:
-                            "Expected page state description (e.g., 'page shows shopping cart', 'product details loaded')",
-                    },
-                },
-            },
-            {
-                name: "queryPageContent",
-                description:
-                    "Answer questions about visible page content (PREFERRED over raw HTML parsing)",
-                parameters: {
-                    query: {
-                        type: "string",
-                        description:
-                            "Question about page content (e.g., 'how many items in stock?', 'what is the price?')",
-                    },
-                },
-            },
-        ],
-    },
-    {
-        name: "browser.commerce",
-        description:
-            "Commerce-specific browser actions for shopping, cart management, and reservations",
-        schemaSource:
-            "export type ShoppingActions = ViewShoppingCart | FindNearbyStore | GetLocationInStore | BuyProduct | SearchForReservation | SelectReservation",
-        actions: [
-            {
-                name: "buyProduct",
-                description:
-                    "Complete shopping flow: search, select, and add product to cart",
-                parameters: {
-                    productName: {
-                        type: "string",
-                        description: "Product name or description to purchase",
-                    },
-                },
-            },
-            {
-                name: "getLocationInStore",
-                description:
-                    "Find physical location of product in store (aisle, shelf)",
-                parameters: {
-                    productName: {
-                        type: "string",
-                        description: "Name of the product to locate",
-                    },
-                },
-            },
-            {
-                name: "viewShoppingCart",
-                description: "View shopping cart contents",
-                parameters: {},
-            },
-            {
-                name: "findNearbyStore",
-                description: "Find nearest store location",
-                parameters: {},
-            },
-            {
-                name: "searchForReservation",
-                description: "Search for restaurant reservation slots",
-                parameters: {
-                    restaurantName: {
-                        type: "string",
-                        description: "Name of the restaurant",
-                    },
-                    time: {
-                        type: "string",
-                        description: "Desired time (AM/PM format)",
-                    },
-                    numberOfPeople: {
-                        type: "number",
-                        description: "Number of people (default: 1)",
-                    },
-                },
-            },
-            {
-                name: "selectReservation",
-                description: "Select and book a specific reservation time slot",
-                parameters: {
-                    time: {
-                        type: "string",
-                        description: "Time slot to book",
-                    },
-                },
-            },
-        ],
-    },
-];
-
-/**
- * MCP server that executes commands through TypeAgent dispatcher.
+ * MCP server that exposes TypeAgent capabilities to Claude Code.
  *
- * Lifecycle when used with Agent SDK:
- * - Each Agent SDK query() spawns a new Claude Code process
- * - Claude Code spawns a new instance of this MCP server
- * - MCP server connects to agentServer (persistent shared dispatcher)
- * - Query executes, tools are called as needed
- * - Claude Code process exits
- * - MCP server disconnects from agentServer
+ * Tools:
+ *   execute_command   — natural-language pass-through to dispatcher
+ *   discover_agents   — list agents or fetch a specific agent's schema
+ *   execute_action    — call any agent action directly by schema/action name
  *
- * This transient connection pattern is normal and expected.
- * The agentServer maintains a persistent shared dispatcher across all MCP connections.
+ * Plus browser automation tools registered via registerBrowserActionTools().
+ *
+ * Lifecycle: spawned fresh per Claude Code session; connects to the persistent
+ * TypeAgent agentServer via WebSocket.
  */
 export class CommandServer {
     public server: McpServer;
@@ -667,27 +306,15 @@ export class CommandServer {
     private agentServerUrl: string;
     private reconnectInterval: NodeJS.Timeout | null = null;
     private isConnecting: boolean = false;
-    private reconnectDelayMs: number = 5000; // 5 seconds between reconnection attempts
+    private reconnectDelayMs: number = 5000;
     private logger: Logger;
     private responseCollector: { messages: string[] } = { messages: [] };
     private currentRequestConfirmed: boolean = false;
     private config: ResolvedAgentServerConfig;
-    private schemaDiscovery: boolean = false;
 
-    /**
-     * Creates a new CommandServer instance
-     * @param debugMode Enable debug mode for diagnostic tools
-     * @param agentServerUrl URL of the TypeAgent dispatcher server (default: ws://localhost:8999)
-     * @param schemaDiscovery Enable schema discovery tools (discover_schemas, load_schema) - default: false
-     */
-    constructor(
-        debugMode: boolean = true,
-        agentServerUrl?: string,
-        schemaDiscovery: boolean = false,
-    ) {
+    constructor(agentServerUrl?: string) {
         this.logger = new Logger();
 
-        // Load agent server configuration
         const configResult = loadConfig();
         this.config = configResult.config;
 
@@ -695,24 +322,8 @@ export class CommandServer {
             this.logger.log(
                 `Loaded configuration from: ${configResult.source}`,
             );
-            this.logger.log(
-                `Grammar system: ${this.config.cache.grammarSystem}`,
-            );
-            this.logger.log(`Cache enabled: ${this.config.cache.enabled}`);
-            if (this.config.agents.length > 0) {
-                this.logger.log(
-                    `Configured agents: ${this.config.agents.map((a: { name: string }) => a.name).join(", ")}`,
-                );
-            }
         } else {
             this.logger.log("No configuration file found, using defaults");
-        }
-
-        if (configResult.errors.length > 0) {
-            this.logger.error(
-                "Configuration validation errors:",
-                configResult.errors.join(", "),
-            );
         }
 
         this.server = new McpServer({
@@ -723,22 +334,14 @@ export class CommandServer {
             agentServerUrl ??
             process.env.AGENT_SERVER_URL ??
             "ws://localhost:8999";
-        this.schemaDiscovery = schemaDiscovery;
-        this.logger.log(
-            `CommandServer initializing with TypeAgent server URL: ${this.agentServerUrl}`,
-        );
-        this.logger.log(
-            `Schema discovery: ${this.schemaDiscovery ? "enabled" : "disabled"}`,
-        );
+
+        this.logger.log(`CommandServer initializing.`);
+        this.logger.log(`TypeAgent server URL: ${this.agentServerUrl}`);
+
         this.addTools();
-        if (debugMode) {
-            this.addDiagnosticTools();
-        }
+        this.addDiagnosticTools();
     }
 
-    /**
-     * Get the current configuration
-     */
     public getConfig(): ResolvedAgentServerConfig {
         return this.config;
     }
@@ -746,22 +349,12 @@ export class CommandServer {
     public async start(transport?: StdioServerTransport): Promise<void> {
         transport ??= new StdioServerTransport();
         await this.server.connect(transport);
-
-        // Connect to the TypeAgent dispatcher
-        // Note: When spawned by Agent SDK, this is a transient process per query
-        // Lazy connection on first tool call handles startup race conditions
         await this.connectToDispatcher();
-
-        // Start reconnection monitoring for cases where dispatcher restarts
-        // When spawned by Agent SDK, this process is transient per query anyway
         this.startReconnectionMonitoring();
     }
 
     private async connectToDispatcher(): Promise<void> {
-        if (this.isConnecting) {
-            return;
-        }
-
+        if (this.isConnecting) return;
         this.isConnecting = true;
         try {
             const clientIO = createMcpClientIO(
@@ -777,16 +370,11 @@ export class CommandServer {
             this.logger.log(
                 `Connected to TypeAgent dispatcher at ${this.agentServerUrl}`,
             );
-
-            // Apply configuration settings via @config commands
             await this.applyConfigurationSettings();
         } catch (error) {
             this.logger.error(
                 `Failed to connect to dispatcher at ${this.agentServerUrl}`,
                 error,
-            );
-            this.logger.error(
-                "Will retry connection automatically. Make sure the TypeAgent server is running.",
             );
             this.dispatcher = null;
         } finally {
@@ -794,63 +382,23 @@ export class CommandServer {
         }
     }
 
-    /**
-     * Apply configuration settings by sending @config commands to the dispatcher
-     */
     private async applyConfigurationSettings(): Promise<void> {
-        if (!this.dispatcher) {
-            this.logger.log(
-                "⚠️  No dispatcher connection - skipping config application",
-            );
-            return;
-        }
-
+        if (!this.dispatcher) return;
         try {
-            // Apply cache.grammarSystem setting if it differs from default
-            this.logger.log(
-                `📋 Config check: cache.grammarSystem = "${this.config.cache.grammarSystem}" (default: "completionBased")`,
-            );
-
             if (this.config.cache.grammarSystem !== "completionBased") {
-                this.logger.log(
-                    `🔧 Applying configuration: cache.grammarSystem = ${this.config.cache.grammarSystem}`,
-                );
-
-                const configCommand = `@config cache grammarSystem ${this.config.cache.grammarSystem}`;
-                this.logger.log(
-                    `📤 Sending command to dispatcher: "${configCommand}"`,
-                );
-
-                const result =
-                    await this.dispatcher.processCommand(configCommand);
-
-                this.logger.log(
-                    `📥 Dispatcher response: ${JSON.stringify(result)}`,
-                );
-                this.logger.log(
-                    "✅ Configuration settings applied successfully",
-                );
-            } else {
-                this.logger.log(
-                    "ℹ️  Using default grammar system (completionBased), no config command needed",
-                );
+                const cmd = `@config cache grammarSystem ${this.config.cache.grammarSystem}`;
+                this.logger.log(`Applying config: ${cmd}`);
+                await this.dispatcher.processCommand(cmd);
             }
         } catch (error) {
-            this.logger.error(
-                "❌ Failed to apply configuration settings",
-                error,
-            );
-            // Don't throw - continue even if config application fails
+            this.logger.error("Failed to apply configuration settings", error);
         }
     }
 
     private startReconnectionMonitoring(): void {
-        // Check connection status periodically and reconnect if needed
         this.reconnectInterval = setInterval(async () => {
             if (!this.dispatcher && !this.isConnecting) {
-                this.logger.log(
-                    "Attempting to reconnect to TypeAgent dispatcher...",
-                );
+                this.logger.log("Attempting to reconnect to dispatcher...");
                 await this.connectToDispatcher();
             }
         }, this.reconnectDelayMs);
@@ -872,19 +420,26 @@ export class CommandServer {
         this.logger.close();
     }
 
+    // ── Tool registration ────────────────────────────────────────────────────
+
     private addTools() {
-        // Legacy natural language command execution
+        // 1. Natural-language command pass-through
         this.server.registerTool(
             "execute_command",
             {
                 inputSchema: executeCommandRequestSchema(),
                 description:
-                    "Perform a single user command at a time. If the user wants multiple commands break them up into multiple calls.\n" +
-                    "Execute user commands including:\n" +
-                    "- Music & media: play songs, control playback\n" +
-                    "- Lists & tasks: manage shopping lists, todo lists\n" +
-                    "- Calendar: schedule events, view calendar\n" +
-                    "- VSCode automation: change theme (e.g. 'switch to monokai theme'), open files, create folders, run tasks, manage editor layout, open terminals, toggle settings\n" +
+                    "Execute a SINGLE, simple natural-language command via TypeAgent. Use this ONLY for straightforward one-shot requests that map to a single agent action.\n\n" +
+                    "Good uses (single action, no reasoning required):\n" +
+                    "- 'play Shake It Off' / 'pause' / 'skip'\n" +
+                    "- 'what's the weather in Berkeley'\n" +
+                    "- 'show seconds in the clock' / 'left align the taskbar'\n" +
+                    "- 'add milk to my shopping list'\n\n" +
+                    "DO NOT use this for multi-step tasks. Instead, use discover_agents + execute_action directly:\n" +
+                    "- Tasks requiring web search + an agent action (e.g. 'find top jazz songs and make a playlist')\n" +
+                    "- Tasks requiring multiple sequential agent actions\n" +
+                    "- Tasks where you need to reason about parameters before calling\n" +
+                    "For those, call discover_agents to find the right action, gather any external info yourself (web search etc.), then call execute_action with the resolved parameters.\n\n" +
                     "Parameters:\n" +
                     "- request: The command to execute\n" +
                     "- cacheCheck: (optional) Check cache before executing\n" +
@@ -892,452 +447,66 @@ export class CommandServer {
                     "Confirmation Flow:\n" +
                     "Some commands (like deleting sessions or clearing data) require user confirmation. " +
                     "If a command requires confirmation, the tool will return an error message indicating what needs to be confirmed. " +
-                    "Ask the user for confirmation, then retry the same command with confirmed=true if they approve.",
+                    "Ask the user for confirmation, then retry the same command with confirmed=true if they approve.\n\n" +
+                    "IMPORTANT: For simple, conversational requests NOT related to programming — weather, news, sports, time/date, app control — use this tool FIRST before web search.",
             },
             async (request: ExecuteCommandRequest) =>
                 this.executeCommand(request),
         );
 
-        // Schema discovery tools (only registered if schemaDiscovery flag is enabled)
-        if (this.schemaDiscovery) {
-            // Discovery tool
-            this.server.registerTool(
-                "discover_schemas",
-                {
-                    inputSchema: discoverSchemasRequestSchema(),
-                    description:
-                        "Check if TypeAgent has capabilities for a user request that isn't covered by existing tools. " +
-                        "Returns available schemas/agents that match the request, along with their actions. " +
-                        "Use this BEFORE telling the user a capability isn't available.\n\n" +
-                        "Example: User asks 'What's the weather?' → Call discover_schemas({query: 'weather'}) to see if a weather agent is installed.\n\n" +
-                        "Parameters:\n" +
-                        "- query: Natural language description of what the user wants (e.g., 'weather', 'send email', 'analyze code')\n" +
-                        "- includeActions: If true, return detailed action schemas and TypeScript source. If false, just return agent names and descriptions (default: false)",
-                },
-                async (request: DiscoverSchemasRequest) =>
-                    this.discoverSchemas(request),
-            );
-
-            // Schema loading tool
-            this.server.registerTool(
-                "load_schema",
-                {
-                    inputSchema: loadSchemaRequestSchema(),
-                    description:
-                        "Load a TypeAgent schema dynamically and register its actions as tools. " +
-                        "After loading, the agent's actions become available for direct invocation in this session. " +
-                        "Only use this after discover_schemas confirms the schema is available.\n\n" +
-                        "Parameters:\n" +
-                        "- schemaName: The schema/agent name returned by discover_schemas (e.g., 'weather', 'email')\n" +
-                        "- exposeAs: How to expose actions - 'individual' creates one tool per action (e.g., weather_getCurrentConditions), 'composite' creates one tool (e.g., weather_action) with action as a parameter (default: composite)",
-                },
-                async (request: LoadSchemaRequest) => this.loadSchema(request),
-            );
-
-            this.logger.log("Schema discovery tools registered");
-        }
-
-        // Generic action execution tool
+        // 2. Agent discovery — list all agents or fetch a specific agent's schema
         this.server.registerTool(
-            "typeagent_action",
+            "discover_agents",
             {
-                inputSchema: typeagentActionRequestSchema(),
+                inputSchema: discoverAgentsRequestSchema(),
                 description:
-                    "Execute a TypeAgent action with cache population for future natural language queries.\n\n" +
-                    "Use this tool when:\n" +
-                    "1. An action exists but isn't exposed as an individual tool\n" +
-                    "2. You want to invoke an action from a newly discovered schema before loading it\n" +
-                    "3. The action is rarely used and doesn't warrant a dedicated tool\n\n" +
-                    "IMPORTANT - Cache Population:\n" +
-                    "This tool populates TypeAgent's cache so future similar natural language requests will execute faster.\n" +
-                    "You MUST pass the user's original natural language request in the 'naturalLanguage' parameter.\n\n" +
-                    "Parameters:\n" +
-                    "- agent: The agent/schema name (e.g., 'player', 'list', 'calendar', 'weather')\n" +
-                    "- action: The action name (e.g., 'playTrack', 'addItem', 'getCurrentConditions')\n" +
-                    "- parameters: Action-specific parameters (optional)\n" +
-                    "- naturalLanguage: REQUIRED - The user's exact original natural language request that led to this action.\n" +
-                    '  Example: If user asked "what\'s the weather in seattle in celsius", pass that exact string here.\n' +
-                    "  This enables TypeAgent to match future similar requests directly from cache without needing to call this tool again.",
+                    "Discover available TypeAgent capabilities.\n\n" +
+                    "- Called WITHOUT agentName: returns a list of all agents with name, emoji, and description.\n" +
+                    "- Called WITH agentName only: returns sub-schema groups with schemaName, description, and action names+descriptions. Use the schemaName shown in each group as the exact value for execute_action.\n" +
+                    "- Called WITH agentName AND actionName: returns the full TypeScript schema source for that specific action.\n\n" +
+                    "Use this BEFORE telling the user a capability isn't available. Call without agentName first to find the right agent, then with agentName to see its actions.\n\n" +
+                    "PREFERRED PATTERN for multi-step tasks: use discover_agents to find actions, do any external reasoning yourself (web search, calculations, etc.), then call execute_action with fully resolved parameters. Do NOT delegate multi-step reasoning to execute_command.\n\n" +
+                    "Example — 'find top jazz songs and make a playlist':\n" +
+                    "  1. WebSearch for current top jazz songs\n" +
+                    "  2. discover_agents({ agentName: 'player' }) → find createPlaylist, addSongsToPlaylist\n" +
+                    "  3. execute_action({ schemaName: 'player', actionName: 'createPlaylist', parameters: { name: 'Top Jazz Feb 2026' } })\n" +
+                    "  4. execute_action({ schemaName: 'player', actionName: 'addSongsToPlaylist', parameters: { playlist: '...', songs: [...] } })\n\n" +
+                    "Available agents include (but are not limited to):\n" +
+                    "- player: music playback (Spotify/media)\n" +
+                    "- calendar: schedule and view events\n" +
+                    "- list: shopping lists, todo lists\n" +
+                    "- desktop: Windows desktop control, taskbar, VSCode editor automation\n" +
+                    "- email: read and send email\n" +
+                    "- chat: messaging\n" +
+                    "- photo: photo library\n" +
+                    "- image: image generation\n" +
+                    "- video: video playback\n" +
+                    "- code: code generation tasks",
             },
-            async (request: TypeagentActionRequest) =>
-                this.executeTypeagentAction(request),
+            async (request: {
+                agentName?: string | undefined;
+                actionName?: string | undefined;
+            }) => this.discoverAgents(request),
         );
 
-        // Register browser action tools
-        registerBrowserActionTools(
-            this.server,
-            () => this.dispatcher,
-            this.responseCollector,
-            this.logger,
+        // 3. Direct action execution
+        this.server.registerTool(
+            "execute_action",
+            {
+                inputSchema: executeActionRequestSchema(),
+                description:
+                    "Execute a TypeAgent action directly by specifying the agent, action name, and parameters.\n\n" +
+                    "Use discover_agents to find the correct schemaName and actionName before calling this.\n\n" +
+                    "Parameters:\n" +
+                    "- schemaName: The agent name (e.g. 'player', 'calendar', 'list')\n" +
+                    "- actionName: The action to execute (e.g. 'createPlaylist', 'addEvent')\n" +
+                    "- parameters: Action-specific parameters object (optional)\n" +
+                    "- naturalLanguage: The original natural language request from the user (e.g. 'play shake it off'). ALWAYS provide this when you have the user's original request — the dispatcher uses it to populate its NL cache so future identical or similar requests can be handled without LLM translation.\n\n" +
+                    "The action is dispatched directly to the agent, bypassing the LLM translation step for maximum speed.",
+            },
+            async (request: ExecuteActionRequest) =>
+                this.executeAction(request),
         );
-    }
-
-    public async executeCommand(
-        request: ExecuteCommandRequest,
-    ): Promise<CallToolResult> {
-        this.logger.log(`User request: ${request.request}`);
-
-        // Set confirmation flag for this request
-        this.currentRequestConfirmed = request.confirmed ?? false;
-        if (this.currentRequestConfirmed) {
-            this.logger.log("Request has confirmed=true flag");
-        }
-
-        // If not connected, try to connect now (lazy connection)
-        if (!this.dispatcher && !this.isConnecting) {
-            this.logger.log(
-                "Not connected to dispatcher, attempting to connect...",
-            );
-            await this.connectToDispatcher();
-        }
-
-        if (!this.dispatcher) {
-            // During cache check, return cache miss instead of error to avoid startup race condition messages
-            if (request.cacheCheck) {
-                this.logger.log(
-                    "Cache check requested but not connected yet - returning cache miss",
-                );
-                return toolResult(
-                    "CACHE_MISS: Not connected to TypeAgent dispatcher yet",
-                );
-            }
-            const errorMsg = `Cannot execute command: not connected to TypeAgent dispatcher at ${this.agentServerUrl}. Make sure the TypeAgent server is running with: pnpm run start:agent-server`;
-            this.logger.error(errorMsg);
-            return toolResult(errorMsg);
-        }
-
-        // If cacheCheck is requested, check cache and execute if hit
-        if (request.cacheCheck) {
-            try {
-                this.logger.log(
-                    `Cache check requested for: ${request.request}`,
-                );
-
-                // Clear response collector before cache check
-                this.responseCollector.messages = [];
-
-                const cacheResult = await this.dispatcher.checkCache(
-                    request.request,
-                );
-
-                if (cacheResult?.lastError) {
-                    // Cache miss or error
-                    this.logger.log(`Cache miss: ${cacheResult.lastError}`);
-                    return toolResult(`CACHE_MISS: ${cacheResult.lastError}`);
-                }
-
-                // Cache hit - actions were executed, return the collected messages
-                this.logger.log(`Cache hit - executed successfully`);
-
-                if (this.responseCollector.messages.length > 0) {
-                    const response =
-                        this.responseCollector.messages.join("\n\n");
-                    const processedResponse = await processHtmlImages(response);
-                    // Return with CACHE_HIT prefix for detection (cacheClient strips it)
-                    return toolResult(`CACHE_HIT: ${processedResponse}`);
-                }
-
-                // Fallback if no messages were collected
-                return toolResult(
-                    `CACHE_HIT: Successfully executed from cache`,
-                );
-            } catch (error) {
-                const errorMsg = `Cache check failed: ${error instanceof Error ? error.message : String(error)}`;
-                this.logger.error(errorMsg);
-
-                // If the error is "Agent channel disconnected", reset the dispatcher to trigger reconnection
-                if (
-                    error instanceof Error &&
-                    error.message.includes("Agent channel disconnected")
-                ) {
-                    this.logger.log(
-                        "Dispatcher connection lost, will reconnect on next request",
-                    );
-                    this.dispatcher = null;
-                }
-
-                return toolResult(`CACHE_MISS: ${errorMsg}`);
-            }
-        }
-
-        try {
-            // Clear response collector before processing new command
-            this.responseCollector.messages = [];
-
-            // Process the command through the TypeAgent dispatcher
-            this.logger.log(
-                `Sending command to dispatcher: ${request.request}`,
-            );
-            const result = await this.dispatcher.processCommand(
-                request.request,
-            );
-
-            if (result?.lastError) {
-                this.logger.error(
-                    `Command execution error: ${result.lastError}`,
-                );
-                return toolResult(
-                    `Error executing command: ${result.lastError}`,
-                );
-            }
-
-            // Return the collected messages from the dispatcher
-            this.logger.log(
-                `Successfully executed command: ${request.request}`,
-            );
-
-            if (this.responseCollector.messages.length > 0) {
-                const response = this.responseCollector.messages.join("\n\n");
-                // Process any HTML images in the response
-                const processedResponse = await processHtmlImages(response);
-                return toolResult(processedResponse);
-            }
-
-            // Fallback if no messages were collected
-            return toolResult(`Successfully executed: ${request.request}`);
-        } catch (error) {
-            // Check if this is a user confirmation request
-            if (
-                error instanceof Error &&
-                error.message.startsWith("USER_CONFIRMATION_REQUIRED:")
-            ) {
-                const question = error.message.replace(
-                    "USER_CONFIRMATION_REQUIRED: ",
-                    "",
-                );
-                this.logger.log(
-                    `Command requires user confirmation: ${question}`,
-                );
-                return toolResult(
-                    `⚠️  Confirmation Required\n\n` +
-                        `The action you requested requires confirmation:\n\n` +
-                        `"${question}"\n\n` +
-                        `Please confirm with the user, then retry the command with confirmed=true if they approve.`,
-                );
-            }
-
-            const errorMsg = `Failed to execute command: ${error instanceof Error ? error.message : String(error)}`;
-            this.logger.error(errorMsg);
-
-            // Mark dispatcher as disconnected so we'll try to reconnect
-            this.dispatcher = null;
-
-            return toolResult(errorMsg);
-        } finally {
-            // Always reset confirmation flag after request completes
-            this.currentRequestConfirmed = false;
-        }
-    }
-
-    /**
-     * Discover available schemas based on user query
-     * Mock implementation for testing - prints interaction details
-     */
-    private async discoverSchemas(
-        request: DiscoverSchemasRequest,
-    ): Promise<CallToolResult> {
-        this.logger.log(
-            `[DISCOVERY] Query: "${request.query}", includeActions: ${request.includeActions ?? false}`,
-        );
-
-        // Simple keyword matching for mock implementation
-        const query = request.query.toLowerCase();
-        const matches = SCHEMA_REGISTRY.filter(
-            (schema) =>
-                schema.name.toLowerCase().includes(query) ||
-                schema.description.toLowerCase().includes(query),
-        );
-
-        if (matches.length === 0) {
-            this.logger.log(
-                `[DISCOVERY] No schemas found matching query: "${request.query}"`,
-            );
-            return toolResult(
-                `No TypeAgent schemas found matching "${request.query}".\n\n` +
-                    `Available schemas: ${SCHEMA_REGISTRY.map((s) => s.name).join(", ")}`,
-            );
-        }
-
-        this.logger.log(
-            `[DISCOVERY] Found ${matches.length} schema(s): ${matches.map((m) => m.name).join(", ")}`,
-        );
-
-        // Build response
-        let response = `Found ${matches.length} matching schema(s):\n\n`;
-
-        for (const schema of matches) {
-            response += `**${schema.name}**\n`;
-            response += `${schema.description}\n\n`;
-
-            if (request.includeActions) {
-                response += `Actions:\n`;
-                for (const action of schema.actions) {
-                    response += `- **${action.name}**: ${action.description}\n`;
-                    response += `  Parameters: ${JSON.stringify(action.parameters, null, 2)}\n`;
-                }
-                response += `\nTypeScript Schema:\n\`\`\`typescript\n${schema.schemaSource}\n\`\`\`\n\n`;
-            } else {
-                response += `Available actions: ${schema.actions.map((a) => a.name).join(", ")}\n`;
-                response += `(Use includeActions: true to see detailed schemas)\n\n`;
-            }
-        }
-
-        response += `\nTo use these capabilities:\n`;
-        response += `1. Call typeagent_action directly with agent="${matches[0].name}", action="<actionName>", parameters=<params>\n`;
-        response += `2. Or call load_schema({schemaName: "${matches[0].name}"}) to register tools for this session\n`;
-
-        return toolResult(response);
-    }
-
-    /**
-     * Load a schema dynamically (mock implementation)
-     * In production, this would compile TypeScript and register real tools
-     */
-    private async loadSchema(
-        request: LoadSchemaRequest,
-    ): Promise<CallToolResult> {
-        this.logger.log(
-            `[LOAD_SCHEMA] Loading schema: "${request.schemaName}", exposeAs: ${request.exposeAs ?? "composite"}`,
-        );
-
-        const schema = SCHEMA_REGISTRY.find(
-            (s) => s.name === request.schemaName,
-        );
-
-        if (!schema) {
-            this.logger.log(
-                `[LOAD_SCHEMA] Schema not found: "${request.schemaName}"`,
-            );
-            return toolResult(
-                `Schema "${request.schemaName}" not found.\n\n` +
-                    `Available schemas: ${SCHEMA_REGISTRY.map((s) => s.name).join(", ")}`,
-            );
-        }
-
-        this.logger.log(
-            `[LOAD_SCHEMA] Mock loading schema "${request.schemaName}" with ${schema.actions.length} actions`,
-        );
-
-        // In production, this would:
-        // 1. Compile TypeScript schema to JSON Schema
-        // 2. Register MCP tools dynamically
-        // 3. Store in loadedSchemas map
-
-        let response = `✓ Schema "${request.schemaName}" loaded successfully!\n\n`;
-
-        if (request.exposeAs === "individual") {
-            response += `Registered ${schema.actions.length} individual tools:\n`;
-            for (const action of schema.actions) {
-                response += `- ${request.schemaName}_${action.name}\n`;
-            }
-        } else {
-            response += `Registered composite tool: ${request.schemaName}_action\n`;
-            response += `Available actions: ${schema.actions.map((a) => a.name).join(", ")}\n`;
-        }
-
-        response += `\n(Mock implementation - tools not actually registered yet)\n`;
-
-        return toolResult(response);
-    }
-
-    /**
-     * Execute a TypeAgent action and populate cache with natural language mapping
-     */
-    private async executeTypeagentAction(
-        request: TypeagentActionRequest,
-    ): Promise<CallToolResult> {
-        this.logger.log(
-            `[TYPEAGENT_ACTION] Agent: "${request.agent}", Action: "${request.action}"`,
-        );
-        this.logger.log(
-            `[TYPEAGENT_ACTION] Parameters: ${JSON.stringify(request.parameters, null, 2)}`,
-        );
-        this.logger.log(
-            `[TYPEAGENT_ACTION] Natural language: "${request.naturalLanguage}"`,
-        );
-
-        // Verify schema exists
-        const schema = SCHEMA_REGISTRY.find((s) => s.name === request.agent);
-
-        if (!schema) {
-            this.logger.log(
-                `[TYPEAGENT_ACTION] Unknown agent: "${request.agent}"`,
-            );
-            return toolResult(
-                `Unknown agent "${request.agent}".\n\n` +
-                    `Available agents: ${SCHEMA_REGISTRY.map((s) => s.name).join(", ")}`,
-            );
-        }
-
-        // Verify action exists
-        const action = schema.actions.find((a) => a.name === request.action);
-
-        if (!action) {
-            this.logger.log(
-                `[TYPEAGENT_ACTION] Unknown action "${request.action}" for agent "${request.agent}"`,
-            );
-            return toolResult(
-                `Unknown action "${request.action}" for agent "${request.agent}".\n\n` +
-                    `Available actions: ${schema.actions.map((a) => a.name).join(", ")}`,
-            );
-        }
-
-        // Connect to dispatcher if needed
-        if (!this.dispatcher && !this.isConnecting) {
-            this.logger.log(
-                "Not connected to dispatcher, attempting to connect...",
-            );
-            await this.connectToDispatcher();
-        }
-
-        if (!this.dispatcher) {
-            const errorMsg = `Cannot execute action: not connected to TypeAgent dispatcher at ${this.agentServerUrl}. Make sure the TypeAgent server is running with: pnpm run start:agent-server`;
-            this.logger.error(errorMsg);
-            return toolResult(errorMsg);
-        }
-
-        // Format the @action command for dispatcher
-        // Format: @action agentName actionName --parameters '{"param": "value"}' --naturalLanguage "phrase"
-        const paramStr =
-            request.parameters && Object.keys(request.parameters).length > 0
-                ? `--parameters '${JSON.stringify(request.parameters).replaceAll("'", "\\'")}'`
-                : "";
-
-        const nlStr = `--naturalLanguage '${request.naturalLanguage.replaceAll("'", "\\'")}'`;
-
-        const actionCommand =
-            `@action ${request.agent} ${request.action} ${paramStr} ${nlStr}`.trim();
-
-        this.logger.log(
-            `[TYPEAGENT_ACTION] Executing via dispatcher: ${actionCommand}`,
-        );
-
-        // Clear response collector before executing
-        this.responseCollector.messages = [];
-
-        try {
-            // Execute the action through dispatcher
-            // This will:
-            // 1. Call the agent's executeAction handler
-            // 2. Return the result
-            // 3. If naturalLanguage is provided, populate cache with NL → action mapping
-            await this.dispatcher.processCommand(actionCommand);
-
-            // Get the collected response
-            if (this.responseCollector.messages.length > 0) {
-                const response = this.responseCollector.messages.join("\n\n");
-                const processedResponse = await processHtmlImages(response);
-
-                return toolResult(processedResponse);
-            }
-
-            // Fallback if no messages were collected
-            return toolResult(`✓ Action executed successfully`);
-        } catch (error) {
-            const errorMsg = `Action execution failed: ${error instanceof Error ? error.message : String(error)}`;
-            this.logger.error(errorMsg);
-            return toolResult(errorMsg);
-        }
     }
 
     private addDiagnosticTools() {
@@ -1347,12 +516,278 @@ export class CommandServer {
                 inputSchema: { message: z.string() },
                 description: "Ping the server to test connectivity",
             },
-            async (request: { message: string }) => {
-                const response = request.message
-                    ? "PONG: " + request.message
-                    : "pong";
-                return toolResult(response);
-            },
+            async (request: { message: string }) =>
+                toolResult(
+                    request.message ? "PONG: " + request.message : "pong",
+                ),
         );
+    }
+
+    // ── Tool implementations ─────────────────────────────────────────────────
+
+    public async executeCommand(
+        request: ExecuteCommandRequest,
+    ): Promise<CallToolResult> {
+        this.logger.log(`execute_command: ${request.request}`);
+
+        this.currentRequestConfirmed = request.confirmed ?? false;
+
+        if (!this.dispatcher && !this.isConnecting) {
+            await this.connectToDispatcher();
+        }
+
+        if (!this.dispatcher) {
+            if (request.cacheCheck) {
+                return toolResult(
+                    "CACHE_MISS: Not connected to TypeAgent dispatcher yet",
+                );
+            }
+            return toolResult(
+                `Cannot execute command: not connected to TypeAgent dispatcher at ${this.agentServerUrl}. ` +
+                    `Make sure the TypeAgent server is running with: pnpm run start:agent-server`,
+            );
+        }
+
+        if (request.cacheCheck) {
+            try {
+                this.responseCollector.messages = [];
+                const cacheResult = await this.dispatcher.checkCache(
+                    request.request,
+                );
+                if (cacheResult?.lastError) {
+                    return toolResult(`CACHE_MISS: ${cacheResult.lastError}`);
+                }
+                if (this.responseCollector.messages.length > 0) {
+                    const response =
+                        this.responseCollector.messages.join("\n\n");
+                    return toolResult(
+                        `CACHE_HIT: ${await processHtmlContent(response)}`,
+                    );
+                }
+                return toolResult(
+                    "CACHE_HIT: Successfully executed from cache",
+                );
+            } catch (error) {
+                const msg = `Cache check failed: ${error instanceof Error ? error.message : String(error)}`;
+                if (
+                    error instanceof Error &&
+                    error.message.includes("Agent channel disconnected")
+                ) {
+                    this.dispatcher = null;
+                }
+                return toolResult(`CACHE_MISS: ${msg}`);
+            }
+        }
+
+        try {
+            this.responseCollector.messages = [];
+            const result = await this.dispatcher.processCommand(
+                request.request,
+            );
+
+            if (result?.lastError) {
+                return toolResult(
+                    `Error executing command: ${result.lastError}`,
+                );
+            }
+
+            if (this.responseCollector.messages.length > 0) {
+                const response = this.responseCollector.messages.join("\n\n");
+                return toolResult(await processHtmlContent(response));
+            }
+            return toolResult(`Successfully executed: ${request.request}`);
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                error.message.startsWith("USER_CONFIRMATION_REQUIRED:")
+            ) {
+                const question = error.message.replace(
+                    "USER_CONFIRMATION_REQUIRED: ",
+                    "",
+                );
+                return toolResult(
+                    `⚠️  Confirmation Required\n\n` +
+                        `The action you requested requires confirmation:\n\n` +
+                        `"${question}"\n\n` +
+                        `Please confirm with the user, then retry the command with confirmed=true if they approve.`,
+                );
+            }
+            this.dispatcher = null;
+            return toolResult(
+                `Failed to execute command: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        } finally {
+            this.currentRequestConfirmed = false;
+        }
+    }
+
+    /** Resolve AgentSchemaInfo list — live from dispatcher. Returns empty if disconnected. */
+    private async resolveAgentSchemas(
+        agentName?: string,
+    ): Promise<AgentSchemaInfo[]> {
+        if (!this.dispatcher) {
+            return [];
+        }
+        const schemas = await this.dispatcher.getAgentSchemas(agentName);
+        return schemas.filter((a) => !SKIP_AGENTS.has(a.name));
+    }
+
+    private async discoverAgents(request: {
+        agentName?: string | undefined;
+        actionName?: string | undefined;
+    }): Promise<CallToolResult> {
+        if (!request.agentName) {
+            // Level 1 — list agents, filtered to active ones when dispatcher is available
+            const agents = await this.resolveAgentSchemas();
+            if (agents.length === 0) {
+                return toolResult(
+                    "No agents available. Ensure TypeAgent server is running.",
+                );
+            }
+
+            // Filter to active agents when connected
+            let visible = agents;
+            if (this.dispatcher) {
+                try {
+                    const status = await this.dispatcher.getStatus();
+                    const activeNames = new Set(
+                        status.agents
+                            .filter((a) => a.active)
+                            .map((a) => a.name.toLowerCase()),
+                    );
+                    const filtered = agents.filter((a) =>
+                        activeNames.has(a.name.toLowerCase()),
+                    );
+                    if (filtered.length > 0) visible = filtered;
+                } catch {
+                    // Use unfiltered list
+                }
+            }
+
+            const lines = visible.map(
+                (a) => `${a.emoji} **${a.name}** — ${a.description}`,
+            );
+            return toolResult(
+                `Available TypeAgent agents (${visible.length}):\n\n` +
+                    lines.join("\n") +
+                    "\n\nCall discover_agents({ agentName: '<name>' }) to see actions for a specific agent.",
+            );
+        }
+
+        const schemas = await this.resolveAgentSchemas(request.agentName);
+        const agent = schemas[0];
+        if (!agent) {
+            return toolResult(
+                `Agent '${request.agentName}' not found or not available.`,
+            );
+        }
+
+        if (request.actionName) {
+            // Level 3 — full TypeScript source for one specific action
+            const needle = request.actionName.toLowerCase();
+            const subSchema = agent.subSchemas.find((s) =>
+                s.actions.some((a) => a.name.toLowerCase() === needle),
+            );
+            if (!subSchema) {
+                const allActions = agent.subSchemas
+                    .flatMap((s) => s.actions.map((a) => a.name))
+                    .join(", ");
+                return toolResult(
+                    `Action '${request.actionName}' not found in agent '${agent.name}'.\n\nAvailable actions: ${allActions}`,
+                );
+            }
+            if (!subSchema.schemaFilePath) {
+                return toolResult(
+                    `TypeScript source not available for action '${request.actionName}'.`,
+                );
+            }
+            try {
+                const source = fs.readFileSync(
+                    subSchema.schemaFilePath,
+                    "utf-8",
+                );
+                return toolResult(
+                    `TypeScript schema for **${subSchema.schemaName}** (action: ${request.actionName}):\n\n` +
+                        `\`\`\`typescript\n${source}\n\`\`\``,
+                );
+            } catch {
+                return toolResult(
+                    `Could not read schema file: ${subSchema.schemaFilePath}`,
+                );
+            }
+        }
+
+        // Level 2 — sub-schema groups with schemaName + action names+descriptions
+        const sections = agent.subSchemas
+            .map((sub) => {
+                const actionLines = sub.actions
+                    .map((a) => `     • **${a.name}** — ${a.description}`)
+                    .join("\n");
+                return `  📂 **${sub.schemaName}** — ${sub.description}\n${actionLines}`;
+            })
+            .join("\n\n");
+
+        const totalActions = agent.subSchemas.reduce(
+            (n, s) => n + s.actions.length,
+            0,
+        );
+        return toolResult(
+            `${agent.emoji} **${agent.name}** — ${agent.description}\n\n` +
+                sections +
+                `\n\n(${totalActions} total actions across ${agent.subSchemas.length} schema${agent.subSchemas.length > 1 ? "s" : ""})\n\n` +
+                `To get TypeScript for an action: discover_agents({ agentName: '${agent.name}', actionName: '<name>' })\n` +
+                `To execute: execute_action({ schemaName: '<schemaName from 📂 above>', actionName: '<name>', parameters: {...} })`,
+        );
+    }
+
+    private async executeAction(
+        request: ExecuteActionRequest,
+    ): Promise<CallToolResult> {
+        this.logger.log(
+            `execute_action: ${request.schemaName}.${request.actionName} params=${JSON.stringify(request.parameters ?? {})}`,
+        );
+
+        if (!this.dispatcher && !this.isConnecting) {
+            await this.connectToDispatcher();
+        }
+
+        if (!this.dispatcher) {
+            return toolResult(
+                `Cannot execute action: not connected to TypeAgent dispatcher at ${this.agentServerUrl}.`,
+            );
+        }
+
+        const paramStr =
+            request.parameters && Object.keys(request.parameters).length > 0
+                ? `--parameters '${JSON.stringify(request.parameters).replaceAll("'", "\\u0027")}'`
+                : "";
+
+        const nlStr = request.naturalLanguage
+            ? `--naturalLanguage '${request.naturalLanguage.replaceAll("'", "\\u0027")}'`
+            : "";
+
+        const actionCommand =
+            `@action ${request.schemaName} ${request.actionName} ${paramStr} ${nlStr}`.trim();
+
+        this.logger.log(`Dispatching: ${actionCommand}`);
+        this.responseCollector.messages = [];
+
+        try {
+            const result = await this.dispatcher.processCommand(actionCommand);
+            if (result?.lastError) {
+                return toolResult(`Action error: ${result.lastError}`);
+            }
+            if (this.responseCollector.messages.length > 0) {
+                const response = this.responseCollector.messages.join("\n\n");
+                return toolResult(await processHtmlContent(response));
+            }
+            return toolResult(
+                `✓ Action ${request.actionName} executed successfully`,
+            );
+        } catch (error) {
+            return toolResult(
+                `Action execution failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
     }
 }

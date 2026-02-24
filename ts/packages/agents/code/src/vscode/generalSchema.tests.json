@@ -1,0 +1,66 @@
+[
+  {
+    "request": "Open the command palette",
+    "schemaName": "generalSchema",
+    "action": {
+      "actionName": "showCommandPalette",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Show me the command palette please",
+    "schemaName": "generalSchema",
+    "action": {
+      "actionName": "showCommandPalette",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you bring up the command palette?",
+    "schemaName": "generalSchema",
+    "action": {
+      "actionName": "showCommandPalette",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Command palette",
+    "schemaName": "generalSchema",
+    "action": {
+      "actionName": "showCommandPalette",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Go to line 150 in main.py",
+    "schemaName": "generalSchema",
+    "action": {
+      "actionName": "gotoFileOrLineOrSymbol",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Can you navigate to the LoginComponent function?",
+    "schemaName": "generalSchema",
+    "action": {
+      "actionName": "gotoFileOrLineOrSymbol",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Jump to src/utils/helpers.js",
+    "schemaName": "generalSchema",
+    "action": {
+      "actionName": "gotoFileOrLineOrSymbol",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Take me to the calculateTotal method please",
+    "schemaName": "generalSchema",
+    "action": {
+      "actionName": "gotoFileOrLineOrSymbol",
+      "parameters": {}
+    }
+  }
+]

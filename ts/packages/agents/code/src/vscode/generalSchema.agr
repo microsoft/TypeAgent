@@ -1,0 +1,26 @@
+//
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+//
+
+// General schema grammar for IDE commands and navigation
+
+<Start> = <showCommandPalette> | <gotoFileOrLineOrSymbol> | <showUserSettings> | <showKeyboardShortcuts>;
+
+// Action rules
+<showCommandPalette> = <Polite> ('open' | 'show' | 'bring up' | 'display') 'the'? 'command palette' -> { actionName: "showCommandPalette", parameters: {} };
+
+<gotoFileOrLineOrSymbol> = <Polite> <GotoAction> $(goto:string) ('in' | 'from') $(ref:string) -> { actionName: "gotoFileOrLineOrSymbol", parameters: { goto: goto, ref: ref } }
+                           | <Polite> <GotoAction> $(goto:string) -> { actionName: "gotoFileOrLineOrSymbol", parameters: { goto: goto, ref: goto } }
+                           | <Polite> <NavigateAction> 'to' 'the'? $(goto:string) ('function' | 'method' | 'component' | 'class')? -> { actionName: "gotoFileOrLineOrSymbol", parameters: { goto: goto, ref: goto } };
+
+<showUserSettings> = <Polite> ('open' | 'show' | 'display') ('user'? 'settings' | 'preferences' | 'configuration') -> { actionName: "showUserSettings", parameters: {} };
+
+<showKeyboardShortcuts> = <Polite> ('show' | 'display' | 'open') ('keyboard'? 'shortcuts' | 'keybindings' | 'hotkeys') -> { actionName: "showKeyboardShortcuts", parameters: {} };
+
+// Shared sub-rules
+<Polite> = ('can you' | 'please' | 'would you')?;
+
+<GotoAction> = ('go to' | 'jump to' | 'navigate to') ('line' | 'file')?;
+
+<NavigateAction> = ('take me' | 'navigate' | 'jump' | 'go');

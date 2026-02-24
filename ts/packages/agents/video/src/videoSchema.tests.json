@@ -1,0 +1,66 @@
+[
+  {
+    "request": "Can you create a 30-second promotional video using the product images in the marketing folder? Add a caption that says 'Introducing our latest collection'",
+    "schemaName": "videoSchema",
+    "action": {
+      "actionName": "createVideoAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Make a quick video slideshow from these vacation photos, maybe 2 minutes long with the caption 'Summer Adventures 2024'",
+    "schemaName": "videoSchema",
+    "action": {
+      "actionName": "createVideoAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I need a video for social media - use the screenshots from the app demo and keep it under 60 seconds. Caption should be 'See our new features in action!'",
+    "schemaName": "videoSchema",
+    "action": {
+      "actionName": "createVideoAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Create a video compilation of the conference presentation slides with 'Annual Report Highlights' as the caption, around 90 seconds would be perfect",
+    "schemaName": "videoSchema",
+    "action": {
+      "actionName": "createVideoAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Could you please generate a brief video using the team photos from last week's event? Make it about 45 seconds with the caption 'Meet our amazing team'",
+    "schemaName": "videoSchema",
+    "action": {
+      "actionName": "createVideoAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Make me a video from the recipe photos in the food folder - 3 minutes duration, caption 'Easy weeknight dinners'",
+    "schemaName": "videoSchema",
+    "action": {
+      "actionName": "createVideoAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Need a video ASAP using the before/after renovation pics, 2-minute duration, caption 'Home transformation journey'",
+    "schemaName": "videoSchema",
+    "action": {
+      "actionName": "createVideoAction",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "Generate a video slideshow from the annual report charts and graphs, keep it professional at 4 minutes with caption 'Year in Review - Key Metrics'",
+    "schemaName": "videoSchema",
+    "action": {
+      "actionName": "createVideoAction",
+      "parameters": {}
+    }
+  }
+]

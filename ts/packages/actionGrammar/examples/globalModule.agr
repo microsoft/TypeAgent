@@ -7,18 +7,18 @@
 entity Ordinal, Cardinal;
 
 // Example usage of built-in entities
-@ <Start> = <PlayTrackNumber>
+<Start> = <PlayTrackNumber>;
 
-@ <PlayTrackNumber> =
+<PlayTrackNumber> =
     play (the)? $(n:Ordinal) (track | song)? -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
     }
 | play track $(n:Cardinal) -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
-            trackNumber: $(n)
+            trackNumber: n
         }
-   }
+   };

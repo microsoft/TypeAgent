@@ -10,7 +10,7 @@ const testParamGrammarRules = (fileName: string, content: string) =>
 describe("Grammar Rule Parser", () => {
     describe("Basic Rule Definitions", () => {
         it("a simple rule with string expression", () => {
-            const grammar = "@<greeting> = hello world";
+            const grammar = "<greeting> = hello world;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toEqual([
@@ -31,7 +31,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("a rule with multiple alternatives", () => {
-            const grammar = "@<greeting> = hello | hi | hey";
+            const grammar = "<greeting> = hello | hi | hey;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toHaveLength(1);
@@ -52,7 +52,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("a rule with value mapping", () => {
-            const grammar = '@<greeting> = hello -> "greeting"';
+            const grammar = '<greeting> = hello -> "greeting";';
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toHaveLength(1);
@@ -64,8 +64,8 @@ describe("Grammar Rule Parser", () => {
 
         it("multiple rule definitions", () => {
             const grammar = `
-                @<greeting> = hello
-                @<farewell> = goodbye
+                <greeting> = hello;
+                <farewell> = goodbye;
             `;
             const result = testParamGrammarRules("test.agr", grammar);
 
@@ -75,7 +75,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("rule with rule reference", () => {
-            const grammar = "@<sentence> = <greeting> world";
+            const grammar = "<sentence> = <greeting> world;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions).toHaveLength(2);
@@ -92,7 +92,7 @@ describe("Grammar Rule Parser", () => {
 
     describe("Expression Parsing", () => {
         it("variable expressions with default type", () => {
-            const grammar = "@<rule> = $(name)";
+            const grammar = "<rule> = $(name);";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions[0]).toEqual({
@@ -104,7 +104,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("variable expressions with specified type", () => {
-            const grammar = "@<rule> = $(count:number)";
+            const grammar = "<rule> = $(count:number);";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions[0]).toEqual({
@@ -116,7 +116,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("variable expressions with rule reference", () => {
-            const grammar = "@<rule> = $(item:<ItemType>)";
+            const grammar = "<rule> = $(item:<ItemType>);";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions[0]).toEqual({
@@ -128,7 +128,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("variable expressions - optional", () => {
-            const grammar = "@<rule> = $(item:<ItemType>)?";
+            const grammar = "<rule> = $(item:<ItemType>)?;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions[0]).toEqual({
@@ -141,7 +141,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("group expressions", () => {
-            const grammar = "@<rule> = (hello | hi) world";
+            const grammar = "<rule> = (hello | hi) world;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions).toHaveLength(2);
@@ -161,7 +161,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("optional group expressions", () => {
-            const grammar = "@<rule> = (please)? help";
+            const grammar = "<rule> = (please)? help;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions[0]).toEqual({
@@ -177,7 +177,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("complex expressions with multiple components", () => {
-            const grammar = "@<rule> = $(action) the <object> $(adverb:string)";
+            const grammar = "<rule> = $(action) the <object> $(adverb:string);";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions).toHaveLength(4);
@@ -193,7 +193,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("should handle escaped characters in string expressions", () => {
-            const grammar = "@<rule> = hello\\0world";
+            const grammar = "<rule> = hello\\0world;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions[0]).toEqual({
@@ -205,8 +205,8 @@ describe("Grammar Rule Parser", () => {
 
     describe("Value Parsing", () => {
         it("boolean literal values", () => {
-            const grammar1 = "@<rule> = test -> true";
-            const grammar2 = "@<rule> = test -> false";
+            const grammar1 = "<rule> = test -> true;";
+            const grammar2 = "<rule> = test -> false;";
 
             const result1 = testParamGrammarRules("test.agr", grammar1);
             const result2 = testParamGrammarRules("test.agr", grammar2);
@@ -222,7 +222,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("float literal values", () => {
-            const grammar = "@<rule> = test -> 42.5";
+            const grammar = "<rule> = test -> 42.5;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -232,7 +232,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("integer literal values", () => {
-            const grammar = "@<rule> = test -> 12";
+            const grammar = "<rule> = test -> 12;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -242,7 +242,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("integer hex literal values", () => {
-            const grammar = "@<rule> = test -> 0xC";
+            const grammar = "<rule> = test -> 0xC;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -252,7 +252,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("integer oct literal values", () => {
-            const grammar = "@<rule> = test -> 0o14";
+            const grammar = "<rule> = test -> 0o14;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -262,7 +262,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("integer binary literal values", () => {
-            const grammar = "@<rule> = test -> 0b1100";
+            const grammar = "<rule> = test -> 0b1100;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -272,8 +272,8 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("string literal values", () => {
-            const grammar1 = '@<rule> = test -> "hello world"';
-            const grammar2 = "@<rule> = test -> 'hello world'";
+            const grammar1 = '<rule> = test -> "hello world";';
+            const grammar2 = "<rule> = test -> 'hello world';";
 
             const result1 = testParamGrammarRules("test.agr", grammar1);
             const result2 = testParamGrammarRules("test.agr", grammar2);
@@ -289,7 +289,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("string values with escape sequences", () => {
-            const grammar = '@<rule> = test -> "hello\\tworld\\n"';
+            const grammar = '<rule> = test -> "hello\\tworld\\n";';
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -299,7 +299,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("array values", () => {
-            const grammar = '@<rule> = test -> [1, "hello", true]';
+            const grammar = '<rule> = test -> [1, "hello", true];';
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -313,7 +313,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("empty array values", () => {
-            const grammar = "@<rule> = test -> []";
+            const grammar = "<rule> = test -> [];";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -323,7 +323,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("object values", () => {
-            const grammar = '@<rule> = test -> {type: "greeting", count: 1}';
+            const grammar = '<rule> = test -> {type: "greeting", count: 1};';
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -336,7 +336,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("empty object values", () => {
-            const grammar = "@<rule> = test -> {}";
+            const grammar = "<rule> = test -> {};";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -347,7 +347,7 @@ describe("Grammar Rule Parser", () => {
 
         it("object values with single quote properties", () => {
             const grammar =
-                "@<rule> = test -> {'type': \"greeting\", 'count': 1}";
+                "<rule> = test -> {'type': \"greeting\", 'count': 1};";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -361,7 +361,7 @@ describe("Grammar Rule Parser", () => {
 
         it("object values with double quote properties", () => {
             const grammar =
-                '@<rule> = test -> {"type": "greeting", "count": 1}';
+                '<rule> = test -> {"type": "greeting", "count": 1};';
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -374,7 +374,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("variable reference values", () => {
-            const grammar = "@<rule> = $(name) -> $(name)";
+            const grammar = "<rule> = $(name) -> name;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -385,7 +385,7 @@ describe("Grammar Rule Parser", () => {
 
         it("nested object and array values", () => {
             const grammar =
-                "@<rule> = test -> {items: [1, 2], meta: {count: 2}}";
+                "<rule> = test -> {items: [1, 2], meta: {count: 2}};";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].value).toEqual({
@@ -410,17 +410,17 @@ describe("Grammar Rule Parser", () => {
 
         it("should handle nested groups and complex expressions", () => {
             const grammar = `
-                @<complex> = (please)? ($(action) | do) (the)? $(object) ($(adverb))? -> {
-                    politeness: $(politeness),
-                    actions: [$(action), "execute"],
+                <complex> = (please)? ($(action) | do) (the)? $(object) ($(adverb))? -> {
+                    politeness,
+                    actions: [action, "execute"],
                     target: {
-                        name: $(object),
+                        name: object,
                         metadata: {
                             hasArticle: true,
-                            modifier: $(adverb)
+                            modifier: adverb
                         }
                     }
-                }
+                };
             `;
 
             const result = testParamGrammarRules("nested.agr", grammar);
@@ -508,10 +508,7 @@ describe("Grammar Rule Parser", () => {
                             value: {
                                 type: "object",
                                 value: {
-                                    politeness: {
-                                        type: "variable",
-                                        name: "politeness",
-                                    },
+                                    politeness: null,
                                     actions: {
                                         type: "array",
                                         value: [
@@ -557,9 +554,9 @@ describe("Grammar Rule Parser", () => {
 
         it("grammar with unicode and special characters", () => {
             const grammar = `
-                @<unicode> = café \\u00E9 -> "café"
-                @<special> = hello\\tworld\\n -> "formatted"
-                @<escaped> = \\@ \\| \\( \\) -> "escaped"
+                <unicode> = café \\u00E9 -> "café";
+                <special> = hello\\tworld\\n -> "formatted";
+                <escaped> = \\| \\( \\) -> "escaped";
             `;
 
             const result = testParamGrammarRules("unicode.agr", grammar);
@@ -575,7 +572,7 @@ describe("Grammar Rule Parser", () => {
             });
             expect(result[2].rules[0].expressions[0]).toEqual({
                 type: "string",
-                value: ["@", "|", "(", ")"],
+                value: ["|", "(", ")"],
             });
         });
     });
@@ -584,7 +581,7 @@ describe("Grammar Rule Parser", () => {
         it("should handle collapse whitespace between tokens", () => {
             const spaces =
                 "  \t\v\f\u00a0\ufeff\n\r\u2028\u2029\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u202F\u205F\u3000";
-            const grammar = `${spaces}@${spaces}<greeting>${spaces}=${spaces}hello${spaces}world${spaces}->${spaces}true${spaces}`;
+            const grammar = `${spaces}<greeting>${spaces}=${spaces}hello${spaces}world${spaces}->${spaces}true${spaces};`;
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toEqual([
@@ -609,7 +606,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("should keep escaped whitespace in expression", () => {
-            const grammar = `@<greeting>=${escapedSpaces}hello${escapedSpaces}world${escapedSpaces}->true`;
+            const grammar = `<greeting>=${escapedSpaces}hello${escapedSpaces}world${escapedSpaces}->true;`;
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toEqual([
@@ -638,7 +635,7 @@ describe("Grammar Rule Parser", () => {
         it("should handle single-line comments", () => {
             const grammar = `
                 // This is a greeting rule
-                @<greeting> = hello // End of line comment
+                <greeting> = hello; // End of line comment
                 // Another comment
             `;
             const result = testParamGrammarRules("test.agr", grammar);
@@ -649,11 +646,11 @@ describe("Grammar Rule Parser", () => {
 
         it("should handle multi-line comments", () => {
             const grammar = `
-                /* 
+                /*
                  * This is a multi-line comment
                  * describing the greeting rule
                  */
-                @<greeting> = hello /* inline comment */ world
+                <greeting> = hello /* inline comment */ world;
             `;
             const result = testParamGrammarRules("test.agr", grammar);
 
@@ -664,7 +661,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("should handle mixed whitespace types", () => {
-            const grammar = "@<rule>\t=\r\nhello\n\t world";
+            const grammar = "<rule>\t=\r\nhello\n\t world;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions[0]).toEqual({
@@ -674,7 +671,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("should collapse multiple whitespace in strings to single space", () => {
-            const grammar = "@<rule> = hello     world\t\t\ttest";
+            const grammar = "<rule> = hello     world\t\t\ttest;";
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result[0].rules[0].expressions[0]).toEqual({
@@ -685,11 +682,11 @@ describe("Grammar Rule Parser", () => {
 
         it("should handle comments in values", () => {
             const grammar = `
-                @<rule> = test -> {
+                <rule> = test -> {
                     // Property comment
                     type: "greeting", /* inline */
                     count: 1
-                }
+                };
             `;
             const result = testParamGrammarRules("test.agr", grammar);
 
@@ -701,116 +698,156 @@ describe("Grammar Rule Parser", () => {
                 },
             });
         });
+
+        it("should treat // comment with no preceding space as flex space in string expression", () => {
+            const grammar = "<rule> = hello//comment\nworld;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "string",
+                value: ["hello", "world"],
+            });
+        });
+
+        it("should treat /* */ comment with no preceding space as flex space in string expression", () => {
+            const grammar = "<rule> = hello/*comment*/world;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "string",
+                value: ["hello", "world"],
+            });
+        });
+
+        it("should collapse multiple consecutive comments to a single flex space", () => {
+            const grammar = "<rule> = hello//c1\n//c2\nworld;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "string",
+                value: ["hello", "world"],
+            });
+        });
+
+        it("should collapse mixed adjacent comment styles to a single flex space", () => {
+            const grammar = "<rule> = hello//line\n/*block*/world;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "string",
+                value: ["hello", "world"],
+            });
+        });
     });
 
     describe("Error Handling", () => {
-        it("should throw error for missing @ at start of rule", () => {
+        it("should throw error for missing rule terminator", () => {
             const grammar = "<greeting> = hello";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
-                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
+                "';' expected",
             );
         });
 
         it("should throw error for malformed rule name", () => {
-            const grammar = "@greeting = hello";
+            const grammar = "greeting = hello;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
-                "Expected 'entity' declaration, '@import' statement, or '@' rule definition",
+                "Expected rule definition, 'import' statement, or 'entity' declaration",
             );
         });
 
         it("should throw error for missing equals sign", () => {
-            const grammar = "@<greeting> hello";
+            const grammar = "<greeting> hello;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "'=' expected",
             );
         });
 
         it("should throw error for unterminated string literal", () => {
-            const grammar = '@<rule> = test -> "unterminated';
+            const grammar = '<rule> = test -> "unterminated';
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Unterminated string literal",
             );
         });
 
         it("should throw error for unterminated variable", () => {
-            const grammar = "@<rule> = $(name";
+            const grammar = "<rule> = $(name;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "')' expected",
             );
         });
 
         it("should throw error for unterminated group", () => {
-            const grammar = "@<rule> = (hello";
+            const grammar = "<rule> = (hello;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "')' expected",
             );
         });
 
         it("should throw error for invalid escape sequence", () => {
-            const grammar = '@<rule> = test -> "invalid\\';
+            const grammar = '<rule> = test -> "invalid\\';
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Missing escaped character.",
             );
         });
 
         it("should throw error for invalid hex escape", () => {
-            const grammar = '@<rule> = test -> "\\xZZ"';
+            const grammar = '<rule> = test -> "\\xZZ";';
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Invalid hex escape sequence",
             );
         });
 
         it("should throw error for invalid unicode escape", () => {
-            const grammar = '@<rule> = test -> "\\uZZZZ"';
+            const grammar = '<rule> = test -> "\\uZZZZ";';
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Invalid Unicode escape sequence",
             );
         });
 
         it("should throw error for unterminated array", () => {
-            const grammar = "@<rule> = test -> [1, 2";
+            const grammar = "<rule> = test -> [1, 2";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Unexpected end of file in array value",
             );
         });
 
         it("should throw error for unterminated object", () => {
-            const grammar = '@<rule> = test -> {type: "test"';
+            const grammar = '<rule> = test -> {type: "test"';
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Unexpected end of file in object value",
             );
         });
 
         it("should throw error for missing colon in object", () => {
-            const grammar = '@<rule> = test -> {type "test"}';
+            const grammar = '<rule> = test -> {type "test"};';
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "':' expected",
             );
         });
 
         it("should throw error for invalid number", () => {
-            const grammar = "@<rule> = test -> abc123";
+            const grammar = "<rule> = test -> 1abc;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Invalid literal",
             );
         });
 
         it("should throw error for infinity values", () => {
-            const grammar = "@<rule> = test -> Infinity";
+            const grammar = "<rule> = test -> Infinity;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Infinity values are not allowed",
             );
         });
 
         it("should throw error for unescaped special characters", () => {
-            const grammar = "@<rule> = hello-world";
+            const grammar = "<rule> = hello-world;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Special character needs to be escaped",
             );
         });
 
         it("should throw error for empty expression", () => {
-            const grammar = "@<rule> = ";
+            const grammar = "<rule> = ;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 "Empty expression",
             );
@@ -818,8 +855,8 @@ describe("Grammar Rule Parser", () => {
 
         it("should include line and column information in errors", () => {
             const grammar = `
-                @<valid> = hello
-                @invalid = world
+                <valid> = hello;
+                invalid = world;
             `;
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 /test\.agr:\d+:\d+:/,
@@ -830,7 +867,7 @@ describe("Grammar Rule Parser", () => {
     describe("Complex Integration", () => {
         it("should handle deeply nested value structures", () => {
             const grammar = `
-                @<nested> = test -> {
+                <nested> = test -> {
                     config: {
                         settings: [
                             {name: "debug", value: true},
@@ -841,8 +878,8 @@ describe("Grammar Rule Parser", () => {
                             features: ["async", "cache"]
                         }
                     },
-                    variables: [$(param1), $(param2)]
-                }
+                    variables: [param1, param2]
+                };
             `;
 
             const result = testParamGrammarRules("deeply-nested.agr", grammar);
@@ -857,31 +894,31 @@ describe("Grammar Rule Parser", () => {
         it("real-world conversation patterns", () => {
             const grammar = `
                 // Weather queries
-                @<weather> = (what's | what is) the weather (like)? (in $(location))? -> {
+                <weather> = (what's | what is) the weather (like)? (in $(location))? -> {
                     intent: "weather.query",
-                    location: $(location),
+                    location,
                     type: "current"
-                }
-                
-                // Calendar operations  
-                @<calendar> = (schedule | book) (a)? $(event) (for | on) $(date) (at $(time))? -> {
+                };
+
+                // Calendar operations
+                <calendar> = (schedule | book) (a)? $(event) (for | on) $(date) (at $(time))? -> {
                     intent: "calendar.create",
                     event: {
-                        title: $(event),
-                        date: $(date),
-                        time: $(time)
+                        title: event,
+                        date,
+                        time
                     }
-                }
-                
+                };
+
                 // Music control
-                @<music> = (play | start) $(song)? (by $(artist))? -> {
+                <music> = (play | start) $(song)? (by $(artist))? -> {
                     intent: "music.play",
                     query: {
-                        song: $(song),
-                        artist: $(artist)
+                        song,
+                        artist
                     },
                     shuffle: false
-                }
+                };
             `;
 
             const result = testParamGrammarRules("conversation.agr", grammar);
@@ -901,7 +938,7 @@ describe("Grammar Rule Parser", () => {
 
     describe("Import Statements", () => {
         it("parse granular import statement", () => {
-            const grammar = '@import { Name1, Name2 } from "file.agr"';
+            const grammar = 'import { Name1, Name2 } from "file.agr";';
             const result = parseGrammarRules("test.agr", grammar, false);
 
             expect(result.imports).toHaveLength(1);
@@ -910,7 +947,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("parse wildcard import statement", () => {
-            const grammar = '@import * from "file.agr"';
+            const grammar = 'import * from "file.agr";';
             const result = parseGrammarRules("test.agr", grammar, false);
 
             expect(result.imports).toHaveLength(1);
@@ -920,9 +957,9 @@ describe("Grammar Rule Parser", () => {
 
         it("parse multiple import statements", () => {
             const grammar = `
-                @import { Action1, Action2 } from "actions.agr"
-                @import * from "types.ts"
-                @import { Helper } from "helpers.agr"
+                import { Action1, Action2 } from "actions.agr";
+                import * from "types.ts";
+                import { Helper } from "helpers.agr";
             `;
             const result = parseGrammarRules("test.agr", grammar, false);
 
@@ -937,10 +974,10 @@ describe("Grammar Rule Parser", () => {
 
         it("parse imports with grammar rules", () => {
             const grammar = `
-                @import { BaseRule } from "base.agr"
+                import { BaseRule } from "base.agr";
 
-                @<Start> = <BaseRule> world
-                @<BaseRule> = hello
+                <Start> = <BaseRule> world;
+                <BaseRule> = hello;
             `;
             const result = parseGrammarRules("test.agr", grammar, false);
 
@@ -952,7 +989,7 @@ describe("Grammar Rule Parser", () => {
         });
 
         it("parse single name import", () => {
-            const grammar = '@import { SingleName } from "file.agr"';
+            const grammar = 'import { SingleName } from "file.agr";';
             const result = parseGrammarRules("test.agr", grammar, false);
 
             expect(result.imports).toHaveLength(1);
