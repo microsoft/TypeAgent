@@ -592,6 +592,56 @@ export class ChatView {
         return p;
     }
 
+    public showChoice(
+        requestId: RequestId,
+        choiceId: string,
+        type: "yesNo" | "multiChoice",
+        _message: string,
+        choiceLabels: string[],
+        source: string,
+    ) {
+        // Append choice UI to the last agent message (the action result bubble)
+        const messageGroup = this.getMessageGroup(requestId);
+        if (!messageGroup) return;
+
+        const agentMessage =
+            messageGroup.getLastAgentMessage() ??
+            this.ensureAgentMessage({ message: "", requestId, source });
+        if (!agentMessage) return;
+
+        if (type === "yesNo") {
+            const choices: InputChoice[] = [
+                {
+                    text: "Yes (Enter)",
+                    element: iconCheckMarkCircle(),
+                    selectKey: ["Enter"],
+                    value: true,
+                },
+                {
+                    text: "No (Del)",
+                    element: iconX(),
+                    selectKey: ["Delete"],
+                    value: false,
+                },
+            ];
+            agentMessage.addChoicePanel(choices, (choice) => {
+                this.getDispatcher().respondToChoice(choiceId, choice.value);
+            });
+        } else {
+            // multiChoice — checkboxes
+            agentMessage.addCheckboxPanel(
+                choiceLabels,
+                (selectedIndices: number[]) => {
+                    this.getDispatcher().respondToChoice(
+                        choiceId,
+                        selectedIndices,
+                    );
+                },
+            );
+        }
+        this.updateScroll();
+    }
+
     public async proposeAction(
         requestId: RequestId,
         actionTemplates: TemplateEditConfig,

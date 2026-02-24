@@ -9,6 +9,8 @@ import {
 } from "../action.js";
 import { DisplayMessageKind } from "../display.js";
 import { Entity } from "../memory.js";
+import { ChoiceManager } from "./choiceManager.js";
+export { ChoiceManager };
 
 export function createActionResultNoDisplay(
     historyText: string,
@@ -118,6 +120,45 @@ export function createActionResultFromMarkdownDisplay(
         entities,
         resultEntity,
         displayContent: { type: "markdown", content: markdownText },
+    };
+}
+
+export function createYesNoChoiceResult(
+    choiceManager: ChoiceManager,
+    message: string,
+    onResponse: (confirmed: boolean) => Promise<ActionResult | undefined>,
+    displayHtml?: string,
+): ActionResultSuccess {
+    const choiceId = choiceManager.registerChoice((response) =>
+        onResponse(response as boolean),
+    );
+    return {
+        entities: [],
+        displayContent: displayHtml
+            ? { type: "html", content: displayHtml }
+            : message,
+        pendingChoice: { choiceId, type: "yesNo", message },
+    };
+}
+
+export function createMultiChoiceResult(
+    choiceManager: ChoiceManager,
+    message: string,
+    choices: string[],
+    onResponse: (
+        selectedIndices: number[],
+    ) => Promise<ActionResult | undefined>,
+    displayHtml?: string,
+): ActionResultSuccess {
+    const choiceId = choiceManager.registerChoice((response) =>
+        onResponse(response as number[]),
+    );
+    return {
+        entities: [],
+        displayContent: displayHtml
+            ? { type: "html", content: displayHtml }
+            : message,
+        pendingChoice: { choiceId, type: "multiChoice", message, choices },
     };
 }
 

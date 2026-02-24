@@ -46,4 +46,9 @@ export type DispatcherInvokeFunctions = {
     close(): Promise<void>;
 
     getStatus(): Promise<DispatcherStatus>;
+
+    respondToChoice(
+        choiceId: string,
+        response: boolean | number[],
+    ): Promise<CommandResult | undefined>;
 };

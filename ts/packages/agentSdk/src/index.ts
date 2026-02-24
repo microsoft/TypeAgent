@@ -62,6 +62,9 @@ export {
     ActionResultSuccess,
     ActionResult,
     ActionResultActivityContext,
+    PendingChoice,
+    PendingYesNoChoice,
+    PendingMultiChoice,
 } from "./action.js";
 
 export type {

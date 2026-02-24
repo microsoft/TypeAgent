@@ -56,6 +56,9 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         closeLocalView(...args): Promise<void> {
             return rpc.invoke("closeLocalView", ...args);
         },
+        requestChoice(...args): void {
+            return rpc.send("requestChoice", ...args);
+        },
         takeAction(...args): void {
             return rpc.send("takeAction", ...args);
         },

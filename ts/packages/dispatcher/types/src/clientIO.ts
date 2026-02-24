@@ -100,6 +100,16 @@ export interface ClientIO {
     openLocalView(requestId: RequestId, port: number): Promise<void>;
     closeLocalView(requestId: RequestId, port: number): Promise<void>;
 
+    // Non-blocking choice request (yes/no buttons or multi-select checkboxes)
+    requestChoice(
+        requestId: RequestId,
+        choiceId: string,
+        type: "yesNo" | "multiChoice",
+        message: string,
+        choices: string[],
+        source: string,
+    ): void;
+
     // Host specific (TODO: Formalize the API)
     takeAction(requestId: RequestId, action: string, data: unknown): void;
 }

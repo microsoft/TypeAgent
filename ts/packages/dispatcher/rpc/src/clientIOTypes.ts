@@ -57,5 +57,14 @@ export type ClientIOCallFunctions = {
         source: string,
     ): void;
 
+    requestChoice(
+        requestId: RequestId,
+        choiceId: string,
+        type: "yesNo" | "multiChoice",
+        message: string,
+        choices: string[],
+        source: string,
+    ): void;
+
     takeAction(requestId: RequestId, action: string, data: unknown): void;
 };
