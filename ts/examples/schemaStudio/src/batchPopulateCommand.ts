@@ -587,6 +587,10 @@ export function createBatchPopulateCommand(
                 }
             }
             io.writer.writeLine("");
+
+            // Write CSV report after every batch so partial
+            // results survive cancellation or failure
+            writeCSVReport(outputPath, results);
         }
 
         const elapsedMs = Date.now() - startTime;
@@ -599,8 +603,6 @@ export function createBatchPopulateCommand(
             );
         }
 
-        // Write CSV report
-        writeCSVReport(outputPath, results);
         io.writer.writeLine(`CSV report written to: ${outputPath}`);
         io.writer.writeLine("");
 
