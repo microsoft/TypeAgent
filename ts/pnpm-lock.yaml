@@ -603,6 +603,12 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      agent-cache:
+        specifier: workspace:*
+        version: link:../../packages/cache
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../packages/dispatcher/dispatcher
       aiclient:
         specifier: workspace:*
         version: link:../../packages/aiclient
@@ -612,9 +618,15 @@ importers:
       debug:
         specifier: ^4.4.0
         version: 4.4.1
+      default-agent-provider:
+        specifier: workspace:*
+        version: link:../../packages/defaultAgentProvider
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
+      find-config:
+        specifier: ^1.0.0
+        version: 1.0.0
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -634,6 +646,9 @@ importers:
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      '@types/find-config':
+        specifier: 1.0.4
+        version: 1.0.4
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
