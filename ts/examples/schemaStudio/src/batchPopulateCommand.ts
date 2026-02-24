@@ -19,6 +19,7 @@ import {
     ActionConfigProvider,
     ActionConfig,
     ComposeSchemaOptions,
+    initializeGeolocation,
 } from "agent-dispatcher/internal";
 import { getDefaultAppAgentProviders } from "default-agent-provider";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
@@ -118,6 +119,14 @@ export function createBatchPopulateCommand(
                         "Path to a JSON file for persisting the construction cache. " +
                         "If the file exists and --newCache is false, it will be loaded. " +
                         "The cache is saved to this file after processing.",
+                },
+                limit: {
+                    description: "The maximum number of prompts to process from the file.",
+                },
+                skip: {
+                    description:
+                        "Comma-delimited list of schema names to skip. " +
+                        'Supports wildcards, e.g. "browser.*,system.*".',
                 },
             },
         };
@@ -300,6 +309,8 @@ export function createBatchPopulateCommand(
         const outputPath: string = namedArgs.output;
         const schemaFilter: string | undefined = namedArgs.schema;
         const cacheFilePath: string | undefined = namedArgs.cacheFile;
+        const limit: number | undefined = namedArgs.maxPrompts;
+        const skipFilter: string | undefined = namedArgs.skip;
 
         if (!filePath) {
             io.writer.writeLine(
@@ -330,12 +341,18 @@ export function createBatchPopulateCommand(
             return;
         }
 
+        if (limit !== undefined) {
+            prompts = prompts.slice(0, limit);
+        }
+
         io.writer.writeLine(`Found ${prompts.length} prompt(s) in file.`);
 
         // Initialize provider and schemas
         io.writer.writeLine("Loading action schemas...");
-        const { provider, schemaNames: allSchemaNames } =
-            await ensureProvider();
+        const [{ provider, schemaNames: allSchemaNames }] = await Promise.all([
+            ensureProvider(),
+            initializeGeolocation(),
+        ]);
 
         // Determine which schemas to use
         let targetSchemas: string[];
@@ -364,6 +381,32 @@ export function createBatchPopulateCommand(
             );
         }
 
+        // Apply skip filter
+        if (skipFilter) {
+            const skipPatterns = skipFilter
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0)
+                .map((pattern) => {
+                    // Convert glob-style wildcard to regex
+                    const escaped = pattern
+                        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+                        .replace(/\*/g, ".*")
+                        .replace(/\?/g, ".");
+                    return new RegExp(`^${escaped}$`, "i");
+                });
+            const before = targetSchemas.length;
+            targetSchemas = targetSchemas.filter(
+                (s) => !skipPatterns.some((re) => re.test(s)),
+            );
+            const skipped = before - targetSchemas.length;
+            if (skipped > 0) {
+                io.writer.writeLine(
+                    `Skipped ${skipped} schema(s) matching: ${skipFilter}`,
+                );
+            }
+        }
+
         if (targetSchemas.length === 0) {
             io.writer.writeLine("No valid schemas selected.");
             return;
@@ -377,7 +420,7 @@ export function createBatchPopulateCommand(
         for (const schema of targetSchemas) {
             try {
                 translatorEntries.push(
-                    getTranslator(schema, provider, allSchemaNames),
+                    getTranslator(schema, provider, targetSchemas),
                 );
             } catch (err: any) {
                 io.writer.writeLine(
@@ -510,10 +553,16 @@ export function createBatchPopulateCommand(
                             executableAction,
                         );
 
+                        // Don't cache unknown actions — they
+                        // represent "I don't know" and aren't
+                        // useful for generalization.
+                        const shouldCache =
+                            translated.actionName !== "unknown";
+
                         const processResult =
                             await cache.processRequestAction(
                                 requestAction,
-                                true, // cache = true
+                                shouldCache,
                             );
 
                         const explResult =
@@ -647,11 +696,13 @@ function printSummary(
     elapsedMs: number,
 ): void {
     const total = results.length;
-    const translated = results.filter((r) => r.translated).length;
-    const explained = results.filter((r) => r.explained).length;
-    const cacheHits = results.filter((r) => r.cacheHitAfter).length;
+    // Mutually exclusive categories that sum to total:
     const cacheSkipped = results.filter((r) => r.cacheHitBefore).length;
+    const generalized = results.filter(
+        (r) => r.cacheHitAfter && !r.cacheHitBefore,
+    ).length;
     const failed = results.filter((r) => !r.translated).length;
+    const translatedOnly = total - cacheSkipped - generalized - failed;
 
     const pct = (n: number) =>
         total > 0 ? ((n / total) * 100).toFixed(1) : "0.0";
@@ -666,13 +717,10 @@ function printSummary(
         );
     }
     io.writer.writeLine(
-        `  Translated:             ${c.green}${translated}  (${pct(translated)}%)${c.reset}`,
+        `  Generalizable (cache):  ${generalized > 0 ? c.green : c.yellow}${generalized}  (${pct(generalized)}%)${c.reset}`,
     );
     io.writer.writeLine(
-        `  Explained:              ${c.green}${explained}  (${pct(explained)}%)${c.reset}`,
-    );
-    io.writer.writeLine(
-        `  Generalizable (cache):  ${cacheHits > 0 ? c.green : c.yellow}${cacheHits}  (${pct(cacheHits)}%)${c.reset}`,
+        `  Translated only:        ${c.yellow}${translatedOnly}  (${pct(translatedOnly)}%)${c.reset}`,
     );
     io.writer.writeLine(
         `  Failed:                 ${failed > 0 ? c.red : c.green}${failed}  (${pct(failed)}%)${c.reset}`,
