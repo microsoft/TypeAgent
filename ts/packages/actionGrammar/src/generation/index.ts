@@ -130,10 +130,13 @@ function isValueInRequest(paramValue: any, normalizedRequest: string): boolean {
     if (typeof paramValue === "number") {
         // Check if the number appears as a digit token, a word-number, or a
         // multi-word phrase (e.g., "a couple" → 2) via the Cardinal converter.
+        // For negative values (e.g. volumeChangePercentage: -10 from "decrease by 10%"),
+        // the sign is implied by the verb so we match against the absolute value.
+        const absValue = Math.abs(paramValue);
         const tokens = normalizedRequest
             .split(/\s+/)
             .filter((t) => t.length > 0);
-        const numStr = String(paramValue);
+        const numStr = String(absValue);
         // Literal digit match
         if (tokens.some((t) => t.replace(/[^\d]/g, "") === numStr)) {
             return true;
@@ -147,7 +150,7 @@ function isValueInRequest(paramValue: any, normalizedRequest: string): boolean {
                 len++
             ) {
                 const span = tokens.slice(start, start + len).join(" ");
-                if (Cardinal.convert(span) === paramValue) {
+                if (Cardinal.convert(span) === absValue) {
                     return true;
                 }
             }
