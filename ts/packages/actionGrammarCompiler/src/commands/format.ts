@@ -4,7 +4,7 @@
 import { Command, Flags } from "@oclif/core";
 import path from "node:path";
 import fs from "node:fs";
-import { parseGrammarRules, writeGrammarFile } from "action-grammar";
+import { parseGrammarRules, writeGrammarRules } from "action-grammar";
 
 export default class Format extends Command {
     static description = "Format action grammar (.agr) files";
@@ -46,7 +46,7 @@ export default class Format extends Command {
             process.exit(1);
         }
 
-        const formatted = writeGrammarFile(parseResult);
+        const formatted = writeGrammarRules(parseResult);
 
         if (flags.check) {
             if (content !== formatted) {

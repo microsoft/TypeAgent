@@ -4,7 +4,6 @@
 import {
     Expr,
     GrammarParseResult,
-    ImportStatement,
     isExpressionSpecialChar,
     isWhitespace,
     Rule,
@@ -12,63 +11,113 @@ import {
     ValueNode,
 } from "./grammarRuleParser.js";
 
-export function writeGrammarFile(result: GrammarParseResult): string {
-    const parts: string[] = [];
+export type GrammarWriterOptions = {
+    maxLineLength?: number; // Maximum line length before breaking (default: 80)
+    indentSize?: number; // Number of spaces to indent when breaking lines (default: 2)
+};
 
-    if (result.entities.length > 0) {
-        parts.push(`entity ${result.entities.join(", ")};\n\n`);
+class GrammarWriter {
+    private parts: string[] = [];
+    private _column: number = 0;
+
+    constructor(private readonly options?: GrammarWriterOptions) {}
+
+    get column(): number {
+        return this._column;
     }
 
-    if (result.imports.length > 0) {
-        for (const imp of result.imports) {
-            parts.push(writeImportStatement(imp));
+    get maxLineLength(): number {
+        return this.options?.maxLineLength ?? 80;
+    }
+
+    get indentSize(): number {
+        return this.options?.indentSize ?? 2;
+    }
+
+    write(text: string): void {
+        this.parts.push(text);
+        this._column += text.length;
+    }
+
+    writeAtColumn(text: string, column: number): void {
+        if (this._column > column) {
+            this.writeNewLine(" ".repeat(column));
+        } else {
+            this.write(" ".repeat(column - this._column));
         }
-        parts.push("\n");
+        this.write(text);
+    }
+    writeNewLine(text: string): void {
+        this.parts.push("\n");
+        this._column = 0;
+        this.write(text);
+    }
+    writeLine(text?: string): void {
+        if (text) {
+            this.write(text);
+        }
+        this.parts.push("\n");
+        this._column = 0;
     }
 
-    parts.push(writeGrammarRules(result.definitions));
-    return parts.join("");
+    toString(): string {
+        return this.parts.join("");
+    }
 }
 
-function writeImportStatement(imp: ImportStatement): string {
-    const names = imp.names === "*" ? "*" : `{ ${imp.names.join(", ")} }`;
-    return `import ${names} from "${imp.source}";\n`;
-}
+export function writeGrammarRules(
+    grammar: GrammarParseResult,
+    options?: GrammarWriterOptions,
+): string {
+    const result = new GrammarWriter(options);
+    if (grammar.entities.length > 0) {
+        result.writeLine(`entity ${grammar.entities.join(", ")};`);
+        result.writeLine();
+    }
 
-export function writeGrammarRules(grammar: RuleDefinition[]): string {
-    const result: string[] = [];
-    for (const def of grammar) {
+    if (grammar.imports.length > 0) {
+        for (const imp of grammar.imports) {
+            const names =
+                imp.names === "*" ? "*" : `{ ${imp.names.join(", ")} }`;
+            result.writeLine(`import ${names} from "${imp.source}";`);
+        }
+        result.writeLine();
+    }
+
+    for (const def of grammar.definitions) {
         writeRuleDefinition(result, def);
-        result.push("\n");
     }
 
-    return result.join("");
+    return result.toString();
 }
 
-function writeRuleDefinition(result: string[], def: RuleDefinition) {
-    const ruleStart = `<${def.name}> = `;
-    result.push(ruleStart);
-    writeRules(result, def.rules, ruleStart.length);
-    result.push(";");
+function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
+    result.write(`<${def.name}> = `);
+    writeRules(result, def.rules, result.column - 2);
+    result.writeLine(";");
 }
 
-function writeRules(result: string[], rules: Rule[], indent: number) {
+function writeRules(result: GrammarWriter, rules: Rule[], col: number) {
     let first = true;
 
     for (const rule of rules) {
         if (!first) {
-            result.push(`\n${" ".repeat(indent)}| `);
+            result.writeNewLine(`${" ".repeat(col)}| `);
         }
         first = false;
-        writeRule(result, rule, indent);
+        writeRule(result, rule, col);
     }
 }
 
-function writeRule(result: string[], rule: Rule, indent: number) {
-    writeExpression(result, rule.expressions, indent);
+function writeRule(result: GrammarWriter, rule: Rule, col: number) {
+    writeExpression(result, rule.expressions, col);
     if (rule.value !== undefined) {
-        result.push(" -> ");
-        writeValueNode(result, rule.value, 0);
+        if (result.column >= result.maxLineLength) {
+            result.writeNewLine(`${" ".repeat(col + result.indentSize)}-> `);
+        } else {
+            result.write(" -> ");
+        }
+        writeValueNode(result, rule.value, result.column);
     }
 }
 
@@ -119,90 +168,85 @@ function escapeExpressionString(str: string): string {
 }
 
 function writeExpression(
-    result: string[],
+    result: GrammarWriter,
     expressions: Expr[],
     indent: number,
 ) {
     let first = true;
     for (const expr of expressions) {
         if (!first) {
-            result.push(" ");
+            result.write(" ");
         }
         first = false;
 
         switch (expr.type) {
             case "string":
-                result.push(expr.value.map(escapeExpressionString).join(" "));
+                result.write(expr.value.map(escapeExpressionString).join(" "));
                 break;
             case "ruleReference":
-                result.push(`<${expr.name}>`);
+                result.write(`<${expr.name}>`);
                 break;
             case "rules":
                 const rules = expr.rules;
-                result.push("(");
+                result.write("(");
                 writeRules(result, rules, indent);
-                result.push(expr.optional ? ")?" : ")");
+                result.write(expr.optional ? ")?" : ")");
                 break;
             case "variable":
-                result.push("$(");
-                result.push(expr.name);
+                result.write("$(");
+                result.write(expr.name);
                 if (expr.refName !== "string") {
-                    result.push(":");
-                    result.push(
+                    result.write(":");
+                    result.write(
                         expr.ruleReference ? `<${expr.refName}>` : expr.refName,
                     );
                 }
-                result.push(expr.optional ? ")?" : ")");
+                result.write(expr.optional ? ")?" : ")");
                 break;
         }
     }
 }
-function writeValueNode(result: string[], value: ValueNode, indent: number) {
+function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
     switch (value.type) {
         case "literal":
-            result.push(JSON.stringify(value.value));
+            result.write(JSON.stringify(value.value));
             break;
         case "variable":
-            result.push(value.name);
+            result.write(value.name);
             break;
         case "object": {
             const entries = Object.entries(value.value);
             if (entries.length === 0) {
-                result.push("{}");
+                result.write("{}");
                 break;
             }
-            result.push("{\n");
             let first = true;
-            const innerIndent = indent + 4;
+            const nestedCol = col + result.indentSize;
             for (const [key, val] of entries) {
-                if (!first) {
-                    result.push(",\n");
-                }
+                result.writeLine(first ? "{" : ",");
                 first = false;
-                result.push(" ".repeat(innerIndent));
                 if (val === null) {
                     // Shorthand form: { key } instead of { key: key }
-                    result.push(key);
+                    result.writeAtColumn(key, nestedCol);
                 } else {
                     // Full form: { key: value }
-                    result.push(`${key}: `);
-                    writeValueNode(result, val, innerIndent);
+                    result.writeAtColumn(`${key}: `, nestedCol);
+                    writeValueNode(result, val, nestedCol);
                 }
             }
-            result.push(`\n${" ".repeat(indent)}}`);
+            result.writeNewLine(`${" ".repeat(col)}}`);
             break;
         }
         case "array": {
-            result.push("[");
             let first = true;
+            const nestedCol = col + result.indentSize;
             for (const item of value.value) {
-                if (!first) {
-                    result.push(", ");
-                }
+                result.writeLine(first ? "[" : ", ");
                 first = false;
-                writeValueNode(result, item, indent);
+                result.writeAtColumn("", nestedCol);
+                writeValueNode(result, item, nestedCol);
             }
-            result.push("]");
+            result.writeNewLine(`${" ".repeat(col)}]`);
             break;
         }
     }
