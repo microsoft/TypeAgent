@@ -6,6 +6,17 @@ export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
 
+// Parser (for tooling — formatter, linters, etc.)
+export { parseGrammarRules } from "./grammarRuleParser.js";
+export type {
+    GrammarParseResult,
+    ImportStatement,
+    RuleDefinition,
+} from "./grammarRuleParser.js";
+
+// Writer / formatter
+export { writeGrammarRules } from "./grammarRuleWriter.js";
+
 export {
     matchGrammar,
     GrammarMatchResult,
