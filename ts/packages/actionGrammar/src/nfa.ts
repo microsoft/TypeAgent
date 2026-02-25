@@ -231,7 +231,11 @@ export class NFABuilder {
         });
     }
 
-    addPhraseSetTransition(from: number, to: number, matcherName: string): void {
+    addPhraseSetTransition(
+        from: number,
+        to: number,
+        matcherName: string,
+    ): void {
         const state = this.states[from];
         if (!state) {
             throw new Error(`State ${from} does not exist`);

@@ -133,29 +133,12 @@ globalPhraseSetRegistry.register(
     "Acknowledgement",
     "Optional acknowledgement at the start (e.g., after completing a prior task)",
     ["thanks", "thank you", "great", "perfect", "good", "nice", "cool"],
-    [
-        "thanks",
-        "thank you",
-        "great",
-        "perfect",
-        "good",
-        "nice",
-        "cool",
-    ],
+    ["thanks", "thank you", "great", "perfect", "good", "nice", "cool"],
 );
 
 globalPhraseSetRegistry.register(
     "FillerWord",
     "Optional hesitation or filler word that can appear inline in a request",
     ["um", "uh", "like", "well", "so", "just", "basically"],
-    [
-        "um",
-        "uh",
-        "like",
-        "well",
-        "so",
-        "just",
-        "basically",
-        "actually",
-    ],
+    ["um", "uh", "like", "well", "so", "just", "basically", "actually"],
 );

@@ -229,8 +229,7 @@ async function retryOnConnectionError<T>(
         try {
             return await fn();
         } catch (err) {
-            const msg =
-                err instanceof Error ? err.message : String(err);
+            const msg = err instanceof Error ? err.message : String(err);
             const isTransient =
                 msg.includes("Connection error") ||
                 msg.includes("ECONNRESET") ||
@@ -316,9 +315,8 @@ export async function populateCache(
         // Apply any new phrases the LLM wants to add to phrase-set matchers (idempotent)
         applyPhrasesToAdd(analysis);
         // Accumulate all phrasesToAdd across passes so callers can persist them
-        const allPhrasesToAdd: Array<{ matcherName: string; phrase: string }> = [
-            ...(analysis.phrasesToAdd ?? []),
-        ];
+        const allPhrasesToAdd: Array<{ matcherName: string; phrase: string }> =
+            [...(analysis.phrasesToAdd ?? [])];
 
         // Check if grammar should be generated
         if (!analysis.shouldGenerateGrammar) {
@@ -376,7 +374,9 @@ export async function populateCache(
             if (!refinedAnalysis.shouldGenerateGrammar) {
                 return {
                     success: false,
-                    rejectionReason: refinedAnalysis.rejectionReason || "Rule refinement rejected",
+                    rejectionReason:
+                        refinedAnalysis.rejectionReason ||
+                        "Rule refinement rejected",
                     analysis: refinedAnalysis,
                 };
             }

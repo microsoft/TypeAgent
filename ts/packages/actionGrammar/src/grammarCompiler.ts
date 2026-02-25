@@ -491,7 +491,8 @@ function createGrammarRule(
                             context.hasStarImport ||
                             context.knownTypeNames.has(refName) ||
                             context.importedTypeNames.has(refName) ||
-                            globalEntityRegistry.getConverter(refName) !== undefined;
+                            globalEntityRegistry.getConverter(refName) !==
+                                undefined;
 
                         if (!isImportedType) {
                             context.errors.push({

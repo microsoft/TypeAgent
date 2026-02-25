@@ -711,7 +711,9 @@ function compileStringPart(
 ): number {
     // Normalize grammar tokens (lowercase + strip trailing punctuation) so they
     // compare correctly against the normalized input tokens from tokenizeRequest().
-    const normalized = part.value.map(normalizeToken).filter((t) => t.length > 0);
+    const normalized = part.value
+        .map(normalizeToken)
+        .filter((t) => t.length > 0);
 
     if (normalized.length === 0) {
         // Empty string - epsilon transition

@@ -107,7 +107,7 @@ const cardinalMap: Record<string, number> = {
     "a couple": 2,
     "a pair": 2,
     "a few": 3,
-    "several": 4,
+    several: 4,
     "a handful": 5,
     "half a dozen": 6,
     "a dozen": 12,

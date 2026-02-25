@@ -700,9 +700,8 @@ Generate a corrected rule now.`;
             }
         }
 
-        let grammar = preambleRules.length > 0
-            ? preambleRules.join("\n") + "\n"
-            : "";
+        let grammar =
+            preambleRules.length > 0 ? preambleRules.join("\n") + "\n" : "";
 
         // <Start> rule + action rule
         grammar += `<Start> = <${actionName}>;\n`;

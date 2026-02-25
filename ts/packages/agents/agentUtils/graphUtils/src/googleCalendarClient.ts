@@ -497,7 +497,9 @@ export class GoogleCalendarClient
         } catch (error: any) {
             debugError(`Failed to complete auth: ${error}`);
             console.error(`[Google Calendar] Auth failed: ${error}`);
-            console.error(`[Google Calendar] error.code=${error?.code} error.type=${error?.type} error.cause=${error?.cause} error.status=${error?.status}`);
+            console.error(
+                `[Google Calendar] error.code=${error?.code} error.type=${error?.type} error.cause=${error?.cause} error.status=${error?.status}`,
+            );
             if (error?.stack) console.error(error.stack);
             return false;
         }

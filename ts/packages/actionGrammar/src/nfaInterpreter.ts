@@ -150,10 +150,7 @@ export function matchNFA(
                         : undefined;
                     if (matcher) {
                         for (const phrase of matcher.phrases) {
-                            if (
-                                tokenIndex + phrase.length <=
-                                tokens.length
-                            ) {
+                            if (tokenIndex + phrase.length <= tokens.length) {
                                 let matches = true;
                                 for (let pi = 0; pi < phrase.length; pi++) {
                                     if (

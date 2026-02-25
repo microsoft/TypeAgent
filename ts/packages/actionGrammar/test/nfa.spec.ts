@@ -210,8 +210,16 @@ describe("NFA Infrastructure", () => {
                             {
                                 type: "rules",
                                 rules: [
-                                    { parts: [{ type: "string", value: ["um"] }] },
-                                    { parts: [{ type: "string", value: ["uh"] }] },
+                                    {
+                                        parts: [
+                                            { type: "string", value: ["um"] },
+                                        ],
+                                    },
+                                    {
+                                        parts: [
+                                            { type: "string", value: ["uh"] },
+                                        ],
+                                    },
                                 ],
                                 optional: true,
                                 repeat: true,
@@ -243,7 +251,11 @@ describe("NFA Infrastructure", () => {
                             {
                                 type: "rules",
                                 rules: [
-                                    { parts: [{ type: "string", value: ["word"] }] },
+                                    {
+                                        parts: [
+                                            { type: "string", value: ["word"] },
+                                        ],
+                                    },
                                 ],
                                 repeat: true,
                                 // optional is intentionally absent → must match at least once
@@ -261,7 +273,9 @@ describe("NFA Infrastructure", () => {
             // two occurrences
             expect(matchNFA(nfa, ["word", "word", "end"]).matched).toBe(true);
             // three occurrences
-            expect(matchNFA(nfa, ["word", "word", "word", "end"]).matched).toBe(true);
+            expect(matchNFA(nfa, ["word", "word", "word", "end"]).matched).toBe(
+                true,
+            );
             // zero occurrences — must NOT match
             expect(matchNFA(nfa, ["end"]).matched).toBe(false);
         });
