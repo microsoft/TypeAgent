@@ -75,7 +75,8 @@ interface MissEntry {
 const statsByFile = new Map<string, FileStats>();
 const totals = emptyStats();
 const misses: MissEntry[] = [];
-const constructionFailures: { file: string; request: string; error: string }[] = [];
+const constructionFailures: { file: string; request: string; error: string }[] =
+    [];
 
 for (const filePath of filePaths) {
     const fileName = path.basename(filePath, ".json");
@@ -108,7 +109,11 @@ for (const filePath of filePaths) {
             grammarText = text !== "" ? text : undefined;
         } catch (e) {
             // Construction failed — skip entry
-            constructionFailures.push({ file: fileName, request: requestAction.request, error: String(e) });
+            constructionFailures.push({
+                file: fileName,
+                request: requestAction.request,
+                error: String(e),
+            });
         }
 
         if (grammarText === undefined) {
@@ -178,8 +183,7 @@ function fmtStats(s: MatcherStats): string {
 function buildTable(): string {
     const COL1 = 30;
     const header =
-        "File".padEnd(COL1) +
-        " | Old Matcher            | NFA Matcher";
+        "File".padEnd(COL1) + " | Old Matcher            | NFA Matcher";
     const sep = "-".repeat(header.length);
     const lines = [sep, header, sep];
 
@@ -205,7 +209,9 @@ describe("NFA Grammar Coverage", () => {
     it("reports NFA match rate vs old matcher per action file (informational)", () => {
         console.log("\n" + buildTable() + "\n");
         if (constructionFailures.length > 0) {
-            console.log(`Construction failures (${constructionFailures.length}):`);
+            console.log(
+                `Construction failures (${constructionFailures.length}):`,
+            );
             for (const f of constructionFailures) {
                 console.log(`  [${f.file}] "${f.request}": ${f.error}`);
             }
@@ -213,7 +219,9 @@ describe("NFA Grammar Coverage", () => {
         if (misses.length > 0) {
             console.log(`NFA misses (${misses.length}):`);
             for (const m of misses) {
-                console.log(`  [${m.file}] "${m.request}"\n    grammar: ${m.grammarText}`);
+                console.log(
+                    `  [${m.file}] "${m.request}"\n    grammar: ${m.grammarText}`,
+                );
             }
         }
 

@@ -74,7 +74,8 @@ export class TokenProvider {
         try {
             result = await fetch(tokenUri, options);
         } catch (e: any) {
-            const cause = e.cause?.message || e.cause?.code || e.cause?.toString();
+            const cause =
+                e.cause?.message || e.cause?.code || e.cause?.toString();
             const msg = cause || e.message || String(e);
             throw new Error(`Spotify token refresh failed: ${msg}`);
         }

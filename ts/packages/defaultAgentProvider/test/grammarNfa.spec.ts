@@ -90,7 +90,11 @@ describe("Grammar NFA", () => {
             it(testName, () => {
                 const g = loadGrammarRules("test", grammar);
                 const nfa = compileGrammarToNFA(g);
-                const matched = matchGrammarWithNFA(g, nfa, requestAction.request);
+                const matched = matchGrammarWithNFA(
+                    g,
+                    nfa,
+                    requestAction.request,
+                );
 
                 expect(matched.length).not.toEqual(0);
                 expect(matched[0].match).toEqual(

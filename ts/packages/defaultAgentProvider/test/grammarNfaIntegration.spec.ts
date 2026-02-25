@@ -45,10 +45,7 @@ const __dirname = path.dirname(__filename);
 
 // Sequential execution: concurrent Claude CLI processes corrupt ~/.claude.json.
 // Results persist between runs; only previously-failed entries are re-run.
-const RESULTS_FILE = path.resolve(
-    __dirname,
-    "data/grammarNfaResults.json",
-);
+const RESULTS_FILE = path.resolve(__dirname, "data/grammarNfaResults.json");
 
 const PLAYER_SCHEMA_PATH = path.resolve(
     __dirname,
@@ -164,159 +161,177 @@ const generationResults: (GenerationResult | undefined)[] = new Array(
 // ── Test suite ─────────────────────────────────────────────────────────────────
 
 describe("Grammar NFA Integration (new explainer → new matcher)", () => {
-    beforeAll(async () => {
-        if (!schemaAvailable) {
-            return;
-        }
+    beforeAll(
+        async () => {
+            if (!schemaAvailable) {
+                return;
+            }
 
-        // Register built-in entity converters (ordinal, cardinal, etc.) so
-        // generated grammar rules using those types compile and match correctly.
-        registerBuiltInEntities();
+            // Register built-in entity converters (ordinal, cardinal, etc.) so
+            // generated grammar rules using those types compile and match correctly.
+            registerBuiltInEntities();
 
-        const total = testEntries.length;
-        const persistedResults = loadPersistedResults();
+            const total = testEntries.length;
+            const persistedResults = loadPersistedResults();
 
-        // Replay all persisted phrasesToAdd so cached rules match as they did when generated.
-        // populateCache adds phrases ephemerally; without replay, cached rules that depend on
-        // added phrases (e.g. "yo yo" in Greeting) will fail NFA match in the it() blocks.
-        for (const prev of persistedResults.values()) {
-            if (prev.appliedPhrasesToAdd) {
-                for (const { matcherName, phrase } of prev.appliedPhrasesToAdd) {
-                    globalPhraseSetRegistry.addPhrase(matcherName, phrase);
+            // Replay all persisted phrasesToAdd so cached rules match as they did when generated.
+            // populateCache adds phrases ephemerally; without replay, cached rules that depend on
+            // added phrases (e.g. "yo yo" in Greeting) will fail NFA match in the it() blocks.
+            for (const prev of persistedResults.values()) {
+                if (prev.appliedPhrasesToAdd) {
+                    for (const {
+                        matcherName,
+                        phrase,
+                    } of prev.appliedPhrasesToAdd) {
+                        globalPhraseSetRegistry.addPhrase(matcherName, phrase);
+                    }
                 }
             }
-        }
 
-        // Split entries into: already-passed (use cached result) vs. need-to-run.
-        // For cached-pass entries, do a quick NFA pre-check: if the rule no longer
-        // matches (e.g. phrasesToAdd weren't persisted in an older run), re-run it.
-        const toRun: Array<{ entry: TestEntry; index: number }> = [];
+            // Split entries into: already-passed (use cached result) vs. need-to-run.
+            // For cached-pass entries, do a quick NFA pre-check: if the rule no longer
+            // matches (e.g. phrasesToAdd weren't persisted in an older run), re-run it.
+            const toRun: Array<{ entry: TestEntry; index: number }> = [];
 
-        for (let i = 0; i < testEntries.length; i++) {
-            const entry = testEntries[i];
-            const prev = persistedResults.get(entryKey(entry));
-            if (prev?.status === "pass" && prev.generatedRule) {
-                let nfaStillMatches = false;
-                try {
-                    const g = loadGrammarRules("test", prev.generatedRule);
-                    const nfa = compileGrammarToNFA(g);
-                    nfaStillMatches =
-                        matchGrammarWithNFA(g, nfa, entry.request).length > 0;
-                } catch {
-                    nfaStillMatches = false;
-                }
-                if (nfaStillMatches) {
-                    generationResults[i] = {
-                        generatedRule: prev.generatedRule,
-                        rejectionReason: prev.rejectionReason,
-                        lastAttemptedRule: prev.lastAttemptedRule,
-                    };
+            for (let i = 0; i < testEntries.length; i++) {
+                const entry = testEntries[i];
+                const prev = persistedResults.get(entryKey(entry));
+                if (prev?.status === "pass" && prev.generatedRule) {
+                    let nfaStillMatches = false;
+                    try {
+                        const g = loadGrammarRules("test", prev.generatedRule);
+                        const nfa = compileGrammarToNFA(g);
+                        nfaStillMatches =
+                            matchGrammarWithNFA(g, nfa, entry.request).length >
+                            0;
+                    } catch {
+                        nfaStillMatches = false;
+                    }
+                    if (nfaStillMatches) {
+                        generationResults[i] = {
+                            generatedRule: prev.generatedRule,
+                            rejectionReason: prev.rejectionReason,
+                            lastAttemptedRule: prev.lastAttemptedRule,
+                        };
+                    } else {
+                        // Stale cache (phrases missing) — re-run to get fresh phrasesToAdd
+                        toRun.push({ entry, index: i });
+                    }
                 } else {
-                    // Stale cache (phrases missing) — re-run to get fresh phrasesToAdd
                     toRun.push({ entry, index: i });
                 }
-            } else {
-                toRun.push({ entry, index: i });
             }
-        }
 
-        const cachedPass = total - toRun.length;
-        process.stdout.write(
-            `\n─── Grammar NFA: ${total} entries │ ${cachedPass} cached-pass │ ${toRun.length} to run ───\n\n`,
-        );
+            const cachedPass = total - toRun.length;
+            process.stdout.write(
+                `\n─── Grammar NFA: ${total} entries │ ${cachedPass} cached-pass │ ${toRun.length} to run ───\n\n`,
+            );
 
-        let newPass = 0;
-        let newFail = 0;
+            let newPass = 0;
+            let newFail = 0;
 
-        for (let run = 0; run < toRun.length; run++) {
-            const { entry, index } = toRun[run];
-            const actionLabel = `${entry.actionName}(${JSON.stringify(entry.parameters)})`;
+            for (let run = 0; run < toRun.length; run++) {
+                const { entry, index } = toRun[run];
+                const actionLabel = `${entry.actionName}(${JSON.stringify(entry.parameters)})`;
 
-            const result = await populateCache({
-                request: entry.request,
-                schemaName: entry.schemaName,
-                action: {
+                const result = await populateCache({
+                    request: entry.request,
+                    schemaName: entry.schemaName,
+                    action: {
+                        actionName: entry.actionName,
+                        parameters: entry.parameters,
+                    },
+                    schemaPath: PLAYER_SCHEMA_PATH,
+                });
+
+                generationResults[index] = {
+                    generatedRule: result.generatedRule,
+                    rejectionReason: result.rejectionReason,
+                    lastAttemptedRule: result.lastAttemptedRule,
+                };
+
+                // Attempt NFA match here so we can record the true status.
+                // The it() blocks will re-run the same check and report via Jest assertions.
+                let nfaMatched = false;
+                if (result.generatedRule) {
+                    try {
+                        const g = loadGrammarRules(
+                            "test",
+                            result.generatedRule,
+                        );
+                        const nfa = compileGrammarToNFA(g);
+                        nfaMatched =
+                            matchGrammarWithNFA(g, nfa, entry.request).length >
+                            0;
+                    } catch {
+                        nfaMatched = false;
+                    }
+                }
+
+                const persisted: PersistedResult = {
+                    request: entry.request,
+                    schemaName: entry.schemaName,
                     actionName: entry.actionName,
                     parameters: entry.parameters,
-                },
-                schemaPath: PLAYER_SCHEMA_PATH,
-            });
+                    status:
+                        result.generatedRule && nfaMatched ? "pass" : "fail",
+                    runAt: new Date().toISOString(),
+                };
+                if (result.generatedRule)
+                    persisted.generatedRule = result.generatedRule;
+                if (result.rejectionReason)
+                    persisted.rejectionReason = result.rejectionReason;
+                if (result.lastAttemptedRule)
+                    persisted.lastAttemptedRule = result.lastAttemptedRule;
+                if (
+                    result.appliedPhrasesToAdd &&
+                    result.appliedPhrasesToAdd.length > 0
+                )
+                    persisted.appliedPhrasesToAdd = result.appliedPhrasesToAdd;
+                if (!result.generatedRule) {
+                    persisted.failReason = "rejected";
+                } else if (!nfaMatched) {
+                    persisted.failReason = "no-match";
+                }
+                persistedResults.set(entryKey(entry), persisted);
 
-            generationResults[index] = {
-                generatedRule: result.generatedRule,
-                rejectionReason: result.rejectionReason,
-                lastAttemptedRule: result.lastAttemptedRule,
-            };
-
-            // Attempt NFA match here so we can record the true status.
-            // The it() blocks will re-run the same check and report via Jest assertions.
-            let nfaMatched = false;
-            if (result.generatedRule) {
-                try {
-                    const g = loadGrammarRules("test", result.generatedRule);
-                    const nfa = compileGrammarToNFA(g);
-                    nfaMatched = matchGrammarWithNFA(g, nfa, entry.request).length > 0;
-                } catch {
-                    nfaMatched = false;
+                if (persisted.status === "pass") {
+                    newPass++;
+                    process.stdout.write(
+                        `[${run + 1}/${toRun.length}] ✓  ${entry.request}\n` +
+                            `           → ${actionLabel}\n`,
+                    );
+                } else if (persisted.failReason === "rejected") {
+                    newFail++;
+                    const ruleInfo = result.lastAttemptedRule
+                        ? `\n  rule   : ${result.lastAttemptedRule.trimEnd()}`
+                        : "";
+                    process.stdout.write(
+                        `[${run + 1}/${toRun.length}] ✗  REJECT  ${entry.request}\n` +
+                            `  action : ${actionLabel}\n` +
+                            `  reason : ${result.rejectionReason ?? "no result"}` +
+                            ruleInfo +
+                            `\n`,
+                    );
+                } else {
+                    newFail++;
+                    process.stdout.write(
+                        `[${run + 1}/${toRun.length}] ✗  NO-MATCH  ${entry.request}\n` +
+                            `  action : ${actionLabel}\n` +
+                            `  rule   : ${result.generatedRule?.trimEnd()}\n`,
+                    );
                 }
             }
 
-            const persisted: PersistedResult = {
-                request: entry.request,
-                schemaName: entry.schemaName,
-                actionName: entry.actionName,
-                parameters: entry.parameters,
-                status: result.generatedRule && nfaMatched ? "pass" : "fail",
-                runAt: new Date().toISOString(),
-            };
-            if (result.generatedRule) persisted.generatedRule = result.generatedRule;
-            if (result.rejectionReason) persisted.rejectionReason = result.rejectionReason;
-            if (result.lastAttemptedRule)
-                persisted.lastAttemptedRule = result.lastAttemptedRule;
-            if (result.appliedPhrasesToAdd && result.appliedPhrasesToAdd.length > 0)
-                persisted.appliedPhrasesToAdd = result.appliedPhrasesToAdd;
-            if (!result.generatedRule) {
-                persisted.failReason = "rejected";
-            } else if (!nfaMatched) {
-                persisted.failReason = "no-match";
-            }
-            persistedResults.set(entryKey(entry), persisted);
+            savePersistedResults(persistedResults);
 
-            if (persisted.status === "pass") {
-                newPass++;
-                process.stdout.write(
-                    `[${run + 1}/${toRun.length}] ✓  ${entry.request}\n` +
-                        `           → ${actionLabel}\n`,
-                );
-            } else if (persisted.failReason === "rejected") {
-                newFail++;
-                const ruleInfo = result.lastAttemptedRule
-                    ? `\n  rule   : ${result.lastAttemptedRule.trimEnd()}`
-                    : "";
-                process.stdout.write(
-                    `[${run + 1}/${toRun.length}] ✗  REJECT  ${entry.request}\n` +
-                        `  action : ${actionLabel}\n` +
-                        `  reason : ${result.rejectionReason ?? "no result"}` +
-                        ruleInfo +
-                        `\n`,
-                );
-            } else {
-                newFail++;
-                process.stdout.write(
-                    `[${run + 1}/${toRun.length}] ✗  NO-MATCH  ${entry.request}\n` +
-                        `  action : ${actionLabel}\n` +
-                        `  rule   : ${result.generatedRule?.trimEnd()}\n`,
-                );
-            }
-        }
-
-        savePersistedResults(persistedResults);
-
-        const totalPass = cachedPass + newPass;
-        process.stdout.write(
-            `\n─── Done: ${totalPass}/${total} pass (${cachedPass} cached + ${newPass} new) │ ${newFail} failed ───\n\n`,
-        );
-    }, 40 * 60 * 1000); // 40-minute timeout for the full benchmark (~535 entries)
+            const totalPass = cachedPass + newPass;
+            process.stdout.write(
+                `\n─── Done: ${totalPass}/${total} pass (${cachedPass} cached + ${newPass} new) │ ${newFail} failed ───\n\n`,
+            );
+        },
+        40 * 60 * 1000,
+    ); // 40-minute timeout for the full benchmark (~535 entries)
 
     for (let i = 0; i < testEntries.length; i++) {
         const entry = testEntries[i];

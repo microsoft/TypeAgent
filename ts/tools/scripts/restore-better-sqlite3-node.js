@@ -49,7 +49,9 @@ for (const entry of entries) {
     const dst = path.join(pkgDir, "build", "Release", "better_sqlite3.node");
 
     if (!fs.existsSync(src)) {
-        console.warn(`⚠️  No prebuild-node binary for ${entry} — skipping restore`);
+        console.warn(
+            `⚠️  No prebuild-node binary for ${entry} — skipping restore`,
+        );
         continue;
     }
 
@@ -60,7 +62,9 @@ for (const entry of entries) {
     }
 
     try {
-        fs.mkdirSync(path.join(pkgDir, "build", "Release"), { recursive: true });
+        fs.mkdirSync(path.join(pkgDir, "build", "Release"), {
+            recursive: true,
+        });
         fs.copyFileSync(src, dst);
         console.log(`✅ ${entry}: restored Node.js binary → build/Release/`);
     } catch (e) {
