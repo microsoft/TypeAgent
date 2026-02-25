@@ -314,7 +314,7 @@ function getClaudeOptions(
         canUseTool: async () => ({ behavior: "allow" as const }),
         allowedTools,
         cwd: getRepoRoot(),
-        settingSources: ["project"],
+        settingSources: [],
         maxTurns: 20,
         maxThinkingTokens: 10000,
         systemPrompt: {
