@@ -18,9 +18,25 @@
  * request additions via the phrasesToAdd field in its output.
  */
 
+const TRAILING_PUNCT = new Set([
+    "'",
+    '"',
+    ".",
+    ",",
+    "!",
+    "?",
+    ";",
+    ":",
+]);
+
 /** Inline normalization — avoids circular import through nfaMatcher → nfaInterpreter */
 function normalizePhrase(token: string): string {
-    return token.toLowerCase().replace(/['".,!?;:]+$/g, "");
+    const lower = token.toLowerCase();
+    let end = lower.length;
+    while (end > 0 && TRAILING_PUNCT.has(lower[end - 1])) {
+        end--;
+    }
+    return end === lower.length ? lower : lower.slice(0, end);
 }
 
 export interface PhraseSetMatcher {
