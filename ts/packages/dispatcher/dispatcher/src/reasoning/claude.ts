@@ -136,10 +136,16 @@ function formatParams(params: Record<string, any> | undefined): string {
         .map(([k, v]) => {
             let s: string;
             if (typeof v === "string") {
-                s = v.length > MAX_VALUE_LEN ? `"${v.slice(0, MAX_VALUE_LEN)}…"` : `"${v}"`;
+                s =
+                    v.length > MAX_VALUE_LEN
+                        ? `"${v.slice(0, MAX_VALUE_LEN)}…"`
+                        : `"${v}"`;
             } else if (typeof v === "object") {
                 const j = JSON.stringify(v);
-                s = j.length > MAX_VALUE_LEN ? `${j.slice(0, MAX_VALUE_LEN)}…` : j;
+                s =
+                    j.length > MAX_VALUE_LEN
+                        ? `${j.slice(0, MAX_VALUE_LEN)}…`
+                        : j;
             } else {
                 s = String(v);
             }
@@ -269,6 +275,21 @@ function getClaudeOptions(
             const actionJson = args.action;
             const validationResult = validator.validate(actionJson);
             if (!validationResult.success) {
+                // For unknown action names, include the schema text so the model
+                // can self-correct without an extra discover_actions round trip.
+                if (
+                    validationResult.message.startsWith("Unknown action name:")
+                ) {
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `${validationResult.message}\nAvailable actions for schema '${args.schemaName}':\n${validator.getSchemaText()}`,
+                            },
+                        ],
+                        isError: true,
+                    };
+                }
                 throw validationResult.message;
             }
 
@@ -436,7 +457,10 @@ async function executeReasoningWithoutPlanning(
                         context.actionIO.appendDisplay(
                             {
                                 type: "markdown",
-                                content: formatToolResultDisplay(content, isError),
+                                content: formatToolResultDisplay(
+                                    content,
+                                    isError,
+                                ),
                                 kind: isError ? "warning" : "info",
                             },
                             "block",
@@ -567,7 +591,10 @@ async function executeReasoningWithTracing(
                             context.actionIO.appendDisplay(
                                 {
                                     type: "markdown",
-                                    content: formatToolResultDisplay(content, isError),
+                                    content: formatToolResultDisplay(
+                                        content,
+                                        isError,
+                                    ),
                                     kind: isError ? "warning" : "info",
                                 },
                                 "block",
