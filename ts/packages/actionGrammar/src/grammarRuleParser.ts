@@ -49,7 +49,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <VariableSpecifier> ::= <VarName> (":" (<TypeName> | <RuleName>))?
  *
  *   <RuleRefExpr> ::= <RuleName>
- *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" )      // TODO: support for + and *?
+ *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" | ")*" | ")+" )
  *
  *   <Value> = BooleanValue | NumberValue | StringValue | ObjectValue | ArrayValue | VarReference
  *   <ArrayValue> = "[" (<Value> ("," <Value>)*)? "]"
@@ -448,6 +448,12 @@ class GrammarRuleParser {
                 if (this.isAt(")*")) {
                     node.optional = true;
                     node.repeat = true;
+                    this.skipWhitespace(2);
+                    continue;
+                }
+                if (this.isAt(")+")) {
+                    node.repeat = true;
+                    // optional stays false — must match at least once
                     this.skipWhitespace(2);
                     continue;
                 }

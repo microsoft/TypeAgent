@@ -145,6 +145,7 @@ FILLER WORD GUIDANCE — hesitation sounds and mid-sentence filler ALL belong in
 - Verbal filler phrases: "you know", "i mean", "kind of", "sort of", "i guess" → FillerWord
 - Use (<FillerWord>)* (Kleene star, zero-or-more) when multiple fillers can appear in sequence.
   Do NOT chain (<FillerWord>)? (<FillerWord>)? — use * instead.
+- Use (...)+ (Kleene plus, one-or-more) when at least one occurrence is required.
 - Do NOT define custom rules (e.g. <ConversationalFiller>) for hesitations; use <FillerWord>.
 
 ACKNOWLEDGEMENT/GREETING guidance:
@@ -184,7 +185,7 @@ OUTPUT FORMAT (TypeScript interfaces):
 
 interface RuleRHS {
     matchPattern: string;  // The grammar pattern like "(<Polite>)? play $(track:wildcard) by $(artist:wildcard)"
-                           // Quantifiers: (...)? = zero-or-one, (...)* = zero-or-more (Kleene star)
+                           // Quantifiers: (...)? = zero-or-one, (...)* = zero-or-more (Kleene star), (...)+ = one-or-more (Kleene plus)
     actionParameters: Array<{
         parameterName: string;
         parameterValue: string; // e.g., "track" or fixed value "kitchen"; arrays: "[artist]"

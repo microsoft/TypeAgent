@@ -1062,7 +1062,7 @@ function compileRulesPart(
         builder.addEpsilonTransition(fromState, toState);
     }
     if (part.repeat) {
-        // Kleene star: loop back from nestedExit to nestedEntry for another iteration
+        // Kleene star )* or Kleene plus )+: loop back from nestedExit to nestedEntry for another iteration
         builder.addEpsilonTransition(nestedExit, nestedEntry);
     }
     builder.addEpsilonTransition(nestedExit, toState);
@@ -1247,7 +1247,7 @@ function compileRulesPartWithSlots(
         builder.addEpsilonTransition(fromState, toState);
     }
     if (part.repeat) {
-        // Kleene star: loop back from nestedExit to nestedEntry for another iteration
+        // Kleene star )* or Kleene plus )+: loop back from nestedExit to nestedEntry for another iteration
         builder.addEpsilonTransition(nestedExit, nestedEntry);
     }
 
