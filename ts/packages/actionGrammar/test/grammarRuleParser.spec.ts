@@ -176,6 +176,59 @@ describe("Grammar Rule Parser", () => {
             });
         });
 
+        it("Kleene star group expressions ()*", () => {
+            const grammar = "<rule> = (um | uh)* help;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "rules",
+                rules: [
+                    {
+                        expressions: [{ type: "string", value: ["um"] }],
+                        value: undefined,
+                    },
+                    {
+                        expressions: [{ type: "string", value: ["uh"] }],
+                        value: undefined,
+                    },
+                ],
+                optional: true,
+                repeat: true,
+            });
+        });
+
+        it("Kleene plus group expressions )+", () => {
+            const grammar = "<rule> = (word)+ end;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            // repeat: true, optional absent (must match at least once)
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "rules",
+                rules: [
+                    {
+                        expressions: [{ type: "string", value: ["word"] }],
+                        value: undefined,
+                    },
+                ],
+                repeat: true,
+            });
+            // 'optional' must NOT be set
+            expect(
+                (result[0].rules[0].expressions[0] as any).optional,
+            ).toBeUndefined();
+        });
+
+        it("Kleene plus with alternatives )+", () => {
+            const grammar = "<rule> = (yes | no)+ done;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            const group = result[0].rules[0].expressions[0] as any;
+            expect(group.type).toBe("rules");
+            expect(group.repeat).toBe(true);
+            expect(group.optional).toBeUndefined();
+            expect(group.rules).toHaveLength(2);
+        });
+
         it("complex expressions with multiple components", () => {
             const grammar = "<rule> = $(action) the <object> $(adverb:string);";
             const result = testParamGrammarRules("test.agr", grammar);

@@ -125,6 +125,36 @@ function buildPromptWithContext(
 }
 
 /**
+ * Render tool input parameters as a compact inline string.
+ * Omits undefined/null values; truncates long strings.
+ */
+function formatParams(params: Record<string, any> | undefined): string {
+    if (!params || Object.keys(params).length === 0) return "";
+    const MAX_VALUE_LEN = 60;
+    const pairs = Object.entries(params)
+        .filter(([, v]) => v !== undefined && v !== null)
+        .map(([k, v]) => {
+            let s: string;
+            if (typeof v === "string") {
+                s =
+                    v.length > MAX_VALUE_LEN
+                        ? `"${v.slice(0, MAX_VALUE_LEN)}…"`
+                        : `"${v}"`;
+            } else if (typeof v === "object") {
+                const j = JSON.stringify(v);
+                s =
+                    j.length > MAX_VALUE_LEN
+                        ? `${j.slice(0, MAX_VALUE_LEN)}…`
+                        : j;
+            } else {
+                s = String(v);
+            }
+            return `${k}: ${s}`;
+        });
+    return pairs.length > 0 ? ` \`{ ${pairs.join(", ")} }\`` : "";
+}
+
+/**
  * Format a tool call as a persistent display line.
  */
 function formatToolCallDisplay(toolName: string, input: any): string {
@@ -133,11 +163,28 @@ function formatToolCallDisplay(toolName: string, input: any): string {
         return `**Tool:** discover_actions — schema: \`${input.schemaName}\``;
     } else if (toolName === `${mcpPrefix}execute_action`) {
         const actionName = input.action?.actionName ?? "unknown";
-        return `**Tool:** execute_action — \`${input.schemaName}.${actionName}\``;
+        const params = formatParams(input.action?.parameters);
+        return `**Tool:** execute_action — \`${input.schemaName}.${actionName}\`${params}`;
     } else if (toolName.startsWith(mcpPrefix)) {
-        return `**Tool:** ${toolName.slice(mcpPrefix.length)}`;
+        const params = formatParams(input);
+        return `**Tool:** ${toolName.slice(mcpPrefix.length)}${params}`;
     }
-    return `**Tool:** ${toolName}`;
+    // Built-in Claude Code tools — show key input field(s)
+    const params = formatParams(input);
+    return `**Tool:** ${toolName}${params}`;
+}
+
+/**
+ * Format a tool result for display. Truncates long results and strips noise.
+ */
+function formatToolResultDisplay(content: string, isError: boolean): string {
+    const MAX_LEN = 120;
+    let preview = content.trim().replace(/\n+/g, " ");
+    if (preview.length > MAX_LEN) {
+        preview = preview.slice(0, MAX_LEN) + "…";
+    }
+    const label = isError ? "**Error:**" : "**↳**";
+    return `${label} \`${preview || "(empty)"}\``;
 }
 
 /**
@@ -228,6 +275,21 @@ function getClaudeOptions(
             const actionJson = args.action;
             const validationResult = validator.validate(actionJson);
             if (!validationResult.success) {
+                // For unknown action names, include the schema text so the model
+                // can self-correct without an extra discover_actions round trip.
+                if (
+                    validationResult.message.startsWith("Unknown action name:")
+                ) {
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `${validationResult.message}\nAvailable actions for schema '${args.schemaName}':\n${validator.getSchemaText()}`,
+                            },
+                        ],
+                        isError: true,
+                    };
+                }
                 throw validationResult.message;
             }
 
@@ -273,7 +335,7 @@ function getClaudeOptions(
         canUseTool: async () => ({ behavior: "allow" as const }),
         allowedTools,
         cwd: getRepoRoot(),
-        settingSources: ["project"],
+        settingSources: [],
         maxTurns: 20,
         maxThinkingTokens: 10000,
         systemPrompt: {
@@ -332,6 +394,7 @@ async function executeReasoningWithoutPlanning(
     });
 
     let finalResult: string | undefined = undefined;
+
     // Process streaming response
     for await (const message of queryInstance) {
         debug(message);
@@ -370,6 +433,35 @@ async function executeReasoningWithoutPlanning(
                             {
                                 type: "html",
                                 content: formatThinkingDisplay(thinkingContent),
+                            },
+                            "block",
+                        );
+                    }
+                }
+            }
+        } else if (message.type === "user") {
+            // Tool results come back as user messages with tool_result blocks
+            const msg = (message as any).message;
+            if (msg?.content) {
+                for (const block of msg.content) {
+                    if (block.type === "tool_result") {
+                        const isError = block.is_error || false;
+                        let content = "";
+                        if (Array.isArray(block.content)) {
+                            for (const cb of block.content) {
+                                if (cb.type === "text") content += cb.text;
+                            }
+                        } else if (typeof block.content === "string") {
+                            content = block.content;
+                        }
+                        context.actionIO.appendDisplay(
+                            {
+                                type: "markdown",
+                                content: formatToolResultDisplay(
+                                    content,
+                                    isError,
+                                ),
+                                kind: isError ? "warning" : "info",
                             },
                             "block",
                         );
@@ -475,6 +567,35 @@ async function executeReasoningWithTracing(
                                     type: "html",
                                     content:
                                         formatThinkingDisplay(thinkingContent),
+                                },
+                                "block",
+                            );
+                        }
+                    }
+                }
+            } else if (message.type === "user") {
+                // Tool results come back as user messages with tool_result blocks
+                const msg = (message as any).message;
+                if (msg?.content) {
+                    for (const block of msg.content) {
+                        if (block.type === "tool_result") {
+                            const isError = block.is_error || false;
+                            let content = "";
+                            if (Array.isArray(block.content)) {
+                                for (const cb of block.content) {
+                                    if (cb.type === "text") content += cb.text;
+                                }
+                            } else if (typeof block.content === "string") {
+                                content = block.content;
+                            }
+                            context.actionIO.appendDisplay(
+                                {
+                                    type: "markdown",
+                                    content: formatToolResultDisplay(
+                                        content,
+                                        isError,
+                                    ),
+                                    kind: isError ? "warning" : "info",
                                 },
                                 "block",
                             );

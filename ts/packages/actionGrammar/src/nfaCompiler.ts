@@ -9,6 +9,7 @@ import {
     VarStringPart,
     VarNumberPart,
     RulesPart,
+    PhraseSetPart,
 } from "./grammarTypes.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
@@ -16,6 +17,7 @@ import {
     compileValueExpression,
     ValueExpression,
 } from "./environment.js";
+import { normalizeToken } from "./nfaMatcher.js";
 
 /**
  * Context for compiling a rule, including slot information
@@ -314,7 +316,8 @@ function collectVariables(rule: GrammarRule): string[] {
                 // Don't recurse into nested rule's inner variables - they use their own slots
                 break;
             case "string":
-                // No variables in string parts
+            case "phraseSet":
+                // No variables in string or phraseSet parts
                 break;
         }
     }
@@ -370,7 +373,8 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
                 }
                 break;
             case "string":
-                // StringPart has no variables
+            case "phraseSet":
+                // No variables
                 break;
         }
     }
@@ -615,6 +619,9 @@ function compilePart(
                 overrideVariableName,
             );
 
+        case "phraseSet":
+            return compilePhraseSetPart(builder, part, fromState, toState);
+
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
     }
@@ -664,9 +671,33 @@ function compilePartWithSlots(
                 context,
             );
 
+        case "phraseSet":
+            return compilePhraseSetPart(builder, part, fromState, toState);
+
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
     }
+}
+
+/**
+ * Compile a phraseSet part.
+ *
+ * Emits a single "phraseSet" NFA transition from fromState to toState.
+ * The NFA interpreter resolves the actual phrases at match time, generating
+ * one thread per matching phrase — identical to how entity converters work
+ * with skipCount for multi-token spans.
+ *
+ * PhraseSetParts are always non-optional at this level; optionality is handled
+ * by the enclosing RulesPart (e.g., from "(<Polite>)?").
+ */
+function compilePhraseSetPart(
+    builder: NFABuilder,
+    part: PhraseSetPart,
+    fromState: number,
+    toState: number,
+): number {
+    builder.addPhraseSetTransition(fromState, toState, part.matcherName);
+    return toState;
 }
 
 /**
@@ -678,24 +709,30 @@ function compileStringPart(
     fromState: number,
     toState: number,
 ): number {
-    if (part.value.length === 0) {
+    // Normalize grammar tokens (lowercase + strip trailing punctuation) so they
+    // compare correctly against the normalized input tokens from tokenizeRequest().
+    const normalized = part.value
+        .map(normalizeToken)
+        .filter((t) => t.length > 0);
+
+    if (normalized.length === 0) {
         // Empty string - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
         return toState;
     }
 
     // For single token, direct transition
-    if (part.value.length === 1) {
-        builder.addTokenTransition(fromState, toState, part.value);
+    if (normalized.length === 1) {
+        builder.addTokenTransition(fromState, toState, normalized);
         return toState;
     }
 
     // For multiple tokens, create a sequence chain
     // Each token must match in order: state1 --token1--> state2 --token2--> ... --> toState
     let currentState = fromState;
-    for (let i = 0; i < part.value.length; i++) {
-        const token = part.value[i];
-        const isLast = i === part.value.length - 1;
+    for (let i = 0; i < normalized.length; i++) {
+        const token = normalized[i];
+        const isLast = i === normalized.length - 1;
         const nextState = isLast ? toState : builder.createState(false);
         builder.addTokenTransition(currentState, nextState, [token]);
         currentState = nextState;
@@ -1023,8 +1060,12 @@ function compileRulesPart(
 
     // Connect exit
     if (part.optional) {
-        // Optional: can skip the entire nested section
+        // Optional (and Kleene star): can skip the entire nested section
         builder.addEpsilonTransition(fromState, toState);
+    }
+    if (part.repeat) {
+        // Kleene star )* or Kleene plus )+: loop back from nestedExit to nestedEntry for another iteration
+        builder.addEpsilonTransition(nestedExit, nestedEntry);
     }
     builder.addEpsilonTransition(nestedExit, toState);
 
@@ -1204,8 +1245,12 @@ function compileRulesPartWithSlots(
 
     // Connect exit
     if (part.optional) {
-        // Optional: can skip the entire nested section
+        // Optional (and Kleene star): can skip the entire nested section
         builder.addEpsilonTransition(fromState, toState);
+    }
+    if (part.repeat) {
+        // Kleene star )* or Kleene plus )+: loop back from nestedExit to nestedEntry for another iteration
+        builder.addEpsilonTransition(nestedExit, nestedEntry);
     }
 
     // If no parent slot index (nested rule doesn't write to parent), we need to
