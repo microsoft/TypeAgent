@@ -18,16 +18,7 @@
  * request additions via the phrasesToAdd field in its output.
  */
 
-const TRAILING_PUNCT = new Set([
-    "'",
-    '"',
-    ".",
-    ",",
-    "!",
-    "?",
-    ";",
-    ":",
-]);
+const TRAILING_PUNCT = new Set(["'", '"', ".", ",", "!", "?", ";", ":"]);
 
 /** Inline normalization — avoids circular import through nfaMatcher → nfaInterpreter */
 function normalizePhrase(token: string): string {
