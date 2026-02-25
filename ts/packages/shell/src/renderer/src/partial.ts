@@ -122,6 +122,16 @@ export class PartialCompletion {
             return;
         }
 
+        // Empty input: hide any open menu and stop — don't show completions on
+        // an empty box (e.g. after backspacing all the way). This check must
+        // come before reuseSearchMenu() because reuseSearchMenu("") would
+        // match current="" and show all items for the start-state request.
+        const trimmed = input.trimStart();
+        if (trimmed.length === 0) {
+            this.cancelCompletionMenu();
+            return;
+        }
+
         // Request completions: only request at token boundaries.
         // Between boundaries, filter the existing menu locally.
         if (this.reuseSearchMenu(input)) {
@@ -132,10 +142,6 @@ export class PartialCompletion {
         // 1. Trailing space → complete tokens available, request with them
         // 2. Non-empty with no spaces → first typing, request start state (tokens=[])
         // 3. Otherwise (mid-word after spaces, no menu) → wait for next space
-        const trimmed = input.trimStart();
-        if (trimmed.length === 0) {
-            return; // Empty input — defer until user starts typing
-        }
         const hasTrailingSpace = /\s$/.test(input);
         const hasSpaces = /\s/.test(trimmed);
 
