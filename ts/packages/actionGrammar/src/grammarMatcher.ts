@@ -59,6 +59,7 @@ type ParentMatchState = {
     variable: string | undefined;
     valueIds: ValueIdNode | undefined | null; // null means we don't need any value
     parent: ParentMatchState | undefined;
+    repeatPartIndex?: number | undefined; // defined for ()* / )+ — holds the part index to loop back to
 };
 type MatchState = {
     // Current context
@@ -74,6 +75,8 @@ type MatchState = {
     parent?: ParentMatchState | undefined;
 
     nestedLevel: number; // for debugging
+
+    inRepeat?: boolean | undefined; // true when re-entering a repeat group after a successful match
 
     index: number;
     pendingWildcard?:
@@ -465,7 +468,11 @@ function finalizeMatch(
     results.push(matchResult);
 }
 
-function finalizeNestedRule(state: MatchState, partial: boolean = false) {
+function finalizeNestedRule(
+    state: MatchState,
+    pending?: MatchState[],
+    partial: boolean = false,
+) {
     const parent = state.parent;
     if (parent !== undefined) {
         debugMatch(state, `finished nested`);
@@ -512,6 +519,18 @@ function finalizeNestedRule(state: MatchState, partial: boolean = false) {
         state.name = parent.name;
         state.parts = parent.parts;
         state.partIndex = parent.partIndex;
+
+        // For repeat parts ()*  or )+: after each successful match, queue a state
+        // that tries to match the same group again.  inRepeat suppresses the
+        // optional-skip push so we don't generate duplicate "done" states.
+        if (parent.repeatPartIndex !== undefined && pending !== undefined) {
+            pending.push({
+                ...state,
+                partIndex: parent.repeatPartIndex,
+                inRepeat: true,
+            });
+        }
+
         return true;
     }
 
@@ -706,7 +725,7 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
-            if (!finalizeNestedRule(state)) {
+            if (!finalizeNestedRule(state, pending)) {
                 // Finish matching this state.
                 return true;
             }
@@ -719,8 +738,9 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
             `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
         );
 
-        if (part.optional) {
-            // queue up skipping optional
+        if (part.optional && !state.inRepeat) {
+            // queue up skipping optional (suppressed when re-entering a repeat
+            // group to avoid duplicating already-queued "done" states)
             const newState = { ...state, partIndex: state.partIndex + 1 };
             if (part.variable) {
                 addValue(newState, part.variable, undefined);
@@ -759,6 +779,7 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
                     partIndex: state.partIndex + 1,
                     valueIds: state.valueIds,
                     parent: state.parent,
+                    repeatPartIndex: part.repeat ? state.partIndex : undefined,
                 };
 
                 // The nested rule needs to track values if the current rule is tracking value AND
@@ -777,6 +798,7 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
                 state.valueIds = requireValue ? undefined : null;
                 state.parent = parent;
                 state.nestedLevel++;
+                state.inRepeat = undefined; // entering nested rules, clear repeat flag
 
                 // queue up the other rules (backwards to search in the original order)
                 for (let i = rules.length - 1; i > 0; i--) {
@@ -832,7 +854,7 @@ function getGrammarCompletionProperty(
     }
     const wildcardPropertyNames: string[] = [];
 
-    while (finalizeNestedRule(temp, true)) {}
+    while (finalizeNestedRule(temp, undefined, true)) {}
     const match = createValue(
         temp.value,
         temp.valueIds,
