@@ -371,9 +371,9 @@ describe("Grammar Matcher", () => {
         it("()* - two matches", () => {
             const g = `<Start> = hello (world)* -> true;`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(testMatchGrammar(grammar, "hello world world")).toStrictEqual(
-                [true],
-            );
+            expect(
+                testMatchGrammar(grammar, "hello world world"),
+            ).toStrictEqual([true]);
         });
         it("()+ - zero matches not accepted", () => {
             const g = `<Start> = hello (world)+ -> true;`;
@@ -390,9 +390,9 @@ describe("Grammar Matcher", () => {
         it("()+ - two matches", () => {
             const g = `<Start> = hello (world)+ -> true;`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(testMatchGrammar(grammar, "hello world world")).toStrictEqual(
-                [true],
-            );
+            expect(
+                testMatchGrammar(grammar, "hello world world"),
+            ).toStrictEqual([true]);
         });
         it("()* - alternates in group", () => {
             const g = `<Start> = hello (world | earth)* -> true;`;
