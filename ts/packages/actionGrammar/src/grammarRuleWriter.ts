@@ -186,12 +186,20 @@ function writeExpression(
             case "ruleReference":
                 result.write(`<${expr.name}>`);
                 break;
-            case "rules":
+            case "rules": {
                 const rules = expr.rules;
                 result.write("(");
                 writeRules(result, rules, indent);
-                result.write(expr.optional ? ")?" : ")");
+                const suffix = expr.repeat
+                    ? expr.optional
+                        ? ")*"
+                        : ")+"
+                    : expr.optional
+                      ? ")?"
+                      : ")";
+                result.write(suffix);
                 break;
+            }
             case "variable":
                 result.write("$(");
                 result.write(expr.name);
