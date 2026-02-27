@@ -32,6 +32,8 @@ export async function getBoardSchema(
         );
         return cachedSchema;
     }
+
+    await browserControl.awaitPageLoad(1000);
     const htmlFragments = await browser.getHtmlFragments();
     debug(`Found ${htmlFragments.length} HTML fragments on the page ${url}.`);
     debug(htmlFragments);
@@ -74,7 +76,7 @@ export async function getBoardSchema(
         }
     }
 
-    /*    
+    /*
     const filteredFragments = await browser.getFilteredHtmlFragments(
       candidateFragments,
     );

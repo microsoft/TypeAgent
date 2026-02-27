@@ -155,8 +155,6 @@ import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
 
-// Knowledge extraction progress tracking - types now imported from knowledgeCardRenderer.mjs
-
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
 const MAX_RETRY_CYCLES = 2;
@@ -178,7 +176,6 @@ setInterval(
     5 * 60 * 1000,
 ); // Clean up every 5 minutes
 
-// getDynamicDisplay implementation for browser agent
 async function getDynamicDisplayImpl(
     type: DisplayType,
     dynamicDisplayId: string,
@@ -485,6 +482,7 @@ async function updateBrowserContext(
                 context.agentContext.browserConnector = new BrowserConnector(
                     context.agentContext.agentWebSocketServer,
                     browserControls,
+                    context.agentContext.preferredClientType,
                 );
             }
         }
@@ -557,6 +555,17 @@ async function processBrowserAgentMessage(
                     true,
                     `Initializing ${targetTranslator}`,
                 );
+
+                const notificationId = `crossword-${Date.now()}`;
+                context.notify(
+                    AppAgentEvent.Inline,
+                    {
+                        type: "text",
+                        content: `Loading the crossword agent to get it ready for interaction...`,
+                    },
+                    notificationId,
+                );
+
                 try {
                     context.agentContext.crossWordState =
                         await getBoardSchema(context);
@@ -570,6 +579,10 @@ async function processBrowserAgentMessage(
                         false,
                         `Failed to initialize ${targetTranslator}`,
                     );
+
+                    debug(
+                        `Failed to initialize ${targetTranslator}. Details ${e}`,
+                    );
                 }
 
                 if (context.agentContext.crossWordState) {
@@ -577,14 +590,23 @@ async function processBrowserAgentMessage(
                         context.agentContext.crossWordState.across?.length || 0;
                     const downClues =
                         context.agentContext.crossWordState.down?.length || 0;
+
                     context.notify(
                         AppAgentEvent.Inline,
-                        `Crossword page is ready for interaction with ${acrossClues} across and ${downClues} down clues.`,
+                        {
+                            type: "text",
+                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Fill in the answer for 2 down."`,
+                        },
+                        notificationId,
                     );
                 } else {
                     context.notify(
                         AppAgentEvent.Inline,
-                        "Failed to extract crossword schema - crossword board initialization failed.",
+                        {
+                            type: "text",
+                            content: `There was an error when initializing the crossword. Try re-loading the page.`,
+                        },
+                        notificationId,
                     );
                 }
             }
@@ -1763,7 +1785,7 @@ async function executeBrowserAction(
     const connector = context.sessionContext.agentContext.browserConnector;
     if (connector) {
         try {
-            context.actionIO.setDisplay("Running remote action.");
+            // context.actionIO.setDisplay("Running remote action.");
 
             let schemaName = "browser";
             if (action.schemaName === "browser.crossword") {

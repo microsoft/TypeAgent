@@ -43,7 +43,7 @@ function getSuffixPromptSection() {
     suffixSection.push({
         type: "text",
         text: `
-The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:
 `,
     });
     return suffixSection;
@@ -94,7 +94,7 @@ function getScreenshotPromptSection(
                 text: `Here is the text content of the page
             '''
             ${textFragments}
-            '''            
+            '''
             `,
             });
         }
@@ -228,14 +228,14 @@ export class CrosswordPageTranslator<T extends object> {
                 type: "text",
                 text: `
             Use the layout information provided to generate a "${this.schemaName}" response using the typescript schema below.Note that you must include the complete response.
-            This MUST include all the clues in the crossword. 
-            
+            This MUST include all the clues in the crossword.
+
             '''
             ${this.schema}
             '''
-            
+
             The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined. Look carefuly at the
-            schema definition and make sure no extra properties that are not part of the target type are returned:          
+            schema definition and make sure no extra properties that are not part of the target type are returned:
         `,
             },
         ];
@@ -254,8 +254,8 @@ export class CrosswordPageTranslator<T extends object> {
             {
                 type: "text",
                 text: `
-            Here is the existing "Crossword" data generated from previous interactions. 
-            
+            Here is the existing "Crossword" data generated from previous interactions.
+
             '''
             ${JSON.stringify(partialData, undefined, 2)}
             '''
@@ -265,14 +265,14 @@ export class CrosswordPageTranslator<T extends object> {
                 type: "text",
                 text: `
             Use the layout information provided to generate updated "Crossword" response by adding CSS Selector information. Use the crossword clue information
-            already identified above to locate the HTML elements that should be used in CSS Selectors. Here is the Typescript Schema for Crossword elements" 
-            
+            already identified above to locate the HTML elements that should be used in CSS Selectors. Here is the Typescript Schema for Crossword elements"
+
             '''
             ${this.schema}
             '''
-            
+
             The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined. Look carefuly at the
-            schema definition and make sure no extra properties that are not part of the target type are returned:          
+            schema definition and make sure no extra properties that are not part of the target type are returned:
         `,
             },
         ];
@@ -289,14 +289,14 @@ export class CrosswordPageTranslator<T extends object> {
                 type: "text",
                 text: `
             Use the layout information provided to generate a "${this.schemaName}" response using the typescript schema below.Note that you must include the complete response.
-            This MUST include all the clues in the crossword. 
-            
+            This MUST include all the clues in the crossword.
+
             '''
             ${this.schema}
             '''
-            
+
             The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined. Look carefuly at the
-            schema definition and make sure no extra properties that are not part of the target type are returned:          
+            schema definition and make sure no extra properties that are not part of the target type are returned:
         `,
             },
         ];
@@ -314,12 +314,12 @@ export class CrosswordPageTranslator<T extends object> {
                 type: "text",
                 text: `
         Use the layout information provided to generate a "CrosswordPresence" response using the typescript schema below:
-        
+
         '''
         ${this.presenceSchema}
         '''
-        
-        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:            
+
+        The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:
         `,
             },
         ];
@@ -330,7 +330,7 @@ export class CrosswordPageTranslator<T extends object> {
         const promptSections =
             this.getCluesTextWithSelectorsPromptSections(fragments);
 
-        // overtride default create prompt
+        // override default create prompt
         this.translator.createRequestPrompt = (input: string) => {
             return "";
         };
@@ -347,7 +347,7 @@ export class CrosswordPageTranslator<T extends object> {
     async getCluesText(fragments?: HtmlFragments[]) {
         const promptSections = this.getCluesTextOnlyPromptSections(fragments);
 
-        // overtride default create prompt
+        // override default create prompt
         this.translator.createRequestPrompt = (input: string) => {
             return "";
         };
@@ -370,7 +370,7 @@ export class CrosswordPageTranslator<T extends object> {
             partialData,
         );
 
-        // overtride default create prompt
+        // override default create prompt
         this.translator.createRequestPrompt = (input: string) => {
             return "";
         };
@@ -472,7 +472,7 @@ export class CrosswordPageTranslator<T extends object> {
             Use the layout information provided and the user request below to generate a SINGLE "${translator.validator.getTypeName()}" response using the typescript schema below.
             For schemas that include CSS selectors, construct the selector based on the element's Id attribute if the id is present.
             You should stop searching and return current result as soon as you find a result that matches the user's criteria:
-            
+
             '''
             ${translator.validator.getSchemaText()}
             '''
