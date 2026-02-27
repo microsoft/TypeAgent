@@ -494,30 +494,39 @@ async function updateBrowserContext(
         // rehydrate cached settings
         const sessionDir: string | undefined =
             await getSessionFolderPath(context);
-        const contents: string = await readFileSync(
-            path.join(sessionDir!, "settings.json"),
-            "utf-8",
-        );
+        if (sessionDir) {
+            const settingsPath = path.join(sessionDir, "settings.json");
+            try {
+                if (fs.existsSync(settingsPath)) {
+                    const contents: string = readFileSync(
+                        settingsPath,
+                        "utf-8",
+                    );
 
-        if (contents.length > 0) {
-            const config = JSON.parse(contents);
+                    if (contents.length > 0) {
+                        const config = JSON.parse(contents);
 
-            // resolver settings
-            context.agentContext.resolverSettings.searchResolver =
-                config.resolverSettings.searchResolver;
-            context.agentContext.resolverSettings.keywordResolver =
-                config.resolverSettings.keywordResolver;
-            context.agentContext.resolverSettings.wikipediaResolver =
-                config.resolverSettings.wikipediaResolver;
-            context.agentContext.resolverSettings.historyResolver =
-                config.resolverSettings.historyResolver;
+                        // resolver settings
+                        context.agentContext.resolverSettings.searchResolver =
+                            config.resolverSettings.searchResolver;
+                        context.agentContext.resolverSettings.keywordResolver =
+                            config.resolverSettings.keywordResolver;
+                        context.agentContext.resolverSettings.wikipediaResolver =
+                            config.resolverSettings.wikipediaResolver;
+                        context.agentContext.resolverSettings.historyResolver =
+                            config.resolverSettings.historyResolver;
 
-            // search provider settings
-            context.agentContext.searchProviders =
-                config.searchProviders || defaultSearchProviders;
-            context.agentContext.activeSearchProvider =
-                config.activeSearchProvider ||
-                context.agentContext.searchProviders[0];
+                        // search provider settings
+                        context.agentContext.searchProviders =
+                            config.searchProviders || defaultSearchProviders;
+                        context.agentContext.activeSearchProvider =
+                            config.activeSearchProvider ||
+                            context.agentContext.searchProviders[0];
+                    }
+                }
+            } catch (error) {
+                debug("Failed to load browser settings file:", error);
+            }
         }
     } else {
         if (context.agentContext.agentWebSocketServer) {
@@ -953,9 +962,9 @@ async function initializeWebsiteIndex(
         }
     } catch (error) {
         debug("Error initializing website collection:", error);
-        // Fallback to empty collection without index
-        context.agentContext.websiteCollection =
-            new website.WebsiteCollection();
+        // SQLite/website-memory may be unavailable; keep browser agent alive.
+        // Knowledge features will remain unavailable until dependency issues are resolved.
+        context.agentContext.websiteCollection = undefined;
         context.agentContext.index = undefined;
     }
 }
