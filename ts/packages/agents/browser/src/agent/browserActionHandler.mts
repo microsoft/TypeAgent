@@ -595,7 +595,7 @@ async function processBrowserAgentMessage(
                         AppAgentEvent.Inline,
                         {
                             type: "text",
-                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Fill in the answer for 2 down."`,
+                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
                         },
                         notificationId,
                     );

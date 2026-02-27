@@ -366,6 +366,8 @@ export class ShellWindow {
             this.showAndFocus();
 
             // Restore browser tabs after window is visible so startup isn't blocked
+            // Note: Site agent registration messages will be queued if WebSocket
+            // isn't ready yet, then flushed when connection is established
             await this.restoreBrowserTabs();
 
             if (isLinux) {
@@ -477,6 +479,14 @@ export class ShellWindow {
             "received-from-browser-ipc",
             message,
         );
+    }
+
+    public sendSystemNotification(message: string, id?: string): void {
+        this.chatView.webContents.send("system-notification", {
+            message,
+            id: id || `system-${Date.now()}`,
+            timestamp: Date.now(),
+        });
     }
 
     public runDemo(interactive: boolean = false) {

@@ -14,6 +14,7 @@ const debugWebSocketError = registerDebug("typeagent:browser:ws:error");
 
 let webSocket: WebSocket | undefined;
 let settings: Record<string, any>;
+let connectionInProgress: boolean = false;
 
 /**
  * Broadcasts WebSocket connection status changes to all extension pages
@@ -82,6 +83,13 @@ export async function ensureWebsocketConnected(): Promise<
     WebSocket | undefined
 > {
     return new Promise<WebSocket | undefined>(async (resolve, reject) => {
+        // Prevent multiple simultaneous connection attempts
+        if (connectionInProgress) {
+            debugWebSocket("Connection attempt already in progress, skipping");
+            resolve(webSocket);
+            return;
+        }
+
         if (webSocket) {
             if (webSocket.readyState === WebSocket.OPEN) {
                 resolve(webSocket);
@@ -93,7 +101,9 @@ export async function ensureWebsocketConnected(): Promise<
             } catch {}
         }
 
+        connectionInProgress = true;
         webSocket = await createWebSocket();
+        connectionInProgress = false;
         if (!webSocket) {
             showBadgeError();
             broadcastConnectionStatus(false);
