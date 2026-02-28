@@ -20,7 +20,8 @@
     "./agent/types": "./dist/common/browserControl.mjs",
     "./agent/indexing": "./dist/agent/indexing/browserIndexingService.js",
     "./contentScriptRpc/types": "./dist/common/contentScriptRpc/types.mjs",
-    "./contentScriptRpc/client": "./dist/common/contentScriptRpc/client.mjs"
+    "./contentScriptRpc/client": "./dist/common/contentScriptRpc/client.mjs",
+    "./htmlReducer": "./dist/common/crossContextHtmlReducer.js"
   },
   "main": "index.js",
   "scripts": {
