@@ -15,6 +15,8 @@ import {
     ValueNode,
 } from "./grammarRuleParser.js";
 import { getLineCol } from "./utils.js";
+import { globalEntityRegistry } from "./entityRegistry.js";
+import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 
 export type FileLoader = {
     resolvePath: (name: string, ref?: string) => string;
@@ -488,7 +490,9 @@ function createGrammarRule(
                         const isImportedType =
                             context.hasStarImport ||
                             context.knownTypeNames.has(refName) ||
-                            context.importedTypeNames.has(refName);
+                            context.importedTypeNames.has(refName) ||
+                            globalEntityRegistry.getConverter(refName) !==
+                                undefined;
 
                         if (!isImportedType) {
                             context.errors.push({
@@ -512,13 +516,34 @@ function createGrammarRule(
                 }
                 break;
             }
-            case "ruleReference":
+            case "ruleReference": {
+                // Phrase-set matchers (Polite, Greeting, etc.) are handled at
+                // match time — no rule definition needed, no NFA state expansion.
+                // BUT: only use the phrase-set if the rule is NOT defined locally
+                // or via import (preserves grammars that define their own <Polite> etc.)
+                const isLocallyDefined =
+                    context.ruleDefMap.has(expr.name) ||
+                    context.importedRuleMap.has(expr.name);
+                if (
+                    !isLocallyDefined &&
+                    globalPhraseSetRegistry.isPhraseSetName(expr.name)
+                ) {
+                    parts.push({
+                        type: "phraseSet",
+                        matcherName: expr.name,
+                    });
+                    // Phrase sets don't produce a captured value on their own.
+                    // Use defaultValue=true so single-part rules using a phrase set
+                    // don't trip the "Start rule does not produce a value" check.
+                    defaultValue = true;
+                    break;
+                }
                 const { grammarRules, hasValue } = createNamedGrammarRules(
                     context,
                     expr.name,
                     expr.pos,
                 );
-                // defaule value of the rule reference
+                // default value of the rule reference
                 defaultValue = hasValue;
                 parts.push({
                     type: "rules",
@@ -526,16 +551,19 @@ function createGrammarRule(
                     name: expr.name,
                 });
                 break;
+            }
             case "rules": {
-                const { rules, optional } = expr;
+                const { rules, optional, repeat } = expr;
                 const grammarRules: GrammarRule[] = [];
                 // default value of the nested rules
                 defaultValue = createGrammarRules(context, rules, grammarRules);
-                parts.push({
+                const rulesPart: import("./grammarTypes.js").RulesPart = {
                     type: "rules",
                     rules: grammarRules,
                     optional,
-                });
+                };
+                if (repeat) rulesPart.repeat = true;
+                parts.push(rulesPart);
 
                 break;
             }

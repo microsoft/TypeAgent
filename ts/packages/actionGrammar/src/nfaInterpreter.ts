@@ -2,7 +2,9 @@
 // Licensed under the MIT License.
 
 import { NFA, NFATransition } from "./nfa.js";
+import { normalizeToken } from "./nfaMatcher.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
+import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 import {
     Environment,
     createEnvironment,
@@ -139,6 +141,59 @@ export function matchNFA(
 
             // Try each transition
             for (const trans of nfaState.transitions) {
+                // phraseSet transitions are handled here (not in tryTransition):
+                // try every phrase in the set at the current token position and
+                // generate one execution thread per matching phrase.
+                if (trans.type === "phraseSet") {
+                    const matcher = trans.matcherName
+                        ? globalPhraseSetRegistry.getMatcher(trans.matcherName)
+                        : undefined;
+                    if (matcher) {
+                        for (const phrase of matcher.phrases) {
+                            if (tokenIndex + phrase.length <= tokens.length) {
+                                let matches = true;
+                                for (let pi = 0; pi < phrase.length; pi++) {
+                                    if (
+                                        normalizeToken(
+                                            tokens[tokenIndex + pi],
+                                        ) !== phrase[pi]
+                                    ) {
+                                        matches = false;
+                                        break;
+                                    }
+                                }
+                                if (matches) {
+                                    debugNFA(
+                                        `    phraseSet(${trans.matcherName}) matched phrase "${phrase.join(" ")}" → state ${trans.to}${phrase.length > 1 ? ` (skip ${phrase.length - 1})` : ""}`,
+                                    );
+                                    nextStates.push({
+                                        stateId: trans.to,
+                                        tokenIndex: tokenIndex + 1,
+                                        path: [...state.path, trans.to],
+                                        fixedStringPartCount:
+                                            state.fixedStringPartCount +
+                                            phrase.length,
+                                        checkedWildcardCount:
+                                            state.checkedWildcardCount,
+                                        uncheckedWildcardCount:
+                                            state.uncheckedWildcardCount,
+                                        ruleIndex: state.ruleIndex,
+                                        actionValue: state.actionValue,
+                                        environment: state.environment,
+                                        slotMap: state.slotMap,
+                                        skipCount:
+                                            phrase.length > 1
+                                                ? phrase.length - 1
+                                                : undefined,
+                                    });
+                                    allVisitedStates.add(trans.to);
+                                }
+                            }
+                        }
+                    }
+                    continue; // phraseSet handled above
+                }
+
                 const result = tryTransition(
                     nfa,
                     trans,
@@ -292,8 +347,9 @@ function tryTransition(
 ): NFAExecutionState | undefined {
     switch (trans.type) {
         case "token":
-            // Match specific token(s)
-            if (trans.tokens && trans.tokens.includes(token)) {
+            // Match specific token(s); normalize input token so that
+            // case and trailing punctuation don't prevent a match
+            if (trans.tokens && trans.tokens.includes(normalizeToken(token))) {
                 return {
                     stateId: trans.to,
                     tokenIndex: tokenIndex + 1,

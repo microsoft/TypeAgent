@@ -40,6 +40,15 @@ describe("Grammar Rule Writer", () => {
             <other> = one | two | three;
         `);
     });
+    it("kleene star group", () => {
+        validateRoundTrip(`<test> = hello (world)* end;`);
+    });
+    it("kleene plus group", () => {
+        validateRoundTrip(`<test> = hello (world)+ end;`);
+    });
+    it("kleene star with alternates", () => {
+        validateRoundTrip(`<test> = hello (world | earth)* end;`);
+    });
     it("spaces in expressions", () => {
         validateRoundTrip(
             `<test> = ${spaces}${escapedSpaces}${spaces}${escapedSpaces}${spaces};`,

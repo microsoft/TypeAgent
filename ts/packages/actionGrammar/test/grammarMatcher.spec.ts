@@ -355,6 +355,60 @@ describe("Grammar Matcher", () => {
             ]);
         });
     });
+    describe("Repeat GroupExpr", () => {
+        it("()* - zero matches", () => {
+            const g = `<Start> = hello (world)* -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "hello")).toStrictEqual([true]);
+        });
+        it("()* - one match", () => {
+            const g = `<Start> = hello (world)* -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                true,
+            ]);
+        });
+        it("()* - two matches", () => {
+            const g = `<Start> = hello (world)* -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(
+                testMatchGrammar(grammar, "hello world world"),
+            ).toStrictEqual([true]);
+        });
+        it("()+ - zero matches not accepted", () => {
+            const g = `<Start> = hello (world)+ -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "hello")).toStrictEqual([]);
+        });
+        it("()+ - one match", () => {
+            const g = `<Start> = hello (world)+ -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                true,
+            ]);
+        });
+        it("()+ - two matches", () => {
+            const g = `<Start> = hello (world)+ -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(
+                testMatchGrammar(grammar, "hello world world"),
+            ).toStrictEqual([true]);
+        });
+        it("()* - alternates in group", () => {
+            const g = `<Start> = hello (world | earth)* -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(
+                testMatchGrammar(grammar, "hello world earth world"),
+            ).toStrictEqual([true]);
+        });
+        it("()+ - suffix after repeat", () => {
+            const g = `<Start> = hello (world)+ end -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(
+                testMatchGrammar(grammar, "hello world world end"),
+            ).toStrictEqual([true]);
+        });
+    });
     describe("Not matched", () => {
         it("string expr not separated", () => {
             const g = `

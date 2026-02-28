@@ -103,6 +103,15 @@ const cardinalMap: Record<string, number> = {
     "twenty-eight": 28,
     "twenty-nine": 29,
     thirty: 30,
+    // Multi-word quantity phrases (matched via multi-token entity lookahead)
+    "a couple": 2,
+    "a pair": 2,
+    "a few": 3,
+    several: 4,
+    "a handful": 5,
+    "half a dozen": 6,
+    "a dozen": 12,
+    "a score": 20,
 };
 
 function validateCardinal(token: string): boolean {

@@ -12,6 +12,7 @@ export class BrowserConnector {
     constructor(
         private readonly agentServer: AgentWebSocketServer,
         private readonly browserControl: BrowserControl,
+        private readonly preferredClientType?: "extension" | "electron",
     ) {}
 
     async sendActionToBrowser(
@@ -21,7 +22,7 @@ export class BrowserConnector {
     ): Promise<any> {
         const client = targetClientId
             ? this.agentServer.getClient(targetClientId)
-            : this.agentServer.getActiveClient();
+            : this.agentServer.getActiveClient(this.preferredClientType);
 
         if (!client) {
             throw new Error("No browser client available");

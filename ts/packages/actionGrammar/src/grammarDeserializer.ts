@@ -28,7 +28,7 @@ export function grammarFromJson(json: GrammarJson): Grammar {
             case "wildcard":
             case "number":
                 return p;
-            case "rules":
+            case "rules": {
                 let rules = indexToRules.get(p.index);
                 if (rules === undefined) {
                     rules = [];
@@ -37,13 +37,18 @@ export function grammarFromJson(json: GrammarJson): Grammar {
                         rules.push(grammarRuleFromJson(r, json));
                     }
                 }
-                return {
+                const part: import("./grammarTypes.js").RulesPart = {
                     type: "rules",
                     name: p.name,
                     rules,
                     variable: p.variable,
                     optional: p.optional,
                 };
+                if (p.repeat) part.repeat = true;
+                return part;
+            }
+            case "phraseSet":
+                return { type: "phraseSet", matcherName: p.matcherName };
         }
     }
 

@@ -39,9 +39,20 @@ function stripTrailingPunctuation(token: string): string {
 }
 
 /**
- * Tokenize a request string into an array of tokens
- * Simple whitespace-based tokenization for NFA matching
- * Strips trailing punctuation from tokens for better matching
+ * Normalize a single token for NFA matching: lowercase and strip trailing
+ * punctuation.  Applied to both input tokens and grammar tokens so that both
+ * sides of the comparison are on the same canonical form.
+ */
+export function normalizeToken(token: string): string {
+    return stripTrailingPunctuation(token.toLowerCase());
+}
+
+/**
+ * Tokenize a request string into an array of tokens.
+ * Splits on whitespace and strips trailing punctuation, but preserves
+ * original case so that wildcard captures retain the user's casing.
+ * Normalization (lowercasing) for fixed-token comparisons is done
+ * separately at match time via normalizeToken().
  */
 export function tokenizeRequest(request: string): string[] {
     return request
@@ -54,6 +65,10 @@ export function tokenizeRequest(request: string): string[] {
 /**
  * Match a request string against a grammar using NFA
  *
+ * The grammar rule itself is expected to account for all tokens in the request,
+ * using optional built-in categories ((<Polite>)?, (<FillerWord>)?, etc.) for
+ * leading/trailing courtesy words and hesitations.
+ *
  * @param _grammar The grammar structure (unused, kept for API compatibility)
  * @param nfa The compiled NFA
  * @param request The request string to match
@@ -64,7 +79,6 @@ export function matchGrammarWithNFA(
     nfa: NFA,
     request: string,
 ): NFAGrammarMatchResult[] {
-    // Tokenize the request
     const tokens = tokenizeRequest(request);
 
     debug(`Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`);
@@ -73,29 +87,18 @@ export function matchGrammarWithNFA(
         return [];
     }
 
-    // Match against NFA
     const nfaResult = matchNFA(nfa, tokens);
-
-    debug(`Match result: ${nfaResult.matched ? "MATCHED" : "NO MATCH"}`);
-    if (nfaResult.matched) {
-        debug(`Action value: %O`, nfaResult.actionValue);
-    }
-
     if (!nfaResult.matched) {
+        debug(`Match result: NO MATCH`);
         return [];
     }
 
-    // The action object is already evaluated in the NFA interpreter using the slot-based
-    // environment system. nfaResult.actionValue contains the final computed action object.
+    debug(`Match result: MATCHED`);
+    debug(`Action value: %O`, nfaResult.actionValue);
+
     const actionObject = nfaResult.actionValue ?? request;
-
-    // Wildcard character count is approximated from unchecked wildcard count
-    // (each unchecked wildcard captures some characters)
     const wildcardCharCount = nfaResult.uncheckedWildcardCount;
-
-    // Determine entity wildcard property names
     const entityWildcardPropertyNames: string[] = [];
-    // TODO: Implement entity wildcard detection if needed
 
     return [
         {
