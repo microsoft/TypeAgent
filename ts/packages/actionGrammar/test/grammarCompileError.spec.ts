@@ -321,6 +321,394 @@ describe("Grammar Compiler", () => {
         });
     });
 
+    describe("Epsilon-reachable recursive cycles", () => {
+        // Using startValueRequired: false to avoid spurious "no value" errors
+        // in grammars that are only testing cycle detection.
+        const opts = { startValueRequired: false };
+
+        describe("Error", () => {
+            it("direct self-reference <T> = <T>", () => {
+                const grammarText = `<Start> = <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<Start>");
+            });
+
+            it("self-reference as first part before literal <T> = <T> foo", () => {
+                const grammarText = `<Start> = <Start> foo;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<Start>");
+            });
+
+            it("mutual epsilon cycle <A> = <B>, <B> = <A>", () => {
+                const grammarText = `
+                    <Start> = <A>;
+                    <A> = <B>;
+                    <B> = <A>;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<A>");
+            });
+
+            it("optional inline rule before self-reference <T> = (foo)? <T>", () => {
+                const grammarText = `<Start> = (foo)? <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<Start>");
+            });
+
+            it("optional part in mutual cycle <A> = (foo)? <B>, <B> = <A>", () => {
+                const grammarText = `
+                    <Start> = <A>;
+                    <A> = (foo)? <B>;
+                    <B> = <A>;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<A>");
+            });
+
+            it("inner epsilon cycle despite outer mandatory input: foo <B>, <B> = <C>, <C> = <B>", () => {
+                const grammarText = `
+                    <Start> = foo <B>;
+                    <B> = <C>;
+                    <C> = <B>;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<B>");
+            });
+
+            it("three-node epsilon cycle <A> = <B>, <B> = <C>, <C> = <A>", () => {
+                const grammarText = `
+                    <Start> = <A>;
+                    <A> = <B>;
+                    <B> = <C>;
+                    <C> = <A>;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<A>");
+                // The back-reference is inside <C>, so the definition attribution
+                // should point there.
+                expect(errors[0]).toContain("<C>");
+            });
+
+            it("epsilon cycle in one alternative of multi-alternative rule <T> = foo | <T>", () => {
+                const grammarText = `<Start> = foo | <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<Start>");
+            });
+
+            it("nullable intermediate rule creates epsilon path <A> = <B> <A>, <B> = (foo)?", () => {
+                const grammarText = `
+                    <Start> = <A>;
+                    <A> = <B> <A>;
+                    <B> = (foo)?;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<A>");
+            });
+
+            it("optional variable self-reference <T> = $(x:<T>)?", () => {
+                const grammarText = `<Start> = $(x:<Start>)?;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<Start>");
+            });
+
+            it("Kleene star group before self-reference <T> = (foo)* <T>", () => {
+                // (foo)* is optional (zero or more), so <T> is reachable via ε
+                const grammarText = `<Start> = (foo)* <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<Start>");
+            });
+
+            it("Kleene star group containing self-reference <T> = (<T>)* foo", () => {
+                // The first thing attempted inside (<T>)* is <T> itself — ε-cycle
+                const grammarText = `<Start> = (<Start>)* foo;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(1);
+                expect(errors[0]).toContain("error:");
+                expect(errors[0]).toContain("<Start>");
+            });
+
+            it("two independent epsilon cycles each reported separately", () => {
+                const grammarText = `
+                    <Start> = <A> | <B>;
+                    <A> = <A>;
+                    <B> = <B>;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(2);
+                expect(errors.some((e) => e.includes("<A>"))).toBe(true);
+                expect(errors.some((e) => e.includes("<B>"))).toBe(true);
+            });
+        });
+
+        describe("Valid (no error)", () => {
+            it("right-recursive with mandatory input <T> = foo <T>", () => {
+                const grammarText = `<Start> = foo <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("mutual recursion with mandatory input in caller <A> = foo <B>, <B> = <A>", () => {
+                const grammarText = `
+                    <Start> = <A>;
+                    <A> = foo <B>;
+                    <B> = <A>;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("non-nullable rule before self-reference <A> = <B> <A>, <B> = foo", () => {
+                const grammarText = `
+                    <Start> = <A>;
+                    <A> = <B> <A>;
+                    <B> = foo;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("both rules consume mandatory input <A> = foo <B>, <B> = bar <A>", () => {
+                const grammarText = `
+                    <Start> = <A>;
+                    <A> = foo <B>;
+                    <B> = bar <A>;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("number variable before self-reference <T> = $(n:number) <T>", () => {
+                const grammarText = `<Start> = $(n:number) <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("wildcard variable before self-reference <T> = $(x) <T>", () => {
+                const grammarText = `<Start> = $(x) <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("safe recursive alternative alongside non-recursive alternative <T> = foo | bar <T>", () => {
+                // The 'bar <T>' alternative is safe because 'bar' is consumed first.
+                // The plain 'foo' alternative is trivially non-recursive.
+                const grammarText = `<Start> = foo | bar <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("optional self-reference after mandatory literal <T> = foo $(x:<T>)?", () => {
+                // 'foo' consumes mandatory input, so the optional back-ref is safe.
+                const grammarText = `<Start> = foo $(x:<Start>)?;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("non-nullable multi-alternative intermediate <A> = <B> <A>, <B> = foo | bar", () => {
+                // <B> has two alternatives, both consuming mandatory input, so it
+                // is non-nullable and clears the epsilon-reachable set before <A>.
+                const grammarText = `
+                    <Start> = <A>;
+                    <A> = <B> <A>;
+                    <B> = foo | bar;
+                `;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+
+            it("Kleene plus before self-reference <T> = (foo)+ <T>", () => {
+                // (foo)+ must match at least one 'foo', so mandatory input is
+                // consumed before the recursive <T>.
+                const grammarText = `<Start> = (foo)+ <Start>;`;
+                const errors: string[] = [];
+                loadGrammarRulesNoThrow(
+                    "test",
+                    grammarText,
+                    errors,
+                    undefined,
+                    opts,
+                );
+                expect(errors.length).toBe(0);
+            });
+        });
+    });
+
     describe("Type Imports", () => {
         it("Imported type reference should not error", () => {
             const grammarText = `

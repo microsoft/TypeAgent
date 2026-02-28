@@ -5,6 +5,7 @@ import {
     Grammar,
     GrammarPart,
     GrammarRule,
+    RulesPart,
     StringPart,
 } from "./grammarTypes.js";
 import {
@@ -29,6 +30,8 @@ type DefinitionRecord = {
     pos: number | undefined;
     grammarRules?: GrammarRule[];
     hasValue: boolean;
+    compiling: boolean; // true while grammarRules is being populated
+    nullable?: boolean; // set after compilation; true if any alternative matches ε
 };
 
 type CompletedDefinitionRecord = DefinitionRecord & {
@@ -136,6 +139,7 @@ function createCompileContext(
                 pos: def.pos,
                 // Set this to true to allow recursion to assume that it has value.
                 hasValue: true,
+                compiling: false,
             });
         } else {
             existing.rules.push(...def.rules);
@@ -300,6 +304,8 @@ const emptyRecord = {
     pos: undefined,
     grammarRules: [],
     hasValue: true, // Pretend to have value to avoid cascading errors
+    compiling: false,
+    nullable: false,
 };
 
 /**
@@ -360,11 +366,32 @@ function validateVariableReferences(
             break;
     }
 }
+// ε-reachable cycle detection
+//
+// A grammar rule causes an infinite loop at match time when a named rule can
+// recurse back to itself without ever consuming a mandatory input token — i.e.
+// when the cycle is reachable via ε-transitions (optional parts, rule expansions
+// that themselves match ε).
+//
+// Detection: `epsilonReachable` carries the set of rule names entered since the
+// last mandatory input was consumed. When a back-reference is found
+// (record.compiling === true) and the rule name is still in that set, the full
+// path back to the entry point was traversed without consuming any input, so an
+// error is reported.
+//
+// Nullability note — two asymmetric checks appear at each rule-reference site:
+//   record.nullable === false  →  clear currentEpr (only when *definitely*
+//                                 non-nullable; undefined/back-ref leaves it
+//                                 intact to avoid masking a cycle further along)
+//   record.nullable ?? false   →  propagate ruleNullable (treat back-refs
+//                                 conservatively as non-nullable)
+
 function createNamedGrammarRules(
     context: CompileContext,
     name: string,
     referencePosition?: number,
     referenceVariable?: string,
+    epsilonReachable: Set<string> = new Set(),
     referenceContext: CompileContext = context,
 ): CompletedDefinitionRecord {
     const record = context.ruleDefMap.get(name);
@@ -385,18 +412,43 @@ function createNamedGrammarRules(
             name,
             referencePosition,
             referenceVariable,
+            epsilonReachable,
             referenceContext,
         );
     }
-    if (record.grammarRules === undefined) {
+    if (record.compiling) {
+        if (epsilonReachable.has(name)) {
+            // Back-reference reachable without consuming any input: infinite loop at match time
+            referenceContext.errors.push({
+                message: `Rule '<${name}>' creates an epsilon-reachable cycle that would cause an infinite loop at match time`,
+                definition: referenceContext.currentDefinition,
+                pos: referencePosition,
+            });
+        }
+        // else: non-epsilon back-reference (mandatory input consumed before the
+        // back-ref); just return the incomplete record — the grammar is valid.
+    } else if (record.grammarRules === undefined) {
+        const eprWithSelf = new Set(epsilonReachable).add(name);
         const prev = context.currentDefinition;
         context.currentDefinition = name;
+        // Assign an empty sentinel array before setting compiling=true so that
+        // any non-epsilon re-entrant call (record.compiling=true, name not in
+        // epsilonReachable) returns [] rather than undefined for grammarRules.
         record.grammarRules = [];
-        record.hasValue = createGrammarRules(
+        record.compiling = true;
+        // Pass the sentinel as the output array so createGrammarRules pushes
+        // directly into it. Any RulesPart.rules captured during a circular
+        // back-reference holds a reference to this same array object and will
+        // see the populated rules without a separate copy step.
+        const { hasValue, nullable } = createGrammarRules(
             context,
             record.rules,
+            eprWithSelf,
             record.grammarRules,
         );
+        record.hasValue = hasValue;
+        record.compiling = false;
+        record.nullable = nullable;
         context.currentDefinition = prev;
     }
 
@@ -413,26 +465,39 @@ function createNamedGrammarRules(
 function createGrammarRules(
     context: CompileContext,
     rules: Rule[],
-    grammarRules: GrammarRule[],
-) {
+    epsilonReachable: Set<string>,
+    out: GrammarRule[] = [],
+): { grammarRules: GrammarRule[]; hasValue: boolean; nullable: boolean } {
+    const grammarRules = out;
     let hasValue = true;
+    let nullable = false; // nullable if ANY alternative is nullable
     for (const r of rules) {
-        const result = createGrammarRule(context, r);
+        const result = createGrammarRule(context, r, epsilonReachable);
         grammarRules.push(result.grammarRule);
         hasValue = hasValue && result.hasValue;
+        nullable = nullable || result.nullable;
     }
-    return hasValue;
+    return { grammarRules, hasValue, nullable };
 }
 
 function createGrammarRule(
     context: CompileContext,
     rule: Rule,
-): { grammarRule: GrammarRule; hasValue: boolean } {
+    epsilonReachable: Set<string>,
+): { grammarRule: GrammarRule; hasValue: boolean; nullable: boolean } {
     const { expressions, value } = rule;
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
     let variableCount = 0;
     let defaultValue = false;
+    // A rule alternative is nullable if ALL of its parts can match ε.
+    let ruleNullable = true;
+    let currentEpr = epsilonReachable;
+    // Call after any part that guarantees consuming ≥1 input token.
+    const consumedInput = () => {
+        currentEpr = new Set<string>();
+        ruleNullable = false;
+    };
     for (const expr of expressions) {
         switch (expr.type) {
             case "string": {
@@ -444,6 +509,7 @@ function createGrammarRule(
                 parts.push(part);
                 // default value of the string
                 defaultValue = true;
+                consumedInput(); // string literals always consume mandatory input
                 break;
             }
             case "variable": {
@@ -459,25 +525,38 @@ function createGrammarRule(
                 }
                 availableVariables.add(name);
                 if (ruleReference) {
-                    const { grammarRules } = createNamedGrammarRules(
+                    const record = createNamedGrammarRules(
                         context,
                         refName,
                         refPos,
                         name,
+                        currentEpr,
                     );
                     parts.push({
                         type: "rules",
-                        rules: grammarRules,
+                        rules: record.grammarRules,
                         variable: name,
                         name: refName,
                         optional: expr.optional,
                     });
+                    if (!expr.optional) {
+                        // === false: only clear when *definitely* non-nullable.
+                        // undefined (back-ref still compiling) leaves epr intact
+                        // to avoid masking an ε-cycle further along this path.
+                        if (record.nullable === false) currentEpr = new Set();
+                        // ?? false: treat undefined (back-ref) as non-nullable —
+                        // conservative for nullability propagation, consistent with
+                        // how cycles are broken (they require mandatory input).
+                        ruleNullable =
+                            ruleNullable && (record.nullable ?? false);
+                    }
                 } else if (refName === "number") {
                     parts.push({
                         type: "number",
                         variable: name,
                         optional: expr.optional,
                     });
+                    if (!expr.optional) consumedInput();
                 } else {
                     // Validate type name references
                     // All non-built-in types must be explicitly imported
@@ -513,6 +592,7 @@ function createGrammarRule(
                         optional: expr.optional,
                         typeName: refName,
                     });
+                    if (!expr.optional) consumedInput();
                 }
                 break;
             }
@@ -536,35 +616,50 @@ function createGrammarRule(
                     // Use defaultValue=true so single-part rules using a phrase set
                     // don't trip the "Start rule does not produce a value" check.
                     defaultValue = true;
+                    consumedInput(); // phrase sets always consume input
                     break;
                 }
-                const { grammarRules, hasValue } = createNamedGrammarRules(
+                const record = createNamedGrammarRules(
                     context,
                     expr.name,
                     expr.pos,
+                    undefined,
+                    currentEpr,
                 );
                 // default value of the rule reference
-                defaultValue = hasValue;
+                defaultValue = record.hasValue;
                 parts.push({
                     type: "rules",
-                    rules: grammarRules,
+                    rules: record.grammarRules,
                     name: expr.name,
                 });
+                // RuleRefExpr has no optional modifier; it is always non-optional.
+                // === false: only clear when *definitely* non-nullable (same
+                // asymmetry as the variable ruleRef case above).
+                if (record.nullable === false) {
+                    currentEpr = new Set();
+                }
+                // ?? false: treat undefined (back-ref) as non-nullable.
+                ruleNullable = ruleNullable && (record.nullable ?? false);
                 break;
             }
             case "rules": {
                 const { rules, optional, repeat } = expr;
-                const grammarRules: GrammarRule[] = [];
                 // default value of the nested rules
-                defaultValue = createGrammarRules(context, rules, grammarRules);
-                const rulesPart: import("./grammarTypes.js").RulesPart = {
+                const {
+                    grammarRules,
+                    hasValue: groupHasValue,
+                    nullable: groupNullable,
+                } = createGrammarRules(context, rules, currentEpr);
+                defaultValue = groupHasValue;
+                const rulesPart: RulesPart = {
                     type: "rules",
                     rules: grammarRules,
                     optional,
                 };
                 if (repeat) rulesPart.repeat = true;
                 parts.push(rulesPart);
-
+                if (!optional && !groupNullable) consumedInput();
                 break;
             }
             default:
@@ -594,5 +689,6 @@ function createGrammarRule(
             value !== undefined ||
             variableCount === 1 ||
             (variableCount === 0 && parts.length === 1 && defaultValue),
+        nullable: ruleNullable,
     };
 }
