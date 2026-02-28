@@ -23,6 +23,12 @@ import { executeAction } from "../execute/actionHandlers.js";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
+import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
+import { PlanGenerator } from "./planning/planGenerator.js";
+import { PlanLibrary } from "./planning/planLibrary.js";
+import { PlanMatcher } from "./planning/planMatcher.js";
+import { PlanExecutor } from "./planning/planExecutor.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
@@ -30,6 +36,69 @@ const defaultModel = "gpt-4o";
 
 // Track Copilot clients per dispatcher instance (WeakMap for GC)
 const copilotClients = new WeakMap<object, CopilotClient>();
+
+// Track Copilot session IDs per dispatcher instance (mirrors Claude's session tracking)
+const copilotSessionIds = new WeakMap<object, string>();
+
+// Track active Copilot sessions per dispatcher instance for reuse
+const copilotSessions = new WeakMap<object, any>();
+
+/**
+ * Get the stored session ID for this dispatcher context
+ * (Same pattern as Claude implementation)
+ */
+function getSessionId(
+    context: ActionContext<CommandHandlerContext>,
+): string | undefined {
+    return copilotSessionIds.get(context.sessionContext.agentContext);
+}
+
+/**
+ * Store the session ID for this dispatcher context
+ * (Same pattern as Claude implementation)
+ */
+function setSessionId(
+    context: ActionContext<CommandHandlerContext>,
+    sessionId: string,
+): void {
+    copilotSessionIds.set(context.sessionContext.agentContext, sessionId);
+}
+
+/**
+ * Get the stored session for this dispatcher context
+ */
+function getSession(
+    context: ActionContext<CommandHandlerContext>,
+): any | undefined {
+    return copilotSessions.get(context.sessionContext.agentContext);
+}
+
+/**
+ * Store the session for this dispatcher context
+ */
+function setSession(
+    context: ActionContext<CommandHandlerContext>,
+    session: any,
+): void {
+    copilotSessions.set(context.sessionContext.agentContext, session);
+}
+
+/**
+ * Generate a structured session ID based on the dispatcher session
+ * (Mirrors Claude's session ID pattern)
+ */
+function generateSessionId(
+    context: ActionContext<CommandHandlerContext>,
+): string {
+    const sessionDirPath = context.sessionContext.agentContext.session.getSessionDirPath();
+    if (sessionDirPath) {
+        // Extract session name from path (e.g., "my-session" from ".../sessions/my-session")
+        const sessionName = sessionDirPath.split(/[/\\]/).pop() || "default";
+        return `typeagent-${sessionName}`;
+    }
+    // Fallback to timestamp-based ID if no session path
+    return `typeagent-reasoning-${Date.now()}`;
+}
 
 /**
  * Get the TypeAgent repository root path
@@ -176,6 +245,13 @@ function formatToolCallDisplay(toolName: string, input: any): string {
         return `**Tool:** execute_action — \`${input.schemaName}.${actionName}\``;
     }
     return `**Tool:** ${toolName}`;
+}
+
+/**
+ * Generate a unique request ID for tracing
+ */
+function generateRequestId(): string {
+    return `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
 /**
@@ -349,7 +425,8 @@ function getCopilotSessionConfig(
 }
 
 /**
- * Execute reasoning action without planning (Phase 1 MVP)
+ * Execute reasoning action without planning
+ * Uses session persistence and reuse for multi-turn conversations
  */
 async function executeReasoningWithoutPlanning(
     originalRequest: string,
@@ -361,23 +438,34 @@ async function executeReasoningWithoutPlanning(
     const client = await getCopilotClient(context);
     const config = getCopilotSessionConfig(context);
 
-    // Generate session ID for this reasoning session
-    const sessionId = `typeagent-reasoning-${Date.now()}`;
-    debug(`Creating session: ${sessionId}`);
+    // Check for existing session to enable multi-turn conversations
+    let session = getSession(context);
+    let sessionId = getSessionId(context);
 
-    let session;
-    try {
-        session = await client.createSession({
-            sessionId,
-            ...config,
-        });
-        debug(`Session created successfully: ${sessionId}`);
-    } catch (err) {
-        debug("Failed to create session:", err);
-        throw new Error(
-            `Failed to create Copilot session.\n` +
-            `Error: ${err instanceof Error ? err.message : String(err)}`
-        );
+    if (!session) {
+        // Generate structured session ID based on dispatcher session
+        sessionId = generateSessionId(context);
+        debug(`Creating new session: ${sessionId}`);
+
+        try {
+            session = await client.createSession({
+                sessionId,
+                ...config,
+            });
+            debug(`Session created successfully: ${sessionId}`);
+
+            // Store session and session ID for reuse across requests
+            setSession(context, session);
+            setSessionId(context, sessionId);
+        } catch (err) {
+            debug("Failed to create session:", err);
+            throw new Error(
+                `Failed to create Copilot session.\n` +
+                `Error: ${err instanceof Error ? err.message : String(err)}`
+            );
+        }
+    } else {
+        debug(`Reusing existing session: ${sessionId}`);
     }
 
     let finalResult: string | undefined = undefined;
@@ -496,6 +584,381 @@ async function executeReasoningWithoutPlanning(
 }
 
 /**
+ * Execute reasoning action with trace capture
+ * Captures execution traces for plan generation
+ */
+async function executeReasoningWithTracing(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<any> {
+    const systemContext = context.sessionContext.agentContext;
+    const storage = context.sessionContext.sessionStorage;
+
+    if (!storage) {
+        debug("No sessionStorage available, using standard reasoning");
+        return executeReasoningWithoutPlanning(originalRequest, context);
+    }
+
+    const requestId = generateRequestId();
+
+    // Create trace collector
+    const tracer = new ReasoningTraceCollector({
+        storage,
+        sessionId: systemContext.session.getSessionDirPath() || "unknown",
+        originalRequest,
+        requestId,
+        model: defaultModel,
+        planReuseEnabled: true,
+    });
+
+    try {
+        debug(`Executing reasoning with tracing: ${originalRequest}`);
+        context.actionIO.appendDisplay("Thinking...", "temporary");
+
+        const client = await getCopilotClient(context);
+        const config = getCopilotSessionConfig(context);
+
+        // Check for existing session
+        let session = getSession(context);
+        let sessionId = getSessionId(context);
+
+        if (!session) {
+            sessionId = generateSessionId(context);
+            debug(`Creating new session: ${sessionId}`);
+
+            try {
+                session = await client.createSession({
+                    sessionId,
+                    ...config,
+                });
+                debug(`Session created successfully: ${sessionId}`);
+
+                setSession(context, session);
+                setSessionId(context, sessionId);
+            } catch (err) {
+                debug("Failed to create session:", err);
+                throw new Error(
+                    `Failed to create Copilot session.\n` +
+                    `Error: ${err instanceof Error ? err.message : String(err)}`
+                );
+            }
+        } else {
+            debug(`Reusing existing session: ${sessionId}`);
+        }
+
+        let finalResult: string | undefined = undefined;
+        let currentContent = "";
+        let currentReasoning = "";
+
+        // Subscribe to reasoning events and record thinking
+        const unsubscribeReasoningDelta = session.on("assistant.reasoning_delta", (event: any) => {
+            if (event.data?.deltaContent) {
+                currentReasoning += event.data.deltaContent;
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content: formatThinkingDisplay(currentReasoning, true),
+                    },
+                    "temporary",
+                );
+            }
+        });
+
+        const unsubscribeReasoning = session.on("assistant.reasoning", (event: any) => {
+            if (event.data?.content) {
+                // Record thinking for trace
+                tracer.recordThinking({ content: [{ type: "thinking", thinking: event.data.content }] });
+
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content: formatThinkingDisplay(event.data.content, false),
+                    },
+                    "block",
+                );
+            }
+        });
+
+        // Subscribe to message streaming
+        const unsubscribeMessageDelta = session.on("assistant.message_delta", (event: any) => {
+            if (event.data?.deltaContent) {
+                currentContent += event.data.deltaContent;
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content: currentContent,
+                    },
+                    "temporary",
+                );
+            }
+        });
+
+        // Track tool calls for tracing
+        const unsubscribeToolStart = session.on("tool.execution_start", (event: any) => {
+            debug(`Tool execution started: ${event.toolName}`);
+
+            // Record tool call for trace
+            tracer.recordToolCall(event.toolName, event.parameters);
+
+            context.actionIO.appendDisplay(
+                {
+                    type: "markdown",
+                    content: formatToolCallDisplay(event.toolName, event.parameters),
+                    kind: "info",
+                },
+                "block",
+            );
+        });
+
+        const unsubscribeToolComplete = session.on("tool.execution_complete", (event: any) => {
+            debug(`Tool execution completed: ${event.toolName}`);
+        });
+
+        const unsubscribeFinalMessage = session.on("assistant.message", (event: any) => {
+            debug("Received final assistant message");
+            if (event.data?.content) {
+                finalResult = event.data.content;
+            }
+        });
+
+        try {
+            const prompt = buildPromptWithContext(originalRequest, context);
+            debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
+
+            const response = await session.sendAndWait({ prompt });
+            debug("Received response from Copilot");
+
+            if (response?.data?.content) {
+                finalResult = response.data.content;
+            }
+
+            if (currentContent) {
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content: currentContent,
+                    },
+                    "block",
+                );
+            }
+
+            // Mark trace as successful
+            tracer.markSuccess(finalResult);
+
+            // Save trace
+            await tracer.saveTrace();
+
+            // Generate plan from successful trace
+            if (tracer.wasSuccessful()) {
+                try {
+                    const planGenerator = new PlanGenerator();
+                    const planLibrary = new PlanLibrary(
+                        storage,
+                        context.sessionContext.instanceStorage,
+                    );
+
+                    const plan = await planGenerator.generatePlan(
+                        tracer.getTrace(),
+                    );
+
+                    if (plan && planGenerator.validatePlan(plan)) {
+                        // Check for duplicate plans before saving
+                        const existingPlans = await planLibrary.findMatchingPlans(
+                            originalRequest,
+                            plan.intent,
+                        );
+
+                        let isDuplicate = false;
+                        let duplicatePlanId: string | undefined;
+
+                        if (existingPlans.length > 0) {
+                            const planMatcher = new PlanMatcher(planLibrary);
+
+                            for (const existingPlan of existingPlans) {
+                                if (existingPlan.approval?.status === "approved") {
+                                    debug(
+                                        `Found user-approved plan: ${existingPlan.planId}, skipping new plan creation`,
+                                    );
+
+                                    await planLibrary.updatePlanUsage(
+                                        existingPlan.planId,
+                                        true,
+                                        tracer.getTrace().metrics.duration,
+                                    );
+
+                                    isDuplicate = true;
+                                    duplicatePlanId = existingPlan.planId;
+                                    break;
+                                }
+
+                                const similarity =
+                                    await planMatcher.computeSimilarity(
+                                        plan.description,
+                                        existingPlan.description,
+                                    );
+
+                                if (similarity >= 0.8) {
+                                    isDuplicate = true;
+                                    duplicatePlanId = existingPlan.planId;
+                                    debug(
+                                        `Detected duplicate plan (similarity: ${similarity}): ${existingPlan.planId}`,
+                                    );
+
+                                    await planLibrary.updatePlanUsage(
+                                        existingPlan.planId,
+                                        true,
+                                        tracer.getTrace().metrics.duration,
+                                    );
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (isDuplicate) {
+                            debug(
+                                `Skipped creating duplicate plan, updated existing: ${duplicatePlanId}`,
+                            );
+                            context.actionIO.appendDisplay({
+                                type: "text",
+                                content: `\n✓ Updated existing workflow plan usage (prevented duplicate)`,
+                            });
+                        } else {
+                            await planLibrary.savePlan(plan);
+                            debug(
+                                `Generated and saved workflow plan: ${plan.planId} (${plan.intent})`,
+                            );
+
+                            context.actionIO.appendDisplay({
+                                type: "text",
+                                content: `\n✓ Created reusable workflow plan: ${plan.description}`,
+                            });
+                        }
+                    }
+                } catch (error) {
+                    debug("Failed to generate plan from trace:", error);
+                }
+            }
+
+            return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
+
+        } finally {
+            unsubscribeReasoningDelta();
+            unsubscribeReasoning();
+            unsubscribeMessageDelta();
+            unsubscribeToolStart();
+            unsubscribeToolComplete();
+            unsubscribeFinalMessage();
+        }
+    } catch (error) {
+        tracer.markFailed(error instanceof Error ? error : String(error));
+        await tracer.saveTrace();
+        throw error;
+    }
+}
+
+/**
+ * Execute reasoning action with planning
+ * Tries to find and execute a matching plan, falls back to reasoning with tracing
+ */
+async function executeReasoningWithPlanning(
+    originalRequest: string,
+    context: ActionContext<CommandHandlerContext>,
+): Promise<any> {
+    const storage = context.sessionContext.sessionStorage;
+
+    if (!storage) {
+        debug("No sessionStorage available, using standard reasoning");
+        return executeReasoningWithoutPlanning(originalRequest, context);
+    }
+
+    // Try to find and execute a matching plan
+    try {
+        const planLibrary = new PlanLibrary(
+            storage,
+            context.sessionContext.instanceStorage,
+        );
+        const planMatcher = new PlanMatcher(planLibrary);
+
+        debug("Searching for matching workflow plan...");
+        displayStatus("Checking for matching workflow...", context);
+
+        const match = await planMatcher.findBestMatch(originalRequest);
+
+        if (match) {
+            debug(
+                `Found matching plan: ${match.plan.planId} (confidence: ${match.confidence})`,
+            );
+
+            context.actionIO.appendDisplay({
+                type: "text",
+                content: `\n♻️ Reusing workflow: ${match.plan.description} (confidence: ${Math.round(match.confidence * 100)}%)`,
+            });
+
+            const planExecutor = new PlanExecutor();
+            const executionResult = await planExecutor.executePlan(
+                match.plan,
+                originalRequest,
+                context,
+            );
+
+            if (executionResult.success) {
+                await planLibrary.updatePlanUsage(
+                    match.plan.planId,
+                    true,
+                    executionResult.duration,
+                );
+
+                debug(
+                    `Plan executed successfully in ${executionResult.duration}ms`,
+                );
+
+                context.actionIO.appendDisplay({
+                    type: "text",
+                    content: `\n✓ Workflow completed successfully`,
+                });
+
+                if (match.plan.approval?.status === "pending_review") {
+                    context.actionIO.appendDisplay({
+                        type: "text",
+                        content: `\n💡 This workflow is ready for review.`,
+                    });
+                }
+
+                return executionResult.finalOutput
+                    ? createActionResultNoDisplay(executionResult.finalOutput)
+                    : undefined;
+            } else {
+                await planLibrary.updatePlanUsage(
+                    match.plan.planId,
+                    false,
+                    executionResult.duration,
+                );
+
+                debug(
+                    `Plan execution failed: ${executionResult.error}, falling back to reasoning`,
+                );
+
+                context.actionIO.appendDisplay({
+                    type: "text",
+                    content: `\n⚠️ Workflow failed, using reasoning instead...`,
+                });
+            }
+        } else {
+            debug("No matching plan found, using reasoning");
+            displayStatus(
+                "No matching workflow found, using reasoning...",
+                context,
+            );
+        }
+    } catch (error) {
+        debug("Plan matching/execution failed:", error);
+    }
+
+    // Fallback: Execute reasoning with tracing
+    return executeReasoningWithTracing(originalRequest, context);
+}
+
+/**
  * Main entry point for Copilot reasoning actions
  * (Mirrors executeReasoningAction from claude.ts)
  */
@@ -553,11 +1016,10 @@ export async function executeReasoning(
     const planReuseEnabled = options?.planReuseEnabled ?? false;
 
     if (!planReuseEnabled) {
-        // Phase 1: Standard reasoning without planning
+        // Standard reasoning without planning
         return executeReasoningWithoutPlanning(request, context);
     }
 
-    // TODO: Phase 4 - Implement planning support
-    debug("Plan reuse enabled but not yet implemented, using standard reasoning");
-    return executeReasoningWithoutPlanning(request, context);
+    // Reasoning with planning (trace capture, plan matching, and execution)
+    return executeReasoningWithPlanning(request, context);
 }
