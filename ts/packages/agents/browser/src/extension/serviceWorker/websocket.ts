@@ -200,6 +200,32 @@ export async function ensureWebsocketConnected(): Promise<
                 return;
             }
 
+            if (data.method === "crosswordSchemaExtracted") {
+                // Handle crossword schema extraction - install observer
+                if (data.params && data.params.selectors && data.params.texts) {
+                    try {
+                        const { getActiveTab } = await import("./tabManager");
+                        const tab = await getActiveTab();
+                        if (tab?.id) {
+                            chrome.tabs.sendMessage(tab.id, {
+                                type: "setupCrosswordObserver",
+                                selectors: data.params.selectors,
+                                texts: data.params.texts,
+                            });
+                            debugWebSocket(
+                                "Sent crossword observer installation to content script",
+                            );
+                        }
+                    } catch (error) {
+                        debugWebSocketError(
+                            "Failed to install crossword observer:",
+                            error,
+                        );
+                    }
+                }
+                return;
+            }
+
             if (data.method && data.method.indexOf("/") > 0) {
                 const [schema, actionName] = data.method?.split("/");
 

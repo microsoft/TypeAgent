@@ -600,6 +600,34 @@ async function processBrowserAgentMessage(
                     const downClues =
                         context.agentContext.crossWordState.down?.length || 0;
 
+                    // Send schema to browser extension/electron for observer installation
+                    const schema = context.agentContext.crossWordState;
+                    const allClues = [...schema.across, ...schema.down];
+                    const sampleClues = allClues.slice(0, 5);
+
+                    if (client && client.socket && sampleClues.length > 0) {
+                        try {
+                            client.socket.send(
+                                JSON.stringify({
+                                    method: "crosswordSchemaExtracted",
+                                    params: {
+                                        selectors: sampleClues.map(
+                                            (c) => c.cssSelector,
+                                        ),
+                                        texts: sampleClues.map((c) => c.text),
+                                    },
+                                }),
+                            );
+
+                            debug("Sent crossword schema to client", sampleClues);
+
+                        } catch (e) {
+                            debug("Failed to send crossword schema to client", e);
+                        }
+                    }else{
+                        debug("Failed to send crossword schema to client. The client socket is not available.", client);
+                    }
+
                     context.notify(
                         AppAgentEvent.Inline,
                         {
