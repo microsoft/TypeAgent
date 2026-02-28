@@ -152,6 +152,7 @@ export type CommandHandlerContext = {
     agentCache: AgentCache;
     agentGrammarRegistry: AgentGrammarRegistry; // NFA-based grammar system for cache matching
     grammarGenerationInitialized: boolean; // Track if NFA grammar generation has been set up
+    persistedGrammarStore?: PersistedGrammarStore; // Persistence layer for dynamic grammar rules
     currentScriptDir: string;
     logger?: Logger | undefined;
     currentRequestId: RequestId | undefined;
@@ -738,6 +739,9 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     } else {
         await grammarStore.newStore(grammarStorePath);
     }
+
+    // Expose the persistence store on the context for management actions
+    context.persistedGrammarStore = grammarStore;
 
     // Enable auto-save
     await grammarStore.setAutoSave(config.cache.autoSave);

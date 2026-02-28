@@ -1804,6 +1804,13 @@ async function executeBrowserAction(
                     );
                     return result;
                 }
+                case "downloadImage": {
+                    const result = await handleDownloadImage(
+                        action.parameters,
+                        context,
+                    );
+                    return result;
+                }
                 default:
                     // Should never happen.
                     throw new Error(
@@ -3278,6 +3285,35 @@ The following is the COMPLETE JSON response object with 2 spaces of indentation 
         }
     } catch (error) {
         const errorMsg = `Error in queryPageContent: ${(error as Error).message}`;
+        context.actionIO.setDisplay(errorMsg);
+        return createActionResultFromError(errorMsg);
+    }
+}
+
+/**
+ * Handle downloadImage action
+ */
+async function handleDownloadImage(
+    parameters: {
+        cssSelector?: string;
+        imageDescription?: string;
+        filename?: string;
+    },
+    context: ActionContext<BrowserActionContext>,
+): Promise<ActionResult> {
+    const browserControl = getActionBrowserControl(context);
+
+    try {
+        const filePath = await browserControl.downloadImage(
+            parameters.cssSelector,
+            parameters.imageDescription,
+            parameters.filename,
+        );
+        const displayText = `Image downloaded to: ${filePath}`;
+        context.actionIO.setDisplay(displayText);
+        return createActionResult(filePath);
+    } catch (error) {
+        const errorMsg = `Error downloading image: ${(error as Error).message}`;
         context.actionIO.setDisplay(errorMsg);
         return createActionResultFromError(errorMsg);
     }
