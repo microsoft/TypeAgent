@@ -11,6 +11,8 @@ import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSch
 import { CopilotClient, defineTool, type SystemMessageConfig, type Tool } from "@github/copilot-sdk";
 import registerDebug from "debug";
 import { execSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getActionSchemaTypeName } from "../translation/agentTranslators.js";
 import {
     composeActionSchema,
@@ -28,6 +30,16 @@ const defaultModel = "gpt-4o";
 
 // Track Copilot clients per dispatcher instance (WeakMap for GC)
 const copilotClients = new WeakMap<object, CopilotClient>();
+
+/**
+ * Get the TypeAgent repository root path
+ * (Same as Claude implementation)
+ */
+function getRepoRoot(): string {
+    // Navigate up from this file to the repo root
+    // packages/dispatcher/dispatcher/src/reasoning/copilot.ts -> ../../../../..
+    return path.resolve(fileURLToPath(import.meta.url), "../../../../..");
+}
 
 /**
  * Find the copilot CLI executable path
@@ -136,6 +148,24 @@ function buildPromptWithContext(
 }
 
 /**
+ * Format thinking block display with collapsible details
+ * (Matches Claude implementation styling exactly)
+ */
+function formatThinkingDisplay(thinking: string, isStreaming: boolean): string {
+    const escaped = thinking
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    return [
+        `<details class="reasoning-thinking"${isStreaming ? "" : " open"}>`,
+        `<summary>Thinking</summary>`,
+        `<pre>${escaped}</pre>`,
+        `</details>`,
+    ].join("");
+}
+
+/**
  * Format a tool call as a persistent display line.
  */
 function formatToolCallDisplay(toolName: string, input: any): string {
@@ -158,6 +188,7 @@ function getCopilotSessionConfig(
     model: string;
     streaming: boolean;
     tools: Tool<unknown>[];
+    workingDirectory: string;
     systemMessage: SystemMessageConfig;
 } {
     const systemContext = context.sessionContext.agentContext;
@@ -299,6 +330,7 @@ function getCopilotSessionConfig(
         model: defaultModel,
         streaming: true,
         tools: [discoverTool, executeTool],
+        workingDirectory: getRepoRoot(),
         systemMessage: {
             mode: "append" as const,
             content: [
@@ -350,8 +382,37 @@ async function executeReasoningWithoutPlanning(
 
     let finalResult: string | undefined = undefined;
     let currentContent = "";
+    let currentReasoning = "";
 
-    // Subscribe to streaming events
+    // Subscribe to reasoning events (thinking blocks)
+    const unsubscribeReasoningDelta = session.on("assistant.reasoning_delta", (event: any) => {
+        if (event.data?.deltaContent) {
+            currentReasoning += event.data.deltaContent;
+            context.actionIO.appendDisplay(
+                {
+                    type: "markdown",
+                    content: formatThinkingDisplay(currentReasoning, true),
+                },
+                "temporary",
+            );
+        }
+    });
+
+    const unsubscribeReasoning = session.on("assistant.reasoning", (event: any) => {
+        if (event.data?.content) {
+            // Final reasoning content - display as permanent thinking block
+            context.actionIO.appendDisplay(
+                {
+                    type: "markdown",
+                    content: formatThinkingDisplay(event.data.content, false),
+                },
+                "block",
+            );
+        }
+    });
+
+    // Subscribe to message streaming events
+    // Use "temporary" mode so each delta replaces the previous one
     const unsubscribeMessageDelta = session.on("assistant.message_delta", (event: any) => {
         if (event.data?.deltaContent) {
             currentContent += event.data.deltaContent;
@@ -360,7 +421,7 @@ async function executeReasoningWithoutPlanning(
                     type: "markdown",
                     content: currentContent,
                 },
-                "block",
+                "temporary",
             );
         }
     });
@@ -400,6 +461,17 @@ async function executeReasoningWithoutPlanning(
             finalResult = response.data.content;
         }
 
+        // Display final content as permanent block (replaces temporary streaming display)
+        if (currentContent) {
+            context.actionIO.appendDisplay(
+                {
+                    type: "markdown",
+                    content: currentContent,
+                },
+                "block",
+            );
+        }
+
         return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
 
     } catch (error) {
@@ -414,6 +486,8 @@ async function executeReasoningWithoutPlanning(
         throw error;
     } finally {
         // Unsubscribe from all events
+        unsubscribeReasoningDelta();
+        unsubscribeReasoning();
         unsubscribeMessageDelta();
         unsubscribeToolStart();
         unsubscribeToolComplete();
