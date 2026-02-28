@@ -128,7 +128,8 @@ async function executeDispatcherAction(
             break;
         case "dispatcher.reasoning":
             if (action.actionName === "reasoningAction") {
-                const config = context.sessionContext.agentContext.session.getConfig();
+                const config =
+                    context.sessionContext.agentContext.session.getConfig();
                 const engine = config.execution.reasoning;
 
                 switch (engine) {
@@ -137,7 +138,9 @@ async function executeDispatcherAction(
                     case "copilot":
                         return executeCopilotReasoning(action, context);
                     default:
-                        throw new Error(`Unsupported reasoning engine: ${engine}`);
+                        throw new Error(
+                            `Unsupported reasoning engine: ${engine}`,
+                        );
                 }
             }
             break;

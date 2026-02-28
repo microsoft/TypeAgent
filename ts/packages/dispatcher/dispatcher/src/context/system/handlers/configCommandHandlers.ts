@@ -1348,7 +1348,8 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
     public readonly parameters = {
         args: {
             engine: {
-                description: "Reasoning engine to use (claude, copilot, or none)",
+                description:
+                    "Reasoning engine to use (claude, copilot, or none)",
             },
         },
     };
@@ -1371,12 +1372,16 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
                 context,
             );
             displayResult(`Reasoning engine is set to '${engine}'`, context);
-            debugReasoning(`Reasoning engine changed to '${engine}' by user command`);
+            debugReasoning(
+                `Reasoning engine changed to '${engine}' by user command`,
+            );
         } else {
-            debugReasoning(`Invalid reasoning engine '${engine}' provided by user command`);
-            
+            debugReasoning(
+                `Invalid reasoning engine '${engine}' provided by user command`,
+            );
+
             throw new Error(
-                `Invalid reasoning engine: ${engine}\nValid options: claude, copilot, none`
+                `Invalid reasoning engine: ${engine}\nValid options: claude, copilot, none`,
             );
         }
     }

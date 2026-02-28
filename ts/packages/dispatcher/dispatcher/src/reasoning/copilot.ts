@@ -8,7 +8,12 @@ import {
 } from "@typeagent/agent-sdk";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSchema.js";
-import { CopilotClient, defineTool, type SystemMessageConfig, type Tool } from "@github/copilot-sdk";
+import {
+    CopilotClient,
+    defineTool,
+    type SystemMessageConfig,
+    type Tool,
+} from "@github/copilot-sdk";
 import registerDebug from "debug";
 import { execSync } from "node:child_process";
 import path from "node:path";
@@ -90,7 +95,8 @@ function setSession(
 function generateSessionId(
     context: ActionContext<CommandHandlerContext>,
 ): string {
-    const sessionDirPath = context.sessionContext.agentContext.session.getSessionDirPath();
+    const sessionDirPath =
+        context.sessionContext.agentContext.session.getSessionDirPath();
     if (sessionDirPath) {
         // Extract session name from path (e.g., "my-session" from ".../sessions/my-session")
         const sessionName = sessionDirPath.split(/[/\\]/).pop() || "default";
@@ -164,7 +170,7 @@ async function getCopilotClient(
             debug("Failed to start Copilot client:", err);
             throw new Error(
                 `Failed to start Copilot CLI client. Make sure 'copilot' command is available and authenticated.\n` +
-                `Error: ${err instanceof Error ? err.message : String(err)}`
+                    `Error: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
     }
@@ -305,10 +311,10 @@ function getCopilotSessionConfig(
             properties: {
                 schemaName: {
                     type: "string",
-                    description: "Schema name to discover"
-                }
+                    description: "Schema name to discover",
+                },
             },
-            required: ["schemaName"]
+            required: ["schemaName"],
         },
         handler: async (args: any) => {
             const { schemaName } = args;
@@ -333,7 +339,7 @@ function getCopilotSessionConfig(
             properties: {
                 schemaName: {
                     type: "string",
-                    description: "Schema name"
+                    description: "Schema name",
                 },
                 action: {
                     type: "object",
@@ -341,16 +347,16 @@ function getCopilotSessionConfig(
                     properties: {
                         actionName: {
                             type: "string",
-                            description: "Action name"
+                            description: "Action name",
                         },
                         parameters: {
-                            description: "Action parameters"
-                        }
+                            description: "Action parameters",
+                        },
                     },
-                    required: ["actionName", "parameters"]
-                }
+                    required: ["actionName", "parameters"],
+                },
             },
-            required: ["schemaName", "action"]
+            required: ["schemaName", "action"],
         },
         handler: async (args: any) => {
             const { schemaName, action: actionJson } = args;
@@ -478,7 +484,7 @@ async function executeReasoningWithoutPlanning(
             debug("Failed to create session:", err);
             throw new Error(
                 `Failed to create Copilot session.\n` +
-                `Error: ${err instanceof Error ? err.message : String(err)}`
+                    `Error: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
     } else {
@@ -490,69 +496,93 @@ async function executeReasoningWithoutPlanning(
     let currentReasoning = "";
 
     // Subscribe to reasoning events (thinking blocks)
-    const unsubscribeReasoningDelta = session.on("assistant.reasoning_delta", (event: any) => {
-        if (event.data?.deltaContent) {
-            currentReasoning += event.data.deltaContent;
-            context.actionIO.appendDisplay(
-                {
-                    type: "markdown",
-                    content: formatThinkingDisplay(currentReasoning, true),
-                },
-                "temporary",
-            );
-        }
-    });
+    const unsubscribeReasoningDelta = session.on(
+        "assistant.reasoning_delta",
+        (event: any) => {
+            if (event.data?.deltaContent) {
+                currentReasoning += event.data.deltaContent;
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content: formatThinkingDisplay(currentReasoning, true),
+                    },
+                    "temporary",
+                );
+            }
+        },
+    );
 
-    const unsubscribeReasoning = session.on("assistant.reasoning", (event: any) => {
-        if (event.data?.content) {
-            // Final reasoning content - display as permanent thinking block
-            context.actionIO.appendDisplay(
-                {
-                    type: "markdown",
-                    content: formatThinkingDisplay(event.data.content, false),
-                },
-                "block",
-            );
-        }
-    });
+    const unsubscribeReasoning = session.on(
+        "assistant.reasoning",
+        (event: any) => {
+            if (event.data?.content) {
+                // Final reasoning content - display as permanent thinking block
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content: formatThinkingDisplay(
+                            event.data.content,
+                            false,
+                        ),
+                    },
+                    "block",
+                );
+            }
+        },
+    );
 
     // Subscribe to message streaming events
     // Use "temporary" mode so each delta replaces the previous one
-    const unsubscribeMessageDelta = session.on("assistant.message_delta", (event: any) => {
-        if (event.data?.deltaContent) {
-            currentContent += event.data.deltaContent;
+    const unsubscribeMessageDelta = session.on(
+        "assistant.message_delta",
+        (event: any) => {
+            if (event.data?.deltaContent) {
+                currentContent += event.data.deltaContent;
+                context.actionIO.appendDisplay(
+                    {
+                        type: "markdown",
+                        content: currentContent,
+                    },
+                    "temporary",
+                );
+            }
+        },
+    );
+
+    const unsubscribeToolStart = session.on(
+        "tool.execution_start",
+        (event: any) => {
+            debug(`Tool execution started: ${event.toolName}`);
             context.actionIO.appendDisplay(
                 {
                     type: "markdown",
-                    content: currentContent,
+                    content: formatToolCallDisplay(
+                        event.toolName,
+                        event.parameters,
+                    ),
+                    kind: "info",
                 },
-                "temporary",
+                "block",
             );
-        }
-    });
+        },
+    );
 
-    const unsubscribeToolStart = session.on("tool.execution_start", (event: any) => {
-        debug(`Tool execution started: ${event.toolName}`);
-        context.actionIO.appendDisplay(
-            {
-                type: "markdown",
-                content: formatToolCallDisplay(event.toolName, event.parameters),
-                kind: "info",
-            },
-            "block",
-        );
-    });
+    const unsubscribeToolComplete = session.on(
+        "tool.execution_complete",
+        (event: any) => {
+            debug(`Tool execution completed: ${event.toolName}`);
+        },
+    );
 
-    const unsubscribeToolComplete = session.on("tool.execution_complete", (event: any) => {
-        debug(`Tool execution completed: ${event.toolName}`);
-    });
-
-    const unsubscribeFinalMessage = session.on("assistant.message", (event: any) => {
-        debug("Received final assistant message");
-        if (event.data?.content) {
-            finalResult = event.data.content;
-        }
-    });
+    const unsubscribeFinalMessage = session.on(
+        "assistant.message",
+        (event: any) => {
+            debug("Received final assistant message");
+            if (event.data?.content) {
+                finalResult = event.data.content;
+            }
+        },
+    );
 
     try {
         // Send request with chat history context and wait for completion
@@ -577,8 +607,9 @@ async function executeReasoningWithoutPlanning(
             );
         }
 
-        return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
-
+        return finalResult
+            ? createActionResultNoDisplay(finalResult)
+            : undefined;
     } catch (error) {
         debug("Error during reasoning:", error);
         context.actionIO.appendDisplay(
@@ -656,7 +687,7 @@ async function executeReasoningWithTracing(
                 debug("Failed to create session:", err);
                 throw new Error(
                     `Failed to create Copilot session.\n` +
-                    `Error: ${err instanceof Error ? err.message : String(err)}`
+                        `Error: ${err instanceof Error ? err.message : String(err)}`,
                 );
             }
         } else {
@@ -668,75 +699,106 @@ async function executeReasoningWithTracing(
         let currentReasoning = "";
 
         // Subscribe to reasoning events and record thinking
-        const unsubscribeReasoningDelta = session.on("assistant.reasoning_delta", (event: any) => {
-            if (event.data?.deltaContent) {
-                currentReasoning += event.data.deltaContent;
+        const unsubscribeReasoningDelta = session.on(
+            "assistant.reasoning_delta",
+            (event: any) => {
+                if (event.data?.deltaContent) {
+                    currentReasoning += event.data.deltaContent;
+                    context.actionIO.appendDisplay(
+                        {
+                            type: "markdown",
+                            content: formatThinkingDisplay(
+                                currentReasoning,
+                                true,
+                            ),
+                        },
+                        "temporary",
+                    );
+                }
+            },
+        );
+
+        const unsubscribeReasoning = session.on(
+            "assistant.reasoning",
+            (event: any) => {
+                if (event.data?.content) {
+                    // Record thinking for trace
+                    tracer.recordThinking({
+                        content: [
+                            { type: "thinking", thinking: event.data.content },
+                        ],
+                    });
+
+                    context.actionIO.appendDisplay(
+                        {
+                            type: "markdown",
+                            content: formatThinkingDisplay(
+                                event.data.content,
+                                false,
+                            ),
+                        },
+                        "block",
+                    );
+                }
+            },
+        );
+
+        // Subscribe to message streaming
+        const unsubscribeMessageDelta = session.on(
+            "assistant.message_delta",
+            (event: any) => {
+                if (event.data?.deltaContent) {
+                    currentContent += event.data.deltaContent;
+                    context.actionIO.appendDisplay(
+                        {
+                            type: "markdown",
+                            content: currentContent,
+                        },
+                        "temporary",
+                    );
+                }
+            },
+        );
+
+        // Track tool calls for tracing
+        const unsubscribeToolStart = session.on(
+            "tool.execution_start",
+            (event: any) => {
+                debug(`Tool execution started: ${event.toolName}`);
+
+                // Record tool call for trace
+                tracer.recordToolCall(event.toolName, event.parameters);
+
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatThinkingDisplay(currentReasoning, true),
-                    },
-                    "temporary",
-                );
-            }
-        });
-
-        const unsubscribeReasoning = session.on("assistant.reasoning", (event: any) => {
-            if (event.data?.content) {
-                // Record thinking for trace
-                tracer.recordThinking({ content: [{ type: "thinking", thinking: event.data.content }] });
-
-                context.actionIO.appendDisplay(
-                    {
-                        type: "markdown",
-                        content: formatThinkingDisplay(event.data.content, false),
+                        content: formatToolCallDisplay(
+                            event.toolName,
+                            event.parameters,
+                        ),
+                        kind: "info",
                     },
                     "block",
                 );
-            }
-        });
+            },
+        );
 
-        // Subscribe to message streaming
-        const unsubscribeMessageDelta = session.on("assistant.message_delta", (event: any) => {
-            if (event.data?.deltaContent) {
-                currentContent += event.data.deltaContent;
-                context.actionIO.appendDisplay(
-                    {
-                        type: "markdown",
-                        content: currentContent,
-                    },
-                    "temporary",
-                );
-            }
-        });
+        const unsubscribeToolComplete = session.on(
+            "tool.execution_complete",
+            (event: any) => {
+                debug(`Tool execution completed: ${event.toolName}`);
+            },
+        );
 
-        // Track tool calls for tracing
-        const unsubscribeToolStart = session.on("tool.execution_start", (event: any) => {
-            debug(`Tool execution started: ${event.toolName}`);
-
-            // Record tool call for trace
-            tracer.recordToolCall(event.toolName, event.parameters);
-
-            context.actionIO.appendDisplay(
-                {
-                    type: "markdown",
-                    content: formatToolCallDisplay(event.toolName, event.parameters),
-                    kind: "info",
-                },
-                "block",
-            );
-        });
-
-        const unsubscribeToolComplete = session.on("tool.execution_complete", (event: any) => {
-            debug(`Tool execution completed: ${event.toolName}`);
-        });
-
-        const unsubscribeFinalMessage = session.on("assistant.message", (event: any) => {
-            debug("Received final assistant message");
-            if (event.data?.content) {
-                finalResult = event.data.content;
-            }
-        });
+        const unsubscribeFinalMessage = session.on(
+            "assistant.message",
+            (event: any) => {
+                debug("Received final assistant message");
+                if (event.data?.content) {
+                    finalResult = event.data.content;
+                }
+            },
+        );
 
         try {
             const prompt = buildPromptWithContext(originalRequest, context);
@@ -780,10 +842,11 @@ async function executeReasoningWithTracing(
 
                     if (plan && planGenerator.validatePlan(plan)) {
                         // Check for duplicate plans before saving
-                        const existingPlans = await planLibrary.findMatchingPlans(
-                            originalRequest,
-                            plan.intent,
-                        );
+                        const existingPlans =
+                            await planLibrary.findMatchingPlans(
+                                originalRequest,
+                                plan.intent,
+                            );
 
                         let isDuplicate = false;
                         let duplicatePlanId: string | undefined;
@@ -792,7 +855,9 @@ async function executeReasoningWithTracing(
                             const planMatcher = new PlanMatcher(planLibrary);
 
                             for (const existingPlan of existingPlans) {
-                                if (existingPlan.approval?.status === "approved") {
+                                if (
+                                    existingPlan.approval?.status === "approved"
+                                ) {
                                     debug(
                                         `Found user-approved plan: ${existingPlan.planId}, skipping new plan creation`,
                                     );
@@ -856,8 +921,9 @@ async function executeReasoningWithTracing(
                 }
             }
 
-            return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
-
+            return finalResult
+                ? createActionResultNoDisplay(finalResult)
+                : undefined;
         } finally {
             unsubscribeReasoningDelta();
             unsubscribeReasoning();
@@ -998,7 +1064,7 @@ export async function executeReasoningAction(
         await import("@github/copilot-sdk");
     } catch (error) {
         throw new Error(
-            `GitHub Copilot SDK is not installed. Run: pnpm add @github/copilot-sdk`
+            `GitHub Copilot SDK is not installed. Run: pnpm add @github/copilot-sdk`,
         );
     }
 

@@ -40,7 +40,7 @@ export class ReasonCommandHandler implements CommandHandler {
                 });
             case "none":
                 throw new Error(
-                    "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'."
+                    "Reasoning is disabled. Set reasoning engine to 'claude' or 'copilot'.",
                 );
             default:
                 throw new Error(`Unknown reasoning engine: ${engine}`);
