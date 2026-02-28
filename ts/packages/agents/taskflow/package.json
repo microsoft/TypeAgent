@@ -17,11 +17,11 @@
     "./agent/handlers": "./dist/actionHandler.mjs"
   },
   "scripts": {
-    "asc": "asc -i ./src/schema/userActions.mts -o ./dist/taskflowSchema.pas.json -t TaskFlowActions",
     "agc": "agc -i ./src/taskflowSchema.agr -o ./dist/taskflowSchema.ag.json",
-    "compile": "node scripts/compileRecipes.mjs",
+    "asc": "asc -i ./src/schema/userActions.mts -o ./dist/taskflowSchema.pas.json -t TaskFlowActions",
     "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "compile": "node scripts/compileRecipes.mjs",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "tsc": "tsc -b"
@@ -44,19 +44,6 @@
   },
   "fluidBuild": {
     "tasks": {
-      "asc": {
-        "dependsOn": [
-          "@typeagent/action-schema-compiler#tsc"
-        ],
-        "files": {
-          "inputGlobs": [
-            "src/schema/userActions.mts"
-          ],
-          "outputGlobs": [
-            "dist/taskflowSchema.pas.json"
-          ]
-        }
-      },
       "agc": {
         "dependsOn": [
           "action-grammar-compiler#tsc"
@@ -67,6 +54,19 @@
           ],
           "outputGlobs": [
             "dist/taskflowSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/schema/userActions.mts"
+          ],
+          "outputGlobs": [
+            "dist/taskflowSchema.pas.json"
           ]
         }
       }
