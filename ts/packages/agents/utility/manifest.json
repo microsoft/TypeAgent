@@ -1,0 +1,12 @@
+{
+  "emojiChar": "🔧",
+  "description": "Utility agent — web search, web fetch, and file I/O for compiled task flows",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "Utility operations: search the web, fetch page content, read and write files",
+    "schemaFile": "./src/utilitySchema.mts",
+    "compiledSchemaFile": "agents/utility/dist/utilitySchema.pas.json",
+    "grammarFile": "./dist/utilitySchema.ag.json",
+    "schemaType": "UtilityAction"
+  }
+}

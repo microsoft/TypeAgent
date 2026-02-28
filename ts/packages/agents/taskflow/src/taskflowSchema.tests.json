@@ -1,0 +1,26 @@
+[
+  {
+    "request": "Can you show me all the available task flows?",
+    "schemaName": "taskflowSchema",
+    "action": {
+      "actionName": "listTaskFlows",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "List task flows",
+    "schemaName": "taskflowSchema",
+    "action": {
+      "actionName": "listTaskFlows",
+      "parameters": {}
+    }
+  },
+  {
+    "request": "I'd like to see what task flows we have set up, please",
+    "schemaName": "taskflowSchema",
+    "action": {
+      "actionName": "listTaskFlows",
+      "parameters": {}
+    }
+  }
+]

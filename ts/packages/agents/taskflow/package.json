@@ -1,0 +1,75 @@
+{
+  "name": "taskflow-typeagent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent TaskFlow — compiled user-taught task macros",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/taskflow"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./manifest.json",
+    "./agent/handlers": "./dist/actionHandler.mjs"
+  },
+  "scripts": {
+    "agc": "agc -i ./src/taskflowSchema.agr -o ./dist/taskflowSchema.ag.json",
+    "asc": "asc -i ./src/schema/userActions.mts -o ./dist/taskflowSchema.pas.json -t TaskFlowActions",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "compile": "node scripts/compileRecipes.mjs",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
+    "html-to-text": "^9.0.5"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/html-to-text": "^9.0.4",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/taskflowSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/taskflowSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/schema/userActions.mts"
+          ],
+          "outputGlobs": [
+            "dist/taskflowSchema.pas.json"
+          ]
+        }
+      }
+    }
+  }
+}

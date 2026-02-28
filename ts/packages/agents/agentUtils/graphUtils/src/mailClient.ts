@@ -100,7 +100,9 @@ export class MailClient extends GraphClient {
                 subject: subject,
                 body: {
                     content: body,
-                    contentType: "text",
+                    contentType: body.trimStart().startsWith("<")
+                        ? "html"
+                        : "text",
                 },
             };
 

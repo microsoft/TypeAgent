@@ -427,6 +427,14 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
     // Email Operations
     // =========================================================================
 
+    // RFC 2047 encode a header value if it contains non-ASCII characters
+    private mimeEncodeHeader(value: string): string {
+        if (/[^\x00-\x7F]/.test(value)) {
+            return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
+        }
+        return value;
+    }
+
     async sendEmail(
         subject: string,
         body: string,
@@ -454,7 +462,7 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
             if (bccAddresses?.length) {
                 messageParts.push(`Bcc: ${bccAddresses.join(", ")}`);
             }
-            messageParts.push(`Subject: ${subject}`);
+            messageParts.push(`Subject: ${this.mimeEncodeHeader(subject)}`);
             messageParts.push("Content-Type: text/html; charset=utf-8");
             messageParts.push("");
             messageParts.push(body);
@@ -507,7 +515,7 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
 
             const messageParts = [
                 `To: ${replyTo}`,
-                `Subject: ${subject.startsWith("Re:") ? subject : `Re: ${subject}`}`,
+                `Subject: ${this.mimeEncodeHeader(subject.startsWith("Re:") ? subject : `Re: ${subject}`)}`,
                 `In-Reply-To: ${messageIdHeader}`,
                 `References: ${messageIdHeader}`,
                 "Content-Type: text/html; charset=utf-8",
@@ -569,7 +577,7 @@ export class GoogleEmailClient extends EventEmitter implements IEmailProvider {
             const fullBody = `${body}<br/><br/>---------- Forwarded message ----------<br/>${originalBody}`;
 
             const messageParts = [
-                `Subject: ${subject.startsWith("Fwd:") ? subject : `Fwd: ${subject}`}`,
+                `Subject: ${this.mimeEncodeHeader(subject.startsWith("Fwd:") ? subject : `Fwd: ${subject}`)}`,
                 "Content-Type: text/html; charset=utf-8",
             ];
             if (toAddresses?.length) {

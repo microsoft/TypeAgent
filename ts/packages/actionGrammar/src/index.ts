@@ -36,6 +36,13 @@ export {
     Ordinal,
     Cardinal,
     CalendarDate,
+    CalendarDateValue,
+    CalendarTime,
+    CalendarTimeValue,
+    CalendarTimeRange,
+    CalendarTimeRangeValue,
+    CalendarDayRange,
+    CalendarDayRangeValue,
     registerBuiltInEntities,
 } from "./builtInEntities.js";
 

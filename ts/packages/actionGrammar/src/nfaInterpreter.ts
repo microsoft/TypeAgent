@@ -7,6 +7,7 @@ import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 import {
     Environment,
+    SlotValue,
     createEnvironment,
     setSlotValue,
     evaluateExpression,
@@ -367,7 +368,7 @@ function tryTransition(
 
         case "wildcard": {
             // Match token and write to slot (variables compile to slot indices)
-            let slotValue: string | number = token;
+            let slotValue: SlotValue = token;
             let skipCount = 0;
 
             // Check type constraints and validate/convert token
@@ -420,7 +421,7 @@ function tryTransition(
                         if (converted === undefined) {
                             return undefined; // Conversion failed
                         }
-                        slotValue = converted as string | number;
+                        slotValue = converted as SlotValue;
                     }
                     // If no converter, slotValue remains as token string
                 }
@@ -502,14 +503,14 @@ function tryMultiTokenEntity(
         }
 
         // Multi-token span validated — try converter
-        let slotValue: string | number = span;
+        let slotValue: SlotValue = span;
         const converter = globalEntityRegistry.getConverter(trans.typeName!);
         if (converter) {
             const converted = converter.convert(span);
             if (converted === undefined) {
                 continue; // Conversion failed for this span length
             }
-            slotValue = converted as string | number;
+            slotValue = converted as SlotValue;
         }
 
         debugNFA(
