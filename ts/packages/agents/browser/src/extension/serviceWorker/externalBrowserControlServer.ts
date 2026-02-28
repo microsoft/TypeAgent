@@ -6,7 +6,7 @@ import {
     ChannelAdapter,
     RpcChannel,
 } from "@typeagent/agent-rpc/channel";
-import { getActiveTab } from "./tabManager";
+import { getActiveTab, downloadImageAsFile } from "./tabManager";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     BrowserControlCallFunctions,
@@ -546,6 +546,44 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const targetTab = await ensureActiveTab();
             const contentScriptRpc = await getContentScriptRpc(targetTab.id!);
             return contentScriptRpc.awaitPageInteraction(timeout);
+        },
+        downloadImage: async (
+            cssSelector?: string,
+            imageDescription?: string,
+            filename?: string,
+        ): Promise<string> => {
+            const targetTab = await ensureActiveTab();
+
+            const response = await chrome.tabs.sendMessage(targetTab.id!, {
+                type: "get_image_url",
+                cssSelector,
+                imageDescription,
+            });
+
+            if (response?.error) {
+                throw new Error(response.error);
+            }
+
+            const imageUrl: string = response?.imageUrl;
+            if (!imageUrl) {
+                throw new Error("No image URL returned from content script");
+            }
+
+            // Fetch image and trigger browser download via the tab
+            const imgResponse = await fetch(imageUrl);
+            const arrayBuffer = await imgResponse.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            let binary = "";
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            const contentType =
+                imgResponse.headers.get("content-type") || "image/png";
+            const dataUrl = `data:${contentType};base64,${btoa(binary)}`;
+
+            const resolvedFilename = filename || `image_${Date.now()}.png`;
+            await downloadImageAsFile(targetTab, dataUrl, resolvedFilename);
+            return resolvedFilename;
         },
         //};
     };

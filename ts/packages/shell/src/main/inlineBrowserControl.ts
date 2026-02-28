@@ -8,7 +8,9 @@ import type {
     SearchProvider,
 } from "browser-typeagent/agent/types";
 import { createContentScriptRpcClient } from "browser-typeagent/contentScriptRpc/client";
-import { ipcMain } from "electron";
+import { app, ipcMain, net } from "electron";
+import path from "node:path";
+import fs from "node:fs/promises";
 import { openai } from "aiclient";
 import {
     indexesOfNearest,
@@ -524,6 +526,54 @@ export function createInlineBrowserControl(
 
         async awaitPageInteraction(timeout?: number): Promise<void> {
             return await contentScriptControl.awaitPageInteraction(timeout);
+        },
+
+        async downloadImage(
+            cssSelector?: string,
+            imageDescription?: string,
+            filename?: string,
+        ): Promise<string> {
+            const webContents = getActiveBrowserWebContents();
+
+            const imageUrl: string | null =
+                await webContents.executeJavaScript(`
+                (function() {
+                    let img = null;
+                    const selector = ${JSON.stringify(cssSelector ?? null)};
+                    const desc = ${JSON.stringify(imageDescription?.toLowerCase() ?? null)};
+                    if (selector) {
+                        const el = document.querySelector(selector);
+                        img = el instanceof HTMLImageElement ? el : null;
+                    } else if (desc) {
+                        img = Array.from(document.querySelectorAll('img')).find(el =>
+                            el.alt?.toLowerCase().includes(desc) ||
+                            el.title?.toLowerCase().includes(desc)
+                        ) || null;
+                    }
+                    if (!img) return null;
+                    const src = img.currentSrc || img.src;
+                    return src ? new URL(src, location.href).href : null;
+                })()`);
+
+            if (!imageUrl) {
+                throw new Error(
+                    cssSelector
+                        ? `No image found with selector '${cssSelector}'`
+                        : `No image found matching description '${imageDescription}'`,
+                );
+            }
+
+            const resolvedFilename = filename ?? `image_${Date.now()}.png`;
+            const filePath = path.join(
+                app.getPath("downloads"),
+                resolvedFilename,
+            );
+            const response = await net.fetch(imageUrl);
+            await fs.writeFile(
+                filePath,
+                Buffer.from(await response.arrayBuffer()),
+            );
+            return filePath;
         },
     };
     return {

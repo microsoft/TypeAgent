@@ -23,6 +23,8 @@ import { grammarToJson } from "./grammarSerializer.js";
  * Stored grammar rule with metadata
  */
 export interface StoredGrammarRule {
+    // Stable numeric ID assigned at creation time; used for human-friendly deletion
+    id: number;
     // The raw grammar text (.agr format) — retained for debugging and export
     grammarText: string;
     // When this rule was added
@@ -40,6 +42,8 @@ export interface StoredGrammarRule {
  */
 export interface GrammarStoreData {
     version: string;
+    // Auto-incrementing counter for assigning stable rule IDs
+    nextId?: number;
     // Map from schema name to array of grammar rules
     schemas: Record<string, StoredGrammarRule[]>;
     // Pre-compiled Grammar AST of all rules combined.
@@ -69,6 +73,7 @@ export class GrammarStore {
     constructor() {
         this.data = {
             version: "1.0",
+            nextId: 1,
             schemas: {},
         };
     }
@@ -125,10 +130,14 @@ export class GrammarStore {
      * Add a new grammar rule to the store
      */
     public async addRule(
-        rule: Omit<StoredGrammarRule, "timestamp">,
+        rule: Omit<StoredGrammarRule, "timestamp" | "id">,
     ): Promise<void> {
+        if (this.data.nextId === undefined) {
+            this.data.nextId = 1;
+        }
         const storedRule: StoredGrammarRule = {
             ...rule,
+            id: this.data.nextId++,
             timestamp: Date.now(),
         };
 
@@ -186,11 +195,58 @@ export class GrammarStore {
     }
 
     /**
+     * Delete a rule by its stable ID (searches all schemas)
+     * Returns the deleted rule on success, undefined if not found
+     */
+    public async deleteRuleById(
+        id: number,
+    ): Promise<StoredGrammarRule | undefined> {
+        for (const [schemaName, rules] of Object.entries(this.data.schemas)) {
+            const index = rules.findIndex((r) => r.id === id);
+            if (index !== -1) {
+                const [deleted] = rules.splice(index, 1);
+                if (rules.length === 0) {
+                    delete this.data.schemas[schemaName];
+                }
+                this._compiledCache = undefined;
+                this.modified = true;
+                await this.doAutoSave();
+                return deleted;
+            }
+        }
+        return undefined;
+    }
+
+    /**
+     * Clear all rules for a specific schema
+     */
+    public async clearSchema(schemaName: string): Promise<number> {
+        const rules = this.data.schemas[schemaName];
+        if (!rules) {
+            return 0;
+        }
+        const count = rules.length;
+        delete this.data.schemas[schemaName];
+        this._compiledCache = undefined;
+        this.modified = true;
+        await this.doAutoSave();
+        return count;
+    }
+
+    /**
+     * Get all schema names that have stored rules
+     */
+    public getSchemaNames(): string[] {
+        return Object.keys(this.data.schemas);
+    }
+
+    /**
      * Clear all rules
      */
     public clear(): void {
         this.data = {
             version: "1.0",
+            nextId: this.data.nextId ?? 1,
             schemas: {},
         };
         this._compiledCache = undefined;
@@ -213,6 +269,7 @@ export class GrammarStore {
             // Empty file indicates new/empty store
             this.data = {
                 version: "1.0",
+                nextId: 1,
                 schemas: {},
             };
         } else {
@@ -224,6 +281,26 @@ export class GrammarStore {
             this._compiledCache = grammarFromJson(this.data.compiledGrammar);
         } else {
             this._compiledCache = undefined;
+        }
+
+        // Migration: assign stable IDs to rules from older files that lack them
+        if (!this.data.nextId) {
+            let maxId = 0;
+            for (const rules of Object.values(this.data.schemas)) {
+                for (const rule of rules) {
+                    if ((rule as any).id) {
+                        maxId = Math.max(maxId, (rule as any).id);
+                    }
+                }
+            }
+            this.data.nextId = maxId + 1;
+            for (const rules of Object.values(this.data.schemas)) {
+                for (const rule of rules) {
+                    if (!rule.id) {
+                        rule.id = this.data.nextId++;
+                    }
+                }
+            }
         }
 
         this.filePath = resolvedPath;

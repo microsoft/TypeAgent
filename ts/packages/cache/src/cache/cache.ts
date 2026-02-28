@@ -426,6 +426,8 @@ export class AgentCache {
                                 await this._persistedGrammarStore.addRule({
                                     schemaName,
                                     grammarText: genResult.generatedRule,
+                                    actionName,
+                                    sourceRequest: requestAction.request,
                                 });
 
                                 // Add rule to agent grammar registry (in-memory)

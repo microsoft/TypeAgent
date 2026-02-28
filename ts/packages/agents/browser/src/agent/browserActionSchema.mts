@@ -31,7 +31,8 @@ export type BrowserActions =
     | GetHTML
     | GetElementByDescription
     | IsPageStateMatched
-    | QueryPageContent;
+    | QueryPageContent
+    | DownloadImage;
 
 export type WebSearchResult = string;
 export type BrowserEntities = WebPageMoniker | WebSearchResult;
@@ -324,5 +325,18 @@ export type QueryPageContent = {
     parameters: {
         // Question about page content in natural language
         query: string;
+    };
+};
+
+// Download an image from the current page to the local downloads folder.
+export type DownloadImage = {
+    actionName: "downloadImage";
+    parameters: {
+        // CSS selector to identify the image element
+        cssSelector?: string;
+        // Natural language description to find the image by alt text or title
+        imageDescription?: string;
+        // Filename to save the image as (defaults to image_<timestamp>.png)
+        filename?: string;
     };
 };

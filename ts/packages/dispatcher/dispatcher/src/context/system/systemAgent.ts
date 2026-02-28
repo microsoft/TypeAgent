@@ -25,10 +25,12 @@ import {
 
 import { executeNotificationAction } from "./action/notificationActionHandler.js";
 import { executeHistoryAction } from "./action/historyActionHandler.js";
+import { executeGrammarAction } from "./action/grammarActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
 import { HistoryAction } from "./schema/historyActionSchema.js";
 import { SessionAction } from "./schema/sessionActionSchema.js";
+import { GrammarAction } from "./schema/grammarActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
@@ -97,7 +99,8 @@ function executeSystemAction(
         | TypeAgentAction<SessionAction, "system.session">
         | TypeAgentAction<ConfigAction, "system.config">
         | TypeAgentAction<NotificationAction, "system.notify">
-        | TypeAgentAction<HistoryAction, "system.history">,
+        | TypeAgentAction<HistoryAction, "system.history">
+        | TypeAgentAction<GrammarAction, "system.grammar">,
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.schemaName) {
@@ -109,6 +112,8 @@ function executeSystemAction(
             return executeNotificationAction(action, context);
         case "system.history":
             return executeHistoryAction(action, context);
+        case "system.grammar":
+            return executeGrammarAction(action, context);
         default:
             throw new Error(
                 `Invalid system sub-translator: ${(action as TypeAgentAction).schemaName}`,
@@ -150,6 +155,19 @@ export const systemManifest: AppAgentManifest = {
                 schemaFile:
                     "./src/context/system/schema/historyActionSchema.ts",
                 schemaType: "HistoryAction",
+            },
+        },
+        grammar: {
+            schema: {
+                description:
+                    "Manage dynamic grammar rules learned from user interactions. " +
+                    "List all rules or filter by agent (e.g. 'show grammar rules for calendar', " +
+                    "'list player grammar rules'). Show rule details or delete individual rules by ID " +
+                    "('show grammar rule 3', 'delete grammar rule 5'). Clear all rules or rules for " +
+                    "one agent ('clear calendar grammar rules').",
+                schemaFile:
+                    "./src/context/system/schema/grammarActionSchema.ts",
+                schemaType: "GrammarAction",
             },
         },
     },

@@ -712,12 +712,12 @@ export class MessageContainer {
             if (icon) {
                 (icon as SVGElement).style.fill = "cornflowerblue";
             }
-            // Update tooltip with rejection reason
+            // Update tooltip with reason why no grammar rule was cached
             if (message) {
                 const existing = this.div.getAttribute("data-expl") || "";
                 this.div.setAttribute(
                     "data-expl",
-                    `${existing}. No grammar rule: ${message}`,
+                    `${existing}. No fast-path cached (${message})`,
                 );
             }
         }
