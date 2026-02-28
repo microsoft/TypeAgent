@@ -41,7 +41,15 @@ export function getNextDaysDates(numDays: number): {
     const startMonth = currentDate.getMonth();
     const startDay = currentDate.getDate();
 
-    const startDateLocal = new Date(startYear, startMonth, startDay, 0, 0, 0, 0);
+    const startDateLocal = new Date(
+        startYear,
+        startMonth,
+        startDay,
+        0,
+        0,
+        0,
+        0,
+    );
     const endDateLocal = new Date(
         startYear,
         startMonth,
@@ -79,7 +87,10 @@ export function getNWeeksDateRangeISO(nWeeks: number): {
     const endDate = new Date(startDate);
     endDate.setDate(startDate.getDate() + nWeeks * 7);
     endDate.setHours(23, 59, 59, 999);
-    return { startDateTime: startDate.toISOString(), endDateTime: endDate.toISOString() };
+    return {
+        startDateTime: startDate.toISOString(),
+        endDateTime: endDate.toISOString(),
+    };
 }
 
 // ── parseDayRange ─────────────────────────────────────────────────────────────
@@ -92,7 +103,11 @@ export function parseDayRange(dayRange: string): {
     before?: string;
 } {
     const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayStart = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+    );
     const iso = (d: Date) => d.toISOString();
     const lower = dayRange.toLowerCase().trim();
 
@@ -128,8 +143,16 @@ export function parseDayRange(dayRange: string): {
 
     if (lower === "last month") {
         return {
-            since: iso(new Date(todayStart.getFullYear(), todayStart.getMonth() - 1, 1)),
-            before: iso(new Date(todayStart.getFullYear(), todayStart.getMonth(), 1)),
+            since: iso(
+                new Date(
+                    todayStart.getFullYear(),
+                    todayStart.getMonth() - 1,
+                    1,
+                ),
+            ),
+            before: iso(
+                new Date(todayStart.getFullYear(), todayStart.getMonth(), 1),
+            ),
         };
     }
 
@@ -157,7 +180,10 @@ export function parseDayRange(dayRange: string): {
     const yearMatch = lower.match(/^(\d{4})$/);
     if (yearMatch) {
         const y = parseInt(yearMatch[1], 10);
-        return { since: iso(new Date(y, 0, 1)), before: iso(new Date(y + 1, 0, 1)) };
+        return {
+            since: iso(new Date(y, 0, 1)),
+            before: iso(new Date(y + 1, 0, 1)),
+        };
     }
 
     return {};

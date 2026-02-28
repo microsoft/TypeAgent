@@ -764,7 +764,10 @@ export function registerBuiltInEntities(): void {
         "CalendarTimeRange",
         CalendarTimeRange,
     );
-    globalEntityRegistry.registerConverter("CalendarDayRange", CalendarDayRange);
+    globalEntityRegistry.registerConverter(
+        "CalendarDayRange",
+        CalendarDayRange,
+    );
     globalEntityRegistry.registerConverter("Percentage", Percentage);
 
     // Lowercase aliases (paramSpec convention from .pas.json schemas)
@@ -776,6 +779,9 @@ export function registerBuiltInEntities(): void {
         "calendarTimeRange",
         CalendarTimeRange,
     );
-    globalEntityRegistry.registerConverter("calendarDayRange", CalendarDayRange);
+    globalEntityRegistry.registerConverter(
+        "calendarDayRange",
+        CalendarDayRange,
+    );
     globalEntityRegistry.registerConverter("percentage", Percentage);
 }

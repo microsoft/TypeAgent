@@ -738,7 +738,11 @@ async function handleFindEmailAction(
             dr !== null &&
             typeof dr === "object" &&
             "asISORange" in (dr as object)
-                ? (dr as { asISORange(): { since?: string; before?: string } }).asISORange()
+                ? (
+                      dr as {
+                          asISORange(): { since?: string; before?: string };
+                      }
+                  ).asISORange()
                 : parseDayRange(String(dr));
         if (isoRange.since) searchQuery.startDateTime = isoRange.since;
         if (isoRange.before) searchQuery.endDateTime = isoRange.before;
@@ -778,8 +782,7 @@ async function handleFindEmailAction(
     displayStatus("Searching emails...", context);
     // Use a higher limit for date-range fetches (e.g. weekly digest); 10 for targeted searches
     searchQuery.maxResults =
-        searchQuery.maxResults ||
-        (searchQuery.startDateTime ? 100 : 10);
+        searchQuery.maxResults || (searchQuery.startDateTime ? 100 : 10);
     const messages = await emailProvider.searchEmails(searchQuery);
 
     // Background: absorb results into kp index for async enrichment

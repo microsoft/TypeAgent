@@ -15,6 +15,7 @@ pnpm run compile
 ```
 
 That's it. `scripts/compileRecipes.mjs` reads `pending/*.recipe.json` and:
+
 1. Writes `flows/ACTION_NAME.flow.json`
 2. Appends TypeScript type to `src/schema/userActions.mts`
 3. Appends grammar rule to `src/taskflowSchema.agr`
@@ -90,13 +91,13 @@ Do NOT write TypeScript files. Do NOT edit `userActions.mts`, `taskflowSchema.ag
 
 ### Parameter references in step parameters
 
-| Value | Resolves to |
-|-------|-------------|
-| `"${paramName}"` | flow parameter value (typed) |
-| `"${stepId.text}"` | prior step's plain text output |
-| `"${stepId.data}"` | prior step's output parsed as JSON |
-| `"prefix ${paramName} suffix"` | interpolated string |
-| Static value | passed through as-is (strings, numbers, booleans, objects, arrays) |
+| Value                          | Resolves to                                                        |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `"${paramName}"`               | flow parameter value (typed)                                       |
+| `"${stepId.text}"`             | prior step's plain text output                                     |
+| `"${stepId.data}"`             | prior step's output parsed as JSON                                 |
+| `"prefix ${paramName} suffix"` | interpolated string                                                |
+| Static value                   | passed through as-is (strings, numbers, booleans, objects, arrays) |
 
 ### Nested objects and arrays are fine
 
@@ -141,9 +142,9 @@ Use `discover_actions schemaName` to see exact parameter types. Key schemas:
 
 ## LLM Model Selection for llmTransform / claudeTask
 
-| Task | Model |
-|------|-------|
+| Task                                         | Model                       |
+| -------------------------------------------- | --------------------------- |
 | Simple extraction, formatting, summarisation | `claude-haiku-4-5-20251001` |
-| Complex multi-step reasoning | `claude-sonnet-4-6` |
+| Complex multi-step reasoning                 | `claude-sonnet-4-6`         |
 
 Default to Haiku.

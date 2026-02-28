@@ -75,7 +75,9 @@ function buildTsType(recipe) {
     const paramLines = params
         .map((p) => {
             const opt = p.required === false ? "?" : "";
-            const comment = p.description ? `        // ${p.description}\n` : "";
+            const comment = p.description
+                ? `        // ${p.description}\n`
+                : "";
             return `${comment}        ${p.name}${opt}: ${p.type};`;
         })
         .join("\n");
@@ -128,7 +130,10 @@ for (const recipeFile of recipeFiles) {
 
     // 1. Write flow.json
     const flowPath = join(flowsDir, `${recipe.actionName}.flow.json`);
-    writeFileSync(flowPath, JSON.stringify(buildFlowJson(recipe), null, 2) + "\n");
+    writeFileSync(
+        flowPath,
+        JSON.stringify(buildFlowJson(recipe), null, 2) + "\n",
+    );
     console.log(`  ✓ flows/${recipe.actionName}.flow.json`);
 
     // 2. Append TypeScript type and update union in userActions.mts
@@ -173,7 +178,9 @@ for (const recipeFile of recipeFiles) {
         );
         grammar += buildGrammarRule(recipe);
         writeFileSync(grammarPath, grammar);
-        console.log(`  ✓ src/taskflowSchema.agr (added <${recipe.actionName}>)`);
+        console.log(
+            `  ✓ src/taskflowSchema.agr (added <${recipe.actionName}>)`,
+        );
     }
 
     // 4. Update manifest.json flows
@@ -185,7 +192,8 @@ for (const recipeFile of recipeFiles) {
             `  ⚠ manifest.json entry for '${recipe.actionName}' already exists — skipping`,
         );
     } else {
-        manifest.flows[recipe.actionName] = `./flows/${recipe.actionName}.flow.json`;
+        manifest.flows[recipe.actionName] =
+            `./flows/${recipe.actionName}.flow.json`;
         writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
         console.log(`  ✓ manifest.json (added flows.${recipe.actionName})`);
     }

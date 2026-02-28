@@ -46,9 +46,7 @@
       "parameters": {
         "subject": "Email digest — ${timePeriod}",
         "body": "${digest.text}",
-        "to": [
-          "me"
-        ],
+        "to": ["me"],
         "genContent": {
           "generateBody": false
         }

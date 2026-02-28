@@ -67,7 +67,12 @@ export function getTimeRangeBasedQuery(
     return undefined;
 }
 
-export { getCurrentWeekDates, getCurrentMonthDates, getNextDaysDates, getNWeeksDateRangeISO };
+export {
+    getCurrentWeekDates,
+    getCurrentMonthDates,
+    getNextDaysDates,
+    getNWeeksDateRangeISO,
+};
 
 export function generateNaturalLanguageCriteria(
     input: string,
