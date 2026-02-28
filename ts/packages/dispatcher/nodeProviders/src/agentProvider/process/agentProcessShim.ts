@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import child_process from "child_process";
+import { execFileSync } from "child_process";
 import { AppAgent } from "@typeagent/agent-sdk";
 import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import { createChannelProvider } from "@typeagent/agent-rpc/channel";
@@ -15,15 +16,41 @@ export type AgentProcess = {
     trace?: (namespaces: string) => void;
 };
 
+// When running inside Electron, process.execPath points to the Electron binary,
+// not system Node.js. Agent child processes must use system Node so that native
+// modules (e.g. better-sqlite3) compiled for the system Node ABI load correctly.
+let _systemNodePath: string | undefined | null = undefined;
+function getSystemNodeExecPath(): string | undefined {
+    if (!process.versions.electron) {
+        return undefined;
+    }
+    if (_systemNodePath !== undefined) {
+        return _systemNodePath ?? undefined;
+    }
+    try {
+        const cmd = process.platform === "win32" ? "where" : "which";
+        const result = execFileSync(cmd, ["node"], { encoding: "utf8" });
+        _systemNodePath = result.split(/\r?\n/)[0].trim() || null;
+    } catch {
+        _systemNodePath = null;
+    }
+    return _systemNodePath ?? undefined;
+}
+
 export async function createAgentProcess(
     agentName: string,
     modulePath: string,
 ): Promise<AgentProcess> {
     const env = { ...process.env };
+    const forkOptions: child_process.ForkOptions = { env };
+    const systemNode = getSystemNodeExecPath();
+    if (systemNode) {
+        forkOptions.execPath = systemNode;
+    }
     const agentProcess = child_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [agentName, modulePath],
-        { env },
+        forkOptions,
     );
 
     const channelProvider = createChannelProvider(

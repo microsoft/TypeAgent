@@ -56,6 +56,7 @@ import {
 } from "../context/memory.js";
 import { setActivityContext } from "./activityContext.js";
 import { tryGetActionSchema } from "../translation/actionSchemaFileCache.js";
+import { processFlow } from "./flowInterpreter.js";
 
 const debugActions = registerDebug("typeagent:dispatcher:actions");
 const debugCommandExecError = registerDebug(
@@ -118,12 +119,6 @@ export async function executeAction(
     // Update the last action translator.
     systemContext.lastActionSchemaName = schemaName;
 
-    if (appAgent.executeAction === undefined) {
-        throw new Error(
-            `Agent '${appAgentName}' does not support executeAction.`,
-        );
-    }
-
     // Reuse the same streaming action context if one is available.
 
     const { actionContext, closeActionContext } =
@@ -153,11 +148,36 @@ export async function executeAction(
     );
     let result: ActionResult;
     try {
-        result =
-            (await appAgent.executeAction(action, actionContext)) ??
-            createActionResult(
-                `Action ${getFullActionName(executableAction)} completed.`,
+        // Check if this action has a registered flow program
+        const flowDef = systemContext.agents.getFlow(
+            schemaName,
+            action.actionName,
+        );
+        if (flowDef !== undefined) {
+            const flowParams = (action.parameters ?? {}) as Record<
+                string,
+                unknown
+            >;
+            // Pass the outer context (ActionContext<CommandHandlerContext>) so the
+            // flow interpreter can access the full agent registry.
+            result = await processFlow(
+                flowDef,
+                flowParams,
+                context,
+                actionIndex,
             );
+        } else {
+            if (appAgent.executeAction === undefined) {
+                throw new Error(
+                    `Agent '${appAgentName}' does not support executeAction.`,
+                );
+            }
+            result =
+                (await appAgent.executeAction(action, actionContext)) ??
+                createActionResult(
+                    `Action ${getFullActionName(executableAction)} completed.`,
+                );
+        }
     } catch (e: any) {
         result = createActionResultFromError(e.message);
     }

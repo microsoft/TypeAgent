@@ -57,6 +57,12 @@
     },
     "weather": {
       "name": "weather-agent"
+    },
+    "taskflow": {
+      "name": "taskflow-typeagent"
+    },
+    "utility": {
+      "name": "utility-typeagent"
     }
   },
   "mcpServers": {

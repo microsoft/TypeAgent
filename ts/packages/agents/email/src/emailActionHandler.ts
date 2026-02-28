@@ -8,12 +8,14 @@ import {
     EmailSearchQuery,
     createEmailProviderFromConfig,
     GoogleEmailClient,
+    parseDayRange,
 } from "graph-utils";
 import chalk from "chalk";
 import {
     EmailAction,
     FindEmailAction,
     ForwardEmailAction,
+    MessageReference,
     ReplyEmailAction,
 } from "./emailActionsSchema.js";
 import { generateNotes } from "typeagent";
@@ -432,7 +434,9 @@ async function handleForwardOrReplyAction(
     action: ForwardEmailAction | ReplyEmailAction,
     emailProvider: IEmailProvider,
 ) {
-    let msgRef = action.parameters.messageRef;
+    const rawRef = action.parameters.messageRef as MessageReference | string;
+    let msgRef: MessageReference =
+        typeof rawRef === "string" ? { content: rawRef } : rawRef;
     if (msgRef) {
         // use the message reference to find the email to reply to
         console.log(chalk.green("Handling replyEmail action ..."));
@@ -704,7 +708,9 @@ async function handleFindEmailAction(
 ): Promise<ActionResultSuccess | string> {
     debug(chalk.green("Handling findEmail action ..."));
 
-    const msgRef = action.parameters.messageRef;
+    const rawRef = action.parameters.messageRef as MessageReference | string;
+    const msgRef: MessageReference =
+        typeof rawRef === "string" ? { content: rawRef } : rawRef;
 
     // Build provider search query from message reference
     const searchQuery: EmailSearchQuery = {};
@@ -724,6 +730,19 @@ async function handleFindEmailAction(
         searchQuery.startDateTime = msgRef.receivedDateTime.startTime;
     if (msgRef.receivedDateTime?.endTime)
         searchQuery.endDateTime = msgRef.receivedDateTime.endTime;
+    if (msgRef.receivedDateTime?.dayRange && !searchQuery.startDateTime) {
+        // Grammar matching may deliver a CalendarDayRangeValue object (asISORange method);
+        // LLM path always delivers a plain string. Handle both via duck typing.
+        const dr = msgRef.receivedDateTime.dayRange as unknown;
+        const isoRange =
+            dr !== null &&
+            typeof dr === "object" &&
+            "asISORange" in (dr as object)
+                ? (dr as { asISORange(): { since?: string; before?: string } }).asISORange()
+                : parseDayRange(String(dr));
+        if (isoRange.since) searchQuery.startDateTime = isoRange.since;
+        if (isoRange.before) searchQuery.endDateTime = isoRange.before;
+    }
     if (msgRef.srcFolder) searchQuery.folder = msgRef.srcFolder;
 
     const hasSearchCriteria =
@@ -757,7 +776,10 @@ async function handleFindEmailAction(
 
     // Provider search — primary path for all queries
     displayStatus("Searching emails...", context);
-    searchQuery.maxResults = searchQuery.maxResults || 10;
+    // Use a higher limit for date-range fetches (e.g. weekly digest); 10 for targeted searches
+    searchQuery.maxResults =
+        searchQuery.maxResults ||
+        (searchQuery.startDateTime ? 100 : 10);
     const messages = await emailProvider.searchEmails(searchQuery);
 
     // Background: absorb results into kp index for async enrichment

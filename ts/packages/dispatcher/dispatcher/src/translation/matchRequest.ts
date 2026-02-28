@@ -170,12 +170,21 @@ export function getActivityNamespaceSuffix(
     return cacheSpec !== "shared" ? activityContext!.activityName : undefined;
 }
 
+// Prefixes that must always reach Claude reasoning — never matched by grammar.
+const REASONING_PREFIXES = ["learn:", "dev:", "remember how to ", "record "];
+
 export async function matchRequest(
     context: ActionContext<CommandHandlerContext>,
     request: string,
     history?: HistoryContext,
     activeSchemas?: string[],
 ): Promise<TranslationResult | undefined> {
+    // Bypass grammar cache for recording/reasoning-directed requests.
+    const lower = request.trimStart().toLowerCase();
+    if (REASONING_PREFIXES.some((p) => lower.startsWith(p))) {
+        return undefined;
+    }
+
     const systemContext = context.sessionContext.agentContext;
     const agentCache = systemContext.agentCache;
     if (!agentCache.isEnabled()) {

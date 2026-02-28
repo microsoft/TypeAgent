@@ -1,0 +1,58 @@
+{
+  "name": "weeklyEmailDigest",
+  "description": "Fetch recent emails and send a digest summary to yourself",
+  "parameters": {
+    "timePeriod": {
+      "type": "string",
+      "required": false,
+      "default": "this week",
+      "description": "Time period to summarize (e.g. 'this week', 'today', 'last 3 days')"
+    },
+    "focus": {
+      "type": "string",
+      "required": false,
+      "default": "personal and work emails; skip promotional, marketing, and automated messages",
+      "description": "What to focus on or exclude in the digest"
+    }
+  },
+  "steps": [
+    {
+      "id": "emails",
+      "schemaName": "email",
+      "actionName": "findEmail",
+      "parameters": {
+        "messageRef": {
+          "receivedDateTime": {
+            "dayRange": "${timePeriod}"
+          }
+        }
+      }
+    },
+    {
+      "id": "digest",
+      "schemaName": "utility",
+      "actionName": "llmTransform",
+      "parameters": {
+        "input": "${emails.text}",
+        "prompt": "Write a concise email digest as HTML from the emails below. Use <h2> for section headers (e.g. Personal, Work, Skipped). Use <ul><li> for bullet points. Use <strong> for sender names. Wrap everything in <div style=\"font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;line-height:1.5\">. Focus on: ${focus}. Keep it concise.",
+        "htmlOutput": true,
+        "model": "claude-haiku-4-5-20251001"
+      }
+    },
+    {
+      "id": "sent",
+      "schemaName": "email",
+      "actionName": "sendEmail",
+      "parameters": {
+        "subject": "Email digest — ${timePeriod}",
+        "body": "${digest.text}",
+        "to": [
+          "me"
+        ],
+        "genContent": {
+          "generateBody": false
+        }
+      }
+    }
+  ]
+}

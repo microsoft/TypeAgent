@@ -1,0 +1,45 @@
+{
+  "name": "createTopSongsPlaylistClaude",
+  "description": "Find top streaming songs using claudeTask (web research) and create a Spotify playlist — compare against createTopSongsPlaylist which uses hardcoded chosic.com",
+  "parameters": {
+    "genre": {
+      "type": "string",
+      "required": true,
+      "description": "Music genre (e.g. bluegrass, jazz, country, rock, hip-hop)"
+    },
+    "quantity": {
+      "type": "number",
+      "required": false,
+      "default": 10,
+      "description": "Number of top songs to include"
+    },
+    "timePeriod": {
+      "type": "string",
+      "required": false,
+      "default": "this month",
+      "description": "Chart time period (e.g. 'this month', 'this week', '2024')"
+    }
+  },
+  "steps": [
+    {
+      "id": "songs",
+      "schemaName": "utility",
+      "actionName": "claudeTask",
+      "parameters": {
+        "goal": "You MUST use the WebSearch or WebFetch tools to find current data — do not answer from memory. Search for the top ${quantity} ${genre} songs of 2025 on a chart site (chosic.com, rateyourmusic.com, or similar). Fetch the page and extract the song list. Return ONLY a JSON array of objects with \"trackName\" and \"artist\" fields. If you cannot find songs, return an empty array []. Output nothing except the JSON array.",
+        "parseJson": true,
+        "model": "claude-sonnet-4-6",
+        "maxTurns": 10
+      }
+    },
+    {
+      "id": "playlist",
+      "schemaName": "player",
+      "actionName": "createPlaylist",
+      "parameters": {
+        "name": "Top ${quantity} ${genre} \u2013 ${timePeriod} (claude)",
+        "songs": "${songs.data}"
+      }
+    }
+  ]
+}
