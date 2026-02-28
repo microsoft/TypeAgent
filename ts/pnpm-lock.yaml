@@ -2400,6 +2400,46 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
+  packages/agents/taskflow:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.3.6)
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../../agentServer/client
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
+      html-to-text:
+        specifier: ^9.0.5
+        version: 9.0.5
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      '@types/html-to-text':
+        specifier: ^9.0.4
+        version: 9.0.4
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agents/test:
     dependencies:
       '@typeagent/agent-sdk':
@@ -2464,6 +2504,52 @@ importers:
       webpack-dev-server:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
+
+  packages/agents/utility:
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.3.6)
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@types/html-to-text':
+        specifier: ^9.0.4
+        version: 9.0.4
+      browser-typeagent:
+        specifier: workspace:*
+        version: link:../browser
+      html-to-text:
+        specifier: ^9.0.5
+        version: 9.0.5
+      puppeteer:
+        specifier: ^24.15.0
+        version: 24.37.5(typescript@5.4.5)
+      puppeteer-extra:
+        specifier: ^3.3.6
+        version: 3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5))
+      puppeteer-extra-plugin-stealth:
+        specifier: ^2.11.2
+        version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
 
   packages/agents/video:
     dependencies:
@@ -3224,6 +3310,9 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
+      taskflow-typeagent:
+        specifier: workspace:*
+        version: link:../agents/taskflow
       telemetry:
         specifier: workspace:*
         version: link:../telemetry
@@ -3236,6 +3325,9 @@ importers:
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
+      utility-typeagent:
+        specifier: workspace:*
+        version: link:../agents/utility
       video-agent:
         specifier: workspace:*
         version: link:../agents/video
