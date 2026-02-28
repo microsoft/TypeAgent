@@ -13,8 +13,39 @@ import { getCachedSchema, setCachedSchema } from "./cachedSchema.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:crossword:schema");
+function validateCachedSchema(
+    cachedSchema: Crossword,
+    htmlFragments: any[],
+): boolean {
+    const allClues = [...cachedSchema.across, ...cachedSchema.down];
+    const cluesToCheck = allClues.slice(0, 5);
+
+    if (cluesToCheck.length === 0) {
+        return false;
+    }
+
+    const htmlContent = htmlFragments
+        .map((fragment) => fragment.content || "")
+        .join(" ");
+
+    for (const clue of cluesToCheck) {
+        if (!htmlContent.includes(clue.text)) {
+            debug(
+                `Cache validation failed: clue "${clue.text}" not found in HTML`,
+            );
+            return false;
+        }
+    }
+
+    debug(
+        `Cache validation passed: all ${cluesToCheck.length} sample clues found`,
+    );
+    return true;
+}
+
 export async function getBoardSchema(
     context: SessionContext<BrowserActionContext>,
+    targetClientId?: string,
 ): Promise<Crossword | undefined> {
     const agentContext = context.agentContext;
     if (!agentContext.browserConnector) {
@@ -26,16 +57,24 @@ export async function getBoardSchema(
     const url = await browserControl.getPageUrl();
     const cachedSchema = await getCachedSchema(context, url);
 
-    if (cachedSchema) {
-        debug(
-            `Reusing cached schema for ${url}: ${JSON.stringify(cachedSchema)}`,
-        );
-        return cachedSchema;
-    }
-
     await browserControl.awaitPageLoad(1000);
-    const htmlFragments = await browser.getHtmlFragments();
+    const htmlFragments = await browser.getHtmlFragments(
+        undefined,
+        undefined,
+        targetClientId,
+    );
     debug(`Found ${htmlFragments.length} HTML fragments on the page ${url}.`);
+
+    if (cachedSchema) {
+        debug(`Found cached schema for ${url}, validating...`);
+        if (validateCachedSchema(cachedSchema, htmlFragments)) {
+            debug(`Reusing validated cached schema for ${url}`);
+            return cachedSchema;
+        }
+        debug(
+            `Cached schema validation failed, re-extracting schema for ${url}`,
+        );
+    }
     debug(htmlFragments);
     const agent = await createCrosswordPageTranslator("GPT_5_MINI");
 

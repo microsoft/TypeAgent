@@ -93,6 +93,12 @@ export async function clearCachedSchemas(
     if (storage === undefined) {
         return;
     }
-    await storage.delete(cacheSchemaFile);
+    try {
+        if (await storage.exists(cacheSchemaFile)) {
+            await storage.delete(cacheSchemaFile);
+        }
+    } catch (e) {
+        debugError("Failed to clear cached crossword schema.", e);
+    }
     context.agentContext.crosswordCachedSchemas = undefined;
 }

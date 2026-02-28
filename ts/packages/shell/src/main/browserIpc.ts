@@ -14,13 +14,19 @@ const debugBrowserIPC = registerDebug("typeagent:browser:ipc");
 export class BrowserAgentIpc {
     private static instance: BrowserAgentIpc;
     public onMessageReceived: ((message: WebSocketMessageV2) => void) | null;
+    public onSendNotification: ((message: string, id: string) => void) | null;
     private webSocket: any;
     private reconnectionPending: boolean = false;
     private webSocketPromise: Promise<WebSocket | undefined> | null = null;
+    private messageQueue: WebSocketMessageV2[] = [];
+    private maxQueueSize: number = 100;
+    private reconnectAttempts: number = 0;
+    private hasShownRestoringNotification: boolean = false;
 
     private constructor() {
         this.webSocket = null;
         this.onMessageReceived = null;
+        this.onSendNotification = null;
     }
 
     public static getinstance = (): BrowserAgentIpc => {
@@ -81,10 +87,11 @@ export class BrowserAgentIpc {
                             (schema == "browser" ||
                                 schema == "webAgent" ||
                                 schema.startsWith("browser.") ||
+                                data.method === "crosswordSchemaExtracted" ||
                                 data.method === "importProgress") &&
                             this.onMessageReceived
                         ) {
-                            debugBrowserIPC("Browser -> Dispatcher", data);
+                            debugBrowserIPC("BrowserAgent -> Shell", data);
                             this.onMessageReceived(data);
                         }
                     } catch {}
@@ -98,11 +105,39 @@ export class BrowserAgentIpc {
 
                 this.webSocketPromise = null;
 
+                // Reset reconnection attempts on successful connection
+                this.reconnectAttempts = 0;
+
+                // Flush any queued messages
+                this.flushMessageQueue();
+
                 resolve(this.webSocket);
             },
         );
 
         return this.webSocketPromise;
+    }
+
+    private flushMessageQueue(): void {
+        if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+
+        debugBrowserIPC(`Flushing ${this.messageQueue.length} queued messages`);
+        while (this.messageQueue.length > 0) {
+            const message = this.messageQueue.shift();
+            if (message) {
+                try {
+                    debugBrowserIPC("Browser -> Dispatcher (queued)", message);
+                    this.webSocket.send(JSON.stringify(message));
+                } catch (error) {
+                    debugBrowserIPC("Failed to send queued message", error);
+                }
+            }
+        }
+
+        // Reset notification flag after flushing queue
+        this.hasShownRestoringNotification = false;
     }
 
     private reconnectWebSocket() {
@@ -114,32 +149,85 @@ export class BrowserAgentIpc {
         // indicate a reconnection attempt is pending
         this.reconnectionPending = true;
 
-        // attempt reconnection every 5 seconds
-        const connectionCheckIntervalId = setInterval(async () => {
+        // Use exponential backoff: start at 1s, double each time, cap at 5s
+        // Attempts: 1s, 2s, 4s, 5s, 5s, 5s...
+        const retryDelay = Math.min(
+            1000 * Math.pow(2, this.reconnectAttempts),
+            5000,
+        );
+        this.reconnectAttempts++;
+
+        debugBrowserIPC(
+            `Scheduling reconnection attempt in ${retryDelay}ms (attempt ${this.reconnectAttempts})`,
+        );
+
+        setTimeout(async () => {
             if (
                 this.webSocket &&
                 this.webSocket.readyState === WebSocket.OPEN
             ) {
-                debugBrowserIPC("Clearing reconnect retry interval");
-                clearInterval(connectionCheckIntervalId);
-            } else {
-                debugBrowserIPC("Retrying connection");
-                await this.ensureWebsocketConnected();
+                debugBrowserIPC(
+                    "Connection already established, stopping reconnection",
+                );
+                this.reconnectionPending = false;
+                return;
             }
+
+            debugBrowserIPC("Retrying connection");
+            await this.ensureWebsocketConnected();
 
             // reconnection was either successful or attempted
             this.reconnectionPending = false;
-        }, 5 * 1000);
+
+            // If still not connected, schedule another attempt
+            if (
+                !this.webSocket ||
+                this.webSocket.readyState !== WebSocket.OPEN
+            ) {
+                this.reconnectWebSocket();
+            }
+        }, retryDelay);
     }
 
     public async send(message: WebSocketMessageV2) {
         const webSocket = await this.ensureWebsocketConnected();
         if (!webSocket) {
-            debugBrowserIPC("WebSocket not [yet] connected!");
+            // Queue the message if connection isn't ready yet
+            if (this.messageQueue.length < this.maxQueueSize) {
+                debugBrowserIPC(
+                    "WebSocket not connected, queueing message",
+                    message.method,
+                );
+                this.messageQueue.push(message);
+
+                // Show notification when queueing site agent messages
+                if (
+                    !this.hasShownRestoringNotification &&
+                    (message.method === "enableSiteTranslator" ||
+                        message.method === "enableSiteAgent")
+                ) {
+                    this.hasShownRestoringNotification = true;
+                    this.sendRestoringNotification();
+                }
+            } else {
+                debugBrowserIPC(
+                    "Message queue full, dropping message",
+                    message.method,
+                );
+            }
             return;
         }
         debugBrowserIPC("Browser -> Dispatcher", message);
         webSocket.send(JSON.stringify(message));
+    }
+
+    private sendRestoringNotification(): void {
+        if (this.onSendNotification) {
+            this.onSendNotification(
+                "Restoring site-specific agents...",
+                "browser-restore-agents",
+            );
+        }
     }
 
     public isConnected(): boolean {

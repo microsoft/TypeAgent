@@ -3,6 +3,15 @@
 
 export {};
 
+interface CrosswordObserverState {
+    observer: MutationObserver | null;
+    monitoredSelectors: string[];
+    monitoredTexts: string[];
+    debounceTimer: number | null;
+}
+
+let crosswordObserverState: CrosswordObserverState | null = null;
+
 function escapeCssSelector(selector: string) {
     let prefix = "";
     let suffix = "";
@@ -288,6 +297,152 @@ async function selectDropdownOption(selector: string, optionLabel: string) {
     }
 }
 
+function hasRelevantCrosswordChange(
+    mutation: MutationRecord,
+    selectors: string[],
+    expectedTexts: string[],
+): boolean {
+    // Check if monitored element was removed
+    if (mutation.type === "childList" && mutation.removedNodes.length > 0) {
+        for (const node of Array.from(mutation.removedNodes)) {
+            if (node instanceof HTMLElement) {
+                const id = node.id ? `#${node.id}` : null;
+                if (id && selectors.includes(id)) {
+                    console.log(`Crossword change detected: ${id} removed`);
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Check if text content changed
+    if (mutation.type === "childList" || mutation.type === "characterData") {
+        const target = mutation.target;
+        let element: HTMLElement | null = null;
+
+        if (target instanceof HTMLElement) {
+            element = target;
+        } else if (target.parentElement) {
+            element = target.parentElement;
+        }
+
+        if (element) {
+            const id = element.id ? `#${element.id}` : null;
+            if (id && selectors.includes(id)) {
+                const index = selectors.indexOf(id);
+                const expectedText = expectedTexts[index];
+                const currentText = element.textContent || "";
+
+                // Check if clue text no longer present
+                if (!currentText.includes(expectedText)) {
+                    console.log(`Crossword change: ${id} text changed`);
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+function notifyCrosswordChanged(): void {
+    if (!crosswordObserverState) return;
+
+    // Clear existing timer
+    if (crosswordObserverState.debounceTimer) {
+        clearTimeout(crosswordObserverState.debounceTimer);
+    }
+
+    // Set new timer (500ms debounce)
+    crosswordObserverState.debounceTimer = window.setTimeout(() => {
+        console.log("Crossword change detected, firing event");
+
+        if (typeof window !== "undefined" && (window as any).browserConnect) {
+            // Electron: Use browserConnect API
+            console.log("Re-enabling crossword agent via browserConnect");
+            try {
+                (window as any).browserConnect.enableSiteAgent(
+                    "browser.crossword",
+                );
+            } catch (error) {
+                console.error("Error re-enabling crossword agent:", error);
+            }
+        } else {
+            // Fire custom document event
+            const event = new CustomEvent("fromCrosswordAutomation", {
+                detail: {
+                    type: "crosswordChanged",
+                    url: window.location.href,
+                    timestamp: Date.now(),
+                },
+            });
+            document.dispatchEvent(event);
+        }
+
+        crosswordObserverState!.debounceTimer = null;
+    }, 500);
+}
+
+function setupCrosswordObserver(selectors: string[], texts: string[]): void {
+    console.log("Setting up crossword observer for selectors:", selectors);
+
+    // Disconnect existing observer if any
+    if (crosswordObserverState?.observer) {
+        crosswordObserverState.observer.disconnect();
+    }
+
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            if (hasRelevantCrosswordChange(mutation, selectors, texts)) {
+                notifyCrosswordChanged();
+                break;
+            }
+        }
+    });
+
+    // Observe each clue element
+    selectors.forEach((selector) => {
+        const element = document.querySelector(selector);
+        if (element) {
+            // Watch element itself for text changes
+            observer.observe(element, {
+                characterData: true,
+                childList: true,
+                subtree: true,
+            });
+
+            // Watch parent for element removal
+            if (element.parentElement) {
+                observer.observe(element.parentElement, {
+                    childList: true,
+                });
+            }
+        }
+    });
+
+    crosswordObserverState = {
+        observer,
+        monitoredSelectors: selectors,
+        monitoredTexts: texts,
+        debounceTimer: null,
+    };
+
+    console.log("Crossword observer set up successfully");
+}
+
+function disconnectCrosswordObserver(): void {
+    if (crosswordObserverState?.observer) {
+        console.log("Disconnecting crossword observer");
+        crosswordObserverState.observer.disconnect();
+
+        if (crosswordObserverState.debounceTimer) {
+            clearTimeout(crosswordObserverState.debounceTimer);
+        }
+
+        crosswordObserverState = null;
+    }
+}
+
 window.addEventListener("message", async (event: any) => {
     const data = event.data;
 
@@ -334,6 +489,15 @@ window.addEventListener("message", async (event: any) => {
                     message.parameters.optionLabel,
                 );
             }
+            if (actionName === "setupCrosswordObserver") {
+                setupCrosswordObserver(
+                    message.parameters.selectors,
+                    message.parameters.texts,
+                );
+            }
+            if (actionName === "disconnectCrosswordObserver") {
+                disconnectCrosswordObserver();
+            }
 
             window.postMessage(
                 {
@@ -359,4 +523,8 @@ window.addEventListener("message", async (event: any) => {
 
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("UI Events Script initialized");
+});
+
+window.addEventListener("beforeunload", () => {
+    disconnectCrosswordObserver();
 });

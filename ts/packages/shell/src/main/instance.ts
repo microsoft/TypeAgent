@@ -22,6 +22,7 @@ import {
 import { getTraceId } from "agent-dispatcher/helpers/data";
 import { createShellAgentProvider } from "./agent.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
+import { BrowserAgentIpc } from "./browserIpc.js";
 import {
     ClientIO,
     createDispatcher,
@@ -270,6 +271,16 @@ export function initializeInstance(
     );
 
     const shellWindow = new ShellWindow(shellSettings, inputOnly);
+
+    // Set up notification callback for browser agent IPC early,
+    // so messages queued during tab restoration can trigger notifications
+    BrowserAgentIpc.getinstance().onSendNotification = (
+        message: string,
+        id: string,
+    ) => {
+        shellWindow.sendSystemNotification(message, id);
+    };
+
     const { chatView } = shellWindow;
     let title: string = "";
     async function updateTitle(dispatcher: Dispatcher) {

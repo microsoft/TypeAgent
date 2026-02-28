@@ -96,6 +96,13 @@ function registerClient(client: Client) {
         client.tabRestoreStatus(count);
     });
 
+    ipcRenderer.on(
+        "system-notification",
+        (_, data: { message: string; id: string; timestamp: number }) => {
+            client.systemNotification?.(data.message, data.id, data.timestamp);
+        },
+    );
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
 

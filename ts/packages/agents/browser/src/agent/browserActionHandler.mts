@@ -154,6 +154,7 @@ import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
+const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
@@ -479,6 +480,9 @@ async function updateBrowserContext(
                 : context.agentContext.clientBrowserControl;
 
             if (browserControls && context.agentContext.agentWebSocketServer) {
+                debugClientRouting(
+                    `Creating BrowserConnector with preferredClientType = '${context.agentContext.preferredClientType}'`,
+                );
                 context.agentContext.browserConnector = new BrowserConnector(
                     context.agentContext.agentWebSocketServer,
                     browserControls,
@@ -494,30 +498,39 @@ async function updateBrowserContext(
         // rehydrate cached settings
         const sessionDir: string | undefined =
             await getSessionFolderPath(context);
-        const contents: string = await readFileSync(
-            path.join(sessionDir!, "settings.json"),
-            "utf-8",
-        );
+        if (sessionDir) {
+            const settingsPath = path.join(sessionDir, "settings.json");
+            try {
+                if (fs.existsSync(settingsPath)) {
+                    const contents: string = readFileSync(
+                        settingsPath,
+                        "utf-8",
+                    );
 
-        if (contents.length > 0) {
-            const config = JSON.parse(contents);
+                    if (contents.length > 0) {
+                        const config = JSON.parse(contents);
 
-            // resolver settings
-            context.agentContext.resolverSettings.searchResolver =
-                config.resolverSettings.searchResolver;
-            context.agentContext.resolverSettings.keywordResolver =
-                config.resolverSettings.keywordResolver;
-            context.agentContext.resolverSettings.wikipediaResolver =
-                config.resolverSettings.wikipediaResolver;
-            context.agentContext.resolverSettings.historyResolver =
-                config.resolverSettings.historyResolver;
+                        // resolver settings
+                        context.agentContext.resolverSettings.searchResolver =
+                            config.resolverSettings.searchResolver;
+                        context.agentContext.resolverSettings.keywordResolver =
+                            config.resolverSettings.keywordResolver;
+                        context.agentContext.resolverSettings.wikipediaResolver =
+                            config.resolverSettings.wikipediaResolver;
+                        context.agentContext.resolverSettings.historyResolver =
+                            config.resolverSettings.historyResolver;
 
-            // search provider settings
-            context.agentContext.searchProviders =
-                config.searchProviders || defaultSearchProviders;
-            context.agentContext.activeSearchProvider =
-                config.activeSearchProvider ||
-                context.agentContext.searchProviders[0];
+                        // search provider settings
+                        context.agentContext.searchProviders =
+                            config.searchProviders || defaultSearchProviders;
+                        context.agentContext.activeSearchProvider =
+                            config.activeSearchProvider ||
+                            context.agentContext.searchProviders[0];
+                    }
+                }
+            } catch (error) {
+                debug("Failed to load browser settings file:", error);
+            }
         }
     } else {
         if (context.agentContext.agentWebSocketServer) {
@@ -542,6 +555,10 @@ async function processBrowserAgentMessage(
     context: SessionContext<BrowserActionContext>,
     client: BrowserClient,
 ) {
+    debugClientRouting(
+        `processBrowserAgentMessage: method='${data.method}', client type='${client.type}', id='${client.id}', preferredClientType='${context.agentContext.preferredClientType}'`,
+    );
+
     switch (data.method) {
         case "knowledgeExtractionProgress": {
             await handleKnowledgeExtractionProgress(data.params, context);
@@ -567,8 +584,13 @@ async function processBrowserAgentMessage(
                 );
 
                 try {
-                    context.agentContext.crossWordState =
-                        await getBoardSchema(context);
+                    debugClientRouting(
+                        `Calling getBoardSchema with client.id='${client.id}'`,
+                    );
+                    context.agentContext.crossWordState = await getBoardSchema(
+                        context,
+                        client.id,
+                    );
 
                     browserControls.setAgentStatus(
                         false,
@@ -591,11 +613,37 @@ async function processBrowserAgentMessage(
                     const downClues =
                         context.agentContext.crossWordState.down?.length || 0;
 
+                    // Send schema to browser extension/electron for observer installation
+                    const schema = context.agentContext.crossWordState;
+                    const allClues = [...schema.across, ...schema.down];
+                    const sampleClues = allClues.slice(0, 5);
+
+                    if (client && client.socket && sampleClues.length > 0) {
+                        try {
+                            client.socket.send(
+                                JSON.stringify({
+                                    method: "crosswordSchemaExtracted",
+                                    params: {
+                                        selectors: sampleClues.map(
+                                            (c) => c.cssSelector,
+                                        ),
+                                        texts: sampleClues.map((c) => c.text),
+                                    },
+                                }),
+                            );
+                        } catch (e) {
+                            debug(
+                                "Failed to send crossword schema to client",
+                                e,
+                            );
+                        }
+                    }
+
                     context.notify(
                         AppAgentEvent.Inline,
                         {
                             type: "text",
-                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Fill in the answer for 2 down."`,
+                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
                         },
                         notificationId,
                     );
@@ -953,9 +1001,9 @@ async function initializeWebsiteIndex(
         }
     } catch (error) {
         debug("Error initializing website collection:", error);
-        // Fallback to empty collection without index
-        context.agentContext.websiteCollection =
-            new website.WebsiteCollection();
+        // SQLite/website-memory may be unavailable; keep browser agent alive.
+        // Knowledge features will remain unavailable until dependency issues are resolved.
+        context.agentContext.websiteCollection = undefined;
         context.agentContext.index = undefined;
     }
 }
@@ -3275,12 +3323,36 @@ export const handlers: CommandHandlerTable = {
                         }
                         agentContext.useExternalBrowserControl = true;
                         agentContext.preferredClientType = "extension";
+                        debugClientRouting(
+                            "[@browser external on] Set preferredClientType = 'extension'",
+                        );
 
                         // Re-select active client based on new preference
                         if (agentContext.agentWebSocketServer) {
                             agentContext.agentWebSocketServer.selectActiveClient(
                                 "extension",
                             );
+                            debugClientRouting(
+                                "[@browser external on] Called selectActiveClient('extension')",
+                            );
+                        }
+
+                        // Recreate BrowserConnector with new preferredClientType
+                        const browserControls =
+                            agentContext.externalBrowserControl?.control;
+                        if (
+                            browserControls &&
+                            agentContext.agentWebSocketServer
+                        ) {
+                            debugClientRouting(
+                                "[@browser external on] Recreating BrowserConnector with preferredClientType = 'extension'",
+                            );
+                            agentContext.browserConnector =
+                                new BrowserConnector(
+                                    agentContext.agentWebSocketServer,
+                                    browserControls,
+                                    agentContext.preferredClientType,
+                                );
                         }
 
                         await context.queueToggleTransientAgent(
@@ -3307,12 +3379,36 @@ export const handlers: CommandHandlerTable = {
                         }
                         agentContext.useExternalBrowserControl = false;
                         agentContext.preferredClientType = "electron";
+                        debugClientRouting(
+                            "[@browser external off] Set preferredClientType = 'electron'",
+                        );
 
                         // Re-select active client based on new preference
                         if (agentContext.agentWebSocketServer) {
                             agentContext.agentWebSocketServer.selectActiveClient(
                                 "electron",
                             );
+                            debugClientRouting(
+                                "[@browser external off] Called selectActiveClient('electron')",
+                            );
+                        }
+
+                        // Recreate BrowserConnector with new preferredClientType
+                        const browserControls =
+                            agentContext.clientBrowserControl;
+                        if (
+                            browserControls &&
+                            agentContext.agentWebSocketServer
+                        ) {
+                            debugClientRouting(
+                                "[@browser external off] Recreating BrowserConnector with preferredClientType = 'electron'",
+                            );
+                            agentContext.browserConnector =
+                                new BrowserConnector(
+                                    agentContext.agentWebSocketServer,
+                                    browserControls,
+                                    agentContext.preferredClientType,
+                                );
                         }
 
                         await context.queueToggleTransientAgent(

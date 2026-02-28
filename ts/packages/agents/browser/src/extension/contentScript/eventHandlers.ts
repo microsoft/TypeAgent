@@ -25,6 +25,7 @@ import { awaitPageIncrementalUpdates } from "./loadingDetector";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { sendMessageToBackground, sendMainWorldRequest } from "./messaging";
 
 // Set up history interception for SPA navigation
 const interceptHistory = (method: "pushState" | "replaceState") => {
@@ -69,6 +70,28 @@ function setupMessageListeners(): void {
             if (message.type === "rpc") {
                 contentScriptExtensionChannel.notifyMessage(message.message);
                 return false;
+            }
+
+            if (message.type === "setupCrosswordObserver") {
+                // Forward to MAIN world
+                sendMainWorldRequest({
+                    actionName: "setupCrosswordObserver",
+                    parameters: {
+                        selectors: message.selectors,
+                        texts: message.texts,
+                    },
+                })
+                    .then(() => {
+                        sendResponse({ success: true });
+                    })
+                    .catch((error) => {
+                        console.error(
+                            "Error installing crossword observer:",
+                            error,
+                        );
+                        sendResponse({ success: false, error: error.message });
+                    });
+                return true; // Async response
             }
 
             const handleAction = async () => {
@@ -203,6 +226,22 @@ function setupMessageListeners(): void {
 }
 
 /**
+ * Handles crossword change detection and triggers re-initialization
+ * @param url The URL where the change was detected
+ */
+async function handleCrosswordChanged(url: string): Promise<void> {
+    try {
+        await sendMessageToBackground({
+            type: "enableSiteAgent",
+            agentName: "browser.crossword",
+            reinitialize: true,
+        });
+    } catch (error) {
+        console.error("Error sending message to background:", error);
+    }
+}
+
+/**
  * Sets up event listeners for the page
  */
 function setupPageEventListeners(): void {
@@ -218,6 +257,19 @@ function setupPageEventListeners(): void {
         async function (e: any) {
             var message = e.detail;
             console.log("received from UI Events:", message);
+        },
+    );
+
+    // Listen for crossword automation events
+    document.addEventListener(
+        "fromCrosswordAutomation",
+        async function (e: any) {
+            const message = e.detail;
+            console.log("Crossword automation event:", message);
+
+            if (message.type === "crosswordChanged") {
+                await handleCrosswordChanged(message.url);
+            }
         },
     );
 }
@@ -339,6 +391,24 @@ export async function handleMessage(
             case "extractSchemaLinkedPages": {
                 extractSchemaFromLinkedPages();
                 sendResponse({});
+                break;
+            }
+
+            case "setupCrosswordObserver": {
+                console.log(
+                    "Received request to install crossword observer with selectors:",
+                    message.selectors,
+                    "and texts:",
+                    message.texts,
+                );
+                // Forward to MAIN world
+                sendMainWorldRequest({
+                    actionName: "setupCrosswordObserver",
+                    parameters: {
+                        selectors: message.selectors,
+                        texts: message.texts,
+                    },
+                });
                 break;
             }
 

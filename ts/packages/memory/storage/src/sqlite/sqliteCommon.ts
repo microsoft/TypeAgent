@@ -1,11 +1,34 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import Database, * as sqlite from "better-sqlite3";
+import type * as sqlite from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { removeFile, ensureDir } from "../fileSystem.js";
 import { createRequire } from "node:module";
+
+type BetterSqlite3Ctor = new (
+    filePath: string,
+    options?: unknown,
+) => sqlite.Database;
+
+let sqliteCtor: BetterSqlite3Ctor | undefined;
+
+function getSqliteCtor(): BetterSqlite3Ctor {
+    if (!sqliteCtor) {
+        try {
+            const r = createRequire(import.meta.url);
+            sqliteCtor = r("better-sqlite3") as BetterSqlite3Ctor;
+        } catch (error) {
+            const details =
+                error instanceof Error ? error.message : String(error);
+            throw new Error(
+                `SQLite support is unavailable because 'better-sqlite3' could not be loaded. Install 'better-sqlite3' to enable persistent SQLite storage. Details: ${details}`,
+            );
+        }
+    }
+    return sqliteCtor;
+}
 
 function getDbOptions() {
     if (process?.versions?.electron !== undefined) {
@@ -32,6 +55,7 @@ export function createDatabase(
         deleteDatabase(filePath);
     }
     ensureDir(path.dirname(filePath));
+    const Database = getSqliteCtor();
     const db = new Database(filePath, getDbOptions());
     db.pragma("journal_mode = WAL");
     return db;

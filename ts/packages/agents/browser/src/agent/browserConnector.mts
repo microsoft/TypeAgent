@@ -7,6 +7,9 @@ import {
     BrowserClient,
     AgentWebSocketServer,
 } from "./agentWebSocketServer.mjs";
+import registerDebug from "debug";
+
+const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 
 export class BrowserConnector {
     constructor(
@@ -20,13 +23,24 @@ export class BrowserConnector {
         schemaName?: string,
         targetClientId?: string,
     ): Promise<any> {
+        debugClientRouting(
+            `sendActionToBrowser: action=${action.actionName}, targetClientId=${targetClientId}, preferredClientType=${this.preferredClientType}`,
+        );
+
         const client = targetClientId
             ? this.agentServer.getClient(targetClientId)
             : this.agentServer.getActiveClient(this.preferredClientType);
 
         if (!client) {
+            debugClientRouting(
+                `sendActionToBrowser: NO CLIENT FOUND (targetClientId=${targetClientId}, preferredClientType=${this.preferredClientType})`,
+            );
             throw new Error("No browser client available");
         }
+
+        debugClientRouting(
+            `sendActionToBrowser: Selected client type='${client.type}', id='${client.id}' for action='${action.actionName}'`,
+        );
 
         return this.sendToClient(client, action, schemaName);
     }
@@ -75,16 +89,21 @@ export class BrowserConnector {
     async getHtmlFragments(
         useTimestampIds?: boolean,
         compressionMode?: string,
+        targetClientId?: string,
     ): Promise<any[]> {
-        const result = await this.sendActionToBrowser({
-            actionName: "getHTML",
-            parameters: {
-                fullHTML: compressionMode === "None",
-                downloadAsFile: false,
-                extractText: compressionMode !== "knowledgeExtraction",
-                useTimestampIds: useTimestampIds,
+        const result = await this.sendActionToBrowser(
+            {
+                actionName: "getHTML",
+                parameters: {
+                    fullHTML: compressionMode === "None",
+                    downloadAsFile: false,
+                    extractText: compressionMode !== "knowledgeExtraction",
+                    useTimestampIds: useTimestampIds,
+                },
             },
-        });
+            undefined,
+            targetClientId,
+        );
         return Array.isArray(result?.data) ? result.data : [];
     }
 
@@ -116,36 +135,53 @@ export class BrowserConnector {
         ]);
     }
 
-    async clickOn(cssSelector: string): Promise<any> {
-        return this.sendActionToBrowser({
-            actionName: "clickOnElement",
-            parameters: { cssSelector },
-        });
+    async clickOn(cssSelector: string, targetClientId?: string): Promise<any> {
+        return this.sendActionToBrowser(
+            {
+                actionName: "clickOnElement",
+                parameters: { cssSelector },
+            },
+            undefined,
+            targetClientId,
+        );
     }
 
-    async setDropdown(cssSelector: string, optionLabel: string): Promise<any> {
-        return this.sendActionToBrowser({
-            actionName: "setDropdownValue",
-            parameters: { cssSelector, optionLabel },
-        });
+    async setDropdown(
+        cssSelector: string,
+        optionLabel: string,
+        targetClientId?: string,
+    ): Promise<any> {
+        return this.sendActionToBrowser(
+            {
+                actionName: "setDropdownValue",
+                parameters: { cssSelector, optionLabel },
+            },
+            undefined,
+            targetClientId,
+        );
     }
 
     async enterTextIn(
         textValue: string,
         cssSelector?: string,
         submitForm?: boolean,
+        targetClientId?: string,
     ): Promise<any> {
         const actionName = cssSelector
             ? "enterTextInElement"
             : "enterTextOnPage";
-        return this.sendActionToBrowser({
-            actionName,
-            parameters: {
-                value: textValue,
-                cssSelector,
-                submitForm,
+        return this.sendActionToBrowser(
+            {
+                actionName,
+                parameters: {
+                    value: textValue,
+                    cssSelector,
+                    submitForm,
+                },
             },
-        });
+            undefined,
+            targetClientId,
+        );
     }
 
     async awaitPageLoad(timeout?: number): Promise<any> {

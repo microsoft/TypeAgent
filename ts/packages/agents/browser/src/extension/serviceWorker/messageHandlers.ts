@@ -1502,6 +1502,30 @@ export async function handleMessage(
             }
         }
 
+        case "enableSiteAgent": {
+            const { agentName, reinitialize } = message;
+
+            if (reinitialize) {
+                console.log(`Re-initializing site agent: ${agentName}`);
+            }
+
+            // Send WebSocket message to enable/re-enable site agent
+            const webSocket = getWebSocket();
+            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                webSocket.send(
+                    JSON.stringify({
+                        method: "enableSiteTranslator",
+                        params: { translator: agentName },
+                    }),
+                );
+
+                return { success: true };
+            } else {
+                console.error("WebSocket not connected");
+                return { success: false, error: "WebSocket not connected" };
+            }
+        }
+
         default:
             return null;
     }
