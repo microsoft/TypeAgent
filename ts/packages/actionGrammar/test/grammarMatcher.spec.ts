@@ -468,4 +468,32 @@ describe("Grammar Matcher", () => {
             expect(testMatchGrammar(grammar, "+0x123")).toStrictEqual([]);
         });
     });
+
+    describe("Recursive rules", () => {
+        // Regression: when a rule has a non-epsilon back-reference to itself,
+        // the compiled RulesPart.rules must point to the final populated array,
+        // not the empty sentinel assigned before compilation begins.
+        // If the sentinel is captured (bug), the recursive match silently fails.
+        it("right-recursive rule reference can match multi-token input", () => {
+            // <Start> = foo <Start> -> "hit" | bar -> "bar"
+            // "foo bar": foo consumes mandatory input, then <Start> matches "bar"
+            const g = `
+                <Start> = foo <Start> -> "hit"
+                        | bar -> "bar";
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "foo bar")).toStrictEqual(["hit"]);
+        });
+
+        it("right-recursive variable rule can match multi-token input", () => {
+            // <Start> = foo $(x:<Start>) -> x | bar -> "bar"
+            // "foo bar": foo consumes mandatory input, then $(x:<Start>) captures "bar"
+            const g = `
+                <Start> = foo $(x:<Start>) -> x
+                        | bar -> "bar";
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            expect(testMatchGrammar(grammar, "foo bar")).toStrictEqual(["bar"]);
+        });
+    });
 });
