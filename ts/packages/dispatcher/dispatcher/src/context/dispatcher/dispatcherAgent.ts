@@ -40,7 +40,8 @@ import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
-import { executeReasoningAction } from "../../reasoning/claude.js";
+import { executeReasoningAction as executeClaudeReasoning } from "../../reasoning/claude.js";
+import { executeReasoningAction as executeCopilotReasoning } from "../../reasoning/copilot.js";
 import { ReasonCommandHandler } from "./handlers/reasonCommandHandler.js";
 
 const dispatcherHandlers: CommandHandlerTable = {
@@ -127,7 +128,20 @@ async function executeDispatcherAction(
             break;
         case "dispatcher.reasoning":
             if (action.actionName === "reasoningAction") {
-                return executeReasoningAction(action, context);
+                const config =
+                    context.sessionContext.agentContext.session.getConfig();
+                const engine = config.execution.reasoning;
+
+                switch (engine) {
+                    case "claude":
+                        return executeClaudeReasoning(action, context);
+                    case "copilot":
+                        return executeCopilotReasoning(action, context);
+                    default:
+                        throw new Error(
+                            `Unsupported reasoning engine: ${engine}`,
+                        );
+                }
             }
             break;
     }

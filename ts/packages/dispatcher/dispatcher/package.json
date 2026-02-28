@@ -45,6 +45,7 @@
     "@azure/core-rest-pipeline": "^1.22.0",
     "@azure/cosmos": "^4.2.1",
     "@azure/identity": "^4.10.0",
+    "@github/copilot-sdk": "^0.1.26",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
