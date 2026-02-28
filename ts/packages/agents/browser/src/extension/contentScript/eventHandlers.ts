@@ -394,8 +394,13 @@ export async function handleMessage(
                 break;
             }
 
-            case "setupCrosswordObserver":{
-                console.log("Received request to install crossword observer with selectors:", message.selectors, "and texts:", message.texts);
+            case "setupCrosswordObserver": {
+                console.log(
+                    "Received request to install crossword observer with selectors:",
+                    message.selectors,
+                    "and texts:",
+                    message.texts,
+                );
                 // Forward to MAIN world
                 sendMainWorldRequest({
                     actionName: "setupCrosswordObserver",

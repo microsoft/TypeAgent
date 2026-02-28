@@ -47,9 +47,7 @@ export const getCrosswordCommandHandlerTable = (): CommandHandlerTable => {
                                 );
                                 return;
                             }
-                            await clearCachedSchemas(
-                                context.sessionContext,
-                            );
+                            await clearCachedSchemas(context.sessionContext);
                             context.actionIO.setDisplay(
                                 `Cleared all cached crossword schema`,
                             );

@@ -151,17 +151,24 @@ export class BrowserAgentIpc {
 
         // Use exponential backoff: start at 1s, double each time, cap at 5s
         // Attempts: 1s, 2s, 4s, 5s, 5s, 5s...
-        const retryDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 5000);
+        const retryDelay = Math.min(
+            1000 * Math.pow(2, this.reconnectAttempts),
+            5000,
+        );
         this.reconnectAttempts++;
 
-        debugBrowserIPC(`Scheduling reconnection attempt in ${retryDelay}ms (attempt ${this.reconnectAttempts})`);
+        debugBrowserIPC(
+            `Scheduling reconnection attempt in ${retryDelay}ms (attempt ${this.reconnectAttempts})`,
+        );
 
         setTimeout(async () => {
             if (
                 this.webSocket &&
                 this.webSocket.readyState === WebSocket.OPEN
             ) {
-                debugBrowserIPC("Connection already established, stopping reconnection");
+                debugBrowserIPC(
+                    "Connection already established, stopping reconnection",
+                );
                 this.reconnectionPending = false;
                 return;
             }
@@ -173,7 +180,10 @@ export class BrowserAgentIpc {
             this.reconnectionPending = false;
 
             // If still not connected, schedule another attempt
-            if (!this.webSocket || this.webSocket.readyState !== WebSocket.OPEN) {
+            if (
+                !this.webSocket ||
+                this.webSocket.readyState !== WebSocket.OPEN
+            ) {
                 this.reconnectWebSocket();
             }
         }, retryDelay);
@@ -184,18 +194,26 @@ export class BrowserAgentIpc {
         if (!webSocket) {
             // Queue the message if connection isn't ready yet
             if (this.messageQueue.length < this.maxQueueSize) {
-                debugBrowserIPC("WebSocket not connected, queueing message", message.method);
+                debugBrowserIPC(
+                    "WebSocket not connected, queueing message",
+                    message.method,
+                );
                 this.messageQueue.push(message);
 
                 // Show notification when queueing site agent messages
-                if (!this.hasShownRestoringNotification &&
+                if (
+                    !this.hasShownRestoringNotification &&
                     (message.method === "enableSiteTranslator" ||
-                     message.method === "enableSiteAgent")) {
+                        message.method === "enableSiteAgent")
+                ) {
                     this.hasShownRestoringNotification = true;
                     this.sendRestoringNotification();
                 }
             } else {
-                debugBrowserIPC("Message queue full, dropping message", message.method);
+                debugBrowserIPC(
+                    "Message queue full, dropping message",
+                    message.method,
+                );
             }
             return;
         }
@@ -207,7 +225,7 @@ export class BrowserAgentIpc {
         if (this.onSendNotification) {
             this.onSendNotification(
                 "Restoring site-specific agents...",
-                "browser-restore-agents"
+                "browser-restore-agents",
             );
         }
     }

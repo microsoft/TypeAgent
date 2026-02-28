@@ -404,16 +404,16 @@ function registerClient(
                 );
             }
         },
-        systemNotification(message: string, id: string, _timestamp: number): void {
+        systemNotification(
+            message: string,
+            id: string,
+            _timestamp: number,
+        ): void {
             // Ensure shell has an icon in the agents map
             if (!agents.has("shell")) {
                 agents.set("shell", "\uD83D\uDC1A");
             }
-            chatView.addNotificationMessage(
-                message,
-                "shell",
-                id,
-            );
+            chatView.addNotificationMessage(message, "shell", id);
         },
     };
 

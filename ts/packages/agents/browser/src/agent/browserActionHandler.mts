@@ -587,8 +587,10 @@ async function processBrowserAgentMessage(
                     debugClientRouting(
                         `Calling getBoardSchema with client.id='${client.id}'`,
                     );
-                    context.agentContext.crossWordState =
-                        await getBoardSchema(context, client.id);
+                    context.agentContext.crossWordState = await getBoardSchema(
+                        context,
+                        client.id,
+                    );
 
                     browserControls.setAgentStatus(
                         false,
@@ -629,14 +631,12 @@ async function processBrowserAgentMessage(
                                     },
                                 }),
                             );
-
-                            debug("Sent crossword schema to client", sampleClues);
-
                         } catch (e) {
-                            debug("Failed to send crossword schema to client", e);
+                            debug(
+                                "Failed to send crossword schema to client",
+                                e,
+                            );
                         }
-                    }else{
-                        debug("Failed to send crossword schema to client. The client socket is not available.", client);
                     }
 
                     context.notify(
@@ -3347,11 +3347,12 @@ export const handlers: CommandHandlerTable = {
                             debugClientRouting(
                                 "[@browser external on] Recreating BrowserConnector with preferredClientType = 'extension'",
                             );
-                            agentContext.browserConnector = new BrowserConnector(
-                                agentContext.agentWebSocketServer,
-                                browserControls,
-                                agentContext.preferredClientType,
-                            );
+                            agentContext.browserConnector =
+                                new BrowserConnector(
+                                    agentContext.agentWebSocketServer,
+                                    browserControls,
+                                    agentContext.preferredClientType,
+                                );
                         }
 
                         await context.queueToggleTransientAgent(
@@ -3402,11 +3403,12 @@ export const handlers: CommandHandlerTable = {
                             debugClientRouting(
                                 "[@browser external off] Recreating BrowserConnector with preferredClientType = 'electron'",
                             );
-                            agentContext.browserConnector = new BrowserConnector(
-                                agentContext.agentWebSocketServer,
-                                browserControls,
-                                agentContext.preferredClientType,
-                            );
+                            agentContext.browserConnector =
+                                new BrowserConnector(
+                                    agentContext.agentWebSocketServer,
+                                    browserControls,
+                                    agentContext.preferredClientType,
+                                );
                         }
 
                         await context.queueToggleTransientAgent(

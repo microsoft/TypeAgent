@@ -30,12 +30,16 @@ function validateCachedSchema(
 
     for (const clue of cluesToCheck) {
         if (!htmlContent.includes(clue.text)) {
-            debug(`Cache validation failed: clue "${clue.text}" not found in HTML`);
+            debug(
+                `Cache validation failed: clue "${clue.text}" not found in HTML`,
+            );
             return false;
         }
     }
 
-    debug(`Cache validation passed: all ${cluesToCheck.length} sample clues found`);
+    debug(
+        `Cache validation passed: all ${cluesToCheck.length} sample clues found`,
+    );
     return true;
 }
 
@@ -67,7 +71,9 @@ export async function getBoardSchema(
             debug(`Reusing validated cached schema for ${url}`);
             return cachedSchema;
         }
-        debug(`Cached schema validation failed, re-extracting schema for ${url}`);
+        debug(
+            `Cached schema validation failed, re-extracting schema for ${url}`,
+        );
     }
     debug(htmlFragments);
     const agent = await createCrosswordPageTranslator("GPT_5_MINI");

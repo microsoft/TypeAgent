@@ -308,7 +308,8 @@ export async function importChromeHistory(
             try {
                 // Calculate date filter if specified
                 const cutoffTime = options?.days
-                    ? Date.now() * 1000 - options.days * 24 * 60 * 60 * 1000 * 1000 // Chrome uses microseconds
+                    ? Date.now() * 1000 -
+                      options.days * 24 * 60 * 60 * 1000 * 1000 // Chrome uses microseconds
                     : 0;
 
                 // Build the SQL query
@@ -375,7 +376,11 @@ export async function importChromeHistory(
                     websites.push(visitInfo);
 
                     if (progressCallback) {
-                        progressCallback(i + 1, rows.length, row.title || row.url);
+                        progressCallback(
+                            i + 1,
+                            rows.length,
+                            row.title || row.url,
+                        );
                     }
 
                     if (options?.limit && websites.length >= options.limit) {

@@ -357,16 +357,17 @@ function notifyCrosswordChanged(): void {
     crosswordObserverState.debounceTimer = window.setTimeout(() => {
         console.log("Crossword change detected, firing event");
 
-
         if (typeof window !== "undefined" && (window as any).browserConnect) {
             // Electron: Use browserConnect API
             console.log("Re-enabling crossword agent via browserConnect");
             try {
-                (window as any).browserConnect.enableSiteAgent("browser.crossword");
+                (window as any).browserConnect.enableSiteAgent(
+                    "browser.crossword",
+                );
             } catch (error) {
                 console.error("Error re-enabling crossword agent:", error);
             }
-        }else{
+        } else {
             // Fire custom document event
             const event = new CustomEvent("fromCrosswordAutomation", {
                 detail: {
@@ -382,10 +383,7 @@ function notifyCrosswordChanged(): void {
     }, 500);
 }
 
-function setupCrosswordObserver(
-    selectors: string[],
-    texts: string[],
-): void {
+function setupCrosswordObserver(selectors: string[], texts: string[]): void {
     console.log("Setting up crossword observer for selectors:", selectors);
 
     // Disconnect existing observer if any
