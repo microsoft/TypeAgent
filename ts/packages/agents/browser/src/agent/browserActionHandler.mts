@@ -154,6 +154,7 @@ import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
+const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
@@ -479,6 +480,9 @@ async function updateBrowserContext(
                 : context.agentContext.clientBrowserControl;
 
             if (browserControls && context.agentContext.agentWebSocketServer) {
+                debugClientRouting(
+                    `Creating BrowserConnector with preferredClientType = '${context.agentContext.preferredClientType}'`,
+                );
                 context.agentContext.browserConnector = new BrowserConnector(
                     context.agentContext.agentWebSocketServer,
                     browserControls,
@@ -551,6 +555,10 @@ async function processBrowserAgentMessage(
     context: SessionContext<BrowserActionContext>,
     client: BrowserClient,
 ) {
+    debugClientRouting(
+        `processBrowserAgentMessage: method='${data.method}', client type='${client.type}', id='${client.id}', preferredClientType='${context.agentContext.preferredClientType}'`,
+    );
+
     switch (data.method) {
         case "knowledgeExtractionProgress": {
             await handleKnowledgeExtractionProgress(data.params, context);
@@ -576,8 +584,11 @@ async function processBrowserAgentMessage(
                 );
 
                 try {
+                    debugClientRouting(
+                        `Calling getBoardSchema with client.id='${client.id}'`,
+                    );
                     context.agentContext.crossWordState =
-                        await getBoardSchema(context);
+                        await getBoardSchema(context, client.id);
 
                     browserControls.setAgentStatus(
                         false,
@@ -3312,11 +3323,34 @@ export const handlers: CommandHandlerTable = {
                         }
                         agentContext.useExternalBrowserControl = true;
                         agentContext.preferredClientType = "extension";
+                        debugClientRouting(
+                            "[@browser external on] Set preferredClientType = 'extension'",
+                        );
 
                         // Re-select active client based on new preference
                         if (agentContext.agentWebSocketServer) {
                             agentContext.agentWebSocketServer.selectActiveClient(
                                 "extension",
+                            );
+                            debugClientRouting(
+                                "[@browser external on] Called selectActiveClient('extension')",
+                            );
+                        }
+
+                        // Recreate BrowserConnector with new preferredClientType
+                        const browserControls =
+                            agentContext.externalBrowserControl?.control;
+                        if (
+                            browserControls &&
+                            agentContext.agentWebSocketServer
+                        ) {
+                            debugClientRouting(
+                                "[@browser external on] Recreating BrowserConnector with preferredClientType = 'extension'",
+                            );
+                            agentContext.browserConnector = new BrowserConnector(
+                                agentContext.agentWebSocketServer,
+                                browserControls,
+                                agentContext.preferredClientType,
                             );
                         }
 
@@ -3344,11 +3378,34 @@ export const handlers: CommandHandlerTable = {
                         }
                         agentContext.useExternalBrowserControl = false;
                         agentContext.preferredClientType = "electron";
+                        debugClientRouting(
+                            "[@browser external off] Set preferredClientType = 'electron'",
+                        );
 
                         // Re-select active client based on new preference
                         if (agentContext.agentWebSocketServer) {
                             agentContext.agentWebSocketServer.selectActiveClient(
                                 "electron",
+                            );
+                            debugClientRouting(
+                                "[@browser external off] Called selectActiveClient('electron')",
+                            );
+                        }
+
+                        // Recreate BrowserConnector with new preferredClientType
+                        const browserControls =
+                            agentContext.clientBrowserControl;
+                        if (
+                            browserControls &&
+                            agentContext.agentWebSocketServer
+                        ) {
+                            debugClientRouting(
+                                "[@browser external off] Recreating BrowserConnector with preferredClientType = 'electron'",
+                            );
+                            agentContext.browserConnector = new BrowserConnector(
+                                agentContext.agentWebSocketServer,
+                                browserControls,
+                                agentContext.preferredClientType,
                             );
                         }
 

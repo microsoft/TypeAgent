@@ -41,6 +41,7 @@ function validateCachedSchema(
 
 export async function getBoardSchema(
     context: SessionContext<BrowserActionContext>,
+    targetClientId?: string,
 ): Promise<Crossword | undefined> {
     const agentContext = context.agentContext;
     if (!agentContext.browserConnector) {
@@ -53,7 +54,11 @@ export async function getBoardSchema(
     const cachedSchema = await getCachedSchema(context, url);
 
     await browserControl.awaitPageLoad(1000);
-    const htmlFragments = await browser.getHtmlFragments();
+    const htmlFragments = await browser.getHtmlFragments(
+        undefined,
+        undefined,
+        targetClientId,
+    );
     debug(`Found ${htmlFragments.length} HTML fragments on the page ${url}.`);
 
     if (cachedSchema) {
