@@ -14,6 +14,7 @@ import {
     ImportStatement,
     parseGrammarRules,
     ValueNode,
+    SpacingMode,
 } from "./grammarRuleParser.js";
 import { getLineCol } from "./utils.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
@@ -26,15 +27,14 @@ export type FileLoader = {
 };
 
 type DefinitionRecord = {
-    rules: Rule[];
-    pos: number | undefined;
+    definitions: RuleDefinition[];
     grammarRules?: GrammarRule[];
     hasValue: boolean;
     compiling: boolean; // true while grammarRules is being populated
     nullable?: boolean; // set after compilation; true if any alternative matches ε
 };
 
-type CompletedDefinitionRecord = DefinitionRecord & {
+type ResolvedDefinitionRecord = DefinitionRecord & {
     grammarRules: GrammarRule[];
 };
 type DefinitionMap = Map<string, DefinitionRecord>;
@@ -135,14 +135,13 @@ function createCompileContext(
         const existing = ruleDefMap.get(def.name);
         if (existing === undefined) {
             ruleDefMap.set(def.name, {
-                rules: [...def.rules],
-                pos: def.pos,
+                definitions: [def],
                 // Set this to true to allow recursion to assume that it has value.
                 hasValue: true,
                 compiling: false,
             });
         } else {
-            existing.rules.push(...def.rules);
+            existing.definitions.push(def);
         }
     }
 
@@ -238,7 +237,7 @@ export function compileGrammar(
         if (record.grammarRules === undefined) {
             context.warnings.push({
                 message: `Rule '<${name}>' is defined but never used.`,
-                pos: record.pos,
+                pos: record.definitions[0]?.pos,
             });
         }
     }
@@ -299,9 +298,10 @@ function convertCompileError(
     });
 }
 
-const emptyRecord = {
-    rules: [],
-    pos: undefined,
+// Sentinel for missing rule definitions. Pre-populated grammarRules suppress
+// re-compilation; empty definitions yield undefined for any pos lookup.
+const emptyRecord: ResolvedDefinitionRecord = {
+    definitions: [],
     grammarRules: [],
     hasValue: true, // Pretend to have value to avoid cascading errors
     compiling: false,
@@ -393,7 +393,7 @@ function createNamedGrammarRules(
     referenceVariable?: string,
     epsilonReachable: Set<string> = new Set(),
     referenceContext: CompileContext = context,
-): CompletedDefinitionRecord {
+): ResolvedDefinitionRecord {
     const record = context.ruleDefMap.get(name);
     if (record === undefined) {
         // Check if this rule name is imported from a grammar file
@@ -440,12 +440,19 @@ function createNamedGrammarRules(
         // directly into it. Any RulesPart.rules captured during a circular
         // back-reference holds a reference to this same array object and will
         // see the populated rules without a separate copy step.
-        const { hasValue, nullable } = createGrammarRules(
-            context,
-            record.rules,
-            eprWithSelf,
-            record.grammarRules,
-        );
+        let hasValue = true;
+        let nullable = false;
+        for (const entry of record.definitions) {
+            const result = createGrammarRules(
+                context,
+                entry.rules,
+                eprWithSelf,
+                entry.spacingMode,
+                record.grammarRules,
+            );
+            hasValue = hasValue && result.hasValue;
+            nullable = nullable || result.nullable;
+        }
         record.hasValue = hasValue;
         record.compiling = false;
         record.nullable = nullable;
@@ -456,23 +463,28 @@ function createNamedGrammarRules(
         referenceContext.errors.push({
             message: `Referenced rule '<${name}>' does not produce a value for variable '${referenceVariable}'`,
             definition: referenceContext.currentDefinition,
-            pos: record.pos,
+            pos: referencePosition,
         });
     }
-    return record as CompletedDefinitionRecord;
+    return record as ResolvedDefinitionRecord;
 }
 
 function createGrammarRules(
     context: CompileContext,
     rules: Rule[],
     epsilonReachable: Set<string>,
-    out: GrammarRule[] = [],
+    spacingMode: SpacingMode,
+    grammarRules: GrammarRule[] = [],
 ): { grammarRules: GrammarRule[]; hasValue: boolean; nullable: boolean } {
-    const grammarRules = out;
     let hasValue = true;
     let nullable = false; // nullable if ANY alternative is nullable
     for (const r of rules) {
-        const result = createGrammarRule(context, r, epsilonReachable);
+        const result = createGrammarRule(
+            context,
+            r,
+            epsilonReachable,
+            spacingMode,
+        );
         grammarRules.push(result.grammarRule);
         hasValue = hasValue && result.hasValue;
         nullable = nullable || result.nullable;
@@ -484,6 +496,7 @@ function createGrammarRule(
     context: CompileContext,
     rule: Rule,
     epsilonReachable: Set<string>,
+    spacingMode: SpacingMode,
 ): { grammarRule: GrammarRule; hasValue: boolean; nullable: boolean } {
     const { expressions, value } = rule;
     const parts: GrammarPart[] = [];
@@ -650,7 +663,7 @@ function createGrammarRule(
                     grammarRules,
                     hasValue: groupHasValue,
                     nullable: groupNullable,
-                } = createGrammarRules(context, rules, currentEpr);
+                } = createGrammarRules(context, rules, currentEpr, spacingMode);
                 defaultValue = groupHasValue;
                 const rulesPart: RulesPart = {
                     type: "rules",
@@ -684,6 +697,7 @@ function createGrammarRule(
         grammarRule: {
             parts,
             value,
+            spacingMode,
         },
         hasValue:
             value !== undefined ||

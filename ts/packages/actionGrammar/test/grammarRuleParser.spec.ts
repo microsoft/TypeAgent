@@ -917,6 +917,88 @@ describe("Grammar Rule Parser", () => {
         });
     });
 
+    describe("Spacing Annotation", () => {
+        it("attaches spacingMode optional via annotation", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=optional] = hello;`,
+            );
+            expect(result).toHaveLength(1);
+            expect(result[0].spacingMode).toBe("optional");
+        });
+
+        it("attaches spacingMode required via annotation", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=required] = hello;`,
+            );
+            expect(result[0].spacingMode).toBe("required");
+        });
+
+        it("attaches spacingMode auto via annotation (stored as undefined)", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=auto] = hello;`,
+            );
+            // "auto" is the default; stored as undefined
+            expect(result[0].spacingMode).toBeUndefined();
+        });
+
+        it("rule without annotation has undefined spacingMode", () => {
+            const result = testParamGrammarRules("test.agr", `<Rule> = hello;`);
+            expect(result[0].spacingMode).toBeUndefined();
+        });
+
+        it("each rule carries its own independently declared mode", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<A> [spacing=optional] = a;
+                 <B> [spacing=required] = b;
+                 <C> = c;`,
+            );
+            expect(result[0].spacingMode).toBe("optional");
+            expect(result[1].spacingMode).toBe("required");
+            // "auto" is the default; stored as undefined
+            expect(result[2].spacingMode).toBeUndefined();
+        });
+
+        it("throws on unknown annotation key", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> [unknown=auto] = hello;`,
+                ),
+            ).toThrow("Unknown rule annotation");
+        });
+
+        it("throws on invalid spacing value", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> [spacing=never] = hello;`,
+                ),
+            ).toThrow("Invalid value");
+        });
+
+        it("throws when '=' is missing in annotation", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> [spacing required] = hello;`,
+                ),
+            ).toThrow("'=' expected in spacing annotation");
+        });
+
+        it("throws when ']' is missing in annotation", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> [spacing=required = hello;`,
+                ),
+            ).toThrow("']' expected at end of spacing annotation");
+        });
+    });
+
     describe("Complex Integration", () => {
         it("should handle deeply nested value structures", () => {
             const grammar = `

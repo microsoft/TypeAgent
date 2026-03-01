@@ -12,7 +12,10 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) "from" <StringLiteral> ";"
  *   <ImportAll> ::= "*"
  *   <ImportNames> ::= "{" <Identifier> ("," <Identifier>)* "}"
- *   <RuleDefinition> ::= <RuleName> "=" <Rules> ";"
+ *   <RuleDefinition> ::= <RuleName> <RuleAnnotation>? "=" <Rules> ";"
+ *   <RuleAnnotation> ::= "[" <AnnotationKey> "=" <AnnotationValue> "]"
+ *   // Currently the only supported annotation key is "spacing":
+ *   //   [spacing=required], [spacing=optional], [spacing=auto]
  *   <Rules> ::= <Rule> ( "|" <Rule> )*
  *   <Rule> ::= <Expression> ( "->" <Value> )?
  *
@@ -20,10 +23,23 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *
  *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash,
  *   // and not the start of a comment sequence ("//" or "/*").
- *   // Whitespace (<WS>) and comments (<Comment>) are not stored literally; instead each
- *   // occurrence creates a "flex space" boundary, splitting the string into segments that can
- *   // match any amount of whitespace at runtime.  An escaped whitespace character (e.g. "\ ")
- *   // bypasses this behavior and is stored as a literal space within the current segment.
+ *   // A "flex space" is a separator position in the grammar source, created by any unescaped
+ *   // whitespace or comment between tokens. When matching input, a flex space accepts any run of
+ *   // whitespace or punctuation characters. The minimum number required is controlled by the
+ *   // spacing mode (set via "set spacing ...;"):
+ *   //
+ *   //   - "required": always requires at least one whitespace/punctuation character.
+ *   //   - "optional": accepts zero or more — no separator is needed.
+ *   //   - "auto"    : (default) requires a separator only when both adjacent tokens belong to
+ *   //                 space-separated scripts (e.g. Latin, Cyrillic). Tokens in non-spaced scripts
+ *   //                 (e.g. CJK), or tokens that are whitespace/punctuation characters themselves,
+ *   //                 do not require a separator.
+ *   //
+ *   // The spacing mode is set per-rule via a [spacing=<mode>] annotation immediately
+ *   // after the rule name: <rule> [spacing=required] = ...;
+ *   // Omitting the annotation is equivalent to [spacing=auto].
+ *   //
+ *   // An escaped space (e.g. "\ ") is treated as a literal character, not a flex space.
  *   // Special chars must be escaped with backslash to appear as literal text.
  *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Comment> | <Char> )+
  *   <EscapeSequence> ::= "\\"<EscapedChar>
@@ -157,6 +173,7 @@ export type Rule = {
 export type RuleDefinition = {
     name: string;
     rules: Rule[];
+    spacingMode?: SpacingMode;
     pos?: number | undefined;
 };
 
@@ -166,6 +183,18 @@ export type ImportStatement = {
     source: string; // File path or module name
     pos?: number | undefined;
 };
+
+/**
+ * Controls how flex-space separator positions between tokens are matched at runtime.
+ *   "required" – at least one whitespace/punctuation character must be present.
+ *   "optional" – zero or more separators; tokens may be adjacent.
+ *   undefined  – auto (default): a separator is required only when both adjacent
+ *                characters belong to scripts that normally use word spaces (e.g.
+ *                Latin, Cyrillic). Scripts such as CJK do not require one.
+ *
+ * Note: the grammar source keyword "auto" is stored as undefined internally.
+ */
+export type SpacingMode = "required" | "optional" | undefined;
 
 // Grammar Parse Result (includes entity declarations and imports)
 export type GrammarParseResult = {
@@ -673,13 +702,37 @@ class GrammarRuleParser {
         return rules;
     }
 
+    private parseSpacingAnnotation(): SpacingMode {
+        this.skipWhitespace(1); // skip "["
+        const key = this.parseId("annotation key");
+        if (key !== "spacing") {
+            this.throwError(
+                `Unknown rule annotation '${key}'. Expected 'spacing'.`,
+            );
+        }
+        this.consume("=", "in spacing annotation");
+        const value = this.parseId("spacing value");
+        if (value !== "required" && value !== "optional" && value !== "auto") {
+            this.throwError(
+                `Invalid value '${value}' for spacing annotation. Expected 'required', 'optional', or 'auto'.`,
+            );
+        }
+        this.consume("]", "at end of spacing annotation");
+        // "auto" is the default behavior; stored as undefined internally
+        return value === "auto" ? undefined : (value as SpacingMode);
+    }
+
     private parseRuleDefinition(): RuleDefinition {
         const pos = this.pos;
         const name = this.parseRuleName();
+        let spacingMode: SpacingMode;
+        if (this.isAt("[")) {
+            spacingMode = this.parseSpacingAnnotation();
+        }
         this.consume("=", "after rule identifier");
         const rules = this.parseRules();
         this.consume(";", "at end of rule definition");
-        return { name, rules, pos };
+        return { name, rules, spacingMode, pos };
     }
 
     private consume(expected: string, reason?: string) {

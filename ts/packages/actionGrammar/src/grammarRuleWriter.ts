@@ -92,7 +92,11 @@ export function writeGrammarRules(
 }
 
 function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
-    result.write(`<${def.name}> = `);
+    result.write(`<${def.name}>`);
+    if (def.spacingMode !== undefined) {
+        result.write(` [spacing=${def.spacingMode}]`);
+    }
+    result.write(` = `);
     writeRules(result, def.rules, result.column - 2);
     result.writeLine(";");
 }
