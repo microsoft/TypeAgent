@@ -220,6 +220,7 @@ function normalizeRule(
                 },
             ],
             value: { type: "variable", name: "_result" }, // Add value expression
+            spacingMode: rule.spacingMode,
         };
     }
 
@@ -230,6 +231,7 @@ function normalizeRule(
         return {
             parts: normalizedParts,
             value: { type: "literal", value: singleLiteral.literal },
+            spacingMode: rule.spacingMode,
         };
     }
 

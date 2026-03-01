@@ -96,12 +96,25 @@ describe("Grammar Matcher", () => {
                 testMatchGrammar(grammar, `hello${spaces} \r\vworld`),
             ).toStrictEqual([true]);
         });
-        it("escaped space infix - not match", () => {
+        it("escaped space infix - literal as separator", () => {
+            // The escaped-space segment ends with \u3000 (ideographic space).
+            // \u3000 is not a word-boundary-script character (not in
+            // wordBoundaryScriptRe and not an ASCII letter), so
+            // needsSeparatorInAutoMode('\u3000', 'w') returns false.
+            // The flex-space between the segment and "world" therefore allows
+            // zero separators in auto mode — no extra separator is required.
             const g = `<Start> = hello${escapedSpaces} world -> true;`;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(
                 testMatchGrammar(grammar, `hello${spaces}world`),
-            ).toStrictEqual([]);
+            ).toStrictEqual([true]);
+        });
+        it("escaped space infix - not match", () => {
+            const g = `<Start> = hello${escapedSpaces} world -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            // An extra space before the escaped-spaces block is a content mismatch:
+            // segment 1 literal is "hello \t…\u3000" but the input "hello  \t…"
+            // has a double space at that position.
             expect(
                 testMatchGrammar(grammar, `hello ${spaces} world`),
             ).toStrictEqual([]);
@@ -115,6 +128,129 @@ describe("Grammar Matcher", () => {
             expect(
                 testMatchGrammar(grammar, `hello ${spaces} world`),
             ).toStrictEqual([]);
+        });
+    });
+    describe("Punctuation as Separator", () => {
+        // In "auto" and "optional" modes a punctuation character adjacent to a
+        // flex-space position — at the end of the preceding literal or at the
+        // start of the following literal — satisfies the separator requirement;
+        // no additional separator is required in the input.
+        // In "required" mode at least one separator character must always be
+        // present in the input, regardless of adjacent literal content.
+        describe("auto mode", () => {
+            it("punctuation at end of preceding literal", () => {
+                const g = `<Start> = hello, world -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                // comma satisfies the flex-space; no extra separator needed
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual([
+                    true,
+                ]);
+                // extra separator also accepted
+                expect(testMatchGrammar(grammar, "hello, world")).toStrictEqual(
+                    [true],
+                );
+                // literal comma must be present
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual(
+                    [],
+                );
+            });
+            it("punctuation at start of following literal", () => {
+                const g = `<Start> = hello ,world -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                // comma satisfies the flex-space from the following side
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual([
+                    true,
+                ]);
+                expect(testMatchGrammar(grammar, "hello ,world")).toStrictEqual(
+                    [true],
+                );
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual(
+                    [],
+                );
+            });
+            it("punctuation trailing boundary", () => {
+                // Use a wildcard to consume the remaining input so finalizeState
+                // does not reject trailing non-separator content. isBoundarySatisfied
+                // is what determines whether the boundary after the comma passes.
+                const g = `<Start> = hello,$(x) -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                // trailing comma is a sufficient boundary; wildcard captures rest
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual([
+                    true,
+                ]);
+                expect(testMatchGrammar(grammar, "hello, world")).toStrictEqual(
+                    [true],
+                );
+            });
+        });
+        describe("required mode", () => {
+            it("punctuation at end of preceding literal", () => {
+                const g = `<Start> [spacing=required] = hello, world -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                // comma alone does not satisfy the boundary; a separator in the
+                // input is still required
+                expect(testMatchGrammar(grammar, "hello, world")).toStrictEqual(
+                    [true],
+                );
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual(
+                    [],
+                );
+            });
+            it("punctuation at start of following literal", () => {
+                const g = `<Start> [spacing=required] = hello ,world -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "hello ,world")).toStrictEqual(
+                    [true],
+                );
+                // comma is consumed by the required separator, leaving nothing
+                // to match the leading comma of the next literal
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual(
+                    [],
+                );
+            });
+            it("punctuation trailing boundary", () => {
+                const g = `<Start> [spacing=required] = hello,$(x) -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                // separator must come from the input after the comma
+                expect(testMatchGrammar(grammar, "hello, world")).toStrictEqual(
+                    [true],
+                );
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual(
+                    [],
+                );
+            });
+        });
+        describe("optional mode", () => {
+            it("punctuation at end of preceding literal", () => {
+                const g = `<Start> [spacing=optional] = hello, world -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual([
+                    true,
+                ]);
+                expect(testMatchGrammar(grammar, "hello, world")).toStrictEqual(
+                    [true],
+                );
+            });
+            it("punctuation at start of following literal", () => {
+                const g = `<Start> [spacing=optional] = hello ,world -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual([
+                    true,
+                ]);
+                expect(testMatchGrammar(grammar, "hello ,world")).toStrictEqual(
+                    [true],
+                );
+            });
+            it("punctuation trailing boundary", () => {
+                const g = `<Start> [spacing=optional] = hello,$(x) -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual([
+                    true,
+                ]);
+                expect(testMatchGrammar(grammar, "hello, world")).toStrictEqual(
+                    [true],
+                );
+            });
         });
     });
     describe("Variable Match", () => {
@@ -494,6 +630,795 @@ describe("Grammar Matcher", () => {
             `;
             const grammar = loadGrammarRules("test.grammar", g);
             expect(testMatchGrammar(grammar, "foo bar")).toStrictEqual(["bar"]);
+        });
+    });
+
+    describe("Space Separator Mode", () => {
+        describe("default (auto) - Latin requires space", () => {
+            const g = `<Start> = hello world -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches with space", () => {
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("does not match without space", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual(
+                    [],
+                );
+            });
+        });
+
+        describe("spacing=required annotation", () => {
+            const g = `<Start> [spacing=required] = hello world -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches with space", () => {
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("does not match without space", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual(
+                    [],
+                );
+            });
+        });
+
+        describe("spacing=optional annotation", () => {
+            const g = `<Start> [spacing=optional] = hello world -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches with space", () => {
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches without space", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("spacing=auto annotation - CJK (Han)", () => {
+            // In the grammar, whitespace creates a flex-space boundary.
+            // With auto mode, Han characters don't need spaces between them.
+            const g = `<Start> [spacing=auto] = 你好 世界 -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches without space", () => {
+                expect(testMatchGrammar(grammar, "你好世界")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches with space", () => {
+                expect(testMatchGrammar(grammar, "你好 世界")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("no annotation is identical to [spacing=auto]", () => {
+            // Omitting the annotation must produce the same behavior as
+            // explicitly writing [spacing=auto] — both store spacingMode as
+            // undefined and both enforce word-boundary rules for Latin scripts
+            // while allowing adjacent CJK characters.
+            it("Latin words without space are rejected in both", () => {
+                const gNoAnnotation = loadGrammarRules(
+                    "test.grammar",
+                    `<Start> = hello world -> true;`,
+                );
+                const gAutoExplicit = loadGrammarRules(
+                    "test.grammar",
+                    `<Start> [spacing=auto] = hello world -> true;`,
+                );
+                expect(
+                    testMatchGrammar(gNoAnnotation, "helloworld"),
+                ).toStrictEqual([]);
+                expect(
+                    testMatchGrammar(gAutoExplicit, "helloworld"),
+                ).toStrictEqual([]);
+            });
+            it("CJK characters without space match in both", () => {
+                const gNoAnnotation = loadGrammarRules(
+                    "test.grammar",
+                    `<Start> = 你好 世界 -> true;`,
+                );
+                const gAutoExplicit = loadGrammarRules(
+                    "test.grammar",
+                    `<Start> [spacing=auto] = 你好 世界 -> true;`,
+                );
+                expect(
+                    testMatchGrammar(gNoAnnotation, "你好世界"),
+                ).toStrictEqual([true]);
+                expect(
+                    testMatchGrammar(gAutoExplicit, "你好世界"),
+                ).toStrictEqual([true]);
+            });
+        });
+
+        describe("spacing=auto annotation - mixed Latin+CJK boundary", () => {
+            // At the Latin→CJK boundary no space is needed (CJK side is no-space)
+            const g = `<Start> [spacing=auto] = hello 世界 -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches without space at Latin-CJK boundary", () => {
+                expect(testMatchGrammar(grammar, "hello世界")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches with space at Latin-CJK boundary", () => {
+                expect(testMatchGrammar(grammar, "hello 世界")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("per-rule mode switching", () => {
+            // <Start> references two sub-rules declared with different modes.
+            const g = `
+                <RequiredRule> [spacing=required] = hello world -> "required";
+                <OptionalRule> [spacing=optional] = hello world -> "optional";
+                <Start> = $(x:<RequiredRule>) -> x | $(x:<OptionalRule>) -> x;
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("both sub-rules match when space is present", () => {
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    "required",
+                    "optional",
+                ]);
+            });
+            it("only the optional sub-rule matches without space", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
+                    "optional",
+                ]);
+            });
+        });
+
+        describe("nested rule uses its own mode", () => {
+            // EnglishRule uses required; NoSpaceRule uses optional.
+            // <Start> references both — each sub-rule uses its own declared mode.
+            const g = `
+                <EnglishRule> [spacing=required] = hello world -> "english";
+                <NoSpaceRule> [spacing=optional] = hi there -> "nospace";
+                <Start> = $(x:<EnglishRule>) $(y:<NoSpaceRule>) -> { x, y };
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("each nested rule uses its own declared mode", () => {
+                // EnglishRule requires space between "hello" and "world";
+                // NoSpaceRule allows "hithere" without space.
+                expect(
+                    testMatchGrammar(grammar, "hello world hithere"),
+                ).toStrictEqual([{ x: "english", y: "nospace" }]);
+            });
+        });
+
+        describe("merged rules - same rule name, different modes", () => {
+            // Two definitions of <Start> with different spacing modes.
+            // The compiler merges them into one rule with two alternatives,
+            // each carrying its own declared mode.
+            const g = `
+                <Start> [spacing=required] = hello world -> "required";
+                <Start> [spacing=optional] = hello world -> "optional";
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("both alternatives match when space is present", () => {
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    "required",
+                    "optional",
+                ]);
+            });
+            it("only the optional alternative matches without space", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
+                    "optional",
+                ]);
+            });
+        });
+
+        describe("inline group inherits enclosing rule mode", () => {
+            const g = `<Start> [spacing=optional] = hello (world | earth) -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches with space", () => {
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches without space (inherits optional)", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches second alternative without space", () => {
+                expect(testMatchGrammar(grammar, "helloearth")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("same-name rule with different modes merged", () => {
+            // <Greeting> is defined twice with different modes; each alternative
+            // must respect its own declared spacingMode.
+            const g = `
+                <Greeting> [spacing=optional] = hello world -> "optional";
+                <Greeting> [spacing=required] = good morning -> "required";
+                <Start> = <Greeting>;
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("optional alternative matches without space", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
+                    "optional",
+                ]);
+            });
+            it("required alternative matches with space", () => {
+                expect(testMatchGrammar(grammar, "good morning")).toStrictEqual(
+                    ["required"],
+                );
+            });
+            it("required alternative does not match without space", () => {
+                expect(testMatchGrammar(grammar, "goodmorning")).toStrictEqual(
+                    [],
+                );
+            });
+        });
+
+        describe("rule without annotation uses auto/default mode", () => {
+            // <Before> has no annotation — must behave identically to
+            // [spacing=auto]: Latin words require a separator, CJK do not.
+            const g = `
+                <Before> = hello world -> "before";
+                <After> [spacing=optional] = hello world -> "after";
+                <Start> = $(x:<Before>) -> x | $(x:<After>) -> x;
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("<Before> requires space between Latin words (auto default)", () => {
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    "before",
+                    "after",
+                ]);
+            });
+            it("<Before> does not match without space (auto default)", () => {
+                // Only the optional <After> alternative should match.
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
+                    "after",
+                ]);
+            });
+        });
+
+        describe("parse error - unknown annotation key", () => {
+            it("throws on unknown annotation key", () => {
+                expect(() =>
+                    loadGrammarRules(
+                        "test.grammar",
+                        `<Start> [unknown=auto] = hello -> true;`,
+                    ),
+                ).toThrow("Unknown rule annotation");
+            });
+        });
+
+        describe("parse error - invalid spacing value", () => {
+            it("throws on invalid value", () => {
+                expect(() =>
+                    loadGrammarRules(
+                        "test.grammar",
+                        `<Start> [spacing=never] = hello -> true;`,
+                    ),
+                ).toThrow("Invalid value");
+            });
+        });
+
+        describe("spacing=auto annotation - Hangul (Korean)", () => {
+            // Hangul is in wordBoundaryScriptRe so adjacent Hangul syllables
+            // require a separator, just like Latin.
+            const g = `<Start> [spacing=auto] = 안녕 세계 -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("does not match without space (Hangul requires separator)", () => {
+                expect(testMatchGrammar(grammar, "안녕세계")).toStrictEqual([]);
+            });
+            it("matches with space", () => {
+                expect(testMatchGrammar(grammar, "안녕 세계")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("spacing=auto annotation - CJK→Latin boundary", () => {
+            // Reverse of the Latin→CJK test: CJK on the left, Latin on the right.
+            // CJK is not in wordBoundaryScriptRe so no space is needed at this boundary.
+            const g = `<Start> [spacing=auto] = 世界 hello -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches without space at CJK-Latin boundary", () => {
+                expect(testMatchGrammar(grammar, "世界hello")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches with space at CJK-Latin boundary", () => {
+                expect(testMatchGrammar(grammar, "世界 hello")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("spacing=required annotation - punctuation-only separator in input", () => {
+            // required mode uses [\s\p{P}]+ which accepts punctuation characters.
+            const g = `<Start> [spacing=required] = hello world -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("accepts a comma as the separator", () => {
+                expect(testMatchGrammar(grammar, "hello,world")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("accepts a period as the separator", () => {
+                expect(testMatchGrammar(grammar, "hello.world")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("repeat group ()* inherits optional mode", () => {
+            const g = `<Start> [spacing=optional] = hello (world)* -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches zero repetitions", () => {
+                expect(testMatchGrammar(grammar, "hello")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches one repetition without space (optional mode)", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches two repetitions without space (optional mode)", () => {
+                expect(
+                    testMatchGrammar(grammar, "helloworldworld"),
+                ).toStrictEqual([true]);
+            });
+        });
+
+        describe("repeat group ()+ with required mode", () => {
+            const g = `<Start> [spacing=required] = hello (world)+ -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches one repetition with space", () => {
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("does not match without space before group", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual(
+                    [],
+                );
+            });
+            it("matches two repetitions with spaces", () => {
+                expect(
+                    testMatchGrammar(grammar, "hello world world"),
+                ).toStrictEqual([true]);
+            });
+            it("does not match when repetitions are not space-separated", () => {
+                // The first 'world' ends with 'w' at index 11 in input; required
+                // mode rejects a match unless a separator follows the token.
+                expect(
+                    testMatchGrammar(grammar, "hello worldworld"),
+                ).toStrictEqual([]);
+            });
+        });
+
+        describe("repeat group ()+ with optional mode", () => {
+            const g = `<Start> [spacing=optional] = hello (world)+ -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches one repetition without space (optional mode)", () => {
+                expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches two repetitions without space (optional mode)", () => {
+                expect(
+                    testMatchGrammar(grammar, "helloworldworld"),
+                ).toStrictEqual([true]);
+            });
+            it("matches two repetitions with spaces (optional mode)", () => {
+                expect(
+                    testMatchGrammar(grammar, "hello world world"),
+                ).toStrictEqual([true]);
+            });
+        });
+
+        describe("[spacing=auto] - digit-Latin boundary does not require space", () => {
+            // One side being a digit and the other Latin: no space needed.
+            const g = `<Start> = 123 hello -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("matches without space at digit-Latin boundary", () => {
+                expect(testMatchGrammar(grammar, "123hello")).toStrictEqual([
+                    true,
+                ]);
+            });
+            it("matches with space at digit-Latin boundary", () => {
+                expect(testMatchGrammar(grammar, "123 hello")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("[spacing=auto] - digit-digit boundary requires space", () => {
+            // Both sides are digits: a separator is required because "123456"
+            // is a different token from "123 456".
+            const g = `<Start> = 123 456 -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+            it("does not match without space at digit-digit boundary", () => {
+                expect(testMatchGrammar(grammar, "123456")).toStrictEqual([]);
+            });
+            it("matches with space at digit-digit boundary", () => {
+                expect(testMatchGrammar(grammar, "123 456")).toStrictEqual([
+                    true,
+                ]);
+            });
+        });
+
+        describe("number variable respects spacingMode", () => {
+            describe("required mode - trailing separator after number", () => {
+                const g = `<Start> [spacing=required] = set $(n:number) items -> n;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("rejects number immediately followed by word (no separator)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "set 50items"),
+                    ).toStrictEqual([]);
+                });
+                it("accepts number followed by space then word", () => {
+                    expect(
+                        testMatchGrammar(grammar, "set 50 items"),
+                    ).toStrictEqual([50]);
+                });
+            });
+
+            describe("optional mode - trailing separator after number", () => {
+                const g = `<Start> [spacing=optional] = set $(n:number) items -> n;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("accepts number immediately followed by word (no separator needed)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "set 50items"),
+                    ).toStrictEqual([50]);
+                });
+                it("accepts number followed by space then word", () => {
+                    expect(
+                        testMatchGrammar(grammar, "set 50 items"),
+                    ).toStrictEqual([50]);
+                });
+            });
+
+            describe("auto mode - digit-Latin boundary does not require space", () => {
+                // Digit followed by Latin: not both in wordBoundaryScriptRe, so no separator needed.
+                const g = `<Start> = set $(n:number) items -> n;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("accepts number immediately followed by Latin word (auto mode)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "set 50items"),
+                    ).toStrictEqual([50]);
+                });
+            });
+
+            describe("required mode - number at start of rule (no preceding part)", () => {
+                // Verifies the trailing separator check fires even when there is no
+                // preceding string part whose own isBoundarySatisfied check would have
+                // enforced a separator earlier.
+                const g = `<Start> [spacing=required] = $(n:number) items -> n;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("rejects number immediately followed by word (no separator)", () => {
+                    expect(testMatchGrammar(grammar, "50items")).toStrictEqual(
+                        [],
+                    );
+                });
+                it("accepts number followed by space then word", () => {
+                    expect(testMatchGrammar(grammar, "50 items")).toStrictEqual(
+                        [50],
+                    );
+                });
+            });
+
+            describe("auto mode - digit-digit boundary requires space after number variable", () => {
+                // Both the end of the matched number and the start of the next
+                // literal are digits → isBoundarySatisfied returns false in auto mode.
+                const g = `<Start> = $(n:number) 456 -> n;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("rejects number immediately followed by digit literal (no separator)", () => {
+                    expect(testMatchGrammar(grammar, "123456")).toStrictEqual(
+                        [],
+                    );
+                });
+                it("accepts number followed by space then digit literal", () => {
+                    expect(testMatchGrammar(grammar, "123 456")).toStrictEqual([
+                        123,
+                    ]);
+                });
+            });
+
+            describe("required mode - number with wildcard trailing separator", () => {
+                const g = `<Start> [spacing=required] = $(x) $(n:number) end -> n;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("rejects number immediately followed by word (no separator)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "set 50end"),
+                    ).toStrictEqual([]);
+                });
+                it("accepts number followed by space then word", () => {
+                    expect(
+                        testMatchGrammar(grammar, "set 50 end"),
+                    ).toStrictEqual([50]);
+                });
+            });
+
+            describe("optional mode - number with wildcard trailing separator", () => {
+                // In optional mode the wildcard path should accept no separator.
+                const g = `<Start> [spacing=optional] = $(x) $(n:number) end -> n;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("accepts number immediately followed by word (no separator needed)", () => {
+                    expect(testMatchGrammar(grammar, "set50end")).toStrictEqual(
+                        [50],
+                    );
+                });
+                it("accepts number followed by space then word", () => {
+                    expect(
+                        testMatchGrammar(grammar, "set 50 end"),
+                    ).toStrictEqual([50]);
+                });
+            });
+        });
+
+        describe("separator AFTER a rule reference follows parent mode", () => {
+            // The nested rule uses optional mode, so its own isBoundarySatisfied check
+            // always passes. The separator AFTER the rule reference must be
+            // validated using the parent (outer) rule's spacingMode.
+            describe("parent required, nested optional", () => {
+                const g = `
+                    <Inner> [spacing=optional] = hello world -> true;
+                    <Start> [spacing=required] = $(x:<Inner>) end -> x;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches when space is present after rule reference", () => {
+                    expect(
+                        testMatchGrammar(grammar, "helloworld end"),
+                    ).toStrictEqual([true]);
+                });
+                it("does not match without space after rule reference (parent required)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "helloworldend"),
+                    ).toStrictEqual([]);
+                });
+            });
+
+            describe("parent optional, nested required", () => {
+                // The nested rule's own required mode enforces a separator
+                // after its last token, so "hello worldend" is rejected by
+                // the inner rule itself regardless of the outer mode.
+                const g = `
+                    <Inner> [spacing=required] = hello world -> true;
+                    <Start> [spacing=optional] = $(x:<Inner>) end -> x;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches when space is present after rule reference", () => {
+                    expect(
+                        testMatchGrammar(grammar, "hello world end"),
+                    ).toStrictEqual([true]);
+                });
+                it("does not match without space (inner required mode enforces the boundary)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "hello worldend"),
+                    ).toStrictEqual([]);
+                });
+            });
+            describe("deeply nested: grandparent optional, parent required pass-through, grandchild optional", () => {
+                // Bug: A(optional) -> B(required, single-part pass-through) -> C(optional)
+                // After C finishes, finalizeNestedRule restores B's "required" mode and
+                // the separator check fires against it — rejecting "barbaz" even though
+                // A (the nearest ancestor with a following part) uses "optional" mode.
+                // The correct behaviour is to walk up to the first ancestor that still
+                // has remaining parts and use *that* ancestor's spacingMode.
+                const g = `
+                    <Inner> [spacing=optional] = bar -> true;
+                    <Middle> [spacing=required] = $(x:<Inner>) -> x;
+                    <Start> [spacing=optional] = $(x:<Middle>) baz -> x;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space (works today)", () => {
+                    expect(testMatchGrammar(grammar, "bar baz")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("matches without space (grandparent optional mode governs the separator after the pass-through)", () => {
+                    expect(testMatchGrammar(grammar, "barbaz")).toStrictEqual([
+                        true,
+                    ]);
+                });
+            });
+            describe("deeply nested: grandparent required, parent optional pass-through, grandchild optional", () => {
+                // The separator check is deferred past the exhausted optional parent
+                // and fires at the grandparent level with "required" mode.
+                const g = `
+                    <Inner> [spacing=optional] = bar -> true;
+                    <Middle> [spacing=optional] = $(x:<Inner>) -> x;
+                    <Start> [spacing=required] = $(x:<Middle>) baz -> x;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "bar baz")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("does not match without space (grandparent required governs)", () => {
+                    expect(testMatchGrammar(grammar, "barbaz")).toStrictEqual(
+                        [],
+                    );
+                });
+            });
+            describe("deeply nested: grandparent auto (default), parent required pass-through, grandchild optional", () => {
+                // auto mode: both "bar" and "baz" are Latin → space is required.
+                const g = `
+                    <Inner> [spacing=optional] = bar -> true;
+                    <Middle> [spacing=required] = $(x:<Inner>) -> x;
+                    <Start> = $(x:<Middle>) baz -> x;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "bar baz")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("does not match without space (auto mode: Latin-Latin boundary requires space)", () => {
+                    expect(testMatchGrammar(grammar, "barbaz")).toStrictEqual(
+                        [],
+                    );
+                });
+            });
+            describe("deeply nested: grandchild required enforces its own internal separator", () => {
+                // grandchild=required: the string-match isBoundarySatisfied check inside
+                // grandchild rejects "bar" immediately followed by "baz" before
+                // the nested-rule separator logic even runs.
+                const g = `
+                    <Inner> [spacing=required] = bar -> true;
+                    <Middle> [spacing=optional] = $(x:<Inner>) -> x;
+                    <Start> [spacing=optional] = $(x:<Middle>) baz -> x;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "bar baz")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("does not match without space (grandchild required catches it internally)", () => {
+                    expect(testMatchGrammar(grammar, "barbaz")).toStrictEqual(
+                        [],
+                    );
+                });
+            });
+            describe("4 levels deep: great-grandparent optional, two required pass-through levels, leaf optional", () => {
+                // The fix must skip multiple exhausted ancestors and fire only at
+                // the great-grandparent which has a following part ("baz").
+                const g = `
+                    <Leaf> [spacing=optional] = bar -> true;
+                    <LevelA> [spacing=required] = $(x:<Leaf>) -> x;
+                    <LevelB> [spacing=required] = $(x:<LevelA>) -> x;
+                    <Start> [spacing=optional] = $(x:<LevelB>) baz -> x;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "bar baz")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("matches without space (great-grandparent optional governs after two exhausted pass-through levels)", () => {
+                    expect(testMatchGrammar(grammar, "barbaz")).toStrictEqual([
+                        true,
+                    ]);
+                });
+            });
+            describe("4 levels deep: great-grandparent required, two optional pass-through levels, leaf optional", () => {
+                // The boundary check defers past two exhausted optional ancestors
+                // and fires at the great-grandparent with "required" mode.
+                const g = `
+                    <Leaf> [spacing=optional] = bar -> true;
+                    <LevelA> [spacing=optional] = $(x:<Leaf>) -> x;
+                    <LevelB> [spacing=optional] = $(x:<LevelA>) -> x;
+                    <Start> [spacing=required] = $(x:<LevelB>) baz -> x;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "bar baz")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("does not match without space (great-grandparent required governs)", () => {
+                    expect(testMatchGrammar(grammar, "barbaz")).toStrictEqual(
+                        [],
+                    );
+                });
+            });
+        });
+
+        describe("separator BEFORE a nested rule reference uses ancestor mode", () => {
+            // Symmetric to the "after" tests: when a pass-through chain (A->X) ends
+            // and the next sibling part in the ancestor is another nested rule (B),
+            // the inter-rule separator is governed by the common ancestor's
+            // spacingMode — not by any intermediate exhausted rule's mode.
+            describe("grandparent optional, pass-through chain before sibling rule", () => {
+                // Start(optional): [A(required)->X(optional) "foo"] then [B(optional) "bar"]
+                // The separator between "foo" and "bar" uses Start's "optional" mode.
+                const g = `
+                    <X> [spacing=optional] = foo -> "x";
+                    <A> [spacing=required] = $(x:<X>) -> x;
+                    <B> [spacing=optional] = bar -> "b";
+                    <Start> [spacing=optional] = $(a:<A>) $(b:<B>) -> [a, b];
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "foo bar")).toStrictEqual([
+                        ["x", "b"],
+                    ]);
+                });
+                it("matches without space (Start optional governs the inter-rule boundary)", () => {
+                    expect(testMatchGrammar(grammar, "foobar")).toStrictEqual([
+                        ["x", "b"],
+                    ]);
+                });
+            });
+            describe("grandparent required, pass-through chain before sibling rule", () => {
+                // Start(required): [A(optional)->X(optional) "foo"] then [B(optional) "bar"]
+                // The separator uses Start's "required" mode regardless of A and X being optional.
+                const g = `
+                    <X> [spacing=optional] = foo -> "x";
+                    <A> [spacing=optional] = $(x:<X>) -> x;
+                    <B> [spacing=optional] = bar -> "b";
+                    <Start> [spacing=required] = $(a:<A>) $(b:<B>) -> [a, b];
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "foo bar")).toStrictEqual([
+                        ["x", "b"],
+                    ]);
+                });
+                it("does not match without space (Start required governs)", () => {
+                    expect(testMatchGrammar(grammar, "foobar")).toStrictEqual(
+                        [],
+                    );
+                });
+            });
+            describe("4 levels deep, great-grandparent optional, pass-through chain before sibling rule", () => {
+                // Start(optional): [A(required)->B(required)->X(optional) "foo"] then [C(optional) "bar"]
+                // Two exhausted required pass-through levels; Start's optional mode governs.
+                const g = `
+                    <X> [spacing=optional] = foo -> "x";
+                    <B> [spacing=required] = $(x:<X>) -> x;
+                    <A> [spacing=required] = $(b:<B>) -> b;
+                    <C> [spacing=optional] = bar -> "c";
+                    <Start> [spacing=optional] = $(a:<A>) $(c:<C>) -> [a, c];
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "foo bar")).toStrictEqual([
+                        ["x", "c"],
+                    ]);
+                });
+                it("matches without space (Start optional governs after two exhausted pass-through levels)", () => {
+                    expect(testMatchGrammar(grammar, "foobar")).toStrictEqual([
+                        ["x", "c"],
+                    ]);
+                });
+            });
+            describe("4 levels deep, great-grandparent required, pass-through chain before sibling rule", () => {
+                // Start(required): [A(optional)->B(optional)->X(optional) "foo"] then [C(optional) "bar"]
+                // Start's required mode governs even though all intermediates are optional.
+                const g = `
+                    <X> [spacing=optional] = foo -> "x";
+                    <B> [spacing=optional] = $(x:<X>) -> x;
+                    <A> [spacing=optional] = $(b:<B>) -> b;
+                    <C> [spacing=optional] = bar -> "c";
+                    <Start> [spacing=required] = $(a:<A>) $(c:<C>) -> [a, c];
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with space", () => {
+                    expect(testMatchGrammar(grammar, "foo bar")).toStrictEqual([
+                        ["x", "c"],
+                    ]);
+                });
+                it("does not match without space (Start required governs)", () => {
+                    expect(testMatchGrammar(grammar, "foobar")).toStrictEqual(
+                        [],
+                    );
+                });
+            });
         });
     });
 });

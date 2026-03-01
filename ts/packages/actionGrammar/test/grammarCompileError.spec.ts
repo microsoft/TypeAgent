@@ -61,6 +61,27 @@ describe("Grammar Compiler", () => {
                 "error: Referenced rule '<Pause>' does not produce a value for variable 'x' in definition '<Start>'",
             );
         });
+        it("Variable reference to non-value rule reports reference position, not definition position", () => {
+            // Use a compact grammar with no leading whitespace so positions are predictable.
+            // refPos of <Pause> inside $(x:<Pause>) is at line 1, col 15.
+            // def.pos of <Pause> definition is at line 2, col 1.
+            // The error must point to the reference site (line 1), not the definition (line 2).
+            const grammarText =
+                "<Start> = $(x:<Pause>);\n" +
+                "<Pause> = <Wait> <Stop>;\n" +
+                "<Wait> = wait;\n" +
+                "<Stop> = stop;\n";
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain(
+                "error: Referenced rule '<Pause>' does not produce a value for variable 'x'",
+            );
+            // Error must be attributed to the reference site on line 1, not the definition on line 2.
+            expect(errors[0]).toContain("test(1,");
+            expect(errors[0]).not.toContain("test(2,");
+        });
+
         it("Variable reference to non-value rules with multiple values", () => {
             const grammarText = `
             <Start> = $(x:<Pause>);
@@ -267,6 +288,31 @@ describe("Grammar Compiler", () => {
             expect(warnings[0]).toContain(
                 "warning: Rule '<Unused>' is defined but never used.",
             );
+            // Warning must point to the definition of <Unused> (line 4, col 13).
+            expect(warnings[0]).toContain("test(4,13)");
+        });
+
+        it("Unused merged rule: warning position points to first definition", () => {
+            // When the same rule name is defined twice (merged), the unused-rule
+            // warning must report the position of the FIRST definition, not the
+            // second.  Use compact grammar with no leading whitespace so positions
+            // are predictable.
+            const grammarText =
+                "<Start> = <Pause>;\n" +
+                "<Pause> = pause;\n" +
+                "<Merged> = one;\n" +
+                "<Merged> = two;\n";
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(1);
+            expect(warnings[0]).toContain(
+                "warning: Rule '<Merged>' is defined but never used.",
+            );
+            // Line 3 col 1 is the first definition of <Merged>; line 4 is the second.
+            expect(warnings[0]).toContain("test(3,1)");
+            expect(warnings[0]).not.toContain("test(4,");
         });
 
         it("Multiple variables without explicit value expression", () => {

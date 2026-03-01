@@ -17,6 +17,7 @@ export function grammarFromJson(json: GrammarJson): Grammar {
         return {
             parts: r.parts.map((p) => grammarPartFromJson(p, json)),
             value: r.value,
+            spacingMode: r.spacingMode,
         };
     }
     function grammarPartFromJson(
