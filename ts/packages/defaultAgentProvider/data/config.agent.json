@@ -1,5 +1,5 @@
 {
-  "description": "Configuration when hosted within another agent.",
+  "description": "Configuration when hosted within another agent (no chat).",
   "agents": {
     "player": {
       "name": "music"
