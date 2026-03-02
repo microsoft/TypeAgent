@@ -842,6 +842,50 @@ class GrammarSystemCommandHandler implements CommandHandler {
         return completions;
     }
 }
+class GrammarUseDFACommandHandler implements CommandHandler {
+    public readonly description =
+        "Enable or disable DFA matching within the NFA grammar system (faster; requires grammarSystem=nfa)";
+    public readonly parameters = {
+        args: {
+            enabled: {
+                description: "true or false",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const value = params.args.enabled;
+        if (value !== "true" && value !== "false") {
+            displayWarn(
+                `Invalid value '${value}'. Must be 'true' or 'false'.`,
+                context,
+            );
+            return;
+        }
+        const useDFA = value === "true";
+        await changeContextConfig({ cache: { useDFA } }, context);
+        displayResult(
+            `DFA matching ${useDFA ? "enabled" : "disabled"}.`,
+            context,
+        );
+    }
+    public async getCompletion(
+        context: SessionContext<CommandHandlerContext>,
+        params: PartialParsedCommandParams<typeof this.parameters>,
+        names: string[],
+    ) {
+        const completions: CompletionGroup[] = [];
+        for (const name of names) {
+            if (name === "enabled") {
+                completions.push({ name, completions: ["true", "false"] });
+            }
+        }
+        return completions;
+    }
+}
+
 const configTranslationCommandHandlers: CommandHandlerTable = {
     description: "Translation configuration",
     defaultSubCommand: "on",
@@ -1457,6 +1501,7 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                 description: "Configure cache behavior",
                 commands: {
                     grammarSystem: new GrammarSystemCommandHandler(),
+                    useDFA: new GrammarUseDFACommandHandler(),
                 },
             },
             translation: configTranslationCommandHandlers,

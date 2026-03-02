@@ -4,7 +4,24 @@
 import registerDebug from "debug";
 import { Grammar } from "./grammarTypes.js";
 import { NFA } from "./nfa.js";
-import { matchNFA, sortNFAMatches } from "./nfaInterpreter.js";
+import {
+    matchNFAWithIndex,
+    buildFirstTokenIndex,
+    sortNFAMatches,
+    type FirstTokenIndex,
+} from "./nfaInterpreter.js";
+import { applySplitToTokens } from "./tokenSplit.js";
+
+// Lazy-built, NFA-lifetime cache: one index per NFA object.
+const indexCache = new WeakMap<NFA, FirstTokenIndex>();
+function getIndex(nfa: NFA): FirstTokenIndex {
+    let idx = indexCache.get(nfa);
+    if (!idx) {
+        idx = buildFirstTokenIndex(nfa);
+        indexCache.set(nfa, idx);
+    }
+    return idx;
+}
 
 const debug = registerDebug("typeagent:actionGrammar:nfaMatcher");
 
@@ -83,63 +100,7 @@ function collectNFASplitCandidates(nfa: NFA): string[] {
     return Array.from(candidates).sort((a, b) => b.length - a.length);
 }
 
-/**
- * Try to split a single whitespace-tokenized token using a list of split
- * candidates (sorted longest-first).  Uses greedy left-to-right scanning:
- * at each position, tries every candidate as a prefix; if none matches,
- * advances one character.  Unmatched characters are emitted as a residual
- * segment between matched candidates.
- *
- * Examples:
- *   "Swift's"  + ["'s"] → ["Swift", "'s"]
- *   "黃色汽車" + ["黃色","汽車"] → ["黃色", "汽車"]
- *   "don't"    + ["'t"] → ["don", "'t"]
- *   "play"     + ["'s"] → ["play"]  (no change — returned as single element)
- */
-function splitToken(token: string, candidates: string[]): string[] {
-    const result: string[] = [];
-    let pos = 0;
-    let segStart = 0;
-    while (pos < token.length) {
-        let matched = false;
-        for (const candidate of candidates) {
-            if (
-                pos + candidate.length <= token.length &&
-                token.startsWith(candidate, pos)
-            ) {
-                if (pos > segStart) result.push(token.slice(segStart, pos));
-                result.push(candidate);
-                pos += candidate.length;
-                segStart = pos;
-                matched = true;
-                break;
-            }
-        }
-        if (!matched) pos++;
-    }
-    if (segStart < token.length) result.push(token.slice(segStart));
-    return result;
-}
-
-/**
- * Apply split candidates to every token in the array.
- * Returns a new (longer) array when at least one token was split, or null
- * when nothing changed (avoids an extra NFA run when there is nothing to do).
- */
-function applySplitToTokens(
-    tokens: string[],
-    candidates: string[],
-): string[] | null {
-    if (candidates.length === 0) return null;
-    let anyChange = false;
-    const result: string[] = [];
-    for (const token of tokens) {
-        const parts = splitToken(token, candidates);
-        result.push(...parts);
-        if (parts.length > 1) anyChange = true;
-    }
-    return anyChange ? result : null;
-}
+// splitToken and applySplitToTokens are imported from tokenSplit.ts
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -172,8 +133,10 @@ export function matchGrammarWithNFA(
         return [];
     }
 
+    const index = getIndex(nfa);
+
     // Pass 1: original token array (handles spacing=required correctly)
-    const origResult = matchNFA(nfa, tokens);
+    const origResult = matchNFAWithIndex(nfa, index, tokens);
 
     // Pass 2: pre-split fused tokens for optional/auto rules
     let bestResult = origResult;
@@ -183,7 +146,7 @@ export function matchGrammarWithNFA(
         debug(
             `Split tokens: [${splitTokens.join(", ")}] (${splitTokens.length} tokens)`,
         );
-        const splitResult = matchNFA(nfa, splitTokens);
+        const splitResult = matchNFAWithIndex(nfa, index, splitTokens);
         if (splitResult.matched) {
             if (!origResult.matched) {
                 bestResult = splitResult;

@@ -443,9 +443,16 @@ describe("DFA Compilation", () => {
 
         // Should show the literal "music"
         expect(completions.completions).toContain("music");
-        // Should show wildcard categories
-        expect(completions.completions).toContain("$(track)");
-        expect(completions.completions).toContain("$(id:number)");
+        // Wildcard categories are in wildcardCompletions (not in the flat completions array)
+        const wildcards = completions.groups.flatMap(
+            (g) => g.wildcardCompletions,
+        );
+        expect(wildcards.some((wc) => wc.variable === "track")).toBe(true);
+        expect(
+            wildcards.some(
+                (wc) => wc.variable === "id" && wc.typeName === "number",
+            ),
+        ).toBe(true);
         expect(completions.prefixMatches).toBe(false);
     });
 
@@ -821,7 +828,10 @@ describe("DFA Compilation", () => {
         expect(completions.groups.length).toBeGreaterThan(0);
         expect(completions.completions).toContain("the");
         expect(completions.completions).toContain("track");
-        expect(completions.completions).toContain("$(trackName)");
+        const wildcards2 = completions.groups.flatMap(
+            (g) => g.wildcardCompletions,
+        );
+        expect(wildcards2.some((wc) => wc.variable === "trackName")).toBe(true);
     });
 
     test("DFA completions on real player grammar - after 'play kodachrome by'", () => {
@@ -893,7 +903,10 @@ describe("DFA Compilation", () => {
         ]);
 
         expect(completions.groups.length).toBeGreaterThan(0);
-        expect(completions.completions).toContain("$(artist)");
+        const wildcards3 = completions.groups.flatMap(
+            (g) => g.wildcardCompletions,
+        );
+        expect(wildcards3.some((wc) => wc.variable === "artist")).toBe(true);
         expect(completions.prefixMatches).toBe(false);
     });
 
@@ -1077,9 +1090,7 @@ describe("DFA Compilation", () => {
             expect(albumCompletion?.displayString).toBe("$(album:AlbumName)");
         }
 
-        // Legacy completions should contain all display strings
-        expect(completions.completions).toContain("$(artist:ArtistName)");
-        expect(completions.completions).toContain("$(track:TrackName)");
-        expect(completions.completions).toContain("$(album:AlbumName)");
+        // Wildcard display strings are in wildcardCompletions (not in the flat completions array)
+        // The groups loop above already verified all three wildcardCompletions entries.
     });
 });

@@ -4,7 +4,12 @@
 import registerDebug from "debug";
 import { Grammar } from "./grammarTypes.js";
 import { NFA } from "./nfa.js";
-import { matchNFA, NFAMatchResult } from "./nfaInterpreter.js";
+import {
+    matchNFAWithIndex,
+    buildFirstTokenIndex,
+    NFAMatchResult,
+    type FirstTokenIndex,
+} from "./nfaInterpreter.js";
 import { compileGrammarToNFA } from "./nfaCompiler.js";
 import { loadGrammarRulesNoThrow } from "./grammarLoader.js";
 import { mergeGrammarRules } from "./grammarMerger.js";
@@ -25,9 +30,11 @@ const debug = registerDebug("typeagent:actionGrammar:registry");
 export class AgentGrammar {
     private grammar: Grammar;
     private nfa: NFA;
+    private firstTokenIndex: FirstTokenIndex;
     private ruleCount: number;
     private readonly baseGrammar: Grammar; // Store original grammar for reset
     private readonly baseNFA: NFA; // Store original NFA for reset
+    private readonly baseFirstTokenIndex: FirstTokenIndex;
 
     constructor(
         public readonly agentId: string,
@@ -36,10 +43,12 @@ export class AgentGrammar {
     ) {
         this.grammar = grammar;
         this.nfa = nfa;
+        this.firstTokenIndex = buildFirstTokenIndex(nfa);
         this.ruleCount = grammar.rules.length;
         // Store deep copy of base grammar for reset capability
         this.baseGrammar = JSON.parse(JSON.stringify(grammar));
         this.baseNFA = nfa; // NFA is immutable, safe to share reference
+        this.baseFirstTokenIndex = this.firstTokenIndex;
     }
 
     /**
@@ -141,6 +150,7 @@ export class AgentGrammar {
             const previousRuleCount = this.ruleCount;
             this.grammar = mergedGrammar;
             this.nfa = newNFA;
+            this.firstTokenIndex = buildFirstTokenIndex(newNFA);
             this.ruleCount = mergedGrammar.rules.length;
 
             // Log the newly added grammar rules for debugging/testing
@@ -178,6 +188,7 @@ export class AgentGrammar {
         );
         this.grammar = JSON.parse(JSON.stringify(this.baseGrammar));
         this.nfa = this.baseNFA;
+        this.firstTokenIndex = this.baseFirstTokenIndex;
         this.ruleCount = this.baseGrammar.rules.length;
     }
 
@@ -185,7 +196,7 @@ export class AgentGrammar {
      * Match tokens against this agent's grammar
      */
     match(tokens: string[]): NFAMatchResult {
-        return matchNFA(this.nfa, tokens);
+        return matchNFAWithIndex(this.nfa, this.firstTokenIndex, tokens);
     }
 
     /**

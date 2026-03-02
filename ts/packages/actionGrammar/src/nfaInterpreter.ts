@@ -41,7 +41,7 @@ export interface NFAMatchResult {
     debugSlotMap?: Map<string, number> | undefined;
 }
 
-interface NFAExecutionState {
+export interface NFAExecutionState {
     stateId: number;
     tokenIndex: number;
     path: number[]; // For debugging
@@ -106,11 +106,33 @@ export function matchNFA(
     debugNFA(
         `Initial states after epsilon closure: ${initialStates.length} state(s)`,
     );
+    return matchNFACore(nfa, initialStates, tokens, 0, debug);
+}
+
+/**
+ * Core NFA matching loop — shared by matchNFA and matchNFAWithIndex.
+ * Runs NFA threading from a pre-computed initial state set starting at
+ * the given token index.  The caller is responsible for building
+ * `initialStates` via epsilonClosure() before invoking this function.
+ */
+function matchNFACore(
+    nfa: NFA,
+    initialStates: NFAExecutionState[],
+    tokens: string[],
+    startTokenIndex: number,
+    debug: boolean,
+): NFAMatchResult {
     let currentStates = initialStates;
-    const allVisitedStates = new Set<number>([nfa.startState]);
+    const allVisitedStates = new Set<number>(
+        initialStates.map((s) => s.stateId),
+    );
 
     // Process each token
-    for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+    for (
+        let tokenIndex = startTokenIndex;
+        tokenIndex < tokens.length;
+        tokenIndex++
+    ) {
         const token = tokens[tokenIndex];
         debugNFA(
             `Token ${tokenIndex}: "${token}", currentStates: ${currentStates.length}`,
@@ -959,4 +981,124 @@ export function sortNFAMatches<T extends NFAMatchResult>(matches: T[]): T[] {
         // Rule 3: Prefer fewer unchecked wildcards
         return a.uncheckedWildcardCount - b.uncheckedWildcardCount;
     });
+}
+
+// ─── First-Token Index ────────────────────────────────────────────────────────
+
+/**
+ * Pre-computed dispatch index: maps each possible first token to the NFA
+ * threads that are active after consuming it (epsilon-closed and ready to
+ * continue from tokens[1]).
+ *
+ * For action grammars (command-prefix structure — "pause", "play", "set", …),
+ * virtually no rule starts with a wildcard, so the index eliminates all but
+ * the relevant rules' threads from the very first token.
+ */
+export interface FirstTokenIndex {
+    /** NFA threads active after consuming each possible first token */
+    readonly tokenMap: ReadonlyMap<string, NFAExecutionState[]>;
+    /** Whether any rule starts with a wildcard or phraseSet transition */
+    readonly hasWildcardStart: boolean;
+}
+
+/**
+ * Build a FirstTokenIndex from an NFA.
+ * Cost: O(initial-states × vocabulary) — one epsilonClosure per distinct
+ * first token.  Typically very cheap for action grammars.
+ */
+export function buildFirstTokenIndex(nfa: NFA): FirstTokenIndex {
+    const initialStates = epsilonClosure(nfa, [
+        {
+            stateId: nfa.startState,
+            tokenIndex: 0,
+            path: [nfa.startState],
+            fixedStringPartCount: 0,
+            checkedWildcardCount: 0,
+            uncheckedWildcardCount: 0,
+            ruleIndex: undefined,
+            actionValue: undefined,
+        },
+    ]);
+
+    const tokenToRaw = new Map<string, NFAExecutionState[]>();
+    let hasWildcardStart = false;
+
+    for (const state of initialStates) {
+        const nfaState = nfa.states[state.stateId];
+        if (!nfaState) continue;
+
+        for (const trans of nfaState.transitions) {
+            if (trans.type === "token" && trans.tokens) {
+                for (const tok of trans.tokens) {
+                    const normalized = normalizeToken(tok);
+                    const nextState = tryTransition(nfa, trans, tok, state, 0, [
+                        tok,
+                    ]);
+                    if (nextState) {
+                        if (!tokenToRaw.has(normalized)) {
+                            tokenToRaw.set(normalized, []);
+                        }
+                        tokenToRaw.get(normalized)!.push(nextState);
+                    }
+                }
+            } else if (
+                trans.type === "wildcard" ||
+                trans.type === "phraseSet"
+            ) {
+                hasWildcardStart = true;
+            }
+        }
+    }
+
+    const tokenMap = new Map<string, NFAExecutionState[]>();
+    for (const [token, rawStates] of tokenToRaw) {
+        tokenMap.set(token, epsilonClosure(nfa, rawStates));
+    }
+
+    return { tokenMap, hasWildcardStart };
+}
+
+/**
+ * Match an NFA using a pre-built FirstTokenIndex for fast dispatch.
+ *
+ * - If the first token is in the index AND no wildcard-start rules exist:
+ *   NFA threading begins with only the relevant threads (typically 1–5),
+ *   skipping token[0] processing entirely.
+ * - If the first token is unknown AND no wildcard-start rules exist:
+ *   immediate O(1) rejection — no threading at all.
+ * - Otherwise: falls back to matchNFA (wildcard-start grammars are uncommon
+ *   in action grammars but handled correctly).
+ */
+export function matchNFAWithIndex(
+    nfa: NFA,
+    index: FirstTokenIndex,
+    tokens: string[],
+    debug: boolean = false,
+): NFAMatchResult {
+    if (tokens.length === 0) {
+        return matchNFA(nfa, tokens, debug);
+    }
+
+    const firstToken = normalizeToken(tokens[0]);
+    const precomputed = index.tokenMap.get(firstToken);
+
+    if (!precomputed || index.hasWildcardStart) {
+        if (!precomputed && !index.hasWildcardStart) {
+            // Unknown first token, no wildcard rules — immediate rejection
+            return {
+                matched: false,
+                fixedStringPartCount: 0,
+                checkedWildcardCount: 0,
+                uncheckedWildcardCount: 0,
+                tokensConsumed: 0,
+            };
+        }
+        // Wildcard-start rules exist (or first token found but wildcards too)
+        return matchNFA(nfa, tokens, debug);
+    }
+
+    debugNFA(
+        `matchNFAWithIndex: "${firstToken}" → ${precomputed.length} thread(s), starting at token[1]`,
+    );
+    return matchNFACore(nfa, precomputed, tokens, 1, debug);
 }
