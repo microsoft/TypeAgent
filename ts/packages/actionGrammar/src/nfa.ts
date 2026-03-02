@@ -118,6 +118,11 @@ export interface NFAState {
     // Set when this state is the entry point of a nested rules reference that captures a property
     completionActionName?: string | undefined;
     completionPropertyPath?: string | undefined;
+
+    // For optional/auto spacing mode: token sub-sequences that may be split out of
+    // fused input tokens when a thread enters this rule.  Sorted longest-first for
+    // greedy left-to-right scanning.  Only set on top-level rule entry states.
+    splitCandidates?: string[] | undefined;
 }
 
 /**
