@@ -52,9 +52,7 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
         const g = `<Start> [spacing=auto] = 你好 世界 -> true;`;
         const grammar = loadGrammarRules("test.grammar", g);
         it("matches without space", () => {
-            expect(testMatchGrammar(grammar, "你好世界")).toStrictEqual([
-                true,
-            ]);
+            expect(testMatchGrammar(grammar, "你好世界")).toStrictEqual([true]);
         });
         it("matches with space", () => {
             expect(testMatchGrammar(grammar, "你好 世界")).toStrictEqual([
@@ -77,12 +75,12 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
                 "test.grammar",
                 `<Start> [spacing=auto] = hello world -> true;`,
             );
-            expect(
-                testMatchGrammar(gNoAnnotation, "helloworld"),
-            ).toStrictEqual([]);
-            expect(
-                testMatchGrammar(gAutoExplicit, "helloworld"),
-            ).toStrictEqual([]);
+            expect(testMatchGrammar(gNoAnnotation, "helloworld")).toStrictEqual(
+                [],
+            );
+            expect(testMatchGrammar(gAutoExplicit, "helloworld")).toStrictEqual(
+                [],
+            );
         });
         it("CJK characters without space match in both", () => {
             const gNoAnnotation = loadGrammarRules(
@@ -93,12 +91,12 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
                 "test.grammar",
                 `<Start> [spacing=auto] = 你好 世界 -> true;`,
             );
-            expect(
-                testMatchGrammar(gNoAnnotation, "你好世界"),
-            ).toStrictEqual([true]);
-            expect(
-                testMatchGrammar(gAutoExplicit, "你好世界"),
-            ).toStrictEqual([true]);
+            expect(testMatchGrammar(gNoAnnotation, "你好世界")).toStrictEqual([
+                true,
+            ]);
+            expect(testMatchGrammar(gAutoExplicit, "你好世界")).toStrictEqual([
+                true,
+            ]);
         });
     });
 
@@ -171,9 +169,7 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
         const g = `<Start> = 123 hello -> true;`;
         const grammar = loadGrammarRules("test.grammar", g);
         it("matches without space at digit-Latin boundary", () => {
-            expect(testMatchGrammar(grammar, "123hello")).toStrictEqual([
-                true,
-            ]);
+            expect(testMatchGrammar(grammar, "123hello")).toStrictEqual([true]);
         });
         it("matches with space at digit-Latin boundary", () => {
             expect(testMatchGrammar(grammar, "123 hello")).toStrictEqual([
@@ -191,9 +187,7 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             expect(testMatchGrammar(grammar, "123456")).toStrictEqual([]);
         });
         it("matches with space at digit-digit boundary", () => {
-            expect(testMatchGrammar(grammar, "123 456")).toStrictEqual([
-                true,
-            ]);
+            expect(testMatchGrammar(grammar, "123 456")).toStrictEqual([true]);
         });
     });
 
@@ -202,14 +196,14 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
         const g = `<Start> = hello $(x) world -> x;`;
         const grammar = loadGrammarRules("test.grammar", g);
         it("rejects when wildcard is pure whitespace (trims to empty)", () => {
-            expect(
-                testMatchGrammar(grammar, "hello   world"),
-            ).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "hello   world")).toStrictEqual(
+                [],
+            );
         });
         it("matches when wildcard has non-separator content", () => {
-            expect(
-                testMatchGrammar(grammar, "hello foo world"),
-            ).toStrictEqual(["foo"]);
+            expect(testMatchGrammar(grammar, "hello foo world")).toStrictEqual([
+                "foo",
+            ]);
         });
     });
 
@@ -217,14 +211,14 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
         const g = `<Start> [spacing=required] = hello $(x) world -> x;`;
         const grammar = loadGrammarRules("test.grammar", g);
         it("rejects when wildcard is pure whitespace", () => {
-            expect(
-                testMatchGrammar(grammar, "hello   world"),
-            ).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "hello   world")).toStrictEqual(
+                [],
+            );
         });
         it("matches when wildcard has non-separator content", () => {
-            expect(
-                testMatchGrammar(grammar, "hello foo world"),
-            ).toStrictEqual(["foo"]);
+            expect(testMatchGrammar(grammar, "hello foo world")).toStrictEqual([
+                "foo",
+            ]);
         });
     });
 
@@ -232,14 +226,14 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
         const g = `<Start> [spacing=optional] = hello $(x) world -> x;`;
         const grammar = loadGrammarRules("test.grammar", g);
         it("rejects when wildcard is pure whitespace", () => {
-            expect(
-                testMatchGrammar(grammar, "hello   world"),
-            ).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "hello   world")).toStrictEqual(
+                [],
+            );
         });
         it("matches when wildcard has non-separator content", () => {
-            expect(
-                testMatchGrammar(grammar, "hello foo world"),
-            ).toStrictEqual(["foo"]);
+            expect(testMatchGrammar(grammar, "hello foo world")).toStrictEqual([
+                "foo",
+            ]);
         });
     });
 
@@ -270,14 +264,14 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             const g = `<Start> [spacing=required] = set $(n:number) items -> n;`;
             const grammar = loadGrammarRules("test.grammar", g);
             it("rejects number immediately followed by word (no separator)", () => {
-                expect(
-                    testMatchGrammar(grammar, "set 50items"),
-                ).toStrictEqual([]);
+                expect(testMatchGrammar(grammar, "set 50items")).toStrictEqual(
+                    [],
+                );
             });
             it("accepts number followed by space then word", () => {
-                expect(
-                    testMatchGrammar(grammar, "set 50 items"),
-                ).toStrictEqual([50]);
+                expect(testMatchGrammar(grammar, "set 50 items")).toStrictEqual(
+                    [50],
+                );
             });
         });
 
@@ -285,14 +279,14 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             const g = `<Start> [spacing=optional] = set $(n:number) items -> n;`;
             const grammar = loadGrammarRules("test.grammar", g);
             it("accepts number immediately followed by word (no separator needed)", () => {
-                expect(
-                    testMatchGrammar(grammar, "set 50items"),
-                ).toStrictEqual([50]);
+                expect(testMatchGrammar(grammar, "set 50items")).toStrictEqual([
+                    50,
+                ]);
             });
             it("accepts number followed by space then word", () => {
-                expect(
-                    testMatchGrammar(grammar, "set 50 items"),
-                ).toStrictEqual([50]);
+                expect(testMatchGrammar(grammar, "set 50 items")).toStrictEqual(
+                    [50],
+                );
             });
         });
 
@@ -301,9 +295,9 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             const g = `<Start> = set $(n:number) items -> n;`;
             const grammar = loadGrammarRules("test.grammar", g);
             it("accepts number immediately followed by Latin word (auto mode)", () => {
-                expect(
-                    testMatchGrammar(grammar, "set 50items"),
-                ).toStrictEqual([50]);
+                expect(testMatchGrammar(grammar, "set 50items")).toStrictEqual([
+                    50,
+                ]);
             });
         });
 
@@ -314,14 +308,12 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             const g = `<Start> [spacing=required] = $(n:number) items -> n;`;
             const grammar = loadGrammarRules("test.grammar", g);
             it("rejects number immediately followed by word (no separator)", () => {
-                expect(testMatchGrammar(grammar, "50items")).toStrictEqual(
-                    [],
-                );
+                expect(testMatchGrammar(grammar, "50items")).toStrictEqual([]);
             });
             it("accepts number followed by space then word", () => {
-                expect(testMatchGrammar(grammar, "50 items")).toStrictEqual(
-                    [50],
-                );
+                expect(testMatchGrammar(grammar, "50 items")).toStrictEqual([
+                    50,
+                ]);
             });
         });
 
@@ -331,9 +323,7 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             const g = `<Start> = $(n:number) 456 -> n;`;
             const grammar = loadGrammarRules("test.grammar", g);
             it("rejects number immediately followed by digit literal (no separator)", () => {
-                expect(testMatchGrammar(grammar, "123456")).toStrictEqual(
-                    [],
-                );
+                expect(testMatchGrammar(grammar, "123456")).toStrictEqual([]);
             });
             it("accepts number followed by space then digit literal", () => {
                 expect(testMatchGrammar(grammar, "123 456")).toStrictEqual([
@@ -346,14 +336,14 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             const g = `<Start> [spacing=required] = $(x) $(n:number) end -> n;`;
             const grammar = loadGrammarRules("test.grammar", g);
             it("rejects number immediately followed by word (no separator)", () => {
-                expect(
-                    testMatchGrammar(grammar, "set 50end"),
-                ).toStrictEqual([]);
+                expect(testMatchGrammar(grammar, "set 50end")).toStrictEqual(
+                    [],
+                );
             });
             it("accepts number followed by space then word", () => {
-                expect(
-                    testMatchGrammar(grammar, "set 50 end"),
-                ).toStrictEqual([50]);
+                expect(testMatchGrammar(grammar, "set 50 end")).toStrictEqual([
+                    50,
+                ]);
             });
         });
 
@@ -362,14 +352,14 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             const g = `<Start> [spacing=optional] = $(x) $(n:number) end -> n;`;
             const grammar = loadGrammarRules("test.grammar", g);
             it("accepts number immediately followed by word (no separator needed)", () => {
-                expect(testMatchGrammar(grammar, "set50end")).toStrictEqual(
-                    [50],
-                );
+                expect(testMatchGrammar(grammar, "set50end")).toStrictEqual([
+                    50,
+                ]);
             });
             it("accepts number followed by space then word", () => {
-                expect(
-                    testMatchGrammar(grammar, "set 50 end"),
-                ).toStrictEqual([50]);
+                expect(testMatchGrammar(grammar, "set 50 end")).toStrictEqual([
+                    50,
+                ]);
             });
         });
     });
@@ -378,9 +368,7 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
         const g = `<Start> [spacing=optional] = hello (world)* -> true;`;
         const grammar = loadGrammarRules("test.grammar", g);
         it("matches zero repetitions", () => {
-            expect(testMatchGrammar(grammar, "hello")).toStrictEqual([
-                true,
-            ]);
+            expect(testMatchGrammar(grammar, "hello")).toStrictEqual([true]);
         });
         it("matches one repetition without space (optional mode)", () => {
             expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([
@@ -388,9 +376,9 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             ]);
         });
         it("matches two repetitions without space (optional mode)", () => {
-            expect(
-                testMatchGrammar(grammar, "helloworldworld"),
-            ).toStrictEqual([true]);
+            expect(testMatchGrammar(grammar, "helloworldworld")).toStrictEqual([
+                true,
+            ]);
         });
     });
 
@@ -403,9 +391,7 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             ]);
         });
         it("does not match without space before group", () => {
-            expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual(
-                [],
-            );
+            expect(testMatchGrammar(grammar, "helloworld")).toStrictEqual([]);
         });
         it("matches two repetitions with spaces", () => {
             expect(
@@ -415,9 +401,9 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
         it("does not match when repetitions are not space-separated", () => {
             // The first 'world' ends with 'w' at index 11 in input; required
             // mode rejects a match unless a separator follows the token.
-            expect(
-                testMatchGrammar(grammar, "hello worldworld"),
-            ).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "hello worldworld")).toStrictEqual(
+                [],
+            );
         });
     });
 
@@ -430,9 +416,9 @@ describe("Grammar Matcher - Spacing Modes (Basic)", () => {
             ]);
         });
         it("matches two repetitions without space (optional mode)", () => {
-            expect(
-                testMatchGrammar(grammar, "helloworldworld"),
-            ).toStrictEqual([true]);
+            expect(testMatchGrammar(grammar, "helloworldworld")).toStrictEqual([
+                true,
+            ]);
         });
         it("matches two repetitions with spaces (optional mode)", () => {
             expect(

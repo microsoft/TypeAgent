@@ -101,9 +101,9 @@ describe("Grammar Matcher - Spacing None Mode", () => {
             ]);
         });
         it("captures separators in wildcard value", () => {
-            expect(
-                testMatchGrammar(grammar, "hello foo world"),
-            ).toStrictEqual([" foo "]);
+            expect(testMatchGrammar(grammar, "hello foo world")).toStrictEqual([
+                " foo ",
+            ]);
         });
     });
 
@@ -190,17 +190,17 @@ describe("Grammar Matcher - Spacing None Mode", () => {
             ]);
         });
         it("matches two repetitions without space", () => {
-            expect(
-                testMatchGrammar(grammar, "helloworldworld"),
-            ).toStrictEqual([true]);
+            expect(testMatchGrammar(grammar, "helloworldworld")).toStrictEqual([
+                true,
+            ]);
         });
         it("does not match with space before group", () => {
             expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([]);
         });
         it("does not match with space between repetitions", () => {
-            expect(
-                testMatchGrammar(grammar, "helloworld world"),
-            ).toStrictEqual([]);
+            expect(testMatchGrammar(grammar, "helloworld world")).toStrictEqual(
+                [],
+            );
         });
     });
 
@@ -234,9 +234,9 @@ describe("Grammar Matcher - Spacing None Mode", () => {
             ]);
         });
         it("captures separators in optional wildcard value", () => {
-            expect(
-                testMatchGrammar(grammar, "hello foo world"),
-            ).toStrictEqual([" foo "]);
+            expect(testMatchGrammar(grammar, "hello foo world")).toStrictEqual([
+                " foo ",
+            ]);
         });
     });
 
@@ -348,9 +348,9 @@ describe("Grammar Matcher - Spacing None Mode", () => {
             // TODO: Review the case item0xFFdone and see if we should make that work.
             const gHex = `<Start> [spacing=none] = item $(n:number) stop -> n;`;
             const grammarHex = loadGrammarRules("test.grammar", gHex);
-            expect(
-                testMatchGrammar(grammarHex, "item0xFFstop"),
-            ).toStrictEqual([0xff]);
+            expect(testMatchGrammar(grammarHex, "item0xFFstop")).toStrictEqual([
+                0xff,
+            ]);
         });
         it("matches octal number", () => {
             expect(testMatchGrammar(grammar, "item0o77done")).toStrictEqual([
@@ -429,16 +429,16 @@ describe("Grammar Matcher - Spacing None Mode", () => {
         it("auto mode accepts leading whitespace", () => {
             const g = `<Start> = hello world -> true;`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(
-                testMatchGrammar(grammar, "  hello world"),
-            ).toStrictEqual([true]);
+            expect(testMatchGrammar(grammar, "  hello world")).toStrictEqual([
+                true,
+            ]);
         });
         it("required mode accepts leading whitespace", () => {
             const g = `<Start> [spacing=required] = hello world -> true;`;
             const grammar = loadGrammarRules("test.grammar", g);
-            expect(
-                testMatchGrammar(grammar, "  hello world"),
-            ).toStrictEqual([true]);
+            expect(testMatchGrammar(grammar, "  hello world")).toStrictEqual([
+                true,
+            ]);
         });
         it("optional mode accepts leading whitespace", () => {
             const g = `<Start> [spacing=optional] = hello world -> true;`;
