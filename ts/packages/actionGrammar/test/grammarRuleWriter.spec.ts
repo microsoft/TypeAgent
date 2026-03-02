@@ -119,6 +119,9 @@ import { RuleX } from "grammarB";
     it("with spacing=optional annotation", () => {
         validateRoundTrip(`<test> [spacing=optional] = hello world;`);
     });
+    it("with spacing=none annotation", () => {
+        validateRoundTrip(`<test> [spacing=none] = hello world;`);
+    });
     it("with spacing=auto annotation (normalized away by writer)", () => {
         // "auto" is the default (undefined); the writer omits the annotation
         const result = parseGrammarRules(

@@ -129,7 +129,6 @@ import {
 import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
-import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -622,7 +621,7 @@ async function processBrowserAgentMessage(
                         try {
                             client.socket.send(
                                 JSON.stringify({
-                                    method: "crosswordSchemaExtracted",
+                                    method: "browser.crossword/schemaReady",
                                     params: {
                                         selectors: sampleClues.map(
                                             (c) => c.cssSelector,
@@ -3338,7 +3337,6 @@ export const handlers: CommandHandlerTable = {
                 close: new CloseBrowserHandler(),
             },
         },
-        crossword: getCrosswordCommandHandlerTable(),
         open: new OpenWebPageHandler(),
         close: new CloseWebPageHandler(),
         external: {

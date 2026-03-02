@@ -60,5 +60,16 @@ describe("Grammar Serialization", () => {
             ]);
             expect(testMatchGrammar(reloaded, "helloworld")).toStrictEqual([]);
         });
+
+        it("preserves none mode through grammarToJson/grammarFromJson", () => {
+            const g = `<Start> [spacing=none] = hello world -> true;`;
+            const reloaded = grammarFromJson(
+                grammarToJson(loadGrammarRules("test.grammar", g)),
+            );
+            expect(testMatchGrammar(reloaded, "helloworld")).toStrictEqual([
+                true,
+            ]);
+            expect(testMatchGrammar(reloaded, "hello world")).toStrictEqual([]);
+        });
     });
 });
