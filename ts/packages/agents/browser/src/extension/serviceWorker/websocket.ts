@@ -44,6 +44,43 @@ function broadcastConnectionStatus(connected: boolean): void {
 }
 
 /**
+ * Handles browser.crossword/* messages
+ */
+async function handleCrosswordMessage(
+    actionName: string,
+    params: any,
+): Promise<void> {
+    switch (actionName) {
+        case "schemaReady": {
+            if (params && params.selectors && params.texts) {
+                try {
+                    const { getActiveTab } = await import("./tabManager");
+                    const tab = await getActiveTab();
+                    if (tab?.id) {
+                        chrome.tabs.sendMessage(tab.id, {
+                            type: "setupCrosswordObserver",
+                            selectors: params.selectors,
+                            texts: params.texts,
+                        });
+                        debugWebSocket(
+                            "Sent crossword observer installation to content script",
+                        );
+                    }
+                } catch (error) {
+                    debugWebSocketError(
+                        "Failed to install crossword observer:",
+                        error,
+                    );
+                }
+            }
+            break;
+        }
+        default:
+            debugWebSocket(`Unknown browser.crossword action: ${actionName}`);
+    }
+}
+
+/**
  * Creates a new WebSocket connection
  * @returns Promise resolving to the WebSocket or undefined
  */
@@ -200,35 +237,10 @@ export async function ensureWebsocketConnected(): Promise<
                 return;
             }
 
-            if (data.method === "crosswordSchemaExtracted") {
-                // Handle crossword schema extraction - install observer
-                if (data.params && data.params.selectors && data.params.texts) {
-                    try {
-                        const { getActiveTab } = await import("./tabManager");
-                        const tab = await getActiveTab();
-                        if (tab?.id) {
-                            chrome.tabs.sendMessage(tab.id, {
-                                type: "setupCrosswordObserver",
-                                selectors: data.params.selectors,
-                                texts: data.params.texts,
-                            });
-                            debugWebSocket(
-                                "Sent crossword observer installation to content script",
-                            );
-                        }
-                    } catch (error) {
-                        debugWebSocketError(
-                            "Failed to install crossword observer:",
-                            error,
-                        );
-                    }
-                }
-                return;
-            }
-
             if (data.method && data.method.indexOf("/") > 0) {
                 const [schema, actionName] = data.method?.split("/");
 
+                // Handle browser actions
                 if (schema == "browser") {
                     const response = await runBrowserAction({
                         actionName: actionName,
@@ -241,6 +253,13 @@ export async function ensureWebsocketConnected(): Promise<
                             result: response,
                         }),
                     );
+                    return;
+                }
+
+                // Handle browser.crossword actions
+                if (schema === "browser.crossword") {
+                    await handleCrosswordMessage(actionName, data.params);
+                    return;
                 }
             }
         };
