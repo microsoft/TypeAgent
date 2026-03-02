@@ -18,10 +18,7 @@ import {
 } from "fs";
 import path from "path";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
-import {
-    ConstructionCache,
-    loadConstructionCacheFile,
-} from "agent-cache";
+import { ConstructionCache, loadConstructionCacheFile } from "agent-cache";
 
 // ANSI color codes for terminal output
 const c = {
@@ -44,9 +41,7 @@ interface SessionCacheInfo {
     current: boolean;
 }
 
-export function createMergeCacheCommand(
-    studio: SchemaStudio,
-): CommandHandler {
+export function createMergeCacheCommand(studio: SchemaStudio): CommandHandler {
     const argDef = defineArgs();
     const handler: CommandHandler = handleCommand;
     handler.metadata = argDef;
@@ -96,9 +91,7 @@ export function createMergeCacheCommand(
     /**
      * Discover session cache files from the dispatcher profile directory.
      */
-    function discoverSessionCaches(
-        sessionFilter?: string,
-    ): SessionCacheInfo[] {
+    function discoverSessionCaches(sessionFilter?: string): SessionCacheInfo[] {
         const instanceDir = getInstanceDir();
         const sessionsDir = path.join(instanceDir, "sessions");
 
@@ -111,9 +104,7 @@ export function createMergeCacheCommand(
         const sessionsJsonPath = path.join(instanceDir, "sessions.json");
         if (existsSync(sessionsJsonPath)) {
             try {
-                const data = JSON.parse(
-                    readFileSync(sessionsJsonPath, "utf8"),
-                );
+                const data = JSON.parse(readFileSync(sessionsJsonPath, "utf8"));
                 lastSession = data.lastSession;
             } catch {
                 // ignore
@@ -159,17 +150,15 @@ export function createMergeCacheCommand(
             );
             if (existsSync(dataJsonPath)) {
                 try {
-                    const data = JSON.parse(
-                        readFileSync(dataJsonPath, "utf8"),
-                    );
+                    const data = JSON.parse(readFileSync(dataJsonPath, "utf8"));
                     sessionCacheData = data.cacheData ?? {};
                 } catch {
                     // ignore
                 }
             }
 
-            const files = readdirSync(constructionsDir).filter(
-                (f) => f.endsWith(".json"),
+            const files = readdirSync(constructionsDir).filter((f) =>
+                f.endsWith(".json"),
             );
             for (const fileName of files) {
                 const filePath = path.join(constructionsDir, fileName);
@@ -216,7 +205,7 @@ export function createMergeCacheCommand(
         }
         io.writer.writeLine(
             `  ${c.bold}${label}${c.reset}: ${totalConstructions} constructions ` +
-            `across ${namespaces.length} namespaces`,
+                `across ${namespaces.length} namespaces`,
         );
         for (const detail of details) {
             io.writer.writeLine(`    ${c.dim}${detail}${c.reset}`);
@@ -256,12 +245,10 @@ export function createMergeCacheCommand(
                     : "";
                 io.writer.writeLine(
                     `  ${c.bold}Session:${c.reset} ${info.sessionName}` +
-                    `  ${c.bold}Explainer:${c.reset} ${info.explainerName}` +
-                    `  ${c.bold}File:${c.reset} ${info.fileName}${currentTag}`,
+                        `  ${c.bold}Explainer:${c.reset} ${info.explainerName}` +
+                        `  ${c.bold}File:${c.reset} ${info.fileName}${currentTag}`,
                 );
-                io.writer.writeLine(
-                    `    ${c.dim}${info.filePath}${c.reset}`,
-                );
+                io.writer.writeLine(`    ${c.dim}${info.filePath}${c.reset}`);
             }
             return;
         }
@@ -270,7 +257,7 @@ export function createMergeCacheCommand(
         if (!sourcePath) {
             io.writer.writeLine(
                 `${c.red}Error: --source is required. ` +
-                `Provide the path to the batchPopulate cache JSON file.${c.reset}`,
+                    `Provide the path to the batchPopulate cache JSON file.${c.reset}`,
             );
             return;
         }
@@ -307,7 +294,7 @@ export function createMergeCacheCommand(
             } else {
                 io.writer.writeLine(
                     `${c.red}Error: No session cache files found. ` +
-                    `Use --target to specify explicitly, or run the dispatcher first.${c.reset}`,
+                        `Use --target to specify explicitly, or run the dispatcher first.${c.reset}`,
                 );
                 return;
             }
@@ -323,15 +310,9 @@ export function createMergeCacheCommand(
         const resolvedOutput = outputPath ?? resolvedTarget;
 
         io.writer.writeLine(`\n${c.bold}=== Cache Merge ===${c.reset}`);
-        io.writer.writeLine(
-            `  ${c.bold}Source:${c.reset} ${sourcePath}`,
-        );
-        io.writer.writeLine(
-            `  ${c.bold}Target:${c.reset} ${resolvedTarget}`,
-        );
-        io.writer.writeLine(
-            `  ${c.bold}Output:${c.reset} ${resolvedOutput}`,
-        );
+        io.writer.writeLine(`  ${c.bold}Source:${c.reset} ${sourcePath}`);
+        io.writer.writeLine(`  ${c.bold}Target:${c.reset} ${resolvedTarget}`);
+        io.writer.writeLine(`  ${c.bold}Output:${c.reset} ${resolvedOutput}`);
 
         // Load both caches
         io.writer.writeLine(`\n${c.dim}Loading source cache...${c.reset}`);
@@ -397,9 +378,7 @@ export function createMergeCacheCommand(
             `  ${c.yellow}Merged:${c.reset}  ${mergedCount} (already existed, kept existing)`,
         );
         if (skippedCount > 0) {
-            io.writer.writeLine(
-                `  ${c.dim}Skipped: ${skippedCount}${c.reset}`,
-            );
+            io.writer.writeLine(`  ${c.dim}Skipped: ${skippedCount}${c.reset}`);
         }
 
         // Print summary after merge

@@ -93,8 +93,7 @@ export function createBatchPopulateCommand(
             },
             options: {
                 batchSize: {
-                    description:
-                        "Number of prompts to process in each batch",
+                    description: "Number of prompts to process in each batch",
                     defaultValue: 5,
                     type: "integer",
                 },
@@ -121,7 +120,8 @@ export function createBatchPopulateCommand(
                         "The cache is saved to this file after processing.",
                 },
                 limit: {
-                    description: "The maximum number of prompts to process from the file.",
+                    description:
+                        "The maximum number of prompts to process from the file.",
                 },
                 skip: {
                     description:
@@ -212,11 +212,7 @@ export function createBatchPopulateCommand(
         _cache = cacheFactory.create(undefined, schemaInfoProvider);
 
         // Try to load an existing cache file if provided
-        if (
-            cacheFilePath &&
-            !useNewCache &&
-            existsSync(cacheFilePath)
-        ) {
+        if (cacheFilePath && !useNewCache && existsSync(cacheFilePath)) {
             await _cache.constructionStore.load(cacheFilePath);
         } else {
             // Initialize a fresh construction store
@@ -252,10 +248,12 @@ export function createBatchPopulateCommand(
                 // is redirecting to a different schema group.
                 // Re-translate with the target schema's translator.
                 if (action.actionName === "additionalActionLookup") {
-                    const params = action.parameters as {
-                        schemaName?: string;
-                        request?: string;
-                    } | undefined;
+                    const params = action.parameters as
+                        | {
+                              schemaName?: string;
+                              request?: string;
+                          }
+                        | undefined;
                     const targetSchema = params?.schemaName;
                     const targetRequest = params?.request ?? prompt;
                     if (targetSchema) {
@@ -277,8 +275,7 @@ export function createBatchPopulateCommand(
                                     schemaName: retrySchema,
                                     actionName: retryAction.actionName,
                                     parameters:
-                                        retryAction.parameters ??
-                                        undefined,
+                                        retryAction.parameters ?? undefined,
                                 };
                             }
                         }
@@ -328,9 +325,7 @@ export function createBatchPopulateCommand(
             prompts = readFileSync(filePath, "utf-8")
                 .split("\n")
                 .map((line) => line.trim())
-                .filter(
-                    (line) => line.length > 0 && !line.startsWith("#"),
-                );
+                .filter((line) => line.length > 0 && !line.startsWith("#"));
         } catch (err: any) {
             io.writer.writeLine(`Error reading file: ${err.message}`);
             return;
@@ -375,9 +370,7 @@ export function createBatchPopulateCommand(
             );
         } else {
             targetSchemas = allSchemaNames.filter(
-                (s) =>
-                    !s.startsWith("system.") &&
-                    !s.startsWith("dispatcher."),
+                (s) => !s.startsWith("system.") && !s.startsWith("dispatcher."),
             );
         }
 
@@ -430,18 +423,12 @@ export function createBatchPopulateCommand(
         }
 
         if (translatorEntries.length === 0) {
-            io.writer.writeLine(
-                "No translators could be created.",
-            );
+            io.writer.writeLine("No translators could be created.");
             return;
         }
 
         // Initialize cache
-        const cache = await ensureCache(
-            provider,
-            useNewCache,
-            cacheFilePath,
-        );
+        const cache = await ensureCache(provider, useNewCache, cacheFilePath);
 
         const cacheLabel = cacheFilePath
             ? useNewCache
@@ -452,9 +439,7 @@ export function createBatchPopulateCommand(
             : useNewCache
               ? "new (in-memory)"
               : "current (in-memory)";
-        io.writer.writeLine(
-            `Batch size: ${batchSize} | Cache: ${cacheLabel}`,
-        );
+        io.writer.writeLine(`Batch size: ${batchSize} | Cache: ${cacheLabel}`);
         io.writer.writeLine("");
 
         // Process in batches
@@ -464,10 +449,7 @@ export function createBatchPopulateCommand(
 
         for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
             const batchStart = batchIdx * batchSize;
-            const batchEnd = Math.min(
-                batchStart + batchSize,
-                prompts.length,
-            );
+            const batchEnd = Math.min(batchStart + batchSize, prompts.length);
             const batch = prompts.slice(batchStart, batchEnd);
 
             io.writer.writeLine(
@@ -491,8 +473,7 @@ export function createBatchPopulateCommand(
                     // Step 0: Check the cache before translating.
                     // If we already have a construction that matches,
                     // skip the expensive LLM translation + explanation.
-                    let preMatch: import("agent-cache").MatchResult[] =
-                        [];
+                    let preMatch: import("agent-cache").MatchResult[] = [];
                     try {
                         preMatch = cache.match(prompt);
                     } catch {
@@ -506,8 +487,7 @@ export function createBatchPopulateCommand(
                         result.translated = true;
                         result.explained = true;
                         result.cacheHitAfter = true;
-                        result.schemaName =
-                            action.action.schemaName;
+                        result.schemaName = action.action.schemaName;
                         result.translatedAction =
                             getFullActionName(action) +
                             `(${JSON.stringify(action.action.parameters ?? {})})`;
@@ -542,12 +522,11 @@ export function createBatchPopulateCommand(
 
                         // Step 2: Build a RequestAction and
                         // explain + cache it
-                        const executableAction =
-                            createExecutableAction(
-                                translated.schemaName,
-                                translated.actionName,
-                                translated.parameters as any,
-                            );
+                        const executableAction = createExecutableAction(
+                            translated.schemaName,
+                            translated.actionName,
+                            translated.parameters as any,
+                        );
                         const requestAction = RequestAction.create(
                             prompt,
                             executableAction,
@@ -556,51 +535,42 @@ export function createBatchPopulateCommand(
                         // Don't cache unknown actions — they
                         // represent "I don't know" and aren't
                         // useful for generalization.
-                        const shouldCache =
-                            translated.actionName !== "unknown";
+                        const shouldCache = translated.actionName !== "unknown";
 
-                        const processResult =
-                            await cache.processRequestAction(
-                                requestAction,
-                                shouldCache,
-                            );
+                        const processResult = await cache.processRequestAction(
+                            requestAction,
+                            shouldCache,
+                        );
 
-                        const explResult =
-                            processResult.explanationResult;
+                        const explResult = processResult.explanationResult;
                         if (explResult.explanation.success) {
                             result.explained = true;
                             // Use toPrettyString if available,
                             // otherwise JSON-stringify the data
                             if (explResult.toPrettyString) {
-                                result.explanation =
-                                    explResult.toPrettyString(
-                                        explResult.explanation
-                                            .data,
-                                    );
+                                result.explanation = explResult.toPrettyString(
+                                    explResult.explanation.data,
+                                );
                             } else {
-                                result.explanation =
-                                    JSON.stringify(
-                                        explResult.explanation
-                                            .data,
-                                    );
+                                result.explanation = JSON.stringify(
+                                    explResult.explanation.data,
+                                );
                             }
                         } else {
-                            result.errorMessage =
-                                `Explanation failed: ${explResult.explanation.message}`;
+                            result.errorMessage = `Explanation failed: ${explResult.explanation.message}`;
                         }
 
                         // Step 3: Check if the prompt is now
                         // generalizable via the cache
-                        let matchResult:
-                            import("agent-cache").MatchResult[] = [];
+                        let matchResult: import("agent-cache").MatchResult[] =
+                            [];
                         try {
                             matchResult = cache.match(prompt);
                         } catch {
                             // match() throws when both stores are
                             // empty/disabled — safe to ignore
                         }
-                        result.cacheHitAfter =
-                            matchResult.length > 0;
+                        result.cacheHitAfter = matchResult.length > 0;
                     }
                 } catch (err: any) {
                     result.errorMessage = err.message;
@@ -647,9 +617,7 @@ export function createBatchPopulateCommand(
         // Save cache to disk if a cache file was specified
         await saveCache();
         if (cacheFilePath) {
-            io.writer.writeLine(
-                `Cache saved to: ${cacheFilePath}`,
-            );
+            io.writer.writeLine(`Cache saved to: ${cacheFilePath}`);
         }
 
         io.writer.writeLine(`CSV report written to: ${outputPath}`);
@@ -662,19 +630,14 @@ export function createBatchPopulateCommand(
     }
 }
 
-function writeCSVReport(
-    outputPath: string,
-    results: BatchResult[],
-): void {
+function writeCSVReport(outputPath: string, results: BatchResult[]): void {
     const header =
-        "Prompt,SchemaName,TranslatedAction,Translated," +
-        "Explained,Error";
+        "Prompt,SchemaName,TranslatedAction,Translated," + "Explained,Error";
     // const header =
     //     "Prompt,SchemaName,TranslatedAction,Translated," +
     //     "Explained,Explanation,CacheHitBefore,CacheHitAfter,Error";
     const rows = results.map((r) => {
-        const escapeCsv = (s: string) =>
-            `"${s.replace(/"/g, '""')}"`;
+        const escapeCsv = (s: string) => `"${s.replace(/"/g, '""')}"`;
         return [
             escapeCsv(r.prompt),
             escapeCsv(r.schemaName),
@@ -710,7 +673,9 @@ function printSummary(
     io.writer.writeLine(`${c.bold}${c.cyan}${"=".repeat(60)}${c.reset}`);
     io.writer.writeLine(`${c.bold}${c.white}  BATCH POPULATE REPORT${c.reset}`);
     io.writer.writeLine(`${c.bold}${c.cyan}${"=".repeat(60)}${c.reset}`);
-    io.writer.writeLine(`  Total prompts:          ${c.bold}${total}${c.reset}`);
+    io.writer.writeLine(
+        `  Total prompts:          ${c.bold}${total}${c.reset}`,
+    );
     if (cacheSkipped > 0) {
         io.writer.writeLine(
             `  Pre-cached (skipped):   ${c.magenta}${cacheSkipped}  (${pct(cacheSkipped)}%)${c.reset}`,

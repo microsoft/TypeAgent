@@ -68,7 +68,7 @@ async function runStudio(): Promise<void> {
         mergeCache: createMergeCacheCommand(studio),
     };
 
-   studio.commands = commands;
+    studio.commands = commands;
     await runConsole({ inputHandler, commandHandler });
 
     async function inputHandler(line: string, io: InteractiveIo) {
