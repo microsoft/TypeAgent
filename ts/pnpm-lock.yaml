@@ -358,8 +358,8 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       fast-xml-parser:
-        specifier: 5.3.6
-        version: 5.3.6
+        specifier: 5.3.8
+        version: 5.3.8
       interactive-app:
         specifier: workspace:*
         version: link:../../packages/interactiveApp
@@ -9651,8 +9651,8 @@ packages:
     resolution: {integrity: sha512-jE8ugADnYOBsu1uaoayVl1tVKAMNOXyjwvv2U6udEA2ORBhDooJDWoGxTkhd4Qn4yh59JVVt/pKXtjPwx9OguQ==}
     hasBin: true
 
-  fast-xml-parser@5.3.6:
-    resolution: {integrity: sha512-QNI3sAvSvaOiaMl8FYU4trnEzCwiRr8XMWgAHzlrWpTSj+QaCSvOf1h82OEP1s4hiAXhnbXSyFWCf4ldZzZRVA==}
+  fast-xml-parser@5.3.8:
+    resolution: {integrity: sha512-53jIF4N6u/pxvaL1eb/hEZts/cFLWZ92eCfLrNyCI0k38lettCG/Bs40W9pPwoPXyHQlKu2OUbQtiEIZK/J6Vw==}
     hasBin: true
 
   fastest-levenshtein@1.0.16:
@@ -21332,7 +21332,7 @@ snapshots:
     dependencies:
       strnum: 1.1.2
 
-  fast-xml-parser@5.3.6:
+  fast-xml-parser@5.3.8:
     dependencies:
       strnum: 2.1.2
 
