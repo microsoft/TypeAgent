@@ -944,6 +944,14 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].spacingMode).toBeUndefined();
         });
 
+        it("attaches spacingMode none via annotation", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=none] = hello;`,
+            );
+            expect(result[0].spacingMode).toBe("none");
+        });
+
         it("rule without annotation has undefined spacingMode", () => {
             const result = testParamGrammarRules("test.agr", `<Rule> = hello;`);
             expect(result[0].spacingMode).toBeUndefined();
