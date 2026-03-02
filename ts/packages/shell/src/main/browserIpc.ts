@@ -87,7 +87,6 @@ export class BrowserAgentIpc {
                             (schema == "browser" ||
                                 schema == "webAgent" ||
                                 schema.startsWith("browser.") ||
-                                data.method === "crosswordSchemaExtracted" ||
                                 data.method === "importProgress") &&
                             this.onMessageReceived
                         ) {
