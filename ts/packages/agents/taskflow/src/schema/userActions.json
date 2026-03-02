@@ -1,0 +1,13 @@
+{
+  "paramSpec": {
+    "createTopSongsPlaylist": {
+      "genre": "checked_wildcard",
+      "quantity": "number"
+    }
+  },
+  "paramCompletionEmojis": {
+    "createTopSongsPlaylist": {
+      "genre": "🎵"
+    }
+  }
+}

@@ -25,7 +25,6 @@ import { InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
-import { VoiceOrb, OrbState } from "./voiceOrb";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 
@@ -49,7 +48,6 @@ export class ChatView {
     private hideMetrics = true;
     private isScrolling = false;
 
-    private _voiceOrb: VoiceOrb;
     private _voiceBanner: HTMLElement;
 
     public userGivenName: string = "";
@@ -88,10 +86,6 @@ export class ChatView {
         this._voiceBanner.className = "voice-mode-banner";
         this._voiceBanner.textContent = "Voice Mode";
         this.topDiv.appendChild(this._voiceBanner);
-
-        // Voice orb — animated status indicator for voice mode
-        this._voiceOrb = new VoiceOrb();
-        this.topDiv.appendChild(this._voiceOrb.element);
 
         // wire up messages from iframes so we can resize them
         window.onmessage = (e) => {
@@ -387,7 +381,6 @@ export class ChatView {
         }
 
         this.idToMessageGroup.set(id, mg);
-        this.setOrbState("thinking");
         this.updateScroll();
         this.commandBackStackIndex = 0;
         this.commandBackStack = [];
@@ -534,13 +527,6 @@ export class ChatView {
         }
 
         agentMessage.setMessage(content, msg.source, options?.appendMode);
-
-        // Return orb to wake-word-waiting if in voice mode, otherwise idle
-        if (document.body.classList.contains("voice-mode")) {
-            this.setOrbState("wake-word-waiting");
-        } else {
-            this.setOrbState("idle");
-        }
 
         if (!scrollToMessage) {
             this.updateScroll();
@@ -691,12 +677,7 @@ export class ChatView {
         this.chatInput?.setVoiceMode(enabled);
     }
 
-    public setOrbState(state: OrbState): void {
-        this._voiceOrb.setState(state);
-    }
-
     public setClaudeFocus(active: boolean): void {
-        this._voiceOrb.setClaudeFocus(active);
         this._voiceBanner.classList.toggle("claude-focus", active);
         this._voiceBanner.textContent = active ? "Claude Focus" : "Voice Mode";
     }
@@ -839,8 +820,6 @@ export class ChatView {
 
             return true;
         };
-
-        input.onSpeechStateChange = (state) => this.setOrbState(state);
 
         this.chatInput = input;
         this.inputContainer = this.chatInput.getInputContainer();

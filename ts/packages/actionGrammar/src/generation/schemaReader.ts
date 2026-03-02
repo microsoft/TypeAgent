@@ -192,10 +192,17 @@ function getConvertersForSchema(
         ],
     });
 
-    converters.set("Number", {
-        name: "Number",
-        description: "Converts number words and digits to numeric values",
-        examples: ["five → 5", "fifty → 50", "20 → 20", "one hundred → 100"],
+    converters.set("Cardinal", {
+        name: "Cardinal",
+        description:
+            "Converts digit strings and number words (including multi-word phrases) to numeric values",
+        examples: [
+            "5 → 5",
+            "five → 5",
+            "a couple → 2",
+            "a dozen → 12",
+            "a few → 3",
+        ],
     });
 
     converters.set("Boolean", {
@@ -275,8 +282,13 @@ function getConvertersForSchema(
 export function getWildcardType(info: ParameterValidationInfo): string {
     // If it has a paramSpec that's not checked_wildcard, use it
     // checked_wildcard just means "validate this wildcard", so it maps to "wildcard"
-    // but ordinal, number, percentage are specific types
     if (info.paramSpec && info.paramSpec !== "checked_wildcard") {
+        // Map "number" to "Cardinal" — Cardinal handles digit strings, word-numbers,
+        // and multi-word phrases like "a couple" → 2, "a dozen" → 12 via multi-token
+        // entity matching. The built-in "number" type only handles raw digit strings.
+        if (info.paramSpec === "number") {
+            return "Cardinal";
+        }
         return info.paramSpec;
     }
 

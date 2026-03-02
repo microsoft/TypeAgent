@@ -146,7 +146,10 @@ async function callFetch<T>(
 
         throw await createFetchError(`${method} ${url} failed`, result);
     } catch (e: any) {
-        const errorStr = `fetch error: ${e.cause?.message ?? e.message}`;
+        const causeDetail =
+            e.cause?.message || e.cause?.code || e.cause?.toString();
+        const msg = causeDetail || e.message || String(e);
+        const errorStr = `fetch error: ${msg}`;
         debugSpotifyRest(errorStr);
         throw new Error(errorStr);
     }

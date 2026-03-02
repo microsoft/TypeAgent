@@ -39,6 +39,8 @@ export type AppAgentManifest = {
     sharedLocalView?: string[]; // list of agents to share the local view with, default is none
     indexingServices?: IndexingServicesManifest;
     cachedActivities?: Record<string, ActivityCacheSpec>; // Key is activity name, default (if not specified) is false
+    // Registered flow programs: actionName → path to .flow.json (relative to manifest file)
+    flows?: Record<string, string>;
 } & ActionManifest;
 
 export type SchemaTypeNames = {

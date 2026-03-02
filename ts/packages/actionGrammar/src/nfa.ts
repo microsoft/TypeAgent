@@ -13,8 +13,9 @@
  * - token: Match a specific token
  * - epsilon: Free transition (no input consumed)
  * - wildcard: Match any single token (for variables)
+ * - phraseSet: Match any phrase in a named phrase-set (resolved at match time)
  */
-export type NFATransitionType = "token" | "epsilon" | "wildcard";
+export type NFATransitionType = "token" | "epsilon" | "wildcard" | "phraseSet";
 
 /**
  * A transition from one state to another
@@ -24,6 +25,9 @@ export interface NFATransition {
 
     // For token transitions: the token to match (can have multiple alternatives)
     tokens?: string[] | undefined;
+
+    // For phraseSet transitions: name of the phrase-set matcher to consult at match time
+    matcherName?: string | undefined;
 
     // For wildcard transitions: metadata about the variable
     variable?: string | undefined;
@@ -114,6 +118,11 @@ export interface NFAState {
     // Set when this state is the entry point of a nested rules reference that captures a property
     completionActionName?: string | undefined;
     completionPropertyPath?: string | undefined;
+
+    // For optional/auto spacing mode: token sub-sequences that may be split out of
+    // fused input tokens when a thread enters this rule.  Sorted longest-first for
+    // greedy left-to-right scanning.  Only set on top-level rule entry states.
+    splitCandidates?: string[] | undefined;
 }
 
 /**
@@ -225,6 +234,18 @@ export class NFABuilder {
             to,
             popEnvironment: true,
         });
+    }
+
+    addPhraseSetTransition(
+        from: number,
+        to: number,
+        matcherName: string,
+    ): void {
+        const state = this.states[from];
+        if (!state) {
+            throw new Error(`State ${from} does not exist`);
+        }
+        state.transitions.push({ type: "phraseSet", matcherName, to });
     }
 
     addWildcardTransition(

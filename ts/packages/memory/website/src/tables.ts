@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import sqlite from "better-sqlite3";
+import type sqlite from "better-sqlite3";
 import * as ms from "memory-storage";
 
 // Website visit frequency table

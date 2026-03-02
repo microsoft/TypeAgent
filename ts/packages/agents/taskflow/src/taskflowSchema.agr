@@ -1,0 +1,23 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+<Start> = <listTaskFlows> | <createTopSongsPlaylist> | <createTopSongsPlaylistClaude> | <weeklyEmailDigest>;
+
+// Action rules
+<listTaskFlows> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? (show me | list | display) (all)? (the)? (available)? task flows -> { actionName: "listTaskFlows", parameters: {} };
+
+<createTopSongsPlaylist> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? create (a)? (top)? $(quantity:number) $(genre:wildcard) (songs)? playlist (for | from) (the)? $(timePeriod:wildcard) -> { actionName: "createTopSongsPlaylist", parameters: { genre, quantity, timePeriod } };
+
+<createTopSongsPlaylistClaude> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? create (a)? (top)? $(quantity:number) $(genre:wildcard) (songs)? playlist using claude (for | from) (the)? $(timePeriod:wildcard) -> { actionName: "createTopSongsPlaylistClaude", parameters: { genre, quantity, timePeriod } };
+
+<weeklyEmailDigest> =
+    send (me)? (a)? (weekly)? email digest (for)? $(timePeriod:wildcard)
+      -> { actionName: "weeklyEmailDigest", parameters: { timePeriod } }
+  | give me (my)? (weekly)? email digest (for)? $(timePeriod:wildcard)
+      -> { actionName: "weeklyEmailDigest", parameters: { timePeriod } }
+  | email digest (for)? $(timePeriod:wildcard)
+      -> { actionName: "weeklyEmailDigest", parameters: { timePeriod } }
+  | (weekly)? email digest
+      -> { actionName: "weeklyEmailDigest", parameters: {} }
+  | summarize (my)? (recent)? emails (for)? $(timePeriod:wildcard)
+      -> { actionName: "weeklyEmailDigest", parameters: { timePeriod } };

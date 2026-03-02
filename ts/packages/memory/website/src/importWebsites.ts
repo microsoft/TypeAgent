@@ -16,7 +16,21 @@ import {
 import { conversation as kpLib } from "knowledge-processor";
 import path from "path";
 import fs from "fs";
-import * as sqlite from "better-sqlite3";
+import { createRequire } from "module";
+
+type BetterSqlite3Ctor = typeof import("better-sqlite3");
+
+function loadSqliteModule(): BetterSqlite3Ctor {
+    try {
+        const require = createRequire(import.meta.url);
+        return require("better-sqlite3") as BetterSqlite3Ctor;
+    } catch (error) {
+        const details = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Browser history import requires optional dependency 'better-sqlite3'. Install it to enable Chrome/Edge history import. Details: ${details}`,
+        );
+    }
+}
 
 export interface ImportOptions {
     source: "chrome" | "edge";
@@ -285,19 +299,21 @@ export async function importChromeHistory(
         }
 
         const websites: WebsiteVisitInfo[] = [];
-        let db: sqlite.Database | null = null;
 
         try {
             // Open the temporary database copy
-            db = new sqlite.default(tempDbPath, { readonly: true });
+            const sqlite = loadSqliteModule();
+            const db = new sqlite(tempDbPath, { readonly: true });
 
-            // Calculate date filter if specified
-            const cutoffTime = options?.days
-                ? Date.now() * 1000 - options.days * 24 * 60 * 60 * 1000 * 1000 // Chrome uses microseconds
-                : 0;
+            try {
+                // Calculate date filter if specified
+                const cutoffTime = options?.days
+                    ? Date.now() * 1000 -
+                      options.days * 24 * 60 * 60 * 1000 * 1000 // Chrome uses microseconds
+                    : 0;
 
-            // Build the SQL query
-            let query = `
+                // Build the SQL query
+                let query = `
                 SELECT 
                     urls.url,
                     urls.title,
@@ -309,67 +325,74 @@ export async function importChromeHistory(
                 WHERE urls.hidden = 0
             `;
 
-            const params: any[] = [];
+                const params: any[] = [];
 
-            if (cutoffTime > 0) {
-                query += ` AND urls.last_visit_time > ?`;
-                params.push(cutoffTime);
-            }
-
-            query += ` ORDER BY urls.last_visit_time DESC`;
-
-            if (options?.limit) {
-                query += ` LIMIT ?`;
-                params.push(options.limit);
-            }
-
-            console.log(
-                `Executing Chrome history query with ${params.length} parameters`,
-            );
-
-            // Execute the query
-            const stmt = db.prepare(query);
-            const rows = stmt.all(...params) as ChromeHistoryEntry[];
-
-            console.log(`Found ${rows.length} history entries`);
-
-            // Convert rows to WebsiteVisitInfo
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-
-                if (!row.url || !isValidHttpUrl(row.url)) {
-                    continue; // Skip non-HTTP/HTTPS URLs
+                if (cutoffTime > 0) {
+                    query += ` AND urls.last_visit_time > ?`;
+                    params.push(cutoffTime);
                 }
 
-                const domain = extractDomain(row.url);
-                const visitDate = chromeTimeToISOString(row.last_visit_time);
+                query += ` ORDER BY urls.last_visit_time DESC`;
 
-                const visitInfo: WebsiteVisitInfo = {
-                    url: row.url,
-                    domain,
-                    visitDate,
-                    source: "history" as const,
-                };
-
-                if (row.title) visitInfo.title = row.title;
-                if (row.visit_count) visitInfo.visitCount = row.visit_count;
-                if (row.typed_count) visitInfo.typedCount = row.typed_count;
-
-                websites.push(visitInfo);
-
-                if (progressCallback) {
-                    progressCallback(i + 1, rows.length, row.title || row.url);
+                if (options?.limit) {
+                    query += ` LIMIT ?`;
+                    params.push(options.limit);
                 }
 
-                if (options?.limit && websites.length >= options.limit) {
-                    break;
+                console.log(
+                    `Executing Chrome history query with ${params.length} parameters`,
+                );
+
+                // Execute the query
+                const stmt = db.prepare(query);
+                const rows = stmt.all(...params) as ChromeHistoryEntry[];
+
+                console.log(`Found ${rows.length} history entries`);
+
+                // Convert rows to WebsiteVisitInfo
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+
+                    if (!row.url || !isValidHttpUrl(row.url)) {
+                        continue; // Skip non-HTTP/HTTPS URLs
+                    }
+
+                    const domain = extractDomain(row.url);
+                    const visitDate = chromeTimeToISOString(
+                        row.last_visit_time,
+                    );
+
+                    const visitInfo: WebsiteVisitInfo = {
+                        url: row.url,
+                        domain,
+                        visitDate,
+                        source: "history" as const,
+                    };
+
+                    if (row.title) visitInfo.title = row.title;
+                    if (row.visit_count) visitInfo.visitCount = row.visit_count;
+                    if (row.typed_count) visitInfo.typedCount = row.typed_count;
+
+                    websites.push(visitInfo);
+
+                    if (progressCallback) {
+                        progressCallback(
+                            i + 1,
+                            rows.length,
+                            row.title || row.url,
+                        );
+                    }
+
+                    if (options?.limit && websites.length >= options.limit) {
+                        break;
+                    }
                 }
-            }
-        } finally {
-            // Clean up: close database and remove temp file
-            if (db) {
+            } finally {
+                // Clean up: close database
                 db.close();
             }
+        } finally {
+            // Clean up: remove temp file
             try {
                 fs.unlinkSync(tempDbPath);
             } catch (error) {

@@ -254,7 +254,7 @@ function formatEventsAsHtml(events: any[]): string {
         const location = escapeHtml(getEventLocation(event));
 
         const subjectHtml = event.htmlLink
-            ? `<a href="${escapeHtml(event.htmlLink)}" target="_system" style="color:#1a73e8;text-decoration:none;font-weight:600;">${subject}</a>`
+            ? `<a href="${escapeHtml(event.htmlLink)}" target="_blank" style="color:#1a73e8;text-decoration:none;font-weight:600;">${subject}</a>`
             : `<span style="font-weight:600;">${subject}</span>`;
 
         const metaParts = [datePart, timePart].filter(Boolean);

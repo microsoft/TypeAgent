@@ -5,6 +5,7 @@ import registerDebug from "debug";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { GrammarTestCase } from "./testTypes.js";
 import { SchemaInfo, ActionInfo, getWildcardType } from "./schemaReader.js";
+import { globalPhraseSetRegistry } from "../builtInPhraseMatchers.js";
 
 const debug = registerDebug("typeagent:actionGrammar:grammarGenerator");
 
@@ -71,6 +72,16 @@ export interface Conversion {
 }
 
 /**
+ * A helper rule defined by Claude for this specific grammar (e.g., rule-specific filler)
+ */
+export interface AdditionalRule {
+    /** Rule name without angle brackets, e.g. "ExtraneousPhrase" */
+    name: string;
+    /** Complete AGR rule text: <Name> = alt1 | alt2 | ... ; */
+    ruleText: string;
+}
+
+/**
  * Result of analyzing a request/action pair
  */
 export interface GrammarAnalysis {
@@ -88,9 +99,15 @@ export interface GrammarAnalysis {
     grammarPattern: RuleRHS;
     // Reasoning about the choices made
     reasoning: string;
+    // Optional: extra rules Claude defined for this grammar (e.g., rule-specific filler)
+    additionalRules?: AdditionalRule[];
+    // Optional: new phrases to add to global phrase-set matchers (idempotent)
+    phrasesToAdd?: Array<{ matcherName: string; phrase: string }>;
 }
 
-const GRAMMAR_GENERATION_SYSTEM_PROMPT = `You are a grammar pattern generator. Your job is to create a pattern, specifically the right-hand-side of a grammar rule, that matches natural language requests to actions.
+function buildSystemPrompt(): string {
+    const phraseSetDescriptions = globalPhraseSetRegistry.getDescriptions();
+    return `You are a grammar pattern generator. Your job is to create a grammar rule that matches natural language requests to actions.
 
 WILDCARD RULES:
 1. Variable content (names, values, numbers) = wildcards
@@ -100,35 +117,86 @@ WILDCARD RULES:
    - Example Pattern: "by $(artist:wildcard)" → maps to artists: [artist]
 
 WILDCARD TYPES:
-- Built-in entity types: $(varName:CalendarDate), $(varName:CalendarTime), $(varName:CalendarTimeRange)
-- ParamSpec types: $(varName:number), $(varName:ordinal), $(varName:percentage)
+- Built-in entity types: $(varName:CalendarDate), $(varName:CalendarTime), $(varName:CalendarTimeRange), $(varName:Cardinal)
+- ParamSpec types: $(varName:ordinal), $(varName:percentage)
 - Validated wildcards: $(varName:wildcard) - for checked_wildcard parameters (validated at runtime)
 - Plain wildcards: $(varName:wildcard) - default for multi-word captures
 - CRITICAL: Use "wildcard" (not "string") for multi-word captures
 - CRITICAL: Only use type names that are explicitly listed in the "USE:" directive
 
-REJECT when:
-1. Adjacent UNVALIDATED wildcards with NO FIXED TEXT between them
-   - "Adjacent" means wildcards directly next to each other with only whitespace between
-   - Wildcards separated by fixed words (by, to, from, in, on, etc.) are NOT adjacent
-   - ACCEPT: "invite $(name) to $(event)" - "to" separates them, not adjacent
-   - ACCEPT: "play $(track) by $(artist)" - "by" separates them, not adjacent
-   - ACCEPT: "play $(track) $(artist)" if AT LEAST ONE is validated (can parse validated first, then remainder)
-   - REJECT: "play $(track) $(artist)" if NEITHER is validated (ambiguous without separator or validation)
-2. References to conversation history: "it", "that", "this", "them"
+AVAILABLE PHRASE-SET MATCHERS:
+These are global phrase sets you can reference in your matchPattern using <Name>.
+At match time the system tries every phrase in the set at that token position.
+The current phrases in each set are listed below.
 
-ACCEPT in all other cases.
+${phraseSetDescriptions}
 
-OUTPUT FORMAT (TypeScript interface):
+PHRASE-SET GUARANTEE — if the specific phrase from the request is NOT listed above:
+You MUST add it via phrasesToAdd so future requests are handled too.
+  Example: request says "would you mind" → not in Polite list →
+    phrasesToAdd: [{ "matcherName": "Polite", "phrase": "would you mind" }]
+
+Do NOT add inline alternatives like (<Polite> | would you mind)? — use phrasesToAdd instead.
+Just write (<Polite>)? in the matchPattern and add the phrase to phrasesToAdd.
+
+FILLER WORD GUIDANCE — hesitation sounds and mid-sentence filler ALL belong in FillerWord:
+- Hesitation sounds: "aa", "ah", "er", "oh", "uh", "um" → add to FillerWord via phrasesToAdd
+- Affirmations used as filler: "yeah", "yep", "yes" when mid-sentence → FillerWord
+- Verbal filler phrases: "you know", "i mean", "kind of", "sort of", "i guess" → FillerWord
+- Use (<FillerWord>)* (Kleene star, zero-or-more) when multiple fillers can appear in sequence.
+  Do NOT chain (<FillerWord>)? (<FillerWord>)? — use * instead.
+- Use (...)+ (Kleene plus, one-or-more) when at least one occurrence is required.
+- Do NOT define custom rules (e.g. <ConversationalFiller>) for hesitations; use <FillerWord>.
+
+ACKNOWLEDGEMENT/GREETING guidance:
+- "ah yes", "yes", "yeah" at the very START of a request → Acknowledgement or Greeting
+  → add via phrasesToAdd to the appropriate set.
+
+You may also define NEW rule-specific helper rules for phrases that appear in the request
+but don't map to any parameter (e.g., "of fugues", "songs", "tracks"). Put these in
+additionalRules in your output — do NOT add them to any phrase-set matcher.
+Example: name="ExtraneousPhrase", ruleText="<ExtraneousPhrase> = of fugues;"
+Then use (<ExtraneousPhrase>)? in the matchPattern where the phrase appears.
+
+ROUND-TRIP GUARANTEE — your rule MUST match the full request:
+After you generate the rule it will be compiled and run against the original request string.
+If it fails to match, you will receive the failure details and be asked to fix it.
+
+Every token in the request must be accounted for — either matched by a wildcard, a fixed
+word, or a phrase-set/custom category. Use the optional phrase-set matchers for leading/
+trailing courtesy words and hesitations. Use additionalRules for request-specific filler.
+
+REJECT ONLY for the following reason (this is an exhaustive list):
+1. Adjacent unvalidated wildcards: wildcards next to each other with NO fixed text between them AND NEITHER is marked (validated)
+   - If AT LEAST ONE is (validated), you MUST accept — do not reject for adjacency
+   - "By", "to", "from", "in", "on" etc. between wildcards = NOT adjacent = always accept
+
+DO NOT REJECT for any other reason. In particular, NEVER reject for:
+- Informal, slangy, or conversational language ("yo", "sick tunes", "crank it up")
+- Actions with no parameters — generate a fixed-text pattern (e.g. 'pause' → 'pause the music')
+- Pronouns like "it", "that", "this", "them" — all parameter values are guaranteed to be in the
+  request text, so any pronouns are just in-sentence anaphora; ignore them and build the pattern
+  from the explicit values
+- Any other reason you might invent
+
+ACCEPT in all other cases — no exceptions.
+
+OUTPUT FORMAT (TypeScript interfaces):
 
 interface RuleRHS {
-    matchPattern: string;  // The grammar pattern like "play $(track:wildcard) by $(artist:wildcard)"
+    matchPattern: string;  // The grammar pattern like "(<Polite>)? play $(track:wildcard) by $(artist:wildcard)"
+                           // Quantifiers: (...)? = zero-or-one, (...)* = zero-or-more (Kleene star), (...)+ = one-or-more (Kleene plus)
     actionParameters: Array<{
         parameterName: string;
-        parameterValue: string; // e.g., "track" (bare var name) or fixed value like "kitchen"; arrays: "[artist]"
+        parameterValue: string; // e.g., "track" or fixed value "kitchen"; arrays: "[artist]"
     }>;
 }
-    
+
+interface AdditionalRule {
+    name: string;     // Rule name without angle brackets, e.g. "ExtraneousPhrase"
+    ruleText: string; // Complete AGR text: <ExtraneousPhrase> = of fugues;
+}
+
 Your output MUST be a JSON object matching the following TypeScript interface:
 interface GrammarAnalysis {
   shouldGenerateGrammar: boolean;
@@ -148,7 +216,9 @@ interface GrammarAnalysis {
     isWildcard: boolean;
   }>;
   fixedPhrases: string[];
-  grammarPattern: RuleRHS;  // The actual pattern like "play $(track:wildcard) by $(artist:wildcard)"
+  grammarPattern: RuleRHS;
+  additionalRules?: AdditionalRule[];  // Rule-specific helper rules (NOT phrase-set matchers)
+  phrasesToAdd?: Array<{ matcherName: string; phrase: string }>;  // New phrases for global sets
   reasoning: string;
 }
 
@@ -176,24 +246,43 @@ Output:
   "reasoning": "Fixed structure 'select...device'. Parameter deviceName is validated (checked_wildcard), use wildcard type."
 }
 
-EXAMPLE 2 (Validated wildcards with separator):
+EXAMPLE 2 (Polite opener + rule-specific filler, phrase already in set):
 
-Request: "play bohemian rhapsody by queen"
-Action: playTrack
-Parameters: { trackName: "bohemian rhapsody" (validated), artists: ["queen"] (validated) }
+Request: "please play a couple of fugues by Bach"
+Action: playArtist
+Parameters: { artist: "Bach" (validated), quantity: 2 } → USE: $(artist:wildcard), $(quantity:Cardinal)
 
 Output:
 {
   "shouldGenerateGrammar": true,
-  "requestAnalysis": { "sentences": [{ "text": "play bohemian rhapsody by queen", "parse": "(S (V play) (NP track) (PP by artist))", "tokens": [] }] },
+  "requestAnalysis": { "sentences": [{ "text": "please play a couple of fugues by Bach", "parse": "(S (Polite please) (V play) (NP quantity artist))", "tokens": [] }] },
   "parameterMappings": [
-    { "parameterName": "trackName", "sourceText": "bohemian rhapsody", "targetValue": "bohemian rhapsody", "isWildcard": true },
-    { "parameterName": "artists", "sourceText": "queen", "targetValue": ["queen"], "isWildcard": true }
+    { "parameterName": "artist", "sourceText": "Bach", "targetValue": "Bach", "isWildcard": true },
+    { "parameterName": "quantity", "sourceText": "a couple", "targetValue": 2, "isWildcard": true }
   ],
   "fixedPhrases": ["play", "by"],
-  "grammarPattern": { "matchPattern": "play $(trackName:wildcard) by $(artist:wildcard)", "actionParameters": [ { "parameterName": "trackName", "parameterValue": "trackName" }, { "parameterName": "artists", "parameterValue": "[artist]" } ] },
-  "reasoning": "Fixed structure 'play...by'. Both parameters are validated so adjacent wildcards are OK. Use singular 'artist' for array parameter 'artists'."
+  "grammarPattern": { "matchPattern": "(<Polite>)? play $(quantity:Cardinal) (<ExtraneousPhrase>)? by $(artist:wildcard)", "actionParameters": [ { "parameterName": "quantity", "parameterValue": "quantity" }, { "parameterName": "artist", "parameterValue": "artist" } ] },
+  "additionalRules": [ { "name": "ExtraneousPhrase", "ruleText": "<ExtraneousPhrase> = of fugues | songs | tracks;" } ],
+  "reasoning": "'please' is already in the Polite set so no phrasesToAdd needed. 'a couple' maps to quantity via Cardinal. 'of fugues' is request-specific filler, captured in ExtraneousPhrase."
+}
+
+EXAMPLE 3 (Greeting phrase NOT in set — add via phrasesToAdd):
+
+Request: "hey there, shuffle my playlist"
+Action: shufflePlaylist
+Parameters: {}
+
+Output:
+{
+  "shouldGenerateGrammar": true,
+  "requestAnalysis": { "sentences": [{ "text": "hey there, shuffle my playlist", "parse": "(S (Greeting hey there) (V shuffle) (NP playlist))", "tokens": [] }] },
+  "parameterMappings": [],
+  "fixedPhrases": ["shuffle", "my", "playlist"],
+  "grammarPattern": { "matchPattern": "(<Greeting>)? shuffle my playlist", "actionParameters": [] },
+  "phrasesToAdd": [{ "matcherName": "Greeting", "phrase": "hey there" }],
+  "reasoning": "'hey there' is a greeting but not in the Greeting set — adding via phrasesToAdd."
 }`;
+}
 
 export class ClaudeGrammarGenerator {
     private model: string;
@@ -210,12 +299,59 @@ export class ClaudeGrammarGenerator {
         if (!actionInfo) {
             throw new Error(`Action not found: ${testCase.action.actionName}`);
         }
-
         const prompt = this.buildPrompt(testCase, actionInfo, schemaInfo);
+        return this.queryAndParse(`${buildSystemPrompt()}\n\n${prompt}`);
+    }
 
+    /**
+     * Refine a previously generated grammar rule that failed to match the original request.
+     * Gives Claude specific feedback: the failed rule, the tokenized request, and hints.
+     */
+    async refineGrammar(
+        testCase: GrammarTestCase,
+        schemaInfo: SchemaInfo,
+        failedRule: string,
+        requestTokens: string[],
+    ): Promise<GrammarAnalysis> {
+        const actionInfo = schemaInfo.actions.get(testCase.action.actionName);
+        if (!actionInfo) {
+            throw new Error(`Action not found: ${testCase.action.actionName}`);
+        }
+        const basePrompt = this.buildPrompt(testCase, actionInfo, schemaInfo);
+
+        const refinementNote = `
+CORRECTION NEEDED — your previous rule did not match the input.
+
+Previous rule that FAILED:
+${failedRule}
+
+Request tokens: [${requestTokens.map((t) => `"${t}"`).join(", ")}]
+
+Why it likely failed: the matchPattern contains fixed words that don't appear at any
+contiguous position in the token stream, OR the wildcard structure doesn't align with
+where the parameter values appear in the tokens.
+
+How to fix it:
+1. The matchPattern must cover ALL tokens in the request token list above
+2. For leading courtesy words (please, hey, ok, etc.) use (<Polite>)? or (<Greeting>)?
+3. For hesitations/fillers (um, uh, ah, aa, like, yeah, you know, etc.) use (<FillerWord>)*
+   — use * (zero-or-more) NOT ? (zero-or-one) since multiple fillers can appear in sequence.
+   Do NOT define custom rules for hesitations/fillers; always use <FillerWord>.
+4. For request-specific filler that doesn't map to a parameter (e.g., "of fugues"),
+   define an additionalRule and use it as (<ExtraneousPhrase>)?
+5. Make sure wildcards and fixed words align exactly with the token positions
+
+Generate a corrected rule now.`;
+
+        return this.queryAndParse(
+            `${buildSystemPrompt()}\n\n${basePrompt}${refinementNote}`,
+        );
+    }
+
+    private async queryAndParse(fullPrompt: string): Promise<GrammarAnalysis> {
         // Use the Agent SDK query function
         const queryInstance = query({
-            prompt: `${GRAMMAR_GENERATION_SYSTEM_PROMPT}\n\n${prompt}`,
+            prompt: fullPrompt,
             options: {
                 model: this.model,
             },
@@ -551,10 +687,24 @@ export class ClaudeGrammarGenerator {
             );
         }
 
-        // Include <Start> rule that references the action rule
-        let grammar = `<Start> = <${actionName}>;\n`;
+        // Collect preamble rule definitions.
+        // Phrase-set matchers (<Polite>, <Greeting>, etc.) are resolved at match
+        // time by the NFA interpreter — they do NOT need inline definitions here.
+        // Only rule-specific helper rules (additionalRules) need to be prepended.
+        const preambleRules: string[] = [];
 
-        // Use exact action name as rule name for easy targeting
+        // Inject any rule-specific helper rules Claude defined
+        if (analysis.additionalRules) {
+            for (const rule of analysis.additionalRules) {
+                preambleRules.push(rule.ruleText);
+            }
+        }
+
+        let grammar =
+            preambleRules.length > 0 ? preambleRules.join("\n") + "\n" : "";
+
+        // <Start> rule + action rule
+        grammar += `<Start> = <${actionName}>;\n`;
         grammar += `<${actionName}> = `;
         grammar += matchPattern;
         grammar += ` -> {\n`;

@@ -42,6 +42,8 @@ import {
     compileGrammarToNFA,
     enrichGrammarWithCheckedVariables,
 } from "action-grammar";
+import fs from "node:fs";
+import { FlowDefinition } from "../execute/flowInterpreter.js";
 
 const debug = registerDebug("typeagent:dispatcher:agents");
 const debugError = registerDebug("typeagent:dispatcher:agents:error");
@@ -118,6 +120,7 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
+    private readonly flowRegistry = new Map<string, FlowDefinition>();
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
@@ -190,6 +193,14 @@ export class AppAgentManager implements ActionConfigProvider {
 
     public isAppAgentName(appAgentName: string) {
         return this.agents.get(appAgentName) !== undefined;
+    }
+
+    public getFlow(
+        schemaName: string,
+        actionName: string,
+    ): FlowDefinition | undefined {
+        const appAgentName = getAppAgentName(schemaName);
+        return this.flowRegistry.get(`${appAgentName}/${actionName}`);
     }
 
     // Throws if schemaName is invalid.
@@ -424,6 +435,28 @@ export class AppAgentManager implements ActionConfigProvider {
         };
 
         this.agents.set(appAgentName, record);
+
+        // Load registered flow definitions from manifest
+        if (manifest.flows) {
+            for (const [actionName, flowPath] of Object.entries(
+                manifest.flows,
+            ) as [string, string][]) {
+                try {
+                    const content = fs.readFileSync(flowPath, "utf-8");
+                    const flowDef: FlowDefinition = JSON.parse(content);
+                    this.flowRegistry.set(
+                        `${appAgentName}/${actionName}`,
+                        flowDef,
+                    );
+                    debug(`Loaded flow: ${appAgentName}.${actionName}`);
+                } catch (e) {
+                    debugError(
+                        `Failed to load flow '${actionName}' from '${flowPath}': ${e}`,
+                    );
+                }
+            }
+        }
+
         return record;
     }
 

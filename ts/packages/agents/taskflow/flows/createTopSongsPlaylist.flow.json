@@ -1,0 +1,52 @@
+{
+  "name": "createTopSongsPlaylist",
+  "description": "Find top streaming songs in a music genre and create a Spotify playlist from them",
+  "parameters": {
+    "genre": {
+      "type": "string",
+      "required": true,
+      "description": "Music genre (e.g. bluegrass, jazz, country, rock, hip-hop)"
+    },
+    "quantity": {
+      "type": "number",
+      "required": false,
+      "default": 10,
+      "description": "Number of top songs to include"
+    },
+    "timePeriod": {
+      "type": "string",
+      "required": false,
+      "default": "this month",
+      "description": "Chart time period (e.g. 'this month', 'this week', '2024')"
+    }
+  },
+  "steps": [
+    {
+      "id": "chartPage",
+      "schemaName": "utility",
+      "actionName": "webFetch",
+      "parameters": {
+        "url": "https://www.chosic.com/genre-chart/${genre}/tracks/2025/"
+      }
+    },
+    {
+      "id": "songs",
+      "schemaName": "utility",
+      "actionName": "llmTransform",
+      "parameters": {
+        "input": "${chartPage.text}",
+        "prompt": "Extract song titles and artists from the following page. Return ONLY a JSON array of objects with \"trackName\" and \"artist\" fields, limited to the top ${quantity}. If you cannot find any songs with both a title and artist, return an empty array []. Output nothing except the JSON array.",
+        "parseJson": true
+      }
+    },
+    {
+      "id": "playlist",
+      "schemaName": "player",
+      "actionName": "createPlaylist",
+      "parameters": {
+        "name": "Top ${quantity} ${genre} \u2013 ${timePeriod}",
+        "songs": "${songs.data}"
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as kp from "knowpro";
-import * as sqlite from "better-sqlite3";
+import type * as sqlite from "better-sqlite3";
 import path from "path";
 import { SqliteCollection } from "./sqliteCollection.js";
 import { createDatabase } from "./sqliteCommon.js";

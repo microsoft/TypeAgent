@@ -3,8 +3,7 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#import-statement" },
-    { "include": "#rule-definition" },
-    { "include": "#action-object" }
+    { "include": "#rule-definition" }
   ],
   "repository": {
     "comments": {
@@ -53,7 +52,7 @@
       "patterns": [
         {
           "begin": "^\\s*(<)([A-Za-z_][A-Za-z0-9_]*)(>)\\s*(=)",
-          "end": "(;)|(?=^\\s*<[A-Za-z_]|^\\s*//|^\\s*import\\b|\\z)",
+          "end": "(;)",
           "beginCaptures": {
             "1": { "name": "punctuation.definition.rule-name.begin.agr" },
             "2": { "name": "entity.name.type.rule.agr" },
@@ -71,6 +70,7 @@
       "patterns": [
         { "include": "#comments" },
         { "include": "#action-object" },
+        { "include": "#action-bare" },
         { "include": "#capture" },
         { "include": "#rule-reference" },
         { "include": "#string-literal" },
@@ -141,28 +141,37 @@
       ]
     },
     "action-object": {
+      "comment": "Object action result: -> { ... } — embedded JavaScript content",
+      "begin": "(->)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": { "name": "keyword.operator.arrow.agr" },
+        "2": { "name": "punctuation.definition.action.begin.agr" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.action.end.agr" }
+      },
+      "contentName": "meta.embedded.block.javascript",
+      "patterns": [{ "include": "source.js" }]
+    },
+    "action-bare": {
+      "comment": "Bare action result: -> value  where value is string, number, or identifier. End is non-consuming so | or ; is available to the parent rule scope.",
+      "begin": "(->)\\s*",
+      "end": "(?=[|;])",
+      "beginCaptures": {
+        "1": { "name": "keyword.operator.arrow.agr" }
+      },
       "patterns": [
+        { "include": "#string-literal" },
+        { "include": "#keywords" },
         {
-          "begin": "(->)\\s*(\\{)",
-          "end": "\\}",
-          "beginCaptures": {
-            "1": { "name": "keyword.operator.arrow.agr" },
-            "2": { "name": "punctuation.definition.action.begin.agr" }
-          },
-          "endCaptures": {
-            "0": { "name": "punctuation.definition.action.end.agr" }
-          },
-          "contentName": "meta.embedded.block.javascript",
-          "patterns": [{ "include": "source.js" }]
+          "name": "variable.other.agr",
+          "match": "[A-Za-z_][A-Za-z0-9_]*"
         }
       ]
     },
     "operators": {
       "patterns": [
-        {
-          "name": "keyword.operator.arrow.agr",
-          "match": "->"
-        },
         {
           "name": "keyword.operator.alternation.agr",
           "match": "\\|"

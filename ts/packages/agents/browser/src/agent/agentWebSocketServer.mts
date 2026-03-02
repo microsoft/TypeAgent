@@ -6,6 +6,7 @@ import { IncomingMessage } from "http";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:agent-ws");
+const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 
 export interface BrowserClient {
     id: string;
@@ -160,10 +161,22 @@ export class AgentWebSocketServer {
     public getActiveClient(
         fallbackType?: "extension" | "electron",
     ): BrowserClient | null {
+        debugClientRouting(
+            `getActiveClient: fallbackType=${fallbackType}, activeClientId=${this.activeClientId}`,
+        );
+
         // First try to get the currently active client
         const activeClient = this.activeClientId
             ? this.clients.get(this.activeClientId) || null
             : null;
+
+        if (activeClient) {
+            debugClientRouting(
+                `getActiveClient: Found active client type='${activeClient.type}', id='${activeClient.id}'`,
+            );
+        } else {
+            debugClientRouting(`getActiveClient: No active client found`);
+        }
 
         // If we have an active client and either no fallback type specified
         // or the active client matches the fallback type, return it
@@ -171,20 +184,35 @@ export class AgentWebSocketServer {
             activeClient &&
             (!fallbackType || activeClient.type === fallbackType)
         ) {
+            debugClientRouting(
+                `getActiveClient: Returning active client (matches fallback or no fallback specified)`,
+            );
             return activeClient;
         }
 
         // If we need a specific type and active client doesn't match, find one
         if (fallbackType) {
+            debugClientRouting(
+                `getActiveClient: Active client doesn't match fallbackType='${fallbackType}', searching for matching client`,
+            );
             for (const [_, client] of this.clients) {
                 if (client.type === fallbackType) {
+                    debugClientRouting(
+                        `getActiveClient: Found matching client type='${client.type}', id='${client.id}'`,
+                    );
                     return client;
                 }
             }
+            debugClientRouting(
+                `getActiveClient: No client found with fallbackType='${fallbackType}'`,
+            );
         }
 
         // Return the active client even if it doesn't match the fallback type,
         // or null if there's no active client
+        debugClientRouting(
+            `getActiveClient: Returning ${activeClient ? `active client type='${activeClient.type}'` : "null"} as final fallback`,
+        );
         return activeClient;
     }
 

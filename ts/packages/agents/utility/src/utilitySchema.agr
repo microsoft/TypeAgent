@@ -1,0 +1,26 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+<Start> = <webSearch> | <webFetch> | <readFile>;
+
+<webSearch> =
+      search (the)? web for $(query:wildcard)
+        -> { actionName: "webSearch", parameters: { query } }
+    | web search $(query:wildcard)
+        -> { actionName: "webSearch", parameters: { query } }
+    | find $(query:wildcard) on the web
+        -> { actionName: "webSearch", parameters: { query } }
+    | look up $(query:wildcard) online
+        -> { actionName: "webSearch", parameters: { query } };
+
+<webFetch> =
+      fetch (the)? (page at)? $(url:wildcard)
+        -> { actionName: "webFetch", parameters: { url } }
+    | get (the)? (content of)? $(url:wildcard)
+        -> { actionName: "webFetch", parameters: { url } };
+
+<readFile> =
+      read (the)? (file)? $(path:wildcard)
+        -> { actionName: "readFile", parameters: { path } }
+    | get (the)? (contents of)? (file)? $(path:wildcard)
+        -> { actionName: "readFile", parameters: { path } };

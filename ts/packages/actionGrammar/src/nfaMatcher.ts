@@ -4,7 +4,24 @@
 import registerDebug from "debug";
 import { Grammar } from "./grammarTypes.js";
 import { NFA } from "./nfa.js";
-import { matchNFA } from "./nfaInterpreter.js";
+import {
+    matchNFAWithIndex,
+    buildFirstTokenIndex,
+    sortNFAMatches,
+    type FirstTokenIndex,
+} from "./nfaInterpreter.js";
+import { applySplitToTokens } from "./tokenSplit.js";
+
+// Lazy-built, NFA-lifetime cache: one index per NFA object.
+const indexCache = new WeakMap<NFA, FirstTokenIndex>();
+function getIndex(nfa: NFA): FirstTokenIndex {
+    let idx = indexCache.get(nfa);
+    if (!idx) {
+        idx = buildFirstTokenIndex(nfa);
+        indexCache.set(nfa, idx);
+    }
+    return idx;
+}
 
 const debug = registerDebug("typeagent:actionGrammar:nfaMatcher");
 
@@ -39,9 +56,20 @@ function stripTrailingPunctuation(token: string): string {
 }
 
 /**
- * Tokenize a request string into an array of tokens
- * Simple whitespace-based tokenization for NFA matching
- * Strips trailing punctuation from tokens for better matching
+ * Normalize a single token for NFA matching: lowercase and strip trailing
+ * punctuation.  Applied to both input tokens and grammar tokens so that both
+ * sides of the comparison are on the same canonical form.
+ */
+export function normalizeToken(token: string): string {
+    return stripTrailingPunctuation(token.toLowerCase());
+}
+
+/**
+ * Tokenize a request string into an array of tokens.
+ * Splits on whitespace and strips trailing punctuation, but preserves
+ * original case so that wildcard captures retain the user's casing.
+ * Normalization (lowercasing) for fixed-token comparisons is done
+ * separately at match time via normalizeToken().
  */
 export function tokenizeRequest(request: string): string[] {
     return request
@@ -51,8 +79,41 @@ export function tokenizeRequest(request: string): string[] {
         .filter((token) => token.length > 0);
 }
 
+// ---------------------------------------------------------------------------
+// Token pre-splitting for optional/auto spacing mode
+// ---------------------------------------------------------------------------
+
+/**
+ * Collect all split candidates stored on NFA rule entry states.
+ * Only states from optional/auto rules carry splitCandidates (set by the
+ * compiler).  Returns candidates sorted longest-first, ready for greedy scan.
+ */
+function collectNFASplitCandidates(nfa: NFA): string[] {
+    const candidates = new Set<string>();
+    for (const state of nfa.states) {
+        if (state.splitCandidates) {
+            for (const c of state.splitCandidates) {
+                candidates.add(c);
+            }
+        }
+    }
+    return Array.from(candidates).sort((a, b) => b.length - a.length);
+}
+
+// splitToken and applySplitToTokens are imported from tokenSplit.ts
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 /**
  * Match a request string against a grammar using NFA
+ *
+ * Two-pass strategy for spacing modes:
+ *   Pass 1 — original whitespace tokens: correct for spacing=required rules.
+ *   Pass 2 — pre-split tokens (only when the NFA has optional/auto rules with
+ *             split candidates): handles fused tokens like "Swift's" or "黃色汽車".
+ * The higher-priority result across both passes is returned.
  *
  * @param _grammar The grammar structure (unused, kept for API compatibility)
  * @param nfa The compiled NFA
@@ -64,7 +125,6 @@ export function matchGrammarWithNFA(
     nfa: NFA,
     request: string,
 ): NFAGrammarMatchResult[] {
-    // Tokenize the request
     const tokens = tokenizeRequest(request);
 
     debug(`Tokenized: [${tokens.join(", ")}] (${tokens.length} tokens)`);
@@ -73,37 +133,48 @@ export function matchGrammarWithNFA(
         return [];
     }
 
-    // Match against NFA
-    const nfaResult = matchNFA(nfa, tokens);
+    const index = getIndex(nfa);
 
-    debug(`Match result: ${nfaResult.matched ? "MATCHED" : "NO MATCH"}`);
-    if (nfaResult.matched) {
-        debug(`Action value: %O`, nfaResult.actionValue);
+    // Pass 1: original token array (handles spacing=required correctly)
+    const origResult = matchNFAWithIndex(nfa, index, tokens);
+
+    // Pass 2: pre-split fused tokens for optional/auto rules
+    let bestResult = origResult;
+    const splitCandidates = collectNFASplitCandidates(nfa);
+    const splitTokens = applySplitToTokens(tokens, splitCandidates);
+    if (splitTokens !== null) {
+        debug(
+            `Split tokens: [${splitTokens.join(", ")}] (${splitTokens.length} tokens)`,
+        );
+        const splitResult = matchNFAWithIndex(nfa, index, splitTokens);
+        if (splitResult.matched) {
+            if (!origResult.matched) {
+                bestResult = splitResult;
+            } else {
+                [bestResult] = sortNFAMatches([origResult, splitResult]);
+            }
+        }
     }
 
-    if (!nfaResult.matched) {
+    if (!bestResult.matched) {
+        debug(`Match result: NO MATCH`);
         return [];
     }
 
-    // The action object is already evaluated in the NFA interpreter using the slot-based
-    // environment system. nfaResult.actionValue contains the final computed action object.
-    const actionObject = nfaResult.actionValue ?? request;
+    debug(`Match result: MATCHED`);
+    debug(`Action value: %O`, bestResult.actionValue);
 
-    // Wildcard character count is approximated from unchecked wildcard count
-    // (each unchecked wildcard captures some characters)
-    const wildcardCharCount = nfaResult.uncheckedWildcardCount;
-
-    // Determine entity wildcard property names
+    const actionObject = bestResult.actionValue ?? request;
+    const wildcardCharCount = bestResult.uncheckedWildcardCount;
     const entityWildcardPropertyNames: string[] = [];
-    // TODO: Implement entity wildcard detection if needed
 
     return [
         {
             match: actionObject,
             matchedValueCount:
-                nfaResult.fixedStringPartCount +
-                nfaResult.checkedWildcardCount +
-                nfaResult.uncheckedWildcardCount,
+                bestResult.fixedStringPartCount +
+                bestResult.checkedWildcardCount +
+                bestResult.uncheckedWildcardCount,
             wildcardCharCount,
             entityWildcardPropertyNames,
         },

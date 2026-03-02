@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ValueNode } from "./grammarRuleParser.js";
+import { SpacingMode, ValueNode } from "./grammarRuleParser.js";
 import registerDebug from "debug";
 // REVIEW: switch to RegExp.escape() when it becomes available.
 import escapeMatch from "regexp.escape";
@@ -20,14 +20,100 @@ const debugCompletion = registerDebug("typeagent:grammar:completion");
 // Treats spaces and punctuation as word separators
 const separatorRegExpStr = "\\s\\p{P}";
 const separatorRegExp = new RegExp(`[${separatorRegExpStr}]+`, "yu");
+const wildcardTrimRegExp = new RegExp(
+    `[${separatorRegExpStr}]*(.+?)[${separatorRegExpStr}]*$`,
+    "yu",
+);
 
-const separatedRegExp = /[^\s\p{P}][\s\p{P}]|[\s\p{P}]./uy;
-function isSeparated(request: string, index: number) {
+// Scripts that use explicit word-space boundaries (Latin, Cyrillic, Greek,
+// Armenian, Georgian, Hangul, Arabic, Hebrew, Devanagari, Bengali, Tamil,
+// Telugu, Kannada, Malayalam, Gujarati, Gurmukhi, Oriya, Sinhala, Ethiopic,
+// Mongolian). In "auto" mode, a separator is required between two adjacent
+// characters only when BOTH belong to one of these scripts. Unknown/unlisted
+// scripts (e.g. CJK) default to no separator needed.
+const wordBoundaryScriptRe =
+    /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
+
+// Decimal digits are not part of any word-space script, but two adjacent
+// digit characters must still be separated: "123456" is a different token from
+// "123 456", so concatenating two digit segments without a separator is ambiguous.
+const digitRe = /[0-9]/;
+
+// In auto mode (undefined), a separator is required between two segments only
+// if both adjacent characters belong to a word-boundary script. This allows users
+// to omit separators when the scripts differ (e.g. Latin followed by CJK),
+// while still requiring them when both sides use word spaces
+// (e.g. Latin followed by Latin).
+function isWordBoundaryScript(c: string): boolean {
+    // Fast path: all ASCII letters are Latin-script (boundary required).
+    // ASCII digits and punctuation/space fall through to return false here
+    // (digits are handled separately by digitRe, punctuation/space never need a boundary).
+    const code = c.charCodeAt(0);
+    if (code < 128) {
+        return (code >= 65 && code <= 90) || (code >= 97 && code <= 122); // A-Z, a-z
+    }
+    return wordBoundaryScriptRe.test(c);
+}
+function needsSeparatorInAutoMode(a: string, b: string): boolean {
+    if (digitRe.test(a) && digitRe.test(b)) {
+        return true;
+    }
+    return isWordBoundaryScript(a) && isWordBoundaryScript(b);
+}
+function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
+    switch (mode) {
+        case "required":
+            return true;
+        case "optional":
+            return false;
+        case "none":
+            // "none" mode is handled directly by the caller (matchStringPart
+            // short-circuits with an empty separator string).  If we ever
+            // reach this branch it indicates a logic error.
+            throw new Error(
+                "Internal error: requiresSeparator should not be called for 'none' mode",
+            );
+        case undefined: // auto
+            return needsSeparatorInAutoMode(a, b);
+    }
+}
+
+function isBoundarySatisfied(
+    request: string,
+    index: number,
+    mode: SpacingMode,
+) {
     if (index === 0 || index === request.length) {
         return true;
     }
-    separatedRegExp.lastIndex = index - 1;
-    return separatedRegExp.test(request);
+    switch (mode) {
+        case "required":
+            // In "required" mode, the input at `index` must begin with a
+            // separator sequence ([\s\p{P}]+).  Separators already consumed
+            // *inside* the match pattern (e.g. the infix [\s\p{P}]+ between
+            // tokens) do not satisfy this trailing-edge check; one or more
+            // separator characters must immediately follow the entire matched
+            // phrase in the input.
+            separatorRegExp.lastIndex = index;
+            return separatorRegExp.test(request);
+        case "optional":
+        case "none":
+            // In both "optional" and "none" modes there is no constraint on
+            // the outer boundary.  "none" enforces zero-width flex-space
+            // *between* tokens (handled by the regex builder in
+            // matchStringPart), but must not reject a match simply because a
+            // literal space from an escaped character (e.g. "\ ") happens to
+            // sit at the boundary.
+            return true;
+        case undefined: // auto: requires a separator only when BOTH characters
+            // adjacent to the boundary belong to word-boundary scripts.  If
+            // either side is punctuation, CJK, or another no-space script, no
+            // separator is required.
+            return !needsSeparatorInAutoMode(
+                request[index - 1],
+                request[index],
+            );
+    }
 }
 
 type MatchedValue =
@@ -59,6 +145,8 @@ type ParentMatchState = {
     variable: string | undefined;
     valueIds: ValueIdNode | undefined | null; // null means we don't need any value
     parent: ParentMatchState | undefined;
+    repeatPartIndex?: number | undefined; // defined for ()* / )+ — holds the part index to loop back to
+    spacingMode: SpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
 };
 type MatchState = {
     // Current context
@@ -74,6 +162,10 @@ type MatchState = {
     parent?: ParentMatchState | undefined;
 
     nestedLevel: number; // for debugging
+
+    inRepeat?: boolean | undefined; // true when re-entering a repeat group after a successful match
+
+    spacingMode: SpacingMode; // active spacing mode for this rule
 
     index: number;
     pendingWildcard?:
@@ -301,15 +393,21 @@ function createValue(
     }
 }
 
-function getWildcardStr(request: string, start: number, end: number) {
-    const wildcardRegexp = new RegExp(
-        `[${separatorRegExpStr}]*(.+?)[${separatorRegExpStr}]*$`,
-        "yu",
-    );
-
+function getWildcardStr(
+    request: string,
+    start: number,
+    end: number,
+    spacingMode?: SpacingMode,
+) {
     const string = request.substring(start, end);
-    wildcardRegexp.lastIndex = 0;
-    const match = wildcardRegexp.exec(string);
+    if (spacingMode === "none") {
+        // In "none" mode there are no flex-space separator positions, so any
+        // whitespace or punctuation between tokens belongs to the wildcard
+        // value itself.  Only reject truly empty wildcards.
+        return string.length > 0 ? string : undefined;
+    }
+    wildcardTrimRegExp.lastIndex = 0;
+    const match = wildcardTrimRegExp.exec(string);
     return match?.[1];
 }
 
@@ -321,7 +419,12 @@ function captureWildcard(
     pending: MatchState[] = [],
 ) {
     const { start: wildcardStart, valueId } = state.pendingWildcard!;
-    const wildcardStr = getWildcardStr(request, wildcardStart, wildcardEnd);
+    const wildcardStr = getWildcardStr(
+        request,
+        wildcardStart,
+        wildcardEnd,
+        state.spacingMode,
+    );
     if (wildcardStr === undefined) {
         return false;
     }
@@ -398,6 +501,7 @@ function finalizeState(state: MatchState, request: string) {
             request,
             pendingWildcard.start,
             request.length,
+            state.spacingMode,
         );
         if (value === undefined) {
             return false;
@@ -465,7 +569,11 @@ function finalizeMatch(
     results.push(matchResult);
 }
 
-function finalizeNestedRule(state: MatchState, partial: boolean = false) {
+function finalizeNestedRule(
+    state: MatchState,
+    pending?: MatchState[],
+    partial: boolean = false,
+) {
     const parent = state.parent;
     if (parent !== undefined) {
         debugMatch(state, `finished nested`);
@@ -512,6 +620,19 @@ function finalizeNestedRule(state: MatchState, partial: boolean = false) {
         state.name = parent.name;
         state.parts = parent.parts;
         state.partIndex = parent.partIndex;
+        state.spacingMode = parent.spacingMode;
+
+        // For repeat parts ()*  or )+: after each successful match, queue a state
+        // that tries to match the same group again.  inRepeat suppresses the
+        // optional-skip push so we don't generate duplicate "done" states.
+        if (parent.repeatPartIndex !== undefined && pending !== undefined) {
+            pending.push({
+                ...state,
+                partIndex: parent.repeatPartIndex,
+                inRepeat: true,
+            });
+        }
+
         return true;
     }
 
@@ -534,7 +655,7 @@ function matchStringPartWithWildcard(
         }
         const wildcardEnd = match.index;
         const newIndex = wildcardEnd + match[0].length;
-        if (!isSeparated(request, newIndex)) {
+        if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
             debugMatch(
                 state,
                 `Rejected non-separated matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
@@ -570,7 +691,7 @@ function matchStringPartWithoutWildcard(
         return false;
     }
     const newIndex = match.index + match[0].length;
-    if (!isSeparated(request, newIndex)) {
+    if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
         debugMatch(
             state,
             `Rejected non-separated matched string ${part.value.join(" ")}`,
@@ -602,8 +723,40 @@ function matchStringPart(
         state,
         `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
     );
-    // REVIEW: better separator policy
-    const regExpStr = `[${separatorRegExpStr}]*?${part.value.map(escapeMatch).join(`[${separatorRegExpStr}]+`)}`;
+    const escaped = part.value.map(escapeMatch);
+    // Build the joined regex string using an array to avoid O(N²) string concatenation.
+    // "required" → [\s\p{P}]+, "optional" → [\s\p{P}]*.
+    // In "auto" mode, + is used only when both adjacent characters belong to
+    // word-space scripts; otherwise * allows zero separators (e.g. when a
+    // segment ends/starts with punctuation, or the neighboring script does
+    // not use word spaces such as CJK).
+    const regexpSegments: string[] = [escaped[0]];
+    for (let i = 1; i < escaped.length; i++) {
+        // In "none" mode flex-space positions must match exactly zero
+        // characters — tokens are directly adjacent.  Any literal spaces
+        // (e.g. from "\ ") are already part of the segment text and will
+        // be matched by the regex itself.
+        const sep =
+            state.spacingMode === "none"
+                ? ""
+                : requiresSeparator(
+                        // Invariant: segments are always non-empty (guaranteed by the parser).
+                        part.value[i - 1].at(-1)!,
+                        part.value[i][0],
+                        state.spacingMode,
+                    )
+                  ? `[${separatorRegExpStr}]+`
+                  : `[${separatorRegExpStr}]*`;
+        regexpSegments.push(sep, escaped[i]);
+    }
+    const joined = regexpSegments.join("");
+    // In "none" mode no leading separator is consumed; the match must start
+    // exactly at the current position (or, for wildcards, at whatever index
+    // the global scan finds the pattern text).
+    const regExpStr =
+        state.spacingMode === "none"
+            ? joined
+            : `[${separatorRegExpStr}]*?${joined}`;
     return state.pendingWildcard !== undefined
         ? matchStringPartWithWildcard(regExpStr, request, part, state, pending)
         : matchStringPartWithoutWildcard(regExpStr, request, part, state);
@@ -611,6 +764,9 @@ function matchStringPart(
 
 const matchNumberPartWithWildcardRegExp =
     /[\s\p{P}]*?(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/giu;
+// "none" mode variant: no leading separator allowed.
+const matchNumberPartWithWildcardNoSepRegExp =
+    /(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/giu;
 function matchVarNumberPartWithWildcard(
     request: string,
     state: MatchState,
@@ -618,9 +774,13 @@ function matchVarNumberPartWithWildcard(
     pending: MatchState[],
 ) {
     const curr = state.index;
-    matchNumberPartWithWildcardRegExp.lastIndex = curr;
+    const re =
+        state.spacingMode === "none"
+            ? matchNumberPartWithWildcardNoSepRegExp
+            : matchNumberPartWithWildcardRegExp;
+    re.lastIndex = curr;
     while (true) {
-        const match = matchNumberPartWithWildcardRegExp.exec(request);
+        const match = re.exec(request);
         if (match === null) {
             return false;
         }
@@ -631,6 +791,14 @@ function matchVarNumberPartWithWildcard(
 
         const wildcardEnd = match.index;
         const newIndex = wildcardEnd + match[0].length;
+
+        if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
+            debugMatch(
+                state,
+                `Rejected non-separated matched number at ${wildcardEnd}`,
+            );
+            continue;
+        }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex, pending)) {
             debugMatch(
@@ -650,14 +818,21 @@ function matchVarNumberPartWithWildcard(
 
 const matchNumberPartRegexp =
     /[\s\p{P}]*?(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/iuy;
+// "none" mode variant: no leading separator allowed.
+const matchNumberPartNoSepRegexp =
+    /(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/iuy;
 function matchVarNumberPartWithoutWildcard(
     request: string,
     state: MatchState,
     part: VarNumberPart,
 ) {
     const curr = state.index;
-    matchNumberPartRegexp.lastIndex = curr;
-    const m = matchNumberPartRegexp.exec(request);
+    const re =
+        state.spacingMode === "none"
+            ? matchNumberPartNoSepRegexp
+            : matchNumberPartRegexp;
+    re.lastIndex = curr;
+    const m = re.exec(request);
     if (m === null) {
         return false;
     }
@@ -667,6 +842,12 @@ function matchVarNumberPartWithoutWildcard(
     }
 
     const newIndex = curr + m[0].length;
+
+    if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
+        debugMatch(state, `Rejected non-separated matched number`);
+        return false;
+    }
+
     debugMatch(state, `Matched number to ${newIndex}`);
 
     addValue(state, part.variable, n);
@@ -706,10 +887,27 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
-            if (!finalizeNestedRule(state)) {
+            if (!finalizeNestedRule(state, pending)) {
                 // Finish matching this state.
                 return true;
             }
+
+            // Check the trailing boundary after the nested rule using the
+            // parent's (now-restored) spacingMode, but only if the
+            // parent still has parts remaining.  If the parent is also
+            // exhausted, skip the check here: the loop will call
+            // finalizeNestedRule again and the check will fire once we
+            // reach an ancestor that actually has a following part — using
+            // that ancestor's mode instead of an intermediate pass-through
+            // rule's mode.
+            if (
+                state.partIndex < state.parts.length &&
+                state.pendingWildcard === undefined &&
+                !isBoundarySatisfied(request, state.index, state.spacingMode)
+            ) {
+                return false;
+            }
+
             continue;
         }
 
@@ -719,8 +917,9 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
             `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
         );
 
-        if (part.optional) {
-            // queue up skipping optional
+        if (part.optional && !state.inRepeat) {
+            // queue up skipping optional (suppressed when re-entering a repeat
+            // group to avoid duplicating already-queued "done" states)
             const newState = { ...state, partIndex: state.partIndex + 1 };
             if (part.variable) {
                 addValue(newState, part.variable, undefined);
@@ -759,6 +958,8 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
                     partIndex: state.partIndex + 1,
                     valueIds: state.valueIds,
                     parent: state.parent,
+                    repeatPartIndex: part.repeat ? state.partIndex : undefined,
+                    spacingMode: state.spacingMode,
                 };
 
                 // The nested rule needs to track values if the current rule is tracking value AND
@@ -777,6 +978,8 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
                 state.valueIds = requireValue ? undefined : null;
                 state.parent = parent;
                 state.nestedLevel++;
+                state.inRepeat = undefined; // entering nested rules, clear repeat flag
+                state.spacingMode = rules[0].spacingMode;
 
                 // queue up the other rules (backwards to search in the original order)
                 for (let i = rules.length - 1; i > 0; i--) {
@@ -785,6 +988,7 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
                         name: getNestedStateName(state, part, i),
                         parts: rules[i].parts,
                         value: rules[i].value,
+                        spacingMode: rules[i].spacingMode,
                     });
                 }
                 // continue the loop (without incrementing partIndex)
@@ -805,6 +1009,7 @@ function initialMatchState(grammar: Grammar): MatchState[] {
             index: 0,
             nextValueId: 0,
             nestedLevel: 0,
+            spacingMode: r.spacingMode,
         }))
         .reverse();
 }
@@ -832,7 +1037,7 @@ function getGrammarCompletionProperty(
     }
     const wildcardPropertyNames: string[] = [];
 
-    while (finalizeNestedRule(temp, true)) {}
+    while (finalizeNestedRule(temp, undefined, true)) {}
     const match = createValue(
         temp.value,
         temp.valueIds,

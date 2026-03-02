@@ -167,6 +167,9 @@ export function createExternalBrowserClient(
         awaitPageInteraction: async (...args) => {
             return rpc.invoke("awaitPageInteraction", ...args);
         },
+        downloadImage: async (...args) => {
+            return rpc.invoke("downloadImage", ...args);
+        },
     };
 
     const dispose = () => {

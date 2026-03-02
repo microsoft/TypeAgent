@@ -176,6 +176,59 @@ describe("Grammar Rule Parser", () => {
             });
         });
 
+        it("Kleene star group expressions ()*", () => {
+            const grammar = "<rule> = (um | uh)* help;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "rules",
+                rules: [
+                    {
+                        expressions: [{ type: "string", value: ["um"] }],
+                        value: undefined,
+                    },
+                    {
+                        expressions: [{ type: "string", value: ["uh"] }],
+                        value: undefined,
+                    },
+                ],
+                optional: true,
+                repeat: true,
+            });
+        });
+
+        it("Kleene plus group expressions )+", () => {
+            const grammar = "<rule> = (word)+ end;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            // repeat: true, optional absent (must match at least once)
+            expect(result[0].rules[0].expressions[0]).toEqual({
+                type: "rules",
+                rules: [
+                    {
+                        expressions: [{ type: "string", value: ["word"] }],
+                        value: undefined,
+                    },
+                ],
+                repeat: true,
+            });
+            // 'optional' must NOT be set
+            expect(
+                (result[0].rules[0].expressions[0] as any).optional,
+            ).toBeUndefined();
+        });
+
+        it("Kleene plus with alternatives )+", () => {
+            const grammar = "<rule> = (yes | no)+ done;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            const group = result[0].rules[0].expressions[0] as any;
+            expect(group.type).toBe("rules");
+            expect(group.repeat).toBe(true);
+            expect(group.optional).toBeUndefined();
+            expect(group.rules).toHaveLength(2);
+        });
+
         it("complex expressions with multiple components", () => {
             const grammar = "<rule> = $(action) the <object> $(adverb:string);";
             const result = testParamGrammarRules("test.agr", grammar);
@@ -861,6 +914,96 @@ describe("Grammar Rule Parser", () => {
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
                 /test\.agr:\d+:\d+:/,
             );
+        });
+    });
+
+    describe("Spacing Annotation", () => {
+        it("attaches spacingMode optional via annotation", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=optional] = hello;`,
+            );
+            expect(result).toHaveLength(1);
+            expect(result[0].spacingMode).toBe("optional");
+        });
+
+        it("attaches spacingMode required via annotation", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=required] = hello;`,
+            );
+            expect(result[0].spacingMode).toBe("required");
+        });
+
+        it("attaches spacingMode auto via annotation (stored as undefined)", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=auto] = hello;`,
+            );
+            // "auto" is the default; stored as undefined
+            expect(result[0].spacingMode).toBeUndefined();
+        });
+
+        it("attaches spacingMode none via annotation", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=none] = hello;`,
+            );
+            expect(result[0].spacingMode).toBe("none");
+        });
+
+        it("rule without annotation has undefined spacingMode", () => {
+            const result = testParamGrammarRules("test.agr", `<Rule> = hello;`);
+            expect(result[0].spacingMode).toBeUndefined();
+        });
+
+        it("each rule carries its own independently declared mode", () => {
+            const result = testParamGrammarRules(
+                "test.agr",
+                `<A> [spacing=optional] = a;
+                 <B> [spacing=required] = b;
+                 <C> = c;`,
+            );
+            expect(result[0].spacingMode).toBe("optional");
+            expect(result[1].spacingMode).toBe("required");
+            // "auto" is the default; stored as undefined
+            expect(result[2].spacingMode).toBeUndefined();
+        });
+
+        it("throws on unknown annotation key", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> [unknown=auto] = hello;`,
+                ),
+            ).toThrow("Unknown rule annotation");
+        });
+
+        it("throws on invalid spacing value", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> [spacing=never] = hello;`,
+                ),
+            ).toThrow("Invalid value");
+        });
+
+        it("throws when '=' is missing in annotation", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> [spacing required] = hello;`,
+                ),
+            ).toThrow("'=' expected in spacing annotation");
+        });
+
+        it("throws when ']' is missing in annotation", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> [spacing=required = hello;`,
+                ),
+            ).toThrow("']' expected at end of spacing annotation");
         });
     });
 

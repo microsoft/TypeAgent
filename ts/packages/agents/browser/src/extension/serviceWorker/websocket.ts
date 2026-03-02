@@ -14,6 +14,7 @@ const debugWebSocketError = registerDebug("typeagent:browser:ws:error");
 
 let webSocket: WebSocket | undefined;
 let settings: Record<string, any>;
+let connectionInProgress: boolean = false;
 
 /**
  * Broadcasts WebSocket connection status changes to all extension pages
@@ -40,6 +41,43 @@ function broadcastConnectionStatus(connected: boolean): void {
             timestamp: Date.now(),
         })
         .catch(() => {});
+}
+
+/**
+ * Handles browser.crossword/* messages
+ */
+async function handleCrosswordMessage(
+    actionName: string,
+    params: any,
+): Promise<void> {
+    switch (actionName) {
+        case "schemaReady": {
+            if (params && params.selectors && params.texts) {
+                try {
+                    const { getActiveTab } = await import("./tabManager");
+                    const tab = await getActiveTab();
+                    if (tab?.id) {
+                        chrome.tabs.sendMessage(tab.id, {
+                            type: "setupCrosswordObserver",
+                            selectors: params.selectors,
+                            texts: params.texts,
+                        });
+                        debugWebSocket(
+                            "Sent crossword observer installation to content script",
+                        );
+                    }
+                } catch (error) {
+                    debugWebSocketError(
+                        "Failed to install crossword observer:",
+                        error,
+                    );
+                }
+            }
+            break;
+        }
+        default:
+            debugWebSocket(`Unknown browser.crossword action: ${actionName}`);
+    }
 }
 
 /**
@@ -82,6 +120,13 @@ export async function ensureWebsocketConnected(): Promise<
     WebSocket | undefined
 > {
     return new Promise<WebSocket | undefined>(async (resolve, reject) => {
+        // Prevent multiple simultaneous connection attempts
+        if (connectionInProgress) {
+            debugWebSocket("Connection attempt already in progress, skipping");
+            resolve(webSocket);
+            return;
+        }
+
         if (webSocket) {
             if (webSocket.readyState === WebSocket.OPEN) {
                 resolve(webSocket);
@@ -93,7 +138,9 @@ export async function ensureWebsocketConnected(): Promise<
             } catch {}
         }
 
+        connectionInProgress = true;
         webSocket = await createWebSocket();
+        connectionInProgress = false;
         if (!webSocket) {
             showBadgeError();
             broadcastConnectionStatus(false);
@@ -193,6 +240,7 @@ export async function ensureWebsocketConnected(): Promise<
             if (data.method && data.method.indexOf("/") > 0) {
                 const [schema, actionName] = data.method?.split("/");
 
+                // Handle browser actions
                 if (schema == "browser") {
                     const response = await runBrowserAction({
                         actionName: actionName,
@@ -205,6 +253,13 @@ export async function ensureWebsocketConnected(): Promise<
                             result: response,
                         }),
                     );
+                    return;
+                }
+
+                // Handle browser.crossword actions
+                if (schema === "browser.crossword") {
+                    await handleCrosswordMessage(actionName, data.params);
+                    return;
                 }
             }
         };

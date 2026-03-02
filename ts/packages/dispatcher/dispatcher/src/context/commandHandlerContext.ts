@@ -153,6 +153,7 @@ export type CommandHandlerContext = {
     agentCache: AgentCache;
     agentGrammarRegistry: AgentGrammarRegistry; // NFA-based grammar system for cache matching
     grammarGenerationInitialized: boolean; // Track if NFA grammar generation has been set up
+    persistedGrammarStore?: PersistedGrammarStore; // Persistence layer for dynamic grammar rules
     currentScriptDir: string;
     logger?: Logger | undefined;
     currentRequestId: RequestId | undefined;
@@ -743,6 +744,9 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
         await grammarStore.newStore(grammarStorePath);
     }
 
+    // Expose the persistence store on the context for management actions
+    context.persistedGrammarStore = grammarStore;
+
     // Enable auto-save
     await grammarStore.setAutoSave(config.cache.autoSave);
 
@@ -803,6 +807,12 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     debug(`Syncing ${registeredAgents.length} agent grammars to store`);
     for (const schemaName of registeredAgents) {
         context.agentCache.syncAgentGrammar(schemaName);
+    }
+
+    // Enable DFA if configured (NFA must be active first, which it now is)
+    if (config.cache.useDFA) {
+        context.agentCache.grammarStore.setUseDFA(true);
+        debug("DFA matching enabled");
     }
 
     // Mark as initialized to prevent re-initialization
@@ -968,6 +978,14 @@ export async function changeContextConfig(
             !systemContext.grammarGenerationInitialized
         ) {
             await setupGrammarGeneration(systemContext);
+        }
+
+        // If useDFA toggled at runtime (only takes effect when NFA grammar system is active)
+        if (
+            changed.cache.useDFA !== undefined &&
+            systemContext.grammarGenerationInitialized
+        ) {
+            agentCache.grammarStore.setUseDFA(changed.cache.useDFA);
         }
     }
 

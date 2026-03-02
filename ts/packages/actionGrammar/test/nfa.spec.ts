@@ -5,6 +5,7 @@ import { Grammar } from "../src/grammarTypes.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA, printNFA, printMatchResult } from "../src/nfaInterpreter.js";
 import { NFABuilder, combineNFAs } from "../src/nfa.js";
+import { loadGrammarRules } from "../src/grammarLoader.js";
 
 describe("NFA Infrastructure", () => {
     describe("NFABuilder", () => {
@@ -198,6 +199,97 @@ describe("NFA Infrastructure", () => {
             expect(result2.matched).toBe(true);
             // When optional wildcard is not matched, the slot is undefined
             expect(result2.actionValue).toEqual({ name: undefined });
+        });
+
+        it("should compile Kleene star )* — zero or more repetitions", () => {
+            // Pattern: (um | uh)* help  — zero fillers is fine
+            const grammar: Grammar = {
+                rules: [
+                    {
+                        parts: [
+                            {
+                                type: "rules",
+                                rules: [
+                                    {
+                                        parts: [
+                                            { type: "string", value: ["um"] },
+                                        ],
+                                    },
+                                    {
+                                        parts: [
+                                            { type: "string", value: ["uh"] },
+                                        ],
+                                    },
+                                ],
+                                optional: true,
+                                repeat: true,
+                            },
+                            { type: "string", value: ["help"] },
+                        ],
+                        value: { type: "literal", value: true },
+                    },
+                ],
+            };
+
+            const nfa = compileGrammarToNFA(grammar, "kleene-star");
+            // zero repetitions
+            expect(matchNFA(nfa, ["help"]).matched).toBe(true);
+            // one repetition
+            expect(matchNFA(nfa, ["um", "help"]).matched).toBe(true);
+            // two repetitions
+            expect(matchNFA(nfa, ["uh", "um", "help"]).matched).toBe(true);
+            // zero occurrences of the body — must NOT match without "help"
+            expect(matchNFA(nfa, ["um"]).matched).toBe(false);
+        });
+
+        it("should compile Kleene plus )+ — one or more repetitions", () => {
+            // Pattern: (word)+ end  — at least one "word" required
+            const grammar: Grammar = {
+                rules: [
+                    {
+                        parts: [
+                            {
+                                type: "rules",
+                                rules: [
+                                    {
+                                        parts: [
+                                            { type: "string", value: ["word"] },
+                                        ],
+                                    },
+                                ],
+                                repeat: true,
+                                // optional is intentionally absent → must match at least once
+                            },
+                            { type: "string", value: ["end"] },
+                        ],
+                        value: { type: "literal", value: true },
+                    },
+                ],
+            };
+
+            const nfa = compileGrammarToNFA(grammar, "kleene-plus");
+            // one occurrence
+            expect(matchNFA(nfa, ["word", "end"]).matched).toBe(true);
+            // two occurrences
+            expect(matchNFA(nfa, ["word", "word", "end"]).matched).toBe(true);
+            // three occurrences
+            expect(matchNFA(nfa, ["word", "word", "word", "end"]).matched).toBe(
+                true,
+            );
+            // zero occurrences — must NOT match
+            expect(matchNFA(nfa, ["end"]).matched).toBe(false);
+        });
+
+        it("should parse and match )+ syntax end-to-end via loadGrammarRules", () => {
+            // Verify the full pipeline: AGR text → parse → NFA → match
+            const agr = `<Start> = (ping)+ pong -> true;`;
+            const g = loadGrammarRules("test.agr", agr);
+            const nfa = compileGrammarToNFA(g, "kleene-plus-e2e");
+
+            expect(matchNFA(nfa, ["ping", "pong"]).matched).toBe(true);
+            expect(matchNFA(nfa, ["ping", "ping", "pong"]).matched).toBe(true);
+            // zero occurrences — must NOT match
+            expect(matchNFA(nfa, ["pong"]).matched).toBe(false);
         });
     });
 

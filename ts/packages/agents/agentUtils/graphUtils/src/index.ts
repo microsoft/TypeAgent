@@ -1,6 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Date range utilities (shared by calendar and email agents)
+export {
+    getCurrentWeekDates,
+    getCurrentMonthDates,
+    getNextDaysDates,
+    getNWeeksDateRangeISO,
+    parseDayRange,
+} from "./dateUtils.js";
+
 // Legacy exports (existing CalendarClient)
 export { createCalendarGraphClient, CalendarClient } from "./calendarClient.js";
 export { createMailGraphClient, MailClient } from "./mailClient.js";

@@ -129,7 +129,6 @@ import {
 import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
 import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
-import { getCrosswordCommandHandlerTable } from "./crossword/commandHandler.mjs";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -154,8 +153,7 @@ import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.
 
 const debug = registerDebug("typeagent:browser:action");
 const debugWebSocket = registerDebug("typeagent:browser:ws");
-
-// Knowledge extraction progress tracking - types now imported from knowledgeCardRenderer.mjs
+const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
@@ -178,7 +176,6 @@ setInterval(
     5 * 60 * 1000,
 ); // Clean up every 5 minutes
 
-// getDynamicDisplay implementation for browser agent
 async function getDynamicDisplayImpl(
     type: DisplayType,
     dynamicDisplayId: string,
@@ -482,9 +479,13 @@ async function updateBrowserContext(
                 : context.agentContext.clientBrowserControl;
 
             if (browserControls && context.agentContext.agentWebSocketServer) {
+                debugClientRouting(
+                    `Creating BrowserConnector with preferredClientType = '${context.agentContext.preferredClientType}'`,
+                );
                 context.agentContext.browserConnector = new BrowserConnector(
                     context.agentContext.agentWebSocketServer,
                     browserControls,
+                    context.agentContext.preferredClientType,
                 );
             }
         }
@@ -496,30 +497,39 @@ async function updateBrowserContext(
         // rehydrate cached settings
         const sessionDir: string | undefined =
             await getSessionFolderPath(context);
-        const contents: string = await readFileSync(
-            path.join(sessionDir!, "settings.json"),
-            "utf-8",
-        );
+        if (sessionDir) {
+            const settingsPath = path.join(sessionDir, "settings.json");
+            try {
+                if (fs.existsSync(settingsPath)) {
+                    const contents: string = readFileSync(
+                        settingsPath,
+                        "utf-8",
+                    );
 
-        if (contents.length > 0) {
-            const config = JSON.parse(contents);
+                    if (contents.length > 0) {
+                        const config = JSON.parse(contents);
 
-            // resolver settings
-            context.agentContext.resolverSettings.searchResolver =
-                config.resolverSettings.searchResolver;
-            context.agentContext.resolverSettings.keywordResolver =
-                config.resolverSettings.keywordResolver;
-            context.agentContext.resolverSettings.wikipediaResolver =
-                config.resolverSettings.wikipediaResolver;
-            context.agentContext.resolverSettings.historyResolver =
-                config.resolverSettings.historyResolver;
+                        // resolver settings
+                        context.agentContext.resolverSettings.searchResolver =
+                            config.resolverSettings.searchResolver;
+                        context.agentContext.resolverSettings.keywordResolver =
+                            config.resolverSettings.keywordResolver;
+                        context.agentContext.resolverSettings.wikipediaResolver =
+                            config.resolverSettings.wikipediaResolver;
+                        context.agentContext.resolverSettings.historyResolver =
+                            config.resolverSettings.historyResolver;
 
-            // search provider settings
-            context.agentContext.searchProviders =
-                config.searchProviders || defaultSearchProviders;
-            context.agentContext.activeSearchProvider =
-                config.activeSearchProvider ||
-                context.agentContext.searchProviders[0];
+                        // search provider settings
+                        context.agentContext.searchProviders =
+                            config.searchProviders || defaultSearchProviders;
+                        context.agentContext.activeSearchProvider =
+                            config.activeSearchProvider ||
+                            context.agentContext.searchProviders[0];
+                    }
+                }
+            } catch (error) {
+                debug("Failed to load browser settings file:", error);
+            }
         }
     } else {
         if (context.agentContext.agentWebSocketServer) {
@@ -544,6 +554,10 @@ async function processBrowserAgentMessage(
     context: SessionContext<BrowserActionContext>,
     client: BrowserClient,
 ) {
+    debugClientRouting(
+        `processBrowserAgentMessage: method='${data.method}', client type='${client.type}', id='${client.id}', preferredClientType='${context.agentContext.preferredClientType}'`,
+    );
+
     switch (data.method) {
         case "knowledgeExtractionProgress": {
             await handleKnowledgeExtractionProgress(data.params, context);
@@ -557,9 +571,25 @@ async function processBrowserAgentMessage(
                     true,
                     `Initializing ${targetTranslator}`,
                 );
+
+                const notificationId = `crossword-${Date.now()}`;
+                context.notify(
+                    AppAgentEvent.Inline,
+                    {
+                        type: "text",
+                        content: `Loading the crossword agent to get it ready for interaction...`,
+                    },
+                    notificationId,
+                );
+
                 try {
-                    context.agentContext.crossWordState =
-                        await getBoardSchema(context);
+                    debugClientRouting(
+                        `Calling getBoardSchema with client.id='${client.id}'`,
+                    );
+                    context.agentContext.crossWordState = await getBoardSchema(
+                        context,
+                        client.id,
+                    );
 
                     browserControls.setAgentStatus(
                         false,
@@ -570,6 +600,10 @@ async function processBrowserAgentMessage(
                         false,
                         `Failed to initialize ${targetTranslator}`,
                     );
+
+                    debug(
+                        `Failed to initialize ${targetTranslator}. Details ${e}`,
+                    );
                 }
 
                 if (context.agentContext.crossWordState) {
@@ -577,14 +611,49 @@ async function processBrowserAgentMessage(
                         context.agentContext.crossWordState.across?.length || 0;
                     const downClues =
                         context.agentContext.crossWordState.down?.length || 0;
+
+                    // Send schema to browser extension/electron for observer installation
+                    const schema = context.agentContext.crossWordState;
+                    const allClues = [...schema.across, ...schema.down];
+                    const sampleClues = allClues.slice(0, 5);
+
+                    if (client && client.socket && sampleClues.length > 0) {
+                        try {
+                            client.socket.send(
+                                JSON.stringify({
+                                    method: "browser.crossword/schemaReady",
+                                    params: {
+                                        selectors: sampleClues.map(
+                                            (c) => c.cssSelector,
+                                        ),
+                                        texts: sampleClues.map((c) => c.text),
+                                    },
+                                }),
+                            );
+                        } catch (e) {
+                            debug(
+                                "Failed to send crossword schema to client",
+                                e,
+                            );
+                        }
+                    }
+
                     context.notify(
                         AppAgentEvent.Inline,
-                        `Crossword page is ready for interaction with ${acrossClues} across and ${downClues} down clues.`,
+                        {
+                            type: "text",
+                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
+                        },
+                        notificationId,
                     );
                 } else {
                     context.notify(
                         AppAgentEvent.Inline,
-                        "Failed to extract crossword schema - crossword board initialization failed.",
+                        {
+                            type: "text",
+                            content: `There was an error when initializing the crossword. Try re-loading the page.`,
+                        },
+                        notificationId,
                     );
                 }
             }
@@ -931,9 +1000,9 @@ async function initializeWebsiteIndex(
         }
     } catch (error) {
         debug("Error initializing website collection:", error);
-        // Fallback to empty collection without index
-        context.agentContext.websiteCollection =
-            new website.WebsiteCollection();
+        // SQLite/website-memory may be unavailable; keep browser agent alive.
+        // Knowledge features will remain unavailable until dependency issues are resolved.
+        context.agentContext.websiteCollection = undefined;
         context.agentContext.index = undefined;
     }
 }
@@ -1734,6 +1803,13 @@ async function executeBrowserAction(
                     );
                     return result;
                 }
+                case "downloadImage": {
+                    const result = await handleDownloadImage(
+                        action.parameters,
+                        context,
+                    );
+                    return result;
+                }
                 default:
                     // Should never happen.
                     throw new Error(
@@ -1763,7 +1839,7 @@ async function executeBrowserAction(
     const connector = context.sessionContext.agentContext.browserConnector;
     if (connector) {
         try {
-            context.actionIO.setDisplay("Running remote action.");
+            // context.actionIO.setDisplay("Running remote action.");
 
             let schemaName = "browser";
             if (action.schemaName === "browser.crossword") {
@@ -3213,6 +3289,35 @@ The following is the COMPLETE JSON response object with 2 spaces of indentation 
     }
 }
 
+/**
+ * Handle downloadImage action
+ */
+async function handleDownloadImage(
+    parameters: {
+        cssSelector?: string;
+        imageDescription?: string;
+        filename?: string;
+    },
+    context: ActionContext<BrowserActionContext>,
+): Promise<ActionResult> {
+    const browserControl = getActionBrowserControl(context);
+
+    try {
+        const filePath = await browserControl.downloadImage(
+            parameters.cssSelector,
+            parameters.imageDescription,
+            parameters.filename,
+        );
+        const displayText = `Image downloaded to: ${filePath}`;
+        context.actionIO.setDisplay(displayText);
+        return createActionResult(filePath);
+    } catch (error) {
+        const errorMsg = `Error downloading image: ${(error as Error).message}`;
+        context.actionIO.setDisplay(errorMsg);
+        return createActionResultFromError(errorMsg);
+    }
+}
+
 export const handlers: CommandHandlerTable = {
     description: "Browser App Agent Commands",
     commands: {
@@ -3232,7 +3337,6 @@ export const handlers: CommandHandlerTable = {
                 close: new CloseBrowserHandler(),
             },
         },
-        crossword: getCrosswordCommandHandlerTable(),
         open: new OpenWebPageHandler(),
         close: new CloseWebPageHandler(),
         external: {
@@ -3253,12 +3357,36 @@ export const handlers: CommandHandlerTable = {
                         }
                         agentContext.useExternalBrowserControl = true;
                         agentContext.preferredClientType = "extension";
+                        debugClientRouting(
+                            "[@browser external on] Set preferredClientType = 'extension'",
+                        );
 
                         // Re-select active client based on new preference
                         if (agentContext.agentWebSocketServer) {
                             agentContext.agentWebSocketServer.selectActiveClient(
                                 "extension",
                             );
+                            debugClientRouting(
+                                "[@browser external on] Called selectActiveClient('extension')",
+                            );
+                        }
+
+                        // Recreate BrowserConnector with new preferredClientType
+                        const browserControls =
+                            agentContext.externalBrowserControl?.control;
+                        if (
+                            browserControls &&
+                            agentContext.agentWebSocketServer
+                        ) {
+                            debugClientRouting(
+                                "[@browser external on] Recreating BrowserConnector with preferredClientType = 'extension'",
+                            );
+                            agentContext.browserConnector =
+                                new BrowserConnector(
+                                    agentContext.agentWebSocketServer,
+                                    browserControls,
+                                    agentContext.preferredClientType,
+                                );
                         }
 
                         await context.queueToggleTransientAgent(
@@ -3285,12 +3413,36 @@ export const handlers: CommandHandlerTable = {
                         }
                         agentContext.useExternalBrowserControl = false;
                         agentContext.preferredClientType = "electron";
+                        debugClientRouting(
+                            "[@browser external off] Set preferredClientType = 'electron'",
+                        );
 
                         // Re-select active client based on new preference
                         if (agentContext.agentWebSocketServer) {
                             agentContext.agentWebSocketServer.selectActiveClient(
                                 "electron",
                             );
+                            debugClientRouting(
+                                "[@browser external off] Called selectActiveClient('electron')",
+                            );
+                        }
+
+                        // Recreate BrowserConnector with new preferredClientType
+                        const browserControls =
+                            agentContext.clientBrowserControl;
+                        if (
+                            browserControls &&
+                            agentContext.agentWebSocketServer
+                        ) {
+                            debugClientRouting(
+                                "[@browser external off] Recreating BrowserConnector with preferredClientType = 'electron'",
+                            );
+                            agentContext.browserConnector =
+                                new BrowserConnector(
+                                    agentContext.agentWebSocketServer,
+                                    browserControls,
+                                    agentContext.preferredClientType,
+                                );
                         }
 
                         await context.queueToggleTransientAgent(

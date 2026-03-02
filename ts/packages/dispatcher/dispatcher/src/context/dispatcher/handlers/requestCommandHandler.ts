@@ -376,6 +376,23 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Translate to action
 
+            // Requests with recording/reasoning prefixes bypass translation entirely
+            // and go straight to Claude reasoning.
+            const REASONING_PREFIXES = [
+                "learn:",
+                "dev:",
+                "remember how to ",
+                "record ",
+            ];
+            const lowerRequest = request.trimStart().toLowerCase();
+            if (
+                !systemContext.noReasoning &&
+                REASONING_PREFIXES.some((p) => lowerRequest.startsWith(p))
+            ) {
+                await executeReasoning(request, context, { engine: "claude" });
+                return;
+            }
+
             // Get the history context before adding the request to memory
             const history = getHistoryContext(systemContext);
             if (systemContext.userRequestKnowledgeExtraction === true) {

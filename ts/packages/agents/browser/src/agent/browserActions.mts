@@ -8,7 +8,7 @@ import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";
 import { BrowserConnector } from "./browserConnector.mjs";
 import { TextEmbeddingModel } from "aiclient";
-import * as website from "website-memory";
+import type { WebsiteCollection, IndexData } from "website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
 import { MacroStore } from "./storage/index.mjs";
 import { WebAgentChannels } from "./webTypeAgent.mjs";
@@ -33,10 +33,10 @@ export type BrowserActionContext = {
     browserProcess?: ChildProcess | undefined;
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];
-    websiteCollection?: website.WebsiteCollection | undefined;
+    websiteCollection?: WebsiteCollection | undefined;
     graphJsonStorage?: any | undefined; // GraphologyPersistenceManager - field name maintained for compatibility
     fuzzyMatchingModel?: TextEmbeddingModel | undefined;
-    index: website.IndexData | undefined;
+    index: IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
     macrosStore?: MacroStore | undefined; // Add MacroStore instance

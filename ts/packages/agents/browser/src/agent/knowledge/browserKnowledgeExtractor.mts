@@ -34,7 +34,7 @@ export class BrowserKnowledgeExtractor {
             const apiSettings = ai.azureApiSettingsFromEnv(
                 ai.ModelType.Chat,
                 undefined,
-                "GPT_4_O_MINI",
+                "GPT_5_MINI",
             );
             const languageModel = ai.createChatModel(apiSettings);
             knowledgeExtractor = kpLib.createKnowledgeExtractor(languageModel);

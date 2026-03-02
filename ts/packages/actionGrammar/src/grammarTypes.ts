@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ValueNode } from "./grammarRuleParser.js";
+import { SpacingMode, ValueNode } from "./grammarRuleParser.js";
 
 /**
  * Grammar Types - in memory
@@ -40,16 +40,27 @@ export type RulesPart = {
 
     variable?: string | undefined;
     optional?: boolean | undefined;
+    repeat?: boolean | undefined; // Kleene star: zero or more occurrences
+};
+
+export type PhraseSetPart = {
+    type: "phraseSet";
+    /** Name of the phrase-set matcher (e.g. "Polite", "Greeting") */
+    matcherName: string;
+    variable?: undefined;
+    optional?: undefined;
 };
 
 export type GrammarPart =
     | StringPart
     | VarStringPart
     | VarNumberPart
-    | RulesPart;
+    | RulesPart
+    | PhraseSetPart;
 export type GrammarRule = {
     parts: GrammarPart[];
     value?: ValueNode | undefined;
+    spacingMode?: SpacingMode; // undefined = auto (default)
 };
 
 export type Grammar = {
@@ -85,17 +96,25 @@ export type RulePartJson = {
     index: number;
     variable?: string | undefined;
     optional?: boolean | undefined;
+    repeat?: boolean | undefined;
+};
+
+export type PhraseSetPartJson = {
+    type: "phraseSet";
+    matcherName: string;
 };
 
 export type GrammarPartJson =
     | StringPartJson
     | VarStringPartJson
     | VarNumberPartJson
-    | RulePartJson;
+    | RulePartJson
+    | PhraseSetPartJson;
 
 export type GrammarRuleJson = {
     parts: GrammarPartJson[];
     value?: ValueNode | undefined;
+    spacingMode?: SpacingMode; // undefined = auto (default)
 };
 export type GrammarRulesJson = GrammarRuleJson[];
 export type GrammarJson = GrammarRulesJson[];

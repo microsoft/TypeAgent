@@ -92,7 +92,11 @@ export function writeGrammarRules(
 }
 
 function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
-    result.write(`<${def.name}> = `);
+    result.write(`<${def.name}>`);
+    if (def.spacingMode !== undefined) {
+        result.write(` [spacing=${def.spacingMode}]`);
+    }
+    result.write(` = `);
     writeRules(result, def.rules, result.column - 2);
     result.writeLine(";");
 }
@@ -186,12 +190,20 @@ function writeExpression(
             case "ruleReference":
                 result.write(`<${expr.name}>`);
                 break;
-            case "rules":
+            case "rules": {
                 const rules = expr.rules;
                 result.write("(");
                 writeRules(result, rules, indent);
-                result.write(expr.optional ? ")?" : ")");
+                const suffix = expr.repeat
+                    ? expr.optional
+                        ? ")*"
+                        : ")+"
+                    : expr.optional
+                      ? ")?"
+                      : ")";
+                result.write(suffix);
                 break;
+            }
             case "variable":
                 result.write("$(");
                 result.write(expr.name);

@@ -9,13 +9,36 @@ import {
     VarStringPart,
     VarNumberPart,
     RulesPart,
+    PhraseSetPart,
 } from "./grammarTypes.js";
+import { SpacingMode } from "./grammarRuleParser.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
     parseValueExpression,
     compileValueExpression,
     ValueExpression,
 } from "./environment.js";
+import { normalizeToken } from "./nfaMatcher.js";
+
+// Scripts that require a word-boundary separator between adjacent tokens.
+// CJK and other logographic/syllabic scripts are NOT included — no separator needed.
+// Must be kept in sync with the equivalent regex in grammarMatcher.ts.
+const _wordBoundaryScriptRe =
+    /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
+
+/**
+ * Returns true when a token's first character belongs to a word-boundary script
+ * (Latin, Cyrillic, Greek, and similar space-separated scripts).
+ * Tokens starting with punctuation ("'s", "'t") or CJK characters return false,
+ * meaning they can be directly concatenated onto a preceding token without a space.
+ */
+function requiresWordBoundaryBefore(token: string): boolean {
+    if (token.length === 0) return false;
+    const code = token.charCodeAt(0);
+    if (code < 128)
+        return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+    return _wordBoundaryScriptRe.test(token[0]);
+}
 
 /**
  * Context for compiling a rule, including slot information
@@ -33,6 +56,14 @@ interface RuleCompilationContext {
     completionActionName?: string | undefined;
     /** Map from variable name to property path (for completion metadata) */
     completionPropertyPaths?: Map<string, string> | undefined;
+    /** Spacing mode for this rule (controls token boundary behaviour) */
+    spacingMode?: SpacingMode;
+    /**
+     * When set, compileStringPart deposits non-word-starting tokens here so
+     * they can be stored as splitCandidates on the rule entry state.
+     * Only populated for optional/auto rules; undefined for required/none.
+     */
+    splitCandidatesCollector?: Set<string> | undefined;
 }
 
 /**
@@ -218,6 +249,7 @@ function normalizeRule(
                 },
             ],
             value: { type: "variable", name: "_result" }, // Add value expression
+            spacingMode: rule.spacingMode,
         };
     }
 
@@ -228,6 +260,7 @@ function normalizeRule(
         return {
             parts: normalizedParts,
             value: { type: "literal", value: singleLiteral.literal },
+            spacingMode: rule.spacingMode,
         };
     }
 
@@ -314,7 +347,8 @@ function collectVariables(rule: GrammarRule): string[] {
                 // Don't recurse into nested rule's inner variables - they use their own slots
                 break;
             case "string":
-                // No variables in string parts
+            case "phraseSet":
+                // No variables in string or phraseSet parts
                 break;
         }
     }
@@ -370,7 +404,8 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
                 }
                 break;
             case "string":
-                // StringPart has no variables
+            case "phraseSet":
+                // No variables
                 break;
         }
     }
@@ -476,6 +511,16 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
 
         builder.addEpsilonTransition(startState, ruleEntry);
 
+        // For optional/auto rules, collect split candidates (non-word-starting tokens
+        // such as "'s", "'t", or CJK characters) so matchGrammarWithNFA can pre-split
+        // fused input tokens (e.g. "Swift's" → ["Swift", "'s"]).
+        // required and none rules don't need this: required never fuses tokens;
+        // none is handled at compile time by joining segments into one fused token.
+        const needsSplitCandidates =
+            rule.spacingMode !== "required" && rule.spacingMode !== "none";
+        const splitCandidatesCollector: Set<string> | undefined =
+            needsSplitCandidates ? new Set<string>() : undefined;
+
         // Create compilation context with slot information
         const context: RuleCompilationContext = {
             slotMap,
@@ -484,6 +529,8 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             parentSlotIndex: undefined,
             completionActionName,
             completionPropertyPaths,
+            spacingMode: rule.spacingMode,
+            splitCandidatesCollector,
         };
 
         const ruleEnd = compileRuleFromStateWithSlots(
@@ -494,6 +541,14 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
             acceptState,
             context,
         );
+
+        // Store collected split candidates on the rule entry state so
+        // matchGrammarWithNFA can discover them without re-traversing the graph.
+        if (splitCandidatesCollector && splitCandidatesCollector.size > 0) {
+            builder.getState(ruleEntry).splitCandidates = Array.from(
+                splitCandidatesCollector,
+            ).sort((a, b) => b.length - a.length); // longest-first for greedy scan
+        }
 
         // If rule didn't connect to accept state, add epsilon transition
         if (ruleEnd !== acceptState) {
@@ -615,6 +670,9 @@ function compilePart(
                 overrideVariableName,
             );
 
+        case "phraseSet":
+            return compilePhraseSetPart(builder, part, fromState, toState);
+
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
     }
@@ -634,7 +692,14 @@ function compilePartWithSlots(
 ): number {
     switch (part.type) {
         case "string":
-            return compileStringPart(builder, part, fromState, toState);
+            return compileStringPart(
+                builder,
+                part,
+                fromState,
+                toState,
+                context.spacingMode,
+                context.splitCandidatesCollector,
+            );
 
         case "wildcard":
             return compileWildcardPartWithSlots(
@@ -664,38 +729,97 @@ function compilePartWithSlots(
                 context,
             );
 
+        case "phraseSet":
+            return compilePhraseSetPart(builder, part, fromState, toState);
+
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
     }
 }
 
 /**
- * Compile a string part (matches specific tokens)
+ * Compile a phraseSet part.
+ *
+ * Emits a single "phraseSet" NFA transition from fromState to toState.
+ * The NFA interpreter resolves the actual phrases at match time, generating
+ * one thread per matching phrase — identical to how entity converters work
+ * with skipCount for multi-token spans.
+ *
+ * PhraseSetParts are always non-optional at this level; optionality is handled
+ * by the enclosing RulesPart (e.g., from "(<Polite>)?").
+ */
+function compilePhraseSetPart(
+    builder: NFABuilder,
+    part: PhraseSetPart,
+    fromState: number,
+    toState: number,
+): number {
+    builder.addPhraseSetTransition(fromState, toState, part.matcherName);
+    return toState;
+}
+
+/**
+ * Compile a string part (matches specific tokens).
+ *
+ * spacing=none   → join all segments into one fused token (compile-time concatenation).
+ * optional/auto  → emit individual token transitions as usual, but also register each
+ *                  non-word-starting token as a split candidate in the collector so
+ *                  matchGrammarWithNFA can pre-split fused input (e.g. "Swift's" or
+ *                  "黃色汽車") before running the NFA.
+ * required/other → emit individual token transitions unchanged (default behaviour).
  */
 function compileStringPart(
     builder: NFABuilder,
     part: StringPart,
     fromState: number,
     toState: number,
+    spacingMode?: SpacingMode,
+    splitCandidatesCollector?: Set<string>,
 ): number {
-    if (part.value.length === 0) {
+    // Normalize grammar tokens (lowercase + strip trailing punctuation) so they
+    // compare correctly against the normalized input tokens from tokenizeRequest().
+    const normalized = part.value
+        .map(normalizeToken)
+        .filter((t) => t.length > 0);
+
+    if (normalized.length === 0) {
         // Empty string - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
         return toState;
     }
 
-    // For single token, direct transition
-    if (part.value.length === 1) {
-        builder.addTokenTransition(fromState, toState, part.value);
+    // spacing=none: concatenate all segments into a single fused token.
+    // The grammar author expects the input to contain no spaces between these
+    // segments, so we emit one token transition for the concatenated form.
+    if (spacingMode === "none") {
+        const fused = normalized.join("");
+        builder.addTokenTransition(fromState, toState, [fused]);
+        return toState;
+    }
+
+    // optional/auto: collect non-word-starting tokens as split candidates.
+    // These will be stored on the rule entry state and used by matchGrammarWithNFA
+    // to pre-split fused input tokens before running the NFA interpreter.
+    if (splitCandidatesCollector) {
+        for (const token of normalized) {
+            if (!requiresWordBoundaryBefore(token)) {
+                splitCandidatesCollector.add(token);
+            }
+        }
+    }
+
+    // Emit individual token transitions (same as before for required/optional/auto).
+    if (normalized.length === 1) {
+        builder.addTokenTransition(fromState, toState, normalized);
         return toState;
     }
 
     // For multiple tokens, create a sequence chain
     // Each token must match in order: state1 --token1--> state2 --token2--> ... --> toState
     let currentState = fromState;
-    for (let i = 0; i < part.value.length; i++) {
-        const token = part.value[i];
-        const isLast = i === part.value.length - 1;
+    for (let i = 0; i < normalized.length; i++) {
+        const token = normalized[i];
+        const isLast = i === normalized.length - 1;
         const nextState = isLast ? toState : builder.createState(false);
         builder.addTokenTransition(currentState, nextState, [token]);
         currentState = nextState;
@@ -1023,8 +1147,12 @@ function compileRulesPart(
 
     // Connect exit
     if (part.optional) {
-        // Optional: can skip the entire nested section
+        // Optional (and Kleene star): can skip the entire nested section
         builder.addEpsilonTransition(fromState, toState);
+    }
+    if (part.repeat) {
+        // Kleene star )* or Kleene plus )+: loop back from nestedExit to nestedEntry for another iteration
+        builder.addEpsilonTransition(nestedExit, nestedEntry);
     }
     builder.addEpsilonTransition(nestedExit, toState);
 
@@ -1159,7 +1287,11 @@ function compileRulesPartWithSlots(
         // based on its variable capture. This prevents deeper rules from incorrectly
         // inheriting parent slot indices.
         // Completion metadata: use the nested rule's own metadata if available,
-        // otherwise fall back to the parent context's metadata
+        // otherwise fall back to the parent context's metadata.
+        // Spacing: inherit the nested rule's own spacingMode (falling back to parent
+        // so sub-rules within an optional/auto rule collect candidates into the same set).
+        // splitCandidatesCollector: share the parent's collector so tokens from nested
+        // rules are included in the top-level rule's split candidate set.
         const nestedContext: RuleCompilationContext = {
             slotMap: nestedSlotMap,
             nextSlotIndex: nestedSlotMap.size,
@@ -1170,6 +1302,8 @@ function compileRulesPartWithSlots(
             completionPropertyPaths:
                 nestedCompletionPropertyPaths ??
                 context.completionPropertyPaths,
+            spacingMode: rule.spacingMode ?? context.spacingMode,
+            splitCandidatesCollector: context.splitCandidatesCollector,
         };
 
         // If we need to write to parent, create a per-rule exit state
@@ -1204,8 +1338,12 @@ function compileRulesPartWithSlots(
 
     // Connect exit
     if (part.optional) {
-        // Optional: can skip the entire nested section
+        // Optional (and Kleene star): can skip the entire nested section
         builder.addEpsilonTransition(fromState, toState);
+    }
+    if (part.repeat) {
+        // Kleene star )* or Kleene plus )+: loop back from nestedExit to nestedEntry for another iteration
+        builder.addEpsilonTransition(nestedExit, nestedEntry);
     }
 
     // If no parent slot index (nested rule doesn't write to parent), we need to
