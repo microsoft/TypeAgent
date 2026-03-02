@@ -113,4 +113,35 @@ describe("Grammar Rule Writer", () => {
 import { RuleX } from "grammarB";
 <test> = hello world;`);
     });
+    it("with spacing=required annotation", () => {
+        validateRoundTrip(`<test> [spacing=required] = hello world;`);
+    });
+    it("with spacing=optional annotation", () => {
+        validateRoundTrip(`<test> [spacing=optional] = hello world;`);
+    });
+    it("with spacing=none annotation", () => {
+        validateRoundTrip(`<test> [spacing=none] = hello world;`);
+    });
+    it("with spacing=auto annotation (normalized away by writer)", () => {
+        // "auto" is the default (undefined); the writer omits the annotation
+        const result = parseGrammarRules(
+            "orig",
+            `<test> [spacing=auto] = hello world;`,
+            false,
+        );
+        expect(result.definitions[0].spacingMode).toBeUndefined();
+        expect(writeGrammarRules(result)).toBe("<test> = hello world;\n");
+    });
+    it("per-rule annotations — mixed modes", () => {
+        validateRoundTrip(`<before> = one two;
+<after> [spacing=required] = hello world;`);
+    });
+    it("multiple rules with different annotations", () => {
+        validateRoundTrip(`<rule1> [spacing=required] = hello world;
+<rule2> [spacing=optional] = hello world;`);
+    });
+    it("annotation then unannotated rule (auto default)", () => {
+        validateRoundTrip(`<rule1> [spacing=required] = hello world;
+<rule2> = hello world;`);
+    });
 });

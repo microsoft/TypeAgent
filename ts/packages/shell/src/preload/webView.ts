@@ -70,13 +70,18 @@ ipcRenderer.on("received-from-browser-ipc", async (_, data) => {
         return;
     }
 
-    if (data.method === "crosswordSchemaExtracted") {
-        if (data.params && data.params.texts) {
-            sendScriptAction({
-                type: "setupCrosswordObserver",
-                selectors: data.params.selectors,
-                texts: data.params.texts,
-            });
+    // Handle browser.crossword messages
+    if (data.method?.startsWith("browser.crossword/")) {
+        const actionName = data.method.split("/")[1];
+
+        if (actionName === "schemaReady") {
+            if (data.params && data.params.texts) {
+                sendScriptAction({
+                    type: "setupCrosswordObserver",
+                    selectors: data.params.selectors,
+                    texts: data.params.texts,
+                });
+            }
         }
         return;
     }

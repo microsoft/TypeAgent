@@ -137,7 +137,7 @@ export type DispatcherConfig = {
         memory: {
             legacy: boolean; // use legacy memory behavior
         };
-        reasoning: "claude" | "none";
+        reasoning: "claude" | "copilot" | "none";
     };
     explainer: {
         enabled: boolean;

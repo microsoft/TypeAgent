@@ -35,6 +35,8 @@ import { alwaysEnabledAgents } from "../../appAgentManager.js";
 import { getCacheFactory } from "../../../utils/cacheFactory.js";
 import { resolveCommand } from "../../../command/command.js";
 import { toggleActivityContext } from "../../../execute/activityContext.js";
+import registerDebug from "debug";
+const debugReasoning = registerDebug("typeagent:dispatcher:reasoning:config");
 
 const enum AgentToggle {
     Schema,
@@ -1346,7 +1348,8 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
     public readonly parameters = {
         args: {
             engine: {
-                description: "Reasoning engine to use (claude or none)",
+                description:
+                    "Reasoning engine to use (claude, copilot, or none)",
             },
         },
     };
@@ -1355,20 +1358,31 @@ class ConfigExecutionReasoningCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const engine = params.args.engine;
-        if (engine === "claude" || engine === "none") {
+        if (engine === "claude" || engine === "copilot" || engine === "none") {
             const agentToggle = {
-                "dispatcher.reasoning": engine === "claude",
+                "dispatcher.reasoning": engine !== "none",
             } as const;
             await changeContextConfig(
                 {
-                    translation: { multiple: { enabled: engine !== "claude" } },
+                    translation: { multiple: { enabled: engine === "none" } },
                     execution: { reasoning: engine },
                     schemas: agentToggle,
                     actions: agentToggle,
                 },
                 context,
             );
-            displayResult(`Reasoning model is set to '${engine}'`, context);
+            displayResult(`Reasoning engine is set to '${engine}'`, context);
+            debugReasoning(
+                `Reasoning engine changed to '${engine}' by user command`,
+            );
+        } else {
+            debugReasoning(
+                `Invalid reasoning engine '${engine}' provided by user command`,
+            );
+
+            throw new Error(
+                `Invalid reasoning engine: ${engine}\nValid options: claude, copilot, none`,
+            );
         }
     }
 }

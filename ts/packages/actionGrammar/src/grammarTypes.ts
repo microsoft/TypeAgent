@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ValueNode } from "./grammarRuleParser.js";
+import { SpacingMode, ValueNode } from "./grammarRuleParser.js";
 
 /**
  * Grammar Types - in memory
@@ -60,6 +60,7 @@ export type GrammarPart =
 export type GrammarRule = {
     parts: GrammarPart[];
     value?: ValueNode | undefined;
+    spacingMode?: SpacingMode; // undefined = auto (default)
 };
 
 export type Grammar = {
@@ -113,6 +114,7 @@ export type GrammarPartJson =
 export type GrammarRuleJson = {
     parts: GrammarPartJson[];
     value?: ValueNode | undefined;
+    spacingMode?: SpacingMode; // undefined = auto (default)
 };
 export type GrammarRulesJson = GrammarRuleJson[];
 export type GrammarJson = GrammarRulesJson[];

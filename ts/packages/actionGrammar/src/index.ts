@@ -12,6 +12,7 @@ export type {
     GrammarParseResult,
     ImportStatement,
     RuleDefinition,
+    SpacingMode,
 } from "./grammarRuleParser.js";
 
 // Writer / formatter

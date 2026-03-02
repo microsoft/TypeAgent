@@ -49,6 +49,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
         return {
             parts: r.parts.map(grammarPartToJson),
             value: r.value,
+            spacingMode: r.spacingMode,
         };
     }
 
