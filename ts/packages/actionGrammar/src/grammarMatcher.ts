@@ -66,6 +66,13 @@ function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
             return true;
         case "optional":
             return false;
+        case "none":
+            // "none" mode is handled directly by the caller (matchStringPart
+            // short-circuits with an empty separator string).  If we ever
+            // reach this branch it indicates a logic error.
+            throw new Error(
+                "Internal error: requiresSeparator should not be called for 'none' mode",
+            );
         case undefined: // auto
             return needsSeparatorInAutoMode(a, b);
     }
@@ -90,6 +97,13 @@ function isBoundarySatisfied(
             separatorRegExp.lastIndex = index;
             return separatorRegExp.test(request);
         case "optional":
+        case "none":
+            // In both "optional" and "none" modes there is no constraint on
+            // the outer boundary.  "none" enforces zero-width flex-space
+            // *between* tokens (handled by the regex builder in
+            // matchStringPart), but must not reject a match simply because a
+            // literal space from an escaped character (e.g. "\ ") happens to
+            // sit at the boundary.
             return true;
         case undefined: // auto: requires a separator only when BOTH characters
             // adjacent to the boundary belong to word-boundary scripts.  If
@@ -379,8 +393,19 @@ function createValue(
     }
 }
 
-function getWildcardStr(request: string, start: number, end: number) {
+function getWildcardStr(
+    request: string,
+    start: number,
+    end: number,
+    spacingMode?: SpacingMode,
+) {
     const string = request.substring(start, end);
+    if (spacingMode === "none") {
+        // In "none" mode there are no flex-space separator positions, so any
+        // whitespace or punctuation between tokens belongs to the wildcard
+        // value itself.  Only reject truly empty wildcards.
+        return string.length > 0 ? string : undefined;
+    }
     wildcardTrimRegExp.lastIndex = 0;
     const match = wildcardTrimRegExp.exec(string);
     return match?.[1];
@@ -394,7 +419,12 @@ function captureWildcard(
     pending: MatchState[] = [],
 ) {
     const { start: wildcardStart, valueId } = state.pendingWildcard!;
-    const wildcardStr = getWildcardStr(request, wildcardStart, wildcardEnd);
+    const wildcardStr = getWildcardStr(
+        request,
+        wildcardStart,
+        wildcardEnd,
+        state.spacingMode,
+    );
     if (wildcardStr === undefined) {
         return false;
     }
@@ -471,6 +501,7 @@ function finalizeState(state: MatchState, request: string) {
             request,
             pendingWildcard.start,
             request.length,
+            state.spacingMode,
         );
         if (value === undefined) {
             return false;
@@ -701,18 +732,31 @@ function matchStringPart(
     // not use word spaces such as CJK).
     const regexpSegments: string[] = [escaped[0]];
     for (let i = 1; i < escaped.length; i++) {
-        const sep = requiresSeparator(
-            // Invariant: segments are always non-empty (guaranteed by the parser).
-            part.value[i - 1].at(-1)!,
-            part.value[i][0],
-            state.spacingMode,
-        )
-            ? `[${separatorRegExpStr}]+`
-            : `[${separatorRegExpStr}]*`;
+        // In "none" mode flex-space positions must match exactly zero
+        // characters — tokens are directly adjacent.  Any literal spaces
+        // (e.g. from "\ ") are already part of the segment text and will
+        // be matched by the regex itself.
+        const sep =
+            state.spacingMode === "none"
+                ? ""
+                : requiresSeparator(
+                        // Invariant: segments are always non-empty (guaranteed by the parser).
+                        part.value[i - 1].at(-1)!,
+                        part.value[i][0],
+                        state.spacingMode,
+                    )
+                  ? `[${separatorRegExpStr}]+`
+                  : `[${separatorRegExpStr}]*`;
         regexpSegments.push(sep, escaped[i]);
     }
     const joined = regexpSegments.join("");
-    const regExpStr = `[${separatorRegExpStr}]*?${joined}`;
+    // In "none" mode no leading separator is consumed; the match must start
+    // exactly at the current position (or, for wildcards, at whatever index
+    // the global scan finds the pattern text).
+    const regExpStr =
+        state.spacingMode === "none"
+            ? joined
+            : `[${separatorRegExpStr}]*?${joined}`;
     return state.pendingWildcard !== undefined
         ? matchStringPartWithWildcard(regExpStr, request, part, state, pending)
         : matchStringPartWithoutWildcard(regExpStr, request, part, state);
@@ -720,6 +764,9 @@ function matchStringPart(
 
 const matchNumberPartWithWildcardRegExp =
     /[\s\p{P}]*?(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/giu;
+// "none" mode variant: no leading separator allowed.
+const matchNumberPartWithWildcardNoSepRegExp =
+    /(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/giu;
 function matchVarNumberPartWithWildcard(
     request: string,
     state: MatchState,
@@ -727,9 +774,13 @@ function matchVarNumberPartWithWildcard(
     pending: MatchState[],
 ) {
     const curr = state.index;
-    matchNumberPartWithWildcardRegExp.lastIndex = curr;
+    const re =
+        state.spacingMode === "none"
+            ? matchNumberPartWithWildcardNoSepRegExp
+            : matchNumberPartWithWildcardRegExp;
+    re.lastIndex = curr;
     while (true) {
-        const match = matchNumberPartWithWildcardRegExp.exec(request);
+        const match = re.exec(request);
         if (match === null) {
             return false;
         }
@@ -767,14 +818,21 @@ function matchVarNumberPartWithWildcard(
 
 const matchNumberPartRegexp =
     /[\s\p{P}]*?(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/iuy;
+// "none" mode variant: no leading separator allowed.
+const matchNumberPartNoSepRegexp =
+    /(0o[0-7]+|0x[0-9a-f]+|0b[01]+|([+-]?[0-9]+)(\.[0-9]+)?(e[+-]?[1-9][0-9]*)?)/iuy;
 function matchVarNumberPartWithoutWildcard(
     request: string,
     state: MatchState,
     part: VarNumberPart,
 ) {
     const curr = state.index;
-    matchNumberPartRegexp.lastIndex = curr;
-    const m = matchNumberPartRegexp.exec(request);
+    const re =
+        state.spacingMode === "none"
+            ? matchNumberPartNoSepRegexp
+            : matchNumberPartRegexp;
+    re.lastIndex = curr;
+    const m = re.exec(request);
     if (m === null) {
         return false;
     }

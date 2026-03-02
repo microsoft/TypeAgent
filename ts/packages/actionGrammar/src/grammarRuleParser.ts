@@ -15,7 +15,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <RuleDefinition> ::= <RuleName> <RuleAnnotation>? "=" <Rules> ";"
  *   <RuleAnnotation> ::= "[" <AnnotationKey> "=" <AnnotationValue> "]"
  *   // Currently the only supported annotation key is "spacing":
- *   //   [spacing=required], [spacing=optional], [spacing=auto]
+ *   //   [spacing=required], [spacing=optional], [spacing=auto], [spacing=none]
  *   <Rules> ::= <Rule> ( "|" <Rule> )*
  *   <Rule> ::= <Expression> ( "->" <Value> )?
  *
@@ -29,11 +29,14 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   // spacing mode (set via "set spacing ...;"):
  *   //
  *   //   - "required": always requires at least one whitespace/punctuation character.
- *   //   - "optional": accepts zero or more — no separator is needed.
+ *   //   - "optional": zero or more separator characters allowed; tokens may be adjacent
+ *   //                 but spaces are permitted.
  *   //   - "auto"    : (default) requires a separator only when both adjacent tokens belong to
  *   //                 space-separated scripts (e.g. Latin, Cyrillic). Tokens in non-spaced scripts
  *   //                 (e.g. CJK), or tokens that are whitespace/punctuation characters themselves,
  *   //                 do not require a separator.
+ *   //   - "none"     : no separator characters allowed; tokens must be directly adjacent.
+ *   //                 Any whitespace or punctuation between them causes a mismatch.
  *   //
  *   // The spacing mode is set per-rule via a [spacing=<mode>] annotation immediately
  *   // after the rule name: <rule> [spacing=required] = ...;
@@ -187,14 +190,17 @@ export type ImportStatement = {
 /**
  * Controls how flex-space separator positions between tokens are matched at runtime.
  *   "required" – at least one whitespace/punctuation character must be present.
- *   "optional" – zero or more separators; tokens may be adjacent.
+ *   "optional" – zero or more separator characters allowed; tokens may be adjacent
+ *               but spaces are permitted.
+ *   "none"     – no separator characters allowed; tokens must be directly adjacent.
+ *               Any whitespace or punctuation between them causes a mismatch.
  *   undefined  – auto (default): a separator is required only when both adjacent
  *                characters belong to scripts that normally use word spaces (e.g.
  *                Latin, Cyrillic). Scripts such as CJK do not require one.
  *
  * Note: the grammar source keyword "auto" is stored as undefined internally.
  */
-export type SpacingMode = "required" | "optional" | undefined;
+export type SpacingMode = "required" | "optional" | "none" | undefined;
 
 // Grammar Parse Result (includes entity declarations and imports)
 export type GrammarParseResult = {
@@ -712,9 +718,14 @@ class GrammarRuleParser {
         }
         this.consume("=", "in spacing annotation");
         const value = this.parseId("spacing value");
-        if (value !== "required" && value !== "optional" && value !== "auto") {
+        if (
+            value !== "required" &&
+            value !== "optional" &&
+            value !== "auto" &&
+            value !== "none"
+        ) {
             this.throwError(
-                `Invalid value '${value}' for spacing annotation. Expected 'required', 'optional', or 'auto'.`,
+                `Invalid value '${value}' for spacing annotation. Expected 'required', 'optional', 'auto', or 'none'.`,
             );
         }
         this.consume("]", "at end of spacing annotation");
