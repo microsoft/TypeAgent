@@ -20,4 +20,5 @@ export interface GrammarStore {
     addGrammar(namespace: string, grammar: any): void;
     removeGrammar(namespace: string): void;
     setUseNFA(useNFA: boolean): void;
+    setUseDFA(useDFA: boolean): void;
 }

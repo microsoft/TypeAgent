@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { NFA } from "./nfa.js";
+
 /**
  * DFA (Deterministic Finite Automaton) types for grammar matching
  *
@@ -108,6 +110,27 @@ export interface DFATransition {
 }
 
 /**
+ * PhraseSet transition that matches a named phrase set at match time
+ *
+ * PhraseSet membership is dynamic (phrases can be added at runtime), so
+ * phrase sets are kept as a special transition type resolved at match time
+ * rather than expanded into token transitions at compile time.
+ */
+export interface DFAPhraseSetTransition {
+    /** Registry key of the phrase set matcher, resolved at match time */
+    matcherName: string;
+
+    /** Destination DFA state ID after the phrase is consumed */
+    to: number;
+
+    /** Slot operations to execute before consuming the phrase */
+    preOps?: DFASlotOperation[] | undefined;
+
+    /** Slot operations to execute after consuming the phrase */
+    postOps?: DFASlotOperation[] | undefined;
+}
+
+/**
  * Wildcard transition that matches any token not matched by specific transitions
  *
  * Slot operations are organized into:
@@ -137,6 +160,10 @@ export interface DFAWildcardTransition {
         slotIndex?: number | undefined;
         /** Which execution contexts this capture applies to */
         contextIndices: number[];
+        /** For property completions: action name from the matched rule (mirrors NFA transition.actionName) */
+        actionName?: string | undefined;
+        /** For property completions: property path in the action (mirrors NFA transition.propertyPath) */
+        propertyPath?: string | undefined;
     }>;
 }
 
@@ -155,6 +182,9 @@ export interface DFAState {
 
     /** Wildcard transition (catch-all for unmatched tokens) */
     wildcardTransition?: DFAWildcardTransition;
+
+    /** PhraseSet transitions resolved at match time */
+    phraseSetTransitions?: DFAPhraseSetTransition[];
 
     /** Whether this state accepts input */
     accepting: boolean;
@@ -205,8 +235,14 @@ export interface DFA {
     /** IDs of accepting states */
     acceptingStates: number[];
 
-    /** Reference to the original NFA (for fallback and debugging) */
-    sourceNFA?: any; // TODO: import NFA type without circular dependency
+    /** Reference to the original NFA — used by matchDFA for thread-based value computation */
+    sourceNFA?: NFA;
+
+    /**
+     * Split candidates for two-pass matching (collected from NFA states).
+     * Sorted longest-first so that longer candidates are tried before shorter ones.
+     */
+    splitCandidates?: string[];
 }
 
 /**
@@ -288,6 +324,35 @@ export class DFABuilder {
             transition.postOps = postOps;
         }
         state.transitions.push(transition);
+    }
+
+    /**
+     * Add a phraseSet transition from one state to another
+     */
+    addPhraseSetTransition(
+        from: number,
+        matcherName: string,
+        to: number,
+        preOps?: DFASlotOperation[],
+        postOps?: DFASlotOperation[],
+    ): void {
+        const state = this.states[from];
+        if (!state) {
+            throw new Error(`State ${from} does not exist`);
+        }
+
+        const pst: DFAPhraseSetTransition = { matcherName, to };
+        if (preOps && preOps.length > 0) {
+            pst.preOps = preOps;
+        }
+        if (postOps && postOps.length > 0) {
+            pst.postOps = postOps;
+        }
+
+        if (!state.phraseSetTransitions) {
+            state.phraseSetTransitions = [];
+        }
+        state.phraseSetTransitions.push(pst);
     }
 
     /**
@@ -424,6 +489,7 @@ export class DFABuilder {
         startState: number,
         acceptingStates: Set<number>,
         name?: string,
+        splitCandidates?: string[],
     ): DFA {
         const dfa: DFA = {
             states: this.states,
@@ -432,6 +498,9 @@ export class DFABuilder {
         };
         if (name !== undefined) {
             dfa.name = name;
+        }
+        if (splitCandidates && splitCandidates.length > 0) {
+            dfa.splitCandidates = splitCandidates;
         }
         return dfa;
     }

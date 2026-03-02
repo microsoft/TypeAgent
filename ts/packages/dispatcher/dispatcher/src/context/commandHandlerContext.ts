@@ -805,6 +805,12 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
         context.agentCache.syncAgentGrammar(schemaName);
     }
 
+    // Enable DFA if configured (NFA must be active first, which it now is)
+    if (config.cache.useDFA) {
+        context.agentCache.grammarStore.setUseDFA(true);
+        debug("DFA matching enabled");
+    }
+
     // Mark as initialized to prevent re-initialization
     context.grammarGenerationInitialized = true;
     debug("Grammar generation configured for NFA system");
@@ -968,6 +974,14 @@ export async function changeContextConfig(
             !systemContext.grammarGenerationInitialized
         ) {
             await setupGrammarGeneration(systemContext);
+        }
+
+        // If useDFA toggled at runtime (only takes effect when NFA grammar system is active)
+        if (
+            changed.cache.useDFA !== undefined &&
+            systemContext.grammarGenerationInitialized
+        ) {
+            agentCache.grammarStore.setUseDFA(changed.cache.useDFA);
         }
     }
 

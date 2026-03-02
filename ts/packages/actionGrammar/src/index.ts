@@ -76,7 +76,11 @@ export type {
 export {
     matchNFA,
     sortNFAMatches,
+    buildFirstTokenIndex,
+    matchNFAWithIndex,
     type NFAMatchResult,
+    type NFAExecutionState,
+    type FirstTokenIndex,
 } from "./nfaInterpreter.js";
 export { compileGrammarToNFA, normalizeGrammar } from "./nfaCompiler.js";
 export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
@@ -122,18 +126,22 @@ export type {
     DFAExecutionContext,
     DFATransition,
     DFAWildcardTransition,
+    DFAPhraseSetTransition,
 } from "./dfa.js";
 export { DFABuilder } from "./dfa.js";
 export { compileNFAToDFA } from "./dfaCompiler.js";
 export {
     matchDFA,
+    matchDFAWithSplitting,
     getDFACompletions,
     printDFA,
     type DFAMatchResult,
     type DFACompletionResult,
     type DFACompletionGroup,
+    type DFAPropertyCompletion,
     type WildcardCompletionInfo,
 } from "./dfaMatcher.js";
+export { splitToken, applySplitToTokens } from "./tokenSplit.js";
 export {
     DFACompilationManager,
     globalDFACompilationManager,
