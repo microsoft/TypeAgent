@@ -23,8 +23,8 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "start": "node dist/server.js",
-    "test": "pnpm run jest-esm --testPathPattern=\".*\\.spec\\.js\"",
-    "test:integration": "pnpm run jest-esm --testPathPattern=\"nfaCacheIntegration\\.spec\\.js\"",
+    "test": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
+    "test:integration": "pnpm run jest-esm --testPathPattern=\"nfaCacheIntegration[.]spec[.]js\"",
     "tsc": "tsc -b"
   },
   "dependencies": {
