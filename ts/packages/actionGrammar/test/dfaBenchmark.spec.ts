@@ -30,6 +30,8 @@ import { normalizeToken } from "../src/nfaMatcher.js";
 import {
     compileNFAToDFA,
     matchDFAWithSplitting,
+    matchDFAToASTWithSplitting,
+    evaluateMatchAST,
     tokenizeRequest,
     buildFirstTokenIndex,
     matchNFAWithIndex,
@@ -125,12 +127,15 @@ interface TimingResult {
     nfaIndexMs: number; // NFA with first-token index dispatch
     dfaTraverseMs: number; // pure DFA traversal (accept/reject only)
     dfaHybridMs: number; // DFA pre-filter + NFA only when accepted
+    dfaASTMs: number; // DFA AST match + evaluate (structural parse)
     nfaMatchMsPerCall: number; // μs/call
     nfaIndexMsPerCall: number; // μs/call
     dfaTraverseMsPerCall: number; // μs/call
     dfaHybridMsPerCall: number; // μs/call
+    dfaASTMsPerCall: number; // μs/call
     indexSpeedup: number; // nfaMatchMs / nfaIndexMs
     hybridSpeedup: number; // nfaMatchMs / dfaHybridMs
+    astSpeedup: number; // nfaMatchMs / dfaASTMs
 }
 
 interface CompileResult {
@@ -204,8 +209,10 @@ function printTimingTable(rows: TimingResult[]): void {
         "NFA+idx μs/call",
         "DFA trav μs/call",
         "DFA hybrid μs/call",
+        "DFA AST μs/call",
         "Idx speedup",
         "Hybrid speedup",
+        "AST speedup",
     ];
     const data = rows.map((r) => [
         r.grammar,
@@ -215,8 +222,10 @@ function printTimingTable(rows: TimingResult[]): void {
         r.nfaIndexMsPerCall.toFixed(2),
         r.dfaTraverseMsPerCall.toFixed(2),
         r.dfaHybridMsPerCall.toFixed(2),
+        r.dfaASTMsPerCall.toFixed(2),
         r.indexSpeedup.toFixed(1) + "x",
         r.hybridSpeedup.toFixed(1) + "x",
+        r.astSpeedup.toFixed(1) + "x",
     ]);
     printAligned(header, data);
 
@@ -227,8 +236,10 @@ function printTimingTable(rows: TimingResult[]): void {
             matched.reduce((s, r) => s + r.indexSpeedup, 0) / matched.length;
         const avgHybrid =
             matched.reduce((s, r) => s + r.hybridSpeedup, 0) / matched.length;
+        const avgAST =
+            matched.reduce((s, r) => s + r.astSpeedup, 0) / matched.length;
         console.log(
-            `  Avg speedup (matched):   idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x`,
+            `  Avg speedup (matched):   idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
         );
     }
     if (unmatched.length) {
@@ -238,8 +249,10 @@ function printTimingTable(rows: TimingResult[]): void {
         const avgHybrid =
             unmatched.reduce((s, r) => s + r.hybridSpeedup, 0) /
             unmatched.length;
+        const avgAST =
+            unmatched.reduce((s, r) => s + r.astSpeedup, 0) / unmatched.length;
         console.log(
-            `  Avg speedup (unmatched): idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x`,
+            `  Avg speedup (unmatched): idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
         );
     }
 }
@@ -342,6 +355,10 @@ describe("DFA vs NFA Benchmark", () => {
             matchNFAWithIndex(nfa!, index!, tokens, false);
             matchDFAWithSplitting(dfa!, tokens);
             traverseDFAOnly(dfa!, tokens);
+            {
+                const r = matchDFAToASTWithSplitting(dfa!, tokens);
+                if (r.ast) evaluateMatchAST(r.ast, grammar);
+            }
 
             // NFA full match (threading + slot ops + value eval) — baseline
             const nfaMatchMs = timeMsN(
@@ -368,6 +385,13 @@ describe("DFA vs NFA Benchmark", () => {
                 ITERATIONS,
             );
 
+            // DFA AST = matchDFAToASTWithSplitting + evaluateMatchAST
+            //   DFA traversal produces MatchAST, then bottom-up value eval
+            const dfaASTMs = timeMsN(() => {
+                const r = matchDFAToASTWithSplitting(dfa!, tokens);
+                if (r.ast) evaluateMatchAST(r.ast, grammar);
+            }, ITERATIONS);
+
             const matched = matchNFA(nfa!, tokens, false).matched;
 
             timingResults.push({
@@ -378,12 +402,15 @@ describe("DFA vs NFA Benchmark", () => {
                 nfaIndexMs,
                 dfaTraverseMs,
                 dfaHybridMs,
+                dfaASTMs,
                 nfaMatchMsPerCall: (nfaMatchMs / ITERATIONS) * 1000,
                 nfaIndexMsPerCall: (nfaIndexMs / ITERATIONS) * 1000,
                 dfaTraverseMsPerCall: (dfaTraverseMs / ITERATIONS) * 1000,
                 dfaHybridMsPerCall: (dfaHybridMs / ITERATIONS) * 1000,
+                dfaASTMsPerCall: (dfaASTMs / ITERATIONS) * 1000,
                 indexSpeedup: nfaIndexMs > 0 ? nfaMatchMs / nfaIndexMs : 0,
                 hybridSpeedup: dfaHybridMs > 0 ? nfaMatchMs / dfaHybridMs : 0,
+                astSpeedup: dfaASTMs > 0 ? nfaMatchMs / dfaASTMs : 0,
             });
         }
     }
@@ -437,5 +464,203 @@ describe("DFA vs NFA Benchmark", () => {
                 expect(true).toBe(true); // grammar not available — skip
             }
         });
+    });
+
+    // ── List grammar (largest: 144 lines, 5 actions, many optional markers) ──
+    describe("List Grammar", () => {
+        const grammarPath = path.resolve(
+            __dirname,
+            "../../../agents/list/src/listSchema.agr",
+        );
+
+        const testRequests = [
+            // AddItems — 2 wildcards separated by "to"
+            "add milk to my shopping list",
+            "add eggs and bread to the grocery list",
+            // RemoveItems — wildcard + "from" separator
+            "remove bananas from my shopping list",
+            // CreateList — optional articles
+            "create a new todo list",
+            // GetList — many optional markers (the/my)
+            "what's on the shopping list",
+            "show me my grocery list",
+            // ClearList
+            "clear my todo list",
+            // Non-matching
+            "buy some groceries",
+            "rename the todo list",
+        ];
+
+        it("benchmarks NFA vs DFA on list grammar", () => {
+            runBenchmark("list", grammarPath, testRequests);
+            expect(spaceResults.length).toBeGreaterThanOrEqual(0);
+        });
+    });
+
+    // ── Desktop grammar (138 lines, 13 actions, known-program sub-rule) ─────
+    describe("Desktop Grammar", () => {
+        const grammarPath = path.resolve(
+            __dirname,
+            "../../../agents/desktop/src/desktopSchema.agr",
+        );
+
+        const testRequests = [
+            // LaunchProgram — known program (literal priority over wildcard)
+            "open chrome",
+            "launch visual studio code",
+            // CloseProgram
+            "close notepad",
+            // MaximizeWindow
+            "maximize excel",
+            // TileWindows — 2 program wildcards with "and" separator
+            "tile notepad and calculator",
+            // VolumeControl — number entity
+            "set volume to 75",
+            "mute",
+            // ThemeMode — literal-only
+            "enable dark mode",
+            // WifiControl — wildcard SSID
+            "connect to home wifi",
+            // BrightnessControl
+            "increase brightness",
+            // Non-matching
+            "install visual studio",
+            "shutdown the computer",
+        ];
+
+        it("benchmarks NFA vs DFA on desktop grammar", () => {
+            runBenchmark("desktop", grammarPath, testRequests);
+            expect(spaceResults.length).toBeGreaterThanOrEqual(0);
+        });
+    });
+
+    // ── Calendar grammar (107 lines, 5 actions, many wildcards per rule) ─────
+    describe("Calendar Grammar", () => {
+        const grammarPath = path.resolve(
+            __dirname,
+            "../../../agents/calendar/src/calendarSchema.agr",
+        );
+
+        const testRequests = [
+            // ScheduleEvent — 5 wildcards (description, date, time, location, participant)
+            "schedule a team meeting for Friday at 2pm in conference room B with Alice",
+            // ScheduleEvent — 3 wildcards
+            "set up lunch with clients on Monday at noon",
+            // FindEvents — 2 wildcards
+            "find all events on Tuesday that include Bob",
+            "show me meetings about Q1 planning scheduled for next week",
+            // AddParticipant — 2 wildcards
+            "include Charlie in the project review",
+            // FindTodaysEvents — literal-heavy
+            "what do I have scheduled for today",
+            // FindThisWeeksEvents — literal-only
+            "what's happening this week",
+            // Non-matching
+            "delete my calendar event",
+            "reschedule the meeting",
+        ];
+
+        it("benchmarks NFA vs DFA on calendar grammar", () => {
+            runBenchmark("calendar", grammarPath, testRequests);
+            expect(spaceResults.length).toBeGreaterThanOrEqual(0);
+        });
+    });
+
+    // ── Weather grammar (88 lines, 3 actions, nested sub-specs) ──────────────
+    describe("Weather Grammar", () => {
+        const grammarPath = path.resolve(
+            __dirname,
+            "../../../agents/weather/src/weatherSchema.agr",
+        );
+
+        const testRequests = [
+            // getCurrentConditions — pattern + location
+            "what's the weather like in New York",
+            "current weather in London",
+            // getForecast — pattern + location + days + units
+            "forecast for Chicago for the next 5 days in celsius",
+            "weather forecast for Seattle",
+            // getAlerts — pattern + location
+            "weather alerts for Miami",
+            // Polite prefix
+            "can you check the current conditions in Tokyo",
+            // Non-matching
+            "when will it rain in Boston",
+            "what's the temperature",
+        ];
+
+        it("benchmarks NFA vs DFA on weather grammar", () => {
+            runBenchmark("weather", grammarPath, testRequests);
+            expect(spaceResults.length).toBeGreaterThanOrEqual(0);
+        });
+    });
+
+    // ── Browser grammar (67 lines, 9 actions, diverse action types) ──────────
+    describe("Browser Grammar", () => {
+        const grammarPath = path.resolve(
+            __dirname,
+            "../../../agents/browser/src/agent/browserSchema.agr",
+        );
+
+        const testRequests = [
+            // OpenPage — wildcard site
+            "open google.com",
+            "navigate to github.com",
+            // ClosePage — literal-only
+            "close the tab",
+            "close all tabs",
+            // Navigation — literal-only
+            "go back",
+            "refresh the page",
+            // FollowLink — wildcard keywords
+            "click on the sign up link",
+            // TabControl — number entity
+            "switch to tab 3",
+            // Zoom — literal-only
+            "zoom in",
+            // Screenshot
+            "take a screenshot",
+            // Non-matching
+            "bookmark this page",
+            "print the page",
+        ];
+
+        it("benchmarks NFA vs DFA on browser grammar", () => {
+            runBenchmark("browser", grammarPath, testRequests);
+            expect(spaceResults.length).toBeGreaterThanOrEqual(0);
+        });
+    });
+
+    // ── Summary test: cross-grammar comparison ───────────────────────────────
+    it("prints cross-grammar state count summary", () => {
+        if (spaceResults.length === 0) return;
+
+        console.log(
+            "\n╔══ CROSS-GRAMMAR SUMMARY ═══════════════════════════════╗",
+        );
+        const header = [
+            "Grammar",
+            "NFA states",
+            "DFA states",
+            "State ratio",
+            "NFA (KB)",
+            "DFA (KB)",
+            "Total (KB)",
+        ];
+        const data = spaceResults.map((r) => [
+            r.grammar,
+            String(r.nfaStates),
+            String(r.dfaStates),
+            r.stateRatio.toFixed(2) + "x",
+            r.nfaSizeKb.toFixed(1),
+            r.dfaSizeKb.toFixed(1),
+            r.dfaTotalKb.toFixed(1),
+        ]);
+        printAligned(header, data);
+
+        // DFA state count is always defined for each grammar
+        for (const r of spaceResults) {
+            expect(r.dfaStates).toBeGreaterThan(0);
+        }
     });
 });

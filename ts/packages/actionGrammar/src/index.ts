@@ -139,17 +139,17 @@ export { compileNFAToDFA } from "./dfaCompiler.js";
 export {
     matchDFA,
     matchDFAWithSplitting,
+    matchDFAToAST,
+    matchDFAToASTWithSplitting,
+    evaluateMatchAST,
     getDFACompletions,
     printDFA,
     type DFAMatchResult,
+    type DFAASTMatchResult,
     type DFACompletionResult,
     type DFACompletionGroup,
     type DFAPropertyCompletion,
     type WildcardCompletionInfo,
-    matchDFAToAST,
-    matchDFAToASTWithSplitting,
-    evaluateMatchAST,
-    type DFAASTMatchResult,
 } from "./dfaMatcher.js";
 export { splitToken, applySplitToTokens } from "./tokenSplit.js";
 export {
