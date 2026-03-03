@@ -18,6 +18,50 @@ import type { NFAMatchResult } from "./nfaInterpreter.js";
 import type { Grammar } from "./grammarTypes.js";
 import type { ValueNode } from "./grammarRuleParser.js";
 
+// ─── DFA First-Token Index ──────────────────────────────────────────────────
+// O(1) pre-filter: reject tokens whose first word can't start any DFA path.
+// Built lazily from the DFA start state and cached per DFA object.
+
+interface DFAFirstTokenIndex {
+    /** Set of normalized tokens that have explicit transitions from the start state */
+    readonly validFirstTokens: ReadonlySet<string>;
+    /** Whether the start state has a wildcard or phraseSet transition (can match anything) */
+    readonly hasWildcardStart: boolean;
+}
+
+const dfaIndexCache = new WeakMap<DFA, DFAFirstTokenIndex>();
+
+function getDFAIndex(dfa: DFA): DFAFirstTokenIndex {
+    let idx = dfaIndexCache.get(dfa);
+    if (!idx) {
+        const startState = dfa.states[dfa.startState];
+        const validFirstTokens = new Set<string>();
+        if (startState) {
+            for (const t of startState.transitions) {
+                validFirstTokens.add(t.token);
+            }
+        }
+        const hasWildcardStart =
+            !!startState?.wildcardTransition ||
+            !!(startState?.phraseSetTransitions?.length);
+        idx = { validFirstTokens, hasWildcardStart };
+        dfaIndexCache.set(dfa, idx);
+    }
+    return idx;
+}
+
+/**
+ * O(1) first-token rejection check for DFA matching.
+ * Returns true if the tokens can be immediately rejected without running the DFA.
+ */
+function dfaFirstTokenRejects(dfa: DFA, tokens: string[]): boolean {
+    if (tokens.length === 0) return false; // empty input may match accepting start state
+    const idx = getDFAIndex(dfa);
+    if (idx.hasWildcardStart) return false; // wildcard can match anything
+    const firstToken = normalizeToken(tokens[0]);
+    return !idx.validFirstTokens.has(firstToken);
+}
+
 /**
  * Environment for slot-based variable storage
  * Matches the NFA interpreter's environment structure
@@ -758,6 +802,17 @@ export function matchDFAWithSplitting(
     tokens: string[],
     debugMode: boolean = false,
 ): DFAMatchResult {
+    // O(1) first-token pre-filter
+    if (dfaFirstTokenRejects(dfa, tokens)) {
+        return {
+            matched: false,
+            fixedStringPartCount: 0,
+            checkedWildcardCount: 0,
+            uncheckedWildcardCount: 0,
+            tokensConsumed: 0,
+        };
+    }
+
     const origResult = matchDFA(dfa, tokens, debugMode);
 
     if (!dfa.splitCandidates?.length) return origResult;
@@ -2021,6 +2076,17 @@ export function matchDFAToASTWithSplitting(
     dfa: DFA,
     tokens: string[],
 ): DFAASTMatchResult {
+    // O(1) first-token pre-filter
+    if (dfaFirstTokenRejects(dfa, tokens)) {
+        return {
+            matched: false,
+            fixedStringPartCount: 0,
+            checkedWildcardCount: 0,
+            uncheckedWildcardCount: 0,
+            tokensConsumed: tokens.length,
+        };
+    }
+
     const origResult = matchDFAToAST(dfa, tokens);
 
     if (!dfa.splitCandidates?.length) return origResult;
