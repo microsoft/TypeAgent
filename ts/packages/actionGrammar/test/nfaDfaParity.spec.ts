@@ -29,7 +29,10 @@ import { compileNFAToDFA } from "../src/dfaCompiler.js";
 import {
     matchDFAWithSplitting,
     getDFACompletions,
+    matchDFAToASTWithSplitting,
+    evaluateMatchAST,
     type DFAMatchResult,
+    type DFAASTMatchResult,
 } from "../src/dfaMatcher.js";
 import { registerBuiltInEntities } from "../src/builtInEntities.js";
 import type { Grammar } from "../src/grammarTypes.js";
@@ -124,6 +127,54 @@ function assertCompletionParity(
         .map((p) => `${p.actionName}:${p.propertyPath}`)
         .sort();
     expect(dfaProps).toEqual(nfaProps);
+}
+
+/** Adapt an AST match result into the same shape as NFAGrammarMatchResult */
+function adaptAST(
+    raw: DFAASTMatchResult,
+    grammar: Grammar,
+    request: string,
+): NFAGrammarMatchResult | null {
+    if (!raw.matched || !raw.ast) return null;
+    const actionValue = evaluateMatchAST(raw.ast, grammar);
+    return {
+        match: actionValue ?? request,
+        matchedValueCount:
+            raw.fixedStringPartCount +
+            raw.checkedWildcardCount +
+            raw.uncheckedWildcardCount,
+        wildcardCharCount: raw.uncheckedWildcardCount,
+        entityWildcardPropertyNames: [],
+    };
+}
+
+/**
+ * Assert that NFA and AST-based DFA produce identical match results.
+ * Like assertMatchParity but uses matchDFAToASTWithSplitting + evaluateMatchAST.
+ */
+function assertASTMatchParity(
+    grammar: Grammar,
+    nfa: NFA,
+    dfa: DFA,
+    request: string,
+): void {
+    const nfaResults = matchGrammarWithNFA(grammar, nfa, request);
+    const tokens = tokenizeRequest(request);
+    const astRaw = matchDFAToASTWithSplitting(dfa, tokens);
+    const astResult = adaptAST(astRaw, grammar, request);
+    const nfaResult = nfaResults.length > 0 ? nfaResults[0] : null;
+
+    // Matched / not-matched must agree
+    expect(astResult !== null).toBe(nfaResult !== null);
+
+    if (nfaResult === null || astResult === null) return;
+
+    // Action value (deep equality)
+    expect(astResult.match).toEqual(nfaResult.match);
+
+    // Priority counters
+    expect(astResult.matchedValueCount).toBe(nfaResult.matchedValueCount);
+    expect(astResult.wildcardCharCount).toBe(nfaResult.wildcardCharCount);
 }
 
 // ---------------------------------------------------------------------------
@@ -1179,6 +1230,189 @@ describe("NFA/DFA Parity", () => {
     // -----------------------------------------------------------------------
     // 14. Priority counters are consistent
     // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // AST-based DFA matcher parity
+    //
+    // matchDFAToAST + evaluateMatchAST should produce the same actionValue as
+    // the NFA for unambiguous grammars (where minimal munch = NFA result).
+    // For ambiguous cases (unchecked wildcards with repeated literals), the
+    // AST matcher's minimal munch may produce a different—but valid—split.
+    // Those are tested separately rather than as strict parity.
+    // -----------------------------------------------------------------------
+
+    describe("AST matcher: literal matches", () => {
+        const { grammar, nfa, dfa } = compile(
+            "ast-literals",
+            `
+            <pause>  = pause  -> { actionName: "pause" };
+            <resume> = resume -> { actionName: "resume" };
+            <stop>   = stop   -> { actionName: "stop" };
+            <Start>  = <pause> | <resume> | <stop>;
+            `,
+        );
+
+        it.each([["pause"], ["resume"], ["stop"]])(
+            "AST matches NFA for '%s'",
+            (req) => {
+                assertASTMatchParity(grammar, nfa, dfa, req);
+            },
+        );
+
+        it.each([["play"], [""], ["pause the music"]])(
+            "AST rejects '%s' like NFA",
+            (req) => {
+                assertASTMatchParity(grammar, nfa, dfa, req);
+            },
+        );
+    });
+
+    describe("AST matcher: unchecked wildcard", () => {
+        const { grammar, nfa, dfa } = compile(
+            "ast-unchecked",
+            `
+            <play> = play $(track:wildcard) -> { actionName: "play", parameters: { track } };
+            <Start> = <play>;
+            `,
+        );
+
+        it.each([
+            ["play Roxanne"],
+            ["play Shake It Off"],
+            ["play Big Red Sun"],
+        ])("AST captures wildcard in '%s'", (req) => {
+            assertASTMatchParity(grammar, nfa, dfa, req);
+        });
+
+        it.each([["stop Roxanne"], ["play"], [""]])(
+            "AST rejects '%s'",
+            (req) => {
+                assertASTMatchParity(grammar, nfa, dfa, req);
+            },
+        );
+    });
+
+    describe("AST matcher: two wildcards with separator", () => {
+        const { grammar, nfa, dfa } = compile(
+            "ast-two-wild",
+            `
+            <playBy> = play $(track:wildcard) by $(artist:wildcard) -> { actionName: "play", parameters: { track, artist } };
+            <Start> = <playBy>;
+            `,
+        );
+
+        // Unambiguous: "by" appears exactly once
+        it.each([
+            ["play Yesterday by Beatles"],
+            ["play Bohemian Rhapsody by Queen"],
+            ["play Shake It Off by Taylor Swift"],
+        ])("AST matches NFA for unambiguous '%s'", (req) => {
+            assertASTMatchParity(grammar, nfa, dfa, req);
+        });
+
+        it.each([["play Yesterday"], ["stop Roxanne by Queen"], [""]])(
+            "AST rejects '%s'",
+            (req) => {
+                assertASTMatchParity(grammar, nfa, dfa, req);
+            },
+        );
+    });
+
+    describe("AST matcher: number wildcard", () => {
+        const { grammar, nfa, dfa } = compile(
+            "ast-number",
+            `
+            <setVol> = set volume to $(level:number) -> { actionName: "setVolume", parameters: { level } };
+            <Start> = <setVol>;
+            `,
+        );
+
+        it.each([
+            ["set volume to 50"],
+            ["set volume to 100"],
+            ["set volume to 0"],
+        ])("AST matches NFA for '%s'", (req) => {
+            assertASTMatchParity(grammar, nfa, dfa, req);
+        });
+    });
+
+    describe("AST matcher: Ordinal entity", () => {
+        const { grammar, nfa, dfa } = compile(
+            "ast-ordinal",
+            `
+            entity Ordinal;
+            <skip> = play the $(n:Ordinal) track -> { actionName: "playTrack", parameters: { trackNumber: n } };
+            <Start> = <skip>;
+            `,
+        );
+
+        it.each([
+            ["play the first track"],
+            ["play the second track"],
+            ["play the third track"],
+        ])("AST matches NFA for '%s'", (req) => {
+            assertASTMatchParity(grammar, nfa, dfa, req);
+        });
+    });
+
+    describe("AST matcher: priority - fixed beats wildcard", () => {
+        const { grammar, nfa, dfa } = compile(
+            "ast-priority",
+            `
+            <fixed>  = play the music -> { actionName: "playFixed" };
+            <wild>   = play $(track:wildcard) -> { actionName: "play", parameters: { track } };
+            <Start>  = <fixed> | <wild>;
+            `,
+        );
+
+        it("AST picks 'play the music' as fixed match", () => {
+            assertASTMatchParity(grammar, nfa, dfa, "play the music");
+        });
+
+        it("AST picks wildcard for 'play Roxanne'", () => {
+            assertASTMatchParity(grammar, nfa, dfa, "play Roxanne");
+        });
+    });
+
+    describe("AST matcher: multiple alternatives", () => {
+        const { grammar, nfa, dfa } = compile(
+            "ast-alts",
+            `
+            <play>   = play $(track:wildcard) -> { actionName: "play", parameters: { track } };
+            <stop>   = stop -> { actionName: "stop" };
+            <select> = select $(device:wildcard) -> { actionName: "select", parameters: { device } };
+            <Start>  = <play> | <stop> | <select>;
+            `,
+        );
+
+        it.each([
+            ["play Roxanne"],
+            ["stop"],
+            ["select kitchen"],
+            ["select kitchen speaker"],
+        ])("AST matches NFA for '%s'", (req) => {
+            assertASTMatchParity(grammar, nfa, dfa, req);
+        });
+    });
+
+    describe("AST matcher: Cardinal entity", () => {
+        const { grammar, nfa, dfa } = compile(
+            "ast-cardinal",
+            `
+            entity Cardinal;
+            <playN> = play $(n:Cardinal) songs -> { actionName: "playN", parameters: { count: n } };
+            <Start> = <playN>;
+            `,
+        );
+
+        it.each([
+            ["play three songs"],
+            ["play five songs"],
+            ["play ten songs"],
+        ])("AST matches NFA for '%s'", (req) => {
+            assertASTMatchParity(grammar, nfa, dfa, req);
+        });
+    });
+
     describe("priority counter consistency", () => {
         const { grammar, nfa, dfa } = compile(
             "counters",

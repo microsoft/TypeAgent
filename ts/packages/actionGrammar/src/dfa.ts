@@ -245,6 +245,52 @@ export interface DFA {
     splitCandidates?: string[];
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// MatchAST — structural parse tree produced by DFA matching
+// ────────────────────────────────────────────────────────────────────────────
+
+/** A literal token that matched a specific grammar token */
+export interface TokenMatchNode {
+    kind: "token";
+    token: string;
+}
+
+/** A wildcard that consumed one or more tokens */
+export interface WildcardMatchNode {
+    kind: "wildcard";
+    variable: string;
+    typeName?: string;
+    checked: boolean;
+    tokens: string[];
+}
+
+/** A phrase-set match that consumed one or more tokens */
+export interface PhraseSetMatchNode {
+    kind: "phraseSet";
+    matcherName: string;
+    tokens: string[];
+}
+
+/** A rule reference match (for nested rules / sub-grammars) */
+export interface RuleRefMatchNode {
+    kind: "ruleRef";
+    variable: string;
+    match: MatchAST;
+}
+
+/** Any node in the match tree */
+export type MatchNode =
+    | TokenMatchNode
+    | WildcardMatchNode
+    | PhraseSetMatchNode
+    | RuleRefMatchNode;
+
+/** A matched rule with its structural parts */
+export interface MatchAST {
+    ruleIndex: number;
+    parts: MatchNode[];
+}
+
 /**
  * Builder for constructing DFAs
  */
