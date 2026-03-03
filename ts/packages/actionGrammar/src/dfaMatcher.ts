@@ -526,7 +526,11 @@ export function matchDFA(
                 const capTypeName = capture.typeName;
                 const entryIsChecked =
                     capture.checked === true ||
-                    !!(capTypeName && capTypeName !== "string");
+                    !!(
+                        capTypeName &&
+                        capTypeName !== "string" &&
+                        capTypeName !== "wildcard"
+                    );
                 if (!entryIsChecked) continue; // handle unchecked as fallback
 
                 if (capTypeName === "number") {
@@ -1857,7 +1861,8 @@ function buildBindings(parts: MatchNode[]): Map<string, any> {
                 if (
                     part.checked &&
                     part.typeName &&
-                    part.typeName !== "string"
+                    part.typeName !== "string" &&
+                    part.typeName !== "wildcard"
                 ) {
                     if (part.typeName === "number") {
                         const num = parseFloat(rawValue);

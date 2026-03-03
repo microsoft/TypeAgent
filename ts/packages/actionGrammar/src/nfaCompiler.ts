@@ -847,7 +847,10 @@ function compileWildcardPart(
     // A wildcard is checked if:
     // 1. It has a non-string typeName (entity type like MusicDevice, Ordinal, etc.)
     // 2. It's in the checkedVariables set (has checked_wildcard paramSpec)
-    const hasEntityType = part.typeName && part.typeName !== "string";
+    const hasEntityType =
+        part.typeName &&
+        part.typeName !== "string" &&
+        part.typeName !== "wildcard";
     const hasCheckedParamSpec = checkedVariables?.has(variableName) ?? false;
     const isChecked = hasEntityType || hasCheckedParamSpec;
 

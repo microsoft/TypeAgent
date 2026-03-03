@@ -295,7 +295,11 @@ function computeTransitions(
         for (const { context, transition } of wildcardSources) {
             const isChecked =
                 transition.checked === true ||
-                !!(transition.typeName && transition.typeName !== "string");
+                !!(
+                    transition.typeName &&
+                    transition.typeName !== "string" &&
+                    transition.typeName !== "wildcard"
+                );
 
             const newCtx: DFAExecutionContext = {
                 nfaStateIds: new Set([transition.to]),
