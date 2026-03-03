@@ -1,13 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { DFA, DFASlotOperation, DFATransition } from "./dfa.js";
+import {
+    DFA,
+    DFASlotOperation,
+    DFATransition,
+    type MatchAST,
+    type MatchNode,
+    type WildcardMatchNode,
+} from "./dfa.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 import { normalizeToken } from "./nfaMatcher.js";
 import { applySplitToTokens } from "./tokenSplit.js";
 import { matchNFA } from "./nfaInterpreter.js";
 import type { NFAMatchResult } from "./nfaInterpreter.js";
+import type { Grammar } from "./grammarTypes.js";
+import type { ValueNode } from "./grammarRuleParser.js";
 
 /**
  * Environment for slot-based variable storage
@@ -1026,6 +1035,895 @@ export function getDFACompletions(
         result.properties = properties;
     }
     return result;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// AST-based DFA matching
+//
+// The DFA acts as a pure recognizer producing a MatchAST. Value computation
+// is deferred to a bottom-up walk of the AST using the grammar's name-based
+// ValueNode expressions.
+//
+// Matching strategy: MINIMAL MUNCH with priorities
+//   1. Try exact token transition (literal match)
+//   2. Try longest prefix match (flex-space: grammar token is a prefix of input token)
+//   3. Try phraseSet transitions (multi-token)
+//   4. Wildcard fallback (consume 1 token)
+//
+// When a literal matches at a state that also has a wildcard, a decision point
+// is recorded. If the match later fails validation, we backtrack to the decision
+// point and let the wildcard absorb the literal instead.
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Build a wildcardCaptureInfo object, conditionally including typeName.
+ */
+function buildCaptureInfo(capture: {
+    variable: string;
+    typeName?: string;
+    checked: boolean;
+}): { variable: string; typeName?: string; checked: boolean } {
+    const info: { variable: string; typeName?: string; checked: boolean } = {
+        variable: capture.variable,
+        checked: capture.checked,
+    };
+    if (capture.typeName !== undefined) {
+        info.typeName = capture.typeName;
+    }
+    return info;
+}
+
+/**
+ * A snapshot of matcher state saved at a decision point for backtracking.
+ *
+ * Created when we choose a literal transition at a state that also has a
+ * wildcard transition. If we later hit a dead end or validation fails,
+ * we restore to this point and take the wildcard path instead.
+ */
+interface DecisionPoint {
+    /** DFA state ID where the decision was made */
+    stateId: number;
+    /** Token index at the decision point */
+    tokenIndex: number;
+    /** Length of parts[] to restore to */
+    partsLength: number;
+    /** The wildcard target state to take on backtrack */
+    wildcardTargetStateId: number;
+    /** The active wildcard node being built (if any) before this decision */
+    activeWildcard: WildcardMatchNode | undefined;
+    /** Priority counters at the decision point */
+    fixedStringPartCount: number;
+    checkedWildcardCount: number;
+    uncheckedWildcardCount: number;
+    /** Capture info from the wildcard transition */
+    wildcardCaptureInfo: {
+        variable: string;
+        typeName?: string;
+        checked: boolean;
+    };
+}
+
+/**
+ * Result of AST-based DFA matching
+ */
+export interface DFAASTMatchResult {
+    /** Whether the input was accepted */
+    matched: boolean;
+    /** The parse tree (if matched) */
+    ast?: MatchAST;
+    /** Priority counts for ranking */
+    fixedStringPartCount: number;
+    checkedWildcardCount: number;
+    uncheckedWildcardCount: number;
+    /** Number of tokens consumed */
+    tokensConsumed: number;
+    /** Rule index from Grammar.rules[] */
+    ruleIndex?: number;
+}
+
+/**
+ * Match tokens against a DFA, producing a MatchAST.
+ *
+ * Uses minimal munch: wildcards consume as few tokens as possible.
+ * Literals are preferred over wildcards. When a literal is chosen at a state
+ * that also has a wildcard, a decision point is recorded for backtracking.
+ *
+ * @param dfa The DFA to match against
+ * @param tokens Array of tokens to match
+ * @returns Match result with optional AST
+ */
+export function matchDFAToAST(dfa: DFA, tokens: string[]): DFAASTMatchResult {
+    const NO_MATCH: DFAASTMatchResult = {
+        matched: false,
+        fixedStringPartCount: 0,
+        checkedWildcardCount: 0,
+        uncheckedWildcardCount: 0,
+        tokensConsumed: tokens.length,
+    };
+
+    if (tokens.length === 0) {
+        const startState = dfa.states[dfa.startState];
+        if (startState?.accepting) {
+            const bestCtx = startState.bestPriority
+                ? startState.contexts[startState.bestPriority.contextIndex]
+                : startState.contexts[0];
+            const emptyResult: DFAASTMatchResult = {
+                matched: true,
+                ast: {
+                    ruleIndex: bestCtx?.ruleIndex ?? 0,
+                    parts: [],
+                },
+                fixedStringPartCount: 0,
+                checkedWildcardCount: 0,
+                uncheckedWildcardCount: 0,
+                tokensConsumed: 0,
+            };
+            if (bestCtx?.ruleIndex !== undefined) {
+                emptyResult.ruleIndex = bestCtx.ruleIndex;
+            }
+            return emptyResult;
+        }
+        return NO_MATCH;
+    }
+
+    let currentStateId = dfa.startState;
+    const parts: MatchNode[] = [];
+    const decisionPoints: DecisionPoint[] = [];
+
+    // The currently active wildcard node being built (for multi-token wildcards via minimal munch)
+    let activeWildcard: WildcardMatchNode | undefined;
+
+    // Priority counters
+    let fixedStringPartCount = 0;
+    let checkedWildcardCount = 0;
+    let uncheckedWildcardCount = 0;
+
+    let i = 0;
+    while (i < tokens.length) {
+        const token = tokens[i];
+        const normalizedToken = normalizeToken(token);
+        const currentState = dfa.states[currentStateId];
+
+        if (!currentState) {
+            // Dead state — try backtracking
+            const restored = backtrack(decisionPoints, parts, tokens);
+            if (restored) {
+                currentStateId = restored.stateId;
+                i = restored.tokenIndex;
+                activeWildcard = restored.activeWildcard;
+                fixedStringPartCount = restored.fixedStringPartCount;
+                checkedWildcardCount = restored.checkedWildcardCount;
+                uncheckedWildcardCount = restored.uncheckedWildcardCount;
+                continue;
+            }
+            return NO_MATCH;
+        }
+
+        // Try specific token transition (literal match — highest priority)
+        let nextStateId: number | undefined;
+        let consumed = false;
+
+        for (const trans of currentState.transitions) {
+            if (trans.token === normalizedToken) {
+                // Before taking the literal, record a decision point if wildcard also available
+                if (currentState.wildcardTransition) {
+                    const wt = currentState.wildcardTransition;
+                    // Find the best capture info for the wildcard
+                    const bestCapture = wt.captureInfo[0];
+                    if (bestCapture) {
+                        decisionPoints.push({
+                            stateId: currentStateId,
+                            tokenIndex: i,
+                            partsLength: parts.length,
+                            wildcardTargetStateId: wt.to,
+                            activeWildcard: activeWildcard
+                                ? {
+                                      ...activeWildcard,
+                                      tokens: [...activeWildcard.tokens],
+                                  }
+                                : undefined,
+                            fixedStringPartCount,
+                            checkedWildcardCount,
+                            uncheckedWildcardCount,
+                            wildcardCaptureInfo: buildCaptureInfo(bestCapture),
+                        });
+                    }
+                }
+
+                // Finalize any active wildcard before consuming a literal
+                if (activeWildcard) {
+                    parts.push(activeWildcard);
+                    activeWildcard = undefined;
+                }
+
+                parts.push({ kind: "token", token: normalizedToken });
+                nextStateId = trans.to;
+                fixedStringPartCount++;
+                consumed = true;
+                break;
+            }
+        }
+
+        // Try prefix match (flex-space): grammar token is a strict prefix of input token
+        if (!consumed) {
+            for (const trans of currentState.transitions) {
+                if (
+                    normalizedToken.length > trans.token.length &&
+                    normalizedToken.startsWith(trans.token)
+                ) {
+                    // Record decision point if wildcard also available
+                    if (currentState.wildcardTransition) {
+                        const wt = currentState.wildcardTransition;
+                        const bestCapture = wt.captureInfo[0];
+                        if (bestCapture) {
+                            decisionPoints.push({
+                                stateId: currentStateId,
+                                tokenIndex: i,
+                                partsLength: parts.length,
+                                wildcardTargetStateId: wt.to,
+                                activeWildcard: activeWildcard
+                                    ? {
+                                          ...activeWildcard,
+                                          tokens: [...activeWildcard.tokens],
+                                      }
+                                    : undefined,
+                                fixedStringPartCount,
+                                checkedWildcardCount,
+                                uncheckedWildcardCount,
+                                wildcardCaptureInfo:
+                                    buildCaptureInfo(bestCapture),
+                            });
+                        }
+                    }
+
+                    // Finalize any active wildcard
+                    if (activeWildcard) {
+                        parts.push(activeWildcard);
+                        activeWildcard = undefined;
+                    }
+
+                    // Consume the prefix as a literal
+                    parts.push({ kind: "token", token: trans.token });
+                    fixedStringPartCount++;
+
+                    // Push the remainder back: replace current token with remainder
+                    // We do this by mutating tokens in-place (safe since we own the array)
+                    const remainder = normalizedToken.slice(trans.token.length);
+                    tokens = [
+                        ...tokens.slice(0, i + 1),
+                        remainder,
+                        ...tokens.slice(i + 1),
+                    ];
+                    // Don't increment i — the remainder token will be processed next iteration
+
+                    nextStateId = trans.to;
+                    consumed = true;
+                    break;
+                }
+            }
+        }
+
+        // Try phraseSet transitions (multi-token)
+        if (!consumed && currentState.phraseSetTransitions) {
+            for (const pst of currentState.phraseSetTransitions) {
+                const matcher = globalPhraseSetRegistry.getMatcher(
+                    pst.matcherName,
+                );
+                if (!matcher) continue;
+                for (const phrase of matcher.phrases) {
+                    if (i + phrase.length > tokens.length) continue;
+                    const allMatch = phrase.every(
+                        (p, pi) => normalizeToken(tokens[i + pi]) === p,
+                    );
+                    if (allMatch) {
+                        // Finalize any active wildcard
+                        if (activeWildcard) {
+                            parts.push(activeWildcard);
+                            activeWildcard = undefined;
+                        }
+
+                        parts.push({
+                            kind: "phraseSet",
+                            matcherName: pst.matcherName,
+                            tokens: tokens.slice(i, i + phrase.length),
+                        });
+                        nextStateId = pst.to;
+                        fixedStringPartCount += phrase.length;
+                        i += phrase.length - 1; // -1 because the main loop increments
+                        consumed = true;
+                        break;
+                    }
+                }
+                if (consumed) break;
+            }
+        }
+
+        // Wildcard fallback (minimal munch — consume 1 token)
+        if (!consumed && currentState.wildcardTransition) {
+            const wt = currentState.wildcardTransition;
+            const bestCapture = wt.captureInfo[0];
+
+            if (activeWildcard) {
+                // Continue building the same wildcard (multi-token via backtracking)
+                activeWildcard.tokens.push(token);
+            } else {
+                // Start a new wildcard node
+                activeWildcard = {
+                    kind: "wildcard",
+                    variable: bestCapture?.variable ?? "",
+                    checked: bestCapture?.checked ?? false,
+                    tokens: [token],
+                };
+                if (bestCapture?.typeName) {
+                    activeWildcard.typeName = bestCapture.typeName;
+                }
+            }
+
+            nextStateId = wt.to;
+            // Priority counting is deferred to finalization (after validation)
+            consumed = true;
+        }
+
+        if (!consumed) {
+            // No transition available — try backtracking
+            const restored = backtrack(decisionPoints, parts, tokens);
+            if (restored) {
+                currentStateId = restored.stateId;
+                i = restored.tokenIndex;
+                activeWildcard = restored.activeWildcard;
+                fixedStringPartCount = restored.fixedStringPartCount;
+                checkedWildcardCount = restored.checkedWildcardCount;
+                uncheckedWildcardCount = restored.uncheckedWildcardCount;
+                continue;
+            }
+            return NO_MATCH;
+        }
+
+        currentStateId = nextStateId!;
+        i++;
+    }
+
+    // Finalize any trailing wildcard
+    if (activeWildcard) {
+        parts.push(activeWildcard);
+        activeWildcard = undefined;
+    }
+
+    // Check for accepting state
+    const finalState = dfa.states[currentStateId];
+    if (!finalState?.accepting) {
+        // Try backtracking
+        const restored = backtrack(decisionPoints, parts, tokens);
+        if (restored) {
+            // Re-run from restored point (recursive approach via loop)
+            // We need to restart the main loop from the restored state
+            // Since we're at the end, do a fresh attempt with the restored state
+            return matchDFAToASTFrom(
+                dfa,
+                tokens,
+                restored.stateId,
+                restored.tokenIndex,
+                parts.slice(0, restored.partsLength),
+                restored.activeWildcard,
+                decisionPoints,
+                restored.fixedStringPartCount,
+                restored.checkedWildcardCount,
+                restored.uncheckedWildcardCount,
+            );
+        }
+        return NO_MATCH;
+    }
+
+    // Count wildcard priorities from the AST parts
+    for (const part of parts) {
+        if (part.kind === "wildcard") {
+            if (part.checked) {
+                checkedWildcardCount++;
+            } else {
+                uncheckedWildcardCount++;
+            }
+        }
+    }
+
+    // Find the rule index from the best-priority accepting context
+    const bestCtx = finalState.bestPriority
+        ? finalState.contexts[finalState.bestPriority.contextIndex]
+        : finalState.contexts[0];
+
+    const matchResult: DFAASTMatchResult = {
+        matched: true,
+        ast: {
+            ruleIndex: bestCtx?.ruleIndex ?? 0,
+            parts,
+        },
+        fixedStringPartCount,
+        checkedWildcardCount,
+        uncheckedWildcardCount,
+        tokensConsumed: tokens.length,
+    };
+    if (bestCtx?.ruleIndex !== undefined) {
+        matchResult.ruleIndex = bestCtx.ruleIndex;
+    }
+    return matchResult;
+}
+
+/**
+ * Continue matching from a restored backtrack point.
+ * This is the continuation of matchDFAToAST after a backtrack.
+ */
+function matchDFAToASTFrom(
+    dfa: DFA,
+    tokens: string[],
+    startStateId: number,
+    startTokenIndex: number,
+    initialParts: MatchNode[],
+    initialActiveWildcard: WildcardMatchNode | undefined,
+    decisionPoints: DecisionPoint[],
+    fixedStringPartCount: number,
+    checkedWildcardCount: number,
+    uncheckedWildcardCount: number,
+): DFAASTMatchResult {
+    const NO_MATCH: DFAASTMatchResult = {
+        matched: false,
+        fixedStringPartCount: 0,
+        checkedWildcardCount: 0,
+        uncheckedWildcardCount: 0,
+        tokensConsumed: tokens.length,
+    };
+
+    let currentStateId = startStateId;
+    const parts = initialParts;
+    let activeWildcard = initialActiveWildcard;
+    let i = startTokenIndex;
+
+    while (i < tokens.length) {
+        const token = tokens[i];
+        const normalizedToken = normalizeToken(token);
+        const currentState = dfa.states[currentStateId];
+
+        if (!currentState) {
+            const restored = backtrack(decisionPoints, parts, tokens);
+            if (restored) {
+                currentStateId = restored.stateId;
+                i = restored.tokenIndex;
+                activeWildcard = restored.activeWildcard;
+                fixedStringPartCount = restored.fixedStringPartCount;
+                checkedWildcardCount = restored.checkedWildcardCount;
+                uncheckedWildcardCount = restored.uncheckedWildcardCount;
+                continue;
+            }
+            return NO_MATCH;
+        }
+
+        let nextStateId: number | undefined;
+        let consumed = false;
+
+        // Literal match
+        for (const trans of currentState.transitions) {
+            if (trans.token === normalizedToken) {
+                if (currentState.wildcardTransition) {
+                    const wt = currentState.wildcardTransition;
+                    const bestCapture = wt.captureInfo[0];
+                    if (bestCapture) {
+                        decisionPoints.push({
+                            stateId: currentStateId,
+                            tokenIndex: i,
+                            partsLength: parts.length,
+                            wildcardTargetStateId: wt.to,
+                            activeWildcard: activeWildcard
+                                ? {
+                                      ...activeWildcard,
+                                      tokens: [...activeWildcard.tokens],
+                                  }
+                                : undefined,
+                            fixedStringPartCount,
+                            checkedWildcardCount,
+                            uncheckedWildcardCount,
+                            wildcardCaptureInfo: buildCaptureInfo(bestCapture),
+                        });
+                    }
+                }
+
+                if (activeWildcard) {
+                    parts.push(activeWildcard);
+                    activeWildcard = undefined;
+                }
+
+                parts.push({ kind: "token", token: normalizedToken });
+                nextStateId = trans.to;
+                fixedStringPartCount++;
+                consumed = true;
+                break;
+            }
+        }
+
+        // Prefix match (flex-space)
+        if (!consumed) {
+            for (const trans of currentState.transitions) {
+                if (
+                    normalizedToken.length > trans.token.length &&
+                    normalizedToken.startsWith(trans.token)
+                ) {
+                    if (currentState.wildcardTransition) {
+                        const wt = currentState.wildcardTransition;
+                        const bestCapture = wt.captureInfo[0];
+                        if (bestCapture) {
+                            decisionPoints.push({
+                                stateId: currentStateId,
+                                tokenIndex: i,
+                                partsLength: parts.length,
+                                wildcardTargetStateId: wt.to,
+                                activeWildcard: activeWildcard
+                                    ? {
+                                          ...activeWildcard,
+                                          tokens: [...activeWildcard.tokens],
+                                      }
+                                    : undefined,
+                                fixedStringPartCount,
+                                checkedWildcardCount,
+                                uncheckedWildcardCount,
+                                wildcardCaptureInfo:
+                                    buildCaptureInfo(bestCapture),
+                            });
+                        }
+                    }
+
+                    if (activeWildcard) {
+                        parts.push(activeWildcard);
+                        activeWildcard = undefined;
+                    }
+
+                    parts.push({ kind: "token", token: trans.token });
+                    fixedStringPartCount++;
+
+                    const remainder = normalizedToken.slice(trans.token.length);
+                    tokens = [
+                        ...tokens.slice(0, i + 1),
+                        remainder,
+                        ...tokens.slice(i + 1),
+                    ];
+
+                    nextStateId = trans.to;
+                    consumed = true;
+                    break;
+                }
+            }
+        }
+
+        // PhraseSet
+        if (!consumed && currentState.phraseSetTransitions) {
+            for (const pst of currentState.phraseSetTransitions) {
+                const matcher = globalPhraseSetRegistry.getMatcher(
+                    pst.matcherName,
+                );
+                if (!matcher) continue;
+                for (const phrase of matcher.phrases) {
+                    if (i + phrase.length > tokens.length) continue;
+                    const allMatch = phrase.every(
+                        (p, pi) => normalizeToken(tokens[i + pi]) === p,
+                    );
+                    if (allMatch) {
+                        if (activeWildcard) {
+                            parts.push(activeWildcard);
+                            activeWildcard = undefined;
+                        }
+                        parts.push({
+                            kind: "phraseSet",
+                            matcherName: pst.matcherName,
+                            tokens: tokens.slice(i, i + phrase.length),
+                        });
+                        nextStateId = pst.to;
+                        fixedStringPartCount += phrase.length;
+                        i += phrase.length - 1;
+                        consumed = true;
+                        break;
+                    }
+                }
+                if (consumed) break;
+            }
+        }
+
+        // Wildcard fallback
+        if (!consumed && currentState.wildcardTransition) {
+            const wt = currentState.wildcardTransition;
+            const bestCapture = wt.captureInfo[0];
+
+            if (activeWildcard) {
+                activeWildcard.tokens.push(token);
+            } else {
+                activeWildcard = {
+                    kind: "wildcard",
+                    variable: bestCapture?.variable ?? "",
+                    checked: bestCapture?.checked ?? false,
+                    tokens: [token],
+                };
+                if (bestCapture?.typeName) {
+                    activeWildcard.typeName = bestCapture.typeName;
+                }
+            }
+
+            nextStateId = wt.to;
+            consumed = true;
+        }
+
+        if (!consumed) {
+            const restored = backtrack(decisionPoints, parts, tokens);
+            if (restored) {
+                currentStateId = restored.stateId;
+                i = restored.tokenIndex;
+                activeWildcard = restored.activeWildcard;
+                fixedStringPartCount = restored.fixedStringPartCount;
+                checkedWildcardCount = restored.checkedWildcardCount;
+                uncheckedWildcardCount = restored.uncheckedWildcardCount;
+                continue;
+            }
+            return NO_MATCH;
+        }
+
+        currentStateId = nextStateId!;
+        i++;
+    }
+
+    if (activeWildcard) {
+        parts.push(activeWildcard);
+    }
+
+    const finalState = dfa.states[currentStateId];
+    if (!finalState?.accepting) {
+        const restored = backtrack(decisionPoints, parts, tokens);
+        if (restored) {
+            return matchDFAToASTFrom(
+                dfa,
+                tokens,
+                restored.stateId,
+                restored.tokenIndex,
+                parts.slice(0, restored.partsLength),
+                restored.activeWildcard,
+                decisionPoints,
+                restored.fixedStringPartCount,
+                restored.checkedWildcardCount,
+                restored.uncheckedWildcardCount,
+            );
+        }
+        return NO_MATCH;
+    }
+
+    // Count wildcard priorities from AST parts
+    let finalChecked = checkedWildcardCount;
+    let finalUnchecked = uncheckedWildcardCount;
+    for (const part of parts) {
+        if (part.kind === "wildcard") {
+            if (part.checked) {
+                finalChecked++;
+            } else {
+                finalUnchecked++;
+            }
+        }
+    }
+
+    const bestCtx = finalState.bestPriority
+        ? finalState.contexts[finalState.bestPriority.contextIndex]
+        : finalState.contexts[0];
+
+    const fromResult: DFAASTMatchResult = {
+        matched: true,
+        ast: {
+            ruleIndex: bestCtx?.ruleIndex ?? 0,
+            parts,
+        },
+        fixedStringPartCount,
+        checkedWildcardCount: finalChecked,
+        uncheckedWildcardCount: finalUnchecked,
+        tokensConsumed: tokens.length,
+    };
+    if (bestCtx?.ruleIndex !== undefined) {
+        fromResult.ruleIndex = bestCtx.ruleIndex;
+    }
+    return fromResult;
+}
+
+/**
+ * Backtrack to the most recent decision point and take the wildcard path.
+ *
+ * At the decision point, we had chosen a literal transition. Now we pop that
+ * decision, truncate parts[] to the saved length, and set up the wildcard
+ * to absorb the token at the decision point's tokenIndex.
+ *
+ * Returns the restored state, or undefined if no decision points remain.
+ */
+function backtrack(
+    decisionPoints: DecisionPoint[],
+    parts: MatchNode[],
+    tokens: string[],
+):
+    | {
+          stateId: number;
+          tokenIndex: number;
+          partsLength: number;
+          activeWildcard: WildcardMatchNode | undefined;
+          fixedStringPartCount: number;
+          checkedWildcardCount: number;
+          uncheckedWildcardCount: number;
+      }
+    | undefined {
+    if (decisionPoints.length === 0) return undefined;
+
+    const dp = decisionPoints.pop()!;
+
+    // Truncate parts to the saved length
+    parts.length = dp.partsLength;
+
+    // Restore the active wildcard state from the decision point
+    let activeWildcard = dp.activeWildcard;
+
+    // Now take the wildcard path: absorb the token at dp.tokenIndex
+    const token = tokens[dp.tokenIndex];
+    if (activeWildcard) {
+        // Continue the existing wildcard with this token
+        activeWildcard.tokens.push(token);
+    } else {
+        // Start a new wildcard
+        activeWildcard = {
+            kind: "wildcard",
+            variable: dp.wildcardCaptureInfo.variable,
+            checked: dp.wildcardCaptureInfo.checked,
+            tokens: [token],
+        };
+        if (dp.wildcardCaptureInfo.typeName) {
+            activeWildcard.typeName = dp.wildcardCaptureInfo.typeName;
+        }
+    }
+
+    return {
+        stateId: dp.wildcardTargetStateId,
+        tokenIndex: dp.tokenIndex + 1,
+        partsLength: dp.partsLength,
+        activeWildcard,
+        fixedStringPartCount: dp.fixedStringPartCount,
+        checkedWildcardCount: dp.checkedWildcardCount,
+        uncheckedWildcardCount: dp.uncheckedWildcardCount,
+    };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// AST evaluation — bottom-up value computation
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Evaluate a MatchAST to produce the action value.
+ *
+ * Uses the grammar's ValueNode expressions (name-based variable references)
+ * to compute the final action object from the structural parse tree.
+ *
+ * @param ast The parse tree from matchDFAToAST
+ * @param grammar The grammar (for rule definitions and value expressions)
+ * @returns The computed action value, or undefined if no value expression
+ */
+export function evaluateMatchAST(ast: MatchAST, grammar: Grammar): any {
+    const rule = grammar.rules[ast.ruleIndex];
+    if (!rule?.value) return undefined;
+
+    // Build name→value bindings from AST parts
+    const bindings = new Map<string, any>();
+
+    for (const part of ast.parts) {
+        switch (part.kind) {
+            case "wildcard": {
+                const rawValue = part.tokens.join(" ");
+                // Apply entity conversion for checked wildcards
+                if (
+                    part.checked &&
+                    part.typeName &&
+                    part.typeName !== "string"
+                ) {
+                    if (part.typeName === "number") {
+                        const num = parseFloat(rawValue);
+                        if (!isNaN(num)) {
+                            bindings.set(part.variable, num);
+                            break;
+                        }
+                    } else {
+                        const converter = globalEntityRegistry.getConverter(
+                            part.typeName,
+                        );
+                        if (converter) {
+                            const converted = converter.convert(rawValue);
+                            if (converted !== undefined) {
+                                bindings.set(part.variable, converted);
+                                break;
+                            }
+                        }
+                    }
+                }
+                bindings.set(part.variable, rawValue);
+                break;
+            }
+            case "ruleRef":
+                // Recursively evaluate the sub-match
+                bindings.set(
+                    part.variable,
+                    evaluateMatchAST(part.match, grammar),
+                );
+                break;
+            // Token and phraseSet nodes don't contribute to value bindings
+        }
+    }
+
+    // Evaluate the value expression with the bindings
+    return evaluateValueNode(rule.value, bindings);
+}
+
+/**
+ * Evaluate a grammar ValueNode using name-based bindings.
+ */
+function evaluateValueNode(node: ValueNode, bindings: Map<string, any>): any {
+    switch (node.type) {
+        case "literal":
+            return node.value;
+
+        case "variable":
+            return bindings.get(node.name);
+
+        case "object": {
+            const result: Record<string, any> = {};
+            for (const [key, val] of Object.entries(node.value)) {
+                if (val === null) {
+                    // null means "use the variable with the same name as the key"
+                    result[key] = bindings.get(key);
+                } else {
+                    result[key] = evaluateValueNode(val, bindings);
+                }
+            }
+            return result;
+        }
+
+        case "array":
+            return node.value.map((v) => evaluateValueNode(v, bindings));
+    }
+}
+
+/**
+ * Match DFA to AST with two-pass split-candidate strategy.
+ * Pass 1 — original tokens.
+ * Pass 2 — pre-split tokens using dfa.splitCandidates.
+ * Returns the higher-priority result.
+ */
+export function matchDFAToASTWithSplitting(
+    dfa: DFA,
+    tokens: string[],
+): DFAASTMatchResult {
+    const origResult = matchDFAToAST(dfa, tokens);
+
+    if (!dfa.splitCandidates?.length) return origResult;
+
+    const splitTokens = applySplitToTokens(tokens, dfa.splitCandidates);
+    if (!splitTokens) return origResult;
+
+    const splitResult = matchDFAToAST(dfa, splitTokens);
+    if (!splitResult.matched) return origResult;
+    if (!origResult.matched) return splitResult;
+
+    // Compare priorities: prefer the higher-priority match
+    const cmp = compareASTPriority(origResult, splitResult);
+    return cmp <= 0 ? origResult : splitResult;
+}
+
+/**
+ * Compare two AST match results using the same 3-rule priority as sortNFAMatches.
+ */
+function compareASTPriority(
+    a: DFAASTMatchResult,
+    b: DFAASTMatchResult,
+): number {
+    if (a.uncheckedWildcardCount === 0 && b.uncheckedWildcardCount !== 0)
+        return -1;
+    if (a.uncheckedWildcardCount !== 0 && b.uncheckedWildcardCount === 0)
+        return 1;
+    if (a.fixedStringPartCount !== b.fixedStringPartCount)
+        return b.fixedStringPartCount - a.fixedStringPartCount;
+    if (a.checkedWildcardCount !== b.checkedWildcardCount)
+        return b.checkedWildcardCount - a.checkedWildcardCount;
+    return a.uncheckedWildcardCount - b.uncheckedWildcardCount;
 }
 
 /**
