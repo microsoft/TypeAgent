@@ -326,9 +326,7 @@ function seedQueue(
                 uncheckedWildcardCount: state.uncheckedWildcardCount,
                 ruleIndex: state.ruleIndex,
                 actionValue: evaluatedActionValue,
-                visitedStates: debug
-                    ? Array.from(allVisitedStates)
-                    : undefined,
+                visitedStates: debug ? Array.from(allVisitedStates) : undefined,
                 tokensConsumed: globalTokens.length,
                 debugSlotMap: debug ? state.slotMap : undefined,
             });
@@ -382,9 +380,7 @@ function seedQueue(
         if (trans.type === "token" && trans.tokens) {
             // Exact match
             if (trans.tokens.includes(normToken)) {
-                debugNFA(
-                    `  token exact "${normToken}" → state ${trans.to}`,
-                );
+                debugNFA(`  token exact "${normToken}" → state ${trans.to}`);
                 queue.push({ trans, state });
             }
             // Prefix match → fork the thread with a split local-token array

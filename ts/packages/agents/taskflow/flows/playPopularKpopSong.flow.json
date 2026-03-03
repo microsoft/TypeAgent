@@ -37,9 +37,7 @@
       "actionName": "playTrack",
       "parameters": {
         "trackName": "${extractTopSong.data.trackName}",
-        "artists": [
-          "${extractTopSong.data.artist}"
-        ]
+        "artists": ["${extractTopSong.data.artist}"]
       }
     }
   ]

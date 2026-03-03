@@ -618,19 +618,13 @@ describe("flex-space — Swahili <Tense> rule reference: fused and spaced forms 
                         name: "Tense",
                         rules: [
                             {
-                                parts: [
-                                    { type: "string", value: ["li"] },
-                                ],
+                                parts: [{ type: "string", value: ["li"] }],
                             },
                             {
-                                parts: [
-                                    { type: "string", value: ["na"] },
-                                ],
+                                parts: [{ type: "string", value: ["na"] }],
                             },
                             {
-                                parts: [
-                                    { type: "string", value: ["ta"] },
-                                ],
+                                parts: [{ type: "string", value: ["ta"] }],
                             },
                         ],
                     },
@@ -776,4 +770,3 @@ describe("flex-space — Swahili subject-agreement: person variation (ninasoma /
         expect(match(grammar, "tunasoma")).toHaveLength(0);
     });
 });
-

@@ -127,6 +127,12 @@ export type {
     DFATransition,
     DFAWildcardTransition,
     DFAPhraseSetTransition,
+    MatchAST,
+    MatchNode,
+    TokenMatchNode,
+    WildcardMatchNode,
+    PhraseSetMatchNode,
+    RuleRefMatchNode,
 } from "./dfa.js";
 export { DFABuilder } from "./dfa.js";
 export { compileNFAToDFA } from "./dfaCompiler.js";
@@ -140,6 +146,10 @@ export {
     type DFACompletionGroup,
     type DFAPropertyCompletion,
     type WildcardCompletionInfo,
+    matchDFAToAST,
+    matchDFAToASTWithSplitting,
+    evaluateMatchAST,
+    type DFAASTMatchResult,
 } from "./dfaMatcher.js";
 export { splitToken, applySplitToTokens } from "./tokenSplit.js";
 export {
