@@ -118,6 +118,8 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
     );
     // Store NFA reference so matchDFA can use thread-based value computation
     dfa.sourceNFA = nfa;
+    // Free execution contexts — match-time data now lives directly on DFAState
+    DFABuilder.compact(dfa);
     return dfa;
 }
 
