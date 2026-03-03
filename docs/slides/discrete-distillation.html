@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discrete Distillation</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reset.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/theme/white.css">
+  <style>
+    :root {
+      --blue:  #2255bb;
+      --dblue: #1a1a2e;
+      --green: #336633;
+      --red:   #882222;
+    }
+
+    /* Pin slides to top, prevent vertical clipping */
+    .reveal .slides > section {
+      top: 0 !important;
+      margin-top: 0 !important;
+      height: auto !important;
+    }
+    .reveal .slides > section.present,
+    .reveal .slides > section.past,
+    .reveal .slides > section.future {
+      top: 0 !important;
+    }
+    .reveal .slides section { text-align: left; }
+    .reveal .slides section.center { text-align: center; }
+    .reveal h2 { font-size: 1.2em; border-bottom: 2px solid #dde; padding-bottom: 0.15em; margin-bottom: 0.45em; margin-top: 0; }
+    .reveal p  { font-size: 0.76em; line-height: 1.45; margin: 0.35em 0; }
+    .reveal li { font-size: 0.76em; line-height: 1.45; }
+    .reveal ul  { margin-left: 1.1em; margin-top: 0.25em; margin-bottom: 0.25em; }
+    .reveal ol  { margin-left: 1.1em; margin-top: 0.25em; margin-bottom: 0.25em; }
+
+    /* Labeled boxes */
+    .box {
+      border: 2px solid #555;
+      border-radius: 6px;
+      padding: 0.35em 0.7em;
+      display: inline-block;
+      background: #f8f8f8;
+    }
+    .hat-box {
+      border: 2px solid var(--red);
+      border-radius: 6px;
+      padding: 0.35em 0.7em;
+      display: inline-block;
+      background: #fff5f5;
+      font-weight: 600;
+    }
+    .det-box {
+      border: 2px solid var(--blue);
+      border-radius: 6px;
+      padding: 0.35em 0.7em;
+      display: inline-block;
+      background: #f5f5ff;
+      font-weight: 600;
+    }
+
+    /* Inline callout */
+    .callout {
+      margin-top: 0.5em;
+      padding: 0.4em 0.8em;
+      border-radius: 4px;
+      font-size: 0.74em;
+    }
+    .callout-blue  { background: #eef2ff; border-left: 4px solid var(--blue); }
+    .callout-green { background: #f0fff0; border-left: 4px solid var(--green); }
+    .callout-dark  { background: #f4f4f8; border-left: 4px solid #888; }
+
+    /* SVG diagrams */
+    .diagram-wrap { margin: 0.7em auto; display: block; }
+
+    /* Coverage bars */
+    .cov-row { margin-bottom: 0.15em; }
+    .cov-label { font-size: 0.52em; color: #666; margin-bottom: 0.05em; }
+    .cov-bar {
+      display: flex; height: 22px; border-radius: 4px; overflow: hidden;
+      font-size: 0.55em; font-weight: 600;
+    }
+    .seg-det {
+      background: var(--blue); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; border-right: 1px solid rgba(255,255,255,0.3);
+    }
+    .seg-llm {
+      background: #cc8844; color: #fff; flex: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Comparison table */
+    table.cmp { font-size: 0.61em; border-collapse: collapse; width: 100%; margin-top: 0.4em; border-bottom: 1px solid #ccc; }
+    table.cmp th, table.cmp td { border: 1px solid #ccc; padding: 0.17em 0.5em; }
+    table.cmp th { background: #eee; text-align: left; }
+    table.cmp td:first-child { font-weight: 600; color: #444; }
+    table.cmp .good { color: var(--green); font-weight: 600; }
+    table.cmp .bad  { color: var(--red); }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ═══════════════════════════════════════════ SLIDE 1: Title -->
+<section class="center" data-background-color="#1a1a2e">
+  <h1 style="color:#dde; font-size:1.7em; font-weight:700; margin-bottom:0.3em;">
+    Discrete Distillation
+  </h1>
+  <h3 style="color:#99b; font-weight:400; font-size:1em; margin-top:0;">
+    Compiling LLM Knowledge into Deterministic Programs
+  </h3>
+  <p style="color:#667; margin-top:2.5em; font-size:0.7em;">
+    A framework for amortizing reasoning over repeated tasks
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 2: Higher-order function -->
+<section>
+  <h2>The Model as a Higher-Order Function</h2>
+  <p>A language model \(\mathcal{M}\) induces a <em>probabilistic higher-order function</em>:</p>
+
+  \[ \hat{F} \;:\; \Pi \;\longrightarrow\; \bigl(\Sigma^* \to \Delta(\Sigma^*)\bigr) \]
+
+  <ul style="margin-top:0.4em;">
+    <li>\(\Pi\) — <em>prompt prefixes</em>: system prompts, instruction sets, persona</li>
+    <li>\(\Sigma^*\) — token sequences (inputs and outputs)</li>
+    <li>\(\Delta(\Sigma^*)\) — probability distributions over token sequences</li>
+  </ul>
+
+  <p class="fragment" style="margin-top:0.5em;">
+    Applying \(\hat{F}\) to a prefix \(\pi\) yields a <em>continuation function</em>:
+    \[ \hat{g}_\pi \;=\; \hat{F}(\pi) \;:\; \Sigma^* \to \Delta(\Sigma^*) \]
+  </p>
+
+  <div class="callout callout-dark fragment">
+    The hat \(\hat{\cdot}\) marks functions that <strong>may produce semantically incorrect outputs</strong>
+    — they are stochastic and not guaranteed correct.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 3: Two-stage application -->
+<section>
+  <h2>Two-Stage Application</h2>
+  <p>
+    Given a continuation \(c \in \Sigma^*\) (chat history + user request),
+    sampling the answer:
+    \[ \hat{y} \;\sim\; \hat{g}_\pi(c) \]
+    The hat propagates — \(\hat{y}\) inherits potential error from \(\hat{F}\).
+  </p>
+
+  <!-- SVG diagram of two-stage application -->
+  <svg class="diagram-wrap fragment" width="680" height="140" viewBox="0 0 680 160" style="max-width:100%;margin:0.3em auto">
+    <!-- π box -->
+    <rect x="10" y="60" width="60" height="36" rx="5" fill="#f5f5ff" stroke="#2255bb" stroke-width="2"/>
+    <text x="40" y="83" text-anchor="middle" font-size="14" fill="#2255bb" font-family="serif">π</text>
+    <!-- arrow to F-hat -->
+    <line x1="70" y1="78" x2="140" y2="78" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+    <!-- F-hat box (red = probabilistic) -->
+    <rect x="140" y="55" width="68" height="46" rx="6" fill="#fff5f5" stroke="#882222" stroke-width="2"/>
+    <text x="174" y="76" text-anchor="middle" font-size="15" fill="#882222" font-family="serif" font-weight="bold">F̂</text>
+    <text x="174" y="92" text-anchor="middle" font-size="9" fill="#882222" font-family="sans-serif">higher-order</text>
+    <!-- arrow to g-hat-pi -->
+    <line x1="208" y1="78" x2="290" y2="78" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+    <!-- g-hat-pi box -->
+    <rect x="290" y="55" width="80" height="46" rx="6" fill="#fff5f5" stroke="#882222" stroke-width="2"/>
+    <text x="330" y="76" text-anchor="middle" font-size="15" fill="#882222" font-family="serif" font-weight="bold">ĝ<tspan font-size="10" dy="3">π</tspan></text>
+    <text x="330" y="93" text-anchor="middle" font-size="9" fill="#882222" font-family="sans-serif">continuation fn</text>
+    <!-- c (from below) -->
+    <text x="408" y="135" text-anchor="middle" font-size="13" fill="#444" font-family="serif">c</text>
+    <text x="455" y="139" text-anchor="start" font-size="10" fill="#666" font-family="sans-serif">(chat + user request)</text>
+    <line x1="408" y1="125" x2="408" y2="100" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+    <!-- invisible connector from g-hat-pi to combiner -->
+    <line x1="370" y1="78" x2="390" y2="78" stroke="#555" stroke-width="1.5"/>
+    <line x1="390" y1="78" x2="390" y2="100" stroke="#555" stroke-width="1.5"/>
+    <!-- combiner dot -->
+    <circle cx="408" cy="100" r="4" fill="#555"/>
+    <line x1="390" y1="100" x2="408" y2="100" stroke="#555" stroke-width="1.5"/>
+    <!-- arrow from combiner to y-hat -->
+    <line x1="412" y1="100" x2="490" y2="78" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+    <!-- y-hat box -->
+    <rect x="490" y="55" width="80" height="46" rx="6" fill="#fff5f5" stroke="#882222" stroke-width="2"/>
+    <text x="530" y="76" text-anchor="middle" font-size="15" fill="#882222" font-family="serif" font-weight="bold">ŷ</text>
+    <text x="530" y="93" text-anchor="middle" font-size="9" fill="#cc4444" font-family="sans-serif">may be wrong</text>
+    <!-- arrowhead marker -->
+    <defs>
+      <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#555"/>
+      </marker>
+    </defs>
+  </svg>
+
+  <p class="fragment" style="margin-top:0.3em;">
+    For a fixed \(\pi\), the model is a black box consuming user turns and emitting sampled
+    answers — correct with high but <em>not certain</em> probability.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 4: Standard usage -->
+<section>
+  <h2>Standard (Query-Time) Reasoning</h2>
+  <p>For each user query \(u_i\), invoke \(\hat{g}_\pi\):</p>
+  \[ \hat{y}_i \;\sim\; \hat{g}_\pi(u_i), \qquad \text{cost } c_{\mathcal{M}} \text{ per query} \]
+
+  <p class="fragment" style="margin-top:0.7em;">Total cost for \(N\) queries:</p>
+  \[ C_{\mathrm{std}}(N) \;=\; N \cdot c_{\mathcal{M}} \]
+
+  <ul class="fragment" style="margin-top:0.7em;">
+    <li>Appropriate for <em>novel</em> tasks — full generalization, no prior knowledge assumed</li>
+    <li>Cost scales <em>linearly</em> — no benefit from repetition or structure</li>
+    <li>Each \(\hat{y}_i\) is a fresh sample — output may vary even for identical \(u_i\)</li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 5: Neural distillation background -->
+<section>
+  <h2>Knowledge Distillation — Neural Target</h2>
+  <p>
+    Hinton et al. (2015): transfer knowledge from a large model \(\mathcal{M}_L\)
+    into a small model \(\mathcal{M}_S\) by training on <em>soft targets</em>
+    (output distributions of \(\mathcal{M}_L\) rather than hard labels).
+  </p>
+
+  \[ \hat{F}_L \;\xrightarrow{\;\text{distill}\;}\; \hat{F}_S, \qquad |\mathcal{M}_S| \ll |\mathcal{M}_L| \]
+
+  <div class="fragment callout callout-dark" style="margin-top:0.8em;">
+    <strong>What stays the same after neural distillation:</strong>
+    <ul style="margin-top:0.4em; margin-bottom:0;">
+      <li>Target is still a <em>neural network</em> — still \(\hat{\cdot}\), still probabilistic</li>
+      <li>Knowledge remains in weights — <em>opaque</em></li>
+      <li>Errors corrected only by <em>re-training</em></li>
+      <li>Broad generalization preserved — but so is the black-box character</li>
+    </ul>
+  </div>
+
+  <p class="fragment" style="margin-top:0.8em;">
+    The target representation is the same kind of thing as the source.
+    What if we chose a <em>different</em> target?
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 6: Discrete distillation -->
+<section>
+  <h2>Discrete Distillation — A Different Target</h2>
+
+  <p>
+    Instead of another neural net, distill \(\hat{F}\)'s knowledge into
+    <em>discrete structures</em>: programs, grammars, schemas.
+  </p>
+
+  <div style="margin:0.9em 0; display:flex; gap:1.5em; align-items:center;">
+    <div class="hat-box">\(\hat{F}\)</div>
+    <span style="font-size:1.6em; color:#555;">⟹</span>
+    <div class="det-box">\(\tilde{p},\;\; G,\;\; \ldots\)</div>
+    <span style="font-size:0.75em; color:#666;">programs &amp; grammars</span>
+  </div>
+
+  <ul class="fragment">
+    <li><strong>Programs</strong> \(\tilde{p}: \Theta \to \mathcal{Y}\) — deterministic computations over typed parameters</li>
+    <li><strong>Grammars</strong> \(G: \mathcal{T} \to \Theta\) — NFA recognizers that match utterances and extract parameters</li>
+    <li><strong>Schemas</strong>, API bindings, structured plans, structured memory indexes, …</li>
+  </ul>
+
+  <p class="fragment" style="margin-top:0.8em;">
+    \(\tilde{\cdot}\) denotes <em>deterministic but initially unverified</em> — no randomness,
+    but may be semantically wrong if compiled from a flawed \(\hat{y}\).
+  </p>
+
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 7: The compiler -->
+<section>
+  <h2>The Compilation Step</h2>
+  <p>
+    Given a teaching example \(u_0\), the model produces a <em>recipe</em>
+    \(\hat{r} \in \mathcal{R}\) — a structured description of the intended computation:
+    \[ \hat{r} \;\sim\; \hat{g}_\pi(u_0), \qquad \hat{r} \in \mathcal{R} \subset \Sigma^* \]
+  </p>
+
+  <p class="fragment">
+    A <em>compiler</em> — a total <strong>deterministic</strong> function — maps recipe to program:
+    \[ \kappa : \mathcal{R} \;\longrightarrow\; (\Theta \to \mathcal{Y}), \qquad \tilde{p} = \kappa(\hat{r}) \]
+  </p>
+
+  <!-- SVG: compilation pipeline -->
+  <svg class="diagram-wrap fragment" width="680" height="95" viewBox="0 0 680 110" style="max-width:100%;margin:0.3em auto">
+    <defs>
+      <marker id="arr2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L8,3 z" fill="#555"/>
+      </marker>
+    </defs>
+    <!-- u0 -->
+    <rect x="5" y="32" width="60" height="34" rx="5" fill="#f8f8f8" stroke="#555" stroke-width="1.5"/>
+    <text x="35" y="53" text-anchor="middle" font-size="13" fill="#333" font-family="serif">u₀</text>
+    <!-- arrow -->
+    <line x1="65" y1="49" x2="105" y2="49" stroke="#555" stroke-width="1.5" marker-end="url(#arr2)"/>
+    <!-- g-hat-pi -->
+    <rect x="105" y="28" width="76" height="42" rx="6" fill="#fff5f5" stroke="#882222" stroke-width="2"/>
+    <text x="143" y="48" text-anchor="middle" font-size="14" fill="#882222" font-family="serif" font-weight="bold">ĝ<tspan font-size="10" dy="3">π</tspan></text>
+    <text x="143" y="63" text-anchor="middle" font-size="9" fill="#882222" font-family="sans-serif">LLM</text>
+    <!-- arrow to r-hat -->
+    <line x1="181" y1="49" x2="225" y2="49" stroke="#555" stroke-width="1.5" marker-end="url(#arr2)"/>
+    <!-- r-hat box -->
+    <rect x="225" y="28" width="80" height="42" rx="6" fill="#fff5f5" stroke="#882222" stroke-width="2"/>
+    <text x="265" y="48" text-anchor="middle" font-size="14" fill="#882222" font-family="serif" font-weight="bold">r̂</text>
+    <text x="265" y="63" text-anchor="middle" font-size="9" fill="#882222" font-family="sans-serif">recipe</text>
+    <!-- arrow to kappa -->
+    <line x1="305" y1="49" x2="355" y2="49" stroke="#555" stroke-width="1.5" marker-end="url(#arr2)"/>
+    <!-- kappa box (deterministic = blue) -->
+    <rect x="355" y="28" width="76" height="42" rx="6" fill="#f5f5ff" stroke="#2255bb" stroke-width="2"/>
+    <text x="393" y="48" text-anchor="middle" font-size="14" fill="#2255bb" font-family="serif" font-weight="bold">κ</text>
+    <text x="393" y="63" text-anchor="middle" font-size="9" fill="#2255bb" font-family="sans-serif">compiler</text>
+    <!-- arrow to p-tilde -->
+    <line x1="431" y1="49" x2="475" y2="49" stroke="#555" stroke-width="1.5" marker-end="url(#arr2)"/>
+    <!-- p-tilde box -->
+    <rect x="475" y="28" width="110" height="42" rx="6" fill="#f5f5ff" stroke="#2255bb" stroke-width="2"/>
+    <text x="530" y="48" text-anchor="middle" font-size="14" fill="#2255bb" font-family="serif" font-weight="bold">p̃ : Θ → Y</text>
+    <text x="530" y="63" text-anchor="middle" font-size="9" fill="#2255bb" font-family="sans-serif">deterministic program</text>
+    <!-- labels below arrows -->
+    <text x="143" y="85" text-anchor="middle" font-size="9" fill="#aa2222">probabilistic</text>
+    <text x="393" y="85" text-anchor="middle" font-size="9" fill="#2255bb">deterministic</text>
+  </svg>
+
+  <p class="fragment" style="margin-top:0.2em;">
+    \(\kappa\) is deterministic but \(\tilde{p}\) is only as correct as \(\hat{r}\) was.
+    Also emitted: a grammar \(G\) that recognizes the task family and extracts \(\theta \in \Theta\).
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 8: Task families -->
+<section>
+  <h2>Task Families</h2>
+  <p>A <em>task family</em> is a triple \((\mathcal{T},\, \Theta,\, \phi)\):</p>
+  <ul>
+    <li>\(\mathcal{T} \subseteq \Sigma^*\) — all utterances expressing the same underlying task</li>
+    <li>\(\Theta\) — parameter space (e.g. genre × quantity × time period)</li>
+    <li>\(\phi : \Theta \to \mathcal{T}\) — maps parameters to representative utterances</li>
+  </ul>
+
+  <p class="fragment" style="margin-top:0.7em;">
+    A grammar \(G : \mathcal{T} \to \Theta\) (implemented as an NFA) <em>recognizes</em> the
+    task family and <em>extracts</em> parameters at near-zero cost:
+    \[ G(u) = \theta \in \Theta \quad \forall\, u \in \mathcal{T} \]
+  </p>
+
+  <div class="callout callout-dark fragment">
+    <strong>Correctness requirement on \(\tilde{p}\):</strong>
+    \(\tilde{p}\) must <em>parameterize</em>, not specialize.
+    A recipe that hardcodes one value (e.g. a URL for a single genre) produces
+    \(\tilde{p}\) correct only at the teaching point \(\theta_0\).
+    Correct distillation requires \(\tilde{p}(\theta) \approx_\varepsilon \hat{g}_\pi(\phi(\theta))\)
+    for <em>all</em> \(\theta \in \Theta\).
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 9: Piecewise handler -->
+<section>
+  <h2>The Growing Piecewise Handler \(H_k\)</h2>
+  <p>
+    Let \(\{(\mathcal{T}_i, \Theta_i, G_i, \tilde{p}_i)\}_{i=1}^k\) be compiled task families. Define:
+    \[
+      H_k(u) \;=\; \begin{cases}
+        \tilde{p}_i\bigl(G_i(u)\bigr) & \exists\, i \leq k : u \in \mathcal{T}_i \\[4pt]
+        \hat{g}_\pi(u) & \text{otherwise}
+      \end{cases}
+    \]
+  </p>
+
+  <p class="fragment" style="margin-top:0.5em; font-size:0.8em;">
+    The first \(k\) branches are <strong>deterministic</strong>. The fallback is the full LLM.
+    As \(k\) grows, deterministic coverage expands:
+  </p>
+
+  <div class="fragment" style="margin-top:0.6em;">
+    <div class="cov-row">
+      <div class="cov-label">k = 1</div>
+      <div class="cov-bar">
+        <div class="seg-det" style="width:18%">T₁</div>
+        <div class="seg-llm">LLM fallback</div>
+      </div>
+    </div>
+    <div class="cov-row" style="margin-top:0.25em;">
+      <div class="cov-label">k = 3</div>
+      <div class="cov-bar">
+        <div class="seg-det" style="width:18%">T₁</div>
+        <div class="seg-det" style="width:15%">T₂</div>
+        <div class="seg-det" style="width:13%">T₃</div>
+        <div class="seg-llm">LLM fallback</div>
+      </div>
+    </div>
+    <div class="cov-row" style="margin-top:0.25em;">
+      <div class="cov-label">k → ∞</div>
+      <div class="cov-bar">
+        <div class="seg-det" style="width:18%">T₁</div>
+        <div class="seg-det" style="width:15%">T₂</div>
+        <div class="seg-det" style="width:13%">T₃</div>
+        <div class="seg-det" style="width:11%">T₄</div>
+        <div class="seg-det" style="width:9%">T₅</div>
+        <div class="seg-det" style="width:7%">…</div>
+        <div class="seg-llm" style="flex:0.3">LLM</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 10: Coverage and cost -->
+<section>
+  <h2>Coverage and Expected Cost</h2>
+  <p>Let \(\mathcal{D}\) be a distribution over user utterances. Define <em>coverage</em>:</p>
+  \[ \mathrm{cov}(H_k) \;=\; \Pr_{u \sim \mathcal{D}}\!\Bigl[u \in \textstyle\bigcup_{i=1}^k \mathcal{T}_i\Bigr] \]
+
+  <p class="fragment">Expected cost per query:</p>
+  \[
+    \begin{aligned}
+    \mathbb{E}\bigl[C(H_k)\bigr]
+      &\;=\; \mathrm{cov}(H_k)\cdot c_{\mathrm{det}} \\
+      &\quad+\; \bigl(1 - \mathrm{cov}(H_k)\bigr)\cdot c_{\mathcal{M}}
+    \end{aligned}
+  \]
+
+  <p class="fragment" style="margin-top:0.5em;">
+    Since \(c_{\mathrm{det}} \approx 0 \ll c_{\mathcal{M}}\),
+    as \(\mathrm{cov}(H_k) \nearrow 1\):
+    \[ \mathbb{E}\bigl[C(H_k)\bigr] \;\longrightarrow\; 0 \]
+  </p>
+
+  <div class="callout callout-blue fragment">
+    <strong>Break-even:</strong> compiling a task family costs one LLM call \(c_{\mathcal{M}}\)
+    (the teaching example). A single subsequent query recoups that cost entirely.
+    \(N^* \approx 1\).
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 11a: Correctness refinement -->
+<section>
+  <h2>Correctness Refinement</h2>
+  <p>
+    Each \(\tilde{p}_i\) is initially <em>unverified</em>. Let \(y^*(\theta)\) be
+    the ground-truth outcome. Define the error rate at refinement step \(t\):
+    \[ \varepsilon_i(t) \;=\; \Pr_{\theta \sim \Theta_i}\!\bigl[\tilde{p}_i^{(t)}(\theta) \neq y^*(\theta)\bigr] \]
+  </p>
+
+  <p class="fragment" style="margin-top:0.4em;">When a user signals an error, refinement takes one of three paths:</p>
+  <ol class="fragment">
+    <li style="margin-bottom:0.2em;"><strong>Re-recording</strong> — back through \(\hat{g}_\pi\) with corrected context</li>
+    <li><strong>AI-assisted repair</strong> of \(\tilde{p}_i\):
+      <ul style="margin-top:0.15em;">
+        <li>(a) direct engineering — unit tests, debugger, code review</li>
+        <li>(b) ask a code-generation model to fix \(\tilde{p}_i\) given the failure case</li>
+      </ul>
+    </li>
+  </ol>
+
+  <div class="callout callout-green fragment" style="margin-top:0.45em;">
+    Key asymmetry: \(\hat{g}_\pi\) is a black box — you can only reprompt.
+    \(\tilde{p}_i\) is <strong>conventional software</strong> — transparent, testable, refineable.
+    \(\varepsilon_i(t) \to 0\) as \(t \to \infty\).
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 11b: Data-driven splitting -->
+<section>
+  <h2>Correctness Refinement — Data-Driven Splitting</h2>
+  <p>
+    A third path exploits accumulated user feedback directly.
+    Partition inputs: let \(A \subset \mathcal{T}_i\) be accepted, \(R \subset \mathcal{T}_i\) rejected.
+  </p>
+
+  <ol class="fragment" start="3">
+    <li><strong>Data-driven splitting</strong>:
+      <ul style="margin-top:0.2em;">
+        <li style="margin-bottom:0.15em;">(a) <em>Grammar</em>: pose \((A,\, R)\) to \(\hat{g}_\pi\) —
+            <em>"find a rule accepting \(A\) and rejecting \(R\)"</em> —
+            replacing \(G_i\) with discriminating rules \(G_i^+,\, G_i^-\)</li>
+        <li>(b) <em>Program</em>: filter \(\tilde{p}_i\)'s control flow by coverage over \(A\) vs \(R\) —
+            automatically specializing two flow programs \(\tilde{p}_i^+,\, \tilde{p}_i^-\),
+            one per partition</li>
+      </ul>
+    </li>
+  </ol>
+
+  <div class="callout callout-dark fragment" style="margin-top:0.4em; font-size:0.63em;">
+    <strong>Program Synthesis connection</strong> —
+    path 3 is an instance of <em>synthesis from examples</em>:
+    grammar induction from \((A, R)\) recalls Angluin's L* / RPNI (Oncina &amp; García 1992);
+    flow specialization resembles SyGuS (Alur et al. 2013) and FlashFill / PROSE (Gulwani et al.).
+    The novel element: \(\hat{g}_\pi\) as <em>oracle</em> generalizes to informal, natural-language domains;
+    regular closure makes \(G_i^- = \overline{G_i^+}\) automatic.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 12: Comparison -->
+<section>
+  <h2>Neural vs. Discrete Distillation</h2>
+  <table class="cmp">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Neural Distillation</th>
+        <th>Discrete Distillation</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Source</td>
+        <td>\(\hat{F}_L\) (large model)</td>
+        <td>\(\hat{F}\) (any model)</td>
+      </tr>
+      <tr>
+        <td>Target</td>
+        <td>Small neural net \(\hat{F}_S\)</td>
+        <td class="good">Programs, grammars, schemas</td>
+      </tr>
+      <tr>
+        <td>Output</td>
+        <td class="bad">Probabilistic (\(\hat{\cdot}\))</td>
+        <td class="good">Deterministic (\(\tilde{\cdot}\))</td>
+      </tr>
+      <tr>
+        <td>Coverage</td>
+        <td>Broad — generalizes</td>
+        <td>Targeted — task families</td>
+      </tr>
+      <tr>
+        <td>Transparency</td>
+        <td class="bad">Opaque (weights)</td>
+        <td class="good">Readable (source code)</td>
+      </tr>
+      <tr>
+        <td>Error correction</td>
+        <td class="bad">Re-training</td>
+        <td class="good">Conventional debugging</td>
+      </tr>
+      <tr>
+        <td>Cost per query</td>
+        <td>\(c_{\mathcal{M}_S} &lt; c_{\mathcal{M}_L}\)</td>
+        <td class="good">\(c_{\mathrm{det}} \approx 0\)</td>
+      </tr>
+      <tr>
+        <td>Refinement loop</td>
+        <td class="bad">Gradient descent</td>
+        <td class="good">Engineering + user feedback</td>
+      </tr>
+      <tr>
+        <td>Artifact class</td>
+        <td class="bad">Parametric weights (opaque, fixed)</td>
+        <td class="good">Weakest sufficient programs + grammars</td>
+      </tr>
+      <tr>
+        <td>Algebraic ops</td>
+        <td class="bad">None — retrain to change</td>
+        <td class="good">Union, concat, complement — automatic</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════ SLIDE 13: Summary -->
+<section class="center" data-background-color="#1a1a2e">
+  <h2 style="color:#dde; border-bottom-color:#445;">Summary</h2>
+  <div style="text-align:left; font-size:0.82em; margin-top:0.8em;">
+    <p class="fragment" style="color:#bbc;">
+      \(\hat{F}\) is a <strong style="color:#99ccff;">probabilistic higher-order function</strong>:
+      prompt prefix → continuation function → sampled (possibly incorrect) answer.
+    </p>
+    <p class="fragment" style="color:#bbc; margin-top:0.7em;">
+      <strong style="color:#99ccff;">Discrete distillation</strong> compiles outputs of \(\hat{F}\)
+      into programs \(\tilde{p}\) and grammars \(G\) — deterministic, transparent, refineable
+      structures that approximate \(\hat{F}\) on specific task families.
+    </p>
+    <p class="fragment" style="color:#bbc; margin-top:0.7em;">
+      The handler \(H_k\) is a <strong style="color:#99ccff;">piecewise function</strong>
+      growing over time: deterministic branches multiply, cost collapses,
+      correctness improves through ordinary software engineering.
+    </p>
+    <p class="fragment" style="color:#bbc; margin-top:0.7em;">
+      We target the <strong style="color:#99ccff;">weakest sufficient artifact class</strong> —
+      regular grammars (closed under union and complement) and bounded dataflow programs
+      (composable, terminating, verifiable). Weakness is a feature: algebraic closure means
+      splits, merges, and compositions are <em>automatic</em>.
+      Turing-complete programs fit the framework, but weaker classes accelerate refinement
+      and are secure by construction.
+    </p>
+    <p class="fragment" style="color:#7799cc; font-style:italic; margin-top:0.9em; text-align:center;">
+      Where neural distillation produces a smaller black box,<br>
+      discrete distillation produces conventional software.
+    </p>
+  </div>
+</section>
+
+</div><!-- slides -->
+</div><!-- reveal -->
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/math/math.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/plugin/notes/notes.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    center: false,
+    slideNumber: 'c/t',
+    transition: 'fade',
+    transitionSpeed: 'fast',
+    width: 1050,
+    height: 700,
+    margin: 0.06,
+    minScale: 0.1,
+    maxScale: 2.0,
+    plugins: [ RevealMath.KaTeX, RevealNotes ],
+    katex: {
+      version: 'latest',
+      delimiters: [
+        { left: '\\[', right: '\\]', display: true  },
+        { left: '\\(', right: '\\)', display: false },
+      ],
+    },
+  });
+
+  // reveal.js sets top as an inline style, overriding CSS !important.
+  // Use setProperty with 'important' priority to beat it.
+  function pinSlidesToTop() {
+    document.querySelectorAll('.reveal .slides > section').forEach(s => {
+      s.style.setProperty('top', '0px', 'important');
+    });
+  }
+  Reveal.on('ready', () => requestAnimationFrame(pinSlidesToTop));
+  Reveal.on('resize', () => requestAnimationFrame(pinSlidesToTop));
+  Reveal.on('slidechanged', () => requestAnimationFrame(pinSlidesToTop));
+</script>
+</body>
+</html>
