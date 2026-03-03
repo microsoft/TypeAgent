@@ -250,8 +250,7 @@ function printTimingTable(rows: TimingResult[]): void {
             unmatched.reduce((s, r) => s + r.hybridSpeedup, 0) /
             unmatched.length;
         const avgAST =
-            unmatched.reduce((s, r) => s + r.astSpeedup, 0) /
-            unmatched.length;
+            unmatched.reduce((s, r) => s + r.astSpeedup, 0) / unmatched.length;
         console.log(
             `  Avg speedup (unmatched): idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
         );
@@ -388,13 +387,10 @@ describe("DFA vs NFA Benchmark", () => {
 
             // DFA AST = matchDFAToASTWithSplitting + evaluateMatchAST
             //   DFA traversal produces MatchAST, then bottom-up value eval
-            const dfaASTMs = timeMsN(
-                () => {
-                    const r = matchDFAToASTWithSplitting(dfa!, tokens);
-                    if (r.ast) evaluateMatchAST(r.ast, grammar);
-                },
-                ITERATIONS,
-            );
+            const dfaASTMs = timeMsN(() => {
+                const r = matchDFAToASTWithSplitting(dfa!, tokens);
+                if (r.ast) evaluateMatchAST(r.ast, grammar);
+            }, ITERATIONS);
 
             const matched = matchNFA(nfa!, tokens, false).matched;
 

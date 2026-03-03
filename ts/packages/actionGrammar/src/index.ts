@@ -150,10 +150,6 @@ export {
     type DFACompletionGroup,
     type DFAPropertyCompletion,
     type WildcardCompletionInfo,
-    matchDFAToAST,
-    matchDFAToASTWithSplitting,
-    evaluateMatchAST,
-    type DFAASTMatchResult,
 } from "./dfaMatcher.js";
 export { splitToken, applySplitToTokens } from "./tokenSplit.js";
 export {
