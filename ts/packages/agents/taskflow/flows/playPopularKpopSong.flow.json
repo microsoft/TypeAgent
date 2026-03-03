@@ -1,0 +1,44 @@
+{
+  "name": "playPopularKpopSong",
+  "description": "Find and play the most popular K-pop song this month",
+  "parameters": {
+    "timePeriod": {
+      "type": "string",
+      "required": false,
+      "default": "this month",
+      "description": "Time period for the chart (e.g., 'this month', 'this week')"
+    }
+  },
+  "steps": [
+    {
+      "id": "fetchChart",
+      "schemaName": "utility",
+      "actionName": "webFetch",
+      "parameters": {
+        "url": "https://onlyhit.us/charts/kpop-thisweek/"
+      },
+      "observedOutputFormat": "HTML page with K-pop chart rankings"
+    },
+    {
+      "id": "extractTopSong",
+      "schemaName": "utility",
+      "actionName": "llmTransform",
+      "parameters": {
+        "input": "${fetchChart.text}",
+        "prompt": "Extract the #1 song from this K-pop chart. Return a JSON object with 'trackName' (song title) and 'artist' (artist name) fields. If there are multiple artists, put them in a single string separated by commas.",
+        "parseJson": true,
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "observedOutputFormat": "{ \"trackName\": \"song title\", \"artist\": \"artist name\" }"
+    },
+    {
+      "id": "playSong",
+      "schemaName": "player",
+      "actionName": "playTrack",
+      "parameters": {
+        "trackName": "${extractTopSong.data.trackName}",
+        "artists": ["${extractTopSong.data.artist}"]
+      }
+    }
+  ]
+}

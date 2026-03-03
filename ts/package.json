@@ -92,12 +92,12 @@
         "arm64"
       ]
     },
-    "ignoredBuiltDependencies": [
-      "leveldown"
-    ],
     "overrides": {
       "node-gyp": "^12.2.0"
-    }
+    },
+    "ignoredBuiltDependencies": [
+      "leveldown"
+    ]
   },
   "peerDependencyRules": {
     "ignoreMissing": [

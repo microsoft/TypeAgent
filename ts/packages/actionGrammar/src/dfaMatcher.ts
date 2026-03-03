@@ -18,50 +18,6 @@ import type { NFAMatchResult } from "./nfaInterpreter.js";
 import type { Grammar } from "./grammarTypes.js";
 import type { ValueNode } from "./grammarRuleParser.js";
 
-// ─── DFA First-Token Index ──────────────────────────────────────────────────
-// O(1) pre-filter: reject tokens whose first word can't start any DFA path.
-// Built lazily from the DFA start state and cached per DFA object.
-
-interface DFAFirstTokenIndex {
-    /** Set of normalized tokens that have explicit transitions from the start state */
-    readonly validFirstTokens: ReadonlySet<string>;
-    /** Whether the start state has a wildcard or phraseSet transition (can match anything) */
-    readonly hasWildcardStart: boolean;
-}
-
-const dfaIndexCache = new WeakMap<DFA, DFAFirstTokenIndex>();
-
-function getDFAIndex(dfa: DFA): DFAFirstTokenIndex {
-    let idx = dfaIndexCache.get(dfa);
-    if (!idx) {
-        const startState = dfa.states[dfa.startState];
-        const validFirstTokens = new Set<string>();
-        if (startState) {
-            for (const t of startState.transitions) {
-                validFirstTokens.add(t.token);
-            }
-        }
-        const hasWildcardStart =
-            !!startState?.wildcardTransition ||
-            !!(startState?.phraseSetTransitions?.length);
-        idx = { validFirstTokens, hasWildcardStart };
-        dfaIndexCache.set(dfa, idx);
-    }
-    return idx;
-}
-
-/**
- * O(1) first-token rejection check for DFA matching.
- * Returns true if the tokens can be immediately rejected without running the DFA.
- */
-function dfaFirstTokenRejects(dfa: DFA, tokens: string[]): boolean {
-    if (tokens.length === 0) return false; // empty input may match accepting start state
-    const idx = getDFAIndex(dfa);
-    if (idx.hasWildcardStart) return false; // wildcard can match anything
-    const firstToken = normalizeToken(tokens[0]);
-    return !idx.validFirstTokens.has(firstToken);
-}
-
 /**
  * Environment for slot-based variable storage
  * Matches the NFA interpreter's environment structure
@@ -1181,27 +1137,6 @@ export interface DFAASTMatchResult {
 }
 
 /**
- * Determine at match time whether a wildcard node is "checked" (entity-typed).
- *
- * The DFA compiler may mark a wildcard as checked based on typeName alone,
- * but at runtime the token must also validate against the entity type.
- * Mirrors the slot-based matcher logic: "wildcard" and "string" types are
- * always unchecked; "number" requires parseFloat; other types require a
- * registered entity validator.
- */
-function isRuntimeChecked(w: WildcardMatchNode): boolean {
-    const typeName = w.typeName;
-    if (!typeName || typeName === "string" || typeName === "wildcard")
-        return false;
-    const tokenStr = w.tokens.join(" ");
-    if (typeName === "number") {
-        return !isNaN(parseFloat(tokenStr));
-    }
-    const validator = globalEntityRegistry.getValidator(typeName);
-    return validator ? validator.validate(tokenStr) : false;
-}
-
-/**
  * Match tokens against a DFA, producing a MatchAST.
  *
  * Uses minimal munch: wildcards consume as few tokens as possible.
@@ -1494,18 +1429,13 @@ export function matchDFAToAST(dfa: DFA, tokens: string[]): DFAASTMatchResult {
         return NO_MATCH;
     }
 
-    // Count wildcard priorities from the AST parts (runtime validation).
-    // Count per TOKEN consumed (not per wildcard node) to match NFA semantics.
-    // Also correct the checked field on each wildcard node (compile-time
-    // value may be wrong for "wildcard" type — see isRuntimeChecked).
+    // Count wildcard priorities from the AST parts
     for (const part of parts) {
         if (part.kind === "wildcard") {
-            const runtimeChecked = isRuntimeChecked(part);
-            (part as WildcardMatchNode).checked = runtimeChecked;
-            if (runtimeChecked) {
-                checkedWildcardCount += part.tokens.length;
+            if (part.checked) {
+                checkedWildcardCount++;
             } else {
-                uncheckedWildcardCount += part.tokens.length;
+                uncheckedWildcardCount++;
             }
         }
     }
@@ -1773,17 +1703,15 @@ function matchDFAToASTFrom(
         return NO_MATCH;
     }
 
-    // Count wildcard priorities from AST parts (runtime validation, per token)
+    // Count wildcard priorities from AST parts
     let finalChecked = checkedWildcardCount;
     let finalUnchecked = uncheckedWildcardCount;
     for (const part of parts) {
         if (part.kind === "wildcard") {
-            const runtimeChecked = isRuntimeChecked(part);
-            (part as WildcardMatchNode).checked = runtimeChecked;
-            if (runtimeChecked) {
-                finalChecked += part.tokens.length;
+            if (part.checked) {
+                finalChecked++;
             } else {
-                finalUnchecked += part.tokens.length;
+                finalUnchecked++;
             }
         }
     }
@@ -1888,27 +1816,12 @@ function backtrack(
  */
 export function evaluateMatchAST(ast: MatchAST, grammar: Grammar): any {
     const rule = grammar.rules[ast.ruleIndex];
-    if (!rule) return undefined;
-
-    // Find the value expression — it may be nested in RulesPart structures
-    const valueNode = findValueExpression(rule, ast.parts);
-    if (!valueNode) return undefined;
+    if (!rule?.value) return undefined;
 
     // Build name→value bindings from AST parts
-    const bindings = buildBindings(ast.parts);
-
-    // Evaluate the value expression with the bindings
-    return evaluateValueNode(valueNode, bindings);
-}
-
-/**
- * Build name→value bindings from AST parts.
- * Wildcards produce string/number/entity values, ruleRefs recurse.
- */
-function buildBindings(parts: MatchNode[]): Map<string, any> {
     const bindings = new Map<string, any>();
 
-    for (const part of parts) {
+    for (const part of ast.parts) {
         switch (part.kind) {
             case "wildcard": {
                 const rawValue = part.tokens.join(" ");
@@ -1916,8 +1829,7 @@ function buildBindings(parts: MatchNode[]): Map<string, any> {
                 if (
                     part.checked &&
                     part.typeName &&
-                    part.typeName !== "string" &&
-                    part.typeName !== "wildcard"
+                    part.typeName !== "string"
                 ) {
                     if (part.typeName === "number") {
                         const num = parseFloat(rawValue);
@@ -1942,99 +1854,18 @@ function buildBindings(parts: MatchNode[]): Map<string, any> {
                 break;
             }
             case "ruleRef":
-                // Recursively evaluate the sub-match (not yet implemented for DFA)
+                // Recursively evaluate the sub-match
+                bindings.set(
+                    part.variable,
+                    evaluateMatchAST(part.match, grammar),
+                );
                 break;
             // Token and phraseSet nodes don't contribute to value bindings
         }
     }
 
-    return bindings;
-}
-
-/**
- * Find the ValueNode expression for a match, searching through nested
- * RulesPart structures if needed.
- *
- * The grammar compiler may wrap rules in RulesPart (type="rules") when
- * there are alternatives (e.g. `<Start> = <play> | <stop>`). The actual
- * value expression lives on the nested GrammarRule, not the top level.
- *
- * Strategy: if the top-level rule has a value, use it directly.
- * Otherwise, match the AST parts against nested rule alternatives by
- * structural comparison (compare token sequences and wildcard positions).
- */
-function findValueExpression(
-    rule: import("./grammarTypes.js").GrammarRule,
-    astParts: MatchNode[],
-): ValueNode | undefined {
-    // Direct value on the rule — use it
-    if (rule.value) return rule.value;
-
-    // Search through RulesPart structures
-    for (const part of rule.parts) {
-        if (part.type === "rules") {
-            for (const nestedRule of part.rules) {
-                const nestedValue = findValueExpression(nestedRule, astParts);
-                if (nestedValue) return nestedValue;
-            }
-        }
-    }
-
-    // No value expression found — try structural matching against nested rules
-    for (const part of rule.parts) {
-        if (part.type === "rules") {
-            for (const nestedRule of part.rules) {
-                if (matchesRuleStructure(nestedRule, astParts)) {
-                    if (nestedRule.value) return nestedRule.value;
-                }
-            }
-        }
-    }
-
-    return undefined;
-}
-
-/**
- * Check whether a grammar rule's parts structurally match the AST parts.
- * Used to identify which nested alternative was matched.
- */
-function matchesRuleStructure(
-    rule: import("./grammarTypes.js").GrammarRule,
-    astParts: MatchNode[],
-): boolean {
-    // Flatten the rule's parts into a sequence of string/wildcard/number tokens
-    // and compare with the AST's sequence
-    let astIdx = 0;
-    for (const rulePart of rule.parts) {
-        if (rulePart.type === "string") {
-            // Each word in the string part should correspond to a token node
-            for (const word of rulePart.value) {
-                if (astIdx >= astParts.length) return false;
-                const astPart = astParts[astIdx];
-                if (astPart.kind !== "token") return false;
-                if (normalizeToken(astPart.token) !== normalizeToken(word)) {
-                    return false;
-                }
-                astIdx++;
-            }
-        } else if (rulePart.type === "wildcard" || rulePart.type === "number") {
-            // Should correspond to a wildcard node
-            if (astIdx >= astParts.length) return false;
-            if (astParts[astIdx].kind !== "wildcard") return false;
-            astIdx++;
-        } else if (rulePart.type === "phraseSet") {
-            if (astIdx >= astParts.length) return false;
-            if (astParts[astIdx].kind !== "phraseSet") return false;
-            astIdx++;
-        } else if (rulePart.type === "rules") {
-            // Nested rules — the AST won't have a direct counterpart,
-            // skip for now (handled by recursive findValueExpression)
-            return false;
-        }
-    }
-
-    // All AST parts should be consumed
-    return astIdx === astParts.length;
+    // Evaluate the value expression with the bindings
+    return evaluateValueNode(rule.value, bindings);
 }
 
 /**
@@ -2076,17 +1907,6 @@ export function matchDFAToASTWithSplitting(
     dfa: DFA,
     tokens: string[],
 ): DFAASTMatchResult {
-    // O(1) first-token pre-filter
-    if (dfaFirstTokenRejects(dfa, tokens)) {
-        return {
-            matched: false,
-            fixedStringPartCount: 0,
-            checkedWildcardCount: 0,
-            uncheckedWildcardCount: 0,
-            tokensConsumed: tokens.length,
-        };
-    }
-
     const origResult = matchDFAToAST(dfa, tokens);
 
     if (!dfa.splitCandidates?.length) return origResult;

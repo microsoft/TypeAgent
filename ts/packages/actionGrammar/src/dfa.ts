@@ -247,9 +247,14 @@ export interface DFA {
 
 // ────────────────────────────────────────────────────────────────────────────
 // MatchAST — structural parse tree produced by DFA matching
+//
+// The DFA is a pure recognizer: it consumes tokens and records *which* parts
+// of the grammar matched, without computing values.  Value computation is
+// deferred to a bottom-up walk of the MatchAST using the grammar's
+// name-based ValueNode expressions.
 // ────────────────────────────────────────────────────────────────────────────
 
-/** A literal token that matched a specific grammar token */
+/** A literal token matched against a StringPart word */
 export interface TokenMatchNode {
     kind: "token";
     token: string;
@@ -258,36 +263,51 @@ export interface TokenMatchNode {
 /** A wildcard that consumed one or more tokens */
 export interface WildcardMatchNode {
     kind: "wildcard";
+    /** Variable name from the grammar (e.g. "artist") */
     variable: string;
+    /** Entity type name, if any (e.g. "Ordinal", "CalendarDate") */
     typeName?: string;
+    /** Whether this wildcard has entity validation */
     checked: boolean;
+    /** Raw tokens consumed by this wildcard */
     tokens: string[];
 }
 
 /** A phrase-set match that consumed one or more tokens */
 export interface PhraseSetMatchNode {
     kind: "phraseSet";
+    /** Registry key of the matcher */
     matcherName: string;
+    /** Tokens consumed by the phrase */
     tokens: string[];
 }
 
-/** A rule reference match (for nested rules / sub-grammars) */
+/** A nested rule reference that matched a sub-grammar */
 export interface RuleRefMatchNode {
     kind: "ruleRef";
+    /** Variable name that captures the sub-rule's value */
     variable: string;
+    /** The sub-match tree */
     match: MatchAST;
 }
 
-/** Any node in the match tree */
 export type MatchNode =
     | TokenMatchNode
     | WildcardMatchNode
     | PhraseSetMatchNode
     | RuleRefMatchNode;
 
-/** A matched rule with its structural parts */
+/**
+ * A complete match tree for one grammar rule.
+ *
+ * `ruleIndex` identifies which Grammar.rules[] entry matched.
+ * `parts` is the sequence of structural nodes (tokens, wildcards, rule refs, phrase sets)
+ * in the order they were consumed.
+ */
 export interface MatchAST {
+    /** Index into Grammar.rules[] */
     ruleIndex: number;
+    /** Ordered sequence of matched structural parts */
     parts: MatchNode[];
 }
 

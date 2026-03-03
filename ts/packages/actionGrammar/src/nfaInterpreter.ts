@@ -65,6 +65,13 @@ export interface NFAExecutionState {
     // remaining tokens to skip. On each subsequent token, skipCount is
     // decremented and no transitions are attempted until it reaches 0.
     skipCount?: number | undefined;
+
+    // Per-thread token array for on-demand morpheme splitting.
+    // When a grammar token is a strict prefix of the current input token
+    // (e.g. "ni" is a prefix of "ninasoma"), the thread forks: a clone of
+    // the token array replaces that input token with [matched-prefix, remainder].
+    // Unset means the thread uses the global input token array.
+    localTokens?: string[] | undefined;
 }
 
 /**
@@ -111,196 +118,194 @@ export function matchNFA(
 
 /**
  * Core NFA matching loop — shared by matchNFA and matchNFAWithIndex.
- * Runs NFA threading from a pre-computed initial state set starting at
- * the given token index.  The caller is responsible for building
- * `initialStates` via epsilonClosure() before invoking this function.
+ *
+ * Uses a work queue of (transition, threadState) pairs.  Only transitions
+ * that match the current token are enqueued, so the inner loop never
+ * examines non-matching transitions.
+ *
+ * Threads are independent: each carries its own tokenIndex and an optional
+ * localTokens array.  When a grammar token `t` is a strict prefix of the
+ * current input token (e.g. "ni" ⊂ "ninasoma"), seedQueue forks the thread
+ * with a split localTokens array so that on-demand morpheme segmentation
+ * proceeds without affecting other threads.
  */
 function matchNFACore(
     nfa: NFA,
     initialStates: NFAExecutionState[],
     tokens: string[],
-    startTokenIndex: number,
+    _startTokenIndex: number, // unused — initial states carry their own tokenIndex
     debug: boolean,
 ): NFAMatchResult {
-    let currentStates = initialStates;
+    type QueueEntry = {
+        trans: NFATransition;
+        state: NFAExecutionState;
+        /** For phraseSet transitions: the specific phrase that was matched */
+        matchedPhrase?: string[] | undefined;
+    };
+
+    const queue: QueueEntry[] = [];
+    const acceptingThreads: NFAMatchResult[] = [];
     const allVisitedStates = new Set<number>(
         initialStates.map((s) => s.stateId),
     );
 
-    // Process each token
-    for (
-        let tokenIndex = startTokenIndex;
-        tokenIndex < tokens.length;
-        tokenIndex++
-    ) {
-        const token = tokens[tokenIndex];
-        debugNFA(
-            `Token ${tokenIndex}: "${token}", currentStates: ${currentStates.length}`,
+    // Seed the queue from each initial (already epsilon-closed) state
+    for (const state of initialStates) {
+        seedQueue(
+            nfa,
+            state,
+            tokens,
+            queue,
+            acceptingThreads,
+            allVisitedStates,
+            debug,
         );
-        const nextStates: NFAExecutionState[] = [];
+    }
 
-        // Try each current state
-        for (const state of currentStates) {
-            // Multi-token entity skip: this thread already matched a multi-token
-            // entity span and is skipping the remaining tokens in that span
-            if (state.skipCount && state.skipCount > 0) {
-                debugNFA(
-                    `  State ${state.stateId} SKIP (${state.skipCount} remaining)`,
-                );
-                nextStates.push({
-                    ...state,
-                    tokenIndex: tokenIndex + 1,
-                    skipCount: state.skipCount - 1,
-                });
-                continue;
-            }
+    while (queue.length > 0) {
+        const entry = queue.shift()!;
+        const { trans, state, matchedPhrase } = entry;
+        const myTokens = state.localTokens ?? tokens;
+        const token = myTokens[state.tokenIndex];
 
-            const nfaState = nfa.states[state.stateId];
-            if (!nfaState) continue;
+        debugNFA(
+            `Processing ${trans.type} at state ${state.stateId} token[${state.tokenIndex}]="${token}"`,
+        );
 
-            debugNFA(
-                `  State ${state.stateId}, env slots: ${state.environment ? JSON.stringify(state.environment.slots) : "none"}, transitions: ${nfaState.transitions.length}`,
-            );
-
-            // Try each transition
-            for (const trans of nfaState.transitions) {
-                // phraseSet transitions are handled here (not in tryTransition):
-                // try every phrase in the set at the current token position and
-                // generate one execution thread per matching phrase.
-                if (trans.type === "phraseSet") {
-                    const matcher = trans.matcherName
-                        ? globalPhraseSetRegistry.getMatcher(trans.matcherName)
-                        : undefined;
-                    if (matcher) {
-                        for (const phrase of matcher.phrases) {
-                            if (tokenIndex + phrase.length <= tokens.length) {
-                                let matches = true;
-                                for (let pi = 0; pi < phrase.length; pi++) {
-                                    if (
-                                        normalizeToken(
-                                            tokens[tokenIndex + pi],
-                                        ) !== phrase[pi]
-                                    ) {
-                                        matches = false;
-                                        break;
-                                    }
-                                }
-                                if (matches) {
-                                    debugNFA(
-                                        `    phraseSet(${trans.matcherName}) matched phrase "${phrase.join(" ")}" → state ${trans.to}${phrase.length > 1 ? ` (skip ${phrase.length - 1})` : ""}`,
-                                    );
-                                    nextStates.push({
-                                        stateId: trans.to,
-                                        tokenIndex: tokenIndex + 1,
-                                        path: [...state.path, trans.to],
-                                        fixedStringPartCount:
-                                            state.fixedStringPartCount +
-                                            phrase.length,
-                                        checkedWildcardCount:
-                                            state.checkedWildcardCount,
-                                        uncheckedWildcardCount:
-                                            state.uncheckedWildcardCount,
-                                        ruleIndex: state.ruleIndex,
-                                        actionValue: state.actionValue,
-                                        environment: state.environment,
-                                        slotMap: state.slotMap,
-                                        skipCount:
-                                            phrase.length > 1
-                                                ? phrase.length - 1
-                                                : undefined,
-                                    });
-                                    allVisitedStates.add(trans.to);
-                                }
-                            }
-                        }
-                    }
-                    continue; // phraseSet handled above
-                }
-
-                const result = tryTransition(
-                    nfa,
-                    trans,
-                    token,
-                    state,
-                    tokenIndex,
-                    tokens,
-                );
-                if (result) {
-                    debugNFA(
-                        `    Transition ${trans.type} → state ${result.stateId} succeeded${result.skipCount ? ` (skip ${result.skipCount})` : ""}`,
-                    );
-                    nextStates.push(result);
-                    allVisitedStates.add(result.stateId);
-                }
-            }
-        }
-
-        debugNFA(`  Next states before epsilon: ${nextStates.length}`);
-
-        if (nextStates.length === 0) {
-            // No valid transitions - match failed
-            debugNFA(`FAILED: No valid transitions for token "${token}"`);
-            return {
-                matched: false,
-                fixedStringPartCount: 0,
-                checkedWildcardCount: 0,
-                uncheckedWildcardCount: 0,
-                visitedStates: debug ? Array.from(allVisitedStates) : undefined,
-                tokensConsumed: tokenIndex,
+        // Apply the transition to produce a new thread state
+        let newState: NFAExecutionState | undefined;
+        if (trans.type === "phraseSet" && matchedPhrase) {
+            // PhraseSet: build result state directly (phrase was validated in seedQueue)
+            newState = {
+                stateId: trans.to,
+                tokenIndex: state.tokenIndex + 1,
+                path: [...state.path, trans.to],
+                fixedStringPartCount:
+                    state.fixedStringPartCount + matchedPhrase.length,
+                checkedWildcardCount: state.checkedWildcardCount,
+                uncheckedWildcardCount: state.uncheckedWildcardCount,
+                ruleIndex: state.ruleIndex,
+                actionValue: state.actionValue,
+                environment: state.environment,
+                slotMap: state.slotMap,
+                skipCount:
+                    matchedPhrase.length > 1
+                        ? matchedPhrase.length - 1
+                        : undefined,
+                localTokens: state.localTokens,
             };
-        }
-
-        // Compute epsilon closure for next states
-        currentStates = epsilonClosure(nfa, nextStates);
-        debugNFA(`  Current states after epsilon: ${currentStates.length}`);
-
-        // Track visited states
-        if (debug) {
-            for (const state of currentStates) {
-                allVisitedStates.add(state.stateId);
+        } else {
+            newState = tryTransition(
+                nfa,
+                trans,
+                token,
+                state,
+                state.tokenIndex,
+                myTokens,
+            );
+            // Propagate the thread-local token array to the successor state
+            if (newState && state.localTokens) {
+                newState = { ...newState, localTokens: state.localTokens };
             }
         }
+
+        if (!newState) continue;
+
+        debugNFA(
+            `  → state ${newState.stateId} (tokenIndex ${newState.tokenIndex})${newState.skipCount ? ` skip=${newState.skipCount}` : ""}`,
+        );
+        allVisitedStates.add(newState.stateId);
+
+        // Epsilon-close and enqueue matching transitions from successor states
+        const ecStates = epsilonClosure(nfa, [newState]);
+        for (const ecState of ecStates) {
+            allVisitedStates.add(ecState.stateId);
+            seedQueue(
+                nfa,
+                ecState,
+                tokens,
+                queue,
+                acceptingThreads,
+                allVisitedStates,
+                debug,
+            );
+        }
     }
 
-    // Collect ALL accepting threads (multiple rules may match)
-    debugNFA(
-        `After all tokens, currentStates: ${currentStates.length}, accepting states: [${nfa.acceptingStates.join(", ")}]`,
-    );
-
-    // DEBUG: Count State 1 entries in currentStates
-    const state1Entries = currentStates.filter((s) => s.stateId === 1);
-    debugNFA(
-        `DEBUG: Found ${state1Entries.length} State 1 entries in currentStates`,
-    );
-    for (const s1 of state1Entries) {
+    if (acceptingThreads.length > 0) {
+        const sorted = sortNFAMatches(acceptingThreads);
         debugNFA(
-            `DEBUG: State 1 entry - slots: ${JSON.stringify(s1.environment?.slots)}, hash: ${getSlotHash(s1.environment)}`,
+            `SUCCESS: Best match has ${sorted[0].fixedStringPartCount} fixed, ${sorted[0].checkedWildcardCount} checked, ${sorted[0].uncheckedWildcardCount} unchecked`,
         );
+        return sorted[0];
     }
 
-    const acceptingThreads: NFAMatchResult[] = [];
-    for (const state of currentStates) {
-        debugNFA(
-            `  Checking state ${state.stateId}, is accepting: ${nfa.acceptingStates.includes(state.stateId)}`,
+    debugNFA(`FAILED: No accepting threads`);
+    return {
+        matched: false,
+        fixedStringPartCount: 0,
+        checkedWildcardCount: 0,
+        uncheckedWildcardCount: 0,
+        visitedStates: debug ? Array.from(allVisitedStates) : undefined,
+        tokensConsumed: tokens.length,
+    };
+}
+
+/**
+ * Examine the non-epsilon transitions of `state` and enqueue all that match
+ * the current token in the thread's local (or global) token array.
+ *
+ * Token transitions are also checked for prefix matches: if grammar token `t`
+ * is a strict prefix of the current input token, the thread is forked with a
+ * split localTokens array ([…, t, remainder, …]) so that on-demand morpheme
+ * segmentation can proceed within that thread only.
+ */
+function seedQueue(
+    nfa: NFA,
+    state: NFAExecutionState,
+    globalTokens: string[],
+    queue: Array<{
+        trans: NFATransition;
+        state: NFAExecutionState;
+        matchedPhrase?: string[] | undefined;
+    }>,
+    acceptingThreads: NFAMatchResult[],
+    allVisitedStates: Set<number>,
+    debug: boolean,
+): void {
+    const myTokens = state.localTokens ?? globalTokens;
+
+    // Multi-token entity skip: jump past remaining skipped tokens all at once
+    if (state.skipCount && state.skipCount > 0) {
+        const skipAheadState: NFAExecutionState = {
+            ...state,
+            tokenIndex: state.tokenIndex + state.skipCount,
+            skipCount: undefined,
+        };
+        seedQueue(
+            nfa,
+            skipAheadState,
+            globalTokens,
+            queue,
+            acceptingThreads,
+            allVisitedStates,
+            debug,
         );
+        return;
+    }
+
+    // Thread has consumed all tokens — check for acceptance
+    if (state.tokenIndex >= myTokens.length) {
         if (nfa.acceptingStates.includes(state.stateId)) {
-            // Evaluate the actionValue using the environment's slot values
             let evaluatedActionValue = state.actionValue;
             debugNFA(
-                `  Accept state details: hasActionValue=${!!state.actionValue}, hasEnv=${!!state.environment}, hasSlotMap=${!!state.slotMap}`,
+                `  Accept state ${state.stateId}: hasActionValue=${!!state.actionValue}, hasEnv=${!!state.environment}`,
             );
             if (state.environment) {
                 debugNFA(
                     `    Environment slots: ${JSON.stringify(state.environment.slots)}`,
                 );
             }
-            if (state.slotMap) {
-                debugNFA(
-                    `    SlotMap (debug): ${JSON.stringify([...state.slotMap.entries()])}`,
-                );
-            }
-            // actionValue is a compiled ValueExpression with slot indices
-            // Evaluate it using the environment's slot values
             if (state.actionValue && state.environment) {
                 try {
                     evaluatedActionValue = evaluateExpression(
@@ -314,7 +319,6 @@ function matchNFACore(
                     debugNFA(`  Failed to evaluate actionValue: ${e}`);
                 }
             }
-
             acceptingThreads.push({
                 matched: true,
                 fixedStringPartCount: state.fixedStringPartCount,
@@ -323,34 +327,86 @@ function matchNFACore(
                 ruleIndex: state.ruleIndex,
                 actionValue: evaluatedActionValue,
                 visitedStates: debug ? Array.from(allVisitedStates) : undefined,
-                tokensConsumed: tokens.length,
+                tokensConsumed: globalTokens.length,
                 debugSlotMap: debug ? state.slotMap : undefined,
             });
         }
+        return;
     }
 
-    debugNFA(`Accepting threads: ${acceptingThreads.length}`);
+    const token = myTokens[state.tokenIndex];
+    const normToken = normalizeToken(token);
+    const nfaState = nfa.states[state.stateId];
+    if (!nfaState) return;
 
-    // If any threads reached accepting states, return the best one by priority
-    if (acceptingThreads.length > 0) {
-        const sorted = sortNFAMatches(acceptingThreads);
-        debugNFA(
-            `SUCCESS: Best match has ${sorted[0].fixedStringPartCount} fixed, ${sorted[0].checkedWildcardCount} checked, ${sorted[0].uncheckedWildcardCount} unchecked`,
-        );
-        return sorted[0]; // Best match by priority rules
+    debugNFA(
+        `seedQueue: state ${state.stateId} token[${state.tokenIndex}]="${token}" transitions=${nfaState.transitions.length}`,
+    );
+
+    for (const trans of nfaState.transitions) {
+        if (trans.type === "epsilon") continue;
+
+        if (trans.type === "phraseSet") {
+            // Check each phrase for a match starting at the current position
+            const matcher = trans.matcherName
+                ? globalPhraseSetRegistry.getMatcher(trans.matcherName)
+                : undefined;
+            if (matcher) {
+                for (const phrase of matcher.phrases) {
+                    if (state.tokenIndex + phrase.length <= myTokens.length) {
+                        let matches = true;
+                        for (let pi = 0; pi < phrase.length; pi++) {
+                            if (
+                                normalizeToken(
+                                    myTokens[state.tokenIndex + pi],
+                                ) !== phrase[pi]
+                            ) {
+                                matches = false;
+                                break;
+                            }
+                        }
+                        if (matches) {
+                            debugNFA(
+                                `  phraseSet(${trans.matcherName}) matched "${phrase.join(" ")}" → state ${trans.to}`,
+                            );
+                            queue.push({ trans, state, matchedPhrase: phrase });
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+
+        if (trans.type === "token" && trans.tokens) {
+            // Exact match
+            if (trans.tokens.includes(normToken)) {
+                debugNFA(`  token exact "${normToken}" → state ${trans.to}`);
+                queue.push({ trans, state });
+            }
+            // Prefix match → fork the thread with a split local-token array
+            for (const t of trans.tokens) {
+                if (normToken.startsWith(t) && normToken.length > t.length) {
+                    const remainder = normToken.slice(t.length);
+                    const newLocalTokens = [...myTokens];
+                    newLocalTokens.splice(state.tokenIndex, 1, t, remainder);
+                    debugNFA(
+                        `  token prefix "${normToken}" → ["${t}", "${remainder}"] → state ${trans.to}`,
+                    );
+                    queue.push({
+                        trans,
+                        state: { ...state, localTokens: newLocalTokens },
+                    });
+                }
+            }
+            continue;
+        }
+
+        if (trans.type === "wildcard") {
+            // Type checking is deferred to tryTransition during queue processing
+            debugNFA(`  wildcard → state ${trans.to} (type check deferred)`);
+            queue.push({ trans, state });
+        }
     }
-
-    debugNFA(`FAILED: No accepting threads`);
-
-    // Processed all tokens but not in accepting state
-    return {
-        matched: false,
-        fixedStringPartCount: 0,
-        checkedWildcardCount: 0,
-        uncheckedWildcardCount: 0,
-        visitedStates: debug ? Array.from(allVisitedStates) : undefined,
-        tokensConsumed: tokens.length,
-    };
 }
 
 /**
@@ -866,6 +922,8 @@ function epsilonClosure(
                     actionValue: newActionValue,
                     environment: newEnvironment,
                     slotMap: newSlotMap,
+                    skipCount: updatedState.skipCount,
+                    localTokens: updatedState.localTokens,
                 });
             }
         }
@@ -1084,14 +1142,31 @@ export function matchNFAWithIndex(
 
     if (!precomputed || index.hasWildcardStart) {
         if (!precomputed && !index.hasWildcardStart) {
-            // Unknown first token, no wildcard rules — immediate rejection
-            return {
-                matched: false,
-                fixedStringPartCount: 0,
-                checkedWildcardCount: 0,
-                uncheckedWildcardCount: 0,
-                tokensConsumed: 0,
-            };
+            // Unknown first token, no wildcard rules.
+            // Check whether any grammar first-token is a strict prefix of
+            // the input token — if so, on-demand splitting may still match.
+            let hasPrefixMatch = false;
+            for (const tok of index.tokenMap.keys()) {
+                if (
+                    firstToken.startsWith(tok) &&
+                    firstToken.length > tok.length
+                ) {
+                    hasPrefixMatch = true;
+                    break;
+                }
+            }
+            if (!hasPrefixMatch) {
+                // Immediate O(1) rejection — no possible match
+                return {
+                    matched: false,
+                    fixedStringPartCount: 0,
+                    checkedWildcardCount: 0,
+                    uncheckedWildcardCount: 0,
+                    tokensConsumed: 0,
+                };
+            }
+            // Fall through to matchNFA for on-demand prefix splitting
+            return matchNFA(nfa, tokens, debug);
         }
         // Wildcard-start rules exist (or first token found but wildcards too)
         return matchNFA(nfa, tokens, debug);
