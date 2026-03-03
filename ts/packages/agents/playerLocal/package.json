@@ -21,7 +21,8 @@
     "asc": "asc -i ./src/agent/localPlayerSchema.ts -o ./dist/agent/localPlayerSchema.pas.json -t LocalPlayerActions -e LocalPlayerEntities",
     "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "test": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "tsc": "tsc -b src test"
   },
   "dependencies": {

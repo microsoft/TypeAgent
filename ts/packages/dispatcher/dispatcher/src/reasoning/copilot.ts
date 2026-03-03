@@ -11,8 +11,8 @@ import { ReasoningAction } from "../context/dispatcher/schema/reasoningActionSch
 import {
     CopilotClient,
     defineTool,
-    type SystemMessageConfig,
-    type Tool,
+    approveAll,
+    type SessionConfig,
 } from "@github/copilot-sdk";
 import registerDebug from "debug";
 import { execSync } from "node:child_process";
@@ -112,8 +112,10 @@ function generateSessionId(
  */
 function getRepoRoot(): string {
     // Navigate up from this file to the repo root
-    // packages/dispatcher/dispatcher/src/reasoning/copilot.ts -> ../../../../..
-    return path.resolve(fileURLToPath(import.meta.url), "../../../../..");
+    // Compiled path: packages/dispatcher/dispatcher/dist/reasoning/copilot.js
+    // We go up 5 levels to reach ts/ (the monorepo TypeScript root).
+    const thisFile = fileURLToPath(import.meta.url);
+    return path.resolve(path.dirname(thisFile), "../../../../..");
 }
 
 /**
@@ -149,8 +151,19 @@ async function getCopilotClient(
     if (!client) {
         debug("Creating new Copilot client");
         const cliPath = findCopilotPath();
+        const repoRoot = getRepoRoot();
+        debug(`Repo root: ${repoRoot}`);
+        debug(`Parent dir: ${path.resolve(repoRoot, "..")}`);
         client = new CopilotClient({
             cliPath,
+            cliArgs: [
+                "--add-dir",
+                repoRoot,
+                "--add-dir",
+                path.resolve(repoRoot, ".."),
+                "--allow-all-urls",
+                "--allow-all-tools",
+            ],
         });
 
         try {
@@ -266,13 +279,7 @@ function generateRequestId(): string {
  */
 function getCopilotSessionConfig(
     context: ActionContext<CommandHandlerContext>,
-): {
-    model: string;
-    streaming: boolean;
-    tools: Tool<unknown>[];
-    workingDirectory: string;
-    systemMessage: SystemMessageConfig;
-} {
+): Partial<SessionConfig> {
     const systemContext = context.sessionContext.agentContext;
     const activeSchemas = systemContext.agents.getActiveSchemas();
 
@@ -321,10 +328,18 @@ function getCopilotSessionConfig(
             debug(`Discovering actions for schema: ${schemaName}`);
             const validator = validators.get(schemaName);
             if (!validator) {
-                throw new Error(`Invalid schema name '${schemaName}'`);
+                const errorMsg = `Invalid schema name '${schemaName}'`;
+                debug(errorMsg);
+                return {
+                    textResultForLlm: errorMsg,
+                    resultType: "failure" as const,
+                    error: errorMsg,
+                };
             }
+            const schemaText = validator.getSchemaText();
             return {
-                schemaText: validator.getSchemaText(),
+                textResultForLlm: schemaText,
+                resultType: "success" as const,
             };
         },
     });
@@ -398,27 +413,43 @@ function getCopilotSessionConfig(
                     context,
                     actionIndex++,
                 );
-            } finally {
                 systemContext.clientIO = savedClientIO;
-            }
 
-            return {
-                result: JSON.stringify(result),
-            };
+                // Return result in Copilot SDK format
+                return {
+                    textResultForLlm: JSON.stringify(result),
+                    resultType: "success" as const,
+                };
+            } catch (error) {
+                systemContext.clientIO = savedClientIO;
+                const errorMessage =
+                    error instanceof Error ? error.message : String(error);
+                debug(`Error executing action: ${errorMessage}`);
+
+                // Return error in Copilot SDK format
+                return {
+                    textResultForLlm: `Error executing ${schemaName}.${actionJson.actionName}: ${errorMessage}`,
+                    resultType: "failure" as const,
+                    error: errorMessage,
+                };
+            }
         },
     });
 
     return {
+        clientName: "TypeAgent",
         model: defaultModel,
         streaming: true,
-        tools: [
-            discoverTool,
-            executeTool,
+        tools: [discoverTool, executeTool],
+        availableTools: [
+            "discover_actions",
+            "execute_action",
             "github/fs/*",
             "github/search/*",
             "shell",
-        ] as any,
+        ],
         workingDirectory: getRepoRoot(),
+        onPermissionRequest: approveAll,
         systemMessage: {
             mode: "append" as const,
             content: [
@@ -426,22 +457,24 @@ function getCopilotSessionConfig(
                 "",
                 "You are the reasoning engine for TypeAgent, a multi-agent system.",
                 "",
-                "## TypeAgent Action Tools",
-                "You have custom tools for TypeAgent action execution:",
-                "- `discover_actions`: Find available actions by schema name",
-                "- `execute_action`: Execute actions conforming to discovered schemas",
+                "## Built-in Tools (USE THESE FIRST)",
+                "You have access to powerful built-in capabilities:",
+                "- **Web search**: Use your native web search for looking up information online",
+                "- **File operations**: `github/fs/*` for reading, writing, editing files",
+                "- **Code search**: `github/search/*` for searching code patterns",
+                "- **Shell commands**: `shell` for executing terminal commands",
                 "",
-                "## Code Investigation Tools",
-                "You have access to GitHub tool aliases for code operations:",
-                "- `github/fs/*`: File operations (read, write, edit files; find files by pattern)",
-                "- `github/search/*`: Search code (grep for patterns in files)",
-                "- `shell`: Execute shell commands",
+                "## TypeAgent Action Tools (USE WHEN NEEDED)",
+                "For TypeAgent-specific actions like music playback, calendar management, email:",
+                "- `discover_actions`: Find available TypeAgent actions by schema name",
+                "- `execute_action`: Execute TypeAgent actions conforming to discovered schemas",
                 "",
                 "## Guidelines",
-                "- When asked about agent capabilities → use `discover_actions`",
-                "- When asked to perform an action → use `discover_actions` then `execute_action`",
-                "- When investigating code → use `github/fs/*` and `github/search/*` tools",
-                "- When modifying code → use `github/fs/*` edit operations",
+                "- **PREFER built-in tools** for web search, file operations, and code investigation",
+                "- **Use TypeAgent actions** only for domain-specific operations (music, calendar, email, etc.)",
+                "- For web search queries → use your native web search capability",
+                "- For code operations → use `github/fs/*` and `github/search/*` tools",
+                "- For TypeAgent capabilities → use `discover_actions` then `execute_action`",
             ].join("\n"),
         },
     };
@@ -552,14 +585,26 @@ async function executeReasoningWithoutPlanning(
     const unsubscribeToolStart = session.on(
         "tool.execution_start",
         (event: any) => {
-            debug(`Tool execution started: ${event.toolName}`);
+            debug(
+                `Tool execution started event:`,
+                JSON.stringify(event, null, 2),
+            );
+            const toolName =
+                event.toolName ||
+                event.data?.toolName ||
+                event.name ||
+                "unknown";
+            const parameters =
+                event.parameters ||
+                event.data?.parameters ||
+                event.args ||
+                event.data?.args ||
+                {};
+            debug(`Tool execution started: ${toolName}`);
             context.actionIO.appendDisplay(
                 {
                     type: "markdown",
-                    content: formatToolCallDisplay(
-                        event.toolName,
-                        event.parameters,
-                    ),
+                    content: formatToolCallDisplay(toolName, parameters),
                     kind: "info",
                 },
                 "block",
@@ -570,7 +615,12 @@ async function executeReasoningWithoutPlanning(
     const unsubscribeToolComplete = session.on(
         "tool.execution_complete",
         (event: any) => {
-            debug(`Tool execution completed: ${event.toolName}`);
+            const toolName =
+                event.toolName ||
+                event.data?.toolName ||
+                event.name ||
+                "unknown";
+            debug(`Tool execution completed: ${toolName}`);
         },
     );
 
@@ -587,7 +637,13 @@ async function executeReasoningWithoutPlanning(
     try {
         // Send request with chat history context and wait for completion
         const prompt = buildPromptWithContext(originalRequest, context);
-        debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
+        debug(
+            `Prompt length: ${prompt?.length}, first 100 chars: ${prompt?.substring(0, 100) || "undefined"}...`,
+        );
+
+        if (!prompt) {
+            throw new Error("Prompt is undefined or empty");
+        }
 
         const response = await session.sendAndWait({ prompt });
         debug("Received response from Copilot");
@@ -764,18 +820,30 @@ async function executeReasoningWithTracing(
         const unsubscribeToolStart = session.on(
             "tool.execution_start",
             (event: any) => {
-                debug(`Tool execution started: ${event.toolName}`);
+                debug(
+                    `Tool execution started event:`,
+                    JSON.stringify(event, null, 2),
+                );
+                const toolName =
+                    event.toolName ||
+                    event.data?.toolName ||
+                    event.name ||
+                    "unknown";
+                const parameters =
+                    event.parameters ||
+                    event.data?.parameters ||
+                    event.args ||
+                    event.data?.args ||
+                    {};
+                debug(`Tool execution started: ${toolName}`);
 
                 // Record tool call for trace
-                tracer.recordToolCall(event.toolName, event.parameters);
+                tracer.recordToolCall(toolName, parameters);
 
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: formatToolCallDisplay(
-                            event.toolName,
-                            event.parameters,
-                        ),
+                        content: formatToolCallDisplay(toolName, parameters),
                         kind: "info",
                     },
                     "block",
@@ -786,7 +854,12 @@ async function executeReasoningWithTracing(
         const unsubscribeToolComplete = session.on(
             "tool.execution_complete",
             (event: any) => {
-                debug(`Tool execution completed: ${event.toolName}`);
+                const toolName =
+                    event.toolName ||
+                    event.data?.toolName ||
+                    event.name ||
+                    "unknown";
+                debug(`Tool execution completed: ${toolName}`);
             },
         );
 
