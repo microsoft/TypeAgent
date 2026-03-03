@@ -207,7 +207,12 @@ function renderParts(
                         out += part.flatSep;
                         col += part.flatSep.length;
                     }
-                    const r = renderParts(part.items[i], col, maxLen, indentSize);
+                    const r = renderParts(
+                        part.items[i],
+                        col,
+                        maxLen,
+                        indentSize,
+                    );
                     out += r.out;
                     col = r.col;
                 }
@@ -217,12 +222,16 @@ function renderParts(
                     part.brokenCol >= 0 ? part.brokenCol : col + part.brokenCol;
                 for (let i = 0; i < part.items.length; i++) {
                     if (i > 0 && part.style === "prefix") {
-                        const prefix =
-                            " ".repeat(brokenCol) + part.linePrefix;
+                        const prefix = " ".repeat(brokenCol) + part.linePrefix;
                         out += "\n" + prefix;
                         col = prefix.length;
                     }
-                    const r = renderParts(part.items[i], col, maxLen, indentSize);
+                    const r = renderParts(
+                        part.items[i],
+                        col,
+                        maxLen,
+                        indentSize,
+                    );
                     out += r.out;
                     col = r.col;
                     if (part.style === "suffix" && i < part.items.length - 1) {
@@ -251,7 +260,12 @@ function renderParts(
                         out += part.flatSep;
                         col += part.flatSep.length;
                     }
-                    const r = renderParts(part.items[i], col, maxLen, indentSize);
+                    const r = renderParts(
+                        part.items[i],
+                        col,
+                        maxLen,
+                        indentSize,
+                    );
                     out += r.out;
                     col = r.col;
                 }
