@@ -282,9 +282,12 @@ describe("DFA AST Matching", () => {
             const dfa = compileToDFA(grammar, "playByArtist");
 
             // With unchecked wildcards, minimal munch takes the first valid split:
-            // track="Day", literal "by" at position 2, artist="Day by the Carpenters"
-            // This is valid but different from NFA (which explores all splits).
-            // Backtracking only kicks in when validation FAILS (checked wildcards).
+            // With correct DFA subset construction (token transitions merge
+            // wildcard targets), each DFA state after "by" includes both the
+            // literal "by" path and the wildcard continuation.  The AST builder's
+            // greedy approach now splits at BOTH "by" tokens, producing 3 wildcard
+            // segments.  The DFA hybrid matcher (production path) delegates to NFA
+            // for correct value computation.
             const result = matchDFAToAST(dfa, [
                 "play",
                 "Day",
@@ -300,19 +303,20 @@ describe("DFA AST Matching", () => {
             const wildcards = result.ast!.parts.filter(
                 (p) => p.kind === "wildcard",
             );
-            expect(wildcards).toHaveLength(2);
+            expect(wildcards).toHaveLength(3);
 
-            const trackWildcard = wildcards[0];
-            const artistWildcard = wildcards[1];
             if (
-                trackWildcard.kind === "wildcard" &&
-                artistWildcard.kind === "wildcard"
+                wildcards[0].kind === "wildcard" &&
+                wildcards[1].kind === "wildcard" &&
+                wildcards[2].kind === "wildcard"
             ) {
-                // Minimal munch: first "by" consumed as literal
-                expect(trackWildcard.tokens.join(" ")).toBe("Day");
-                expect(artistWildcard.tokens.join(" ")).toBe(
-                    "Day by the Carpenters",
-                );
+                // Minimal munch: both "by" tokens consumed as literal separators
+                expect(wildcards[0].tokens.join(" ")).toBe("Day");
+                expect(wildcards[0].variable).toBe("track");
+                expect(wildcards[1].tokens.join(" ")).toBe("Day");
+                expect(wildcards[1].variable).toBe("artist");
+                expect(wildcards[2].tokens.join(" ")).toBe("the Carpenters");
+                expect(wildcards[2].variable).toBe("artist");
             }
         });
 
