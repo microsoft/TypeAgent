@@ -35,6 +35,7 @@ import {
 } from "./urlCommands.js";
 import { createSettingsSchemaCommand } from "./schemaCommands.js";
 import { createBatchPopulateCommand } from "./batchPopulateCommand.js";
+import { createBatchGrammarCheckCommand } from "./batchGrammarCheckCommand.js";
 import { createMergeCacheCommand } from "./mergeCacheCommand.js";
 
 const envPath = findConfig(".env");
@@ -65,6 +66,7 @@ async function runStudio(): Promise<void> {
         urlValidate: createURLValidateCommands(studio),
         generateSettingsSchemas: createSettingsSchemaCommand(studio),
         batchPopulate: createBatchPopulateCommand(studio),
+        batchGrammarCheck: createBatchGrammarCheckCommand(studio),
         mergeCache: createMergeCacheCommand(studio),
     };
 

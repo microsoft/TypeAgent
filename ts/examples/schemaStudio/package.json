@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@typeagent/action-schema": "workspace:*",
+    "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",

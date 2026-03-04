@@ -107,7 +107,8 @@ export function createBatchPopulateCommand(
                     description:
                         "Schema name(s) to use for translation " +
                         '(comma-separated, e.g. "player,calendar"). ' +
-                        "Defaults to all.",
+                        'Supports wildcards, e.g. "excel*,calendar". ' +
+                        "Overrides --skip filter. Defaults to all.",
                 },
                 output: {
                     description: "Path to write the CSV report",
@@ -349,32 +350,12 @@ export function createBatchPopulateCommand(
             initializeGeolocation(),
         ]);
 
-        // Determine which schemas to use
-        let targetSchemas: string[];
-        if (schemaFilter) {
-            targetSchemas = schemaFilter
-                .split(",")
-                .map((s) => s.trim())
-                .filter((s) => s.length > 0);
-            // Validate
-            for (const s of targetSchemas) {
-                if (!allSchemaNames.includes(s)) {
-                    io.writer.writeLine(
-                        `Warning: schema "${s}" not found. ` +
-                            `Available: ${allSchemaNames.join(", ")}`,
-                    );
-                }
-            }
-            targetSchemas = targetSchemas.filter((s) =>
-                allSchemaNames.includes(s),
-            );
-        } else {
-            targetSchemas = allSchemaNames.filter(
-                (s) => !s.startsWith("system.") && !s.startsWith("dispatcher."),
-            );
-        }
+        // Start with base schemas (exclude system and dispatcher by default)
+        let targetSchemas = allSchemaNames.filter(
+            (s) => !s.startsWith("system.") && !s.startsWith("dispatcher."),
+        );
 
-        // Apply skip filter
+        // Apply skip filter first
         if (skipFilter) {
             const skipPatterns = skipFilter
                 .split(",")
@@ -398,6 +379,40 @@ export function createBatchPopulateCommand(
                     `Skipped ${skipped} schema(s) matching: ${skipFilter}`,
                 );
             }
+        }
+
+        // Apply include filter (overrides skip)
+        if (schemaFilter) {
+            const includePatterns = schemaFilter
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s.length > 0)
+                .map((pattern) => {
+                    // Convert glob-style wildcard to regex
+                    const escaped = pattern
+                        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+                        .replace(/\*/g, ".*")
+                        .replace(/\?/g, ".");
+                    return new RegExp(`^${escaped}$`, "i");
+                });
+
+            // Find all schemas matching include patterns
+            const includedSchemas = allSchemaNames.filter((s) =>
+                includePatterns.some((re) => re.test(s)),
+            );
+
+            if (includedSchemas.length === 0) {
+                io.writer.writeLine(
+                    `Warning: no schemas matched "${schemaFilter}". ` +
+                        `Available: ${allSchemaNames.join(", ")}`,
+                );
+            }
+
+            // Include overrides skip - use only the included schemas
+            targetSchemas = includedSchemas;
+            io.writer.writeLine(
+                `Included ${targetSchemas.length} schema(s) matching: ${schemaFilter}`,
+            );
         }
 
         if (targetSchemas.length === 0) {
