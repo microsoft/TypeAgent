@@ -730,10 +730,6 @@ export function matchDFA(
         actionValue = evaluateActionValue(currentEnv, finalState.actionValue);
     }
 
-    const bestContext = finalState.bestPriority
-        ? finalState.contexts[finalState.bestPriority.contextIndex]
-        : undefined;
-
     const result: DFAMatchResult = {
         matched: true,
         actionValue,
@@ -745,8 +741,8 @@ export function matchDFA(
     };
 
     // Include rule index if available
-    if (bestContext?.ruleIndex !== undefined) {
-        result.ruleIndex = bestContext.ruleIndex;
+    if (finalState.ruleIndex !== undefined) {
+        result.ruleIndex = finalState.ruleIndex;
     }
 
     // Include debug info
@@ -962,12 +958,7 @@ export function getDFACompletions(
     }
 
     // Track which rules are active at this state
-    const activeRules = new Set<number>();
-    for (const context of currentState.contexts) {
-        if (context.ruleIndex !== undefined) {
-            activeRules.add(context.ruleIndex);
-        }
-    }
+    const activeRules = new Set<number>(currentState.activeRuleIndices ?? []);
 
     // Collect token transitions - these apply to all active contexts
     const allTokens = new Set<string>();
@@ -1216,13 +1207,10 @@ export function matchDFAToAST(dfa: DFA, tokens: string[]): DFAASTMatchResult {
     if (tokens.length === 0) {
         const startState = dfa.states[dfa.startState];
         if (startState?.accepting) {
-            const bestCtx = startState.bestPriority
-                ? startState.contexts[startState.bestPriority.contextIndex]
-                : startState.contexts[0];
             const emptyResult: DFAASTMatchResult = {
                 matched: true,
                 ast: {
-                    ruleIndex: bestCtx?.ruleIndex ?? 0,
+                    ruleIndex: startState.ruleIndex ?? 0,
                     parts: [],
                 },
                 fixedStringPartCount: 0,
@@ -1230,8 +1218,8 @@ export function matchDFAToAST(dfa: DFA, tokens: string[]): DFAASTMatchResult {
                 uncheckedWildcardCount: 0,
                 tokensConsumed: 0,
             };
-            if (bestCtx?.ruleIndex !== undefined) {
-                emptyResult.ruleIndex = bestCtx.ruleIndex;
+            if (startState.ruleIndex !== undefined) {
+                emptyResult.ruleIndex = startState.ruleIndex;
             }
             return emptyResult;
         }
@@ -1499,15 +1487,10 @@ export function matchDFAToAST(dfa: DFA, tokens: string[]): DFAASTMatchResult {
         }
     }
 
-    // Find the rule index from the best-priority accepting context
-    const bestCtx = finalState.bestPriority
-        ? finalState.contexts[finalState.bestPriority.contextIndex]
-        : finalState.contexts[0];
-
     const matchResult: DFAASTMatchResult = {
         matched: true,
         ast: {
-            ruleIndex: bestCtx?.ruleIndex ?? 0,
+            ruleIndex: finalState.ruleIndex ?? 0,
             parts,
         },
         fixedStringPartCount,
@@ -1515,8 +1498,8 @@ export function matchDFAToAST(dfa: DFA, tokens: string[]): DFAASTMatchResult {
         uncheckedWildcardCount,
         tokensConsumed: tokens.length,
     };
-    if (bestCtx?.ruleIndex !== undefined) {
-        matchResult.ruleIndex = bestCtx.ruleIndex;
+    if (finalState.ruleIndex !== undefined) {
+        matchResult.ruleIndex = finalState.ruleIndex;
     }
     return matchResult;
 }
@@ -1777,14 +1760,10 @@ function matchDFAToASTFrom(
         }
     }
 
-    const bestCtx = finalState.bestPriority
-        ? finalState.contexts[finalState.bestPriority.contextIndex]
-        : finalState.contexts[0];
-
     const fromResult: DFAASTMatchResult = {
         matched: true,
         ast: {
-            ruleIndex: bestCtx?.ruleIndex ?? 0,
+            ruleIndex: finalState.ruleIndex ?? 0,
             parts,
         },
         fixedStringPartCount,
@@ -1792,8 +1771,8 @@ function matchDFAToASTFrom(
         uncheckedWildcardCount: finalUnchecked,
         tokensConsumed: tokens.length,
     };
-    if (bestCtx?.ruleIndex !== undefined) {
-        fromResult.ruleIndex = bestCtx.ruleIndex;
+    if (finalState.ruleIndex !== undefined) {
+        fromResult.ruleIndex = finalState.ruleIndex;
     }
     return fromResult;
 }
@@ -2156,7 +2135,7 @@ export function printDFA(dfa: DFA): string {
             : "";
 
         lines.push(
-            `    State ${state.id}${accepting}${priority} (${state.contexts.length} contexts):`,
+            `    State ${state.id}${accepting}${priority} (rules: ${(state.activeRuleIndices ?? []).join(",") || "none"}):`,
         );
 
         if (state.transitions.length === 0 && !state.wildcardTransition) {

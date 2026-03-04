@@ -118,6 +118,8 @@ export function compileNFAToDFA(nfa: NFA, name?: string): DFA {
     );
     // Store NFA reference so matchDFA can use thread-based value computation
     dfa.sourceNFA = nfa;
+    // Free execution contexts — match-time data now lives directly on DFAState
+    DFABuilder.compact(dfa);
     return dfa;
 }
 
@@ -271,28 +273,50 @@ function computeTransitions(
         }
     }
 
-    // Token transitions — apply epsilon closure
+    // Build wildcard raw targets (needed both for token merge and standalone wildcard)
+    const wildcardRawTargets: DFAExecutionContext[] = [];
+    for (const { context, transition } of wildcardSources) {
+        const newCtx: DFAExecutionContext = {
+            nfaStateIds: new Set([transition.to]),
+            priority: {
+                fixedStringPartCount: 0,
+                checkedWildcardCount: 0,
+                uncheckedWildcardCount: 0,
+            },
+        };
+        if (context.ruleIndex !== undefined) {
+            newCtx.ruleIndex = context.ruleIndex;
+        }
+        wildcardRawTargets.push(newCtx);
+    }
+
+    // Token transitions — merge wildcard targets (standard DFA subset construction:
+    // a specific token also matches wildcard transitions) then apply epsilon closure
     const tokenTransitions = new Map<
         string,
         { targetContexts: DFAExecutionContext[] }
     >();
     for (const [token, rawCtxs] of tokenTargetsRaw) {
+        // Include wildcard targets: the token also matches any wildcard transitions
+        const merged =
+            wildcardRawTargets.length > 0
+                ? [...rawCtxs, ...wildcardRawTargets]
+                : rawCtxs;
         tokenTransitions.set(token, {
-            targetContexts: epsilonClosure(nfa, rawCtxs),
+            targetContexts: epsilonClosure(nfa, merged),
         });
     }
 
-    // Wildcard transition — merge all sources into one, build captureInfo
+    // Wildcard transition — build captureInfo, use pre-computed wildcardRawTargets
     let wildcardTransition: TransitionResult["wildcardTransition"];
     if (wildcardSources.length > 0) {
-        const rawTargets: DFAExecutionContext[] = [];
         // Keyed by "variable:typeName" to deduplicate capture entries
         const captureMap = new Map<
             string,
             DFAWildcardTransition["captureInfo"][number]
         >();
 
-        for (const { context, transition } of wildcardSources) {
+        for (const { transition } of wildcardSources) {
             const isChecked =
                 transition.checked === true ||
                 !!(
@@ -300,19 +324,6 @@ function computeTransitions(
                     transition.typeName !== "string" &&
                     transition.typeName !== "wildcard"
                 );
-
-            const newCtx: DFAExecutionContext = {
-                nfaStateIds: new Set([transition.to]),
-                priority: {
-                    fixedStringPartCount: 0,
-                    checkedWildcardCount: 0,
-                    uncheckedWildcardCount: 0,
-                },
-            };
-            if (context.ruleIndex !== undefined) {
-                newCtx.ruleIndex = context.ruleIndex;
-            }
-            rawTargets.push(newCtx);
 
             // Build captureInfo entry (variable/typeName/checked + property path for completions)
             const captureKey = `${transition.variable ?? ""}:${transition.typeName ?? "string"}`;
@@ -336,7 +347,7 @@ function computeTransitions(
         }
 
         wildcardTransition = {
-            targetContexts: epsilonClosure(nfa, rawTargets),
+            targetContexts: epsilonClosure(nfa, wildcardRawTargets),
             captureInfo: Array.from(captureMap.values()),
         };
     }
