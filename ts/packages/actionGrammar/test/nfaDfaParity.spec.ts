@@ -1896,7 +1896,11 @@ describe("Rich Entity Matching Parity", () => {
         });
 
         it("NFA produces CalendarDateValue for 'schedule meeting on today'", () => {
-            const results = matchGrammarWithNFA(grammar, nfa, "schedule meeting on today");
+            const results = matchGrammarWithNFA(
+                grammar,
+                nfa,
+                "schedule meeting on today",
+            );
             expect(results.length).toBeGreaterThan(0);
             const val = results[0].match as any;
             expect(val.parameters.date).toBeDefined();
@@ -1952,11 +1956,7 @@ describe("Rich Entity Matching Parity", () => {
             `,
         );
 
-        const requests = [
-            "block 2pm",
-            "block 9am-10am",
-            "block 1-2pm",
-        ];
+        const requests = ["block 2pm", "block 9am-10am", "block 1-2pm"];
 
         it.each(requests)("DFA matches NFA for '%s'", (req) => {
             assertMatchParity(grammar, nfa, dfa, req);
@@ -1996,7 +1996,11 @@ describe("Rich Entity Matching Parity", () => {
         });
 
         it("NFA produces CalendarDayRangeValue for 'show events for this week'", () => {
-            const results = matchGrammarWithNFA(grammar, nfa, "show events for this week");
+            const results = matchGrammarWithNFA(
+                grammar,
+                nfa,
+                "show events for this week",
+            );
             expect(results.length).toBeGreaterThan(0);
             const val = results[0].match as any;
             expect(val.parameters.range).toBeDefined();
@@ -2028,14 +2032,22 @@ describe("Rich Entity Matching Parity", () => {
         });
 
         it("NFA converts ordinal to number for 'play the first track'", () => {
-            const results = matchGrammarWithNFA(grammar, nfa, "play the first track");
+            const results = matchGrammarWithNFA(
+                grammar,
+                nfa,
+                "play the first track",
+            );
             expect(results.length).toBeGreaterThan(0);
             const val = results[0].match as any;
             expect(val.parameters.index).toBe(1);
         });
 
         it("NFA converts ordinal to number for 'play the third track'", () => {
-            const results = matchGrammarWithNFA(grammar, nfa, "play the third track");
+            const results = matchGrammarWithNFA(
+                grammar,
+                nfa,
+                "play the third track",
+            );
             expect(results.length).toBeGreaterThan(0);
             const val = results[0].match as any;
             expect(val.parameters.index).toBe(3);
@@ -2054,18 +2066,18 @@ describe("Rich Entity Matching Parity", () => {
             `,
         );
 
-        const requests = [
-            "skip 3 songs",
-            "skip five songs",
-            "skip ten songs",
-        ];
+        const requests = ["skip 3 songs", "skip five songs", "skip ten songs"];
 
         it.each(requests)("DFA matches NFA for '%s'", (req) => {
             assertMatchParity(grammar, nfa, dfa, req);
         });
 
         it("NFA converts cardinal to number for 'skip five songs'", () => {
-            const results = matchGrammarWithNFA(grammar, nfa, "skip five songs");
+            const results = matchGrammarWithNFA(
+                grammar,
+                nfa,
+                "skip five songs",
+            );
             expect(results.length).toBeGreaterThan(0);
             const val = results[0].match as any;
             expect(val.parameters.count).toBe(5);
@@ -2095,7 +2107,11 @@ describe("Rich Entity Matching Parity", () => {
         });
 
         it("NFA converts percentage to number for 'set volume to 75'", () => {
-            const results = matchGrammarWithNFA(grammar, nfa, "set volume to 75");
+            const results = matchGrammarWithNFA(
+                grammar,
+                nfa,
+                "set volume to 75",
+            );
             expect(results.length).toBeGreaterThan(0);
             const val = results[0].match as any;
             expect(val.parameters.level).toBe(75);
@@ -2225,18 +2241,10 @@ describe("Rich Entity Matching Parity", () => {
         );
 
         it("after 'schedule meeting on': suggests $(date:CalendarDate)", () => {
-            const comp = getDFACompletions(dfa, [
-                "schedule",
-                "meeting",
-                "on",
-            ]);
-            const wildcards = comp.groups.flatMap(
-                (g) => g.wildcardCompletions,
-            );
+            const comp = getDFACompletions(dfa, ["schedule", "meeting", "on"]);
+            const wildcards = comp.groups.flatMap((g) => g.wildcardCompletions);
             expect(wildcards.length).toBeGreaterThan(0);
-            const dateWild = wildcards.find(
-                (w) => w.variable === "date",
-            );
+            const dateWild = wildcards.find((w) => w.variable === "date");
             expect(dateWild).toBeDefined();
             expect(dateWild!.typeName).toBe("CalendarDate");
             expect(dateWild!.checked).toBe(true);
@@ -2251,12 +2259,8 @@ describe("Rich Entity Matching Parity", () => {
                 "Monday",
                 "at",
             ]);
-            const wildcards = comp.groups.flatMap(
-                (g) => g.wildcardCompletions,
-            );
-            const timeWild = wildcards.find(
-                (w) => w.variable === "time",
-            );
+            const wildcards = comp.groups.flatMap((g) => g.wildcardCompletions);
+            const timeWild = wildcards.find((w) => w.variable === "time");
             expect(timeWild).toBeDefined();
             expect(timeWild!.typeName).toBe("CalendarTime");
             expect(timeWild!.checked).toBe(true);
@@ -2265,9 +2269,7 @@ describe("Rich Entity Matching Parity", () => {
 
         it("after 'play the': suggests $(n:Ordinal)", () => {
             const comp = getDFACompletions(dfa, ["play", "the"]);
-            const wildcards = comp.groups.flatMap(
-                (g) => g.wildcardCompletions,
-            );
+            const wildcards = comp.groups.flatMap((g) => g.wildcardCompletions);
             const ordWild = wildcards.find((w) => w.variable === "n");
             expect(ordWild).toBeDefined();
             expect(ordWild!.typeName).toBe("Ordinal");
@@ -2277,9 +2279,7 @@ describe("Rich Entity Matching Parity", () => {
 
         it("after 'skip': suggests $(n:Cardinal)", () => {
             const comp = getDFACompletions(dfa, ["skip"]);
-            const wildcards = comp.groups.flatMap(
-                (g) => g.wildcardCompletions,
-            );
+            const wildcards = comp.groups.flatMap((g) => g.wildcardCompletions);
             const cardWild = wildcards.find((w) => w.variable === "n");
             expect(cardWild).toBeDefined();
             expect(cardWild!.typeName).toBe("Cardinal");
@@ -2288,11 +2288,7 @@ describe("Rich Entity Matching Parity", () => {
         });
 
         it("property completions include entity-typed wildcards", () => {
-            const comp = getDFACompletions(dfa, [
-                "schedule",
-                "meeting",
-                "on",
-            ]);
+            const comp = getDFACompletions(dfa, ["schedule", "meeting", "on"]);
             const props = comp.properties ?? [];
             // CalendarDate is a checked wildcard — should appear in property completions
             const dateProp = props.find(
