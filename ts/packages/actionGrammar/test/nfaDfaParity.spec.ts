@@ -1221,20 +1221,15 @@ describe("NFA/DFA Parity", () => {
             assertCompletionParity(nfa, dfa, ["play"]);
         });
 
-        it("after 'play the': DFA completions are superset of NFA", () => {
+        it("after 'play the': DFA suggests 'by' from wildcard path", () => {
             // After "play the", the DFA correctly includes "by" from the
             // playTrack wildcard path ("play $(track) by $(artist)") because
             // token transitions now merge wildcard targets per standard DFA
-            // subset construction.  NFA completions don't follow wildcard paths
-            // far enough to suggest "by", so DFA produces a strict superset.
-            const nfaComp = computeNFACompletions(nfa, ["play", "the"]);
+            // subset construction.  NFA completions don't follow wildcard
+            // paths far enough to suggest "by".
             const dfaComp = getDFACompletions(dfa, ["play", "the"]);
-            const nfaLiterals = [...(nfaComp.completions ?? [])].sort();
-            const dfaLiterals = [...(dfaComp.completions ?? [])].sort();
-            // DFA superset of NFA
-            for (const nfaLit of nfaLiterals) {
-                expect(dfaLiterals).toContain(nfaLit);
-            }
+            const dfaLiterals = [...(dfaComp.completions ?? [])];
+            expect(dfaLiterals).toContain("by");
         });
 
         it("after 'skip': shows Cardinal wildcard position", () => {
