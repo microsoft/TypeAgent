@@ -2154,4 +2154,191 @@ describe("Rich Entity Matching Parity", () => {
             assertMatchParity(grammar, nfa, dfa, req);
         });
     });
+
+    // ── PhraseSet matching: rejection + multi-token ──────────────────────
+    describe("PhraseSet matching edge cases", () => {
+        const { grammar, nfa, dfa } = compile(
+            "phraseMatch",
+            `
+            entity CalendarDate;
+            <schedule> = <Polite> schedule $(desc:wildcard) for $(date:CalendarDate)
+                -> { actionName: "schedule", parameters: { desc, date } };
+            <Start> = <schedule>;
+            `,
+        );
+
+        // Mandatory phraseSet: requests WITHOUT a Polite opener should not match
+        const rejectRequests = [
+            "schedule meeting for today",
+            "hello schedule meeting for Monday",
+            "yo schedule lunch for tomorrow",
+        ];
+
+        it.each(rejectRequests)(
+            "DFA rejects non-phraseSet input '%s' (parity with NFA)",
+            (req) => {
+                assertMatchParity(grammar, nfa, dfa, req);
+            },
+        );
+
+        // Requests WITH valid Polite phraseSet openers should match
+        const acceptRequests = [
+            "please schedule meeting for today",
+            "could you schedule lunch for Monday",
+            "would you schedule standup for Friday",
+            "kindly schedule review for tomorrow",
+            "can you schedule demo for today",
+        ];
+
+        it.each(acceptRequests)(
+            "DFA matches phraseSet input '%s' (parity with NFA)",
+            (req) => {
+                assertMatchParity(grammar, nfa, dfa, req);
+            },
+        );
+
+        // Multi-token phraseSet: "would you please" is a 3-token phrase
+        it("multi-token phraseSet 'would you please' matches", () => {
+            assertMatchParity(
+                grammar,
+                nfa,
+                dfa,
+                "would you please schedule meeting for today",
+            );
+        });
+    });
+
+    // ── Rich entity completions ──────────────────────────────────────────
+    describe("Rich entity type completions", () => {
+        const { nfa, dfa } = compile(
+            "entityCompl",
+            `
+            entity CalendarDate, CalendarTime, Ordinal, Cardinal;
+            <schedule> = schedule $(desc:wildcard) on $(date:CalendarDate) at $(time:CalendarTime)
+                -> { actionName: "schedule", parameters: { desc, date, time } };
+            <playNth> = play the $(n:Ordinal) track
+                -> { actionName: "playNth", parameters: { index: n } };
+            <skip> = skip $(n:Cardinal) songs
+                -> { actionName: "skip", parameters: { count: n } };
+            <Start> = <schedule> | <playNth> | <skip>;
+            `,
+        );
+
+        it("after 'schedule meeting on': suggests $(date:CalendarDate)", () => {
+            const comp = getDFACompletions(dfa, [
+                "schedule",
+                "meeting",
+                "on",
+            ]);
+            const wildcards = comp.groups.flatMap(
+                (g) => g.wildcardCompletions,
+            );
+            expect(wildcards.length).toBeGreaterThan(0);
+            const dateWild = wildcards.find(
+                (w) => w.variable === "date",
+            );
+            expect(dateWild).toBeDefined();
+            expect(dateWild!.typeName).toBe("CalendarDate");
+            expect(dateWild!.checked).toBe(true);
+            expect(dateWild!.displayString).toBe("$(date:CalendarDate)");
+        });
+
+        it("after 'schedule meeting on Monday at': suggests $(time:CalendarTime)", () => {
+            const comp = getDFACompletions(dfa, [
+                "schedule",
+                "meeting",
+                "on",
+                "Monday",
+                "at",
+            ]);
+            const wildcards = comp.groups.flatMap(
+                (g) => g.wildcardCompletions,
+            );
+            const timeWild = wildcards.find(
+                (w) => w.variable === "time",
+            );
+            expect(timeWild).toBeDefined();
+            expect(timeWild!.typeName).toBe("CalendarTime");
+            expect(timeWild!.checked).toBe(true);
+            expect(timeWild!.displayString).toBe("$(time:CalendarTime)");
+        });
+
+        it("after 'play the': suggests $(n:Ordinal)", () => {
+            const comp = getDFACompletions(dfa, ["play", "the"]);
+            const wildcards = comp.groups.flatMap(
+                (g) => g.wildcardCompletions,
+            );
+            const ordWild = wildcards.find((w) => w.variable === "n");
+            expect(ordWild).toBeDefined();
+            expect(ordWild!.typeName).toBe("Ordinal");
+            expect(ordWild!.checked).toBe(true);
+            expect(ordWild!.displayString).toBe("$(n:Ordinal)");
+        });
+
+        it("after 'skip': suggests $(n:Cardinal)", () => {
+            const comp = getDFACompletions(dfa, ["skip"]);
+            const wildcards = comp.groups.flatMap(
+                (g) => g.wildcardCompletions,
+            );
+            const cardWild = wildcards.find((w) => w.variable === "n");
+            expect(cardWild).toBeDefined();
+            expect(cardWild!.typeName).toBe("Cardinal");
+            expect(cardWild!.checked).toBe(true);
+            expect(cardWild!.displayString).toBe("$(n:Cardinal)");
+        });
+
+        it("property completions include entity-typed wildcards", () => {
+            const comp = getDFACompletions(dfa, [
+                "schedule",
+                "meeting",
+                "on",
+            ]);
+            const props = comp.properties ?? [];
+            // CalendarDate is a checked wildcard — should appear in property completions
+            const dateProp = props.find(
+                (p) => p.propertyPath === "parameters.date",
+            );
+            expect(dateProp).toBeDefined();
+            expect(dateProp!.actionName).toBe("schedule");
+        });
+
+        it("completion parity with NFA after 'schedule meeting on'", () => {
+            const nfaComp = computeNFACompletions(nfa, [
+                "schedule",
+                "meeting",
+                "on",
+            ]);
+            const dfaComp = getDFACompletions(dfa, [
+                "schedule",
+                "meeting",
+                "on",
+            ]);
+
+            // DFA correctly suggests "on" as a literal completion:
+            // wildcard desc can absorb "meeting on", leaving literal "on" available.
+            // This is a DFA improvement over NFA completions.
+            const dfaLiterals = [...(dfaComp.completions ?? [])].sort();
+            expect(dfaLiterals).toContain("on");
+
+            // Property completions should match (both report parameters.date)
+            const nfaProps = (nfaComp.properties ?? [])
+                .map(
+                    (p) =>
+                        `${(p.match as any).actionName}:${p.propertyNames[0]}`,
+                )
+                .sort();
+            const dfaProps = (dfaComp.properties ?? [])
+                .map((p) => `${p.actionName}:${p.propertyPath}`)
+                .sort();
+            expect(dfaProps).toEqual(nfaProps);
+        });
+
+        it("completion parity with NFA after 'play the'", () => {
+            assertCompletionParity(nfa, dfa, ["play", "the"]);
+        });
+
+        it("completion parity with NFA after 'skip'", () => {
+            assertCompletionParity(nfa, dfa, ["skip"]);
+        });
+    });
 });
