@@ -1403,8 +1403,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       dompurify:
-        specifier: ^3.2.5
-        version: 3.2.5
+        specifier: ^3.3.1
+        version: 3.3.1
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2004,7 +2004,7 @@ importers:
         version: 4.4.1
       dompurify:
         specifier: ^3.2.6
-        version: 3.2.6
+        version: 3.3.1
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2933,8 +2933,8 @@ importers:
         specifier: ^6.0.2
         version: 6.0.5
       dompurify:
-        specifier: ^3.2.5
-        version: 3.2.6
+        specifier: ^3.3.1
+        version: 3.3.1
       markdown-it:
         specifier: ^14.1.0
         version: 14.1.1
@@ -4101,7 +4101,7 @@ importers:
         version: 4.4.1
       dompurify:
         specifier: ^3.2.6
-        version: 3.2.6
+        version: 3.3.1
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
@@ -4246,8 +4246,8 @@ importers:
         specifier: workspace:*
         version: link:../dispatcher/nodeProviders
       dompurify:
-        specifier: ^3.2.5
-        version: 3.2.5
+        specifier: ^3.3.1
+        version: 3.3.1
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -9292,11 +9292,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.2.5:
-    resolution: {integrity: sha512-mLPd29uoRe9HpvwP2TxClGQBzGXeEC/we/q+bFlmPPmj2p2Ugl3r6ATu/UU1v77DXNcehiBg9zsr1dREyA/dJQ==}
-
-  dompurify@3.2.6:
-    resolution: {integrity: sha512-/2GogDQlohXPZe6D6NOgQvXLPSYBqIWMnZ8zzOhn09REE4eyAzb+Hed3jhoM9OkuaJ8P6ZGTTVWQKAi8ieIzfQ==}
+  dompurify@3.3.1:
+    resolution: {integrity: sha512-qkdCKzLNtrgPFP1Vo+98FRzJnBRGe4ffyCea9IwHB1fyxPOeNTHpLKYGd4Uk9xvNoH0ZoOjwZxNptyMwqrId1Q==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -16998,7 +16995,7 @@ snapshots:
       '@types/lodash.debounce': 4.0.9
       '@types/lodash.throttle': 4.1.9
       clsx: 2.1.1
-      dompurify: 3.2.6
+      dompurify: 3.3.1
       lodash.debounce: 4.0.8
       lodash.throttle: 4.1.1
       nanoid: 5.1.5
@@ -20841,11 +20838,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.2.5:
-    optionalDependencies:
-      '@types/trusted-types': 2.0.7
-
-  dompurify@3.2.6:
+  dompurify@3.3.1:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -24014,7 +24007,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.11
       dayjs: 1.11.13
-      dompurify: 3.2.6
+      dompurify: 3.3.1
       katex: 0.16.22
       khroma: 2.1.0
       lodash-es: 4.17.23
