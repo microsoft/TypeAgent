@@ -1034,11 +1034,13 @@ export type GrammarCompletionResult = {
     // to insert/filter completions (replacing the space-based heuristic).
     matchedPrefixLength?: number | undefined;
     // True when a separator (e.g. space) must be inserted between the
-    // already-typed prefix and the completion text.  This happens when the
-    // grammar consumed the entire input and the spacing rules between the
-    // last typed character and the first completion character require a
-    // separator (e.g. Latin "play" → "music" needs a space, but CJK
-    // "再生" → "音楽" does not).
+    // content at `matchedPrefixLength` and the completion text.  The
+    // caller should check the spacing rules between the last character
+    // of the matched prefix and the first character of each completion.
+    // Example: prefix="play", matchedPrefixLength=4, completion="music"
+    //   → needsSeparator=true (Latin "y" → "m" requires a space).
+    // Example: prefix="再生", matchedPrefixLength=2, completion="音楽"
+    //   → needsSeparator=false (CJK scripts don't require spaces).
     needsSeparator?: boolean | undefined;
 };
 
@@ -1099,88 +1101,196 @@ export function matchGrammar(grammar: Grammar, request: string) {
 }
 
 /**
- * Check if the remaining input text is a case-insensitive prefix of a rule's
- * string part. Used for completions when the user has partially typed a keyword.
- * For example, prefix "p" should match and complete "play".
+ * Given a grammar and a user-typed prefix string, determine what completions
+ * are available.  The algorithm greedily matches as many grammar parts as
+ * possible against the prefix (the "longest completable prefix"), then
+ * reports completions from the *next* unmatched part.
+ *
+ * The function explores every alternative rule/state in the grammar (via the
+ * `pending` work-list).  Each state is run through `matchState` which
+ * consumes as many parts as the prefix allows.  The state then falls into
+ * one of three categories:
+ *
+ * 1. **Exact match** — the prefix satisfies every part in the rule.
+ *    No completion is needed, but `maxPrefixLength` is updated to
+ *    the full input length so that completion candidates from shorter
+ *    partial matches are filtered out in the post-loop step.
+ *
+ * 2. **Partial match, finalized** — the prefix was consumed (possibly with
+ *    trailing separators) but the rule still has remaining parts.
+ *    `matchState` returns `false` (could not match the next part) and
+ *    `finalizeState` returns `true` (no trailing non-separator junk).
+ *    The next unmatched part produces a completion candidate:
+ *      - String part → literal keyword completion (e.g. "music").
+ *      - Wildcard / number → property completion (handled elsewhere).
+ *
+ * 3. **Partial match, NOT finalized** — either:
+ *      a. A pending wildcard could not be finalized (trailing text is only
+ *         separators with no wildcard content) → emit a property completion
+ *         for the wildcard's entity type.
+ *      b. Trailing text remains that didn't match any part → emit the
+ *         next string part as a completion candidate unconditionally.
+ *         The caller uses `matchedPrefixLength` to filter by trailing
+ *         text.
+ *
+ * After processing all states, only candidates whose `prefixLength`
+ * equals the overall `maxPrefixLength` are returned.  This ensures
+ * completions from shorter partial matches are discarded when a longer
+ * (or exact) match consumed more input.
+ *
+ * `matchedPrefixLength` tracks the furthest point consumed across all
+ * states — including exact matches (via `Math.max`).  This tells the
+ * caller where the completable portion of the input ends, so it can
+ * position the completion insertion point correctly (especially important
+ * for non-space-separated scripts like CJK).
+ *
+ * `needsSeparator` indicates whether a separator (e.g. a space) must be
+ * inserted between the content at `matchedPrefixLength` and the completion
+ * text.  It is determined by the spacing rules between the last character
+ * of the matched prefix and the first character of the completion.
  */
-function isPartialPrefixOfStringPart(
-    prefix: string,
-    index: number,
-    part: StringPart,
-): boolean {
-    // Get the remaining text after any leading separators
-    const remaining = prefix.slice(index).trimStart().toLowerCase();
-    if (remaining.length === 0) {
-        return false; // No partial text - handled by the normal completion path
-    }
-    const partText = part.value.join(" ").toLowerCase();
-    return partText.startsWith(remaining) && remaining.length < partText.length;
-}
-
 export function matchGrammarCompletion(
     grammar: Grammar,
     prefix: string,
 ): GrammarCompletionResult {
     debugCompletion(`Start completion for prefix: "${prefix}"`);
+
+    // Seed the work-list with one MatchState per top-level grammar rule.
+    // matchState may push additional states (for nested rules, optional
+    // parts, wildcard extensions, repeat groups) during processing.
     const pending = initialMatchState(grammar);
-    const completions: string[] = [];
-    const properties: GrammarCompletionProperty[] = [];
+
+    // Accumulate completion candidates with their associated prefix
+    // lengths.  After the main loop we filter to keep only candidates
+    // whose prefix length equals the overall maximum — completions
+    // from shorter partial matches are irrelevant when a longer (or
+    // exact) match exists.
+    const completionCandidates: Array<{
+        text: string;
+        prefixLength: number;
+        needsSep: boolean;
+    }> = [];
+    const propertyCandidates: Array<{
+        property: GrammarCompletionProperty;
+        prefixLength: number;
+        needsSep: boolean;
+    }> = [];
+
     // Track the furthest point the grammar consumed across all
-    // completion-producing states.  This tells the caller where
+    // states (including exact matches).  This tells the caller where
     // the "filter text" begins so it doesn't have to guess from
     // whitespace (which breaks for CJK and other non-space scripts).
     let maxPrefixLength: number | undefined;
-    let needsSeparator = false;
+
+    // --- Main loop: process every pending state ---
     while (pending.length > 0) {
         const state = pending.pop()!;
         debugMatch(state, `resume state`);
+
+        // Attempt to greedily match as many grammar parts as possible
+        // against the prefix.  `matched` is true only when ALL parts in
+        // the rule (including nested rules) were satisfied.  matchState
+        // may also push new derivative states onto `pending` (e.g. for
+        // alternative nested rules, optional-skip paths, wildcard
+        // extensions, repeat iterations).
         const matched = matchState(state, prefix, pending);
 
+        // finalizeState does two things:
+        //   1. If a wildcard is pending at the end, attempt to capture
+        //      all remaining input as its value.
+        //   2. Reject states that leave trailing non-separator characters
+        //      un-consumed (those states don't represent valid parses).
+        // It returns true when the state is "clean" — all input was
+        // consumed (or only trailing separators remain).
         if (finalizeState(state, prefix)) {
+            // --- Category 1: Exact match ---
+            // All parts matched AND prefix was fully consumed.
+            // Nothing left to complete; but record how far we got
+            // so that completions from shorter partial matches are
+            // filtered out in the post-loop step.
             if (matched) {
                 debugCompletion("Matched. Nothing to complete.");
-                // Matched exactly, nothing to complete.
-                continue;
-            }
-            // Completion with the current part
-            const nextPart = state.parts[state.partIndex];
-
-            debugCompletion(`Completing ${nextPart.type} part ${state.name}`);
-            if (nextPart.type === "string") {
-                const completionText = nextPart.value.join(" ");
-                debugCompletion(`Adding completion text: "${completionText}"`);
-                completions.push(completionText);
-                // Grammar consumed up to state.index; completions start there.
                 maxPrefixLength =
                     maxPrefixLength === undefined
                         ? state.index
                         : Math.max(maxPrefixLength, state.index);
-                // When the grammar consumed the entire input, check
-                // whether a separator is needed between the last typed
-                // character and the first completion character.
+                continue;
+            }
+
+            // --- Category 2: Partial match (clean finalization) ---
+            // matchState stopped at state.partIndex because it couldn't
+            // match the next part against the (exhausted) prefix.
+            // That next part is what we offer as a completion.
+            const nextPart = state.parts[state.partIndex];
+
+            debugCompletion(`Completing ${nextPart.type} part ${state.name}`);
+            if (nextPart.type === "string") {
+                // The next expected part is a literal keyword string.
+                // Offer it as a completion (e.g. "music" after "play").
+                const completionText = nextPart.value.join(" ");
+                debugCompletion(`Adding completion text: "${completionText}"`);
+
+                // Determine whether a separator (e.g. space) is needed
+                // between the content at matchedPrefixLength and the
+                // completion text.  Check the boundary between the last
+                // consumed character and the first character of the
+                // completion.  This is purely a property of the
+                // boundary — it does not account for any unmatched
+                // trailing content the user may have typed beyond
+                // matchedPrefixLength (e.g. a trailing space).
+                // Example: prefix="play"  completion="music" → true (Latin).
+                // Example: prefix="play " completion="music" → true (matched
+                //   prefix is "play"; separator still needed at that boundary).
+                // Example: prefix="再生" completion="音楽" → false (CJK).
+                let candidateNeedsSep = false;
                 if (
-                    state.index === prefix.length &&
-                    prefix.length > 0 &&
+                    state.index > 0 &&
                     completionText.length > 0 &&
                     state.spacingMode !== "none"
                 ) {
-                    needsSeparator =
-                        needsSeparator ||
-                        requiresSeparator(
-                            prefix[prefix.length - 1],
-                            completionText[0],
-                            state.spacingMode,
-                        );
+                    candidateNeedsSep = requiresSeparator(
+                        prefix[state.index - 1],
+                        completionText[0],
+                        state.spacingMode,
+                    );
                 }
+
+                completionCandidates.push({
+                    text: completionText,
+                    prefixLength: state.index,
+                    needsSep: candidateNeedsSep,
+                });
+
+                // Record how far into the prefix the grammar consumed
+                // before reaching this completion point.
+                maxPrefixLength =
+                    maxPrefixLength === undefined
+                        ? state.index
+                        : Math.max(maxPrefixLength, state.index);
             }
+            // Note: non-string next parts (wildcard, number, rules) in
+            // Category 2 don't produce completions here — wildcards are
+            // handled by Category 3a (pending wildcard) and nested rules
+            // are expanded by matchState into separate pending states.
         } else {
-            // We can't finalize the state because of empty pending wildcard
-            // or because there's trailing unmatched text.
+            // --- Category 3: finalizeState failed ---
+            // Either (a) a pending wildcard couldn't capture meaningful
+            // content, or (b) trailing non-separator text remains that
+            // didn't match any grammar part.
             const pendingWildcard = state.pendingWildcard;
+
             if (
                 pendingWildcard !== undefined &&
                 pendingWildcard.valueId !== undefined
             ) {
+                // --- Category 3a: Unfinalizable pending wildcard ---
+                // The grammar reached a wildcard slot but its capture
+                // region is empty or separator-only (e.g. prefix="play "
+                // with wildcard starting at index 4 — the space is not
+                // valid wildcard content).  Instead of offering the
+                // *following* string part as a completion, we report a
+                // property completion describing the wildcard's type so
+                // the caller can provide entity-specific suggestions.
                 debugCompletion("Completing wildcard part");
                 const completionProperty = getGrammarCompletionProperty(
                     state,
@@ -1190,70 +1300,116 @@ export function matchGrammarCompletion(
                     debugCompletion(
                         `Adding completion property: ${JSON.stringify(completionProperty)}`,
                     );
-                    properties.push(completionProperty);
+
+                    const candidatePrefixLength = pendingWildcard.start;
+
+                    // Determine whether a separator is needed between
+                    // the content at matchedPrefixLength and the
+                    // completion (the wildcard entity value).  Check
+                    // the boundary between the last consumed character
+                    // before the wildcard and the first character of the
+                    // entity value.  We use "a" as a representative word
+                    // character since the actual value is unknown.
+                    let candidateNeedsSep = false;
+                    if (
+                        pendingWildcard.start > 0 &&
+                        state.spacingMode !== "none"
+                    ) {
+                        candidateNeedsSep = requiresSeparator(
+                            prefix[pendingWildcard.start - 1],
+                            "a",
+                            state.spacingMode,
+                        );
+                    }
+
+                    propertyCandidates.push({
+                        property: completionProperty,
+                        prefixLength: candidatePrefixLength,
+                        needsSep: candidateNeedsSep,
+                    });
+
                     // The wildcard starts at pendingWildcard.start; the
                     // grammar consumed everything before that.
                     maxPrefixLength =
                         maxPrefixLength === undefined
-                            ? pendingWildcard.start
-                            : Math.max(maxPrefixLength, pendingWildcard.start);
-                    // Wildcard completions: the wildcard consumes up to
-                    // pendingWildcard.start.  If that position is at or
-                    // before the end of the input (with only separators
-                    // between the wildcard start and the cursor), we may
-                    // need a separator before the property value.
-                    // This covers two cases:
-                    //   1. pendingWildcard.start === prefix.length — separator
-                    //      not typed yet (e.g. input "play", wildcard at 4).
-                    //   2. pendingWildcard.start < prefix.length and only
-                    //      separators follow (e.g. input "play ", wildcard at
-                    //      4, space at 4 is already typed).
-                    // In both cases needsSeparator must be set so the caller
-                    // strips the leading whitespace before filtering.
-                    // (For wildcards the completion text varies, so we
-                    // conservatively use a typical word char "a".)
-                    if (
-                        pendingWildcard.start > 0 &&
-                        pendingWildcard.start <= prefix.length &&
-                        prefix.length > 0 &&
-                        state.spacingMode !== "none" &&
-                        nextNonSeparatorIndex(prefix, pendingWildcard.start) >=
-                            prefix.length
-                    ) {
-                        needsSeparator =
-                            needsSeparator ||
-                            requiresSeparator(
-                                prefix[pendingWildcard.start - 1],
-                                "a",
-                                state.spacingMode,
-                            );
-                    }
+                            ? candidatePrefixLength
+                            : Math.max(maxPrefixLength, candidatePrefixLength);
                 }
             } else if (!matched) {
-                // matchState failed on a string part and there's trailing text.
-                // Check if the remaining input is a partial prefix of the
-                // current string part (e.g. "p" is a prefix of "play").
+                // --- Category 3b: Completion after consumed prefix ---
+                // The grammar stopped at a string part it could not
+                // match.  Report the string part as a completion
+                // candidate regardless of any trailing text — the
+                // caller can use matchedPrefixLength to determine how
+                // much of the input was successfully consumed and
+                // filter completions by any trailing text beyond that
+                // point.  Post-loop filtering ensures only candidates
+                // at the maximum prefix length are returned, so
+                // completions from shorter partial matches are
+                // automatically discarded when a longer match exists.
                 const currentPart = state.parts[state.partIndex];
                 if (
                     currentPart !== undefined &&
-                    currentPart.type === "string" &&
-                    isPartialPrefixOfStringPart(
-                        prefix,
-                        state.index,
-                        currentPart,
-                    )
+                    currentPart.type === "string"
                 ) {
                     const fullText = currentPart.value.join(" ");
                     debugCompletion(
-                        `Adding partial prefix completion: "${fullText}"`,
+                        `Adding completion: "${fullText}" (consumed ${state.index} chars)`,
                     );
-                    completions.push(fullText);
-                    // The partial text starts at state.index.
+
+                    // Determine whether a separator is needed between
+                    // the matched prefix and the completion text.  Check
+                    // the boundary between the last consumed character
+                    // and the first character of the completion.
+                    let candidateNeedsSep = false;
+                    if (
+                        state.index > 0 &&
+                        fullText.length > 0 &&
+                        state.spacingMode !== "none"
+                    ) {
+                        candidateNeedsSep = requiresSeparator(
+                            prefix[state.index - 1],
+                            fullText[0],
+                            state.spacingMode,
+                        );
+                    }
+
+                    completionCandidates.push({
+                        text: fullText,
+                        prefixLength: state.index,
+                        needsSep: candidateNeedsSep,
+                    });
+
+                    // state.index is where matching stopped (before the
+                    // trailing text), so completions begin there.
                     maxPrefixLength =
                         maxPrefixLength === undefined
                             ? state.index
                             : Math.max(maxPrefixLength, state.index);
                 }
+            }
+        }
+    }
+
+    // --- Post-loop filtering ---
+    // Only keep candidates whose prefix length equals the overall
+    // maximum.  Completions from shorter partial matches are
+    // irrelevant when a longer (or exact) match consumed more input.
+    const completions: string[] = [];
+    const properties: GrammarCompletionProperty[] = [];
+    let needsSeparator = false;
+
+    if (maxPrefixLength !== undefined) {
+        for (const c of completionCandidates) {
+            if (c.prefixLength === maxPrefixLength) {
+                completions.push(c.text);
+                needsSeparator = needsSeparator || c.needsSep;
+            }
+        }
+        for (const p of propertyCandidates) {
+            if (p.prefixLength === maxPrefixLength) {
+                properties.push(p.property);
+                needsSeparator = needsSeparator || p.needsSep;
             }
         }
     }

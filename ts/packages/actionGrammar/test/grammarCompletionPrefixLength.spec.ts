@@ -29,16 +29,19 @@ describe("Grammar Completion - matchedPrefixLength", () => {
             expect(result.matchedPrefixLength).toBe(0);
         });
 
-        it("returns undefined matchedPrefixLength when no completions", () => {
+        it("returns all first parts for non-matching input", () => {
             const result = matchGrammarCompletion(grammar, "xyz");
-            expect(result.completions).toHaveLength(0);
-            expect(result.matchedPrefixLength).toBeUndefined();
+            // Nothing consumed; the first string part is offered
+            // unconditionally so the caller can filter by trailing text.
+            expect(result.completions).toEqual(["play music"]);
+            expect(result.matchedPrefixLength).toBe(0);
         });
 
-        it("returns undefined matchedPrefixLength for exact match", () => {
+        it("returns matchedPrefixLength for exact match", () => {
             const result = matchGrammarCompletion(grammar, "play music");
             expect(result.completions).toHaveLength(0);
-            expect(result.matchedPrefixLength).toBeUndefined();
+            // Exact match now records the full consumed length.
+            expect(result.matchedPrefixLength).toBe(10);
         });
     });
 
@@ -75,10 +78,10 @@ describe("Grammar Completion - matchedPrefixLength", () => {
             expect(result.matchedPrefixLength).toBe(4);
         });
 
-        it("returns undefined matchedPrefixLength for complete match", () => {
+        it("returns matchedPrefixLength for complete match", () => {
             const result = matchGrammarCompletion(grammar, "play music");
             expect(result.completions).toHaveLength(0);
-            expect(result.matchedPrefixLength).toBeUndefined();
+            expect(result.matchedPrefixLength).toBe(10);
         });
     });
 
@@ -178,7 +181,7 @@ describe("Grammar Completion - matchedPrefixLength", () => {
         it("returns no completions for exact match", () => {
             const result = matchGrammarCompletion(grammar, "再生音楽");
             expect(result.completions).toHaveLength(0);
-            expect(result.matchedPrefixLength).toBeUndefined();
+            expect(result.matchedPrefixLength).toBe(4);
         });
     });
 
@@ -233,12 +236,15 @@ describe("Grammar Completion - matchedPrefixLength", () => {
             expect(result.needsSeparator).toBe(true);
         });
 
-        it("does not report needsSeparator when trailing space exists", () => {
+        it("reports needsSeparator even when trailing space exists", () => {
             const result = matchGrammarCompletion(grammar, "play ");
             expect(result.completions).toEqual(["music"]);
-            // state.index > prefix.length because space is consumed,
-            // so needsSeparator is not set (no adjacent chars to check)
-            expect(result.needsSeparator).toBeUndefined();
+            // matchedPrefixLength is 4 ("play"); the trailing space is
+            // unmatched content beyond that boundary.  needsSeparator
+            // describes the boundary at matchedPrefixLength, so it is
+            // true (Latin "y" → "m" needs a separator).
+            expect(result.matchedPrefixLength).toBe(4);
+            expect(result.needsSeparator).toBe(true);
         });
 
         it("does not report needsSeparator for empty input", () => {
@@ -316,10 +322,9 @@ describe("Grammar Completion - matchedPrefixLength", () => {
         });
     });
 
-    describe("needsSeparator - wildcard entity with trailing separator", () => {
+    describe("needsSeparator - wildcard entity", () => {
         // Grammar where the completion is a wildcard entity (not a static string).
-        // "play " (with trailing space) should still report needsSeparator=true
-        // so the caller knows to strip the leading separator before filtering.
+        // needsSeparator describes the boundary at matchedPrefixLength.
         const g = [
             `entity TrackName;`,
             `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
@@ -329,12 +334,14 @@ describe("Grammar Completion - matchedPrefixLength", () => {
         it("reports needsSeparator for 'play' before wildcard", () => {
             const result = matchGrammarCompletion(grammar, "play");
             expect(result.properties?.length).toBeGreaterThan(0);
+            // matchedPrefixLength=4; boundary "y" → entity needs separator.
             expect(result.needsSeparator).toBe(true);
         });
 
-        it("reports needsSeparator for 'play ' (separator already typed)", () => {
-            // pendingWildcard.start=4 < prefix.length=5; only separator between
-            // them → needsSeparator must still be true so the caller strips it.
+        it("reports needsSeparator for 'play ' before wildcard", () => {
+            // matchedPrefixLength=4 ("play"); the trailing space is
+            // beyond that boundary.  needsSeparator describes the
+            // boundary at matchedPrefixLength: "y" → entity → true.
             const result = matchGrammarCompletion(grammar, "play ");
             expect(result.properties?.length).toBeGreaterThan(0);
             expect(result.needsSeparator).toBe(true);
