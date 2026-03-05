@@ -15,7 +15,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result).toEqual([
                 {
-                    name: "greeting",
+                    bracketedName: { name: "greeting" },
                     rules: [
                         {
                             expressions: [
@@ -35,7 +35,7 @@ describe("Grammar Rule Parser", () => {
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toHaveLength(1);
-            expect(result[0].name).toBe("greeting");
+            expect(result[0].bracketedName.name).toBe("greeting");
             expect(result[0].rules).toHaveLength(3);
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "string",
@@ -70,8 +70,8 @@ describe("Grammar Rule Parser", () => {
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toHaveLength(2);
-            expect(result[0].name).toBe("greeting");
-            expect(result[1].name).toBe("farewell");
+            expect(result[0].bracketedName.name).toBe("greeting");
+            expect(result[1].bracketedName.name).toBe("farewell");
         });
 
         it("rule with rule reference", () => {
@@ -81,7 +81,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions).toHaveLength(2);
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "ruleReference",
-                name: "greeting",
+                bracketedName: { name: "greeting" },
             });
             expect(result[0].rules[0].expressions[1]).toEqual({
                 type: "string",
@@ -98,7 +98,6 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
                 name: "name",
-                refName: "string",
                 ruleReference: false,
             });
         });
@@ -110,7 +109,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
                 name: "count",
-                refName: "number",
+                bracketedRefName: { name: "number" },
                 ruleReference: false,
             });
         });
@@ -122,7 +121,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
                 name: "item",
-                refName: "ItemType",
+                bracketedRefName: { name: "ItemType" },
                 ruleReference: true,
             });
         });
@@ -134,7 +133,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
                 name: "item",
-                refName: "ItemType",
+                bracketedRefName: { name: "ItemType" },
                 ruleReference: true,
                 optional: true,
             });
@@ -358,9 +357,9 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].value).toEqual({
                 type: "array",
                 value: [
-                    { type: "literal", value: 1 },
-                    { type: "literal", value: "hello" },
-                    { type: "literal", value: true },
+                    { value: { type: "literal", value: 1 } },
+                    { value: { type: "literal", value: "hello" } },
+                    { value: { type: "literal", value: true } },
                 ],
             });
         });
@@ -381,10 +380,13 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].value).toEqual({
                 type: "object",
-                value: {
-                    type: { type: "literal", value: "greeting" },
-                    count: { type: "literal", value: 1 },
-                },
+                value: [
+                    {
+                        key: "type",
+                        value: { type: "literal", value: "greeting" },
+                    },
+                    { key: "count", value: { type: "literal", value: 1 } },
+                ],
             });
         });
 
@@ -394,7 +396,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].value).toEqual({
                 type: "object",
-                value: {},
+                value: [],
             });
         });
 
@@ -405,10 +407,13 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].value).toEqual({
                 type: "object",
-                value: {
-                    type: { type: "literal", value: "greeting" },
-                    count: { type: "literal", value: 1 },
-                },
+                value: [
+                    {
+                        key: "type",
+                        value: { type: "literal", value: "greeting" },
+                    },
+                    { key: "count", value: { type: "literal", value: 1 } },
+                ],
             });
         });
 
@@ -419,10 +424,13 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].value).toEqual({
                 type: "object",
-                value: {
-                    type: { type: "literal", value: "greeting" },
-                    count: { type: "literal", value: 1 },
-                },
+                value: [
+                    {
+                        key: "type",
+                        value: { type: "literal", value: "greeting" },
+                    },
+                    { key: "count", value: { type: "literal", value: 1 } },
+                ],
             });
         });
 
@@ -443,21 +451,30 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].value).toEqual({
                 type: "object",
-                value: {
-                    items: {
-                        type: "array",
-                        value: [
-                            { type: "literal", value: 1 },
-                            { type: "literal", value: 2 },
-                        ],
-                    },
-                    meta: {
-                        type: "object",
+                value: [
+                    {
+                        key: "items",
                         value: {
-                            count: { type: "literal", value: 2 },
+                            type: "array",
+                            value: [
+                                { value: { type: "literal", value: 1 } },
+                                { value: { type: "literal", value: 2 } },
+                            ],
                         },
                     },
-                },
+                    {
+                        key: "meta",
+                        value: {
+                            type: "object",
+                            value: [
+                                {
+                                    key: "count",
+                                    value: { type: "literal", value: 2 },
+                                },
+                            ],
+                        },
+                    },
+                ],
             });
         });
 
@@ -480,7 +497,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result).toEqual([
                 {
-                    name: "complex",
+                    bracketedName: { name: "complex" },
                     rules: [
                         {
                             expressions: [
@@ -506,7 +523,6 @@ describe("Grammar Rule Parser", () => {
                                                 {
                                                     type: "variable",
                                                     name: "action",
-                                                    refName: "string",
                                                     ruleReference: false,
                                                 },
                                             ],
@@ -538,7 +554,6 @@ describe("Grammar Rule Parser", () => {
                                 {
                                     type: "variable",
                                     name: "object",
-                                    refName: "string",
                                     ruleReference: false,
                                 },
                                 {
@@ -549,7 +564,6 @@ describe("Grammar Rule Parser", () => {
                                                 {
                                                     type: "variable",
                                                     name: "adverb",
-                                                    refName: "string",
                                                     ruleReference: false,
                                                 },
                                             ],
@@ -560,44 +574,66 @@ describe("Grammar Rule Parser", () => {
                             ],
                             value: {
                                 type: "object",
-                                value: {
-                                    politeness: null,
-                                    actions: {
-                                        type: "array",
-                                        value: [
-                                            {
-                                                type: "variable",
-                                                name: "action",
-                                            },
-                                            {
-                                                type: "literal",
-                                                value: "execute",
-                                            },
-                                        ],
-                                    },
-                                    target: {
-                                        type: "object",
+                                value: [
+                                    { key: "politeness", value: null },
+                                    {
+                                        key: "actions",
                                         value: {
-                                            name: {
-                                                type: "variable",
-                                                name: "object",
-                                            },
-                                            metadata: {
-                                                type: "object",
-                                                value: {
-                                                    hasArticle: {
-                                                        type: "literal",
-                                                        value: true,
-                                                    },
-                                                    modifier: {
+                                            type: "array",
+                                            value: [
+                                                {
+                                                    value: {
                                                         type: "variable",
-                                                        name: "adverb",
+                                                        name: "action",
                                                     },
                                                 },
-                                            },
+                                                {
+                                                    value: {
+                                                        type: "literal",
+                                                        value: "execute",
+                                                    },
+                                                },
+                                            ],
                                         },
                                     },
-                                },
+                                    {
+                                        key: "target",
+                                        value: {
+                                            type: "object",
+                                            value: [
+                                                {
+                                                    key: "name",
+                                                    value: {
+                                                        type: "variable",
+                                                        name: "object",
+                                                    },
+                                                },
+                                                {
+                                                    key: "metadata",
+                                                    value: {
+                                                        type: "object",
+                                                        value: [
+                                                            {
+                                                                key: "hasArticle",
+                                                                value: {
+                                                                    type: "literal",
+                                                                    value: true,
+                                                                },
+                                                            },
+                                                            {
+                                                                key: "modifier",
+                                                                value: {
+                                                                    type: "variable",
+                                                                    name: "adverb",
+                                                                },
+                                                            },
+                                                        ],
+                                                    },
+                                                },
+                                            ],
+                                        },
+                                    },
+                                ],
                             },
                         },
                     ],
@@ -639,7 +675,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result).toEqual([
                 {
-                    name: "greeting",
+                    bracketedName: { name: "greeting" },
                     rules: [
                         {
                             expressions: [
@@ -664,7 +700,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result).toEqual([
                 {
-                    name: "greeting",
+                    bracketedName: { name: "greeting" },
                     rules: [
                         {
                             expressions: [
@@ -694,7 +730,7 @@ describe("Grammar Rule Parser", () => {
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toHaveLength(1);
-            expect(result[0].name).toBe("greeting");
+            expect(result[0].bracketedName.name).toBe("greeting");
         });
 
         it("should handle multi-line comments", () => {
@@ -707,9 +743,14 @@ describe("Grammar Rule Parser", () => {
             `;
             const result = testParamGrammarRules("test.agr", grammar);
 
-            expect(result[0].rules[0].expressions[0]).toEqual({
+            // Inline block comments become leadingComments on the following expr.
+            const exprs = result[0].rules[0].expressions;
+            expect(exprs).toHaveLength(2);
+            expect(exprs[0]).toEqual({ type: "string", value: ["hello"] });
+            expect(exprs[1]).toMatchObject({
                 type: "string",
-                value: ["hello", "world"],
+                value: ["world"],
+                leadingComments: [{ style: "block", text: " inline comment " }],
             });
         });
 
@@ -743,53 +784,391 @@ describe("Grammar Rule Parser", () => {
             `;
             const result = testParamGrammarRules("test.agr", grammar);
 
+            // "// Property comment" starts on its own line → leadingComments on "type".
+            // "/* inline */" is on the same line as the comma → trailingComment on "type".
+            // "count" gets no leadingComments.
             expect(result[0].rules[0].value).toEqual({
                 type: "object",
-                value: {
-                    type: { type: "literal", value: "greeting" },
-                    count: { type: "literal", value: 1 },
-                },
+                value: [
+                    {
+                        key: "type",
+                        value: { type: "literal", value: "greeting" },
+                        leadingComments: [
+                            { style: "line", text: " Property comment" },
+                        ],
+                        trailingComments: [
+                            { style: "block", text: " inline " },
+                        ],
+                    },
+                    {
+                        key: "count",
+                        value: { type: "literal", value: 1 },
+                    },
+                ],
             });
         });
 
-        it("should treat // comment with no preceding space as flex space in string expression", () => {
+        describe("Value node comments", () => {
+            it("should preserve block comment after ':' as leadingComments on object property value", () => {
+                const grammar = `<rule> = test -> { type: /* before */ "greeting" };`;
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const props = (result[0].rules[0].value as any).value;
+                expect(props.find((p: any) => p.key === "type").value).toEqual({
+                    type: "literal",
+                    value: "greeting",
+                    leadingComments: [{ style: "block", text: " before " }],
+                });
+            });
+
+            it("should preserve line comment after ':' as leadingComments on object property value", () => {
+                const grammar =
+                    '<rule> = test -> {\n    type: // before\n    "greeting"\n};';
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const props = (result[0].rules[0].value as any).value;
+                expect(props.find((p: any) => p.key === "type").value).toEqual({
+                    type: "literal",
+                    value: "greeting",
+                    leadingComments: [{ style: "line", text: " before" }],
+                });
+            });
+
+            it("should preserve block comment after property value as trailingComments", () => {
+                const grammar = `<rule> = test -> { type: "greeting" /* after */ };`;
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const props = (result[0].rules[0].value as any).value;
+                expect(props.find((p: any) => p.key === "type").value).toEqual({
+                    type: "literal",
+                    value: "greeting",
+                    trailingComments: [{ style: "block", text: " after " }],
+                });
+            });
+
+            it("should preserve line comment after property value as trailingComments", () => {
+                const grammar = "<rule> = test -> {\n    count: 1 // after\n};";
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const props = (result[0].rules[0].value as any).value;
+                expect(props.find((p: any) => p.key === "count").value).toEqual(
+                    {
+                        type: "literal",
+                        value: 1,
+                        trailingComments: [{ style: "line", text: " after" }],
+                    },
+                );
+            });
+
+            it("should preserve block comment after '[' as leadingComments on first array element", () => {
+                const grammar = `<rule> = test -> [/* first */ "a", "b"];`;
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const arr = (result[0].rules[0].value as any).value;
+                expect(arr[0]).toEqual({
+                    value: {
+                        type: "literal",
+                        value: "a",
+                        leadingComments: [{ style: "block", text: " first " }],
+                    },
+                });
+                expect(arr[1]).toEqual({
+                    value: { type: "literal", value: "b" },
+                });
+            });
+
+            it("should preserve same-line block comment after ',' as trailingComment on that element", () => {
+                // "a", /* second */ "b" — the comment is on the same line as the comma,
+                // so it becomes trailingComment on the ArrayElement for "a".
+                const grammar = `<rule> = test -> ["a", /* second */ "b"];`;
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const arr = (result[0].rules[0].value as any).value;
+                expect(arr[0]).toEqual({
+                    value: { type: "literal", value: "a" },
+                    trailingComments: [{ style: "block", text: " second " }],
+                });
+                expect(arr[1]).toEqual({
+                    value: { type: "literal", value: "b" },
+                });
+            });
+
+            it("should preserve same-line line comment after ',' as trailingComment on that element", () => {
+                // "a", // first\n"b" — the comment is on the same line as the comma,
+                // so it becomes trailingComment on the ArrayElement for "a".
+                const grammar =
+                    '<rule> = test -> [\n    "a", // first\n    "b"\n];';
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const arr = (result[0].rules[0].value as any).value;
+                expect(arr[0]).toEqual({
+                    value: { type: "literal", value: "a" },
+                    trailingComments: [{ style: "line", text: " first" }],
+                });
+                expect(arr[1]).toEqual({
+                    value: { type: "literal", value: "b" },
+                });
+            });
+
+            it("should preserve block comment before ',' as trailingComments on the value", () => {
+                // "a" /* trailing */, "b" — comment is BEFORE the comma, so it is
+                // trailingComments on the value node inside the ArrayElement for "a".
+                const grammar = `<rule> = test -> ["a" /* trailing */, "b"];`;
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const arr = (result[0].rules[0].value as any).value;
+                expect(arr[0]).toEqual({
+                    value: {
+                        type: "literal",
+                        value: "a",
+                        trailingComments: [
+                            { style: "block", text: " trailing " },
+                        ],
+                    },
+                });
+                expect(arr[1]).toEqual({
+                    value: { type: "literal", value: "b" },
+                });
+            });
+
+            it("should capture comments after '{' as leadingComments on the first ObjectProperty", () => {
+                // Comments after "{" precede the first property key and are now
+                // preserved as leadingComments on that ObjectProperty.
+                const grammar = `<rule> = test -> { /* after-brace */ type: "greeting" };`;
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const props = (result[0].rules[0].value as any).value;
+                expect(props[0].leadingComments).toEqual([
+                    { style: "block", text: " after-brace " },
+                ]);
+                // The value node itself has no leadingComments.
+                expect(props[0].value.leadingComments).toBeUndefined();
+            });
+
+            it("should capture /* */ comment on same line as ',' as trailingComment on that ObjectProperty", () => {
+                // "/* between */" is on the same line as the comma → trailingComment
+                // on the preceding property.  "count" gets no leadingComments.
+                const grammar = `<rule> = test -> { type: "greeting", /* between */ count: 1 };`;
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const props = (result[0].rules[0].value as any).value;
+                const typeProp = props.find((p: any) => p.key === "type");
+                expect(typeProp.trailingComments).toEqual([
+                    { style: "block", text: " between " },
+                ]);
+                const countProp = props.find((p: any) => p.key === "count");
+                expect(countProp.leadingComments).toBeUndefined();
+                // The value node itself has no leadingComments.
+                expect(countProp.value.leadingComments).toBeUndefined();
+            });
+
+            it("should capture // line comment after ',' as trailingComment on the property", () => {
+                // "greeting", // note\n  count — the // comment is on the same
+                // line as the comma, so it becomes trailingComment on "type".
+                // "count" gets no leadingComments.
+                const grammar =
+                    '<rule> = test -> { type: "greeting", // note\n   count: 1 };';
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const props = (result[0].rules[0].value as any).value;
+                expect(props[0].trailingComments).toEqual([
+                    { style: "line", text: " note" },
+                ]);
+                expect(props[1].leadingComments).toBeUndefined();
+            });
+
+            it("should distinguish // trailing from /* */ leading when both present", () => {
+                // "greeting", // trailing\n  /* leading */ count — // goes to
+                // trailingComment on "type", /* */ goes to leadingComments on "count".
+                const grammar =
+                    '<rule> = test -> { type: "greeting", // trailing\n   /* leading */ count: 1 };';
+                const result = testParamGrammarRules("test.agr", grammar);
+
+                const props = (result[0].rules[0].value as any).value;
+                expect(props[0].trailingComments).toEqual([
+                    { style: "line", text: " trailing" },
+                ]);
+                expect(props[1].leadingComments).toEqual([
+                    { style: "block", text: " leading " },
+                ]);
+            });
+
+            // ── Trailing comma ────────────────────────────────────────────────
+
+            it("should accept trailing comma in array", () => {
+                const grammar = `<rule> = test -> ["a", "b",];`;
+                const result = testParamGrammarRules("test.agr", grammar);
+                const arr = (result[0].rules[0].value as any).value;
+                expect(arr).toHaveLength(2);
+                expect(arr[0]).toEqual({
+                    value: { type: "literal", value: "a" },
+                });
+                expect(arr[1]).toEqual({
+                    value: { type: "literal", value: "b" },
+                });
+            });
+
+            it("should accept trailing comma in object", () => {
+                const grammar = `<rule> = test -> { type: "greeting", count: 1, };`;
+                const result = testParamGrammarRules("test.agr", grammar);
+                const props = (result[0].rules[0].value as any).value;
+                expect(props).toHaveLength(2);
+                expect(props[0].key).toBe("type");
+                expect(props[1].key).toBe("count");
+            });
+
+            it("should capture comments after trailing ',' as closingComments on array", () => {
+                const grammar =
+                    '<rule> = test -> [\n    "a",\n    /* footer */\n];';
+                const result = testParamGrammarRules("test.agr", grammar);
+                const node = result[0].rules[0].value as any;
+                expect(node.value).toHaveLength(1);
+                expect(node.closingComments).toEqual([
+                    { style: "block", text: " footer " },
+                ]);
+            });
+
+            it("should capture comments after trailing ',' as closingComments on object", () => {
+                const grammar =
+                    '<rule> = test -> {\n    type: "greeting",\n    /* footer */\n};';
+                const result = testParamGrammarRules("test.agr", grammar);
+                const node = result[0].rules[0].value as any;
+                expect(node.value).toHaveLength(1);
+                expect(node.closingComments).toEqual([
+                    { style: "block", text: " footer " },
+                ]);
+            });
+
+            it("should capture comments inside empty array as closingComments", () => {
+                const grammar = `<rule> = test -> [/* empty */];`;
+                const result = testParamGrammarRules("test.agr", grammar);
+                const node = result[0].rules[0].value as any;
+                expect(node.value).toHaveLength(0);
+                expect(node.closingComments).toEqual([
+                    { style: "block", text: " empty " },
+                ]);
+            });
+
+            it("should capture comments inside empty object as closingComments", () => {
+                const grammar = `<rule> = test -> {/* empty */};`;
+                const result = testParamGrammarRules("test.agr", grammar);
+                const node = result[0].rules[0].value as any;
+                expect(node.value).toHaveLength(0);
+                expect(node.closingComments).toEqual([
+                    { style: "block", text: " empty " },
+                ]);
+            });
+        });
+
+        it("should preserve // comment as leadingComment at start of expression", () => {
+            const grammar = "<rule> = //leading\nworld;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            const exprs = result[0].rules[0].expressions;
+            expect(exprs).toHaveLength(1);
+            expect(exprs[0]).toMatchObject({
+                type: "string",
+                value: ["world"],
+                leadingComments: [{ style: "line", text: "leading" }],
+            });
+        });
+
+        it("should preserve // comment as leadingComment at start of alternative", () => {
+            const grammar = "<rule> = x\n| //leading\ny;";
+            const result = testParamGrammarRules("test.agr", grammar);
+
+            const exprs = result[0].rules[1].expressions;
+            expect(exprs).toHaveLength(1);
+            expect(exprs[0]).toMatchObject({
+                type: "string",
+                value: ["y"],
+                leadingComments: [{ style: "line", text: "leading" }],
+            });
+        });
+
+        it("should preserve // comment as leadingComment on following expr", () => {
             const grammar = "<rule> = hello//comment\nworld;";
             const result = testParamGrammarRules("test.agr", grammar);
 
-            expect(result[0].rules[0].expressions[0]).toEqual({
+            const exprs = result[0].rules[0].expressions;
+            expect(exprs).toHaveLength(2);
+            expect(exprs[0]).toEqual({ type: "string", value: ["hello"] });
+            expect(exprs[1]).toMatchObject({
                 type: "string",
-                value: ["hello", "world"],
+                value: ["world"],
+                leadingComments: [{ style: "line", text: "comment" }],
             });
         });
 
-        it("should treat /* */ comment with no preceding space as flex space in string expression", () => {
+        it("should preserve /* */ comment as leadingComment on following expr", () => {
             const grammar = "<rule> = hello/*comment*/world;";
             const result = testParamGrammarRules("test.agr", grammar);
 
-            expect(result[0].rules[0].expressions[0]).toEqual({
+            const exprs = result[0].rules[0].expressions;
+            expect(exprs).toHaveLength(2);
+            expect(exprs[0]).toEqual({ type: "string", value: ["hello"] });
+            expect(exprs[1]).toMatchObject({
                 type: "string",
-                value: ["hello", "world"],
+                value: ["world"],
+                leadingComments: [{ style: "block", text: "comment" }],
             });
         });
 
-        it("should collapse multiple consecutive comments to a single flex space", () => {
+        it("should preserve multiple consecutive comments as leadingComments on following expr", () => {
             const grammar = "<rule> = hello//c1\n//c2\nworld;";
             const result = testParamGrammarRules("test.agr", grammar);
 
-            expect(result[0].rules[0].expressions[0]).toEqual({
+            const exprs = result[0].rules[0].expressions;
+            expect(exprs).toHaveLength(2);
+            expect(exprs[0]).toEqual({ type: "string", value: ["hello"] });
+            expect(exprs[1]).toMatchObject({
                 type: "string",
-                value: ["hello", "world"],
+                value: ["world"],
+                leadingComments: [
+                    { style: "line", text: "c1" },
+                    { style: "line", text: "c2" },
+                ],
             });
         });
 
-        it("should collapse mixed adjacent comment styles to a single flex space", () => {
+        it("should preserve mixed comment styles as leadingComments on following expr", () => {
             const grammar = "<rule> = hello//line\n/*block*/world;";
             const result = testParamGrammarRules("test.agr", grammar);
 
-            expect(result[0].rules[0].expressions[0]).toEqual({
+            const exprs = result[0].rules[0].expressions;
+            expect(exprs).toHaveLength(2);
+            expect(exprs[0]).toEqual({ type: "string", value: ["hello"] });
+            expect(exprs[1]).toMatchObject({
                 type: "string",
-                value: ["hello", "world"],
+                value: ["world"],
+                leadingComments: [
+                    { style: "line", text: "line" },
+                    { style: "block", text: "block" },
+                ],
             });
+        });
+
+        it("should capture full text of // comment at EOF without trailing newline", () => {
+            // Regression: the old parseComment used `this.curr - 1` to strip the
+            // newline, but when no newline exists skipAfter sets curr = content.length,
+            // so `curr - 1` silently dropped the last character of the comment text.
+            const result = parseGrammarRules(
+                "test.agr",
+                "// leading comment at eof",
+                false,
+            );
+            expect(result.leadingComments).toEqual([
+                { style: "line", text: " leading comment at eof" },
+            ]);
+
+            const result2 = parseGrammarRules(
+                "test.agr",
+                "<rule> = foo; // trailing",
+                false,
+            );
+            expect(result2.definitions[0].trailingComments).toEqual([
+                { style: "line", text: " trailing" },
+            ]);
         });
     });
 
@@ -906,6 +1285,13 @@ describe("Grammar Rule Parser", () => {
             );
         });
 
+        it("should throw error for expression with only comments", () => {
+            const grammar = "<rule> = // just a comment\n;";
+            expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
+                "Empty expression",
+            );
+        });
+
         it("should include line and column information in errors", () => {
             const grammar = `
                 <valid> = hello;
@@ -935,13 +1321,13 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].spacingMode).toBe("required");
         });
 
-        it("attaches spacingMode auto via annotation (stored as undefined)", () => {
+        it("attaches spacingMode auto via explicit annotation (stored as 'auto')", () => {
             const result = testParamGrammarRules(
                 "test.agr",
                 `<Rule> [spacing=auto] = hello;`,
             );
-            // "auto" is the default; stored as undefined
-            expect(result[0].spacingMode).toBeUndefined();
+            // Explicit [spacing=auto] annotation is stored as "auto" (distinct from no annotation = undefined).
+            expect(result[0].spacingMode).toBe("auto");
         });
 
         it("attaches spacingMode none via annotation", () => {
@@ -1029,9 +1415,16 @@ describe("Grammar Rule Parser", () => {
 
             const value = result[0].rules[0].value as any;
             expect(value.type).toBe("object");
-            expect(value.value.config.type).toBe("object");
-            expect(value.value.config.value.settings.type).toBe("array");
-            expect(value.value.variables.value).toHaveLength(2);
+            const configProp = value.value.find((p: any) => p.key === "config");
+            expect(configProp.value.type).toBe("object");
+            const settingsProp = configProp.value.value.find(
+                (p: any) => p.key === "settings",
+            );
+            expect(settingsProp.value.type).toBe("array");
+            const variablesProp = value.value.find(
+                (p: any) => p.key === "variables",
+            );
+            expect(variablesProp.value.value).toHaveLength(2);
         });
 
         it("real-world conversation patterns", () => {
@@ -1070,11 +1463,15 @@ describe("Grammar Rule Parser", () => {
 
             // Verify each intent has proper structure
             result.forEach((rule) => {
-                expect(rule.name).toMatch(/^(weather|calendar|music)$/);
+                expect(rule.bracketedName.name).toMatch(
+                    /^(weather|calendar|music)$/,
+                );
                 expect(rule.rules[0].value).toBeDefined();
                 const value = rule.rules[0].value as any;
                 expect(value.type).toBe("object");
-                expect(value.value.intent).toBeDefined();
+                expect(
+                    value.value.find((p: any) => p.key === "intent"),
+                ).toBeDefined();
             });
         });
     });
@@ -1085,7 +1482,10 @@ describe("Grammar Rule Parser", () => {
             const result = parseGrammarRules("test.agr", grammar, false);
 
             expect(result.imports).toHaveLength(1);
-            expect(result.imports[0].names).toEqual(["Name1", "Name2"]);
+            expect(result.imports[0].names).toEqual([
+                { name: "Name1" },
+                { name: "Name2" },
+            ]);
             expect(result.imports[0].source).toBe("file.agr");
         });
 
@@ -1107,11 +1507,14 @@ describe("Grammar Rule Parser", () => {
             const result = parseGrammarRules("test.agr", grammar, false);
 
             expect(result.imports).toHaveLength(3);
-            expect(result.imports[0].names).toEqual(["Action1", "Action2"]);
+            expect(result.imports[0].names).toEqual([
+                { name: "Action1" },
+                { name: "Action2" },
+            ]);
             expect(result.imports[0].source).toBe("actions.agr");
             expect(result.imports[1].names).toBe("*");
             expect(result.imports[1].source).toBe("types.ts");
-            expect(result.imports[2].names).toEqual(["Helper"]);
+            expect(result.imports[2].names).toEqual([{ name: "Helper" }]);
             expect(result.imports[2].source).toBe("helpers.agr");
         });
 
@@ -1125,10 +1528,10 @@ describe("Grammar Rule Parser", () => {
             const result = parseGrammarRules("test.agr", grammar, false);
 
             expect(result.imports).toHaveLength(1);
-            expect(result.imports[0].names).toEqual(["BaseRule"]);
+            expect(result.imports[0].names).toEqual([{ name: "BaseRule" }]);
             expect(result.definitions).toHaveLength(2);
-            expect(result.definitions[0].name).toBe("Start");
-            expect(result.definitions[1].name).toBe("BaseRule");
+            expect(result.definitions[0].bracketedName.name).toBe("Start");
+            expect(result.definitions[1].bracketedName.name).toBe("BaseRule");
         });
 
         it("parse single name import", () => {
@@ -1136,8 +1539,148 @@ describe("Grammar Rule Parser", () => {
             const result = parseGrammarRules("test.agr", grammar, false);
 
             expect(result.imports).toHaveLength(1);
-            expect(result.imports[0].names).toEqual(["SingleName"]);
+            expect(result.imports[0].names).toEqual([{ name: "SingleName" }]);
             expect(result.imports[0].source).toBe("file.agr");
+        });
+
+        it("preserves block comments inside braces before/after names", () => {
+            const grammar =
+                'import { /* A */ Name1 /* B */, /* C */ Name2 /* D */ } from "file.agr";';
+            const result = parseGrammarRules("test.agr", grammar, false);
+            const names = result.imports[0]
+                .names as import("../src/grammarRuleParser.js").NameEntry[];
+            expect(names[0].leadingComments).toEqual([
+                { style: "block", text: " A " },
+            ]);
+            expect(names[0].trailingComments).toEqual([
+                { style: "block", text: " B " },
+            ]);
+            expect(names[1].leadingComments).toEqual([
+                { style: "block", text: " C " },
+            ]);
+            expect(names[1].trailingComments).toEqual([
+                { style: "block", text: " D " },
+            ]);
+        });
+
+        it("preserves block comments after 'import' keyword and after closing brace", () => {
+            const grammar =
+                'import /* after-import */ { Name1 } /* after-brace */ from "file.agr";';
+            const result = parseGrammarRules("test.agr", grammar, false);
+            expect(result.imports[0].afterImportComments).toEqual([
+                { style: "block", text: " after-import " },
+            ]);
+            expect(result.imports[0].afterCloseBraceComments).toEqual([
+                { style: "block", text: " after-brace " },
+            ]);
+        });
+    });
+
+    describe("Comment preservation at structural positions", () => {
+        it("preserves block comment inside rule name angle brackets", () => {
+            const result = parseGrammarRules(
+                "test.agr",
+                `</*A*/Rule/*B*/> = hello;`,
+                false,
+            );
+            expect(result.definitions[0].bracketedName.leadingComments).toEqual(
+                [{ style: "block", text: "A" }],
+            );
+            expect(
+                result.definitions[0].bracketedName.trailingComments,
+            ).toEqual([{ style: "block", text: "B" }]);
+        });
+
+        it("preserves block comments in [spacing=...] annotation", () => {
+            const result = parseGrammarRules(
+                "test.agr",
+                `<Rule> [/*a*/spacing/*b*/=/*c*/required/*d*/] = hello;`,
+                false,
+            );
+            const def = result.definitions[0];
+            expect(def.spacingMode).toBe("required");
+            expect(def.annotationAfterBracketComments).toEqual([
+                { style: "block", text: "a" },
+            ]);
+            expect(def.annotationAfterKeyComments).toEqual([
+                { style: "block", text: "b" },
+            ]);
+            expect(def.annotationAfterEqualsComments).toEqual([
+                { style: "block", text: "c" },
+            ]);
+            expect(def.annotationAfterValueComments).toEqual([
+                { style: "block", text: "d" },
+            ]);
+        });
+
+        it("preserves block comment between $( and variable name", () => {
+            const result = parseGrammarRules(
+                "test.agr",
+                `<Rule> = $(/*c*/x);`,
+                false,
+            );
+            const expr = result.definitions[0].rules[0]
+                .expressions[0] as import("../src/grammarRuleParser.js").VarDefExpr;
+            expect(expr.dollarParenComments).toEqual([
+                { style: "block", text: "c" },
+            ]);
+        });
+
+        it("preserves block comment after colon in variable specifier", () => {
+            const result = parseGrammarRules(
+                "test.agr",
+                `<Rule> = $(x:/*c*/string);`,
+                false,
+            );
+            const expr = result.definitions[0].rules[0]
+                .expressions[0] as import("../src/grammarRuleParser.js").VarDefExpr;
+            expect(expr.colonComments).toEqual([{ style: "block", text: "c" }]);
+        });
+
+        it("preserves block comment after plain type name in variable specifier", () => {
+            const result = parseGrammarRules(
+                "test.agr",
+                `<Rule> = $(x:string/*c*/);`,
+                false,
+            );
+            const expr = result.definitions[0].rules[0]
+                .expressions[0] as import("../src/grammarRuleParser.js").VarDefExpr;
+            expect(expr.bracketedRefName?.name).toEqual("string");
+            expect(expr.bracketedRefName?.trailingComments).toEqual([
+                { style: "block", text: "c" },
+            ]);
+        });
+
+        it("preserves block comment inside rule reference in variable type", () => {
+            const result = parseGrammarRules(
+                "test.agr",
+                `<Rule> = $(x:</*a*/Inner/*b*/>);`,
+                false,
+            );
+            const expr = result.definitions[0].rules[0]
+                .expressions[0] as import("../src/grammarRuleParser.js").VarDefExpr;
+            expect(expr.bracketedRefName?.leadingComments).toEqual([
+                { style: "block", text: "a" },
+            ]);
+            expect(expr.bracketedRefName?.trailingComments).toEqual([
+                { style: "block", text: "b" },
+            ]);
+        });
+
+        it("preserves block comment inside inline rule reference angle brackets", () => {
+            const result = parseGrammarRules(
+                "test.agr",
+                `<Rule> = </*a*/Other/*b*/>;`,
+                false,
+            );
+            const expr = result.definitions[0].rules[0]
+                .expressions[0] as import("../src/grammarRuleParser.js").RuleRefExpr;
+            expect(expr.bracketedName.leadingComments).toEqual([
+                { style: "block", text: "a" },
+            ]);
+            expect(expr.bracketedName.trailingComments).toEqual([
+                { style: "block", text: "b" },
+            ]);
         });
     });
 });

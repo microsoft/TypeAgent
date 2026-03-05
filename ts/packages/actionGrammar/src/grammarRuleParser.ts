@@ -3,6 +3,13 @@
 
 import registerDebug from "debug";
 import { getLineCol } from "./utils.js";
+import {
+    SpacingMode,
+    CompiledLiteralValueNode,
+    CompiledVariableValueNode,
+    CompiledObjectValueNode,
+    CompiledArrayValueNode,
+} from "./grammarTypes.js";
 
 const debugParse = registerDebug("typeagent:grammar:parse");
 /**
@@ -24,9 +31,9 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   // <Char> is any character except special chars (| ( ) < > $ - ; { } [ ]) and backslash,
  *   // and not the start of a comment sequence ("//" or "/*").
  *   // A "flex space" is a separator position in the grammar source, created by any unescaped
- *   // whitespace or comment between tokens. When matching input, a flex space accepts any run of
- *   // whitespace or punctuation characters. The minimum number required is controlled by the
- *   // spacing mode (set via "set spacing ...;"):
+ *   // whitespace or comment between sub-expressions.
+ *   // When matching input, a flex space accepts any run of whitespace or punctuation characters.
+ *   // The minimum number required is controlled by the per-rule spacing mode annotation:
  *   //
  *   //   - "required": always requires at least one whitespace/punctuation character.
  *   //   - "optional": zero or more separator characters allowed; tokens may be adjacent
@@ -44,7 +51,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   //
  *   // An escaped space (e.g. "\ ") is treated as a literal character, not a flex space.
  *   // Special chars must be escaped with backslash to appear as literal text.
- *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Comment> | <Char> )+
+ *   <StringExpr> ::= ( <EscapeSequence> | <WS> | <Char> )+
  *   <EscapeSequence> ::= "\\"<EscapedChar>
  *   <EscapedChar> ::= "0"                        // null character \0
  *                   | "n"                        // newline \n
@@ -71,8 +78,8 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" | ")*" | ")+" )
  *
  *   <Value> = BooleanValue | NumberValue | StringValue | ObjectValue | ArrayValue | VarReference
- *   <ArrayValue> = "[" (<Value> ("," <Value>)*)? "]"
- *   <ObjectValue> = "{" (<ObjectProperty> ("," <ObjectProperty>)*)? "}"
+ *   <ArrayValue> = "[" (<Value> ("," <Value>)* ","?)? "]"
+ *   <ObjectValue> = "{" (<ObjectProperty> ("," <ObjectProperty>)* ","?)? "}"
  *   <ObjectProperty> = <ObjectPropertyFull> | <ObjectPropertyShort>
  *   <ObjectPropertyFull> = <ObjectPropertyName> ":" <Value>
  *   <ObjectPropertyShort> = <VarReference>
@@ -93,8 +100,9 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ID_Continue> = {{ Unicode ID_Continue character }}
  *
  * Between structural tokens in the above grammar, all whitespace and comments are skipped.
- * Within <StringExpr>, whitespace and comments act as flex space delimiters rather than
- * being silently ignored (see notes above).
+ * Within <Expression>, comments between sub-expressions also act as flex-space separators;
+ * they are attached as leadingComments on the following sub-expression in the AST.
+ * Comments are omitted from the BNF productions above for readability.
  *   <WS> ::= {{ Javascript Whitespace and Line terminators character ( [\s] in JS regexp )}}*
  *   <SingleLineComment> ::= "//" [^\n]* "\n"
  *   <MultiLineComment> ::= "/*" .* "*\/"
@@ -110,17 +118,42 @@ export function parseGrammarRules(
     return result;
 }
 
+// ─── Comment types ────────────────────────────────────────────────────────────
+//
+// Naming convention for comment-carrying fields:
+//   - Plural  (e.g. trailingComments: Comment[]): used where multiple comments
+//     can appear — typically block-level positions where several "// …" lines
+//     or "/* … */" spans may follow one another.  Also used for same-line
+//     trailing positions because multiple block comments can precede a line
+//     comment (e.g. /* a */ /* b */ // c).
+
+export type Comment = {
+    style: "line" | "block"; // "//" vs "/* */"
+    text: string; // Raw content after "//" or between "/*" and "*/"
+    // (preserves leading space, e.g. " foo" from "// foo")
+};
+
 // Expr
 export type Expr = StrExpr | VarDefExpr | RuleRefExpr | RulesExpr;
 type StrExpr = {
     type: "string";
     value: string[];
+    leadingComments?: Comment[];
 };
 
-type RuleRefExpr = {
-    type: "ruleReference";
+// A name enclosed in angle brackets, with optional comments inside the brackets.
+// Used by RuleRefExpr and RuleDefinition to represent the <name> construct.
+export type BracketedName = {
     name: string;
+    leadingComments?: Comment[] | undefined; // between < and the name
+    trailingComments?: Comment[] | undefined; // between the name and >
+};
+
+export type RuleRefExpr = {
+    type: "ruleReference";
+    bracketedName: BracketedName;
     pos?: number | undefined;
+    leadingComments?: Comment[];
 };
 
 type RulesExpr = {
@@ -128,16 +161,23 @@ type RulesExpr = {
     rules: Rule[];
     optional?: boolean;
     repeat?: boolean; // Kleene star: zero or more
+    leadingComments?: Comment[];
 };
 
-type VarDefExpr = {
+export type VarDefExpr = {
     type: "variable";
     name: string;
     ruleReference: boolean;
-    refName: string;
+    // bracketedRefName.name is the type/rule name; absent means the type defaults to "string".
+    // For rule references ($(...:<RuleName>)): leadingComments/trailingComments are inside the <>.
+    // For plain types ($(...:typeName)):       trailingComments are after the type identifier.
+    bracketedRefName?: BracketedName;
     refPos?: number | undefined;
     optional?: boolean;
     pos?: number | undefined;
+    leadingComments?: Comment[];
+    dollarParenComments?: Comment[]; // between $( and the variable name
+    colonComments?: Comment[]; // between : and the type specifier
 };
 
 // Value
@@ -147,66 +187,119 @@ export type ValueNode =
     | ArrayValueNode
     | VariableValueNode;
 
-type LiteralValueNode = { type: "literal"; value: boolean | string | number };
-
-// Fields of an ObjectValueNode
-// null means the value is the same as the VariableValueNode of the same name
-type ObjectValueField = { [key: string]: ValueNode | null };
-type ObjectValueNode = {
-    type: "object";
-
+// Parser-time value node types: compiled base types augmented with comment fields.
+// The compiler strips these before storing into GrammarRule (see grammarCompiler.ts).
+//
+// leadingComments:  comments before the value (e.g. after ":" or "[").
+// trailingComments: comments after the value but before the trailing "," or "]"/"}" delimiter.
+type LiteralValueNode = CompiledLiteralValueNode & {
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+};
+type VariableValueNode = CompiledVariableValueNode & {
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+};
+// A single property in an ObjectValueNode.
+// leadingComments: comments before the property key that start on a new line
+//   (after '{' or after the comma + any trailing comments).
+// trailingComments: same-line comments after the trailing ',' — block comments
+//   that close before the next newline and/or a final line comment.
+export type ObjectProperty = {
+    key: string;
+    value: ValueNode | null; // null = shorthand: { x } means { x: x }
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+};
+// ObjectValueField is an ordered list of properties; array form lets each entry
+// carry leading comments on its key.  (A plain {[key:string]:…} dict has no
+// place to attach per-key comments.)
+type ObjectValueField = ObjectProperty[];
+// A value node as it appears as an element in an array literal.
+// trailingComments: same-line comments after the trailing ','.
+export type ArrayElement = {
+    value: ValueNode;
+    trailingComments?: Comment[];
+};
+// ObjectValueNode and ArrayValueNode override the `value` field so it can
+// hold recursive ValueNode/ArrayElement references (not just CompiledValueNode).
+type ObjectValueNode = Omit<CompiledObjectValueNode, "value"> & {
     value: ObjectValueField;
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    // Comments after the last property's trailing ',' (or inside an empty object).
+    closingComments?: Comment[];
 };
-
-type ArrayValueNode = {
-    type: "array";
-    value: ValueNode[];
-};
-type VariableValueNode = {
-    type: "variable";
-    name: string;
+type ArrayValueNode = Omit<CompiledArrayValueNode, "value"> & {
+    value: ArrayElement[];
+    leadingComments?: Comment[];
+    trailingComments?: Comment[];
+    // Comments after the last element's trailing ',' (or inside an empty array).
+    closingComments?: Comment[];
 };
 
 // Rule
 export type Rule = {
     expressions: Expr[];
+    trailingComments?: Comment[] | undefined; // comments after expressions, before | or ;
     value?: ValueNode | undefined;
+    valueLeadingComments?: Comment[] | undefined; // comments between -> and value
+    valueTrailingComments?: Comment[] | undefined; // comments after value, before | or ;
 };
 
 export type RuleDefinition = {
-    name: string;
+    bracketedName: BracketedName;
     rules: Rule[];
     spacingMode?: SpacingMode;
     pos?: number | undefined;
+    leadingComments?: Comment[] | undefined; // comments before <Name>
+    beforeAnnotationComments?: Comment[] | undefined; // comments between <Name> and [annotation]
+    annotationAfterBracketComments?: Comment[] | undefined; // after [
+    annotationAfterKeyComments?: Comment[] | undefined; // after "spacing" keyword, before =
+    annotationAfterEqualsComments?: Comment[] | undefined; // after =, before value
+    annotationAfterValueComments?: Comment[] | undefined; // after value, before ]
+    beforeEqualsComments?: Comment[] | undefined; // comments between <Name>/[annotation] and =
+    trailingComments?: Comment[] | undefined; // comments on same line as ";"
+};
+
+// A single name entry in a comma-separated name list (entity declarations and
+// named import lists).  Modelled after ObjectProperty: carries leading comments
+// (between the preceding delimiter and the name) and trailing comments (after
+// the name, before the "," or closing delimiter).
+export type NameEntry = {
+    name: string;
+    leadingComments?: Comment[] | undefined;
+    trailingComments?: Comment[] | undefined;
 };
 
 // Import types
 export type ImportStatement = {
-    names: string[] | "*"; // Specific names or * for all
+    names: NameEntry[] | "*"; // Specific names or * for all
     source: string; // File path or module name
     pos?: number | undefined;
+    leadingComments?: Comment[] | undefined; // comments before "import"
+    afterImportComments?: Comment[] | undefined; // after "import" keyword, before "{" or "*"
+    afterCloseBraceComments?: Comment[] | undefined; // after "}" (named imports only), before "from"
+    afterStarComments?: Comment[] | undefined; // after "*" (wildcard import only), before "from"
+    afterFromComments?: Comment[] | undefined; // after "from", before source string
+    trailingComments?: Comment[] | undefined; // comments on same line as ";"
 };
 
-/**
- * Controls how flex-space separator positions between tokens are matched at runtime.
- *   "required" – at least one whitespace/punctuation character must be present.
- *   "optional" – zero or more separator characters allowed; tokens may be adjacent
- *               but spaces are permitted.
- *   "none"     – no separator characters allowed; tokens must be directly adjacent.
- *               Any whitespace or punctuation between them causes a mismatch.
- *   undefined  – auto (default): a separator is required only when both adjacent
- *                characters belong to scripts that normally use word spaces (e.g.
- *                Latin, Cyrillic). Scripts such as CJK do not require one.
- *
- * Note: the grammar source keyword "auto" is stored as undefined internally.
- */
-export type SpacingMode = "required" | "optional" | "none" | undefined;
+// Entity declaration — one "entity Foo, Bar;" statement
+export type EntityDeclaration = {
+    names: NameEntry[];
+    leadingComments?: Comment[] | undefined; // comments before "entity"
+    trailingComments?: Comment[] | undefined; // comments on same line as ";"
+};
 
 // Grammar Parse Result (includes entity declarations and imports)
 export type GrammarParseResult = {
-    entities: string[]; // Entity types this grammar depends on
+    entities: string[]; // Entity types this grammar depends on (flattened, backward compat)
+    entityDeclarations?: EntityDeclaration[] | undefined; // Structured entity statements with comments
     imports: ImportStatement[]; // Import statements
     definitions: RuleDefinition[];
+    leadingComments?: Comment[] | undefined; // comments at top of file before first item
+    trailingComments?: Comment[] | undefined; // comments after last definition (end of file)
 };
 
 export function isWhitespace(char: string) {
@@ -264,25 +357,91 @@ class GrammarRuleParser {
         this.curr = index === -1 ? this.content.length : index + after.length;
     }
 
+    // Advances skip characters then skips whitespace characters only.
+    // Pure — does not consume or collect comments.
     private skipWhitespace(skip: number = 0): boolean {
         const start = this.curr;
         this.curr += skip;
+        while (this.isAtWhiteSpace()) {
+            this.curr++;
+        }
+        return this.curr > start;
+    }
+
+    // Skips leading whitespace then parses any // and /* */ comments,
+    // skipping whitespace between consecutive comments.
+    // Returns the collected comments, or undefined if none.
+    private parseComments(): Comment[] | undefined {
+        this.skipWhitespace();
+        const comments: Comment[] = [];
+        while (this.isAtComment()) {
+            comments.push(this.parseComment());
+            this.skipWhitespace();
+        }
+        return comments.length > 0 ? comments : undefined;
+    }
+
+    // Consumes exactly one comment (// or /* */) at the current position and returns it.
+    // For // comments, curr is left AT the newline (not past it).  Stopping here rather
+    // than consuming the '\n' lets the subsequent skipWhitespace() advance past it, keeping
+    // horizontal-space tracking correct.  Callers must always call skipWhitespace() after.
+    // Does NOT skip surrounding whitespace.
+    private parseComment(): Comment {
+        if (this.isAt("//")) {
+            const textStart = this.curr + 2;
+            const newlinePos = this.content.indexOf("\n", textStart);
+            const textEnd =
+                newlinePos === -1 ? this.content.length : newlinePos;
+            this.curr = textEnd;
+            return {
+                style: "line",
+                text: this.content.substring(textStart, textEnd),
+            };
+        }
+        // "/*"
+        const textStart = this.curr + 2;
+        this.skipAfter(2, "*/");
+        return {
+            style: "block",
+            text: this.content.substring(textStart, this.curr - 2),
+        };
+    }
+
+    // Scans for all comments on the CURRENT LINE only (before any newline).
+    // Used to capture trailing comments after ";", ",", etc.
+    // Multiple block comments may appear, optionally followed by a line comment.
+    // Does NOT call skipWhitespace() after — caller must do the subsequent skip.
+    private tryConsumeTrailingComments(): Comment[] | undefined {
+        const comments: Comment[] = [];
         while (true) {
-            if (this.isAtWhiteSpace()) {
-                this.curr++;
-                continue;
+            // Skip horizontal whitespace only (spaces and tabs)
+            let i = this.curr;
+            while (
+                i < this.content.length &&
+                (this.content[i] === " " || this.content[i] === "\t")
+            ) {
+                i++;
             }
-            if (this.isAt("//")) {
-                this.skipAfter(2, "\n");
-                continue;
+            if (this.content.startsWith("//", i)) {
+                this.curr = i;
+                comments.push(this.parseComment());
+                break; // line comment consumes rest of line
             }
-            if (this.isAt("/*")) {
-                this.skipAfter(2, "*/");
-                continue;
+            if (this.content.startsWith("/*", i)) {
+                const closePos = this.content.indexOf("*/", i + 2);
+                if (closePos !== -1) {
+                    // Only treat as trailing if the closing */ comes before the next newline
+                    const newlinePos = this.content.indexOf("\n", i);
+                    if (newlinePos === -1 || closePos < newlinePos) {
+                        this.curr = i;
+                        comments.push(this.parseComment());
+                        continue; // look for more comments on this line
+                    }
+                }
             }
             break;
         }
-        return this.curr > start;
+        return comments.length > 0 ? comments : undefined;
     }
 
     private parseId(expected: string): string {
@@ -387,11 +546,19 @@ class GrammarRuleParser {
         const str: string[] = [];
         const word: string[] = [];
         while (!this.isAtEnd()) {
-            // Collapse all whitespace and comments to flex space
+            // Skip whitespace only (not comments) for flex-space boundary detection.
+            // Comments are handled by parseExpression(), which attaches them as
+            // leadingComments on the next sub-expression.
             if (this.skipWhitespace()) {
                 str.push(word.join(""));
                 word.length = 0;
                 continue;
+            }
+
+            // Stop at a comment — parseExpression will attach it as leadingComments
+            // on the following sub-expression.
+            if (this.isAtComment()) {
+                break;
             }
 
             const ch = this.content[this.curr];
@@ -421,44 +588,81 @@ class GrammarRuleParser {
     private parseVariableSpecifier(): VarDefExpr {
         const pos = this.pos;
         const id = this.parseId("Variable name");
-        let refName: string = "string";
         let ruleReference: boolean = false;
         let refPos: number | undefined = undefined;
+        let colonComments: Comment[] | undefined;
+        let bracketedRefName: BracketedName | undefined;
 
         if (this.isAt(":")) {
-            // Consume colon
-            this.skipWhitespace(1);
+            // Advance past ":" then collect comments before the type specifier.
+            this.curr++;
+            colonComments = this.parseComments() ?? undefined;
 
             refPos = this.pos;
             if (this.isAt("<")) {
                 ruleReference = true;
-                refName = this.parseRuleName();
+                bracketedRefName = this.parseRuleName();
             } else {
-                refName = this.parseId("Type name");
+                bracketedRefName = this.parseNameWithComments("Type name");
             }
         }
-        return {
+        const result: VarDefExpr = {
             type: "variable",
             name: id,
-            refName,
             ruleReference,
             refPos,
             pos,
         };
+        if (colonComments) result.colonComments = colonComments;
+        if (bracketedRefName) result.bracketedRefName = bracketedRefName;
+        return result;
     }
 
-    private parseExpression(): Expr[] {
+    private parseExpression(): {
+        expressions: Expr[];
+        trailingComments?: Comment[];
+    } {
         const expNodes: Expr[] = [];
+        let pending: Comment[] | undefined;
+
+        const attach = (node: Expr): void => {
+            if (pending) {
+                node.leadingComments = pending;
+                pending = undefined;
+            }
+        };
+
         do {
+            // Skip whitespace between tokens (e.g. after a comment token that
+            // doesn't consume trailing whitespace itself).
+            this.skipWhitespace();
+            if (this.isAtEnd()) break;
+
+            // Buffer comments; attach to the next expr as leadingComments.
+            if (this.isAtComment()) {
+                if (!pending) pending = [];
+                pending.push(this.parseComment());
+                continue;
+            }
+
             if (this.isAt("<")) {
                 const pos = this.pos;
-                const name = this.parseRuleName();
-                expNodes.push({ type: "ruleReference", name, pos });
+                const node: RuleRefExpr = {
+                    type: "ruleReference",
+                    bracketedName: this.parseRuleName(),
+                    pos,
+                };
+                attach(node);
+                expNodes.push(node);
                 continue;
             }
             if (this.isAt("$(")) {
-                this.skipWhitespace(2);
+                this.curr += 2; // advance past "$("
+                const dollarParenComments = this.parseComments() ?? undefined;
                 const v = this.parseVariableSpecifier();
+                if (dollarParenComments)
+                    v.dollarParenComments = dollarParenComments;
+                attach(v);
                 expNodes.push(v);
                 if (this.isAt(")?")) {
                     v.optional = true;
@@ -473,26 +677,21 @@ class GrammarRuleParser {
                 this.skipWhitespace(1);
                 const rules = this.parseRules();
                 const node: RulesExpr = { type: "rules", rules };
+                attach(node);
                 expNodes.push(node);
 
                 if (this.isAt(")?")) {
                     node.optional = true;
-                    this.skipWhitespace(2);
-                    continue;
-                }
-                if (this.isAt(")*")) {
+                } else if (this.isAt(")*")) {
                     node.optional = true;
                     node.repeat = true;
-                    this.skipWhitespace(2);
+                } else if (this.isAt(")+")) {
+                    node.repeat = true; // optional stays false — must match at least once
+                } else {
+                    this.consume(")", "to close expression");
                     continue;
                 }
-                if (this.isAt(")+")) {
-                    node.repeat = true;
-                    // optional stays false — must match at least once
-                    this.skipWhitespace(2);
-                    continue;
-                }
-                this.consume(")", "to close expression");
+                this.skipWhitespace(2);
                 continue;
             }
 
@@ -501,10 +700,12 @@ class GrammarRuleParser {
                 // end of expression
                 break;
             }
-
+            attach(s);
             expNodes.push(s);
         } while (!this.isAtEnd());
-        return expNodes;
+        return pending
+            ? { expressions: expNodes, trailingComments: pending }
+            : { expressions: expNodes };
     }
 
     private parseStringLiteral(): string {
@@ -555,33 +756,68 @@ class GrammarRuleParser {
             value: n,
         };
     }
+    // Parses a value and attaches any surrounding comments to it.
+    // If `leadingComments` is provided it is used directly (e.g. carried over from
+    // a preceding separator); otherwise comments are consumed from the current position.
+    private parseValueWithComments(leadingComments?: Comment[]): ValueNode {
+        const leading = leadingComments ?? this.parseComments();
+        const v = this.parseValue();
+        if (leading) v.leadingComments = leading;
+        const trailing = this.parseComments();
+        if (trailing) v.trailingComments = trailing;
+        return v;
+    }
+
     private parseValue(): ValueNode {
         if (this.isAt("{")) {
             // Object
             this.skipWhitespace(1);
+            // Capture comments after "{" as potential leading for the first property.
+            let pendingLeading = this.parseComments();
 
             let first = true;
-            const obj: ObjectValueField = {};
+            const obj: ObjectValueField = [];
             while (true) {
                 if (this.isAtEnd()) {
                     this.throwError("Unexpected end of file in object value.");
                 }
                 if (this.isAt("}")) {
                     this.skipWhitespace(1);
-                    return {
+                    const node: ObjectValueNode = {
                         type: "object",
                         value: obj,
                     };
+                    if (pendingLeading) node.closingComments = pendingLeading;
+                    return node;
                 }
 
                 if (!first) {
-                    this.consume(",", "between object properties");
+                    const trailing = this.consumeWithTrailingComments(
+                        ",",
+                        "object property",
+                    );
+                    if (trailing) {
+                        obj[obj.length - 1].trailingComments = trailing;
+                    }
+                    this.skipWhitespace(); // advance past newline + indentation
+                    pendingLeading = this.parseComments();
+                    // Trailing comma: if next token is "}", there is no further property.
+                    if (this.isAt("}")) {
+                        this.skipWhitespace(1);
+                        const node: ObjectValueNode = {
+                            type: "object",
+                            value: obj,
+                        };
+                        if (pendingLeading)
+                            node.closingComments = pendingLeading;
+                        return node;
+                    }
                 } else {
                     first = false;
                 }
 
                 // Parse property name (identifier or string literal)
-                const isStringLiteral = this.isAt('"') || this.isAt("'");
+                const isStringLiteral = this.isAtStringDelimiter();
 
                 const id = isStringLiteral
                     ? this.parseStringLiteral()
@@ -601,39 +837,66 @@ class GrammarRuleParser {
                 } else {
                     // Full form: propertyName: value
                     this.consume(":", "between property name and value");
-                    v = this.parseValue();
+                    v = this.parseValueWithComments();
                 }
-                obj[id] = v;
+                const prop: ObjectProperty = { key: id, value: v };
+                if (pendingLeading) {
+                    prop.leadingComments = pendingLeading;
+                    pendingLeading = undefined;
+                }
+                obj.push(prop);
             }
         }
         if (this.isAt("[")) {
             // Array
             this.skipWhitespace(1);
+            const arr: ArrayElement[] = [];
 
+            // Capture comments right after "[" as potential leading for the first element.
+            let pendingLeading = this.parseComments();
             let first = true;
-            const arr: ValueNode[] = [];
             while (true) {
                 if (this.isAtEnd()) {
                     this.throwError("Unexpected end of file in array value.");
                 }
                 if (this.isAt("]")) {
                     this.skipWhitespace(1);
-                    return {
-                        type: "array",
-                        value: arr,
-                    };
+                    const node: ArrayValueNode = { type: "array", value: arr };
+                    if (pendingLeading) node.closingComments = pendingLeading;
+                    return node;
                 }
 
                 if (!first) {
-                    this.consume(",", "between array elements");
+                    const trailingComments = this.consumeWithTrailingComments(
+                        ",",
+                        "array element",
+                    );
+                    if (trailingComments) {
+                        arr[arr.length - 1].trailingComments = trailingComments;
+                    }
+                    this.skipWhitespace();
+                    pendingLeading = this.parseComments();
+                    // Trailing comma: if next token is "]", there is no further element.
+                    if (this.isAt("]")) {
+                        this.skipWhitespace(1);
+                        const node: ArrayValueNode = {
+                            type: "array",
+                            value: arr,
+                        };
+                        if (pendingLeading)
+                            node.closingComments = pendingLeading;
+                        return node;
+                    }
                 } else {
                     first = false;
                 }
-                const v = this.parseValue();
-                arr.push(v);
+                arr.push({
+                    value: this.parseValueWithComments(pendingLeading),
+                });
+                pendingLeading = undefined;
             }
         }
-        if (this.isAt('"') || this.isAt("'")) {
+        if (this.isAtStringDelimiter()) {
             return this.parseStringValue();
         }
         if (this.isAt("true")) {
@@ -657,14 +920,26 @@ class GrammarRuleParser {
 
     private parseRule(): Rule {
         const start = this.curr;
-        const expNodes = this.parseExpression();
+        const { expressions, trailingComments } = this.parseExpression();
         const result: Rule = {
-            expressions: expNodes,
+            expressions,
         };
+        if (trailingComments) {
+            result.trailingComments = trailingComments;
+        }
 
         if (this.isAt("->")) {
             this.skipWhitespace(2);
+            const valueLeadingComments = this.parseComments();
             result.value = this.parseValue();
+            if (valueLeadingComments) {
+                result.valueLeadingComments = valueLeadingComments;
+            }
+            // Comments after the value (before | or ;) belong to this rule.
+            const valueTrailingComments = this.parseComments();
+            if (valueTrailingComments) {
+                result.valueTrailingComments = valueTrailingComments;
+            }
         } else if (
             !this.isAtEnd() &&
             !this.isAt(";") &&
@@ -679,44 +954,60 @@ class GrammarRuleParser {
             this.throwError("Special character needs to be escaped");
         }
 
-        // Delay semantic error until syntax is fully parsed
-        if (expNodes.length === 0) {
+        // Delay semantic error until syntax is fully parsed.
+        // An expression with only comments and no actual tokens is empty.
+        if (expressions.length === 0) {
             this.throwError(`Empty expression.`, start);
         }
 
         return result;
     }
 
-    private parseRuleName(): string {
+    // Parse an identifier surrounded by optional comments into a BracketedName.
+    private parseNameWithComments(label: string): BracketedName {
+        const leadingComments = this.parseComments() ?? undefined;
+        const name = this.parseId(label);
+        const trailingComments = this.parseComments() ?? undefined;
+        return { name, leadingComments, trailingComments };
+    }
+
+    private parseRuleName(): BracketedName {
         this.consume("<", "at start of rule name");
-        const id = this.parseId("Rule identifier");
+        const result = this.parseNameWithComments("Rule identifier");
         this.consume(">", "at end of rule name");
-        return id;
+        return result;
     }
 
     private parseRules(): Rule[] {
         const rules: Rule[] = [];
-        do {
-            const r = this.parseRule();
-            rules.push(r);
+        rules.push(this.parseRule());
 
-            if (!this.isAt("|")) {
-                break;
-            }
-            this.skipWhitespace(1);
-        } while (!this.isAtEnd());
+        while (this.isAt("|")) {
+            this.skipWhitespace(1); // advance past "|"
+            rules.push(this.parseRule());
+        }
         return rules;
     }
 
-    private parseSpacingAnnotation(): SpacingMode {
-        this.skipWhitespace(1); // skip "["
+    private parseSpacingAnnotation(): {
+        spacingMode: SpacingMode;
+        afterBracketComments: Comment[] | undefined;
+        afterKeyComments: Comment[] | undefined;
+        afterEqualsComments: Comment[] | undefined;
+        afterValueComments: Comment[] | undefined;
+    } {
+        this.curr++; // skip "["
+        const afterBracketComments = this.parseComments() ?? undefined;
         const key = this.parseId("annotation key");
         if (key !== "spacing") {
             this.throwError(
                 `Unknown rule annotation '${key}'. Expected 'spacing'.`,
             );
         }
+        // parseId already called skipWhitespace(); collect comments before "=".
+        const afterKeyComments = this.parseComments() ?? undefined;
         this.consume("=", "in spacing annotation");
+        const afterEqualsComments = this.parseComments() ?? undefined;
         const value = this.parseId("spacing value");
         if (
             value !== "required" &&
@@ -728,22 +1019,74 @@ class GrammarRuleParser {
                 `Invalid value '${value}' for spacing annotation. Expected 'required', 'optional', 'auto', or 'none'.`,
             );
         }
+        // parseId already called skipWhitespace(); collect comments before "]".
+        const afterValueComments = this.parseComments() ?? undefined;
         this.consume("]", "at end of spacing annotation");
-        // "auto" is the default behavior; stored as undefined internally
-        return value === "auto" ? undefined : (value as SpacingMode);
+        // "auto" is now stored explicitly (compiler folds it to undefined).
+        return {
+            spacingMode: value as SpacingMode,
+            afterBracketComments,
+            afterKeyComments,
+            afterEqualsComments,
+            afterValueComments,
+        };
     }
 
-    private parseRuleDefinition(): RuleDefinition {
+    private parseRuleDefinition(leadingComments?: Comment[]): RuleDefinition {
         const pos = this.pos;
-        const name = this.parseRuleName();
+        const rn = this.parseRuleName();
         let spacingMode: SpacingMode;
+        let beforeAnnotationComments: Comment[] | undefined;
+        let beforeEqualsComments: Comment[] | undefined;
+        let annotationAfterBracketComments: Comment[] | undefined;
+        let annotationAfterKeyComments: Comment[] | undefined;
+        let annotationAfterEqualsComments: Comment[] | undefined;
+        let annotationAfterValueComments: Comment[] | undefined;
+        const maybePreComments = this.parseComments();
         if (this.isAt("[")) {
-            spacingMode = this.parseSpacingAnnotation();
+            beforeAnnotationComments = maybePreComments;
+            const ann = this.parseSpacingAnnotation();
+            spacingMode = ann.spacingMode;
+            annotationAfterBracketComments = ann.afterBracketComments;
+            annotationAfterKeyComments = ann.afterKeyComments;
+            annotationAfterEqualsComments = ann.afterEqualsComments;
+            annotationAfterValueComments = ann.afterValueComments;
+            beforeEqualsComments = this.parseComments();
+        } else {
+            beforeEqualsComments = maybePreComments;
         }
-        this.consume("=", "after rule identifier");
+        if (!this.isAt("=")) {
+            this.throwUnexpectedCharError(
+                "'=' expected after rule identifier.",
+            );
+        }
+        this.skipWhitespace(1); // advance past "="
         const rules = this.parseRules();
-        this.consume(";", "at end of rule definition");
-        return { name, rules, spacingMode, pos };
+
+        const trailingComments = this.consumeWithTrailingComments(
+            ";",
+            "rule definition",
+        );
+
+        const def: RuleDefinition = {
+            bracketedName: rn,
+            rules,
+            pos,
+            leadingComments,
+            beforeAnnotationComments,
+            beforeEqualsComments,
+            trailingComments,
+        };
+        if (spacingMode !== undefined) def.spacingMode = spacingMode;
+        if (annotationAfterBracketComments)
+            def.annotationAfterBracketComments = annotationAfterBracketComments;
+        if (annotationAfterKeyComments)
+            def.annotationAfterKeyComments = annotationAfterKeyComments;
+        if (annotationAfterEqualsComments)
+            def.annotationAfterEqualsComments = annotationAfterEqualsComments;
+        if (annotationAfterValueComments)
+            def.annotationAfterValueComments = annotationAfterValueComments;
+        return def;
     }
 
     private consume(expected: string, reason?: string) {
@@ -793,50 +1136,80 @@ class GrammarRuleParser {
         return this.curr >= this.content.length;
     }
 
-    private parseEntityDeclaration(): string[] {
-        // entity Ordinal;
-        // entity Ordinal, CalendarDate;
-        this.skipWhitespace(6); // skip "entity"
-
-        const entities: string[] = [];
-        while (true) {
-            const entityName = this.parseId("entity name");
-            entities.push(entityName);
-
-            if (this.isAt(",")) {
-                this.skipWhitespace(1);
-                continue;
-            }
-
-            if (this.isAt(";")) {
-                this.skipWhitespace(1);
-                break;
-            }
-
-            this.throwUnexpectedCharError(
-                "Expected ',' or ';' after entity name",
-            );
-        }
-
-        return entities;
+    private isAtComment() {
+        return this.isAt("//") || this.isAt("/*");
     }
 
-    private parseImportStatement(): ImportStatement {
+    private isAtStringDelimiter() {
+        return this.isAt('"') || this.isAt("'");
+    }
+
+    // Asserts the current character is `char`, advances past it, and returns
+    // any same-line trailing comments.  Used wherever a token can be followed
+    // by trailing // or /* */ comments on the same line (";", ",", etc.).
+    private consumeWithTrailingComments(
+        char: string,
+        context: string,
+    ): Comment[] | undefined {
+        if (!this.isAt(char)) {
+            this.throwUnexpectedCharError(
+                `'${char}' expected at end of ${context}.`,
+            );
+        }
+        this.curr++; // advance past char
+        return this.tryConsumeTrailingComments();
+    }
+
+    private parseEntityDeclaration(
+        leadingComments?: Comment[],
+    ): EntityDeclaration {
+        // entity Ordinal;
+        // entity Ordinal, CalendarDate;
+        this.curr += 6; // skip "entity"
+        const names: NameEntry[] = [];
+        // Collect leading comments before the first name (after "entity" keyword).
+        let pendingLeading = this.parseComments() ?? undefined;
+        while (true) {
+            const entry: NameEntry = { name: this.parseId("entity name") };
+            if (pendingLeading) entry.leadingComments = pendingLeading;
+            names.push(entry);
+            // Collect trailing comments after the name, before "," or ";".
+            const tc = this.parseComments();
+            if (tc) entry.trailingComments = tc;
+            if (!this.isAt(",")) break;
+            this.curr++; // skip ","
+            pendingLeading = this.parseComments() ?? undefined;
+        }
+        const trailingComments = this.consumeWithTrailingComments(
+            ";",
+            "entity declaration",
+        );
+        return { names, leadingComments, trailingComments };
+    }
+
+    private parseImportStatement(leadingComments?: Comment[]): ImportStatement {
         // import { Name1, Name2 } from "file";
         // import * from "file";
-        this.skipWhitespace(6); // skip "import"
+        this.curr += 6; // skip "import"
+        const afterImportComments = this.parseComments() ?? undefined;
         const pos = this.pos;
 
-        let names: string[] | "*";
+        let names: NameEntry[] | "*";
+        let afterStarComments: Comment[] | undefined;
+        let afterCloseBraceComments: Comment[] | undefined;
 
         if (this.isAt("*")) {
             // import all
             names = "*";
-            this.skipWhitespace(1);
+            this.curr++; // skip "*"
+            afterStarComments = this.parseComments() ?? undefined;
         } else if (this.isAt("{")) {
             // granular import
-            this.skipWhitespace(1);
+            this.curr++; // skip "{"
             names = [];
+
+            // Leading comments for the first name (after "{").
+            let pendingLeading = this.parseComments() ?? undefined;
 
             while (true) {
                 if (this.isAtEnd()) {
@@ -844,18 +1217,30 @@ class GrammarRuleParser {
                         "Unexpected end of file in import statement.",
                     );
                 }
-
                 if (this.isAt("}")) {
-                    this.skipWhitespace(1);
+                    this.curr++; // skip "}"
                     break;
                 }
 
-                if (names.length > 0) {
-                    this.consume(",", "between import names");
-                }
+                const entry: NameEntry = { name: this.parseId("import name") };
+                if (pendingLeading) entry.leadingComments = pendingLeading;
+                names.push(entry);
 
-                const name = this.parseId("import name");
-                names.push(name);
+                // Collect trailing comments after the name, before "," or "}".
+                const tc = this.parseComments();
+                if (tc) entry.trailingComments = tc;
+
+                if (this.isAtEnd()) {
+                    this.throwError(
+                        "Unexpected end of file in import statement.",
+                    );
+                }
+                if (this.isAt("}")) {
+                    this.curr++; // skip "}"
+                    break;
+                }
+                this.consume(",", "between import names");
+                pendingLeading = this.parseComments() ?? undefined;
             }
 
             if (names.length === 0) {
@@ -863,6 +1248,7 @@ class GrammarRuleParser {
                     "Import statement must have at least one name.",
                 );
             }
+            afterCloseBraceComments = this.parseComments() ?? undefined;
         } else {
             this.throwUnexpectedCharError("Expected '{' or '*' after 'import'");
         }
@@ -873,43 +1259,81 @@ class GrammarRuleParser {
                 "Expected 'from' keyword in import statement",
             );
         }
-        this.skipWhitespace(4); // skip "from"
+        this.curr += 4; // skip "from"
+        const afterFromComments = this.parseComments() ?? undefined;
 
         // Parse source string
-        if (!this.isAt('"') && !this.isAt("'")) {
+        if (!this.isAtStringDelimiter()) {
             this.throwUnexpectedCharError(
                 "Expected string literal for import source",
             );
         }
         const source = this.parseStringLiteral();
 
-        this.consume(";", "at end of import statement");
+        const trailingComments = this.consumeWithTrailingComments(
+            ";",
+            "import statement",
+        );
 
-        return { names, source, pos };
+        const stmt: ImportStatement = {
+            names,
+            source,
+            pos,
+            leadingComments,
+            trailingComments,
+        };
+        if (afterImportComments) stmt.afterImportComments = afterImportComments;
+        if (afterStarComments) stmt.afterStarComments = afterStarComments;
+        if (afterCloseBraceComments)
+            stmt.afterCloseBraceComments = afterCloseBraceComments;
+        if (afterFromComments) stmt.afterFromComments = afterFromComments;
+        return stmt;
     }
 
     public parse(): GrammarParseResult {
         const entities: string[] = [];
+        const entityDeclarations: EntityDeclaration[] = [];
         const imports: ImportStatement[] = [];
         const definitions: RuleDefinition[] = [];
+        let trailingComments: Comment[] | undefined;
         this.skipWhitespace();
+        const leadingComments = this.parseComments();
+
         while (!this.isAtEnd()) {
+            this.skipWhitespace();
+            if (this.isAtEnd()) break;
+            const constructLeading = this.parseComments();
+            if (this.isAtEnd()) {
+                // Comments at end of file with no following construct.
+                trailingComments = constructLeading;
+                break;
+            }
+
             if (this.isAt("<")) {
-                definitions.push(this.parseRuleDefinition());
+                definitions.push(this.parseRuleDefinition(constructLeading));
                 continue;
             }
             if (this.isAt("import")) {
-                imports.push(this.parseImportStatement());
+                imports.push(this.parseImportStatement(constructLeading));
                 continue;
             }
             if (this.isAt("entity")) {
-                entities.push(...this.parseEntityDeclaration());
+                const decl = this.parseEntityDeclaration(constructLeading);
+                entityDeclarations.push(decl);
+                entities.push(...decl.names.map((n) => n.name));
                 continue;
             }
             this.throwUnexpectedCharError(
                 "Expected rule definition, 'import' statement, or 'entity' declaration",
             );
         }
-        return { entities, imports, definitions };
+        return {
+            entities,
+            entityDeclarations,
+            imports,
+            definitions,
+            leadingComments,
+            trailingComments,
+        };
     }
 }

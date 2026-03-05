@@ -1,7 +1,52 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SpacingMode, ValueNode } from "./grammarRuleParser.js";
+/**
+ * Controls how flex-space separator positions between tokens are matched at runtime.
+ *   "required" – at least one whitespace/punctuation character must be present.
+ *   "optional" – zero or more separator characters allowed; tokens may be adjacent
+ *                but spaces are permitted.
+ *   "none"     – no separator characters allowed between tokens; whitespace or
+ *                punctuation is only permitted if it is part of the next token itself.
+ *   undefined  – auto (default): a separator is required only when both adjacent
+ *                characters belong to scripts that normally use word spaces (e.g.
+ *                Latin, Cyrillic). Scripts such as CJK do not require one.
+ *
+ * Note: the grammar source keyword "auto" is stored as undefined internally.
+ */
+export type SpacingMode = "required" | "optional" | "none" | "auto" | undefined;
+// "auto" = explicit [spacing=auto] annotation (same runtime behavior as undefined).
+// undefined = no annotation at all (inherit default).
+
+// ── Compiled value node types ─────────────────────────────────────────────────
+// ValueNode variants *without* comment annotations.  GrammarRule and
+// GrammarRuleJson use these so parser comment fields are never serialized into
+// .ag.json files.  grammarRuleParser.ts imports the base types below and
+// augments them with leadingComments / trailingComments for parse-time use.
+
+export type CompiledLiteralValueNode = {
+    type: "literal";
+    value: boolean | string | number;
+};
+export type CompiledVariableValueNode = {
+    type: "variable";
+    name: string;
+};
+export type CompiledObjectValueNode = {
+    type: "object";
+    value: { [key: string]: CompiledValueNode | null };
+};
+export type CompiledArrayValueNode = {
+    type: "array";
+    value: CompiledValueNode[];
+};
+
+/** ValueNode without comment annotations — used in compiled grammar output (.ag.json). */
+export type CompiledValueNode =
+    | CompiledLiteralValueNode
+    | CompiledVariableValueNode
+    | CompiledObjectValueNode
+    | CompiledArrayValueNode;
 
 /**
  * Grammar Types - in memory
@@ -59,7 +104,7 @@ export type GrammarPart =
     | PhraseSetPart;
 export type GrammarRule = {
     parts: GrammarPart[];
-    value?: ValueNode | undefined;
+    value?: CompiledValueNode | undefined;
     spacingMode?: SpacingMode; // undefined = auto (default)
 };
 
@@ -113,7 +158,7 @@ export type GrammarPartJson =
 
 export type GrammarRuleJson = {
     parts: GrammarPartJson[];
-    value?: ValueNode | undefined;
+    value?: CompiledValueNode | undefined;
     spacingMode?: SpacingMode; // undefined = auto (default)
 };
 export type GrammarRulesJson = GrammarRuleJson[];

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SpacingMode, ValueNode } from "./grammarRuleParser.js";
+import { SpacingMode, CompiledValueNode } from "./grammarTypes.js";
 import registerDebug from "debug";
 // REVIEW: switch to RegExp.escape() when it becomes available.
 import escapeMatch from "regexp.escape";
@@ -73,6 +73,7 @@ function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
             throw new Error(
                 "Internal error: requiresSeparator should not be called for 'none' mode",
             );
+        case "auto": // explicit annotation — folded to undefined by compiler; treat same as auto
         case undefined: // auto
             return needsSeparatorInAutoMode(a, b);
     }
@@ -121,13 +122,16 @@ type MatchedValue =
     | number
     | undefined
     // Value from nested rule
-    | { node: ValueNode | undefined; valueIds: ValueIdNode | undefined };
+    | {
+          node: CompiledValueNode | undefined;
+          valueIds: ValueIdNode | undefined;
+      };
 
-type MatchedValueNode = {
+type MatchedValueEntry = {
     valueId: number;
     value: MatchedValue;
     wildcard: boolean;
-    prev: MatchedValueNode | undefined;
+    prev: MatchedValueEntry | undefined;
 };
 
 type ValueIdNode = {
@@ -140,7 +144,7 @@ type ValueIdNode = {
 type ParentMatchState = {
     name: string; // For debugging
     parts: GrammarPart[];
-    value: ValueNode | undefined; // the value to be assigned after finishing the nested rule.
+    value: CompiledValueNode | undefined; // the value to be assigned after finishing the nested rule.
     partIndex: number; // the part index after the nested rule.
     variable: string | undefined;
     valueIds: ValueIdNode | undefined | null; // null means we don't need any value
@@ -152,13 +156,13 @@ type MatchState = {
     // Current context
     name: string; // For debugging
     parts: GrammarPart[];
-    value: ValueNode | undefined; // the value to be assigned after finishing the current rule if the rule has only one part.
+    value: CompiledValueNode | undefined; // the value to be assigned after finishing the current rule if the rule has only one part.
     partIndex: number;
     valueIds?: ValueIdNode | undefined | null; // null means we don't need any value
 
     // Match state
     nextValueId: number;
-    values?: MatchedValueNode | undefined;
+    values?: MatchedValueEntry | undefined;
     parent?: ParentMatchState | undefined;
 
     nestedLevel: number; // for debugging
@@ -195,7 +199,7 @@ const nonEntityWildcardTypes = new Set([
 
 function createMatchedValue(
     valueIdNode: ValueIdNode,
-    values: MatchedValueNode | undefined,
+    values: MatchedValueEntry | undefined,
     propertyName: string,
     wildcardPropertyNames: string[],
     partialValueId?: number,
@@ -214,14 +218,14 @@ function createMatchedValue(
         wildcardPropertyNames.push(propertyName);
     }
 
-    let matchedValueNode: MatchedValueNode | undefined = values;
+    let matchedCompiledValueNode: MatchedValueEntry | undefined = values;
     while (
-        matchedValueNode !== undefined &&
-        matchedValueNode.valueId !== valueId
+        matchedCompiledValueNode !== undefined &&
+        matchedCompiledValueNode.valueId !== valueId
     ) {
-        matchedValueNode = matchedValueNode.prev;
+        matchedCompiledValueNode = matchedCompiledValueNode.prev;
     }
-    if (matchedValueNode === undefined) {
+    if (matchedCompiledValueNode === undefined) {
         if (partialValueId !== undefined) {
             // Partial match, missing variable is ok
             return undefined;
@@ -231,7 +235,7 @@ function createMatchedValue(
         );
     }
 
-    const value = matchedValueNode.value;
+    const value = matchedCompiledValueNode.value;
     if (typeof value === "object") {
         return createValue(
             value.node,
@@ -250,7 +254,7 @@ function createMatchedValue(
             stat.matchedValueCount++;
         }
 
-        if (matchedValueNode.wildcard) {
+        if (matchedCompiledValueNode.wildcard) {
             if (typeof value !== "string") {
                 throw new Error(
                     `Internal error: Wildcard has non-string value for variable: ${name} id: ${valueId} property: ${propertyName}`,
@@ -268,7 +272,7 @@ function createMatchedValue(
 function createValueForVariable(
     variableName: string,
     valueIds: ValueIdNode | undefined,
-    values: MatchedValueNode | undefined,
+    values: MatchedValueEntry | undefined,
     propertyName: string,
     wildcardPropertyNames: string[],
     partialValueId?: number,
@@ -299,9 +303,9 @@ function createValueForVariable(
 }
 
 function createValue(
-    node: ValueNode | undefined,
+    node: CompiledValueNode | undefined,
     valueIds: ValueIdNode | undefined,
-    values: MatchedValueNode | undefined,
+    values: MatchedValueEntry | undefined,
     propertyName: string,
     wildcardPropertyNames: string[],
     partialValueId?: number,

@@ -10,8 +10,8 @@ import {
     VarNumberPart,
     RulesPart,
     PhraseSetPart,
+    SpacingMode,
 } from "./grammarTypes.js";
-import { SpacingMode } from "./grammarRuleParser.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
     parseValueExpression,

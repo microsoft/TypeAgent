@@ -126,7 +126,7 @@ function getMatchSetRuleDefinition(
     }
 
     const matchSetRuleDefinition = {
-        name: getNextRuleName(state, matchSet.name),
+        bracketedName: { name: getNextRuleName(state, matchSet.name) },
         rules,
     };
     state.matchSetRuleDefinitions.set(matchSet, matchSetRuleDefinition);
@@ -197,13 +197,13 @@ function convertConstruction(
                 expressions.push({
                     type: "variable",
                     name: variableName,
-                    refName: ruleDef.name,
+                    bracketedRefName: ruleDef.bracketedName,
                     ruleReference: true,
                 });
             } else {
                 const expr: Expr = {
                     type: "ruleReference",
-                    name: ruleDef.name,
+                    bracketedName: ruleDef.bracketedName,
                 };
                 if (part.optional) {
                     expressions.push({
@@ -230,7 +230,6 @@ function convertConstruction(
             expressions.push({
                 type: "variable",
                 name: variableName,
-                refName: "string",
                 ruleReference: false,
             });
         }
@@ -315,18 +314,18 @@ function convertToValueNode(entry: any, leafValues: ValueNode[]): ValueNode {
     if (Array.isArray(entry)) {
         return {
             type: "array",
-            value: entry.map((entry) => convertToValueNode(entry, leafValues)),
+            value: entry.map((item) => ({
+                value: convertToValueNode(item, leafValues),
+            })),
         };
     }
     if (typeof entry === "object" && entry !== null) {
         return {
             type: "object",
-            value: Object.fromEntries(
-                Object.entries(entry).map(([k, v]) => [
-                    k,
-                    convertToValueNode(v, leafValues),
-                ]),
-            ),
+            value: Object.entries(entry).map(([k, v]) => ({
+                key: k,
+                value: convertToValueNode(v, leafValues),
+            })),
         };
     }
     throw new Error(`Internal error: invalid value node entry: ${entry}`);

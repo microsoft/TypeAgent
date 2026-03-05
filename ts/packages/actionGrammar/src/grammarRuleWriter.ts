@@ -2,10 +2,12 @@
 // Licensed under the MIT License.
 
 import {
+    Comment,
     Expr,
     GrammarParseResult,
     isExpressionSpecialChar,
     isWhitespace,
+    NameEntry,
     Rule,
     RuleDefinition,
     ValueNode,
@@ -110,6 +112,25 @@ type ListPart = {
 type BlockPart = {
     kind: "block";
     items: Part[][]; // each item's captured sub-parts
+    // Per-item trailing suffix emitted after "," in broken mode (and inline in
+    // flat mode).  Each defined entry is a Part[] for the suffix content (e.g.
+    // [" /* c */"]).  Line-comment suffixes include a ForceBrokenPart so that
+    // measureParts(suffix) = Infinity → forces the block into broken mode.
+    // Undefined entries have no effect.
+    itemSuffixes?: (Part[] | undefined)[];
+    // Comment lines written after a trailing "," on the last item (or directly
+    // inside an empty container), before the closing delimiter.  Each entry is
+    // a Part[] representing one comment line.
+    //
+    // A line-comment line contains a ForceBrokenPart → measureParts(line) = Infinity
+    // → the whole footer forces broken mode.  Block-comment lines are finite.
+    //
+    // Forces broken mode unless ALL of the following hold:
+    //   • items.length === 0 (empty container)
+    //   • every line measures finite (all block comments)
+    // When those hold, flat mode is tried:
+    //   flatOpen + [" "] + lines joined by " " + [" "] + flatClose
+    footer?: Part[][];
     flatOpen: string; // "{ " or "[" — delimiter in flat mode
     flatClose: string; // " }" or "]" — delimiter in flat mode
     open: string; // "{" or "[" — delimiter in broken mode (followed by newline)
@@ -125,7 +146,19 @@ type GroupPart = {
     broken: Part[]; // rendered when it doesn't
 };
 
-type Part = string | NewlinePart | ListPart | BlockPart | GroupPart;
+// ForceBrokenPart signals Infinity to measureParts (forcing parent list into broken mode)
+// but renders as empty string — no extra newline is emitted.
+// Used after a rule with a trailing line comment so the list breaks at | without
+// adding a blank line between alternatives.
+type ForceBrokenPart = { kind: "force-broken" };
+
+type Part =
+    | string
+    | NewlinePart
+    | ListPart
+    | BlockPart
+    | GroupPart
+    | ForceBrokenPart;
 
 // ─── measureParts ─────────────────────────────────────────────────────────────
 // Returns the flat (single-line) character length of a Part array.
@@ -143,6 +176,8 @@ function measureParts(parts: Part[]): number {
             const m = measureParts(part.flat);
             if (m === Infinity) return Infinity;
             total += m;
+        } else if (part.kind === "force-broken") {
+            return Infinity;
         } else if (part.kind === "list") {
             for (let i = 0; i < part.items.length; i++) {
                 if (i > 0) total += part.flatSep.length;
@@ -150,14 +185,47 @@ function measureParts(parts: Part[]): number {
                 if (m === Infinity) return Infinity;
                 total += m;
             }
-        } else {
-            // block
+        } else if (part.kind === "block") {
+            // Line-style suffixes (contain ForceBrokenPart) and non-empty containers
+            // with footer force broken mode.
+            if (
+                part.itemSuffixes?.some(
+                    (s) => s !== undefined && measureParts(s) === Infinity,
+                )
+            )
+                return Infinity;
+            if (
+                part.footer !== undefined &&
+                (part.items.length > 0 ||
+                    part.footer.some((line) => measureParts(line) === Infinity))
+            )
+                return Infinity;
             total += part.flatOpen.length + part.flatClose.length;
             for (let i = 0; i < part.items.length; i++) {
-                if (i > 0) total += part.flatSep.length;
                 const m = measureParts(part.items[i]);
                 if (m === Infinity) return Infinity;
                 total += m;
+                const suffix = part.itemSuffixes?.[i];
+                if (i < part.items.length - 1) {
+                    // Separator to next item: use "," + suffix + " " if suffix, else flatSep.
+                    total +=
+                        suffix !== undefined
+                            ? 1 + measureParts(suffix) + 1
+                            : part.flatSep.length;
+                } else if (suffix !== undefined) {
+                    // Last item with block suffix: trailing ", suffix" before close.
+                    total += 1 + measureParts(suffix);
+                }
+            }
+            // Footer for EMPTY containers only (non-empty case is broken above).
+            // All lines are finite here (line-comment lines were caught above).
+            if (part.footer) {
+                if (!part.flatOpen.endsWith(" ")) total += 1;
+                for (let j = 0; j < part.footer.length; j++) {
+                    if (j > 0) total += 1; // space between footer lines
+                    total += measureParts(part.footer[j]);
+                }
+                if (!part.flatClose.startsWith(" ")) total += 1;
             }
         }
     }
@@ -192,6 +260,8 @@ function renderParts(
             const r = renderParts(chosen, col, maxLen, indentSize);
             out += r.out;
             col = r.col;
+        } else if (part.kind === "force-broken") {
+            // renders as empty string; only exists to force Infinity in measureParts
         } else if (part.kind === "list") {
             const flatLen = part.items.reduce((n, item, i) => {
                 if (n === Infinity) return Infinity;
@@ -240,23 +310,17 @@ function renderParts(
                     }
                 }
             }
-        } else {
-            // block
+        } else if (part.kind === "block") {
             const blockCol = col;
             const entryCol = col + indentSize;
-            const flatLen = part.items.reduce((n, item, i) => {
-                if (n === Infinity) return Infinity;
-                const m = measureParts(item);
-                return m === Infinity
-                    ? Infinity
-                    : n + (i > 0 ? part.flatSep.length : 0) + m;
-            }, part.flatOpen.length + part.flatClose.length);
+            const flatLen = measureParts([part]);
             if (flatLen !== Infinity && col + flatLen <= maxLen) {
-                // flat: flatOpen + items joined by flatSep + flatClose
+                // flat: flatOpen + items (with inline suffixes) + footer (empty only) + flatClose
                 out += part.flatOpen;
                 col += part.flatOpen.length;
                 for (let i = 0; i < part.items.length; i++) {
-                    if (i > 0) {
+                    // If the previous item had a block suffix, its "," was already emitted.
+                    if (i > 0 && !part.itemSuffixes?.[i - 1]) {
                         out += part.flatSep;
                         col += part.flatSep.length;
                     }
@@ -268,6 +332,44 @@ function renderParts(
                     );
                     out += r.out;
                     col = r.col;
+                    const suffix = part.itemSuffixes?.[i];
+                    if (suffix !== undefined) {
+                        out += ",";
+                        col += 1;
+                        const sr = renderParts(suffix, col, maxLen, indentSize);
+                        out += sr.out;
+                        col = sr.col;
+                        if (i < part.items.length - 1) {
+                            // Non-last: space separates from next item
+                            out += " ";
+                            col += 1;
+                        }
+                    }
+                }
+                // Footer only for empty containers (measureParts ensures non-empty stays broken).
+                if (part.footer) {
+                    if (!part.flatOpen.endsWith(" ")) {
+                        out += " ";
+                        col += 1;
+                    }
+                    for (let j = 0; j < part.footer.length; j++) {
+                        if (j > 0) {
+                            out += " ";
+                            col += 1;
+                        }
+                        const r = renderParts(
+                            part.footer[j],
+                            col,
+                            maxLen,
+                            indentSize,
+                        );
+                        out += r.out;
+                        col = r.col;
+                    }
+                    if (!part.flatClose.startsWith(" ")) {
+                        out += " ";
+                        col += 1;
+                    }
                 }
                 out += part.flatClose;
                 col += part.flatClose.length;
@@ -276,7 +378,22 @@ function renderParts(
                 out += part.open + "\n";
                 for (let i = 0; i < part.items.length; i++) {
                     if (i > 0) {
-                        out += ",\n";
+                        out += ",";
+                        col += 1;
+                        // Inject per-item trailing suffix (e.g. " // comment")
+                        // between the "," and the "\n".
+                        const prevSuffix = part.itemSuffixes?.[i - 1];
+                        if (prevSuffix) {
+                            const sr = renderParts(
+                                prevSuffix,
+                                col,
+                                maxLen,
+                                indentSize,
+                            );
+                            out += sr.out;
+                            col = sr.col;
+                        }
+                        out += "\n";
                     }
                     out += " ".repeat(entryCol);
                     col = entryCol;
@@ -289,7 +406,58 @@ function renderParts(
                     out += r.out;
                     col = r.col;
                 }
-                out += "\n" + " ".repeat(blockCol) + part.close;
+                if (part.footer) {
+                    // Trailing comma after last item (if any), then footer comment lines.
+                    if (part.items.length > 0) {
+                        out += ",";
+                        col += 1;
+                        const lastSuffix =
+                            part.itemSuffixes?.[part.items.length - 1];
+                        if (lastSuffix) {
+                            const sr = renderParts(
+                                lastSuffix,
+                                col,
+                                maxLen,
+                                indentSize,
+                            );
+                            out += sr.out;
+                            col = sr.col;
+                        }
+                        out += "\n";
+                    }
+                    for (const line of part.footer) {
+                        out += " ".repeat(entryCol);
+                        col = entryCol;
+                        const r = renderParts(
+                            line,
+                            entryCol,
+                            maxLen,
+                            indentSize,
+                        );
+                        out += r.out;
+                        col = r.col;
+                        out += "\n";
+                    }
+                } else {
+                    // No footer, but the last item may still have a trailing
+                    // comma + suffix (e.g. "a", // comment).
+                    const lastSuffix =
+                        part.itemSuffixes?.[part.items.length - 1];
+                    if (lastSuffix !== undefined) {
+                        out += ",";
+                        col += 1;
+                        const sr = renderParts(
+                            lastSuffix,
+                            col,
+                            maxLen,
+                            indentSize,
+                        );
+                        out += sr.out;
+                        col = sr.col;
+                    }
+                    out += "\n";
+                }
+                out += " ".repeat(blockCol) + part.close;
                 col = blockCol + part.close.length;
             }
         }
@@ -342,6 +510,13 @@ class GrammarWriter {
         }
         this.parts.push({ kind: "newline", indent: "" });
         this._column = 0;
+    }
+
+    // Adds a ForceBrokenPart: signals Infinity to measureParts (forcing the enclosing
+    // list into broken mode) but renders as empty string (no extra newline).
+    writeForceBroken(): void {
+        this.parts.push({ kind: "force-broken" });
+        // _column unchanged — break renders as empty
     }
 
     // Runs fn against a temporary parts buffer and returns the captured parts.
@@ -424,20 +599,36 @@ class GrammarWriter {
             close: string;
             flatSep: string;
             emitItem: (item: T, index: number) => void;
+            // Optional: return a suffix Part[] (e.g. [" // comment", {kind:"break"}])
+            // emitted after the "," separator in broken mode for item[i].
+            // A line-comment suffix (contains ForceBrokenPart) forces broken mode.
+            getItemSuffix?: (item: T, index: number) => Part[] | undefined;
+            // Optional comment lines after a trailing "," on the last item (or
+            // directly inside an empty container), before the closing delimiter.
+            // Each entry is a Part[] for one comment line.  See BlockPart.footer.
+            footer?: Part[][];
         },
     ): void {
         const captured = items.map((item, i) =>
             this.capture(() => options.emitItem(item, i)),
         );
-        this.parts.push({ kind: "block", items: captured, ...options });
+        const itemSuffixes = options.getItemSuffix
+            ? items.map((item, i) => options.getItemSuffix!(item, i))
+            : undefined;
+        const blockPart: BlockPart = {
+            kind: "block",
+            items: captured,
+            flatOpen: options.flatOpen,
+            flatClose: options.flatClose,
+            open: options.open,
+            close: options.close,
+            flatSep: options.flatSep,
+        };
+        if (itemSuffixes) blockPart.itemSuffixes = itemSuffixes;
+        if (options.footer) blockPart.footer = options.footer;
+        this.parts.push(blockPart);
         // Update provisional column with flat-length estimate.
-        const flatLen = captured.reduce((n, item, i) => {
-            if (n === Infinity) return Infinity;
-            const m = measureParts(item);
-            return m === Infinity
-                ? Infinity
-                : n + (i > 0 ? options.flatSep.length : 0) + m;
-        }, options.flatOpen.length + options.flatClose.length);
+        const flatLen = measureParts([blockPart]);
         if (flatLen !== Infinity) {
             this._column += flatLen;
         }
@@ -462,6 +653,93 @@ class GrammarWriter {
     }
 }
 
+// ─── Comment helpers ──────────────────────────────────────────────────────────
+
+// Writes leading comments, each on its own line, before a construct.
+function writeLeadingComments(
+    result: GrammarWriter,
+    comments: Comment[] | undefined,
+): void {
+    if (!comments) return;
+    for (const c of comments) {
+        if (c.style === "line") {
+            result.writeLine("//" + c.text);
+        } else {
+            result.writeLine("/*" + c.text + "*/");
+        }
+    }
+}
+
+// Writes trailing comments inline (no NewlinePart after line comments).
+// The caller is responsible for adding a writeForceBroken() after any line
+// comment so the enclosing list uses broken mode (preventing the | from being
+// swallowed by the comment) without adding a blank line between alternatives.
+function writeTrailingComments(
+    result: GrammarWriter,
+    comments: Comment[] | undefined,
+): void {
+    if (!comments) return;
+    for (const c of comments) {
+        if (c.style === "line") {
+            result.write(" //" + c.text);
+        } else {
+            result.write(" /*" + c.text + "*/");
+        }
+    }
+}
+
+// Writes a trailing-comment array on the same line as the preceding token.
+// (Formerly writeTrailingComment for a single Comment; now accepts the array
+// directly to match the updated AST types.)
+
+// Writes value-adjacent comments (valueLeadingComments / valueTrailingComments).
+// Block comments are written inline.  Line comments are written as "// text"
+// followed by a mandatory newline at the given indent — causing measureParts to
+// return Infinity for the flat form, which forces emitGroup into broken mode.
+//
+// trailing=false (default, leading position): block comment written as "/* c */ "
+//   (trailing space separates from the value that follows).
+// trailing=true (trailing position): block comment written as " /* c */"
+//   (leading space separates from the preceding value; no trailing space to
+//   avoid a double space before the "}" or "," that follows).
+function writeValueComments(
+    result: GrammarWriter,
+    comments: Comment[] | undefined,
+    indent: string,
+    trailing: boolean = false,
+): void {
+    if (!comments) return;
+    for (const c of comments) {
+        if (c.style === "line") {
+            result.write("//" + c.text);
+            result.writeNewLine(indent);
+        } else if (trailing) {
+            result.write(" /*" + c.text + "*/");
+        } else {
+            result.write("/*" + c.text + "*/ ");
+        }
+    }
+}
+
+// Writes comments that appear inline between structural tokens (e.g. inside
+// <Name>, [spacing=...], $(...)).  Block comments are written as-is; line
+// comments force a newline so the following token starts on the next line
+// (same logic as writeRuleHeaderComments).
+function writeInlineComments(
+    result: GrammarWriter,
+    comments: Comment[] | undefined,
+): void {
+    if (!comments) return;
+    for (const c of comments) {
+        if (c.style === "line") {
+            result.write("//" + c.text);
+            result.writeLine();
+        } else {
+            result.write("/*" + c.text + "*/");
+        }
+    }
+}
+
 // ─── writeGrammarRules ────────────────────────────────────────────────────────
 
 export function writeGrammarRules(
@@ -469,16 +747,87 @@ export function writeGrammarRules(
     options?: GrammarWriterOptions,
 ): string {
     const result = new GrammarWriter(options);
-    if (grammar.entities.length > 0) {
+
+    // File-level leading comments (e.g. copyright header)
+    writeLeadingComments(result, grammar.leadingComments);
+
+    // Entity declarations — use entityDeclarations if present (preserves comments),
+    // fall back to flat entities array for backward compat with hand-crafted results.
+    const entityDeclarations = grammar.entityDeclarations;
+    if (entityDeclarations && entityDeclarations.length > 0) {
+        for (const decl of entityDeclarations) {
+            writeLeadingComments(result, decl.leadingComments);
+            result.write("entity");
+            for (let i = 0; i < decl.names.length; i++) {
+                const entry: NameEntry = decl.names[i];
+                if (i > 0) result.write(",");
+                // leading comments before this name (with space prefix)
+                if (entry.leadingComments) {
+                    for (const c of entry.leadingComments) {
+                        result.write(` /*${c.text}*/`);
+                    }
+                }
+                result.write(` ${entry.name}`);
+                // trailing comments after name, before "," or ";"
+                if (entry.trailingComments) {
+                    for (const tc of entry.trailingComments) {
+                        result.write(
+                            tc.style === "line"
+                                ? ` //${tc.text}`
+                                : ` /*${tc.text}*/`,
+                        );
+                    }
+                }
+            }
+            result.write(";");
+            writeTrailingComments(result, decl.trailingComments);
+            result.writeLine();
+        }
+        result.writeLine();
+    } else if (grammar.entities.length > 0) {
         result.writeLine(`entity ${grammar.entities.join(", ")};`);
         result.writeLine();
     }
 
     if (grammar.imports.length > 0) {
         for (const imp of grammar.imports) {
-            const names =
-                imp.names === "*" ? "*" : `{ ${imp.names.join(", ")} }`;
-            result.writeLine(`import ${names} from "${imp.source}";`);
+            writeLeadingComments(result, imp.leadingComments);
+            result.write("import");
+            writeRuleHeaderComments(result, imp.afterImportComments);
+            if (imp.names === "*") {
+                result.write(" *");
+                writeRuleHeaderComments(result, imp.afterStarComments);
+            } else {
+                result.write(" {");
+                for (let i = 0; i < imp.names.length; i++) {
+                    const entry: NameEntry = imp.names[i];
+                    if (i > 0) result.write(",");
+                    // leading comments before this name (with space prefix)
+                    if (entry.leadingComments) {
+                        for (const c of entry.leadingComments) {
+                            result.write(` /*${c.text}*/`);
+                        }
+                    }
+                    result.write(` ${entry.name}`);
+                    // trailing comments after name, before "," or "}"
+                    if (entry.trailingComments) {
+                        for (const tc of entry.trailingComments) {
+                            result.write(
+                                tc.style === "line"
+                                    ? ` //${tc.text}`
+                                    : ` /*${tc.text}*/`,
+                            );
+                        }
+                    }
+                }
+                result.write(" }");
+                writeRuleHeaderComments(result, imp.afterCloseBraceComments);
+            }
+            result.write(" from");
+            writeRuleHeaderComments(result, imp.afterFromComments);
+            result.write(` "${imp.source}";`);
+            writeTrailingComments(result, imp.trailingComments);
+            result.writeLine();
         }
         result.writeLine();
     }
@@ -487,18 +836,54 @@ export function writeGrammarRules(
         writeRuleDefinition(result, def);
     }
 
+    // Comments after the last definition (end of file).
+    writeLeadingComments(result, grammar.trailingComments);
+
     return result.toString();
 }
 
-function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
-    result.write(`<${def.name}>`);
-    if (def.spacingMode !== undefined) {
-        result.write(` [spacing=${def.spacingMode}]`);
+// Writes comments that appear inline within a rule header (between <Name>, [annotation], and =).
+// Block comments are written inline; line comments end the current line.
+function writeRuleHeaderComments(
+    result: GrammarWriter,
+    comments: Comment[] | undefined,
+): void {
+    if (!comments) return;
+    for (const c of comments) {
+        if (c.style === "line") {
+            result.write(" //" + c.text);
+            result.writeLine();
+        } else {
+            result.write(" /*" + c.text + "*/");
+        }
     }
+}
+
+function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
+    writeLeadingComments(result, def.leadingComments);
+    result.write("<");
+    writeInlineComments(result, def.bracketedName.leadingComments);
+    result.write(def.bracketedName.name);
+    writeInlineComments(result, def.bracketedName.trailingComments);
+    result.write(">");
+    writeRuleHeaderComments(result, def.beforeAnnotationComments);
+    if (def.spacingMode !== undefined) {
+        result.write(" [");
+        writeInlineComments(result, def.annotationAfterBracketComments);
+        result.write("spacing");
+        writeInlineComments(result, def.annotationAfterKeyComments);
+        result.write("=");
+        writeInlineComments(result, def.annotationAfterEqualsComments);
+        result.write(def.spacingMode);
+        writeInlineComments(result, def.annotationAfterValueComments);
+        result.write("]");
+    }
+    writeRuleHeaderComments(result, def.beforeEqualsComments);
     result.write(` = `);
     const col = result.column - 2;
     writeRules(result, def.rules, col);
     result.write(";");
+    writeTrailingComments(result, def.trailingComments);
     result.writeLine();
 }
 
@@ -512,27 +897,68 @@ function writeRules(result: GrammarWriter, rules: Rule[], col: number) {
     });
 }
 
+// Writes rule.trailingComments (comments after expressions, before | or ;).
+// Line comments: write text + ForceBrokenPart — forces the enclosing alternatives
+// list into broken mode without emitting a NewlinePart, so the list's own
+// "\n" + prefix produces exactly one newline (no blank line between alts).
+// Block comments: write inline.
+function writeRuleTrailingComments(
+    result: GrammarWriter,
+    comments: Comment[] | undefined,
+): void {
+    if (!comments) return;
+    for (const c of comments) {
+        if (c.style === "line") {
+            result.write(" //" + c.text);
+            result.writeForceBroken();
+        } else {
+            result.write(" /*" + c.text + "*/");
+        }
+    }
+}
+
 function writeRule(result: GrammarWriter, rule: Rule, col: number) {
     if (rule.value === undefined) {
         writeExpression(result, rule.expressions, col);
+        writeRuleTrailingComments(result, rule.trailingComments);
         return;
     }
     // The arrow indent is computed at build time from the known alt-col value.
     const arrowIndent = " ".repeat(col + result.indentSize) + "-> ";
+    // Indent for continuation after a // comment that sits between -> and value.
+    const valueIndent = " ".repeat(col + result.indentSize + 3);
+    const hasLineTrailing = rule.trailingComments?.some(
+        (c) => c.style === "line",
+    );
     result.emitGroup(
-        // flat: expr -> value  (all on one line)
+        // flat: expr [trailingComments] -> [leading] value [valueTrailing]
+        // A line trailingComment or leading value comment makes measureParts
+        // return Infinity → broken is chosen automatically.
         () => {
             writeExpression(result, rule.expressions, col);
+            writeTrailingComments(result, rule.trailingComments);
+            if (hasLineTrailing) result.writeForceBroken(); // force Infinity in flat
             result.write(" -> ");
+            writeValueComments(result, rule.valueLeadingComments, valueIndent);
             writeValueNode(result, rule.value!, col);
+            writeTrailingComments(result, rule.valueTrailingComments);
         },
-        // broken: expr (newline at col+indentSize) -> value
+        // broken: expr [trailingComments] (newline) -> [leading] value [valueTrailing]
         () => {
             writeExpression(result, rule.expressions, col);
+            writeTrailingComments(result, rule.trailingComments);
             result.writeNewLine(arrowIndent);
+            writeValueComments(result, rule.valueLeadingComments, valueIndent);
             writeValueNode(result, rule.value!, col + result.indentSize + 3);
+            writeTrailingComments(result, rule.valueTrailingComments);
         },
     );
+    // If any valueTrailing comment is a line comment, add a ForceBrokenPart so the
+    // enclosing alternatives list uses broken mode (preventing | from being
+    // swallowed by the comment), while rendering as empty string (no blank line).
+    if (rule.valueTrailingComments?.some((c) => c.style === "line")) {
+        result.writeForceBroken();
+    }
 }
 
 function escapeExpressionString(str: string): string {
@@ -606,7 +1032,11 @@ function writeSingleExpr(
             break;
         }
         case "ruleReference":
-            result.write(`<${expr.name}>`);
+            result.write("<");
+            writeInlineComments(result, expr.bracketedName.leadingComments);
+            result.write(expr.bracketedName.name);
+            writeInlineComments(result, expr.bracketedName.trailingComments);
+            result.write(">");
             break;
         case "rules": {
             result.write("(");
@@ -627,12 +1057,35 @@ function writeSingleExpr(
         }
         case "variable":
             result.write("$(");
+            writeInlineComments(result, expr.dollarParenComments);
             result.write(expr.name);
-            if (expr.refName !== "string") {
+            // Emit ": type" if type is not the implicit default "string", OR if
+            // colonComments are present (must preserve them for round-trip fidelity).
+            if (
+                (expr.bracketedRefName?.name ?? "string") !== "string" ||
+                expr.colonComments
+            ) {
                 result.write(":");
-                result.write(
-                    expr.ruleReference ? `<${expr.refName}>` : expr.refName,
-                );
+                writeInlineComments(result, expr.colonComments);
+                if (expr.ruleReference) {
+                    result.write("<");
+                    writeInlineComments(
+                        result,
+                        expr.bracketedRefName?.leadingComments,
+                    );
+                    result.write(expr.bracketedRefName!.name);
+                    writeInlineComments(
+                        result,
+                        expr.bracketedRefName?.trailingComments,
+                    );
+                    result.write(">");
+                } else {
+                    result.write(expr.bracketedRefName!.name);
+                    writeInlineComments(
+                        result,
+                        expr.bracketedRefName?.trailingComments,
+                    );
+                }
             }
             result.write(expr.optional ? ")?" : ")");
             break;
@@ -657,6 +1110,28 @@ function writeRulesAt(
     });
 }
 
+// Writes an expr's leadingComments (if any) before the expr itself.
+// Line comments: write text then a NewlinePart with (indent + 2) spaces so the
+// next token lands at the alt content column (indent + 2).  The space that
+// writeExpression prepends to non-first exprs lands before the "//" text, not
+// after the newline, so (indent + 2) is correct for both first and non-first.
+// Block comments: write inline with a trailing space.
+function writeExprLeadingComments(
+    result: GrammarWriter,
+    expr: Expr,
+    indent: number,
+): void {
+    if (!expr.leadingComments) return;
+    for (const c of expr.leadingComments) {
+        if (c.style === "line") {
+            result.write("//" + c.text);
+            result.writeNewLine(" ".repeat(indent + 2));
+        } else {
+            result.write("/*" + c.text + "*/ ");
+        }
+    }
+}
+
 function writeExpression(
     result: GrammarWriter,
     expressions: Expr[],
@@ -669,13 +1144,15 @@ function writeExpression(
     let first = true;
     for (const expr of expressions) {
         if (first) {
+            writeExprLeadingComments(result, expr, indent);
             writeSingleExpr(result, expr, indent);
             first = false;
         } else {
             // Measure the next expression to decide whether to wrap.
-            const nextParts = result.capture(() =>
-                writeSingleExpr(result, expr, indent),
-            );
+            const nextParts = result.capture(() => {
+                writeExprLeadingComments(result, expr, indent);
+                writeSingleExpr(result, expr, indent);
+            });
             const nextLen = measureParts(nextParts);
             if (
                 nextLen !== Infinity &&
@@ -691,6 +1168,8 @@ function writeExpression(
 }
 
 function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
+    const indent = " ".repeat(col);
+    writeValueComments(result, value.leadingComments, indent);
     switch (value.type) {
         case "literal":
             result.write(JSON.stringify(value.value));
@@ -699,30 +1178,67 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
             result.write(value.name);
             break;
         case "object": {
-            const entries = Object.entries(value.value);
-            if (entries.length === 0) {
+            const entries = value.value;
+            const objFooter: Part[][] | undefined = value.closingComments?.map(
+                (c): Part[] =>
+                    c.style === "line"
+                        ? ["//" + c.text, { kind: "force-broken" }]
+                        : ["/*" + c.text + "*/"],
+            );
+            if (entries.length === 0 && !objFooter) {
                 result.write("{}");
                 break;
             }
+            const entryIndent = " ".repeat(col + result.indentSize);
             result.emitBlock(entries, {
                 flatOpen: "{ ",
                 flatClose: " }",
                 open: "{",
                 close: "}",
                 flatSep: ", ",
-                emitItem: ([key, val]) => {
-                    if (val === null) {
-                        result.write(key);
+                emitItem: (prop) => {
+                    writeValueComments(
+                        result,
+                        prop.leadingComments,
+                        entryIndent,
+                    );
+                    if (prop.value === null) {
+                        result.write(prop.key);
                     } else {
-                        result.write(`${key}: `);
-                        writeValueNode(result, val, col + result.indentSize);
+                        result.write(`${prop.key}: `);
+                        writeValueNode(
+                            result,
+                            prop.value,
+                            col + result.indentSize,
+                        );
                     }
                 },
+                getItemSuffix: (prop): Part[] | undefined => {
+                    if (!prop.trailingComments) return undefined;
+                    const parts: Part[] = [];
+                    for (const c of prop.trailingComments) {
+                        if (c.style === "line") {
+                            parts.push(" //" + c.text, {
+                                kind: "force-broken",
+                            });
+                        } else {
+                            parts.push(" /*" + c.text + "*/");
+                        }
+                    }
+                    return parts;
+                },
+                ...(objFooter ? { footer: objFooter } : {}),
             });
             break;
         }
         case "array": {
-            if (value.value.length === 0) {
+            const arrFooter: Part[][] | undefined = value.closingComments?.map(
+                (c): Part[] =>
+                    c.style === "line"
+                        ? ["//" + c.text, { kind: "force-broken" }]
+                        : ["/*" + c.text + "*/"],
+            );
+            if (value.value.length === 0 && !arrFooter) {
                 result.write("[]");
                 break;
             }
@@ -733,9 +1249,25 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
                 close: "]",
                 flatSep: ", ",
                 emitItem: (item) =>
-                    writeValueNode(result, item, col + result.indentSize),
+                    writeValueNode(result, item.value, col + result.indentSize),
+                getItemSuffix: (item): Part[] | undefined => {
+                    if (!item.trailingComments) return undefined;
+                    const parts: Part[] = [];
+                    for (const c of item.trailingComments) {
+                        if (c.style === "line") {
+                            parts.push(" //" + c.text, {
+                                kind: "force-broken",
+                            });
+                        } else {
+                            parts.push(" /*" + c.text + "*/");
+                        }
+                    }
+                    return parts;
+                },
+                ...(arrFooter ? { footer: arrFooter } : {}),
             });
             break;
         }
     }
+    writeValueComments(result, value.trailingComments, indent, true);
 }
