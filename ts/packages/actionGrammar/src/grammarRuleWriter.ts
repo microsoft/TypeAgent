@@ -3,11 +3,11 @@
 
 import {
     Comment,
+    CommentedName,
     Expr,
     GrammarParseResult,
     isExpressionSpecialChar,
     isWhitespace,
-    NameEntry,
     Rule,
     RuleDefinition,
     ValueNode,
@@ -759,7 +759,7 @@ export function writeGrammarRules(
             writeLeadingComments(result, decl.leadingComments);
             result.write("entity");
             for (let i = 0; i < decl.names.length; i++) {
-                const entry: NameEntry = decl.names[i];
+                const entry: CommentedName = decl.names[i];
                 if (i > 0) result.write(",");
                 // leading comments before this name (with space prefix)
                 if (entry.leadingComments) {
@@ -800,7 +800,7 @@ export function writeGrammarRules(
             } else {
                 result.write(" {");
                 for (let i = 0; i < imp.names.length; i++) {
-                    const entry: NameEntry = imp.names[i];
+                    const entry: CommentedName = imp.names[i];
                     if (i > 0) result.write(",");
                     // leading comments before this name (with space prefix)
                     if (entry.leadingComments) {
@@ -862,9 +862,9 @@ function writeRuleHeaderComments(
 function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
     writeLeadingComments(result, def.leadingComments);
     result.write("<");
-    writeInlineComments(result, def.bracketedName.leadingComments);
-    result.write(def.bracketedName.name);
-    writeInlineComments(result, def.bracketedName.trailingComments);
+    writeInlineComments(result, def.definitionName.leadingComments);
+    result.write(def.definitionName.name);
+    writeInlineComments(result, def.definitionName.trailingComments);
     result.write(">");
     writeRuleHeaderComments(result, def.beforeAnnotationComments);
     if (def.spacingMode !== undefined) {
@@ -1058,33 +1058,26 @@ function writeSingleExpr(
         case "variable":
             result.write("$(");
             writeInlineComments(result, expr.dollarParenComments);
-            result.write(expr.name);
+            writeInlineComments(result, expr.variableName.leadingComments);
+            result.write(expr.variableName.name);
+            writeInlineComments(result, expr.variableName.trailingComments);
             // Emit ": type" if type is not the implicit default "string", OR if
             // colonComments are present (must preserve them for round-trip fidelity).
             if (
-                (expr.bracketedRefName?.name ?? "string") !== "string" ||
+                (expr.refName?.name ?? "string") !== "string" ||
                 expr.colonComments
             ) {
                 result.write(":");
                 writeInlineComments(result, expr.colonComments);
                 if (expr.ruleReference) {
                     result.write("<");
-                    writeInlineComments(
-                        result,
-                        expr.bracketedRefName?.leadingComments,
-                    );
-                    result.write(expr.bracketedRefName!.name);
-                    writeInlineComments(
-                        result,
-                        expr.bracketedRefName?.trailingComments,
-                    );
+                    writeInlineComments(result, expr.refName?.leadingComments);
+                    result.write(expr.refName!.name);
+                    writeInlineComments(result, expr.refName?.trailingComments);
                     result.write(">");
                 } else {
-                    result.write(expr.bracketedRefName!.name);
-                    writeInlineComments(
-                        result,
-                        expr.bracketedRefName?.trailingComments,
-                    );
+                    result.write(expr.refName!.name);
+                    writeInlineComments(result, expr.refName?.trailingComments);
                 }
             }
             result.write(expr.optional ? ")?" : ")");

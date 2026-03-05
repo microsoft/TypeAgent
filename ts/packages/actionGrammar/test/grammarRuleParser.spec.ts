@@ -15,7 +15,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result).toEqual([
                 {
-                    bracketedName: { name: "greeting" },
+                    definitionName: { name: "greeting" },
                     rules: [
                         {
                             expressions: [
@@ -35,7 +35,7 @@ describe("Grammar Rule Parser", () => {
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toHaveLength(1);
-            expect(result[0].bracketedName.name).toBe("greeting");
+            expect(result[0].definitionName.name).toBe("greeting");
             expect(result[0].rules).toHaveLength(3);
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "string",
@@ -70,8 +70,8 @@ describe("Grammar Rule Parser", () => {
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toHaveLength(2);
-            expect(result[0].bracketedName.name).toBe("greeting");
-            expect(result[1].bracketedName.name).toBe("farewell");
+            expect(result[0].definitionName.name).toBe("greeting");
+            expect(result[1].definitionName.name).toBe("farewell");
         });
 
         it("rule with rule reference", () => {
@@ -97,7 +97,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
-                name: "name",
+                variableName: { name: "name" },
                 ruleReference: false,
             });
         });
@@ -108,8 +108,8 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
-                name: "count",
-                bracketedRefName: { name: "number" },
+                variableName: { name: "count" },
+                refName: { name: "number" },
                 ruleReference: false,
             });
         });
@@ -120,8 +120,8 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
-                name: "item",
-                bracketedRefName: { name: "ItemType" },
+                variableName: { name: "item" },
+                refName: { name: "ItemType" },
                 ruleReference: true,
             });
         });
@@ -132,8 +132,8 @@ describe("Grammar Rule Parser", () => {
 
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "variable",
-                name: "item",
-                bracketedRefName: { name: "ItemType" },
+                variableName: { name: "item" },
+                refName: { name: "ItemType" },
                 ruleReference: true,
                 optional: true,
             });
@@ -497,7 +497,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result).toEqual([
                 {
-                    bracketedName: { name: "complex" },
+                    definitionName: { name: "complex" },
                     rules: [
                         {
                             expressions: [
@@ -522,9 +522,12 @@ describe("Grammar Rule Parser", () => {
                                             expressions: [
                                                 {
                                                     type: "variable",
-                                                    name: "action",
+                                                    variableName: {
+                                                        name: "action",
+                                                    },
                                                     ruleReference: false,
                                                 },
+
                                             ],
                                         },
                                         {
@@ -553,7 +556,9 @@ describe("Grammar Rule Parser", () => {
                                 },
                                 {
                                     type: "variable",
-                                    name: "object",
+                                    variableName: {
+                                        name: "object",
+                                    },
                                     ruleReference: false,
                                 },
                                 {
@@ -563,7 +568,9 @@ describe("Grammar Rule Parser", () => {
                                             expressions: [
                                                 {
                                                     type: "variable",
-                                                    name: "adverb",
+                                                    variableName: {
+                                                        name: "adverb",
+                                                    },
                                                     ruleReference: false,
                                                 },
                                             ],
@@ -675,7 +682,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result).toEqual([
                 {
-                    bracketedName: { name: "greeting" },
+                    definitionName: { name: "greeting" },
                     rules: [
                         {
                             expressions: [
@@ -700,7 +707,7 @@ describe("Grammar Rule Parser", () => {
 
             expect(result).toEqual([
                 {
-                    bracketedName: { name: "greeting" },
+                    definitionName: { name: "greeting" },
                     rules: [
                         {
                             expressions: [
@@ -730,7 +737,7 @@ describe("Grammar Rule Parser", () => {
             const result = testParamGrammarRules("test.agr", grammar);
 
             expect(result).toHaveLength(1);
-            expect(result[0].bracketedName.name).toBe("greeting");
+            expect(result[0].definitionName.name).toBe("greeting");
         });
 
         it("should handle multi-line comments", () => {
@@ -1463,7 +1470,7 @@ describe("Grammar Rule Parser", () => {
 
             // Verify each intent has proper structure
             result.forEach((rule) => {
-                expect(rule.bracketedName.name).toMatch(
+                expect(rule.definitionName.name).toMatch(
                     /^(weather|calendar|music)$/,
                 );
                 expect(rule.rules[0].value).toBeDefined();
@@ -1530,8 +1537,8 @@ describe("Grammar Rule Parser", () => {
             expect(result.imports).toHaveLength(1);
             expect(result.imports[0].names).toEqual([{ name: "BaseRule" }]);
             expect(result.definitions).toHaveLength(2);
-            expect(result.definitions[0].bracketedName.name).toBe("Start");
-            expect(result.definitions[1].bracketedName.name).toBe("BaseRule");
+            expect(result.definitions[0].definitionName.name).toBe("Start");
+            expect(result.definitions[1].definitionName.name).toBe("BaseRule");
         });
 
         it("parse single name import", () => {
@@ -1547,20 +1554,22 @@ describe("Grammar Rule Parser", () => {
             const grammar =
                 'import { /* A */ Name1 /* B */, /* C */ Name2 /* D */ } from "file.agr";';
             const result = parseGrammarRules("test.agr", grammar, false);
-            const names = result.imports[0]
-                .names as import("../src/grammarRuleParser.js").NameEntry[];
-            expect(names[0].leadingComments).toEqual([
-                { style: "block", text: " A " },
-            ]);
-            expect(names[0].trailingComments).toEqual([
-                { style: "block", text: " B " },
-            ]);
-            expect(names[1].leadingComments).toEqual([
-                { style: "block", text: " C " },
-            ]);
-            expect(names[1].trailingComments).toEqual([
-                { style: "block", text: " D " },
-            ]);
+            const names = result.imports[0].names;
+            expect(names).not.toBe("*");
+            if (names !== "*") {
+                expect(names[0].leadingComments).toEqual([
+                    { style: "block", text: " A " },
+                ]);
+                expect(names[0].trailingComments).toEqual([
+                    { style: "block", text: " B " },
+                ]);
+                expect(names[1].leadingComments).toEqual([
+                    { style: "block", text: " C " },
+                ]);
+                expect(names[1].trailingComments).toEqual([
+                    { style: "block", text: " D " },
+                ]);
+            }
         });
 
         it("preserves block comments after 'import' keyword and after closing brace", () => {
@@ -1583,11 +1592,11 @@ describe("Grammar Rule Parser", () => {
                 `</*A*/Rule/*B*/> = hello;`,
                 false,
             );
-            expect(result.definitions[0].bracketedName.leadingComments).toEqual(
-                [{ style: "block", text: "A" }],
-            );
             expect(
-                result.definitions[0].bracketedName.trailingComments,
+                result.definitions[0].definitionName.leadingComments,
+            ).toEqual([{ style: "block", text: "A" }]);
+            expect(
+                result.definitions[0].definitionName.trailingComments,
             ).toEqual([{ style: "block", text: "B" }]);
         });
 
@@ -1645,8 +1654,8 @@ describe("Grammar Rule Parser", () => {
             );
             const expr = result.definitions[0].rules[0]
                 .expressions[0] as import("../src/grammarRuleParser.js").VarDefExpr;
-            expect(expr.bracketedRefName?.name).toEqual("string");
-            expect(expr.bracketedRefName?.trailingComments).toEqual([
+            expect(expr.refName?.name).toEqual("string");
+            expect(expr.refName?.trailingComments).toEqual([
                 { style: "block", text: "c" },
             ]);
         });
@@ -1659,10 +1668,10 @@ describe("Grammar Rule Parser", () => {
             );
             const expr = result.definitions[0].rules[0]
                 .expressions[0] as import("../src/grammarRuleParser.js").VarDefExpr;
-            expect(expr.bracketedRefName?.leadingComments).toEqual([
+            expect(expr.refName?.leadingComments).toEqual([
                 { style: "block", text: "a" },
             ]);
-            expect(expr.bracketedRefName?.trailingComments).toEqual([
+            expect(expr.refName?.trailingComments).toEqual([
                 { style: "block", text: "b" },
             ]);
         });

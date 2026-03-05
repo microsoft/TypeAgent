@@ -133,9 +133,9 @@ function createCompileContext(
     // This allows circular imports to work since our definitions are available
     // when other files try to import from us
     for (const def of definitions) {
-        const existing = ruleDefMap.get(def.bracketedName.name);
+        const existing = ruleDefMap.get(def.definitionName.name);
         if (existing === undefined) {
-            ruleDefMap.set(def.bracketedName.name, {
+            ruleDefMap.set(def.definitionName.name, {
                 definitions: [def],
                 // Set this to true to allow recursion to assume that it has value.
                 hasValue: true,
@@ -539,8 +539,10 @@ function createGrammarRule(
             }
             case "variable": {
                 variableCount++;
-                const { name, ruleReference, refPos, pos } = expr;
-                const refName = expr.bracketedRefName?.name ?? "string";
+                const { variableName, refName, ruleReference, refPos, pos } =
+                    expr;
+                const referencedName = refName?.name ?? "string";
+                const name = variableName.name;
                 // Check for duplicate variable definition
                 if (availableVariables.has(name)) {
                     context.errors.push({
@@ -553,7 +555,7 @@ function createGrammarRule(
                 if (ruleReference) {
                     const record = createNamedGrammarRules(
                         context,
-                        refName,
+                        referencedName,
                         refPos,
                         name,
                         currentEpr,
@@ -562,7 +564,7 @@ function createGrammarRule(
                         type: "rules",
                         rules: record.grammarRules,
                         variable: name,
-                        name: refName,
+                        name: referencedName,
                         optional: expr.optional,
                     });
                     if (!expr.optional) {
@@ -576,7 +578,7 @@ function createGrammarRule(
                         ruleNullable =
                             ruleNullable && (record.nullable ?? false);
                     }
-                } else if (refName === "number") {
+                } else if (referencedName === "number") {
                     parts.push({
                         type: "number",
                         variable: name,
@@ -588,27 +590,28 @@ function createGrammarRule(
                     // All non-built-in types must be explicitly imported
                     // Built-in types: string, wildcard, word, number
                     const isBuiltInType =
-                        refName === "string" ||
-                        refName === "wildcard" ||
-                        refName === "word";
+                        referencedName === "string" ||
+                        referencedName === "wildcard" ||
+                        referencedName === "word";
                     if (!isBuiltInType) {
                         const isImportedType =
                             context.hasStarImport ||
-                            context.knownTypeNames.has(refName) ||
-                            context.importedTypeNames.has(refName) ||
-                            globalEntityRegistry.getConverter(refName) !==
-                                undefined;
+                            context.knownTypeNames.has(referencedName) ||
+                            context.importedTypeNames.has(referencedName) ||
+                            globalEntityRegistry.getConverter(
+                                referencedName,
+                            ) !== undefined;
 
                         if (!isImportedType) {
                             context.errors.push({
-                                message: `Undefined type '${refName}' in variable '${name}'`,
+                                message: `Undefined type '${referencedName}' in variable '${name}'`,
                                 definition: context.currentDefinition,
                                 pos: refPos,
                             });
                         } else {
                             // Track imported .ts types used as variable types.
                             // These need runtime entity validation (like old "entity" declarations).
-                            context.usedImportedTypes.add(refName);
+                            context.usedImportedTypes.add(referencedName);
                         }
                     }
 
@@ -616,7 +619,7 @@ function createGrammarRule(
                         type: "wildcard",
                         variable: name,
                         optional: expr.optional,
-                        typeName: refName,
+                        typeName: referencedName,
                     });
                     if (!expr.optional) consumedInput();
                 }

@@ -141,17 +141,17 @@ type StrExpr = {
     leadingComments?: Comment[];
 };
 
-// A name enclosed in angle brackets, with optional comments inside the brackets.
-// Used by RuleRefExpr and RuleDefinition to represent the <name> construct.
-export type BracketedName = {
+// A name with optional leading and trailing comments.
+// Used for rule names within angle brackets and entries in comma-separated lists.
+export type CommentedName = {
     name: string;
-    leadingComments?: Comment[] | undefined; // between < and the name
-    trailingComments?: Comment[] | undefined; // between the name and >
+    leadingComments?: Comment[] | undefined;
+    trailingComments?: Comment[] | undefined;
 };
 
 export type RuleRefExpr = {
     type: "ruleReference";
-    bracketedName: BracketedName;
+    bracketedName: CommentedName;
     pos?: number | undefined;
     leadingComments?: Comment[];
 };
@@ -166,12 +166,12 @@ type RulesExpr = {
 
 export type VarDefExpr = {
     type: "variable";
-    name: string;
+    variableName: CommentedName;
     ruleReference: boolean;
-    // bracketedRefName.name is the type/rule name; absent means the type defaults to "string".
+    // bracketedName.name is the type/rule name; absent means the type defaults to "string".
     // For rule references ($(...:<RuleName>)): leadingComments/trailingComments are inside the <>.
     // For plain types ($(...:typeName)):       trailingComments are after the type identifier.
-    bracketedRefName?: BracketedName;
+    refName?: CommentedName;
     refPos?: number | undefined;
     optional?: boolean;
     pos?: number | undefined;
@@ -248,7 +248,7 @@ export type Rule = {
 };
 
 export type RuleDefinition = {
-    bracketedName: BracketedName;
+    definitionName: CommentedName;
     rules: Rule[];
     spacingMode?: SpacingMode;
     pos?: number | undefined;
@@ -262,19 +262,9 @@ export type RuleDefinition = {
     trailingComments?: Comment[] | undefined; // comments on same line as ";"
 };
 
-// A single name entry in a comma-separated name list (entity declarations and
-// named import lists).  Modelled after ObjectProperty: carries leading comments
-// (between the preceding delimiter and the name) and trailing comments (after
-// the name, before the "," or closing delimiter).
-export type NameEntry = {
-    name: string;
-    leadingComments?: Comment[] | undefined;
-    trailingComments?: Comment[] | undefined;
-};
-
 // Import types
 export type ImportStatement = {
-    names: NameEntry[] | "*"; // Specific names or * for all
+    names: CommentedName[] | "*"; // Specific names or * for all
     source: string; // File path or module name
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined; // comments before "import"
@@ -287,7 +277,7 @@ export type ImportStatement = {
 
 // Entity declaration — one "entity Foo, Bar;" statement
 export type EntityDeclaration = {
-    names: NameEntry[];
+    names: CommentedName[];
     leadingComments?: Comment[] | undefined; // comments before "entity"
     trailingComments?: Comment[] | undefined; // comments on same line as ";"
 };
@@ -587,11 +577,11 @@ class GrammarRuleParser {
 
     private parseVariableSpecifier(): VarDefExpr {
         const pos = this.pos;
-        const id = this.parseId("Variable name");
+        const commentedName = this.parseNameWithComments("Variable name");
         let ruleReference: boolean = false;
         let refPos: number | undefined = undefined;
         let colonComments: Comment[] | undefined;
-        let bracketedRefName: BracketedName | undefined;
+        let bracketedName: CommentedName | undefined;
 
         if (this.isAt(":")) {
             // Advance past ":" then collect comments before the type specifier.
@@ -601,20 +591,20 @@ class GrammarRuleParser {
             refPos = this.pos;
             if (this.isAt("<")) {
                 ruleReference = true;
-                bracketedRefName = this.parseRuleName();
+                bracketedName = this.parseRuleName();
             } else {
-                bracketedRefName = this.parseNameWithComments("Type name");
+                bracketedName = this.parseNameWithComments("Type name");
             }
         }
         const result: VarDefExpr = {
             type: "variable",
-            name: id,
+            variableName: commentedName,
             ruleReference,
             refPos,
             pos,
         };
         if (colonComments) result.colonComments = colonComments;
-        if (bracketedRefName) result.bracketedRefName = bracketedRefName;
+        if (bracketedName) result.refName = bracketedName;
         return result;
     }
 
@@ -963,15 +953,15 @@ class GrammarRuleParser {
         return result;
     }
 
-    // Parse an identifier surrounded by optional comments into a BracketedName.
-    private parseNameWithComments(label: string): BracketedName {
+    // Parse an identifier surrounded by optional comments into a CommentedName.
+    private parseNameWithComments(label: string): CommentedName {
         const leadingComments = this.parseComments() ?? undefined;
         const name = this.parseId(label);
         const trailingComments = this.parseComments() ?? undefined;
         return { name, leadingComments, trailingComments };
     }
 
-    private parseRuleName(): BracketedName {
+    private parseRuleName(): CommentedName {
         this.consume("<", "at start of rule name");
         const result = this.parseNameWithComments("Rule identifier");
         this.consume(">", "at end of rule name");
@@ -1069,7 +1059,7 @@ class GrammarRuleParser {
         );
 
         const def: RuleDefinition = {
-            bracketedName: rn,
+            definitionName: rn,
             rules,
             pos,
             leadingComments,
@@ -1166,11 +1156,11 @@ class GrammarRuleParser {
         // entity Ordinal;
         // entity Ordinal, CalendarDate;
         this.curr += 6; // skip "entity"
-        const names: NameEntry[] = [];
+        const names: CommentedName[] = [];
         // Collect leading comments before the first name (after "entity" keyword).
         let pendingLeading = this.parseComments() ?? undefined;
         while (true) {
-            const entry: NameEntry = { name: this.parseId("entity name") };
+            const entry: CommentedName = { name: this.parseId("entity name") };
             if (pendingLeading) entry.leadingComments = pendingLeading;
             names.push(entry);
             // Collect trailing comments after the name, before "," or ";".
@@ -1194,7 +1184,7 @@ class GrammarRuleParser {
         const afterImportComments = this.parseComments() ?? undefined;
         const pos = this.pos;
 
-        let names: NameEntry[] | "*";
+        let names: CommentedName[] | "*";
         let afterStarComments: Comment[] | undefined;
         let afterCloseBraceComments: Comment[] | undefined;
 
@@ -1222,7 +1212,9 @@ class GrammarRuleParser {
                     break;
                 }
 
-                const entry: NameEntry = { name: this.parseId("import name") };
+                const entry: CommentedName = {
+                    name: this.parseId("import name"),
+                };
                 if (pendingLeading) entry.leadingComments = pendingLeading;
                 names.push(entry);
 
