@@ -606,6 +606,9 @@ importers:
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../../packages/actionSchema
+      action-grammar:
+        specifier: workspace:*
+        version: link:../../packages/actionGrammar
       agent-cache:
         specifier: workspace:*
         version: link:../../packages/cache
