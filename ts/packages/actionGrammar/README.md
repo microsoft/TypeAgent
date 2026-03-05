@@ -131,7 +131,7 @@ npm run test:integration
 | --------------------------- | ------------------------------------------------------------------------------------- |
 | `action-schema` (workspace) | Reading `.pas.json` schema files for checked-variable enrichment                      |
 | `debug`                     | Debug logging (`typeagent:grammar:*`, `typeagent:nfa:*`, `typeagent:actionGrammar:*`) |
-| `regexp.escape`             | Safe regex escaping for the recursive backtracking matcher matcher                    |
+| `regexp.escape`             | Safe regex escaping for the simple recursive backtracking matcher                     |
 
 ## Trademarks
 

@@ -185,12 +185,12 @@ export class GrammarStoreImpl implements GrammarStore {
                     ? "DFA"
                     : this.useNFA && entry.nfa
                       ? "NFA"
-                      : "legacy";
+                      : "simple";
             debug(
                 `Matching "${request}" against ${schemaName} (${matchMode}) - NFA states: ${entry.nfa?.states.length || 0}, DFA states: ${entry.dfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
             );
 
-            // Choose matcher: DFA > NFA > legacy
+            // Choose matcher: DFA > NFA > simple
             let grammarMatches;
             if (this.useDFA && entry.dfa) {
                 const tokens = tokenizeRequest(request);
@@ -347,7 +347,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     }
                 }
             } else {
-                // Legacy grammar-based completions
+                // simple grammar-based completions
                 const partial = matchGrammarCompletion(
                     entry.grammar,
                     requestPrefix ?? "",
