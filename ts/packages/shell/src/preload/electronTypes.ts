@@ -93,7 +93,7 @@ export interface Client {
     focusInput(): void;
     titleUpdated(title: string): void;
 
-    searchMenuCompletion(id: number, item: SearchMenuItem);
+    searchMenuCompletion(id: number, item: SearchMenuItem): void;
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;

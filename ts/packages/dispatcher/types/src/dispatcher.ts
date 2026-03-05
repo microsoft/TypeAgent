@@ -54,6 +54,9 @@ export type CommandResult = {
 export type CommandCompletionResult = {
     startIndex: number; // index of first character of the filter text (after the last space)
     completions: CompletionGroup[]; // completions available at the current position
+    // True when a separator (e.g. space) must be inserted between the
+    // already-typed prefix and the completion text.
+    needsSeparator?: boolean | undefined;
 };
 
 export type AppAgentStatus = {

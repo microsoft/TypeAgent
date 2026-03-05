@@ -91,6 +91,8 @@ export async function requestCompletion(
         return [];
     }
 
+    const prefixLength = results.matchedPrefixLength;
+    const needsSeparator = results.needsSeparator;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -98,6 +100,8 @@ export async function requestCompletion(
             completions: results.completions,
             needQuotes: false, // Request completions are partial, no quotes needed
             kind: "literal",
+            prefixLength,
+            needsSeparator,
         });
     }
 
@@ -117,6 +121,8 @@ export async function requestCompletion(
                 completionProperty.actions,
                 context,
                 propertyCompletions,
+                prefixLength,
+                needsSeparator,
             );
         }
     }
@@ -130,6 +136,8 @@ async function collectActionCompletions(
     partialActions: ExecutableAction[],
     context: CommandHandlerContext,
     propertyCompletions: Map<string, CompletionGroup>,
+    prefixLength?: number | undefined,
+    needsSeparator?: boolean | undefined,
 ) {
     for (const propertyName of properties) {
         const { action, parameterName } = getPropertyInfo(
@@ -155,6 +163,8 @@ async function collectActionCompletions(
                 needQuotes: false, // Request completions are partial, no quotes needed
                 sorted: true, // REVIEW: assume property completions are already in desired order by the agent.
                 kind: "entity",
+                prefixLength,
+                needsSeparator,
             });
         }
     }

@@ -272,6 +272,8 @@ export class GrammarStoreImpl implements GrammarStore {
         }
         const completions: string[] = [];
         const properties: CompletionProperty[] = [];
+        let matchedPrefixLength: number | undefined;
+        let needsSeparator = false;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -353,6 +355,18 @@ export class GrammarStoreImpl implements GrammarStore {
                 if (partial.completions.length > 0) {
                     completions.push(...partial.completions);
                 }
+                if (partial.matchedPrefixLength !== undefined) {
+                    matchedPrefixLength =
+                        matchedPrefixLength === undefined
+                            ? partial.matchedPrefixLength
+                            : Math.max(
+                                  matchedPrefixLength,
+                                  partial.matchedPrefixLength,
+                              );
+                }
+                if (partial.needsSeparator) {
+                    needsSeparator = true;
+                }
                 if (
                     partial.properties !== undefined &&
                     partial.properties.length > 0
@@ -378,6 +392,8 @@ export class GrammarStoreImpl implements GrammarStore {
         return {
             completions,
             properties,
+            matchedPrefixLength,
+            needsSeparator: needsSeparator || undefined,
         };
     }
 }

@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "../dist/src",
+    "rootDir": ".",
+    "moduleResolution": "node16"
+  },
+  "include": [
+    "renderer/src/partialCompletionSession.ts",
+    "preload/electronTypes.ts",
+    "preload/shellSettingsType.ts"
+  ]
+}

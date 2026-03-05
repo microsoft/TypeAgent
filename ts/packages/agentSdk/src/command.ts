@@ -56,6 +56,14 @@ export type CompletionGroup = {
     emojiChar?: string | undefined; // Optional icon for the completion category
     sorted?: boolean; // If true, the completions are already sorted. Default is false, and the completions sorted alphabetically.
     kind?: "literal" | "entity"; // Whether completions are fixed grammar tokens or entity values from agents
+    // Number of characters of the input consumed by the grammar/command parser
+    // before the completion point for this group.  When present, the shell
+    // inserts completions at this offset, replacing space-based heuristics
+    // that fail for CJK and other non-space-delimited scripts.
+    prefixLength?: number | undefined;
+    // True when a separator (e.g. space) must be inserted between the
+    // already-typed prefix and the completion text.
+    needsSeparator?: boolean | undefined;
 };
 
 export interface AppAgentCommandInterface {

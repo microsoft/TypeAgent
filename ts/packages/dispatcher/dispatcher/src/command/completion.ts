@@ -28,31 +28,6 @@ import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
 
-// Return the index of the first character of the last partial token.
-// This is where the shell's filter text begins.
-// Examples:
-//   "play sh"  → 5  (the "s" in "sh")
-//   "play "    → 5  (= input.length, empty filter)
-//   "p"        → 0
-//   "@calen"   → 1  (right after "@")
-//   "@cal foo" → 5  (the "f" in "foo")
-function getFilterStart(input: string) {
-    const commandMatch = input.match(/^\s*@/);
-    if (commandMatch !== null) {
-        const afterAt = input.substring(commandMatch.length);
-        if (!/\s/.test(afterAt)) {
-            // No space after @command — filtering command name
-            return commandMatch.length;
-        }
-    }
-    if (/\s$/.test(input)) {
-        // Trailing whitespace — filter is empty, starts at end
-        return input.length;
-    }
-    const lastSpace = input.lastIndexOf(" ");
-    return lastSpace === -1 ? 0 : lastSpace + 1;
-}
-
 // Return the full flag name if we are waiting a flag value.  Add boolean values for completions and return undefined if the flag is boolean.
 function getPendingFlag(
     params: ParsedCommandParams<ParameterDefinitions>,
@@ -130,11 +105,17 @@ function collectFlags(
     return flagCompletions;
 }
 
+type ParameterCompletionResult = {
+    completions: CompletionGroup[];
+    startIndex: number;
+};
+
 async function getCommandParameterCompletion(
     descriptor: CommandDescriptor,
     context: CommandHandlerContext,
     result: ResolveCommandResult,
-): Promise<CompletionGroup[] | undefined> {
+    inputLength: number,
+): Promise<ParameterCompletionResult | undefined> {
     const completions: CompletionGroup[] = [];
     if (typeof descriptor.parameters !== "object") {
         // No more completion, return undefined;
@@ -184,17 +165,27 @@ async function getCommandParameterCompletion(
             const sessionContext = context.agents.getSessionContext(
                 result.actualAppAgentName,
             );
-            completions.push(
-                ...(await agent.getCommandCompletion(
-                    result.commands,
-                    params,
-                    agentCommandCompletions,
-                    sessionContext,
-                )),
+            const agentGroups = await agent.getCommandCompletion(
+                result.commands,
+                params,
+                agentCommandCompletions,
+                sessionContext,
             );
+            completions.push(...agentGroups);
         }
     }
-    return completions;
+
+    // Compute startIndex from the parse position.  The filter text is the
+    // last incomplete token the user is typing (or empty at a boundary).
+    const trailingSpace = /\s$/.test(result.suffix);
+    const lastToken =
+        params.tokens.length > 0
+            ? params.tokens[params.tokens.length - 1]
+            : undefined;
+    const filterLength = trailingSpace || !lastToken ? 0 : lastToken.length;
+    const startIndex = inputLength - filterLength;
+
+    return { completions, startIndex };
 }
 
 export async function getCommandCompletion(
@@ -203,7 +194,6 @@ export async function getCommandCompletion(
 ): Promise<CommandCompletionResult | undefined> {
     try {
         debug(`Command completion start: '${input}'`);
-        const filterStart = getFilterStart(input);
 
         // Always send the full input so the backend sees all typed text.
         const partialCommand = normalizeCommand(input, context);
@@ -217,6 +207,11 @@ export async function getCommandCompletion(
             // Return undefined to indicate no more completions for this prefix.
             return undefined;
         }
+
+        // The parse-derived startIndex: command resolution consumed
+        // everything up to the suffix; within the suffix, parameter
+        // parsing determines the last incomplete token position.
+        let startIndex = input.length - result.suffix.length;
 
         // Collect completions
         const completions: CompletionGroup[] = [];
@@ -244,6 +239,7 @@ export async function getCommandCompletion(
                 descriptor,
                 context,
                 result,
+                input.length,
             );
             if (parameterCompletions === undefined) {
                 if (completions.length === 0) {
@@ -251,7 +247,8 @@ export async function getCommandCompletion(
                     return undefined;
                 }
             } else {
-                completions.push(...parameterCompletions);
+                completions.push(...parameterCompletions.completions);
+                startIndex = parameterCompletions.startIndex;
             }
         } else {
             if (result.suffix.length !== 0) {
@@ -279,9 +276,28 @@ export async function getCommandCompletion(
             }
         }
 
-        const completionResult = {
-            startIndex: filterStart,
+        // Allow grammar-reported prefixLength (from groups) to override
+        // the parse-derived startIndex.  This handles CJK and other
+        // non-space-delimited scripts where the grammar matcher is the
+        // authoritative source for how far into the input it consumed.
+        const groupPrefixLength = completions.find(
+            (g) => g.prefixLength !== undefined,
+        )?.prefixLength;
+        if (groupPrefixLength !== undefined) {
+            startIndex = groupPrefixLength;
+        }
+
+        // Extract needsSeparator from any group that reports it.
+        const needsSeparator = completions.some(
+            (g) => g.needsSeparator === true,
+        )
+            ? true
+            : undefined;
+
+        const completionResult: CommandCompletionResult = {
+            startIndex,
             completions,
+            needsSeparator,
         };
 
         debug(`Command completion result:`, completionResult);

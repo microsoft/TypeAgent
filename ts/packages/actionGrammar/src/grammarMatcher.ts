@@ -21,7 +21,7 @@ const debugCompletion = registerDebug("typeagent:grammar:completion");
 const separatorRegExpStr = "\\s\\p{P}";
 const separatorRegExp = new RegExp(`[${separatorRegExpStr}]+`, "yu");
 const wildcardTrimRegExp = new RegExp(
-    `[${separatorRegExpStr}]*(.+?)[${separatorRegExpStr}]*$`,
+    `[${separatorRegExpStr}]*([^${separatorRegExpStr}](?:.*[^${separatorRegExpStr}])?)[${separatorRegExpStr}]*$`,
     "yu",
 );
 
@@ -393,6 +393,13 @@ function createValue(
     }
 }
 
+// Extract and trim a wildcard capture from `request[start..end)`.  In the
+// default spacing modes the result is stripped of leading/trailing separators
+// (whitespace and punctuation).  Returns `undefined` when the capture is empty
+// or consists *entirely* of separator characters — e.g. a lone " " — so that
+// the matcher rejects wildcard slots that contain no meaningful content.
+// In "none" mode no trimming is performed; only a truly zero-length capture
+// is rejected.
 function getWildcardStr(
     request: string,
     start: number,
@@ -1022,6 +1029,17 @@ export type GrammarCompletionProperty = {
 export type GrammarCompletionResult = {
     completions: string[];
     properties?: GrammarCompletionProperty[] | undefined;
+    // Number of characters from the input prefix that the grammar consumed
+    // before the completion point.  The shell uses this to determine where
+    // to insert/filter completions (replacing the space-based heuristic).
+    matchedPrefixLength?: number | undefined;
+    // True when a separator (e.g. space) must be inserted between the
+    // already-typed prefix and the completion text.  This happens when the
+    // grammar consumed the entire input and the spacing rules between the
+    // last typed character and the first completion character require a
+    // separator (e.g. Latin "play" → "music" needs a space, but CJK
+    // "再生" → "音楽" does not).
+    needsSeparator?: boolean | undefined;
 };
 
 function getGrammarCompletionProperty(
@@ -1029,6 +1047,8 @@ function getGrammarCompletionProperty(
     valueId: number,
 ): GrammarCompletionProperty | undefined {
     const temp = { ...state };
+
+    while (finalizeNestedRule(temp, undefined, true)) {}
     if (temp.valueIds === null) {
         // valueId would have been undefined
         throw new Error(
@@ -1036,8 +1056,6 @@ function getGrammarCompletionProperty(
         );
     }
     const wildcardPropertyNames: string[] = [];
-
-    while (finalizeNestedRule(temp, undefined, true)) {}
     const match = createValue(
         temp.value,
         temp.valueIds,
@@ -1107,6 +1125,12 @@ export function matchGrammarCompletion(
     const pending = initialMatchState(grammar);
     const completions: string[] = [];
     const properties: GrammarCompletionProperty[] = [];
+    // Track the furthest point the grammar consumed across all
+    // completion-producing states.  This tells the caller where
+    // the "filter text" begins so it doesn't have to guess from
+    // whitespace (which breaks for CJK and other non-space scripts).
+    let maxPrefixLength: number | undefined;
+    let needsSeparator = false;
     while (pending.length > 0) {
         const state = pending.pop()!;
         debugMatch(state, `resume state`);
@@ -1123,10 +1147,31 @@ export function matchGrammarCompletion(
 
             debugCompletion(`Completing ${nextPart.type} part ${state.name}`);
             if (nextPart.type === "string") {
-                debugCompletion(
-                    `Adding completion text: "${nextPart.value.join(" ")}"`,
-                );
-                completions.push(nextPart.value.join(" "));
+                const completionText = nextPart.value.join(" ");
+                debugCompletion(`Adding completion text: "${completionText}"`);
+                completions.push(completionText);
+                // Grammar consumed up to state.index; completions start there.
+                maxPrefixLength =
+                    maxPrefixLength === undefined
+                        ? state.index
+                        : Math.max(maxPrefixLength, state.index);
+                // When the grammar consumed the entire input, check
+                // whether a separator is needed between the last typed
+                // character and the first completion character.
+                if (
+                    state.index === prefix.length &&
+                    prefix.length > 0 &&
+                    completionText.length > 0 &&
+                    state.spacingMode !== "none"
+                ) {
+                    needsSeparator =
+                        needsSeparator ||
+                        requiresSeparator(
+                            prefix[prefix.length - 1],
+                            completionText[0],
+                            state.spacingMode,
+                        );
+                }
             }
         } else {
             // We can't finalize the state because of empty pending wildcard
@@ -1146,6 +1191,43 @@ export function matchGrammarCompletion(
                         `Adding completion property: ${JSON.stringify(completionProperty)}`,
                     );
                     properties.push(completionProperty);
+                    // The wildcard starts at pendingWildcard.start; the
+                    // grammar consumed everything before that.
+                    maxPrefixLength =
+                        maxPrefixLength === undefined
+                            ? pendingWildcard.start
+                            : Math.max(maxPrefixLength, pendingWildcard.start);
+                    // Wildcard completions: the wildcard consumes up to
+                    // pendingWildcard.start.  If that position is at or
+                    // before the end of the input (with only separators
+                    // between the wildcard start and the cursor), we may
+                    // need a separator before the property value.
+                    // This covers two cases:
+                    //   1. pendingWildcard.start === prefix.length — separator
+                    //      not typed yet (e.g. input "play", wildcard at 4).
+                    //   2. pendingWildcard.start < prefix.length and only
+                    //      separators follow (e.g. input "play ", wildcard at
+                    //      4, space at 4 is already typed).
+                    // In both cases needsSeparator must be set so the caller
+                    // strips the leading whitespace before filtering.
+                    // (For wildcards the completion text varies, so we
+                    // conservatively use a typical word char "a".)
+                    if (
+                        pendingWildcard.start > 0 &&
+                        pendingWildcard.start <= prefix.length &&
+                        prefix.length > 0 &&
+                        state.spacingMode !== "none" &&
+                        nextNonSeparatorIndex(prefix, pendingWildcard.start) >=
+                            prefix.length
+                    ) {
+                        needsSeparator =
+                            needsSeparator ||
+                            requiresSeparator(
+                                prefix[pendingWildcard.start - 1],
+                                "a",
+                                state.spacingMode,
+                            );
+                    }
                 }
             } else if (!matched) {
                 // matchState failed on a string part and there's trailing text.
@@ -1166,14 +1248,21 @@ export function matchGrammarCompletion(
                         `Adding partial prefix completion: "${fullText}"`,
                     );
                     completions.push(fullText);
+                    // The partial text starts at state.index.
+                    maxPrefixLength =
+                        maxPrefixLength === undefined
+                            ? state.index
+                            : Math.max(maxPrefixLength, state.index);
                 }
             }
         }
     }
 
-    const result = {
+    const result: GrammarCompletionResult = {
         completions,
         properties,
+        matchedPrefixLength: maxPrefixLength,
+        needsSeparator: needsSeparator || undefined,
     };
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
     return result;

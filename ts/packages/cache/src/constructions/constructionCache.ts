@@ -73,6 +73,11 @@ export type CompletionProperty = {
 export type CompletionResult = {
     completions: string[];
     properties?: CompletionProperty[] | undefined;
+    // Characters consumed by the grammar before the completion point.
+    matchedPrefixLength?: number | undefined;
+    // True when a separator (e.g. space) must be inserted between the
+    // already-typed prefix and the completion text.
+    needsSeparator?: boolean | undefined;
 };
 
 export function mergeCompletionResults(
@@ -85,6 +90,17 @@ export function mergeCompletionResults(
     if (second === undefined) {
         return first;
     }
+    // Take the max matchedPrefixLength across both results.
+    let matchedPrefixLength: number | undefined;
+    if (
+        first.matchedPrefixLength !== undefined ||
+        second.matchedPrefixLength !== undefined
+    ) {
+        matchedPrefixLength = Math.max(
+            first.matchedPrefixLength ?? 0,
+            second.matchedPrefixLength ?? 0,
+        );
+    }
     return {
         completions: [...first.completions, ...second.completions],
         properties: first.properties
@@ -92,6 +108,9 @@ export function mergeCompletionResults(
                 ? [...first.properties, ...second.properties]
                 : first.properties
             : second.properties,
+        matchedPrefixLength,
+        needsSeparator:
+            first.needsSeparator || second.needsSeparator || undefined,
     };
 }
 export class ConstructionCache {
