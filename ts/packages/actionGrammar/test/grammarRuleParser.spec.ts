@@ -1400,6 +1400,18 @@ describe("Grammar Rule Parser", () => {
                 ),
             ).toThrow("']' expected at end of spacing annotation");
         });
+
+        it("throws on unterminated block comment at EOF", () => {
+            expect(() =>
+                testParamGrammarRules("test.agr", `<A> = hello; /* oops`),
+            ).toThrow("Unterminated");
+        });
+
+        it("throws on unterminated block comment mid-file", () => {
+            expect(() =>
+                testParamGrammarRules("test.agr", `<A> = /* never closed`),
+            ).toThrow("Unterminated");
+        });
     });
 
     describe("Complex Integration", () => {

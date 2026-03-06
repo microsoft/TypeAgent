@@ -1207,4 +1207,22 @@ describe("Comment preservation round-trips (structural positions)", () => {
             `import /* after-import */ { Name1 } /* after-brace */ from "file.agr";\n`,
         );
     });
+
+    it("wildcard import with block comment after star", () => {
+        roundTrip(`import * /* after-star */ from "other.agr";\n`);
+    });
+
+    it("wildcard import with block comment after import keyword", () => {
+        roundTrip(
+            `import /* after-import */ * /* after-star */ from "other.agr";\n`,
+        );
+    });
+
+    it("comments inside empty object value", () => {
+        roundTrip(`<A> = x -> { /* only comment */ };\n`);
+    });
+
+    it("comments inside empty array value", () => {
+        roundTrip(`<A> = x -> [ /* only comment */ ];\n`);
+    });
 });

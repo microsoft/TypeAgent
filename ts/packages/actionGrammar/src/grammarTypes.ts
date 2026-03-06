@@ -21,6 +21,11 @@ export type CompiledVariableValueNode = {
     type: "variable";
     name: string;
 };
+// Note: CompiledObjectValueNode uses an unordered dict for values because
+// property order is irrelevant at match time.  The parser-time ObjectValueNode
+// (in grammarRuleParser.ts) uses an ordered ObjectProperty[] array instead so
+// it can preserve per-property comments and original source order for
+// round-trip fidelity.
 export type CompiledObjectValueNode = {
     type: "object";
     value: { [key: string]: CompiledValueNode | null };

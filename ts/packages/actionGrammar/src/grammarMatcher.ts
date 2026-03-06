@@ -221,14 +221,11 @@ function createMatchedValue(
         wildcardPropertyNames.push(propertyName);
     }
 
-    let matchedCompiledValueNode: MatchedValueEntry | undefined = values;
-    while (
-        matchedCompiledValueNode !== undefined &&
-        matchedCompiledValueNode.valueId !== valueId
-    ) {
-        matchedCompiledValueNode = matchedCompiledValueNode.prev;
+    let entry: MatchedValueEntry | undefined = values;
+    while (entry !== undefined && entry.valueId !== valueId) {
+        entry = entry.prev;
     }
-    if (matchedCompiledValueNode === undefined) {
+    if (entry === undefined) {
         if (partialValueId !== undefined) {
             // Partial match, missing variable is ok
             return undefined;
@@ -238,7 +235,7 @@ function createMatchedValue(
         );
     }
 
-    const value = matchedCompiledValueNode.value;
+    const value = entry.value;
     if (typeof value === "object") {
         return createValue(
             value.node,
@@ -257,7 +254,7 @@ function createMatchedValue(
             stat.matchedValueCount++;
         }
 
-        if (matchedCompiledValueNode.wildcard) {
+        if (entry.wildcard) {
             if (typeof value !== "string") {
                 throw new Error(
                     `Internal error: Wildcard has non-string value for variable: ${name} id: ${valueId} property: ${propertyName}`,

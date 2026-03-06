@@ -366,7 +366,12 @@ class GrammarRuleParser {
     }
     private skipAfter(skip: number, after: string) {
         const index = this.content.indexOf(after, this.curr + skip);
-        this.curr = index === -1 ? this.content.length : index + after.length;
+        if (index === -1) {
+            this.throwError(
+                `Unterminated '${this.content.substring(this.curr, this.curr + skip)}' — expected closing '${after}'.`,
+            );
+        }
+        this.curr = index + after.length;
     }
 
     // Advances skip characters then skips whitespace characters only.

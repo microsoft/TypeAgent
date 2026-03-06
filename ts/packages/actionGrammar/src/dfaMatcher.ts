@@ -15,8 +15,7 @@ import { normalizeToken } from "./nfaMatcher.js";
 import { applySplitToTokens } from "./tokenSplit.js";
 import { matchNFA } from "./nfaInterpreter.js";
 import type { NFAMatchResult } from "./nfaInterpreter.js";
-import type { Grammar } from "./grammarTypes.js";
-import type { ValueNode } from "./grammarRuleParser.js";
+import type { Grammar, CompiledValueNode } from "./grammarTypes.js";
 
 // ─── DFA First-Token Index ──────────────────────────────────────────────────
 // O(1) pre-filter: reject tokens whose first word can't start any DFA path.
@@ -1940,7 +1939,7 @@ function buildBindings(parts: MatchNode[], grammar: Grammar): Map<string, any> {
 function findValueExpression(
     rule: import("./grammarTypes.js").GrammarRule,
     astParts: MatchNode[],
-): ValueNode | undefined {
+): CompiledValueNode | undefined {
     // Direct value on the rule — use it
     if (rule.value) return rule.value;
 
@@ -2036,7 +2035,10 @@ function matchesRuleStructure(
 /**
  * Evaluate a grammar ValueNode using name-based bindings.
  */
-function evaluateValueNode(node: ValueNode, bindings: Map<string, any>): any {
+function evaluateValueNode(
+    node: CompiledValueNode,
+    bindings: Map<string, any>,
+): any {
     switch (node.type) {
         case "literal":
             return node.value;
