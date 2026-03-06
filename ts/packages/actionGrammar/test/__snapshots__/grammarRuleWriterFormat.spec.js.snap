@@ -47,6 +47,19 @@ import { PhraseA, PhraseB } from "phrases"; // helpers
 <ValArrFlat> = list -> [1, 2, 3];
 <ValArrEmpty> = none -> [];
 <ValArrNested> = mix -> [{ a: 1 }, "b", true];
+// nested broken: inner block forced to expand (key-aligned indentation)
+<NestedArrBreaks> = x -> { items: [alpha, bravo, charlie] };
+<NestedObjBreaks> = x -> { params: { first: "one", second: "two" } };
+<ArrObjBreaks> = x -> [{ first: "one", second: "two", third: "three" }];
+<ArrArrBreaks> = x -> [[alpha, bravo, charlie, delta]];
+<DeepNested> = x -> { outer: { inner: [alpha, bravo, charlie] } };
+<NestedBrokenCmt> = x
+                    -> {
+                         items: [
+                           "a", // item note
+                           "b"
+                         ]
+                       };
 // value comments
 <ValLeadingLine> = foo
                    -> // before value
@@ -198,6 +211,56 @@ import { PhraseA, PhraseB } from "phrases"; // helpers
                       "b",
                       true
                     ];
+// nested broken: inner block forced to expand (key-aligned indentation)
+<NestedArrBreaks> = x
+                    -> {
+                         items: [
+                           alpha,
+                           bravo,
+                           charlie
+                         ]
+                       };
+<NestedObjBreaks> = x
+                    -> {
+                         params: {
+                           first: "one",
+                           second: "two"
+                         }
+                       };
+<ArrObjBreaks> = x
+                 -> [
+                      {
+                        first: "one",
+                        second: "two",
+                        third: "three"
+                      }
+                    ];
+<ArrArrBreaks> = x
+                 -> [
+                      [
+                        alpha,
+                        bravo,
+                        charlie,
+                        delta
+                      ]
+                    ];
+<DeepNested> = x
+               -> {
+                    outer: {
+                      inner: [
+                        alpha,
+                        bravo,
+                        charlie
+                      ]
+                    }
+                  };
+<NestedBrokenCmt> = x
+                    -> {
+                         items: [
+                           "a", // item note
+                           "b"
+                         ]
+                       };
 // value comments
 <ValLeadingLine> = foo
                    -> // before value
@@ -206,8 +269,8 @@ import { PhraseA, PhraseB } from "phrases"; // helpers
                       };
 <ValLeadingBlock> = foo
                     -> /* note */ {
-                                    actionName: "bar"
-                                  };
+                         actionName: "bar"
+                       };
 <ValTrailingLine> = foo
                     -> {
                          actionName: "bar"

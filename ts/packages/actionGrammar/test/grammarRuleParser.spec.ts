@@ -883,19 +883,22 @@ describe("Grammar Rule Parser", () => {
                 });
             });
 
-            it("should preserve same-line block comment after ',' as trailingComment on that element", () => {
-                // "a", /* second */ "b" — the comment is on the same line as the comma,
-                // so it becomes trailingComment on the ArrayElement for "a".
+            it("should capture block comment after ',' as leadingComment on next element when followed by non-comment token", () => {
+                // "a", /* second */ "b" — the comment is on the same line as "b",
+                // so it becomes leadingComments on the ArrayElement for "b".
                 const grammar = `<rule> = test -> ["a", /* second */ "b"];`;
                 const result = testParamGrammarRules("test.agr", grammar);
 
                 const arr = (result[0].rules[0].value as any).value;
                 expect(arr[0]).toEqual({
                     value: { type: "literal", value: "a" },
-                    trailingComments: [{ style: "block", text: " second " }],
                 });
                 expect(arr[1]).toEqual({
-                    value: { type: "literal", value: "b" },
+                    value: {
+                        type: "literal",
+                        value: "b",
+                        leadingComments: [{ style: "block", text: " second " }],
+                    },
                 });
             });
 
@@ -951,19 +954,19 @@ describe("Grammar Rule Parser", () => {
                 expect(props[0].value.leadingComments).toBeUndefined();
             });
 
-            it("should capture /* */ comment on same line as ',' as trailingComment on that ObjectProperty", () => {
-                // "/* between */" is on the same line as the comma → trailingComment
-                // on the preceding property.  "count" gets no leadingComments.
+            it("should capture /* */ comment after ',' as leadingComment on next property when followed by non-comment token", () => {
+                // "/* between */" is on the same line as "count" → leadingComments
+                // on the following property, not trailingComment on the preceding one.
                 const grammar = `<rule> = test -> { type: "greeting", /* between */ count: 1 };`;
                 const result = testParamGrammarRules("test.agr", grammar);
 
                 const props = (result[0].rules[0].value as any).value;
                 const typeProp = props.find((p: any) => p.key === "type");
-                expect(typeProp.trailingComments).toEqual([
+                expect(typeProp.trailingComments).toBeUndefined();
+                const countProp = props.find((p: any) => p.key === "count");
+                expect(countProp.leadingComments).toEqual([
                     { style: "block", text: " between " },
                 ]);
-                const countProp = props.find((p: any) => p.key === "count");
-                expect(countProp.leadingComments).toBeUndefined();
                 // The value node itself has no leadingComments.
                 expect(countProp.value.leadingComments).toBeUndefined();
             });

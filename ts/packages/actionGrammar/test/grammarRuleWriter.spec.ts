@@ -635,7 +635,7 @@ x
 
     // ── Array element trailing comments ────────────────────────────────────────
 
-    it("/* */ comment after ',' is preserved as trailingComment on that element", () => {
+    it("/* */ comment after ',' is leading on next element (not trailing on previous)", () => {
         roundTrip(`<A> = foo -> ["a", /* note */ "b"];
 `);
     });
@@ -656,12 +656,11 @@ x
 `);
     });
 
-    it("/* */ trailing comment forces broken mode", () => {
-        // Any comment inside a block forces broken mode for simplicity.
+    it("/* */ after comma stays flat when it fits as leading comment", () => {
+        // Block comment after comma is now leading on next element, not trailing.
+        // No itemTrailingText → flat mode is possible.
         const once = fmt(`<A> = foo -> [\n  "a", /* note */ "b"\n];\n`);
-        expect(once).toBe(
-            `<A> = foo\n      -> [\n           "a", /* note */\n           "b"\n         ];\n`,
-        );
+        expect(once).toBe(`<A> = foo -> ["a", /* note */ "b"];\n`);
         expect(fmt(once)).toBe(once); // idempotent
     });
 
@@ -749,7 +748,7 @@ x
 `);
     });
 
-    it("block comment on same line as comma is preserved as trailingComment on that property", () => {
+    it("block comment on same line as comma becomes leadingComment on next property", () => {
         roundTrip(`<A> = foo -> { type: "greeting", /* second */ count: 1 };
 `);
     });
@@ -805,7 +804,8 @@ x
     });
 
     it("block trailing and block leading comments coexist on separate lines (object)", () => {
-        // Multi-line form: trailing comment after comma, leading comment before next key
+        // Multi-line form: /*trailing*/ is at end of line → trailing on k.
+        // /*leading*/ is on the next line → leading on k2.
         const multiLine = `<A> = foo -> {
    k: v, /*trailing*/
    /*leading*/ k2: v2
@@ -815,10 +815,11 @@ x
         const props = parsed.definitions[0].rules[0].value!;
         expect(props.type).toBe("object");
         const objProps = (props as any).value;
-        // In multi-line, trailing and leading are correctly distinguished
+        // Block comment at end of line → trailing on first prop
         expect(objProps[0].trailingComments).toEqual([
             { style: "block", text: "trailing" },
         ]);
+        // Block comment on next line → leading on second prop
         expect(objProps[1].leadingComments).toEqual([
             { style: "block", text: "leading" },
         ]);
@@ -841,6 +842,206 @@ x
    /*leading*/ "b"
 ];
 `);
+    });
+});
+
+describe("Flat-line comment positions → broken-mode output", () => {
+    // These tests verify that comments written on a single flat line are parsed
+    // into the correct AST position (leading/trailing/after-comma/closing) so
+    // that when the formatter re-emits in broken mode, each comment appears
+    // exactly where it should.
+
+    // ── Array ─────────────────────────────────────────────────────────────────
+
+    it("array: leading comment before first element", () => {
+        const src = `<A> = foo -> [/*L*/ "a", "b"];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const arr = parsed.definitions[0].rules[0].value!;
+        expect(arr.type).toBe("array");
+        const elems = (arr as any).value;
+        expect(elems[0].value.leadingComments).toEqual([
+            { style: "block", text: "L" },
+        ]);
+        expect(elems[1].value.leadingComments).toBeUndefined();
+        roundTrip(src);
+    });
+
+    it("array: trailing comment after value (before comma)", () => {
+        const src = `<A> = foo -> ["a" /*T*/, "b"];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const elems = (parsed.definitions[0].rules[0].value as any).value;
+        expect(elems[0].value.trailingComments).toEqual([
+            { style: "block", text: "T" },
+        ]);
+        expect(elems[0].trailingComments).toBeUndefined();
+        roundTrip(src);
+    });
+
+    it("array: comment after comma becomes next element's leadingComments", () => {
+        const src = `<A> = foo -> ["a", /*C*/ "b"];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const elems = (parsed.definitions[0].rules[0].value as any).value;
+        // Block comment after comma → leadingComments on element[1]'s value
+        expect(elems[0].trailingComments).toBeUndefined();
+        expect(elems[1].value.leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("array: trailing comment after last value (before ])", () => {
+        const src = `<A> = foo -> ["a", "b" /*T*/];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const elems = (parsed.definitions[0].rules[0].value as any).value;
+        expect(elems[1].value.trailingComments).toEqual([
+            { style: "block", text: "T" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("array: all four positions produce correct output", () => {
+        // /*A*/ → elem[0].value.leadingComments (before value)
+        // /*B*/ → elem[0].value.trailingComments (after value, before comma)
+        // /*C*/ → elem[1].value.leadingComments (after comma, block → leading)
+        // /*D*/ → elem[1].value.trailingComments (after last value)
+        const flat = `<A> = foo -> [/*A*/ "a" /*B*/, /*C*/ "b" /*D*/];\n`;
+        const broken = fmt(flat);
+        // Comments force broken mode only via value comments (line comments)
+        // or closingLines; block comments after commas are now leading and
+        // don't force broken mode by themselves.
+        expect(broken).toContain(`/*A*/ "a" /*B*/`);
+        expect(broken).toContain(`/*C*/ "b" /*D*/`);
+        expect(fmt(broken)).toBe(broken); // idempotent
+        roundTrip(flat);
+    });
+
+    // ── Object ────────────────────────────────────────────────────────────────
+
+    it("object: leading comment before first property key", () => {
+        const src = `<A> = foo -> { /*L*/ k: v, k2: v2 };\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const props = (parsed.definitions[0].rules[0].value as any).value;
+        expect(props[0].leadingComments).toEqual([
+            { style: "block", text: "L" },
+        ]);
+        expect(props[1].leadingComments).toBeUndefined();
+        roundTrip(src);
+    });
+
+    it("object: trailing comment after property value (before comma)", () => {
+        const src = `<A> = foo -> { k: v /*T*/, k2: v2 };\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const props = (parsed.definitions[0].rules[0].value as any).value;
+        expect(props[0].value.trailingComments).toEqual([
+            { style: "block", text: "T" },
+        ]);
+        expect(props[0].trailingComments).toBeUndefined();
+        roundTrip(src);
+    });
+
+    it("object: comment after comma becomes next property's leadingComments", () => {
+        const src = `<A> = foo -> { k: v, /*C*/ k2: v2 };\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const props = (parsed.definitions[0].rules[0].value as any).value;
+        // Block comment after comma → leadingComments on next property
+        expect(props[0].trailingComments).toBeUndefined();
+        expect(props[1].leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("object: trailing comment after last property value (before })", () => {
+        const src = `<A> = foo -> { k: v, k2: v2 /*T*/ };\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const props = (parsed.definitions[0].rules[0].value as any).value;
+        expect(props[1].value.trailingComments).toEqual([
+            { style: "block", text: "T" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("object: all four positions produce correct output", () => {
+        const flat = `<A> = foo -> { /*A*/ k: v /*B*/, /*C*/ k2: v2 /*D*/ };\n`;
+        const broken = fmt(flat);
+        expect(broken).toContain(`/*A*/ k: v /*B*/`);
+        expect(broken).toContain(`/*C*/ k2: v2 /*D*/`);
+        expect(fmt(broken)).toBe(broken); // idempotent
+        roundTrip(flat);
+    });
+
+    // ── Same-line vs next-line: after-comma position depends on line break ────
+
+    it("array: block comment after comma at EOL is trailing; inline is leading", () => {
+        // Same line, followed by more content → leading on element[1]
+        const flat = `<A> = foo -> ["a", /*C*/ "b"];\n`;
+        const flatParsed = parseGrammarRules("flt", flat, false);
+        const flatElems = (flatParsed.definitions[0].rules[0].value as any)
+            .value;
+        expect(flatElems[0].trailingComments).toBeUndefined();
+        expect(flatElems[1].value.leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+
+        // At end of line (newline follows) → trailing on element[0]
+        const eol = `<A> = foo -> [\n  "a", /*C*/\n  "b"\n];\n`;
+        const eolParsed = parseGrammarRules("eol", eol, false);
+        const eolElems = (eolParsed.definitions[0].rules[0].value as any).value;
+        expect(eolElems[0].trailingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+        expect(eolElems[1].value.leadingComments).toBeUndefined();
+
+        // Next line (no content after comma) → leading on element[1]
+        const multi = `<A> = foo -> [\n  "a",\n  /*C*/ "b"\n];\n`;
+        const multiParsed = parseGrammarRules("multi", multi, false);
+        const multiElems = (multiParsed.definitions[0].rules[0].value as any)
+            .value;
+        expect(multiElems[0].trailingComments).toBeUndefined();
+        expect(multiElems[1].value.leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+    });
+
+    it("object: block comment after comma at EOL is trailing; inline is leading", () => {
+        // Same line, followed by more content → leading on prop[1]
+        const flat = `<A> = foo -> { k: v, /*C*/ k2: v2 };\n`;
+        const flatParsed = parseGrammarRules("flt", flat, false);
+        const flatProps = (flatParsed.definitions[0].rules[0].value as any)
+            .value;
+        expect(flatProps[0].trailingComments).toBeUndefined();
+        expect(flatProps[1].leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+
+        // At end of line → trailing on prop[0]
+        const eol = `<A> = foo -> {\n  k: v, /*C*/\n  k2: v2\n};\n`;
+        const eolParsed = parseGrammarRules("eol", eol, false);
+        const eolProps = (eolParsed.definitions[0].rules[0].value as any).value;
+        expect(eolProps[0].trailingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+        expect(eolProps[1].leadingComments).toBeUndefined();
+
+        // Next line → leading on prop[1]
+        const multi = `<A> = foo -> {\n  k: v,\n  /*C*/ k2: v2\n};\n`;
+        const multiParsed = parseGrammarRules("multi", multi, false);
+        const multiProps = (multiParsed.definitions[0].rules[0].value as any)
+            .value;
+        expect(multiProps[0].trailingComments).toBeUndefined();
+        expect(multiProps[1].leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+    });
+
+    it("array: // line comment after comma is still trailing", () => {
+        const src = `<A> = foo -> [\n  "a", // line\n  "b"\n];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const elems = (parsed.definitions[0].rules[0].value as any).value;
+        expect(elems[0].trailingComments).toEqual([
+            { style: "line", text: " line" },
+        ]);
+        expect(elems[1].value.leadingComments).toBeUndefined();
     });
 });
 

@@ -425,9 +425,21 @@ class GrammarRuleParser {
     // Used to capture trailing comments after ";", ",", etc.
     // Multiple block comments may appear, optionally followed by a line comment.
     //
+    // When blockOnlyAtEOL is true, block comments (/* */) are only consumed as
+    // trailing if the rest of the line after the closing */ is empty (whitespace,
+    // more comments, or newline/EOF).  If a non-comment token follows on the
+    // same line, the block comment is left for the caller's parseComments() to
+    // pick up as a leading comment on the next element.
+    //
+    // This is used after commas in arrays/objects:
+    //   ["a", /* trailing */\n"b"]  →  /* trailing */ is trailing on "a"
+    //   ["a", /* leading */ "b"]    →  /* leading */  is leading on "b"
+    //
     // INVARIANT EXCEPTION: does not skip trailing whitespace — by design, this
     // only scans the current line.  Callers must do the subsequent skip.
-    private tryConsumeTrailingComments(): Comment[] | undefined {
+    private tryConsumeTrailingComments(
+        blockOnlyAtEOL: boolean = false,
+    ): Comment[] | undefined {
         const comments: Comment[] = [];
         while (true) {
             // Skip horizontal whitespace only (spaces and tabs)
@@ -449,6 +461,30 @@ class GrammarRuleParser {
                     // Only treat as trailing if the closing */ comes before the next newline
                     const newlinePos = this.content.indexOf("\n", i);
                     if (newlinePos === -1 || closePos < newlinePos) {
+                        if (blockOnlyAtEOL) {
+                            // Check what follows after */ on the same line.
+                            // Only consume if the rest of the line is empty
+                            // (whitespace, more comments, or newline/EOF).
+                            let after = closePos + 2;
+                            while (
+                                after < this.content.length &&
+                                (this.content[after] === " " ||
+                                    this.content[after] === "\t")
+                            ) {
+                                after++;
+                            }
+                            if (
+                                after < this.content.length &&
+                                this.content[after] !== "\n" &&
+                                this.content[after] !== "\r" &&
+                                !this.content.startsWith("//", after) &&
+                                !this.content.startsWith("/*", after)
+                            ) {
+                                // Non-comment token on same line → leave for
+                                // parseComments() to pick up as leading.
+                                break;
+                            }
+                        }
                         this.curr = i;
                         comments.push(this.parseComment());
                         continue; // look for more comments on this line
@@ -808,6 +844,7 @@ class GrammarRuleParser {
                     const trailing = this.consumeWithTrailingComments(
                         ",",
                         "object property",
+                        true,
                     );
                     obj[obj.length - 1].trailingComments = trailing;
                     this.skipWhitespace(); // advance past newline + indentation
@@ -881,6 +918,7 @@ class GrammarRuleParser {
                     const trailingComments = this.consumeWithTrailingComments(
                         ",",
                         "array element",
+                        true,
                     );
                     arr[arr.length - 1].trailingComments = trailingComments;
                     this.skipWhitespace();
@@ -1147,12 +1185,17 @@ class GrammarRuleParser {
     // any same-line trailing comments.  Used wherever a token can be followed
     // by trailing // or /* */ comments on the same line (";", ",", etc.).
     //
+    // When blockOnlyAtEOL is true, block comments are only consumed as
+    // trailing if nothing else follows on the same line.  See
+    // tryConsumeTrailingComments for details.
+    //
     // INVARIANT EXCEPTION: does not skip trailing whitespace — delegates to
     // tryConsumeTrailingComments which only scans the current line.  Callers
     // must do the subsequent skip.
     private consumeWithTrailingComments(
         char: string,
         context: string,
+        blockOnlyAtEOL: boolean = false,
     ): Comment[] | undefined {
         if (!this.isAt(char)) {
             this.throwUnexpectedCharError(
@@ -1160,7 +1203,7 @@ class GrammarRuleParser {
             );
         }
         this.curr++; // advance past char
-        return this.tryConsumeTrailingComments();
+        return this.tryConsumeTrailingComments(blockOnlyAtEOL);
     }
 
     private parseEntityDeclaration(

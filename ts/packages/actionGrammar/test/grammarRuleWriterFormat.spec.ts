@@ -100,6 +100,17 @@ world;
 <ValArrEmpty> = none -> [];
 <ValArrNested> = mix -> [{ a: 1 }, "b", true];
 
+// nested broken: inner block forced to expand (key-aligned indentation)
+<NestedArrBreaks> = x -> { items: [alpha, bravo, charlie] };
+<NestedObjBreaks> = x -> { params: { first: "one", second: "two" } };
+<ArrObjBreaks> = x -> [{ first: "one", second: "two", third: "three" }];
+<ArrArrBreaks> = x -> [[alpha, bravo, charlie, delta]];
+<DeepNested> = x -> { outer: { inner: [alpha, bravo, charlie] } };
+<NestedBrokenCmt> = x -> { items: [
+  "a", // item note
+  "b"
+] };
+
 // value comments
 <ValLeadingLine> = foo -> // before value
 { actionName: "bar" };

@@ -127,7 +127,11 @@ type BlockPart = {
     close: string; // "}" or "]" — delimiter in broken mode (on its own line)
     flatSep: string; // ", " — separator in flat mode
     // In broken mode: entries at (blockCol + indentSize), close at blockCol.
-    // blockCol is determined by the renderer (actual column when block is encountered).
+    // blockCol is determined by the renderer (actual column when block is encountered)
+    // unless brokenBaseCol is set, in which case it overrides the render-time column.
+    // This lets nested value blocks (e.g. arrays inside object properties) indent
+    // relative to the property key column rather than the opening delimiter column.
+    brokenBaseCol?: number;
 };
 
 type GroupPart = {
@@ -273,8 +277,8 @@ function renderParts(
                 }
             }
         } else if (part.kind === "block") {
-            const blockCol = col;
-            const entryCol = col + indentSize;
+            const blockCol = part.brokenBaseCol ?? col;
+            const entryCol = blockCol + indentSize;
             const flatLen = measureParts([part]);
             if (flatLen !== Infinity && col + flatLen <= maxLen) {
                 // flat: flatOpen + items + flatClose (no comments in flat mode)
@@ -302,8 +306,7 @@ function renderParts(
                 for (let i = 0; i < part.items.length; i++) {
                     if (i > 0) {
                         out += ",";
-                        const prevComment =
-                            part.itemTrailingText?.[i - 1];
+                        const prevComment = part.itemTrailingText?.[i - 1];
                         if (prevComment) out += prevComment;
                         out += "\n";
                     }
@@ -487,6 +490,7 @@ class GrammarWriter {
                 index: number,
             ) => string | undefined;
             closingLines?: string[];
+            brokenBaseCol?: number;
         },
     ): void {
         const captured = items.map((item, i) =>
@@ -504,6 +508,8 @@ class GrammarWriter {
             close: options.close,
             flatSep: options.flatSep,
         };
+        if (options.brokenBaseCol !== undefined)
+            blockPart.brokenBaseCol = options.brokenBaseCol;
         if (itemTrailingText?.some((t) => t !== undefined))
             blockPart.itemTrailingText = itemTrailingText;
         if (options.closingLines?.length)
@@ -985,8 +991,12 @@ function writeExpression(
     }
 }
 
-function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
-    const indent = " ".repeat(col);
+function writeValueNode(
+    result: GrammarWriter,
+    value: ValueNode,
+    baseCol: number,
+) {
+    const indent = " ".repeat(baseCol);
     writeValueComments(result, value.leadingComments, indent);
     switch (value.type) {
         case "literal":
@@ -1002,13 +1012,14 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
                 result.write("{}");
                 break;
             }
-            const entryIndent = " ".repeat(col + result.indentSize);
+            const entryIndent = " ".repeat(baseCol + result.indentSize);
             result.emitBlock(entries, {
                 flatOpen: "{ ",
                 flatClose: " }",
                 open: "{",
                 close: "}",
                 flatSep: ", ",
+                brokenBaseCol: baseCol,
                 emitItem: (prop) => {
                     writeValueComments(
                         result,
@@ -1022,7 +1033,7 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
                         writeValueNode(
                             result,
                             prop.value,
-                            col + result.indentSize,
+                            baseCol + result.indentSize,
                         );
                     }
                 },
@@ -1044,8 +1055,13 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
                 open: "[",
                 close: "]",
                 flatSep: ", ",
+                brokenBaseCol: baseCol,
                 emitItem: (item) =>
-                    writeValueNode(result, item.value, col + result.indentSize),
+                    writeValueNode(
+                        result,
+                        item.value,
+                        baseCol + result.indentSize,
+                    ),
                 getItemTrailingText: (item) =>
                     trailingCommentText(item.trailingComments),
                 ...(arrClosing ? { closingLines: arrClosing } : {}),
