@@ -859,7 +859,9 @@ describe("Entity block formatting", () => {
     it("long entity list breaks into block", () => {
         expect(
             fmt("entity VeryLongName, AnotherLongName, YetAnother;", 30),
-        ).toBe("entity\n  VeryLongName,\n  AnotherLongName,\n  YetAnother;\n\n");
+        ).toBe(
+            "entity\n  VeryLongName,\n  AnotherLongName,\n  YetAnother;\n\n",
+        );
     });
 
     it("entity block round-trips", () => {
@@ -871,9 +873,9 @@ describe("Entity block formatting", () => {
 
     it("entity block with trailing comment", () => {
         // Trailing comment stays on same line as ";"
-        expect(
-            fmt("entity VeryLongName, AnotherLongName; // note", 30),
-        ).toBe("entity\n  VeryLongName,\n  AnotherLongName; // note\n\n");
+        expect(fmt("entity VeryLongName, AnotherLongName; // note", 30)).toBe(
+            "entity\n  VeryLongName,\n  AnotherLongName; // note\n\n",
+        );
     });
 
     it("entity block with trailing comment round-trips", () => {
