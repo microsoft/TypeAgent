@@ -127,7 +127,8 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "@comptest run " → suffix is "" after command resolution,
-            // and parameter parsing has no tokens so
+            // "run" is explicitly matched so no Subcommands group.
+            // parameter parsing has no tokens so
             // startIndex = inputLength - 0 = 14
             expect(result!.startIndex).toBe(14);
         });
@@ -233,15 +234,59 @@ describe("Command Completion - startIndex", () => {
     });
 
     describe("needsSeparator for command completions", () => {
-        it("returns undefined needsSeparator for @-command completions", async () => {
+        it("returns needsSeparator for subcommand completions at agent boundary", async () => {
+            const result = await getCommandCompletion("@comptest ", context);
+            expect(result).toBeDefined();
+            // "run" is the default subcommand, so subcommand alternatives
+            // are included and the group has needsSeparator: true.
+            expect(result!.needsSeparator).toBe(true);
+            // startIndex excludes trailing whitespace (matching grammar
+            // matcher behaviour where prefixLength doesn't include the
+            // separator).
+            expect(result!.startIndex).toBe(9);
+        });
+
+        it("returns needsSeparator for resolved agent without trailing space", async () => {
+            const result = await getCommandCompletion("@comptest", context);
+            expect(result).toBeDefined();
+            expect(result!.needsSeparator).toBe(true);
+            // No trailing whitespace to trim — startIndex stays at end
+            expect(result!.startIndex).toBe(9);
+        });
+
+        it("does not set needsSeparator at top level (@)", async () => {
+            const result = await getCommandCompletion("@", context);
+            expect(result).toBeDefined();
+            // Top-level completions (agent names, system subcommands)
+            // follow '@' directly without a separator.
+            expect(result!.needsSeparator).toBeUndefined();
+        });
+
+        it("does not set needsSeparator for parameter completions only", async () => {
             const result = await getCommandCompletion(
-                "@comptest run ",
+                "@comptest run bu",
                 context,
             );
             expect(result).toBeDefined();
-            // @-command completions go through command handler, not grammar,
-            // so needsSeparator should not be set.
+            // Partial parameter token — only parameter completions returned,
+            // no subcommand group, so needsSeparator is not set.
             expect(result!.needsSeparator).toBeUndefined();
+        });
+
+        it("returns needsSeparator + subcommands for partial unmatched token", async () => {
+            const result = await getCommandCompletion("@comptest ne", context);
+            expect(result).toBeDefined();
+            // "ne" doesn't match an explicit subcommand, so resolved to
+            // default — subcommand alternatives included.
+            expect(result!.needsSeparator).toBe(true);
+            const subcommands = result!.completions.find(
+                (g) => g.name === "Subcommands",
+            );
+            expect(subcommands).toBeDefined();
+            expect(subcommands!.completions).toContain("nested");
+            // startIndex backs up past the space to the agent boundary.
+            // "@comptest" = 9 chars.
+            expect(result!.startIndex).toBe(9);
         });
     });
 });

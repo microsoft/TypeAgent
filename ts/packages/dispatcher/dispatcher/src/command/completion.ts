@@ -223,17 +223,29 @@ export async function getCommandCompletion(
         }
 
         const descriptor = result.descriptor;
+        // Track whether subcommand alternatives are included alongside the
+        // default descriptor's parameters.  When true, startIndex must stay
+        // at the command boundary (before the suffix) since needsSeparator
+        // strips the space and lets the trie match both subcommands and
+        // parameter values.
+        let hasSubcommandCompletions = false;
         if (descriptor !== undefined) {
             if (
-                result.suffix.length === 0 &&
                 table !== undefined &&
+                !result.matched &&
                 getDefaultSubCommandDescriptor(table) === result.descriptor
             ) {
-                // Match the default sub command.  Includes additional subcommand names
+                // Resolved to the default sub command (not an explicit
+                // match).  Include sibling subcommand names so the user
+                // can choose between them and the default's parameters.
+                // This covers both "@config " (suffix="") and "@config c"
+                // (suffix="c") — the trie filters by prefix either way.
                 completions.push({
                     name: "Subcommands",
                     completions: Object.keys(table.commands),
+                    needsSeparator: true,
                 });
+                hasSubcommandCompletions = true;
             }
             const parameterCompletions = await getCommandParameterCompletion(
                 descriptor,
@@ -248,7 +260,9 @@ export async function getCommandCompletion(
                 }
             } else {
                 completions.push(...parameterCompletions.completions);
-                startIndex = parameterCompletions.startIndex;
+                if (!hasSubcommandCompletions) {
+                    startIndex = parameterCompletions.startIndex;
+                }
             }
         } else {
             if (result.suffix.length !== 0) {
@@ -259,6 +273,11 @@ export async function getCommandCompletion(
             completions.push({
                 name: "Subcommands",
                 completions: Object.keys(table.commands),
+                needsSeparator:
+                    result.parsedAppAgentName !== undefined ||
+                    result.commands.length > 0
+                        ? true
+                        : undefined,
             });
             if (
                 result.parsedAppAgentName === undefined &&
@@ -293,6 +312,17 @@ export async function getCommandCompletion(
         )
             ? true
             : undefined;
+
+        // Like the grammar matcher, exclude trailing whitespace before
+        // startIndex when a separator is needed — the separator lives
+        // between the command anchor and the completion text, not inside
+        // the filter prefix.  This handles both "@config " (trailing
+        // space) and "@config c" (space between command and partial token).
+        if (needsSeparator) {
+            while (startIndex > 0 && /\s/.test(input[startIndex - 1])) {
+                startIndex--;
+            }
+        }
 
         const completionResult: CommandCompletionResult = {
             startIndex,

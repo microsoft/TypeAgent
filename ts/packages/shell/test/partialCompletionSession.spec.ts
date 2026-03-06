@@ -437,16 +437,17 @@ describe("PartialCompletionSession — @command routing", () => {
         );
     });
 
-    test("@ command with partial word fetches up to last word boundary", () => {
+    test("@ command with partial word fetches full input (backend filters)", () => {
         const menu = makeMenu();
         const dispatcher = makeDispatcher();
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("@config c", getPos);
 
-        // Should fetch "@config " (up to last space), not "@config c"
+        // Backend receives full input and returns completions with the
+        // correct startIndex; no word-boundary truncation needed.
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
-            "@config ",
+            "@config c",
         );
     });
 
@@ -473,6 +474,86 @@ describe("PartialCompletionSession — @command routing", () => {
         session.update("@config c", getPos); // same anchor: "@config " — PENDING reuse
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("@ command: needsSeparator defers menu until space typed", async () => {
+        const menu = makeMenu();
+        menu.isActive.mockReturnValue(true);
+        // Backend returns subcommands with needsSeparator: true
+        // (anchor = "@config", subcommands follow after a space)
+        const result = makeCompletionResult(["clear", "theme"], 7, {
+            needsSeparator: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        // User types "@config" → completions loaded, menu deferred (no separator yet)
+        session.update("@config", getPos);
+        await Promise.resolve();
+
+        expect(menu.setChoices).toHaveBeenCalledWith(
+            expect.arrayContaining([
+                expect.objectContaining({ selectedText: "clear" }),
+            ]),
+        );
+        expect(menu.updatePrefix).not.toHaveBeenCalled();
+
+        // User types space → separator present, menu appears
+        session.update("@config ", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+        // No re-fetch — same session handles both states
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("@ command: typing after space filters within same session", async () => {
+        const menu = makeMenu();
+        menu.isActive.mockReturnValue(true);
+        // Backend: needsSeparator, anchor = "@config"
+        const result = makeCompletionResult(["clear", "theme"], 7, {
+            needsSeparator: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("@config", getPos);
+        await Promise.resolve();
+
+        // Type space + partial subcommand
+        session.update("@config cl", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("cl", anyPosition);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("@ command: undefined result enters EXHAUSTED (no re-fetch)", async () => {
+        const menu = makeMenu();
+        const dispatcher = makeDispatcher(undefined);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("@unknown", getPos);
+        await Promise.resolve(); // → EXHAUSTED
+
+        // Still within anchor — no re-fetch
+        session.update("@unknownmore", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+        expect(menu.hide).toHaveBeenCalled();
+    });
+
+    test("@ command: backspace past anchor after EXHAUSTED triggers re-fetch", async () => {
+        const menu = makeMenu();
+        const dispatcher = makeDispatcher(undefined);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("@unknown", getPos);
+        await Promise.resolve(); // → EXHAUSTED with current="@unknown"
+
+        // Backspace past anchor
+        session.update("@unknow", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith("@unknow");
     });
 });
 

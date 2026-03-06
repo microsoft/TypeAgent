@@ -80,26 +80,6 @@ export class PartialCompletionSession {
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
     ): void {
-        // @-commands: use word-boundary re-fetch logic so partial tokens
-        // (e.g. "@config c") don't poison noCompletion.
-        if (input.trimStart().startsWith("@")) {
-            if (this.reuseSession(input, getPosition)) {
-                return;
-            }
-            const lastSpaceIdx = input.lastIndexOf(" ");
-            if (/\s$/.test(input)) {
-                this.startNewSession(input, getPosition);
-            } else if (lastSpaceIdx >= 0) {
-                this.startNewSession(
-                    input.substring(0, lastSpaceIdx + 1),
-                    getPosition,
-                );
-            } else {
-                this.startNewSession(input, getPosition);
-            }
-            return;
-        }
-
         // Empty input: hide without fetching.  Must come before reuseSession()
         // because reuseSession("") would match current="" and show stale items.
         if (input.trimStart().length === 0) {
