@@ -527,7 +527,6 @@ describe("Grammar Rule Parser", () => {
                                                     },
                                                     ruleReference: false,
                                                 },
-
                                             ],
                                         },
                                         {
@@ -1630,7 +1629,7 @@ describe("Grammar Rule Parser", () => {
             );
             const expr = result.definitions[0].rules[0]
                 .expressions[0] as import("../src/grammarRuleParser.js").VarDefExpr;
-            expect(expr.dollarParenComments).toEqual([
+            expect(expr.variableName.leadingComments).toEqual([
                 { style: "block", text: "c" },
             ]);
         });
@@ -1684,10 +1683,10 @@ describe("Grammar Rule Parser", () => {
             );
             const expr = result.definitions[0].rules[0]
                 .expressions[0] as import("../src/grammarRuleParser.js").RuleRefExpr;
-            expect(expr.bracketedName.leadingComments).toEqual([
+            expect(expr.refName.leadingComments).toEqual([
                 { style: "block", text: "a" },
             ]);
-            expect(expr.bracketedName.trailingComments).toEqual([
+            expect(expr.refName.trailingComments).toEqual([
                 { style: "block", text: "b" },
             ]);
         });

@@ -990,7 +990,7 @@ function writeSingleExpr(
             break;
         }
         case "ruleReference":
-            writeBracketedName(result, expr.bracketedName);
+            writeBracketedName(result, expr.refName);
             break;
         case "rules": {
             result.write("(");
@@ -1011,7 +1011,6 @@ function writeSingleExpr(
         }
         case "variable":
             result.write("$(");
-            writeInlineComments(result, expr.dollarParenComments);
             writeInlineComments(result, expr.variableName.leadingComments);
             result.write(expr.variableName.name);
             writeInlineComments(result, expr.variableName.trailingComments);

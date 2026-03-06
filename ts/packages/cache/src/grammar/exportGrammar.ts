@@ -203,7 +203,7 @@ function convertConstruction(
             } else {
                 const expr: Expr = {
                     type: "ruleReference",
-                    bracketedName: { name: ruleDef.definitionName.name },
+                    refName: { name: ruleDef.definitionName.name },
                 };
                 if (part.optional) {
                     expressions.push({

@@ -187,7 +187,7 @@ first option here
 //   5. Rule name: nameLeadingComments / nameTrailingComments (inside < >)
 //   6. Spacing annotation: afterBracket / afterKey / afterEquals / afterValue
 //   7. Explicit spacing=auto: stored as "auto", not folded away by writer
-//   8. Variable $(: dollarParenComments (between $( and identifier)
+//   8. Variable $(: variableName.leadingComments (between $( and identifier)
 //   9. Variable colon (string default type): colonComments preserved
 //  10. Variable colon (non-string type): colonComments preserved
 //  11. Variable rule-ref type: typeNameLeadingComments / typeNameTrailingComments

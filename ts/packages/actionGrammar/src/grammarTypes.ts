@@ -2,21 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * Controls how flex-space separator positions between tokens are matched at runtime.
- *   "required" – at least one whitespace/punctuation character must be present.
- *   "optional" – zero or more separator characters allowed; tokens may be adjacent
- *                but spaces are permitted.
- *   "none"     – no separator characters allowed between tokens; whitespace or
- *                punctuation is only permitted if it is part of the next token itself.
- *   undefined  – auto (default): a separator is required only when both adjacent
- *                characters belong to scripts that normally use word spaces (e.g.
- *                Latin, Cyrillic). Scripts such as CJK do not require one.
- *
- * Note: the grammar source keyword "auto" is stored as undefined internally.
+ * SpacingMode after compilation — "auto" is folded to undefined so it never
+ * appears in compiled grammar output (.ag.json) or at match time.
  */
-export type SpacingMode = "required" | "optional" | "none" | "auto" | undefined;
-// "auto" = explicit [spacing=auto] annotation (same runtime behavior as undefined).
-// undefined = no annotation at all (inherit default).
+export type CompiledSpacingMode = "required" | "optional" | "none" | undefined;
 
 // ── Compiled value node types ─────────────────────────────────────────────────
 // ValueNode variants *without* comment annotations.  GrammarRule and
@@ -105,7 +94,7 @@ export type GrammarPart =
 export type GrammarRule = {
     parts: GrammarPart[];
     value?: CompiledValueNode | undefined;
-    spacingMode?: SpacingMode; // undefined = auto (default)
+    spacingMode?: CompiledSpacingMode; // undefined = auto (default)
 };
 
 export type Grammar = {
@@ -159,7 +148,7 @@ export type GrammarPartJson =
 export type GrammarRuleJson = {
     parts: GrammarPartJson[];
     value?: CompiledValueNode | undefined;
-    spacingMode?: SpacingMode; // undefined = auto (default)
+    spacingMode?: CompiledSpacingMode; // undefined = auto (default)
 };
 export type GrammarRulesJson = GrammarRuleJson[];
 export type GrammarJson = GrammarRulesJson[];

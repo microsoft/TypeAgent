@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SpacingMode, CompiledValueNode } from "./grammarTypes.js";
+import { CompiledSpacingMode, CompiledValueNode } from "./grammarTypes.js";
 import registerDebug from "debug";
 // REVIEW: switch to RegExp.escape() when it becomes available.
 import escapeMatch from "regexp.escape";
@@ -60,7 +60,11 @@ function needsSeparatorInAutoMode(a: string, b: string): boolean {
     }
     return isWordBoundaryScript(a) && isWordBoundaryScript(b);
 }
-function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
+function requiresSeparator(
+    a: string,
+    b: string,
+    mode: CompiledSpacingMode,
+): boolean {
     switch (mode) {
         case "required":
             return true;
@@ -73,7 +77,6 @@ function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
             throw new Error(
                 "Internal error: requiresSeparator should not be called for 'none' mode",
             );
-        case "auto": // explicit annotation — folded to undefined by compiler; treat same as auto
         case undefined: // auto
             return needsSeparatorInAutoMode(a, b);
     }
@@ -82,7 +85,7 @@ function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
 function isBoundarySatisfied(
     request: string,
     index: number,
-    mode: SpacingMode,
+    mode: CompiledSpacingMode,
 ) {
     if (index === 0 || index === request.length) {
         return true;
@@ -150,7 +153,7 @@ type ParentMatchState = {
     valueIds: ValueIdNode | undefined | null; // null means we don't need any value
     parent: ParentMatchState | undefined;
     repeatPartIndex?: number | undefined; // defined for ()* / )+ — holds the part index to loop back to
-    spacingMode: SpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
+    spacingMode: CompiledSpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
 };
 type MatchState = {
     // Current context
@@ -169,7 +172,7 @@ type MatchState = {
 
     inRepeat?: boolean | undefined; // true when re-entering a repeat group after a successful match
 
-    spacingMode: SpacingMode; // active spacing mode for this rule
+    spacingMode: CompiledSpacingMode; // active spacing mode for this rule
 
     index: number;
     pendingWildcard?:
@@ -401,7 +404,7 @@ function getWildcardStr(
     request: string,
     start: number,
     end: number,
-    spacingMode?: SpacingMode,
+    spacingMode?: CompiledSpacingMode,
 ) {
     const string = request.substring(start, end);
     if (spacingMode === "none") {

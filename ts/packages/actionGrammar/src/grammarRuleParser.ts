@@ -4,12 +4,26 @@
 import registerDebug from "debug";
 import { getLineCol } from "./utils.js";
 import {
-    SpacingMode,
     CompiledLiteralValueNode,
     CompiledVariableValueNode,
     CompiledObjectValueNode,
     CompiledArrayValueNode,
+    CompiledSpacingMode,
 } from "./grammarTypes.js";
+
+/**
+ * Controls how flex-space separator positions between tokens are matched at runtime.
+ *   "required" – at least one whitespace/punctuation character must be present.
+ *   "optional" – zero or more separator characters allowed; tokens may be adjacent
+ *                but spaces are permitted.
+ *   "none"     – no separator characters allowed between tokens; whitespace or
+ *                punctuation is only permitted if it is part of the next token itself.
+ *   "auto"     – explicit annotation; folded to undefined by the compiler.
+ *   undefined  – auto (default): a separator is required only when both adjacent
+ *                characters belong to scripts that normally use word spaces (e.g.
+ *                Latin, Cyrillic). Scripts such as CJK do not require one.
+ */
+type SpacingMode = CompiledSpacingMode | "auto";
 
 const debugParse = registerDebug("typeagent:grammar:parse");
 /**
@@ -151,7 +165,7 @@ export type CommentedName = {
 
 export type RuleRefExpr = {
     type: "ruleReference";
-    bracketedName: CommentedName;
+    refName: CommentedName;
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
 };
@@ -168,7 +182,7 @@ export type VarDefExpr = {
     type: "variable";
     variableName: CommentedName;
     ruleReference: boolean;
-    // bracketedName.name is the type/rule name; absent means the type defaults to "string".
+    // refName.name is the type/rule name; absent means the type defaults to "string".
     // For rule references ($(...:<RuleName>)): leadingComments/trailingComments are inside the <>.
     // For plain types ($(...:typeName)):       trailingComments are after the type identifier.
     refName?: CommentedName | undefined;
@@ -176,7 +190,6 @@ export type VarDefExpr = {
     optional?: boolean | undefined;
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
-    dollarParenComments?: Comment[] | undefined; // between $( and the variable name
     colonComments?: Comment[] | undefined; // between : and the type specifier
 };
 
@@ -211,10 +224,7 @@ export type ObjectProperty = {
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
 };
-// ObjectValueField is an ordered list of properties; array form lets each entry
-// carry leading comments on its key.  (A plain {[key:string]:…} dict has no
-// place to attach per-key comments.)
-type ObjectValueField = ObjectProperty[];
+
 // A value node as it appears as an element in an array literal.
 // trailingComments: same-line comments after the trailing ','.
 export type ArrayElement = {
@@ -224,7 +234,7 @@ export type ArrayElement = {
 // ObjectValueNode and ArrayValueNode override the `value` field so it can
 // hold recursive ValueNode/ArrayElement references (not just CompiledValueNode).
 type ObjectValueNode = Omit<CompiledObjectValueNode, "value"> & {
-    value: ObjectValueField;
+    value: ObjectProperty[];
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
     // Comments after the last property's trailing ',' (or inside an empty object).
@@ -638,7 +648,7 @@ class GrammarRuleParser {
                 const pos = this.pos;
                 const node: RuleRefExpr = {
                     type: "ruleReference",
-                    bracketedName: this.parseRuleName(),
+                    refName: this.parseRuleName(),
                     pos,
                 };
                 attach(node);
@@ -647,9 +657,7 @@ class GrammarRuleParser {
             }
             if (this.isAt("$(")) {
                 this.curr += 2; // advance past "$("
-                const dollarParenComments = this.parseComments();
                 const v = this.parseVariableSpecifier();
-                v.dollarParenComments = dollarParenComments;
                 attach(v);
                 expNodes.push(v);
                 if (this.isAt(")?")) {
@@ -763,7 +771,7 @@ class GrammarRuleParser {
             let pendingLeading = this.parseComments();
 
             let first = true;
-            const obj: ObjectValueField = [];
+            const obj: ObjectProperty[] = [];
             while (true) {
                 if (this.isAtEnd()) {
                     this.throwError("Unexpected end of file in object value.");

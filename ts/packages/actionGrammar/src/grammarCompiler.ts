@@ -7,7 +7,7 @@ import {
     GrammarRule,
     RulesPart,
     StringPart,
-    SpacingMode,
+    CompiledSpacingMode,
     CompiledValueNode,
 } from "./grammarTypes.js";
 import {
@@ -189,8 +189,8 @@ function createCompileContext(
                     // Mark with a special sentinel to indicate wildcard import
                     context.hasStarImport = true;
                 } else {
-                    for (const entry of importStmt.names) {
-                        importedTypeNames.set(entry.name, importStmt.pos);
+                    for (const { name } of importStmt.names) {
+                        importedTypeNames.set(name, importStmt.pos);
                     }
                 }
             }
@@ -485,7 +485,7 @@ function createGrammarRules(
     context: CompileContext,
     rules: Rule[],
     epsilonReachable: Set<string>,
-    spacingMode: SpacingMode,
+    spacingMode: CompiledSpacingMode,
     grammarRules: GrammarRule[] = [],
 ): { grammarRules: GrammarRule[]; hasValue: boolean; nullable: boolean } {
     let hasValue = true;
@@ -508,7 +508,7 @@ function createGrammarRule(
     context: CompileContext,
     rule: Rule,
     epsilonReachable: Set<string>,
-    spacingMode: SpacingMode,
+    spacingMode: CompiledSpacingMode,
 ): { grammarRule: GrammarRule; hasValue: boolean; nullable: boolean } {
     const { expressions, value } = rule;
     const parts: GrammarPart[] = [];
@@ -631,17 +631,15 @@ function createGrammarRule(
                 // BUT: only use the phrase-set if the rule is NOT defined locally
                 // or via import (preserves grammars that define their own <Polite> etc.)
                 const isLocallyDefined =
-                    context.ruleDefMap.has(expr.bracketedName.name) ||
-                    context.importedRuleMap.has(expr.bracketedName.name);
+                    context.ruleDefMap.has(expr.refName.name) ||
+                    context.importedRuleMap.has(expr.refName.name);
                 if (
                     !isLocallyDefined &&
-                    globalPhraseSetRegistry.isPhraseSetName(
-                        expr.bracketedName.name,
-                    )
+                    globalPhraseSetRegistry.isPhraseSetName(expr.refName.name)
                 ) {
                     parts.push({
                         type: "phraseSet",
-                        matcherName: expr.bracketedName.name,
+                        matcherName: expr.refName.name,
                     });
                     // Phrase sets don't produce a captured value on their own.
                     // Use defaultValue=true so single-part rules using a phrase set
@@ -652,7 +650,7 @@ function createGrammarRule(
                 }
                 const record = createNamedGrammarRules(
                     context,
-                    expr.bracketedName.name,
+                    expr.refName.name,
                     expr.pos,
                     undefined,
                     currentEpr,
@@ -662,7 +660,7 @@ function createGrammarRule(
                 parts.push({
                     type: "rules",
                     rules: record.grammarRules,
-                    name: expr.bracketedName.name,
+                    name: expr.refName.name,
                 });
                 // RuleRefExpr has no optional modifier; it is always non-optional.
                 // === false: only clear when *definitely* non-nullable (same
