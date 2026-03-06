@@ -174,7 +174,10 @@ export interface DFAState {
     /** Unique state ID */
     id: number;
 
-    /** Execution contexts at this state (from different NFA paths) */
+    /**
+     * Execution contexts at this state (from different NFA paths).
+     * Only used during DFA compilation; cleared by compact() to save memory.
+     */
     contexts: DFAExecutionContext[];
 
     /** Deterministic token transitions */
@@ -197,9 +200,20 @@ export interface DFAState {
         fixedStringPartCount: number;
         checkedWildcardCount: number;
         uncheckedWildcardCount: number;
-        /** Index of the context with this priority */
-        contextIndex: number;
     };
+
+    /**
+     * Rule index from the best-priority accepting context.
+     * Extracted during compact() so contexts can be freed.
+     */
+    ruleIndex?: number | undefined;
+
+    /**
+     * Unique rule indices across all contexts at this state.
+     * Used by getDFACompletions to know which rules are active.
+     * Extracted during compact() so contexts can be freed.
+     */
+    activeRuleIndices?: number[] | undefined;
 
     /**
      * If accepting, the compiled action value expression to evaluate
@@ -243,6 +257,72 @@ export interface DFA {
      * Sorted longest-first so that longer candidates are tried before shorter ones.
      */
     splitCandidates?: string[];
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// MatchAST — structural parse tree produced by DFA matching
+//
+// The DFA is a pure recognizer: it consumes tokens and records *which* parts
+// of the grammar matched, without computing values.  Value computation is
+// deferred to a bottom-up walk of the MatchAST using the grammar's
+// name-based ValueNode expressions.
+// ────────────────────────────────────────────────────────────────────────────
+
+/** A literal token matched against a StringPart word */
+export interface TokenMatchNode {
+    kind: "token";
+    token: string;
+}
+
+/** A wildcard that consumed one or more tokens */
+export interface WildcardMatchNode {
+    kind: "wildcard";
+    /** Variable name from the grammar (e.g. "artist") */
+    variable: string;
+    /** Entity type name, if any (e.g. "Ordinal", "CalendarDate") */
+    typeName?: string;
+    /** Whether this wildcard has entity validation */
+    checked: boolean;
+    /** Raw tokens consumed by this wildcard */
+    tokens: string[];
+}
+
+/** A phrase-set match that consumed one or more tokens */
+export interface PhraseSetMatchNode {
+    kind: "phraseSet";
+    /** Registry key of the matcher */
+    matcherName: string;
+    /** Tokens consumed by the phrase */
+    tokens: string[];
+}
+
+/** A nested rule reference that matched a sub-grammar */
+export interface RuleRefMatchNode {
+    kind: "ruleRef";
+    /** Variable name that captures the sub-rule's value */
+    variable: string;
+    /** The sub-match tree */
+    match: MatchAST;
+}
+
+export type MatchNode =
+    | TokenMatchNode
+    | WildcardMatchNode
+    | PhraseSetMatchNode
+    | RuleRefMatchNode;
+
+/**
+ * A complete match tree for one grammar rule.
+ *
+ * `ruleIndex` identifies which Grammar.rules[] entry matched.
+ * `parts` is the sequence of structural nodes (tokens, wildcards, rule refs, phrase sets)
+ * in the order they were consumed.
+ */
+export interface MatchAST {
+    /** Index into Grammar.rules[] */
+    ruleIndex: number;
+    /** Ordered sequence of matched structural parts */
+    parts: MatchNode[];
 }
 
 /**
@@ -421,6 +501,7 @@ export class DFABuilder {
 
         // Find the best priority among all contexts that contain an NFA accepting state
         let bestPriority: DFAState["bestPriority"];
+        let bestRuleIndex: number | undefined;
 
         for (let i = 0; i < state.contexts.length; i++) {
             const ctx = state.contexts[i];
@@ -435,13 +516,17 @@ export class DFABuilder {
                     !bestPriority ||
                     this.comparePriorities(ctx.priority, bestPriority) < 0
                 ) {
-                    bestPriority = { ...ctx.priority, contextIndex: i };
+                    bestPriority = { ...ctx.priority };
+                    bestRuleIndex = ctx.ruleIndex;
                 }
             }
         }
 
         if (bestPriority !== undefined) {
             state.bestPriority = bestPriority;
+        }
+        if (bestRuleIndex !== undefined) {
+            state.ruleIndex = bestRuleIndex;
         }
     }
 
@@ -503,6 +588,36 @@ export class DFABuilder {
             dfa.splitCandidates = splitCandidates;
         }
         return dfa;
+    }
+
+    /**
+     * Compact a DFA by extracting needed fields from contexts, then freeing them.
+     * After compaction, contexts arrays are empty — all match-time data lives
+     * directly on DFAState (ruleIndex, activeRuleIndices, bestPriority).
+     */
+    static compact(dfa: DFA): void {
+        for (const state of dfa.states) {
+            // Extract activeRuleIndices from all contexts
+            const ruleSet = new Set<number>();
+            for (const ctx of state.contexts) {
+                if (ctx.ruleIndex !== undefined) {
+                    ruleSet.add(ctx.ruleIndex);
+                }
+            }
+            if (ruleSet.size > 0) {
+                state.activeRuleIndices = Array.from(ruleSet);
+            }
+
+            // ruleIndex on accepting states is already set by markAccepting.
+            // For non-accepting states, set it from first context with a ruleIndex
+            // (used as fallback by some matchers).
+            if (state.ruleIndex === undefined && ruleSet.size > 0) {
+                state.ruleIndex = state.activeRuleIndices![0];
+            }
+
+            // Free contexts — no longer needed at match time
+            state.contexts = [];
+        }
     }
 
     /**

@@ -1,0 +1,34 @@
+{
+  "name": "playPopularKpopSongClaude",
+  "description": "Comparison flow using claudeTask — compare latency/quality",
+  "parameters": {
+    "timePeriod": {
+      "type": "string",
+      "required": false,
+      "default": "this month",
+      "description": "Time period for the chart (e.g., 'this month', 'this week')"
+    }
+  },
+  "steps": [
+    {
+      "id": "findTopSong",
+      "schemaName": "utility",
+      "actionName": "claudeTask",
+      "parameters": {
+        "goal": "Find the most popular K-pop song ${timePeriod}. Search for current K-pop charts and identify the #1 song. Return a JSON object with 'trackName' (song title) and 'artist' (artist name) fields.",
+        "parseJson": true,
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "observedOutputFormat": "{ \"trackName\": \"song title\", \"artist\": \"artist name\" }"
+    },
+    {
+      "id": "playSong",
+      "schemaName": "player",
+      "actionName": "playTrack",
+      "parameters": {
+        "trackName": "${findTopSong.data.trackName}",
+        "artists": ["${findTopSong.data.artist}"]
+      }
+    }
+  ]
+}

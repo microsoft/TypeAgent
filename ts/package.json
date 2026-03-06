@@ -92,6 +92,9 @@
         "arm64"
       ]
     },
+    "overrides": {
+      "node-gyp": "^12.2.0"
+    },
     "ignoredBuiltDependencies": [
       "leveldown"
     ]
