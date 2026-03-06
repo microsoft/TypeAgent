@@ -770,6 +770,63 @@ x
     it("/* */ leading comment on subsequent key round-trips through flat form", () => {
         roundTrip(`<A> = foo -> { key: blah, /* leading */ key2: blah2 };\n`);
     });
+
+    it("block trailing and block leading comments coexist on separate lines (object)", () => {
+        // Multi-line form: trailing comment after comma, leading comment before next key
+        const multiLine = `<A> = foo -> {
+   k: v, /*trailing*/
+   /*leading*/ k2: v2
+};
+`;
+        const parsed = parseGrammarRules("test", multiLine, false);
+        const props = parsed.definitions[0].rules[0].value!;
+        expect(props.type).toBe("object");
+        const objProps = (props as any).value;
+        // In multi-line, trailing and leading are correctly distinguished
+        expect(objProps[0].trailingComments).toEqual([
+            { style: "block", text: "trailing" },
+        ]);
+        expect(objProps[1].leadingComments).toEqual([
+            { style: "block", text: "leading" },
+        ]);
+    });
+
+    it("block trailing and block leading comments collapse when written flat (object)", () => {
+        // When both trailing and leading are block comments, the writer must
+        // force broken mode to preserve the distinction on re-parse.
+        const multiLine = `<A> = foo -> {
+   k: v, /*trailing*/
+   /*leading*/ k2: v2
+};
+`;
+        const orig = parseGrammarRules("orig", multiLine, false);
+        const written = writeGrammarRules(orig);
+        // Writer keeps broken mode to avoid merging trailing + leading:
+        expect(written).toBe(
+            `<A> = foo -> {\n  k: v, /*trailing*/\n  /*leading*/ k2: v2\n};\n`,
+        );
+
+        // Round-trip preserves Comment attribution
+        roundTrip(multiLine);
+    });
+
+    it("block trailing and block leading comments collapse when written flat (array)", () => {
+        // Same fix for array elements
+        const multiLine = `<A> = foo -> [
+   "a", /*trailing*/
+   /*leading*/ "b"
+];
+`;
+        const orig = parseGrammarRules("orig", multiLine, false);
+        const written = writeGrammarRules(orig);
+        // Writer keeps broken mode:
+        expect(written).toBe(
+            `<A> = foo -> [\n  "a", /*trailing*/\n  /*leading*/ "b"\n];\n`,
+        );
+
+        // Round-trip preserves Comment attribution
+        roundTrip(multiLine);
+    });
 });
 
 describe("Comment preservation round-trips (structural positions)", () => {
