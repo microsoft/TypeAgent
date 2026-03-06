@@ -845,6 +845,126 @@ x
     });
 });
 
+// ─── Entity and import block formatting ───────────────────────────────────────
+
+describe("Entity block formatting", () => {
+    it("short entity list stays flat", () => {
+        expect(fmt("entity Foo, Bar;", 40)).toBe("entity Foo, Bar;\n\n");
+    });
+
+    it("single entity stays flat", () => {
+        expect(fmt("entity Foo;", 40)).toBe("entity Foo;\n\n");
+    });
+
+    it("long entity list breaks into block", () => {
+        expect(
+            fmt("entity VeryLongName, AnotherLongName, YetAnother;", 30),
+        ).toBe("entity\n  VeryLongName,\n  AnotherLongName,\n  YetAnother;\n\n");
+    });
+
+    it("entity block round-trips", () => {
+        roundTrip(
+            "entity VeryLongEntityName, AnotherLongEntityName, ThirdEntity;",
+            30,
+        );
+    });
+
+    it("entity block with trailing comment", () => {
+        // Trailing comment stays on same line as ";"
+        expect(
+            fmt("entity VeryLongName, AnotherLongName; // note", 30),
+        ).toBe("entity\n  VeryLongName,\n  AnotherLongName; // note\n\n");
+    });
+
+    it("entity block with trailing comment round-trips", () => {
+        roundTrip("entity VeryLongName, AnotherLongName; // note", 30);
+    });
+
+    it("entity block with block comments on names", () => {
+        roundTrip(
+            "entity /* a */ VeryLongName /* b */, /* c */ AnotherLong /* d */;",
+            30,
+        );
+    });
+
+    it("multi-line entity input round-trips", () => {
+        roundTrip(
+            `entity
+  Foo,
+  Bar,
+  Baz;
+<A> = x;
+`,
+            80,
+        );
+    });
+});
+
+describe("Import block formatting", () => {
+    it("short import list stays flat", () => {
+        expect(fmt('import { A, B } from "file";', 40)).toBe(
+            'import { A, B } from "file";\n\n',
+        );
+    });
+
+    it("single import stays flat", () => {
+        expect(fmt('import { Name } from "file";', 40)).toBe(
+            'import { Name } from "file";\n\n',
+        );
+    });
+
+    it("long import list breaks into block", () => {
+        expect(
+            fmt(
+                'import { VeryLongRuleName, AnotherLongRule, ThirdRule } from "file";',
+                40,
+            ),
+        ).toBe(
+            'import {\n  VeryLongRuleName,\n  AnotherLongRule,\n  ThirdRule\n} from "file";\n\n',
+        );
+    });
+
+    it("import block round-trips", () => {
+        roundTrip(
+            'import { VeryLongRuleName, AnotherLongRule, ThirdRule } from "file";',
+            40,
+        );
+    });
+
+    it("wildcard import unaffected by maxLineLength", () => {
+        expect(fmt('import * from "file";', 10)).toBe(
+            'import * from "file";\n\n',
+        );
+    });
+
+    it("import block with block comments on names", () => {
+        roundTrip(
+            'import { /* a */ VeryLongName /* b */, /* c */ AnotherLong /* d */ } from "file";',
+            30,
+        );
+    });
+
+    it("import block with afterCloseBrace comment", () => {
+        roundTrip(
+            'import { VeryLongName, AnotherLong } /* note */ from "file";',
+            30,
+        );
+    });
+
+    it("multi-line import input round-trips", () => {
+        roundTrip(
+            `import {
+  RuleA,
+  RuleB,
+  RuleC
+} from "file";
+<A> = x;
+`,
+            80,
+        );
+    });
+});
+
 describe("Flat-line comment positions → broken-mode output", () => {
     // These tests verify that comments written on a single flat line are parsed
     // into the correct AST position (leading/trailing/after-comma/closing) so

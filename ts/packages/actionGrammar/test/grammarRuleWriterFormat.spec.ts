@@ -25,7 +25,9 @@ function roundTrip(src: string, maxLineLength?: number) {
 // A single grammar that touches every code path in writeGrammarRules:
 //   - file-level leading + trailing comments
 //   - entity declarations with leading/trailing comments
+//   - long entity list that breaks into block at narrow widths
 //   - wildcard and named imports with leading/trailing comments
+//   - long named import list that breaks into block at narrow widths
 //   - all three non-default spacing annotations
 //   - pre-annotation and name-trailing block/line comments
 //   - every expression type: string, <ruleRef>, $(var), typed/rule-ref/optional vars, groups ()?/*/ +
@@ -53,11 +55,15 @@ const FULL_GRAMMAR = `\
 
 // entities section
 entity Artist, Album; // known types
+// long entity list (breaks at maxLineLength=40)
+entity LongEntityAlpha, LongEntityBeta, LongEntityGamma;
 
 // wildcard import
 import * from "baseGrammar"; // base rules
 // named import
 import { PhraseA, PhraseB } from "phrases"; // helpers
+// long named import (breaks at maxLineLength=40)
+import { LongRuleAlpha, LongRuleBeta, LongRuleGamma } from "longRules";
 
 // spacing annotations
 <WithRequired> [spacing=required] = one two;

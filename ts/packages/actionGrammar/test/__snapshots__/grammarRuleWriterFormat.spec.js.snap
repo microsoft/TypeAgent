@@ -5,11 +5,15 @@ exports[`Comprehensive formatting exercise default maxLineLength (80) output mat
 // All formatting patterns in one grammar.
 // entities section
 entity Artist, Album; // known types
+// long entity list (breaks at maxLineLength=40)
+entity LongEntityAlpha, LongEntityBeta, LongEntityGamma;
 
 // wildcard import
 import * from "baseGrammar"; // base rules
 // named import
 import { PhraseA, PhraseB } from "phrases"; // helpers
+// long named import (breaks at maxLineLength=40)
+import { LongRuleAlpha, LongRuleBeta, LongRuleGamma } from "longRules";
 
 // spacing annotations
 <WithRequired> [spacing=required] = one two;
@@ -152,11 +156,22 @@ exports[`Comprehensive formatting exercise maxLineLength=40 (all broken modes) o
 // All formatting patterns in one grammar.
 // entities section
 entity Artist, Album; // known types
+// long entity list (breaks at maxLineLength=40)
+entity
+  LongEntityAlpha,
+  LongEntityBeta,
+  LongEntityGamma;
 
 // wildcard import
 import * from "baseGrammar"; // base rules
 // named import
 import { PhraseA, PhraseB } from "phrases"; // helpers
+// long named import (breaks at maxLineLength=40)
+import {
+  LongRuleAlpha,
+  LongRuleBeta,
+  LongRuleGamma
+} from "longRules";
 
 // spacing annotations
 <WithRequired> [spacing=required] = one

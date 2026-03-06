@@ -4,6 +4,7 @@
 import {
     Comment,
     CommentedName,
+    EntityDeclaration,
     Expr,
     GrammarParseResult,
     isExpressionSpecialChar,
@@ -640,20 +641,6 @@ function closingCommentLines(
     return comments.map((c) => commentText(c));
 }
 
-// Writes a comma-separated list of CommentedName entries with their
-// leading/trailing comments (used for entity declarations and import names).
-function writeCommentedNameList(
-    result: GrammarWriter,
-    names: CommentedName[],
-): void {
-    for (let i = 0; i < names.length; i++) {
-        if (i > 0) result.write(",");
-        writeTrailingComments(result, names[i].leadingComments);
-        result.write(` ${names[i].name}`);
-        writeTrailingComments(result, names[i].trailingComments);
-    }
-}
-
 // Writes a bracketed name reference: <Name> with inline comments
 // around the name for round-trip fidelity.
 function writeBracketedName(result: GrammarWriter, name: CommentedName): void {
@@ -662,6 +649,79 @@ function writeBracketedName(result: GrammarWriter, name: CommentedName): void {
     result.write(name.name);
     writeInlineComments(result, name.trailingComments);
     result.write(">");
+}
+
+// Writes a single CommentedName with its leading/trailing comments.
+// Block comments are written inline; line comments force a newline using the
+// given indent (which also forces the enclosing flat form to Infinity, selecting
+// the broken layout automatically).
+function writeCommentedNameItem(
+    result: GrammarWriter,
+    n: CommentedName,
+    indent: string,
+): void {
+    writeValueComments(result, n.leadingComments, indent);
+    result.write(n.name);
+    writeValueComments(result, n.trailingComments, indent, true);
+}
+
+// Writes an entity declaration using emitGroup for flat/broken layout.
+// Flat:   entity Foo, Bar, Baz;
+// Broken: entity
+//           Foo,
+//           Bar,
+//           Baz;
+function writeEntityDeclaration(
+    result: GrammarWriter,
+    decl: EntityDeclaration,
+): void {
+    const indent = " ".repeat(result.indentSize);
+    result.emitGroup(
+        // flat
+        () => {
+            result.write("entity ");
+            for (let i = 0; i < decl.names.length; i++) {
+                if (i > 0) result.write(", ");
+                writeCommentedNameItem(result, decl.names[i], "");
+            }
+            result.write(";");
+        },
+        // broken
+        () => {
+            result.write("entity");
+            for (let i = 0; i < decl.names.length; i++) {
+                result.writeNewLine(indent);
+                writeCommentedNameItem(result, decl.names[i], indent);
+                if (i < decl.names.length - 1) result.write(",");
+            }
+            result.write(";");
+        },
+    );
+}
+
+// Writes the { Name1, Name2, ... } portion of an import statement using
+// emitBlock for flat/broken layout.
+// Flat:   import { Name1, Name2 } from "file";
+// Broken: import {
+//           Name1,
+//           Name2,
+//         } from "file";
+function writeImportNameBlock(
+    result: GrammarWriter,
+    names: CommentedName[],
+): void {
+    const entryIndent = " ".repeat(result.indentSize);
+    result.emitBlock(names, {
+        flatOpen: " { ",
+        flatClose: " }",
+        open: " {",
+        close: "}",
+        flatSep: ", ",
+        brokenBaseCol: 0,
+        emitItem: (n) => {
+            writeCommentedNameItem(result, n, entryIndent);
+        },
+    });
 }
 
 // ─── writeGrammarRules ────────────────────────────────────────────────────────
@@ -681,9 +741,7 @@ export function writeGrammarRules(
     if (entityDeclarations && entityDeclarations.length > 0) {
         for (const decl of entityDeclarations) {
             writeLeadingComments(result, decl.leadingComments);
-            result.write("entity");
-            writeCommentedNameList(result, decl.names);
-            result.write(";");
+            writeEntityDeclaration(result, decl);
             writeTrailingComments(result, decl.trailingComments);
             result.writeLine();
         }
@@ -702,9 +760,7 @@ export function writeGrammarRules(
                 result.write(" *");
                 writeInlineComments(result, imp.afterStarComments, true);
             } else {
-                result.write(" {");
-                writeCommentedNameList(result, imp.names);
-                result.write(" }");
+                writeImportNameBlock(result, imp.names);
                 writeInlineComments(result, imp.afterCloseBraceComments, true);
             }
             result.write(" from");
