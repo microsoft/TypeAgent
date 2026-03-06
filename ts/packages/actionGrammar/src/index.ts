@@ -130,15 +130,25 @@ export type {
     DFATransition,
     DFAWildcardTransition,
     DFAPhraseSetTransition,
+    MatchAST,
+    MatchNode,
+    TokenMatchNode,
+    WildcardMatchNode,
+    PhraseSetMatchNode,
+    RuleRefMatchNode,
 } from "./dfa.js";
 export { DFABuilder } from "./dfa.js";
 export { compileNFAToDFA } from "./dfaCompiler.js";
 export {
     matchDFA,
     matchDFAWithSplitting,
+    matchDFAToAST,
+    matchDFAToASTWithSplitting,
+    evaluateMatchAST,
     getDFACompletions,
     printDFA,
     type DFAMatchResult,
+    type DFAASTMatchResult,
     type DFACompletionResult,
     type DFACompletionGroup,
     type DFAPropertyCompletion,

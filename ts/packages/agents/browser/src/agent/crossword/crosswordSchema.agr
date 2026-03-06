@@ -1,0 +1,55 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Crossword Agent Grammar
+// Covers entering answers and looking up clues
+
+<Start> = <EnterText> | <GetClueValue>;
+
+// ===== Enter Text =====
+// "enter balsa for 8 across", "fill in frog for 5 down", "type hello in 3 across"
+
+<EnterText> = enter $(value:wildcard) for $(n:number) across
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "across" } }
+            | enter $(value:wildcard) for $(n:number) down
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "down" } }
+            | enter $(value:wildcard) in $(n:number) across
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "across" } }
+            | enter $(value:wildcard) in $(n:number) down
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "down" } }
+            | fill in $(value:wildcard) for $(n:number) across
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "across" } }
+            | fill in $(value:wildcard) for $(n:number) down
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "down" } }
+            | type $(value:wildcard) for $(n:number) across
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "across" } }
+            | type $(value:wildcard) for $(n:number) down
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "down" } }
+            | $(n:number) across is $(value:wildcard)
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "across" } }
+            | $(n:number) down is $(value:wildcard)
+                -> { actionName: "enterText", parameters: { value, clueNumber: n, clueDirection: "down" } };
+
+// ===== Get Clue Value =====
+// "what clue is 6 down", "what is 3 across", "what's the clue for 5 down"
+
+<GetClueValue> = what clue is $(n:number) across
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "across" } }
+               | what clue is $(n:number) down
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "down" } }
+               | what is $(n:number) across
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "across" } }
+               | what is $(n:number) down
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "down" } }
+               | what's the clue for $(n:number) across
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "across" } }
+               | what's the clue for $(n:number) down
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "down" } }
+               | show (me)? (the)? clue for $(n:number) across
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "across" } }
+               | show (me)? (the)? clue for $(n:number) down
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "down" } }
+               | read (me)? $(n:number) across
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "across" } }
+               | read (me)? $(n:number) down
+                    -> { actionName: "getClueValue", parameters: { clueNumber: n, clueDirection: "down" } };

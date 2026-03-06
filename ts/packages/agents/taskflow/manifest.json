@@ -12,6 +12,8 @@
   "flows": {
     "createTopSongsPlaylist": "./flows/createTopSongsPlaylist.flow.json",
     "createTopSongsPlaylistClaude": "./flows/createTopSongsPlaylistClaude.flow.json",
-    "weeklyEmailDigest": "./flows/weeklyEmailDigest.flow.json"
+    "weeklyEmailDigest": "./flows/weeklyEmailDigest.flow.json",
+    "playPopularKpopSong": "./flows/playPopularKpopSong.flow.json",
+    "playPopularKpopSongClaude": "./flows/playPopularKpopSongClaude.flow.json"
   }
 }
