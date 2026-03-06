@@ -63,11 +63,19 @@ import { PhraseA, PhraseB } from "phrases"; // helpers
                                type: "hi", // trailing line
                                count: 1
                              };
-<PropCommaTrailingBlock> = foo -> { type: "hi", /* trailing block */ count: 1 };
+<PropCommaTrailingBlock> = foo
+                           -> {
+                                type: "hi", /* trailing block */
+                                count: 1
+                              };
 <PropKeyLeadingBlock> = foo -> { /* before key */ type: "hi" };
 <ArrElemLeading> = foo -> [/* first */ "a", "b"];
 <ArrElemTrailing> = foo -> ["a" /* trailing */, "b"];
-<ArrCommaTrailingBlock> = foo -> ["a", /* after comma */ "b"];
+<ArrCommaTrailingBlock> = foo
+                          -> [
+                               "a", /* after comma */
+                               "b"
+                             ];
 <ArrCommaTrailingLine> = foo
                          -> [
                               "a", // after comma
@@ -83,12 +91,18 @@ import { PhraseA, PhraseB } from "phrases"; // helpers
                       "a",
                       // inner line
                     ];
-<ArrTrailingCommaBlock> = foo -> ["a", /* trailing */];
+<ArrTrailingCommaBlock> = foo
+                          -> [
+                               "a", /* trailing */
+                             ];
 <ArrTrailingCommaLine> = foo
                          -> [
                               "a", // trailing
                             ];
-<ArrEmptyInner> = foo -> [ /* empty array */ ];
+<ArrEmptyInner> = foo
+                  -> [
+                       /* empty array */
+                     ];
 <ObjInnerBlock> = foo
                   -> {
                        type: "hi",
@@ -99,12 +113,18 @@ import { PhraseA, PhraseB } from "phrases"; // helpers
                       type: "hi",
                       // inner line
                     };
-<ObjTrailingCommaBlock> = foo -> { type: "hi", /* trailing */ };
+<ObjTrailingCommaBlock> = foo
+                          -> {
+                               type: "hi", /* trailing */
+                             };
 <ObjTrailingCommaLine> = foo
                          -> {
                               type: "hi", // trailing
                             };
-<ObjEmptyInner> = foo -> { /* empty object */ };
+<ObjEmptyInner> = foo
+                  -> {
+                       /* empty object */
+                     };
 // multi-alt with per-alt leading comments
 <MultiAlt> = // first
              first option here // second

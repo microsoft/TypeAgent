@@ -86,7 +86,9 @@ export type GrammarWriterOptions = {
 //                 appends "," after each non-last item (comma-separated values)
 //   BlockPart   — flat-or-broken delimited block ({ } or [ ]); block column is
 //                 the actual render-time column, so entries indent correctly
-//                 regardless of how deep the block appears in the output
+//                 regardless of how deep the block appears in the output.
+//                 If any item has trailing comment text or closing comment lines
+//                 are present, the block is forced into broken mode.
 //   GroupPart   — general flat-or-broken pair, used for the -> placement
 //
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,25 +114,13 @@ type ListPart = {
 type BlockPart = {
     kind: "block";
     items: Part[][]; // each item's captured sub-parts
-    // Per-item trailing suffix emitted after "," in broken mode (and inline in
-    // flat mode).  Each defined entry is a Part[] for the suffix content (e.g.
-    // [" /* c */"]).  Line-comment suffixes include a ForceBrokenPart so that
-    // measureParts(suffix) = Infinity → forces the block into broken mode.
-    // Undefined entries have no effect.
-    itemSuffixes?: (Part[] | undefined)[];
-    // Comment lines written after a trailing "," on the last item (or directly
-    // inside an empty container), before the closing delimiter.  Each entry is
-    // a Part[] representing one comment line.
-    //
-    // A line-comment line contains a ForceBrokenPart → measureParts(line) = Infinity
-    // → the whole footer forces broken mode.  Block-comment lines are finite.
-    //
-    // Forces broken mode unless ALL of the following hold:
-    //   • items.length === 0 (empty container)
-    //   • every line measures finite (all block comments)
-    // When those hold, flat mode is tried:
-    //   flatOpen + [" "] + lines joined by " " + [" "] + flatClose
-    footer?: Part[][];
+    // Per-item trailing comment text emitted after "," in broken mode
+    // (e.g. " // note" or " /* c */").  When any entry is defined the block
+    // is forced into broken mode.
+    itemTrailingText?: (string | undefined)[];
+    // Comment lines before the closing delimiter (e.g. ["// footer"]).
+    // Forces broken mode when present.
+    closingLines?: string[];
     flatOpen: string; // "{ " or "[" — delimiter in flat mode
     flatClose: string; // " }" or "]" — delimiter in flat mode
     open: string; // "{" or "[" — delimiter in broken mode (followed by newline)
@@ -186,18 +176,10 @@ function measureParts(parts: Part[]): number {
                 total += m;
             }
         } else if (part.kind === "block") {
-            // Line-style suffixes (contain ForceBrokenPart) and non-empty containers
-            // with footer force broken mode.
+            // Any comment in a block forces broken mode.
             if (
-                part.itemSuffixes?.some(
-                    (s) => s !== undefined && measureParts(s) === Infinity,
-                )
-            )
-                return Infinity;
-            if (
-                part.footer !== undefined &&
-                (part.items.length > 0 ||
-                    part.footer.some((line) => measureParts(line) === Infinity))
+                part.itemTrailingText?.some((t) => t !== undefined) ||
+                part.closingLines?.length
             )
                 return Infinity;
             total += part.flatOpen.length + part.flatClose.length;
@@ -205,27 +187,7 @@ function measureParts(parts: Part[]): number {
                 const m = measureParts(part.items[i]);
                 if (m === Infinity) return Infinity;
                 total += m;
-                const suffix = part.itemSuffixes?.[i];
-                if (i < part.items.length - 1) {
-                    // Separator to next item: use "," + suffix + " " if suffix, else flatSep.
-                    total +=
-                        suffix !== undefined
-                            ? 1 + measureParts(suffix) + 1
-                            : part.flatSep.length;
-                } else if (suffix !== undefined) {
-                    // Last item with block suffix: trailing ", suffix" before close.
-                    total += 1 + measureParts(suffix);
-                }
-            }
-            // Footer for EMPTY containers only (non-empty case is broken above).
-            // All lines are finite here (line-comment lines were caught above).
-            if (part.footer) {
-                if (!part.flatOpen.endsWith(" ")) total += 1;
-                for (let j = 0; j < part.footer.length; j++) {
-                    if (j > 0) total += 1; // space between footer lines
-                    total += measureParts(part.footer[j]);
-                }
-                if (!part.flatClose.startsWith(" ")) total += 1;
+                if (i < part.items.length - 1) total += part.flatSep.length;
             }
         }
     }
@@ -315,12 +277,11 @@ function renderParts(
             const entryCol = col + indentSize;
             const flatLen = measureParts([part]);
             if (flatLen !== Infinity && col + flatLen <= maxLen) {
-                // flat: flatOpen + items (with inline suffixes) + footer (empty only) + flatClose
+                // flat: flatOpen + items + flatClose (no comments in flat mode)
                 out += part.flatOpen;
                 col += part.flatOpen.length;
                 for (let i = 0; i < part.items.length; i++) {
-                    // If the previous item had a block suffix, its "," was already emitted.
-                    if (i > 0 && !part.itemSuffixes?.[i - 1]) {
+                    if (i > 0) {
                         out += part.flatSep;
                         col += part.flatSep.length;
                     }
@@ -332,44 +293,6 @@ function renderParts(
                     );
                     out += r.out;
                     col = r.col;
-                    const suffix = part.itemSuffixes?.[i];
-                    if (suffix !== undefined) {
-                        out += ",";
-                        col += 1;
-                        const sr = renderParts(suffix, col, maxLen, indentSize);
-                        out += sr.out;
-                        col = sr.col;
-                        if (i < part.items.length - 1) {
-                            // Non-last: space separates from next item
-                            out += " ";
-                            col += 1;
-                        }
-                    }
-                }
-                // Footer only for empty containers (measureParts ensures non-empty stays broken).
-                if (part.footer) {
-                    if (!part.flatOpen.endsWith(" ")) {
-                        out += " ";
-                        col += 1;
-                    }
-                    for (let j = 0; j < part.footer.length; j++) {
-                        if (j > 0) {
-                            out += " ";
-                            col += 1;
-                        }
-                        const r = renderParts(
-                            part.footer[j],
-                            col,
-                            maxLen,
-                            indentSize,
-                        );
-                        out += r.out;
-                        col = r.col;
-                    }
-                    if (!part.flatClose.startsWith(" ")) {
-                        out += " ";
-                        col += 1;
-                    }
                 }
                 out += part.flatClose;
                 col += part.flatClose.length;
@@ -379,20 +302,9 @@ function renderParts(
                 for (let i = 0; i < part.items.length; i++) {
                     if (i > 0) {
                         out += ",";
-                        col += 1;
-                        // Inject per-item trailing suffix (e.g. " // comment")
-                        // between the "," and the "\n".
-                        const prevSuffix = part.itemSuffixes?.[i - 1];
-                        if (prevSuffix) {
-                            const sr = renderParts(
-                                prevSuffix,
-                                col,
-                                maxLen,
-                                indentSize,
-                            );
-                            out += sr.out;
-                            col = sr.col;
-                        }
+                        const prevComment =
+                            part.itemTrailingText?.[i - 1];
+                        if (prevComment) out += prevComment;
                         out += "\n";
                     }
                     out += " ".repeat(entryCol);
@@ -406,54 +318,23 @@ function renderParts(
                     out += r.out;
                     col = r.col;
                 }
-                if (part.footer) {
-                    // Trailing comma after last item (if any), then footer comment lines.
+                if (part.closingLines?.length) {
+                    // Trailing comma after last item, then comment lines.
                     if (part.items.length > 0) {
                         out += ",";
-                        col += 1;
-                        const lastSuffix =
-                            part.itemSuffixes?.[part.items.length - 1];
-                        if (lastSuffix) {
-                            const sr = renderParts(
-                                lastSuffix,
-                                col,
-                                maxLen,
-                                indentSize,
-                            );
-                            out += sr.out;
-                            col = sr.col;
-                        }
+                        const lastComment =
+                            part.itemTrailingText?.[part.items.length - 1];
+                        if (lastComment) out += lastComment;
                         out += "\n";
                     }
-                    for (const line of part.footer) {
-                        out += " ".repeat(entryCol);
-                        col = entryCol;
-                        const r = renderParts(
-                            line,
-                            entryCol,
-                            maxLen,
-                            indentSize,
-                        );
-                        out += r.out;
-                        col = r.col;
-                        out += "\n";
+                    for (const line of part.closingLines) {
+                        out += " ".repeat(entryCol) + line + "\n";
                     }
                 } else {
-                    // No footer, but the last item may still have a trailing
-                    // comma + suffix (e.g. "a", // comment).
-                    const lastSuffix =
-                        part.itemSuffixes?.[part.items.length - 1];
-                    if (lastSuffix !== undefined) {
-                        out += ",";
-                        col += 1;
-                        const sr = renderParts(
-                            lastSuffix,
-                            col,
-                            maxLen,
-                            indentSize,
-                        );
-                        out += sr.out;
-                        col = sr.col;
+                    const lastComment =
+                        part.itemTrailingText?.[part.items.length - 1];
+                    if (lastComment) {
+                        out += "," + lastComment;
                     }
                     out += "\n";
                 }
@@ -590,6 +471,8 @@ class GrammarWriter {
     // In flat mode: flatOpen + items joined by flatSep + flatClose.
     // In broken mode: open + newline, each item at (renderCol + indentSize),
     //   "," between items, newline + close at renderCol.
+    // If any item has trailing comment text or closingLines are present,
+    // the block is forced into broken mode.
     emitBlock<T>(
         items: T[],
         options: {
@@ -599,21 +482,18 @@ class GrammarWriter {
             close: string;
             flatSep: string;
             emitItem: (item: T, index: number) => void;
-            // Optional: return a suffix Part[] (e.g. [" // comment", {kind:"break"}])
-            // emitted after the "," separator in broken mode for item[i].
-            // A line-comment suffix (contains ForceBrokenPart) forces broken mode.
-            getItemSuffix?: (item: T, index: number) => Part[] | undefined;
-            // Optional comment lines after a trailing "," on the last item (or
-            // directly inside an empty container), before the closing delimiter.
-            // Each entry is a Part[] for one comment line.  See BlockPart.footer.
-            footer?: Part[][];
+            getItemTrailingText?: (
+                item: T,
+                index: number,
+            ) => string | undefined;
+            closingLines?: string[];
         },
     ): void {
         const captured = items.map((item, i) =>
             this.capture(() => options.emitItem(item, i)),
         );
-        const itemSuffixes = options.getItemSuffix
-            ? items.map((item, i) => options.getItemSuffix!(item, i))
+        const itemTrailingText = options.getItemTrailingText
+            ? items.map((item, i) => options.getItemTrailingText!(item, i))
             : undefined;
         const blockPart: BlockPart = {
             kind: "block",
@@ -624,8 +504,10 @@ class GrammarWriter {
             close: options.close,
             flatSep: options.flatSep,
         };
-        if (itemSuffixes) blockPart.itemSuffixes = itemSuffixes;
-        if (options.footer) blockPart.footer = options.footer;
+        if (itemTrailingText?.some((t) => t !== undefined))
+            blockPart.itemTrailingText = itemTrailingText;
+        if (options.closingLines?.length)
+            blockPart.closingLines = options.closingLines;
         this.parts.push(blockPart);
         // Update provisional column with flat-length estimate.
         const flatLen = measureParts([blockPart]);
@@ -734,30 +616,22 @@ function writeInlineComments(
     }
 }
 
-// Converts trailing comments to Part[] for use as item suffixes in blocks.
-// Line comments include a ForceBrokenPart to force broken mode.
-function commentsToSuffixParts(
+// Formats trailing comments as a single string for use as item trailing text
+// in blocks (e.g. " // note" or " /* c */").
+function trailingCommentText(
     comments: Comment[] | undefined,
-): Part[] | undefined {
-    if (!comments) return undefined;
-    const parts: Part[] = [];
-    for (const c of comments) {
-        parts.push(" " + commentText(c));
-        if (c.style === "line") parts.push({ kind: "force-broken" });
-    }
-    return parts;
+): string | undefined {
+    if (!comments?.length) return undefined;
+    return comments.map((c) => " " + commentText(c)).join("");
 }
 
-// Converts closing comments to Part[][] for use as block footers.
-// Line comments include a ForceBrokenPart to force broken mode.
-function commentsToFooterParts(
+// Formats closing comments as an array of lines for use as block closing lines
+// (e.g. ["// footer", "/* note */"]).
+function closingCommentLines(
     comments: Comment[] | undefined,
-): Part[][] | undefined {
-    return comments?.map((c): Part[] =>
-        c.style === "line"
-            ? [commentText(c), { kind: "force-broken" }]
-            : [commentText(c)],
-    );
+): string[] | undefined {
+    if (!comments?.length) return undefined;
+    return comments.map((c) => commentText(c));
 }
 
 // Writes a comma-separated list of CommentedName entries with their
@@ -1123,8 +997,8 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
             break;
         case "object": {
             const entries = value.value;
-            const objFooter = commentsToFooterParts(value.closingComments);
-            if (entries.length === 0 && !objFooter) {
+            const objClosing = closingCommentLines(value.closingComments);
+            if (entries.length === 0 && !objClosing) {
                 result.write("{}");
                 break;
             }
@@ -1152,15 +1026,15 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
                         );
                     }
                 },
-                getItemSuffix: (prop) =>
-                    commentsToSuffixParts(prop.trailingComments),
-                ...(objFooter ? { footer: objFooter } : {}),
+                getItemTrailingText: (prop) =>
+                    trailingCommentText(prop.trailingComments),
+                ...(objClosing ? { closingLines: objClosing } : {}),
             });
             break;
         }
         case "array": {
-            const arrFooter = commentsToFooterParts(value.closingComments);
-            if (value.value.length === 0 && !arrFooter) {
+            const arrClosing = closingCommentLines(value.closingComments);
+            if (value.value.length === 0 && !arrClosing) {
                 result.write("[]");
                 break;
             }
@@ -1172,9 +1046,9 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
                 flatSep: ", ",
                 emitItem: (item) =>
                     writeValueNode(result, item.value, col + result.indentSize),
-                getItemSuffix: (item) =>
-                    commentsToSuffixParts(item.trailingComments),
-                ...(arrFooter ? { footer: arrFooter } : {}),
+                getItemTrailingText: (item) =>
+                    trailingCommentText(item.trailingComments),
+                ...(arrClosing ? { closingLines: arrClosing } : {}),
             });
             break;
         }

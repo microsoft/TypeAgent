@@ -656,11 +656,12 @@ x
 `);
     });
 
-    it("/* */ trailing comment renders flat when it fits", () => {
-        // Block-style trailingComment is allowed in flat mode (suffix appears as
-        // ", /* note */ " between items, with trailing "," + suffix for last item).
+    it("/* */ trailing comment forces broken mode", () => {
+        // Any comment inside a block forces broken mode for simplicity.
         const once = fmt(`<A> = foo -> [\n  "a", /* note */ "b"\n];\n`);
-        expect(once).toBe(`<A> = foo -> ["a", /* note */ "b"];\n`);
+        expect(once).toBe(
+            `<A> = foo\n      -> [\n           "a", /* note */\n           "b"\n         ];\n`,
+        );
         expect(fmt(once)).toBe(once); // idempotent
     });
 
@@ -706,6 +707,38 @@ x
         roundTrip(`<A> = foo -> {
    /* empty */
 };
+`);
+    });
+
+    it("trailing comment on last item + closingComment round-trips (object)", () => {
+        roundTrip(`<A> = foo -> {
+   type: "greeting", /*trailing*/
+   /* closing */
+};
+`);
+    });
+
+    it("trailing comment on last item + closingComment round-trips (array)", () => {
+        roundTrip(`<A> = foo -> [
+   "a", /*trailing*/
+   /* closing */
+];
+`);
+    });
+
+    it("line trailing comment on last item + closingComment round-trips (object)", () => {
+        roundTrip(`<A> = foo -> {
+   type: "greeting", // trailing
+   /* closing */
+};
+`);
+    });
+
+    it("line trailing comment on last item + closingComment round-trips (array)", () => {
+        roundTrip(`<A> = foo -> [
+   "a", // trailing
+   /* closing */
+];
 `);
     });
 
@@ -791,41 +824,23 @@ x
         ]);
     });
 
-    it("block trailing and block leading comments collapse when written flat (object)", () => {
-        // When both trailing and leading are block comments, the writer must
-        // force broken mode to preserve the distinction on re-parse.
-        const multiLine = `<A> = foo -> {
+    it("block trailing and block leading comments round-trip (object)", () => {
+        // Writer must keep broken mode so the parser can distinguish trailing
+        // comments (after ",") from leading comments (before next key).
+        roundTrip(`<A> = foo -> {
    k: v, /*trailing*/
    /*leading*/ k2: v2
 };
-`;
-        const orig = parseGrammarRules("orig", multiLine, false);
-        const written = writeGrammarRules(orig);
-        // Writer keeps broken mode to avoid merging trailing + leading:
-        expect(written).toBe(
-            `<A> = foo -> {\n  k: v, /*trailing*/\n  /*leading*/ k2: v2\n};\n`,
-        );
-
-        // Round-trip preserves Comment attribution
-        roundTrip(multiLine);
+`);
     });
 
-    it("block trailing and block leading comments collapse when written flat (array)", () => {
-        // Same fix for array elements
-        const multiLine = `<A> = foo -> [
+    it("block trailing and block leading comments round-trip (array)", () => {
+        // Same for array elements
+        roundTrip(`<A> = foo -> [
    "a", /*trailing*/
    /*leading*/ "b"
 ];
-`;
-        const orig = parseGrammarRules("orig", multiLine, false);
-        const written = writeGrammarRules(orig);
-        // Writer keeps broken mode:
-        expect(written).toBe(
-            `<A> = foo -> [\n  "a", /*trailing*/\n  /*leading*/ "b"\n];\n`,
-        );
-
-        // Round-trip preserves Comment attribution
-        roundTrip(multiLine);
+`);
     });
 });
 
