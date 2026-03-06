@@ -655,6 +655,11 @@ class GrammarWriter {
 
 // ─── Comment helpers ──────────────────────────────────────────────────────────
 
+// Formats a single comment as its canonical text (no surrounding spaces).
+function commentText(c: Comment): string {
+    return c.style === "line" ? "//" + c.text : "/*" + c.text + "*/";
+}
+
 // Writes leading comments, each on its own line, before a construct.
 function writeLeadingComments(
     result: GrammarWriter,
@@ -662,35 +667,25 @@ function writeLeadingComments(
 ): void {
     if (!comments) return;
     for (const c of comments) {
-        if (c.style === "line") {
-            result.writeLine("//" + c.text);
-        } else {
-            result.writeLine("/*" + c.text + "*/");
-        }
+        result.writeLine(commentText(c));
     }
 }
 
 // Writes trailing comments inline (no NewlinePart after line comments).
-// The caller is responsible for adding a writeForceBroken() after any line
-// comment so the enclosing list uses broken mode (preventing the | from being
-// swallowed by the comment) without adding a blank line between alternatives.
+// When forceBroken is true, a ForceBrokenPart is emitted after each line
+// comment so that the enclosing list uses broken mode (preventing the |
+// from being swallowed by the comment) without adding a blank line.
 function writeTrailingComments(
     result: GrammarWriter,
     comments: Comment[] | undefined,
+    forceBroken: boolean = false,
 ): void {
     if (!comments) return;
     for (const c of comments) {
-        if (c.style === "line") {
-            result.write(" //" + c.text);
-        } else {
-            result.write(" /*" + c.text + "*/");
-        }
+        result.write(" " + commentText(c));
+        if (forceBroken && c.style === "line") result.writeForceBroken();
     }
 }
-
-// Writes a trailing-comment array on the same line as the preceding token.
-// (Formerly writeTrailingComment for a single Comment; now accepts the array
-// directly to match the updated AST types.)
 
 // Writes value-adjacent comments (valueLeadingComments / valueTrailingComments).
 // Block comments are written inline.  Line comments are written as "// text"
@@ -711,33 +706,82 @@ function writeValueComments(
     if (!comments) return;
     for (const c of comments) {
         if (c.style === "line") {
-            result.write("//" + c.text);
+            result.write(commentText(c));
             result.writeNewLine(indent);
         } else if (trailing) {
-            result.write(" /*" + c.text + "*/");
+            result.write(" " + commentText(c));
         } else {
-            result.write("/*" + c.text + "*/ ");
+            result.write(commentText(c) + " ");
         }
     }
 }
 
 // Writes comments that appear inline between structural tokens (e.g. inside
 // <Name>, [spacing=...], $(...)).  Block comments are written as-is; line
-// comments force a newline so the following token starts on the next line
-// (same logic as writeRuleHeaderComments).
+// comments force a newline so the following token starts on the next line.
+// When spaced is true, each comment is preceded by a space (for comments
+// between rule header tokens like <Name>, [annotation], and =).
 function writeInlineComments(
     result: GrammarWriter,
     comments: Comment[] | undefined,
+    spaced: boolean = false,
 ): void {
     if (!comments) return;
+    const prefix = spaced ? " " : "";
     for (const c of comments) {
-        if (c.style === "line") {
-            result.write("//" + c.text);
-            result.writeLine();
-        } else {
-            result.write("/*" + c.text + "*/");
-        }
+        result.write(prefix + commentText(c));
+        if (c.style === "line") result.writeLine();
     }
+}
+
+// Converts trailing comments to Part[] for use as item suffixes in blocks.
+// Line comments include a ForceBrokenPart to force broken mode.
+function commentsToSuffixParts(
+    comments: Comment[] | undefined,
+): Part[] | undefined {
+    if (!comments) return undefined;
+    const parts: Part[] = [];
+    for (const c of comments) {
+        parts.push(" " + commentText(c));
+        if (c.style === "line") parts.push({ kind: "force-broken" });
+    }
+    return parts;
+}
+
+// Converts closing comments to Part[][] for use as block footers.
+// Line comments include a ForceBrokenPart to force broken mode.
+function commentsToFooterParts(
+    comments: Comment[] | undefined,
+): Part[][] | undefined {
+    return comments?.map((c): Part[] =>
+        c.style === "line"
+            ? [commentText(c), { kind: "force-broken" }]
+            : [commentText(c)],
+    );
+}
+
+// Writes a comma-separated list of CommentedName entries with their
+// leading/trailing comments (used for entity declarations and import names).
+function writeCommentedNameList(
+    result: GrammarWriter,
+    names: CommentedName[],
+): void {
+    for (let i = 0; i < names.length; i++) {
+        if (i > 0) result.write(",");
+        writeTrailingComments(result, names[i].leadingComments);
+        result.write(` ${names[i].name}`);
+        writeTrailingComments(result, names[i].trailingComments);
+    }
+}
+
+// Writes a bracketed name reference: <Name> with inline comments
+// around the name for round-trip fidelity.
+function writeBracketedName(result: GrammarWriter, name: CommentedName): void {
+    result.write("<");
+    writeInlineComments(result, name.leadingComments);
+    result.write(name.name);
+    writeInlineComments(result, name.trailingComments);
+    result.write(">");
 }
 
 // ─── writeGrammarRules ────────────────────────────────────────────────────────
@@ -758,27 +802,7 @@ export function writeGrammarRules(
         for (const decl of entityDeclarations) {
             writeLeadingComments(result, decl.leadingComments);
             result.write("entity");
-            for (let i = 0; i < decl.names.length; i++) {
-                const entry: CommentedName = decl.names[i];
-                if (i > 0) result.write(",");
-                // leading comments before this name (with space prefix)
-                if (entry.leadingComments) {
-                    for (const c of entry.leadingComments) {
-                        result.write(` /*${c.text}*/`);
-                    }
-                }
-                result.write(` ${entry.name}`);
-                // trailing comments after name, before "," or ";"
-                if (entry.trailingComments) {
-                    for (const tc of entry.trailingComments) {
-                        result.write(
-                            tc.style === "line"
-                                ? ` //${tc.text}`
-                                : ` /*${tc.text}*/`,
-                        );
-                    }
-                }
-            }
+            writeCommentedNameList(result, decl.names);
             result.write(";");
             writeTrailingComments(result, decl.trailingComments);
             result.writeLine();
@@ -793,38 +817,18 @@ export function writeGrammarRules(
         for (const imp of grammar.imports) {
             writeLeadingComments(result, imp.leadingComments);
             result.write("import");
-            writeRuleHeaderComments(result, imp.afterImportComments);
+            writeInlineComments(result, imp.afterImportComments, true);
             if (imp.names === "*") {
                 result.write(" *");
-                writeRuleHeaderComments(result, imp.afterStarComments);
+                writeInlineComments(result, imp.afterStarComments, true);
             } else {
                 result.write(" {");
-                for (let i = 0; i < imp.names.length; i++) {
-                    const entry: CommentedName = imp.names[i];
-                    if (i > 0) result.write(",");
-                    // leading comments before this name (with space prefix)
-                    if (entry.leadingComments) {
-                        for (const c of entry.leadingComments) {
-                            result.write(` /*${c.text}*/`);
-                        }
-                    }
-                    result.write(` ${entry.name}`);
-                    // trailing comments after name, before "," or "}"
-                    if (entry.trailingComments) {
-                        for (const tc of entry.trailingComments) {
-                            result.write(
-                                tc.style === "line"
-                                    ? ` //${tc.text}`
-                                    : ` /*${tc.text}*/`,
-                            );
-                        }
-                    }
-                }
+                writeCommentedNameList(result, imp.names);
                 result.write(" }");
-                writeRuleHeaderComments(result, imp.afterCloseBraceComments);
+                writeInlineComments(result, imp.afterCloseBraceComments, true);
             }
             result.write(" from");
-            writeRuleHeaderComments(result, imp.afterFromComments);
+            writeInlineComments(result, imp.afterFromComments, true);
             result.write(` "${imp.source}";`);
             writeTrailingComments(result, imp.trailingComments);
             result.writeLine();
@@ -842,31 +846,10 @@ export function writeGrammarRules(
     return result.toString();
 }
 
-// Writes comments that appear inline within a rule header (between <Name>, [annotation], and =).
-// Block comments are written inline; line comments end the current line.
-function writeRuleHeaderComments(
-    result: GrammarWriter,
-    comments: Comment[] | undefined,
-): void {
-    if (!comments) return;
-    for (const c of comments) {
-        if (c.style === "line") {
-            result.write(" //" + c.text);
-            result.writeLine();
-        } else {
-            result.write(" /*" + c.text + "*/");
-        }
-    }
-}
-
 function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
     writeLeadingComments(result, def.leadingComments);
-    result.write("<");
-    writeInlineComments(result, def.definitionName.leadingComments);
-    result.write(def.definitionName.name);
-    writeInlineComments(result, def.definitionName.trailingComments);
-    result.write(">");
-    writeRuleHeaderComments(result, def.beforeAnnotationComments);
+    writeBracketedName(result, def.definitionName);
+    writeInlineComments(result, def.beforeAnnotationComments, true);
     if (def.spacingMode !== undefined) {
         result.write(" [");
         writeInlineComments(result, def.annotationAfterBracketComments);
@@ -878,49 +861,19 @@ function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
         writeInlineComments(result, def.annotationAfterValueComments);
         result.write("]");
     }
-    writeRuleHeaderComments(result, def.beforeEqualsComments);
+    writeInlineComments(result, def.beforeEqualsComments, true);
     result.write(` = `);
     const col = result.column - 2;
-    writeRules(result, def.rules, col);
+    writeRulesAt(result, def.rules, col);
     result.write(";");
     writeTrailingComments(result, def.trailingComments);
     result.writeLine();
 }
 
-function writeRules(result: GrammarWriter, rules: Rule[], col: number) {
-    result.emitList(rules, {
-        flatSep: " | ",
-        brokenCol: col,
-        linePrefix: "| ",
-        style: "prefix",
-        emitItem: (rule) => writeRule(result, rule, col),
-    });
-}
-
-// Writes rule.trailingComments (comments after expressions, before | or ;).
-// Line comments: write text + ForceBrokenPart — forces the enclosing alternatives
-// list into broken mode without emitting a NewlinePart, so the list's own
-// "\n" + prefix produces exactly one newline (no blank line between alts).
-// Block comments: write inline.
-function writeRuleTrailingComments(
-    result: GrammarWriter,
-    comments: Comment[] | undefined,
-): void {
-    if (!comments) return;
-    for (const c of comments) {
-        if (c.style === "line") {
-            result.write(" //" + c.text);
-            result.writeForceBroken();
-        } else {
-            result.write(" /*" + c.text + "*/");
-        }
-    }
-}
-
 function writeRule(result: GrammarWriter, rule: Rule, col: number) {
     if (rule.value === undefined) {
         writeExpression(result, rule.expressions, col);
-        writeRuleTrailingComments(result, rule.trailingComments);
+        writeTrailingComments(result, rule.trailingComments, true);
         return;
     }
     // The arrow indent is computed at build time from the known alt-col value.
@@ -930,27 +883,32 @@ function writeRule(result: GrammarWriter, rule: Rule, col: number) {
     const hasLineTrailing = rule.trailingComments?.some(
         (c) => c.style === "line",
     );
+    // Shared: write expression + trailing comments before the arrow.
+    const writeExprPart = () => {
+        writeExpression(result, rule.expressions, col);
+        writeTrailingComments(result, rule.trailingComments);
+    };
+    // Shared: write value leading comments + value node + value trailing comments.
+    const writeValuePart = (valueCol: number) => {
+        writeValueComments(result, rule.valueLeadingComments, valueIndent);
+        writeValueNode(result, rule.value!, valueCol);
+        writeTrailingComments(result, rule.valueTrailingComments);
+    };
     result.emitGroup(
         // flat: expr [trailingComments] -> [leading] value [valueTrailing]
         // A line trailingComment or leading value comment makes measureParts
         // return Infinity → broken is chosen automatically.
         () => {
-            writeExpression(result, rule.expressions, col);
-            writeTrailingComments(result, rule.trailingComments);
-            if (hasLineTrailing) result.writeForceBroken(); // force Infinity in flat
+            writeExprPart();
+            if (hasLineTrailing) result.writeForceBroken();
             result.write(" -> ");
-            writeValueComments(result, rule.valueLeadingComments, valueIndent);
-            writeValueNode(result, rule.value!, col);
-            writeTrailingComments(result, rule.valueTrailingComments);
+            writeValuePart(col);
         },
         // broken: expr [trailingComments] (newline) -> [leading] value [valueTrailing]
         () => {
-            writeExpression(result, rule.expressions, col);
-            writeTrailingComments(result, rule.trailingComments);
+            writeExprPart();
             result.writeNewLine(arrowIndent);
-            writeValueComments(result, rule.valueLeadingComments, valueIndent);
-            writeValueNode(result, rule.value!, col + result.indentSize + 3);
-            writeTrailingComments(result, rule.valueTrailingComments);
+            writeValuePart(col + result.indentSize + 3);
         },
     );
     // If any valueTrailing comment is a line comment, add a ForceBrokenPart so the
@@ -1032,11 +990,7 @@ function writeSingleExpr(
             break;
         }
         case "ruleReference":
-            result.write("<");
-            writeInlineComments(result, expr.bracketedName.leadingComments);
-            result.write(expr.bracketedName.name);
-            writeInlineComments(result, expr.bracketedName.trailingComments);
-            result.write(">");
+            writeBracketedName(result, expr.bracketedName);
             break;
         case "rules": {
             result.write("(");
@@ -1070,11 +1024,7 @@ function writeSingleExpr(
                 result.write(":");
                 writeInlineComments(result, expr.colonComments);
                 if (expr.ruleReference) {
-                    result.write("<");
-                    writeInlineComments(result, expr.refName?.leadingComments);
-                    result.write(expr.refName!.name);
-                    writeInlineComments(result, expr.refName?.trailingComments);
-                    result.write(">");
+                    writeBracketedName(result, expr.refName!);
                 } else {
                     result.write(expr.refName!.name);
                     writeInlineComments(result, expr.refName?.trailingComments);
@@ -1085,14 +1035,16 @@ function writeSingleExpr(
     }
 }
 
-// Like writeRules but accepts a brokenCol that may be negative (relative to
-// render-time column). Used for inline groups so | aligns with (.
-// ruleCol is passed to writeRule for -> alignment (distinct from brokenCol).
+// Emits a list of rules (alternatives) with | separators.
+// brokenCol controls where | aligns in broken mode (negative = relative to
+// render-time column, used for inline groups so | aligns with parenthesis).
+// ruleCol (defaults to brokenCol when positive) is passed to writeRule for
+// -> alignment, which may differ from brokenCol in inline groups.
 function writeRulesAt(
     result: GrammarWriter,
     rules: Rule[],
     brokenCol: number,
-    ruleCol: number,
+    ruleCol: number = brokenCol,
 ) {
     result.emitList(rules, {
         flatSep: " | ",
@@ -1117,10 +1069,10 @@ function writeExprLeadingComments(
     if (!expr.leadingComments) return;
     for (const c of expr.leadingComments) {
         if (c.style === "line") {
-            result.write("//" + c.text);
+            result.write(commentText(c));
             result.writeNewLine(" ".repeat(indent + 2));
         } else {
-            result.write("/*" + c.text + "*/ ");
+            result.write(commentText(c) + " ");
         }
     }
 }
@@ -1172,12 +1124,7 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
             break;
         case "object": {
             const entries = value.value;
-            const objFooter: Part[][] | undefined = value.closingComments?.map(
-                (c): Part[] =>
-                    c.style === "line"
-                        ? ["//" + c.text, { kind: "force-broken" }]
-                        : ["/*" + c.text + "*/"],
-            );
+            const objFooter = commentsToFooterParts(value.closingComments);
             if (entries.length === 0 && !objFooter) {
                 result.write("{}");
                 break;
@@ -1206,31 +1153,14 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
                         );
                     }
                 },
-                getItemSuffix: (prop): Part[] | undefined => {
-                    if (!prop.trailingComments) return undefined;
-                    const parts: Part[] = [];
-                    for (const c of prop.trailingComments) {
-                        if (c.style === "line") {
-                            parts.push(" //" + c.text, {
-                                kind: "force-broken",
-                            });
-                        } else {
-                            parts.push(" /*" + c.text + "*/");
-                        }
-                    }
-                    return parts;
-                },
+                getItemSuffix: (prop) =>
+                    commentsToSuffixParts(prop.trailingComments),
                 ...(objFooter ? { footer: objFooter } : {}),
             });
             break;
         }
         case "array": {
-            const arrFooter: Part[][] | undefined = value.closingComments?.map(
-                (c): Part[] =>
-                    c.style === "line"
-                        ? ["//" + c.text, { kind: "force-broken" }]
-                        : ["/*" + c.text + "*/"],
-            );
+            const arrFooter = commentsToFooterParts(value.closingComments);
             if (value.value.length === 0 && !arrFooter) {
                 result.write("[]");
                 break;
@@ -1243,20 +1173,8 @@ function writeValueNode(result: GrammarWriter, value: ValueNode, col: number) {
                 flatSep: ", ",
                 emitItem: (item) =>
                     writeValueNode(result, item.value, col + result.indentSize),
-                getItemSuffix: (item): Part[] | undefined => {
-                    if (!item.trailingComments) return undefined;
-                    const parts: Part[] = [];
-                    for (const c of item.trailingComments) {
-                        if (c.style === "line") {
-                            parts.push(" //" + c.text, {
-                                kind: "force-broken",
-                            });
-                        } else {
-                            parts.push(" /*" + c.text + "*/");
-                        }
-                    }
-                    return parts;
-                },
+                getItemSuffix: (item) =>
+                    commentsToSuffixParts(item.trailingComments),
                 ...(arrFooter ? { footer: arrFooter } : {}),
             });
             break;
