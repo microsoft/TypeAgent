@@ -334,6 +334,18 @@ export function isExpressionSpecialChar(char: string) {
     return expressionsSpecialChar.includes(char);
 }
 
+// ─── Parser invariant: skip-whitespace-after-parse ──────────────────────────
+//
+// Every parse method that consumes input must leave `curr` positioned past any
+// trailing whitespace so that the next method can immediately inspect the next
+// non-whitespace character.  This is typically done via `skipWhitespace(N)`
+// (which advances N characters then skips whitespace), `consume()`, or by
+// delegating to another parse method that itself upholds the invariant.
+//
+// Methods that intentionally break this pattern are marked with:
+//   "INVARIANT EXCEPTION: does not skip trailing whitespace — <reason>."
+// Callers of such methods are responsible for the subsequent whitespace skip.
+
 class GrammarRuleParser {
     private curr: number = 0;
     constructor(
@@ -368,11 +380,11 @@ class GrammarRuleParser {
         return this.curr > start;
     }
 
-    // Skips leading whitespace then parses any // and /* */ comments,
+    // Parses any // and /* */ comments at the current position,
     // skipping whitespace between consecutive comments.
     // Returns the collected comments, or undefined if none.
+    // Callers must have already skipped whitespace before calling.
     private parseComments(): Comment[] | undefined {
-        this.skipWhitespace();
         const comments: Comment[] = [];
         while (this.isAtComment()) {
             comments.push(this.parseComment());
@@ -385,7 +397,9 @@ class GrammarRuleParser {
     // For // comments, curr is left AT the newline (not past it).  Stopping here rather
     // than consuming the '\n' lets the subsequent skipWhitespace() advance past it, keeping
     // horizontal-space tracking correct.  Callers must always call skipWhitespace() after.
-    // Does NOT skip surrounding whitespace.
+    //
+    // INVARIANT EXCEPTION: does not skip trailing whitespace — callers (parseComments,
+    // tryConsumeTrailingComments) handle the skip themselves.
     private parseComment(): Comment {
         if (this.isAt("//")) {
             const textStart = this.curr + 2;
@@ -410,7 +424,9 @@ class GrammarRuleParser {
     // Scans for all comments on the CURRENT LINE only (before any newline).
     // Used to capture trailing comments after ";", ",", etc.
     // Multiple block comments may appear, optionally followed by a line comment.
-    // Does NOT call skipWhitespace() after — caller must do the subsequent skip.
+    //
+    // INVARIANT EXCEPTION: does not skip trailing whitespace — by design, this
+    // only scans the current line.  Callers must do the subsequent skip.
     private tryConsumeTrailingComments(): Comment[] | undefined {
         const comments: Comment[] = [];
         while (true) {
@@ -542,6 +558,9 @@ class GrammarRuleParser {
         }
     }
 
+    // INVARIANT EXCEPTION: does not skip trailing whitespace — whitespace is
+    // semantically significant here (flex-space boundaries).  The caller
+    // (parseExpression) manages whitespace skipping in its loop.
     private parseStrExpr(): StrExpr | undefined {
         const str: string[] = [];
         const word: string[] = [];
@@ -595,7 +614,7 @@ class GrammarRuleParser {
 
         if (this.isAt(":")) {
             // Advance past ":" then collect comments before the type specifier.
-            this.curr++;
+            this.skipWhitespace(1);
             colonComments = this.parseComments();
 
             refPos = this.pos;
@@ -656,7 +675,7 @@ class GrammarRuleParser {
                 continue;
             }
             if (this.isAt("$(")) {
-                this.curr += 2; // advance past "$("
+                this.skipWhitespace(2); // advance past "$("
                 const v = this.parseVariableSpecifier();
                 attach(v);
                 expNodes.push(v);
@@ -981,7 +1000,7 @@ class GrammarRuleParser {
         afterEqualsComments: Comment[] | undefined;
         afterValueComments: Comment[] | undefined;
     } {
-        this.curr++; // skip "["
+        this.skipWhitespace(1); // skip "["
         const afterBracketComments = this.parseComments();
         const key = this.parseId("annotation key");
         if (key !== "spacing") {
@@ -1127,6 +1146,10 @@ class GrammarRuleParser {
     // Asserts the current character is `char`, advances past it, and returns
     // any same-line trailing comments.  Used wherever a token can be followed
     // by trailing // or /* */ comments on the same line (";", ",", etc.).
+    //
+    // INVARIANT EXCEPTION: does not skip trailing whitespace — delegates to
+    // tryConsumeTrailingComments which only scans the current line.  Callers
+    // must do the subsequent skip.
     private consumeWithTrailingComments(
         char: string,
         context: string,
@@ -1145,7 +1168,7 @@ class GrammarRuleParser {
     ): EntityDeclaration {
         // entity Ordinal;
         // entity Ordinal, CalendarDate;
-        this.curr += 6; // skip "entity"
+        this.skipWhitespace(6); // skip "entity"
         const names: CommentedName[] = [];
         // Collect leading comments before the first name (after "entity" keyword).
         let pendingLeading = this.parseComments();
@@ -1159,7 +1182,7 @@ class GrammarRuleParser {
                 trailingComments,
             });
             if (!this.isAt(",")) break;
-            this.curr++; // skip ","
+            this.skipWhitespace(1); // skip ","
             pendingLeading = this.parseComments();
         }
         const trailingComments = this.consumeWithTrailingComments(
@@ -1172,7 +1195,7 @@ class GrammarRuleParser {
     private parseImportStatement(leadingComments?: Comment[]): ImportStatement {
         // import { Name1, Name2 } from "file";
         // import * from "file";
-        this.curr += 6; // skip "import"
+        this.skipWhitespace(6); // skip "import"
         const afterImportComments = this.parseComments();
         const pos = this.pos;
 
@@ -1183,11 +1206,11 @@ class GrammarRuleParser {
         if (this.isAt("*")) {
             // import all
             names = "*";
-            this.curr++; // skip "*"
+            this.skipWhitespace(1); // skip "*"
             afterStarComments = this.parseComments();
         } else if (this.isAt("{")) {
             // granular import
-            this.curr++; // skip "{"
+            this.skipWhitespace(1); // skip "{"
             names = [];
 
             // Leading comments for the first name (after "{").
@@ -1200,7 +1223,7 @@ class GrammarRuleParser {
                     );
                 }
                 if (this.isAt("}")) {
-                    this.curr++; // skip "}"
+                    this.skipWhitespace(1); // skip "}"
                     break;
                 }
 
@@ -1219,7 +1242,7 @@ class GrammarRuleParser {
                     );
                 }
                 if (this.isAt("}")) {
-                    this.curr++; // skip "}"
+                    this.skipWhitespace(1); // skip "}"
                     break;
                 }
                 this.consume(",", "between import names");
@@ -1242,7 +1265,7 @@ class GrammarRuleParser {
                 "Expected 'from' keyword in import statement",
             );
         }
-        this.curr += 4; // skip "from"
+        this.skipWhitespace(4); // skip "from"
         const afterFromComments = this.parseComments();
 
         // Parse source string

@@ -81,7 +81,7 @@ describe("Grammar Rule Parser", () => {
             expect(result[0].rules[0].expressions).toHaveLength(2);
             expect(result[0].rules[0].expressions[0]).toEqual({
                 type: "ruleReference",
-                bracketedName: { name: "greeting" },
+                refName: { name: "greeting" },
             });
             expect(result[0].rules[0].expressions[1]).toEqual({
                 type: "string",
