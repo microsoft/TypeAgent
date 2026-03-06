@@ -265,7 +265,7 @@ export interface DFA {
 // The DFA is a pure recognizer: it consumes tokens and records *which* parts
 // of the grammar matched, without computing values.  Value computation is
 // deferred to a bottom-up walk of the MatchAST using the grammar's
-// name-based ValueNode expressions.
+// name-based CompiledValueNode expressions.
 // ────────────────────────────────────────────────────────────────────────────
 
 /** A literal token matched against a StringPart word */

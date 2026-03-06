@@ -1085,7 +1085,7 @@ export function getDFACompletions(
 //
 // The DFA acts as a pure recognizer producing a MatchAST. Value computation
 // is deferred to a bottom-up walk of the AST using the grammar's name-based
-// ValueNode expressions.
+// CompiledValueNode expressions.
 //
 // Matching strategy: MINIMAL MUNCH with priorities
 //   1. Try exact token transition (literal match)
@@ -1846,7 +1846,7 @@ function backtrack(
 /**
  * Evaluate a MatchAST to produce the action value.
  *
- * Uses the grammar's ValueNode expressions (name-based variable references)
+ * Uses the grammar's CompiledValueNode expressions (name-based variable references)
  * to compute the final action object from the structural parse tree.
  *
  * @param ast The parse tree from matchDFAToAST
@@ -1926,7 +1926,7 @@ function buildBindings(parts: MatchNode[], grammar: Grammar): Map<string, any> {
 }
 
 /**
- * Find the ValueNode expression for a match, searching through nested
+ * Find the CompiledValueNode expression for a match, searching through nested
  * RulesPart structures if needed.
  *
  * The DFA AST matcher inlines alternatives: when a grammar has
@@ -2033,7 +2033,7 @@ function matchesRuleStructure(
 }
 
 /**
- * Evaluate a grammar ValueNode using name-based bindings.
+ * Evaluate a grammar CompiledValueNode using name-based bindings.
  */
 function evaluateValueNode(
     node: CompiledValueNode,

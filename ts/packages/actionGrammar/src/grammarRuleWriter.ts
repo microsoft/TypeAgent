@@ -816,40 +816,38 @@ function writeRule(result: GrammarWriter, rule: Rule, col: number) {
     const arrowIndent = " ".repeat(col + result.indentSize) + "-> ";
     // Indent for continuation after a // comment that sits between -> and value.
     const valueIndent = " ".repeat(col + result.indentSize + 3);
-    const hasLineTrailing = rule.trailingComments?.some(
-        (c) => c.style === "line",
-    );
-    // Shared: write expression + trailing comments before the arrow.
-    const writeExprPart = () => {
+    // Write expression + trailing comments before the arrow.
+    // forceBroken=true in the flat callback causes measureParts to return
+    // Infinity when a trailing line comment is present, selecting broken mode.
+    const writeExprPart = (forceBroken: boolean) => {
         writeExpression(result, rule.expressions, col);
-        writeTrailingComments(result, rule.trailingComments);
+        writeTrailingComments(result, rule.trailingComments, forceBroken);
     };
-    // Shared: write value leading comments + value node + value trailing comments.
-    const writeValuePart = (valueCol: number) => {
+    // Write value leading comments + value node + value trailing comments.
+    const writeValuePart = (valueCol: number, forceBroken: boolean) => {
         writeValueComments(result, rule.valueLeadingComments, valueIndent);
         writeValueNode(result, rule.value!, valueCol);
-        writeTrailingComments(result, rule.valueTrailingComments);
+        writeTrailingComments(result, rule.valueTrailingComments, forceBroken);
     };
     result.emitGroup(
         // flat: expr [trailingComments] -> [leading] value [valueTrailing]
-        // A line trailingComment or leading value comment makes measureParts
-        // return Infinity → broken is chosen automatically.
+        // Line comments in trailing positions make measureParts return Infinity
+        // via forceBroken, so the broken form is chosen automatically.
         () => {
-            writeExprPart();
-            if (hasLineTrailing) result.writeForceBroken();
+            writeExprPart(true);
             result.write(" -> ");
-            writeValuePart(col);
+            writeValuePart(col, false);
         },
         // broken: expr [trailingComments] (newline) -> [leading] value [valueTrailing]
         () => {
-            writeExprPart();
+            writeExprPart(false);
             result.writeNewLine(arrowIndent);
-            writeValuePart(col + result.indentSize + 3);
+            writeValuePart(col + result.indentSize + 3, false);
         },
     );
-    // If any valueTrailing comment is a line comment, add a ForceBrokenPart so the
-    // enclosing alternatives list uses broken mode (preventing | from being
-    // swallowed by the comment), while rendering as empty string (no blank line).
+    // If any valueTrailing comment is a line comment, force the enclosing
+    // alternatives list into broken mode (preventing | from being swallowed
+    // by the comment), while rendering as empty string (no blank line).
     if (rule.valueTrailingComments?.some((c) => c.style === "line")) {
         result.writeForceBroken();
     }

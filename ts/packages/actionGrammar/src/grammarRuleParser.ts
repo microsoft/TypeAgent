@@ -47,17 +47,8 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   // A "flex space" is a separator position in the grammar source, created by any unescaped
  *   // whitespace or comment between sub-expressions.
  *   // When matching input, a flex space accepts any run of whitespace or punctuation characters.
- *   // The minimum number required is controlled by the per-rule spacing mode annotation:
- *   //
- *   //   - "required": always requires at least one whitespace/punctuation character.
- *   //   - "optional": zero or more separator characters allowed; tokens may be adjacent
- *   //                 but spaces are permitted.
- *   //   - "auto"    : (default) requires a separator only when both adjacent tokens belong to
- *   //                 space-separated scripts (e.g. Latin, Cyrillic). Tokens in non-spaced scripts
- *   //                 (e.g. CJK), or tokens that are whitespace/punctuation characters themselves,
- *   //                 do not require a separator.
- *   //   - "none"     : no separator characters allowed; tokens must be directly adjacent.
- *   //                 Any whitespace or punctuation between them causes a mismatch.
+ *   // The minimum number required is controlled by the per-rule spacing mode
+ *   // annotation (see SpacingMode type above for the full semantics of each mode).
  *   //
  *   // The spacing mode is set per-rule via a [spacing=<mode>] annotation immediately
  *   // after the rule name: <rule> [spacing=required] = ...;

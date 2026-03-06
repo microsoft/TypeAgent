@@ -99,7 +99,7 @@ export type GrammarPart =
 export type GrammarRule = {
     parts: GrammarPart[];
     value?: CompiledValueNode | undefined;
-    spacingMode?: CompiledSpacingMode; // undefined = auto (default)
+    spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
 
 export type Grammar = {
@@ -153,7 +153,7 @@ export type GrammarPartJson =
 export type GrammarRuleJson = {
     parts: GrammarPartJson[];
     value?: CompiledValueNode | undefined;
-    spacingMode?: CompiledSpacingMode; // undefined = auto (default)
+    spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
 export type GrammarRulesJson = GrammarRuleJson[];
 export type GrammarJson = GrammarRulesJson[];
