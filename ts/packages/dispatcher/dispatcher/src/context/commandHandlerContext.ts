@@ -82,6 +82,7 @@ import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.j
 import { createBuiltinAppAgentProvider } from "./inlineAgentProvider.js";
 import { CommandResult } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
+import { DisplayLog } from "../displayLog.js";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
@@ -99,6 +100,36 @@ import { DefaultAzureCredential } from "@azure/identity";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
+
+function wrapClientIOWithDisplayLog(
+    clientIO: ClientIO,
+    displayLog: DisplayLog,
+): ClientIO {
+    return {
+        ...clientIO,
+        setDisplayInfo(requestId, source, actionIndex?, action?) {
+            displayLog.logSetDisplayInfo(
+                requestId,
+                source,
+                actionIndex,
+                action,
+            );
+            clientIO.setDisplayInfo(requestId, source, actionIndex, action);
+        },
+        setDisplay(message) {
+            displayLog.logSetDisplay(message);
+            clientIO.setDisplay(message);
+        },
+        appendDisplay(message, mode) {
+            displayLog.logAppendDisplay(message, mode);
+            clientIO.appendDisplay(message, mode);
+        },
+        notify(notificationId, event, data, source) {
+            displayLog.logNotify(notificationId, event, data, source);
+            clientIO.notify(notificationId, event, data, source);
+        },
+    };
+}
 
 export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
@@ -180,6 +211,8 @@ export type CommandHandlerContext = {
 
     userRequestKnowledgeExtraction: boolean;
     actionResultKnowledgeExtraction: boolean;
+
+    displayLog: DisplayLog;
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -540,7 +573,11 @@ export async function initializeCommandHandlerContext(
         }
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
-        const clientIO = options?.clientIO ?? nullClientIO;
+        const displayLog = await DisplayLog.load(sessionDirPath);
+        const clientIO = wrapClientIOWithDisplayLog(
+            options?.clientIO ?? nullClientIO,
+            displayLog,
+        );
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
@@ -615,6 +652,8 @@ export async function initializeCommandHandlerContext(
             actionResultKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.actionResultKnowledgeExtraction ?? true,
+
+            displayLog,
         };
 
         await initializeMemory(context, sessionDirPath);
@@ -880,6 +919,7 @@ export async function closeCommandHandlerContext(
 ) {
     // Save the session because the token count is in it.
     context.session.save();
+    await context.displayLog.save();
     await context.agents.close();
     if (context.instanceDirLock) {
         await context.instanceDirLock();
@@ -890,7 +930,10 @@ export async function setSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     session: Session,
 ) {
+    // Persist the old session's display log before switching
+    await context.displayLog.save();
     context.session = session;
+    context.displayLog = await DisplayLog.load(session.getSessionDirPath());
     await context.agents.close();
 
     await initializeMemory(context, session.getSessionDirPath());

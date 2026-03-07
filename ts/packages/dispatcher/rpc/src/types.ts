@@ -9,4 +9,5 @@ export type {
     MessageContent,
     DisplayType,
     DisplayMessageKind,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";

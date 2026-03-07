@@ -8,6 +8,7 @@ import {
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
+import type { DisplayLogEntry } from "./displayLogEntry.js";
 
 export type RequestId = {
     connectionId?: string | undefined;
@@ -182,4 +183,10 @@ export interface Dispatcher {
         choiceId: string,
         response: boolean | number[],
     ): Promise<CommandResult | undefined>;
+
+    /**
+     * Get the display log entries for the current session.
+     * @param afterSeq if provided, return only entries with seq > afterSeq
+     */
+    getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
 }
