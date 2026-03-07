@@ -13,10 +13,7 @@ module.exports = {
         path.join(
             path
                 .dirname(testPath)
-                .replace(
-                    /[/\\]dist[/\\]test$/,
-                    path.sep + "test",
-                ),
+                .replace(/[/\\]dist[/\\]test$/, path.sep + "test"),
             "__snapshots__",
             path.basename(testPath) + snapshotExtension,
         ),
@@ -25,15 +22,17 @@ module.exports = {
         path.join(
             path
                 .dirname(path.dirname(snapshotPath))
-                .replace(
-                    /[/\\]test$/,
-                    path.sep + "dist" + path.sep + "test",
-                ),
+                .replace(/[/\\]test$/, path.sep + "dist" + path.sep + "test"),
             path.basename(snapshotPath, snapshotExtension),
         ),
 
     // path.join normalizes to the host separator, so the consistency-check
     // input must also be normalized for the round-trip comparison to hold
     // on Windows (backslash) and POSIX (forward slash).
-    testPathForConsistencyCheck: path.join("some", "dist", "test", "example.spec.js"),
+    testPathForConsistencyCheck: path.join(
+        "some",
+        "dist",
+        "test",
+        "example.spec.js",
+    ),
 };
