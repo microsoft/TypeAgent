@@ -24,6 +24,25 @@ export type WebAgentChannels = {
     registerChannel: ChannelAdapter;
 };
 
+// Built-in WebAgent URL patterns that are auto-approved (no user permission required)
+const BUILTIN_WEBAGENT_URL_PATTERNS = [
+    // Crossword sites
+    /wsj\.com\/puzzles\/crossword/,
+    /embed\.universaluclick\.com\//,
+    /data\.puzzlexperts\.com\/puzzleapp/,
+    /nytsyn\.pzzl\.com\/cwd_seattle/,
+    /seattletimes\.com\/games-nytimes-crossword/,
+    /denverpost\.com\/games\/daily-crossword/,
+    /denverpost\.com\/puzzles\/\?amu=\/iwin-crossword/,
+    /bestcrosswords\.com\/bestcrosswords\/guestconstructor/,
+    // PaleoBioDb
+    /paleobiodb\.org/,
+];
+
+function isBuiltInWebAgentUrl(url: string): boolean {
+    return BUILTIN_WEBAGENT_URL_PATTERNS.some((pattern) => pattern.test(url));
+}
+
 const dynamicAgentDomainsDataName = "allowDynamicAgentDomains.json";
 export async function loadAllowDynamicAgentDomains(
     context: SessionContext<BrowserActionContext>,
@@ -81,20 +100,40 @@ async function checkDynamicAgentPermission(
     url: string,
     context: SessionContext<BrowserActionContext>,
 ) {
+    // Built-in WebAgents are auto-approved
+    if (isBuiltInWebAgentUrl(url)) {
+        debug(`Auto-approving built-in WebAgent from ${url}`);
+        return true;
+    }
+
     const domain = new URL(url).hostname;
     if (context.agentContext.allowDynamicAgentDomains?.includes(domain)) {
         return true;
     }
-    const result = await context.popupQuestion(
-        `The Web Page '${title}' from domain '${domain}' want to connect to TypeAgent?`,
-        ["Allow Once", `Always Allow Domain ${domain}`, "Deny"],
-    );
 
-    if (result === 1) {
-        await addAllowDynamicAgentDomains(domain, context);
-        return true;
+    try {
+        const result = await context.popupQuestion(
+            `The Web Page '${title}' from domain '${domain}' want to connect to TypeAgent?`,
+            ["Allow Once", `Always Allow Domain ${domain}`, "Deny"],
+        );
+
+        if (result === 1) {
+            await addAllowDynamicAgentDomains(domain, context);
+            return true;
+        }
+        return result === 0;
+    } catch (e: any) {
+        // popupQuestion may throw "Not implemented" when running without GUI
+        if (e.message === "Not implemented") {
+            debugError(
+                `Cannot prompt for permission for ${domain}: popup questions not supported in this environment. ` +
+                    `Add the domain to allowDynamicAgentDomains.json or use the GUI shell.`,
+            );
+        } else {
+            debugError(`Failed to check permission for ${domain}:`, e);
+        }
+        return false;
     }
-    return result === 0;
 }
 function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
     const existing = context.agentContext.webAgentChannels;
@@ -110,6 +149,12 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
     const channelProvider = createChannelProviderAdapter(
         "webAgent:server",
         (message) => {
+            if (message === undefined || message === null) {
+                debugError(
+                    "Attempted to send undefined/null message via webAgent/message",
+                );
+                return;
+            }
             const client = agentServer.getActiveClient();
             if (client) {
                 client.socket.send(
@@ -124,6 +169,12 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
     );
 
     const registerChannel = createChannelAdapter((message) => {
+        if (message === undefined || message === null) {
+            debugError(
+                "Attempted to send undefined/null message via webAgent/register",
+            );
+            return;
+        }
         const client = agentServer.getActiveClient();
         if (client) {
             client.socket.send(
@@ -163,6 +214,11 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
                 );
                 debug("Registered dynamic agent", name);
             } catch (e: any) {
+                // If the channel already exists, the agent is already registered
+                if (e.message?.includes("already exists")) {
+                    debug("Dynamic agent already registered, skipping", name);
+                    return;
+                }
                 debugError("Failed to register dynamic agent", name, e);
                 // Clean up the channel if adding the agent fails
                 channelProvider.deleteChannel(`agent:${name}`);

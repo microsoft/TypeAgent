@@ -5,6 +5,8 @@ import { initializeEventHandlers } from "./eventHandlers";
 import { restoreRecordingState } from "./recording";
 import { interceptHistory } from "./spaNavigation";
 import { PDFInterceptor } from "./pdfInterceptor";
+import { initializeContinuationHandler } from "./continuationHandler";
+import { initializeWebAgentProxy } from "./webAgentProxy";
 import "./autoIndexing"; // Initialize auto-indexing
 
 // Imports to help with bundling
@@ -19,6 +21,7 @@ import "./pdfInterceptor";
 import "./schemaExtraction";
 import "./spaNavigation";
 import "./types";
+import "./webAgentProxy";
 
 /**
  * Initializes the content script
@@ -34,6 +37,12 @@ async function initialize(): Promise<void> {
 
     // Initialize PDF interceptor
     await initializePDFInterceptor();
+
+    // Initialize WebAgent continuation handler
+    initializeContinuationHandler();
+
+    // Initialize WebAgent proxy for dynamic agent registration
+    initializeWebAgentProxy();
 
     // Restore recording state if any
     await restoreRecordingStateFromStorage();
