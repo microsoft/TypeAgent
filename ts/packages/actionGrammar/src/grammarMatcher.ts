@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SpacingMode, ValueNode } from "./grammarRuleParser.js";
+import { CompiledSpacingMode, CompiledValueNode } from "./grammarTypes.js";
 import registerDebug from "debug";
 // REVIEW: switch to RegExp.escape() when it becomes available.
 import escapeMatch from "regexp.escape";
@@ -60,7 +60,11 @@ function needsSeparatorInAutoMode(a: string, b: string): boolean {
     }
     return isWordBoundaryScript(a) && isWordBoundaryScript(b);
 }
-function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
+function requiresSeparator(
+    a: string,
+    b: string,
+    mode: CompiledSpacingMode,
+): boolean {
     switch (mode) {
         case "required":
             return true;
@@ -81,7 +85,7 @@ function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
 function isBoundarySatisfied(
     request: string,
     index: number,
-    mode: SpacingMode,
+    mode: CompiledSpacingMode,
 ) {
     if (index === 0 || index === request.length) {
         return true;
@@ -121,13 +125,16 @@ type MatchedValue =
     | number
     | undefined
     // Value from nested rule
-    | { node: ValueNode | undefined; valueIds: ValueIdNode | undefined };
+    | {
+          node: CompiledValueNode | undefined;
+          valueIds: ValueIdNode | undefined;
+      };
 
-type MatchedValueNode = {
+type MatchedValueEntry = {
     valueId: number;
     value: MatchedValue;
     wildcard: boolean;
-    prev: MatchedValueNode | undefined;
+    prev: MatchedValueEntry | undefined;
 };
 
 type ValueIdNode = {
@@ -140,32 +147,32 @@ type ValueIdNode = {
 type ParentMatchState = {
     name: string; // For debugging
     parts: GrammarPart[];
-    value: ValueNode | undefined; // the value to be assigned after finishing the nested rule.
+    value: CompiledValueNode | undefined; // the value to be assigned after finishing the nested rule.
     partIndex: number; // the part index after the nested rule.
     variable: string | undefined;
     valueIds: ValueIdNode | undefined | null; // null means we don't need any value
     parent: ParentMatchState | undefined;
     repeatPartIndex?: number | undefined; // defined for ()* / )+ — holds the part index to loop back to
-    spacingMode: SpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
+    spacingMode: CompiledSpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
 };
 type MatchState = {
     // Current context
     name: string; // For debugging
     parts: GrammarPart[];
-    value: ValueNode | undefined; // the value to be assigned after finishing the current rule if the rule has only one part.
+    value: CompiledValueNode | undefined; // the value to be assigned after finishing the current rule if the rule has only one part.
     partIndex: number;
     valueIds?: ValueIdNode | undefined | null; // null means we don't need any value
 
     // Match state
     nextValueId: number;
-    values?: MatchedValueNode | undefined;
+    values?: MatchedValueEntry | undefined;
     parent?: ParentMatchState | undefined;
 
     nestedLevel: number; // for debugging
 
     inRepeat?: boolean | undefined; // true when re-entering a repeat group after a successful match
 
-    spacingMode: SpacingMode; // active spacing mode for this rule
+    spacingMode: CompiledSpacingMode; // active spacing mode for this rule
 
     index: number;
     pendingWildcard?:
@@ -195,7 +202,7 @@ const nonEntityWildcardTypes = new Set([
 
 function createMatchedValue(
     valueIdNode: ValueIdNode,
-    values: MatchedValueNode | undefined,
+    values: MatchedValueEntry | undefined,
     propertyName: string,
     wildcardPropertyNames: string[],
     partialValueId?: number,
@@ -214,14 +221,11 @@ function createMatchedValue(
         wildcardPropertyNames.push(propertyName);
     }
 
-    let matchedValueNode: MatchedValueNode | undefined = values;
-    while (
-        matchedValueNode !== undefined &&
-        matchedValueNode.valueId !== valueId
-    ) {
-        matchedValueNode = matchedValueNode.prev;
+    let entry: MatchedValueEntry | undefined = values;
+    while (entry !== undefined && entry.valueId !== valueId) {
+        entry = entry.prev;
     }
-    if (matchedValueNode === undefined) {
+    if (entry === undefined) {
         if (partialValueId !== undefined) {
             // Partial match, missing variable is ok
             return undefined;
@@ -231,7 +235,7 @@ function createMatchedValue(
         );
     }
 
-    const value = matchedValueNode.value;
+    const value = entry.value;
     if (typeof value === "object") {
         return createValue(
             value.node,
@@ -250,7 +254,7 @@ function createMatchedValue(
             stat.matchedValueCount++;
         }
 
-        if (matchedValueNode.wildcard) {
+        if (entry.wildcard) {
             if (typeof value !== "string") {
                 throw new Error(
                     `Internal error: Wildcard has non-string value for variable: ${name} id: ${valueId} property: ${propertyName}`,
@@ -268,7 +272,7 @@ function createMatchedValue(
 function createValueForVariable(
     variableName: string,
     valueIds: ValueIdNode | undefined,
-    values: MatchedValueNode | undefined,
+    values: MatchedValueEntry | undefined,
     propertyName: string,
     wildcardPropertyNames: string[],
     partialValueId?: number,
@@ -299,9 +303,9 @@ function createValueForVariable(
 }
 
 function createValue(
-    node: ValueNode | undefined,
+    node: CompiledValueNode | undefined,
     valueIds: ValueIdNode | undefined,
-    values: MatchedValueNode | undefined,
+    values: MatchedValueEntry | undefined,
     propertyName: string,
     wildcardPropertyNames: string[],
     partialValueId?: number,
@@ -397,7 +401,7 @@ function getWildcardStr(
     request: string,
     start: number,
     end: number,
-    spacingMode?: SpacingMode,
+    spacingMode?: CompiledSpacingMode,
 ) {
     const string = request.substring(start, end);
     if (spacingMode === "none") {
