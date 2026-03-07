@@ -49,22 +49,25 @@ export class SearchMenu {
         return this.trie.size();
     }
 
-    public updatePrefix(prefix: string, position: SearchMenuPosition) {
+    public updatePrefix(
+        prefix: string,
+        position: SearchMenuPosition,
+    ): boolean {
         if (this.numChoices() === 0) {
-            return;
+            return false;
         }
 
         if (this.prefix === prefix && this.searchMenuUI !== undefined) {
             // No need to update existing searchMenuUI, just update the position.
             this.searchMenuUI.update({ position });
-            return;
+            return false;
         }
 
         this.prefix = prefix;
         const items = this.trie.dataWithPrefix(normalizeMatchText(prefix));
-        const showMenu =
-            items.length !== 0 &&
-            (items.length !== 1 || items[0].matchText !== prefix);
+        const uniquelySatisfied =
+            items.length === 1 && items[0].matchText === prefix;
+        const showMenu = items.length !== 0 && !uniquelySatisfied;
 
         if (showMenu) {
             if (this.searchMenuUI === undefined) {
@@ -76,6 +79,7 @@ export class SearchMenu {
         } else {
             this.hide();
         }
+        return uniquelySatisfied;
     }
 
     public hide() {

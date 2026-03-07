@@ -13,7 +13,9 @@ const debugError = registerDebug("typeagent:shell:partial:error");
 
 export interface ISearchMenu {
     setChoices(choices: SearchMenuItem[]): void;
-    updatePrefix(prefix: string, position: SearchMenuPosition): void;
+    // Returns true when the prefix uniquely satisfies exactly one entry
+    // (exact match that is not a prefix of any other entry).
+    updatePrefix(prefix: string, position: SearchMenuPosition): boolean;
     hide(): void;
     isActive(): boolean;
 }
@@ -80,13 +82,6 @@ export class PartialCompletionSession {
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
     ): void {
-        // Empty input: hide without fetching.  Must come before reuseSession()
-        // because reuseSession("") would match current="" and show stale items.
-        if (input.trimStart().length === 0) {
-            this.cancelMenu();
-            return;
-        }
-
         if (this.reuseSession(input, getPosition)) {
             return;
         }
@@ -201,7 +196,16 @@ export class PartialCompletionSession {
             debug(
                 `Partial completion update: '${prefix}' @ ${JSON.stringify(position)}`,
             );
-            this.menu.updatePrefix(prefix, position);
+            const uniquelySatisfied = this.menu.updatePrefix(
+                prefix,
+                position,
+            );
+            if (uniquelySatisfied) {
+                debug(
+                    `Partial completion re-fetch: '${prefix}' uniquely satisfied`,
+                );
+                return false; // RE-FETCH for next level of completions
+            }
         } else {
             this.menu.hide();
         }

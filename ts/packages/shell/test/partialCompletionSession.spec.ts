@@ -23,7 +23,9 @@ type MockMenu = {
 function makeMenu(): MockMenu {
     return {
         setChoices: jest.fn<ISearchMenu["setChoices"]>(),
-        updatePrefix: jest.fn<ISearchMenu["updatePrefix"]>(),
+        updatePrefix: jest
+            .fn<ISearchMenu["updatePrefix"]>()
+            .mockReturnValue(false),
         hide: jest.fn<ISearchMenu["hide"]>(),
         isActive: jest.fn<ISearchMenu["isActive"]>().mockReturnValue(false),
     };
@@ -223,16 +225,74 @@ describe("PartialCompletionSession — state transitions", () => {
         );
     });
 
-    test("empty input hides menu and does not fetch", () => {
+    test("empty input fetches completions from backend", async () => {
         const menu = makeMenu();
-        const dispatcher = makeDispatcher();
+        menu.isActive.mockReturnValue(true);
+        const result = makeCompletionResult(["@"], 0);
+        const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("", getPos);
-        session.update("   ", getPos);
+        await Promise.resolve();
 
-        expect(dispatcher.getCommandCompletion).not.toHaveBeenCalled();
-        expect(menu.hide).toHaveBeenCalled();
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith("");
+        expect(menu.setChoices).toHaveBeenCalledWith(
+            expect.arrayContaining([
+                expect.objectContaining({ selectedText: "@" }),
+            ]),
+        );
+    });
+
+    test("empty input: second update reuses session without re-fetch", async () => {
+        const menu = makeMenu();
+        menu.isActive.mockReturnValue(true);
+        const result = makeCompletionResult(["@"], 0);
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("", getPos);
+        await Promise.resolve();
+
+        session.update("", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("empty input: unique match triggers re-fetch", async () => {
+        const menu = makeMenu();
+        menu.isActive.mockReturnValue(true);
+        // updatePrefix returns true = uniquely satisfied
+        menu.updatePrefix.mockReturnValue(true);
+        const result = makeCompletionResult(["@"], 0);
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("", getPos);
+        await Promise.resolve();
+
+        session.update("@", getPos);
+
+        // "@" uniquely matches the only completion — triggers re-fetch
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith("@");
+    });
+
+    test("empty input: ambiguous prefix does not re-fetch", async () => {
+        const menu = makeMenu();
+        menu.isActive.mockReturnValue(true);
+        // updatePrefix returns false = not uniquely satisfied
+        menu.updatePrefix.mockReturnValue(false);
+        const result = makeCompletionResult(["@config", "@configure"], 0);
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("", getPos);
+        await Promise.resolve();
+
+        session.update("@config", getPos);
+
+        // "@config" is a prefix of "@configure" — reuse, no re-fetch
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });
 
