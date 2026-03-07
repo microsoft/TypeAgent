@@ -11,7 +11,7 @@ import dotenv from "dotenv";
 
 import { debugShell, debugShellError } from "./debug.js";
 
-import { dialog } from "electron";
+import { dialog, shell } from "electron";
 import { getShellDataDir } from "./shellSettings.js";
 
 export function getKeysPersistencePath(dir: string | undefined) {
@@ -137,6 +137,43 @@ export async function loadKeysFromEnvFile(envFile: string) {
     populateKeys(parsed);
 }
 
+// Minimum required keys for TypeAgent to function.
+// At least one of these groups must be fully set.
+const REQUIRED_KEY_GROUPS = [
+    ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"],
+    ["OPENAI_API_KEY", "OPENAI_ENDPOINT"],
+];
+
+function hasRequiredKeys(): boolean {
+    return REQUIRED_KEY_GROUPS.some((group) =>
+        group.every((key) => {
+            const value = process.env[key];
+            return value !== undefined && value.trim().length > 0;
+        }),
+    );
+}
+
+async function showOOBEWarning() {
+    const result = await dialog.showMessageBox({
+        type: "warning",
+        buttons: ["Open Setup Docs", "Continue Anyway"],
+        defaultId: 0,
+        title: "Service keys not configured",
+        message: "TypeAgent requires API keys to function.",
+        detail:
+            "No valid service keys were found. Please configure at least one of:\n\n" +
+            "• Azure OpenAI: AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT\n" +
+            "• OpenAI: OPENAI_API_KEY + OPENAI_ENDPOINT\n\n" +
+            "Click 'Open Setup Docs' to learn how to set up your keys.",
+    });
+
+    if (result.response === 0) {
+        shell.openExternal(
+            "https://github.com/microsoft/TypeAgent/blob/main/ts/README.md",
+        );
+    }
+}
+
 export async function loadKeys(
     dir: string | undefined,
     reset: boolean = false,
@@ -153,5 +190,11 @@ export async function loadKeys(
             title: "Loading service keys",
             message: `Service keys not loaded. Using existing environment variables.`,
         });
+    }
+
+    // OOBE: check that the minimum required keys are present after loading.
+    if (!hasRequiredKeys()) {
+        debugShellError("Required service keys are missing");
+        await showOOBEWarning();
     }
 }
