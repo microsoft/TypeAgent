@@ -359,11 +359,12 @@ export async function getCommandCompletion(
             // known command or subcommand.  startIndex already points to
             // where resolution stopped (the start of the suffix), so we
             // offer every valid continuation from that point — subcommand
-            // names and (when at the root) agent names.  The suffix is
-            // filter text for the caller's trie, not a reason to suppress
-            // completions.  Examples:
+            // names from the current table.  Agent names are handled
+            // independently below.  The suffix is filter text for the
+            // caller's trie, not a reason to suppress completions.
+            // Examples:
             //   "@com"            → suffix="com",   completions include
-            //                       agent names + subcommands (trie
+            //                       subcommands + agent names (trie
             //                       narrows to "comptest", etc.)
             //   "@unknownagent " → suffix="unknownagent ", same set
             //                       (trie finds no match — that's fine)
@@ -376,24 +377,29 @@ export async function getCommandCompletion(
                         ? true
                         : undefined,
             });
-            if (
-                result.parsedAppAgentName === undefined &&
-                result.commands.length === 0
-            ) {
-                // Include the agent names
-                completions.push({
-                    name: "Agent Names",
-                    completions: context.agents
-                        .getAppAgentNames()
-                        .filter((name) =>
-                            context.agents.isCommandEnabled(name),
-                        ),
-                });
-            }
         } else {
             // Both table and descriptor are undefined — the agent
             // returned no commands at all.  Nothing to add;
             // completions stays empty, complete stays true.
+        }
+
+        // Independently of which branch above ran, offer agent names
+        // when the user hasn't typed a recognized agent and hasn't
+        // navigated into a subcommand tree.  This is decoupled from
+        // the three-way branch so it works regardless of whether the
+        // fallback agent has a command table.
+        if (
+            result.parsedAppAgentName === undefined &&
+            result.commands.length === 0
+        ) {
+            completions.push({
+                name: "Agent Names",
+                completions: context.agents
+                    .getAppAgentNames()
+                    .filter((name) =>
+                        context.agents.isCommandEnabled(name),
+                    ),
+            });
         }
 
         // Allow grammar-reported prefixLength (from groups) to override

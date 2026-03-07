@@ -291,6 +291,11 @@ describe("Command Completion - startIndex", () => {
             expect(subcommands!.completions).toContain("nested");
             // Default subcommand "run" has agent completions → not exhaustive.
             expect(result!.complete).toBe(false);
+            // Agent was recognized → no agent names offered.
+            const agentGroup = result!.completions.find(
+                (g) => g.name === "Agent Names",
+            );
+            expect(agentGroup).toBeUndefined();
         });
 
         it("returns matching agent names for partial prefix '@com'", async () => {
@@ -381,6 +386,14 @@ describe("Command Completion - startIndex", () => {
             // Top-level completions (agent names, system subcommands)
             // follow '@' directly without a separator.
             expect(result!.needsSeparator).toBeUndefined();
+            // Agent names are offered when no agent was recognized,
+            // independent of which branch (descriptor/table/neither)
+            // produced the subcommand completions.
+            const agentGroup = result!.completions.find(
+                (g) => g.name === "Agent Names",
+            );
+            expect(agentGroup).toBeDefined();
+            expect(agentGroup!.completions).toContain("comptest");
             // Subcommand + agent name sets are finite → exhaustive.
             expect(result!.complete).toBe(true);
         });
@@ -524,6 +537,13 @@ describe("Command Completion - startIndex", () => {
             );
             expect(subcommands).toBeDefined();
             expect(subcommands!.completions.length).toBeGreaterThan(0);
+            // nocmdtest IS a recognized agent name (just not
+            // command-enabled), so parsedAppAgentName is set and
+            // agent names are NOT offered.
+            const agentGroup = result.completions.find(
+                (g) => g.name === "Agent Names",
+            );
+            expect(agentGroup).toBeUndefined();
         });
     });
 
