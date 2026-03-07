@@ -21,9 +21,7 @@ export interface ISearchMenu {
 }
 
 export interface ICompletionDispatcher {
-    getCommandCompletion(
-        input: string,
-    ): Promise<CommandCompletionResult | undefined>;
+    getCommandCompletion(input: string): Promise<CommandCompletionResult>;
 }
 
 // PartialCompletionSession manages the state machine for command completion.
@@ -38,12 +36,22 @@ export interface ICompletionDispatcher {
 //   - Completion result fields (noCompletion, needsSeparator) are stored as-is
 //     from the backend response and never mutated as the user keeps typing.
 //     reuseSession() reads them to decide whether to show, hide, or re-fetch.
-//   - reuseSession() makes exactly three kinds of decisions:
+//   - reuseSession() makes exactly four kinds of decisions:
 //       1. Re-fetch  — input has moved past what the current result covers
-//       2. Show/update menu — input satisfies the result's constraints
-//       3. Hide menu, keep session — input doesn't satisfy constraints yet
-//          (separator not typed, or no completions exist), but is still
-//          within the anchor so a re-fetch would return the same result.
+//       2. Show/update menu — input satisfies the result's constraints;
+//          trie filters the loaded completions against the typed prefix.
+//       3. Hide menu, keep session — input is within the anchor but the
+//          result's constraints aren't satisfied yet (separator not typed,
+//          or no completions exist).  A re-fetch would return the same result.
+//       4. Uniquely satisfied — the user has exactly typed one completion
+//          entry (and it is not a prefix of any other).  Always re-fetch to
+//          get the NEXT level's completions (e.g. agent name → subcommands).
+//          This re-fetch is unconditional: `complete` is irrelevant here
+//          because it describes THIS level's exhaustiveness, not the next's.
+//   - The `complete` flag controls the no-match fallthrough: when the trie
+//     has zero matches for the typed prefix:
+//       complete=true  → reuse (exhaustive set, nothing else exists)
+//       complete=false → re-fetch (set is partial, backend may know more)
 //   - The anchor (`current`) is never advanced after a result is received.
 //     When `needsSeparator` is true the separator is stripped from the raw
 //     prefix before being passed to the menu, so the trie still matches.
@@ -63,6 +71,19 @@ export class PartialCompletionSession {
     // valid.  Used by reuseSession() and getCompletionPrefix() to interpret
     // the raw prefix without mutating `current`.
     private needsSeparator: boolean = false;
+
+    // When true, the completion set returned by the backend is exhaustive
+    // for THIS level of the command hierarchy.  This affects one decision
+    // in reuseSession():
+    //
+    //   No trie matches: complete=true → reuse (nothing else exists, no
+    //   point re-fetching); complete=false → re-fetch (the backend may
+    //   know about completions we haven't loaded).
+    //
+    // Notably, `complete` does NOT suppress the uniquelySatisfied re-fetch.
+    // uniquelySatisfied means the user needs the NEXT level's completions,
+    // which is a different question from whether THIS level is exhaustive.
+    private complete: boolean = false;
 
     // The in-flight completion request, or undefined when settled.
     private completionP:
@@ -95,6 +116,7 @@ export class PartialCompletionSession {
         this.current = undefined;
         this.noCompletion = false;
         this.needsSeparator = false;
+        this.complete = false;
         this.cancelMenu();
     }
 
@@ -102,6 +124,7 @@ export class PartialCompletionSession {
     public resetToIdle(): void {
         this.current = undefined;
         this.needsSeparator = false;
+        this.complete = false;
     }
 
     // Returns the text typed after the anchor (`current`), or undefined when
@@ -135,8 +158,14 @@ export class PartialCompletionSession {
     //   HIDE+KEEP  — input is within the anchor but the result's constraints
     //                aren't satisfied yet (no completions, or separator not
     //                typed); hide the menu but don't re-fetch (return true).
-    //   SHOW       — constraints satisfied; update/show the menu (return
-    //                isActive() so callers can re-fetch when the trie is empty).
+    //   UNIQUE     — prefix exactly matches one entry and is not a prefix of
+    //                any other; re-fetch for the NEXT level (return false).
+    //                Unconditional — `complete` is irrelevant here.
+    //   SHOW       — constraints satisfied; update the menu.  The final
+    //                return is `this.complete || this.menu.isActive()`:
+    //                reuse when the trie still has matches, or when the set
+    //                is exhaustive (nothing new to fetch).  Re-fetch only
+    //                when the trie is empty AND the set is non-exhaustive.
     private reuseSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
@@ -196,11 +225,11 @@ export class PartialCompletionSession {
             debug(
                 `Partial completion update: '${prefix}' @ ${JSON.stringify(position)}`,
             );
-            const uniquelySatisfied = this.menu.updatePrefix(
-                prefix,
-                position,
-            );
+            const uniquelySatisfied = this.menu.updatePrefix(prefix, position);
             if (uniquelySatisfied) {
+                // The user has typed text that exactly matches one completion
+                // and is not a prefix of any other.  We need the NEXT level's
+                // completions (e.g. agent name → subcommands), so re-fetch.
                 debug(
                     `Partial completion re-fetch: '${prefix}' uniquely satisfied`,
                 );
@@ -210,11 +239,15 @@ export class PartialCompletionSession {
             this.menu.hide();
         }
 
-        // Always reuse: input is within the anchor and we have loaded
-        // completions.  Even if the trie has no matches for the current
-        // prefix (menu hidden), backspacing may restore matches without
-        // needing a re-fetch.
-        return true;
+        // When the menu is still active (trie has matches) we always
+        // reuse — the loaded completions are still useful.  When there are
+        // NO matches, the decision depends on `complete`:
+        //   complete=true  → the set is exhaustive; the user typed past all
+        //                    valid continuations, so re-fetching won't help.
+        //   complete=false → the set is NOT exhaustive; the user may have
+        //                    typed something valid that wasn't loaded, so
+        //                    re-fetch with the longer input.
+        return this.complete || this.menu.isActive();
     }
 
     // Start a new completion session: issue backend request and process result.
@@ -227,6 +260,7 @@ export class PartialCompletionSession {
         this.current = input;
         this.noCompletion = false;
         this.needsSeparator = false;
+        this.complete = false;
         this.menu.setChoices([]);
         const completionP = this.dispatcher.getCommandCompletion(input);
         this.completionP = completionP;
@@ -239,20 +273,9 @@ export class PartialCompletionSession {
 
                 this.completionP = undefined;
                 debug(`Partial completion result: `, result);
-                if (result === undefined) {
-                    debug(
-                        `Partial completion skipped: No completions for '${input}'`,
-                    );
-                    this.noCompletion = true;
-                    return;
-                }
 
-                const partial =
-                    result.startIndex >= 0 && result.startIndex <= input.length
-                        ? input.substring(0, result.startIndex)
-                        : input;
-                this.current = partial;
                 this.needsSeparator = result.needsSeparator === true;
+                this.complete = result.complete;
 
                 // Build completions preserving backend group order.
                 const completions: SearchMenuItem[] = [];
@@ -278,10 +301,22 @@ export class PartialCompletionSession {
 
                 if (completions.length === 0) {
                     debug(
-                        `Partial completion skipped: No current completions for '${partial}'`,
+                        `Partial completion skipped: No completions for '${input}'`,
                     );
+                    // Keep this.current at the value startNewSession set
+                    // (the full input) so the EXHAUSTED anchor covers the
+                    // entire typed text.
+                    this.noCompletion = true;
                     return;
                 }
+
+                // Anchor the session at the resolved prefix so
+                // subsequent keystrokes filter within the trie.
+                const partial =
+                    result.startIndex >= 0 && result.startIndex <= input.length
+                        ? input.substring(0, result.startIndex)
+                        : input;
+                this.current = partial;
 
                 this.menu.setChoices(completions);
 

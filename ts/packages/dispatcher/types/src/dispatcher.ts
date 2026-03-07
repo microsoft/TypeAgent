@@ -52,7 +52,10 @@ export type CommandResult = {
 };
 
 export type CommandCompletionResult = {
-    startIndex: number; // index of first character of the filter text (after the last space)
+    // Length of the longest valid (parsable) prefix of the input.
+    // input[0..startIndex) is fully resolved; completions describe
+    // what can follow after that prefix.
+    startIndex: number;
     completions: CompletionGroup[]; // completions available at the current position
     // True when the matched prefix and the completion text are
     // structurally separated (e.g. a space between a command and its
@@ -60,6 +63,11 @@ export type CommandCompletionResult = {
     // the user has already typed the separator — the frontend uses
     // startIndex and this flag together to decide when to show the menu.
     needsSeparator?: boolean | undefined;
+    // True when the completions listed are the exhaustive set of valid
+    // continuations after the prefix.  When true and the user types
+    // something that doesn't prefix-match any completion, the caller
+    // can skip refetching since no other valid input exists.
+    complete: boolean;
 };
 
 export type AppAgentStatus = {
@@ -164,9 +172,7 @@ export interface Dispatcher {
     ): Promise<string[] | undefined>;
 
     // APIs to get command completion for intellisense like functionality.
-    getCommandCompletion(
-        prefix: string,
-    ): Promise<CommandCompletionResult | undefined>;
+    getCommandCompletion(prefix: string): Promise<CommandCompletionResult>;
 
     // Check if a request can be handled by cache without executing
     checkCache(request: string): Promise<CommandResult | undefined>;

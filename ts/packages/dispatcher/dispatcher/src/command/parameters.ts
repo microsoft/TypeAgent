@@ -136,6 +136,12 @@ function parseValueToken(
     }
 }
 
+// Tokenizes and parses a parameter string into typed flags and positional
+// arguments according to the given parameter definitions.  Supports quoted
+// values, boolean/number/string/json types, multi-value flags and arguments,
+// implicit-quote (rest-of-line) arguments, and a `--` separator.  When
+// `partial` is true, parsing errors are silently ignored so the function can
+// be used for live completions on incomplete input.
 export function parseParams<T extends ParameterDefinitions>(
     parameters: string,
     paramDefs: T,

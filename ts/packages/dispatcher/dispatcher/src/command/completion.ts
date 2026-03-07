@@ -105,11 +105,23 @@ function collectFlags(
     return flagCompletions;
 }
 
+// Internal result from parameter-level completion.
+//
+// `complete` uses a conservative heuristic:
+//  - false when the agent's getCommandCompletion was invoked (agents
+//    cannot yet signal whether their set is exhaustive).
+//  - false when a pending non-boolean flag accepts free-form input.
+//  - true  when all positional args are filled and only enumerable
+//    flag names remain (a finite, known set).
 type ParameterCompletionResult = {
     completions: CompletionGroup[];
     startIndex: number;
+    complete: boolean;
 };
 
+// Complete parameter values and flags for an already-resolved command
+// descriptor.  Returns undefined when the descriptor declares no
+// parameters (the caller decides whether sibling subcommands suffice).
 async function getCommandParameterCompletion(
     descriptor: CommandDescriptor,
     context: CommandHandlerContext,
@@ -146,6 +158,7 @@ async function getCommandParameterCompletion(
         agentCommandCompletions.push(pendingFlag);
     }
 
+    let agentInvoked = false;
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion) {
         const { tokens, lastCompletableParam, lastParamImplicitQuotes } =
@@ -172,6 +185,7 @@ async function getCommandParameterCompletion(
                 sessionContext,
             );
             completions.push(...agentGroups);
+            agentInvoked = true;
         }
     }
 
@@ -185,13 +199,88 @@ async function getCommandParameterCompletion(
     const filterLength = trailingSpace || !lastToken ? 0 : lastToken.length;
     const startIndex = inputLength - filterLength;
 
-    return { completions, startIndex };
+    // Determine whether the completion set is exhaustive.
+    // Agent-provided completions are conservatively treated as
+    // non-exhaustive since agents cannot yet signal exhaustiveness.
+    // When no agent is involved, completions are exhaustive if:
+    //  - A pending boolean flag offers only ["true", "false"]
+    //  - All positional args are filled and only enumerable flags remain
+    // Otherwise free-form text parameters make the set non-exhaustive.
+    let complete: boolean;
+    if (agentInvoked) {
+        complete = false;
+    } else if (pendingFlag !== undefined) {
+        // A non-boolean pending flag accepts free-form values.
+        // (Boolean flags are handled by getPendingFlag returning undefined
+        //  and pushing ["true", "false"] into completions directly.)
+        complete = false;
+    } else {
+        // No agent, no pending flag.  Exhaustive when there are no
+        // unfilled positional args (nextArgs is empty) and only
+        // flags remain — flag names are a finite, known set.
+        complete = params.nextArgs.length === 0;
+    }
+
+    return { completions, startIndex, complete };
 }
 
+//
+// ── getCommandCompletion contract ────────────────────────────────────────────
+//
+// Given a partial user input string, returns the longest valid prefix,
+// available completions from that point, and metadata about how they attach.
+//
+// Always returns a result — every input has a longest valid prefix
+// (at minimum the empty string, startIndex=0).  An empty completions
+// array with complete=true means the command is fully specified and
+// nothing further can follow.
+//
+// The portion of input after the prefix (the "suffix") is NOT a gate
+// on whether completions are returned.  The suffix is filter text:
+// the caller feeds it to a trie to narrow the offered completions
+// down to prefix-matches.  Even if the suffix doesn't match anything
+// today, the full set is still returned so the trie can decide.  For
+// example "@unknownagent " resolves only as far as "@" (startIndex=1);
+// completions offer all agent names and system subcommands, and the
+// trie filters "unknownagent " against them (yielding no matches, but
+// that is the trie's job, not ours).
+//
+// Return fields (see CommandCompletionResult):
+//
+//   startIndex   Length of the longest resolved prefix.
+//                input[0..startIndex) was fully consumed by
+//                normalizeCommand → resolveCommand (→ parseParams);
+//                completions describe what can validly follow.
+//                May be overridden by a grammar-reported prefixLength
+//                from a CompletionGroup.  Trailing whitespace before
+//                startIndex is stripped when needsSeparator is true.
+//
+//   completions  Array of CompletionGroups from up to three sources:
+//                (a) built-in command / subcommand / agent-name lists,
+//                (b) flag names from the descriptor's ParameterDefinitions,
+//                (c) agent-provided groups via the agent's
+//                    getCommandCompletion callback.
+//
+//   needsSeparator
+//                true when the prefix and completions are structurally
+//                separated (e.g. a space between a command and its
+//                parameters).  Aggregated: true if *any* group reports
+//                needsSeparator.
+//
+//   complete     true when the returned completions are the *exhaustive*
+//                set of valid continuations after the prefix.  When true
+//                and the user types something that doesn't prefix-match
+//                any completion, the caller can skip re-fetching because
+//                no other valid input exists.  Subcommand and agent-name
+//                lists are always exhaustive.  Parameter completions are
+//                exhaustive only when no agent was invoked and no
+//                free-form positional args remain unfilled — see
+//                ParameterCompletionResult for the heuristic.
+//
 export async function getCommandCompletion(
     input: string,
     context: CommandHandlerContext,
-): Promise<CommandCompletionResult | undefined> {
+): Promise<CommandCompletionResult> {
     try {
         debug(`Command completion start: '${input}'`);
 
@@ -202,11 +291,6 @@ export async function getCommandCompletion(
         const result = await resolveCommand(partialCommand, context);
 
         const table = result.table;
-        if (table === undefined) {
-            // Unknown app agent, or appAgent doesn't support commands
-            // Return undefined to indicate no more completions for this prefix.
-            return undefined;
-        }
 
         // The parse-derived startIndex: command resolution consumed
         // everything up to the suffix; within the suffix, parameter
@@ -223,53 +307,66 @@ export async function getCommandCompletion(
         }
 
         const descriptor = result.descriptor;
-        // Track whether subcommand alternatives are included alongside the
-        // default descriptor's parameters.  When true, startIndex must stay
-        // at the command boundary (before the suffix) since needsSeparator
-        // strips the space and lets the trie match both subcommands and
-        // parameter values.
-        let hasSubcommandCompletions = false;
+        let complete = true;
         if (descriptor !== undefined) {
-            if (
-                table !== undefined &&
-                !result.matched &&
-                getDefaultSubCommandDescriptor(table) === result.descriptor
-            ) {
-                // Resolved to the default sub command (not an explicit
-                // match).  Include sibling subcommand names so the user
-                // can choose between them and the default's parameters.
-                // This covers both "@config " (suffix="") and "@config c"
-                // (suffix="c") — the trie filters by prefix either way.
-                completions.push({
-                    name: "Subcommands",
-                    completions: Object.keys(table.commands),
-                    needsSeparator: true,
-                });
-                hasSubcommandCompletions = true;
-            }
+            // Get parameter completions first — we need to know
+            // whether parameters consumed past the command boundary
+            // before deciding if subcommand alternatives apply.
             const parameterCompletions = await getCommandParameterCompletion(
                 descriptor,
                 context,
                 result,
                 input.length,
             );
+
+            // Include sibling subcommand names when resolved to the
+            // default (not an explicit match), but only if parameter
+            // parsing hasn't consumed past the command boundary.
+            // Once the user has typed tokens that fill parameters
+            // (moving startIndex forward), they've committed to the
+            // default — subcommand names would be filtered against
+            // the wrong text at the wrong position.
+            const commandBoundary = input.length - result.suffix.length;
+            const addSubcommands =
+                table !== undefined &&
+                !result.matched &&
+                getDefaultSubCommandDescriptor(table) === descriptor &&
+                (parameterCompletions === undefined ||
+                    parameterCompletions.startIndex <= commandBoundary);
+
+            if (addSubcommands) {
+                completions.push({
+                    name: "Subcommands",
+                    completions: Object.keys(table.commands),
+                    needsSeparator: true,
+                });
+            }
+
             if (parameterCompletions === undefined) {
-                if (completions.length === 0) {
-                    // No more completion, return undefined;
-                    return undefined;
-                }
+                // Descriptor has no parameters.  If subcommand
+                // alternatives were added above, they are the
+                // exhaustive set; otherwise the command is fully
+                // specified with nothing more to type.
             } else {
                 completions.push(...parameterCompletions.completions);
-                if (!hasSubcommandCompletions) {
+                if (!addSubcommands) {
                     startIndex = parameterCompletions.startIndex;
                 }
+                complete = parameterCompletions.complete;
             }
-        } else {
-            if (result.suffix.length !== 0) {
-                // Unknown command
-                // Return undefined to indicate no more completions for this prefix.
-                return undefined;
-            }
+        } else if (table !== undefined) {
+            // descriptor is undefined: the suffix didn't resolve to any
+            // known command or subcommand.  startIndex already points to
+            // where resolution stopped (the start of the suffix), so we
+            // offer every valid continuation from that point — subcommand
+            // names and (when at the root) agent names.  The suffix is
+            // filter text for the caller's trie, not a reason to suppress
+            // completions.  Examples:
+            //   "@com"            → suffix="com",   completions include
+            //                       agent names + subcommands (trie
+            //                       narrows to "comptest", etc.)
+            //   "@unknownagent " → suffix="unknownagent ", same set
+            //                       (trie finds no match — that's fine)
             completions.push({
                 name: "Subcommands",
                 completions: Object.keys(table.commands),
@@ -293,6 +390,10 @@ export async function getCommandCompletion(
                         ),
                 });
             }
+        } else {
+            // Both table and descriptor are undefined — the agent
+            // returned no commands at all.  Nothing to add;
+            // completions stays empty, complete stays true.
         }
 
         // Allow grammar-reported prefixLength (from groups) to override
@@ -328,12 +429,20 @@ export async function getCommandCompletion(
             startIndex,
             completions,
             needsSeparator,
+            complete,
         };
 
         debug(`Command completion result:`, completionResult);
         return completionResult;
     } catch (e: any) {
         debugError(`Command completion error: ${e}\n${e.stack}`);
-        return undefined;
+        // On error, return a safe default — don't claim exhaustiveness
+        // since we don't know what went wrong.
+        return {
+            startIndex: 0,
+            completions: [],
+            needsSeparator: undefined,
+            complete: false,
+        };
     }
 }
