@@ -108,25 +108,36 @@ function wrapClientIOWithDisplayLog(
     return {
         ...clientIO,
         setDisplayInfo(requestId, source, actionIndex?, action?) {
-            displayLog.logSetDisplayInfo(
+            const seq = displayLog.logSetDisplayInfo(
                 requestId,
                 source,
                 actionIndex,
                 action,
             );
-            clientIO.setDisplayInfo(requestId, source, actionIndex, action);
+            clientIO.setDisplayInfo(
+                requestId,
+                source,
+                actionIndex,
+                action,
+                seq,
+            );
         },
         setDisplay(message) {
-            displayLog.logSetDisplay(message);
-            clientIO.setDisplay(message);
+            const seq = displayLog.logSetDisplay(message);
+            clientIO.setDisplay(message, seq);
         },
         appendDisplay(message, mode) {
-            displayLog.logAppendDisplay(message, mode);
-            clientIO.appendDisplay(message, mode);
+            const seq = displayLog.logAppendDisplay(message, mode);
+            clientIO.appendDisplay(message, mode, seq);
         },
         notify(notificationId, event, data, source) {
-            displayLog.logNotify(notificationId, event, data, source);
-            clientIO.notify(notificationId, event, data, source);
+            const seq = displayLog.logNotify(
+                notificationId,
+                event,
+                data,
+                source,
+            );
+            clientIO.notify(notificationId, event, data, source, seq);
         },
     };
 }

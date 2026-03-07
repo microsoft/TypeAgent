@@ -23,7 +23,12 @@ import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
-import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
+import {
+    ClientIO,
+    DisplayLogEntry,
+    Dispatcher,
+    RequestId,
+} from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
@@ -55,10 +60,13 @@ function getWebSocketAPI(): ClientAPI {
 }
 
 async function initializeChatHistory(chatView: ChatView) {
-    const history = await getClientAPI().getChatHistory();
-    if (history === undefined) {
+    const result = await getClientAPI().getChatHistory();
+    if (result === undefined) {
         return;
     }
+    const { html: history, seq } = result;
+    maxSeqSeen = seq;
+
     // load the history
     chatView.getScrollContainer().innerHTML = history;
 
@@ -127,6 +135,32 @@ async function initializeChatHistory(chatView: ChatView) {
     }
 }
 
+function replayDisplayHistory(dispatcher: Dispatcher, clientIO: ClientIO) {
+    const afterSeq = maxSeqSeen >= 0 ? maxSeqSeen : undefined;
+    dispatcher.getDisplayHistory(afterSeq).then((entries: DisplayLogEntry[]) => {
+        for (const entry of entries) {
+            switch (entry.type) {
+                case "set-display":
+                    clientIO.setDisplay(entry.message);
+                    break;
+                case "append-display":
+                    clientIO.appendDisplay(entry.message, entry.mode);
+                    break;
+                case "set-display-info":
+                    clientIO.setDisplayInfo(
+                        entry.requestId,
+                        entry.source,
+                        entry.actionIndex,
+                        entry.action,
+                    );
+                    break;
+                // Skip notify — notifications are ephemeral
+            }
+            maxSeqSeen = Math.max(maxSeqSeen, entry.seq);
+        }
+    });
+}
+
 function registerClient(
     chatView: ChatView,
     agents: Map<string, string>,
@@ -141,14 +175,23 @@ function registerClient(
         exit: () => {
             window.close();
         },
-        setDisplayInfo: (requestId, source, actionIndex, action) => {
+        setDisplayInfo: (requestId, source, actionIndex, action, seq?) => {
             chatView.setDisplayInfo(requestId, source, actionIndex, action);
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
         },
-        setDisplay: (message) => {
+        setDisplay: (message, seq?) => {
             chatView.addAgentMessage(message);
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
         },
-        appendDisplay: (message, mode) => {
+        appendDisplay: (message, mode, seq?) => {
             chatView.addAgentMessage(message, { appendMode: mode });
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
         },
         appendDiagnosticData: (requestId, data) => {
             // TODO: append data instead of replace
@@ -195,7 +238,10 @@ function registerClient(
         popupQuestion: () => {
             throw new Error("Main process should have handled popupQuestion");
         },
-        notify: (requestId, event, data, source) => {
+        notify: (requestId, event, data, source, seq?) => {
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
             switch (event) {
                 case "explained":
                     chatView.notifyExplained(requestId, data);
@@ -327,6 +373,7 @@ function registerClient(
         clientIO,
         dispatcherInitialized(dispatcher: Dispatcher): void {
             chatView.initializeDispatcher(dispatcher);
+            replayDisplayHistory(dispatcher, clientIO);
         },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
             agents.clear();
@@ -489,6 +536,10 @@ function summarizeNotifications(
 
 const notifications = new Array();
 
+// Tracks the highest display log seq seen by this client.
+// Set from saved snapshot and updated as live entries arrive.
+let maxSeqSeen: number = -1;
+
 export class IdGenerator {
     private count = 0;
     public genId() {
@@ -592,8 +643,10 @@ function watchForDOMChanges(element: HTMLDivElement) {
             hasTimeout = false;
             const idleTime = Date.now() - lastModifiedTime;
             if (idleTime >= 250) {
-                // been idle for 3 seconds, save the chat history
-                getClientAPI().saveChatHistory(element.innerHTML);
+                getClientAPI().saveChatHistory(
+                    element.innerHTML,
+                    maxSeqSeen,
+                );
             } else {
                 // not idle long enough, reschedule
                 scheduleSaveChatHistory();

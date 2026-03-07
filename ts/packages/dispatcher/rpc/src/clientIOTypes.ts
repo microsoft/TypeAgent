@@ -38,9 +38,14 @@ export type ClientIOCallFunctions = {
         source: string,
         actionIndex?: number,
         action?: TypeAgentAction | string[],
+        seq?: number,
     ): void;
-    setDisplay(message: IAgentMessage): void;
-    appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
+    setDisplay(message: IAgentMessage, seq?: number): void;
+    appendDisplay(
+        message: IAgentMessage,
+        mode: DisplayAppendMode,
+        seq?: number,
+    ): void;
     appendDiagnosticData(requestId: RequestId, data: any): void;
     setDynamicDisplay(
         requestId: RequestId,
@@ -55,6 +60,7 @@ export type ClientIOCallFunctions = {
         event: string,
         data: any,
         source: string,
+        seq?: number,
     ): void;
 
     requestChoice(

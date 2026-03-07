@@ -51,9 +51,14 @@ export interface ClientIO {
         source: string,
         actionIndex?: number,
         action?: TypeAgentAction | string[],
+        seq?: number,
     ): void;
-    setDisplay(message: IAgentMessage): void;
-    appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void;
+    setDisplay(message: IAgentMessage, seq?: number): void;
+    appendDisplay(
+        message: IAgentMessage,
+        mode: DisplayAppendMode,
+        seq?: number,
+    ): void;
     appendDiagnosticData(requestId: RequestId, data: any): void;
     setDynamicDisplay(
         requestId: RequestId,
@@ -89,12 +94,14 @@ export interface ClientIO {
         event: string,
         data: any,
         source: string,
+        seq?: number,
     ): void;
     notify(
         requestId: RequestId,
         event: "explained",
         data: NotifyExplainedData,
         source: string,
+        seq?: number,
     ): void;
 
     openLocalView(requestId: RequestId, port: number): Promise<void>;

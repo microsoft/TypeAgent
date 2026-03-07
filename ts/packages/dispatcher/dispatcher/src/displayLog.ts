@@ -53,46 +53,54 @@ export class DisplayLog {
 
     /**
      * Append a set-display entry.
+     * @returns the assigned sequence number
      */
-    logSetDisplay(message: IAgentMessage): void {
+    logSetDisplay(message: IAgentMessage): number {
+        const seq = this.nextSeq++;
         this.entries.push({
             type: "set-display",
-            seq: this.nextSeq++,
+            seq,
             timestamp: Date.now(),
             message,
         });
         this.dirty = true;
+        return seq;
     }
 
     /**
      * Append an append-display entry.
+     * @returns the assigned sequence number
      */
     logAppendDisplay(
         message: IAgentMessage,
         mode: AppendDisplayEntry["mode"],
-    ): void {
+    ): number {
+        const seq = this.nextSeq++;
         this.entries.push({
             type: "append-display",
-            seq: this.nextSeq++,
+            seq,
             timestamp: Date.now(),
             message,
             mode,
         });
         this.dirty = true;
+        return seq;
     }
 
     /**
      * Append a set-display-info entry.
+     * @returns the assigned sequence number
      */
     logSetDisplayInfo(
         requestId: RequestId,
         source: string,
         actionIndex?: number | undefined,
         action?: SetDisplayInfoEntry["action"],
-    ): void {
+    ): number {
+        const seq = this.nextSeq++;
         const entry: SetDisplayInfoEntry = {
             type: "set-display-info",
-            seq: this.nextSeq++,
+            seq,
             timestamp: Date.now(),
             requestId,
             source,
@@ -105,20 +113,23 @@ export class DisplayLog {
         }
         this.entries.push(entry);
         this.dirty = true;
+        return seq;
     }
 
     /**
      * Append a notify entry.
+     * @returns the assigned sequence number
      */
     logNotify(
         notificationId: string | RequestId | undefined,
         event: string,
         data: any,
         source: string,
-    ): void {
+    ): number {
+        const seq = this.nextSeq++;
         this.entries.push({
             type: "notify",
-            seq: this.nextSeq++,
+            seq,
             timestamp: Date.now(),
             notificationId,
             event,
@@ -126,6 +137,14 @@ export class DisplayLog {
             source,
         });
         this.dirty = true;
+        return seq;
+    }
+
+    /**
+     * Get the current max sequence number, or -1 if the log is empty.
+     */
+    getSeq(): number {
+        return this.nextSeq - 1;
     }
 
     /**
