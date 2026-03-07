@@ -54,8 +54,11 @@ export type CommandResult = {
 export type CommandCompletionResult = {
     startIndex: number; // index of first character of the filter text (after the last space)
     completions: CompletionGroup[]; // completions available at the current position
-    // True when a separator (e.g. space) must be inserted between the
-    // already-typed prefix and the completion text.
+    // True when the matched prefix and the completion text are
+    // structurally separated (e.g. a space between a command and its
+    // parameters).  This describes the grammar relationship, not whether
+    // the user has already typed the separator — the frontend uses
+    // startIndex and this flag together to decide when to show the menu.
     needsSeparator?: boolean | undefined;
 };
 
