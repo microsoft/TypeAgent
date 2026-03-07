@@ -386,6 +386,9 @@ contextBridge.exposeInMainWorld("browserConnect", {
 
 // Add extension service adapter API for view pages
 contextBridge.exposeInMainWorld("electronAPI", {
+    // Get the current tab ID
+    getTabId: () => currentActiveTabId || (window as any)._tabId || null,
+
     // Extension service adapter API
     sendBrowserMessage: async (message: any) => {
         return ipcRenderer.invoke("browser-extension-message", message);
