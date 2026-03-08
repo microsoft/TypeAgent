@@ -150,6 +150,7 @@ export function createChannelProvider(
             );
             return;
         }
+        const msgType = message.message?.type || "unknown";
         const callId = message.message?.callId ?? "n/a";
         debug(
             `routing message to channel: ${message.name} (type=${msgType}, callId=${callId})`,
