@@ -45,9 +45,6 @@ const copilotClients = new WeakMap<object, CopilotClient>();
 // Track Copilot session IDs per dispatcher instance (mirrors Claude's session tracking)
 const copilotSessionIds = new WeakMap<object, string>();
 
-// Track active Copilot sessions per dispatcher instance for reuse
-const copilotSessions = new WeakMap<object, any>();
-
 /**
  * Get the stored session ID for this dispatcher context
  * (Same pattern as Claude implementation)
@@ -67,25 +64,6 @@ function setSessionId(
     sessionId: string,
 ): void {
     copilotSessionIds.set(context.sessionContext.agentContext, sessionId);
-}
-
-/**
- * Get the stored session for this dispatcher context
- */
-function getSession(
-    context: ActionContext<CommandHandlerContext>,
-): any | undefined {
-    return copilotSessions.get(context.sessionContext.agentContext);
-}
-
-/**
- * Store the session for this dispatcher context
- */
-function setSession(
-    context: ActionContext<CommandHandlerContext>,
-    session: any,
-): void {
-    copilotSessions.set(context.sessionContext.agentContext, session);
 }
 
 /**
@@ -482,7 +460,7 @@ function getCopilotSessionConfig(
 
 /**
  * Execute reasoning action without planning
- * Uses session persistence and reuse for multi-turn conversations
+ * Uses session ID resumption for multi-turn conversations
  */
 async function executeReasoningWithoutPlanning(
     originalRequest: string,
@@ -494,9 +472,24 @@ async function executeReasoningWithoutPlanning(
     const client = await getCopilotClient(context);
     const config = getCopilotSessionConfig(context);
 
-    // Check for existing session to enable multi-turn conversations
-    let session = getSession(context);
+    // Check for existing session ID to enable multi-turn conversations
     let sessionId = getSessionId(context);
+    let session: any = null;
+
+    if (sessionId) {
+        // Resume existing session by ID (don't reuse session object)
+        debug(`Resuming existing session: ${sessionId}`);
+        try {
+            session = await client.resumeSession(sessionId);
+            debug(`Session resumed successfully: ${sessionId}`);
+        } catch (err) {
+            debug(
+                `Failed to resume session ${sessionId}, creating new one:`,
+                err,
+            );
+            session = null;
+        }
+    }
 
     if (!session) {
         // Generate structured session ID based on dispatcher session
@@ -510,8 +503,7 @@ async function executeReasoningWithoutPlanning(
             });
             debug(`Session created successfully: ${sessionId}`);
 
-            // Store session and session ID for reuse across requests
-            setSession(context, session);
+            // Store session ID (not the session object) for future resumption
             setSessionId(context, sessionId);
         } catch (err) {
             debug("Failed to create session:", err);
@@ -520,8 +512,6 @@ async function executeReasoningWithoutPlanning(
                     `Error: ${err instanceof Error ? err.message : String(err)}`,
             );
         }
-    } else {
-        debug(`Reusing existing session: ${sessionId}`);
     }
 
     let finalResult: string | undefined = undefined;
@@ -647,20 +637,24 @@ async function executeReasoningWithoutPlanning(
 
         const response = await session.sendAndWait({ prompt });
         debug("Received response from Copilot");
+        debug("Response:", JSON.stringify(response, null, 2));
 
         if (response?.data?.content) {
             finalResult = response.data.content;
         }
 
         // Display final content as permanent block (replaces temporary streaming display)
-        if (currentContent) {
+        const displayContent = currentContent || finalResult;
+        if (displayContent) {
             context.actionIO.appendDisplay(
                 {
                     type: "markdown",
-                    content: currentContent,
+                    content: displayContent,
                 },
                 "block",
             );
+        } else {
+            debug("Warning: No content to display!");
         }
 
         return finalResult
@@ -722,11 +716,27 @@ async function executeReasoningWithTracing(
         const client = await getCopilotClient(context);
         const config = getCopilotSessionConfig(context);
 
-        // Check for existing session
-        let session = getSession(context);
+        // Check for existing session ID to enable multi-turn conversations
         let sessionId = getSessionId(context);
+        let session: any = null;
+
+        if (sessionId) {
+            // Resume existing session by ID (don't reuse session object)
+            debug(`Resuming existing session: ${sessionId}`);
+            try {
+                session = await client.resumeSession(sessionId);
+                debug(`Session resumed successfully: ${sessionId}`);
+            } catch (err) {
+                debug(
+                    `Failed to resume session ${sessionId}, creating new one:`,
+                    err,
+                );
+                session = null;
+            }
+        }
 
         if (!session) {
+            // Generate structured session ID based on dispatcher session
             sessionId = generateSessionId(context);
             debug(`Creating new session: ${sessionId}`);
 
@@ -737,7 +747,7 @@ async function executeReasoningWithTracing(
                 });
                 debug(`Session created successfully: ${sessionId}`);
 
-                setSession(context, session);
+                // Store session ID (not the session object) for future resumption
                 setSessionId(context, sessionId);
             } catch (err) {
                 debug("Failed to create session:", err);
@@ -746,8 +756,6 @@ async function executeReasoningWithTracing(
                         `Error: ${err instanceof Error ? err.message : String(err)}`,
                 );
             }
-        } else {
-            debug(`Reusing existing session: ${sessionId}`);
         }
 
         let finalResult: string | undefined = undefined;
@@ -879,19 +887,24 @@ async function executeReasoningWithTracing(
 
             const response = await session.sendAndWait({ prompt });
             debug("Received response from Copilot");
+            debug("Response:", JSON.stringify(response, null, 2));
 
             if (response?.data?.content) {
                 finalResult = response.data.content;
             }
 
-            if (currentContent) {
+            // Display final content as permanent block (replaces temporary streaming display)
+            const displayContent = currentContent || finalResult;
+            if (displayContent) {
                 context.actionIO.appendDisplay(
                     {
                         type: "markdown",
-                        content: currentContent,
+                        content: displayContent,
                     },
                     "block",
                 );
+            } else {
+                debug("Warning: No content to display!");
             }
 
             // Mark trace as successful
