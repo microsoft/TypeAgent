@@ -341,7 +341,8 @@ export class PDFService {
      */
     addBookmark(bookmark: PDFBookmark): PDFBookmark {
         const sanitizedBookmark = sanitizeBookmark(bookmark);
-        const docBookmarks = this.bookmarks.get(sanitizedBookmark.documentId) || [];
+        const docBookmarks =
+            this.bookmarks.get(sanitizedBookmark.documentId) || [];
         docBookmarks.push(sanitizedBookmark);
         this.bookmarks.set(sanitizedBookmark.documentId, docBookmarks);
 

@@ -39,7 +39,9 @@ function sanitizeObject<T>(value: T): T {
 
     if (value && typeof value === "object") {
         const result: Record<string, unknown> = {};
-        for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+        for (const [key, v] of Object.entries(
+            value as Record<string, unknown>,
+        )) {
             result[key] = sanitizeObject(v);
         }
         return result as T;
