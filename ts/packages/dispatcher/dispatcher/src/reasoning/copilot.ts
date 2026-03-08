@@ -389,10 +389,7 @@ function getCopilotSessionConfig(
     return {
         model: defaultModel,
         streaming: true,
-        tools: [
-            discoverTool,
-            executeTool,
-        ],
+        tools: [discoverTool, executeTool],
         workingDirectory: getRepoRoot(),
         systemMessage: {
             mode: "append" as const,
@@ -447,7 +444,10 @@ async function executeReasoningWithoutPlanning(
             session = await client.resumeSession(sessionId);
             debug(`Session resumed successfully: ${sessionId}`);
         } catch (err) {
-            debug(`Failed to resume session ${sessionId}, creating new one:`, err);
+            debug(
+                `Failed to resume session ${sessionId}, creating new one:`,
+                err,
+            );
             session = null;
         }
     }
@@ -536,8 +536,12 @@ async function executeReasoningWithoutPlanning(
     const unsubscribeToolStart = session.on(
         "tool.execution_start",
         (event: any) => {
-            debug(`Tool execution started event:`, JSON.stringify(event, null, 2));
-            const toolName = event.data?.toolName || event.toolName || "unknown";
+            debug(
+                `Tool execution started event:`,
+                JSON.stringify(event, null, 2),
+            );
+            const toolName =
+                event.data?.toolName || event.toolName || "unknown";
             const parameters = event.data?.input || event.parameters || {};
             context.actionIO.appendDisplay(
                 {
@@ -553,7 +557,10 @@ async function executeReasoningWithoutPlanning(
     const unsubscribeToolComplete = session.on(
         "tool.execution_complete",
         (event: any) => {
-            debug(`Tool execution completed event:`, JSON.stringify(event, null, 2));
+            debug(
+                `Tool execution completed event:`,
+                JSON.stringify(event, null, 2),
+            );
         },
     );
 
@@ -664,7 +671,10 @@ async function executeReasoningWithTracing(
                 session = await client.resumeSession(sessionId);
                 debug(`Session resumed successfully: ${sessionId}`);
             } catch (err) {
-                debug(`Failed to resume session ${sessionId}, creating new one:`, err);
+                debug(
+                    `Failed to resume session ${sessionId}, creating new one:`,
+                    err,
+                );
                 session = null;
             }
         }
@@ -762,8 +772,12 @@ async function executeReasoningWithTracing(
         const unsubscribeToolStart = session.on(
             "tool.execution_start",
             (event: any) => {
-                debug(`Tool execution started event:`, JSON.stringify(event, null, 2));
-                const toolName = event.data?.toolName || event.toolName || "unknown";
+                debug(
+                    `Tool execution started event:`,
+                    JSON.stringify(event, null, 2),
+                );
+                const toolName =
+                    event.data?.toolName || event.toolName || "unknown";
                 const parameters = event.data?.input || event.parameters || {};
 
                 // Record tool call for trace
@@ -783,7 +797,10 @@ async function executeReasoningWithTracing(
         const unsubscribeToolComplete = session.on(
             "tool.execution_complete",
             (event: any) => {
-                debug(`Tool execution completed event:`, JSON.stringify(event, null, 2));
+                debug(
+                    `Tool execution completed event:`,
+                    JSON.stringify(event, null, 2),
+                );
             },
         );
 
