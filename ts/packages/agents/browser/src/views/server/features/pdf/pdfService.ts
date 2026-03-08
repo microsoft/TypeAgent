@@ -24,7 +24,7 @@ function sanitizeBookmark(bookmark: PDFBookmark): PDFBookmark {
         const value = sanitized[key];
         if (typeof value === "string") {
             // Use xss to strip/escape any potentially dangerous HTML/JS
-            sanitized[key] = xss(value) as PDFBookmark[typeof key];
+            (sanitized as any)[key] = xss(value) as PDFBookmark[typeof key];
         }
     }
 
