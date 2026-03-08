@@ -37,6 +37,7 @@ import {
 } from "../ui/knowledgeCardRenderer.mjs";
 import { updateExtractionTimestamp } from "../cache/extractionCache.mjs";
 import registerDebug from "debug";
+import { convert } from "html-to-text";
 
 const debug = registerDebug("typeagent:browser:knowledge");
 
@@ -159,9 +160,9 @@ export function createExtractionInputsFromFragments(
                         "Failed to create doc parts from HTML:",
                         error,
                     );
-                    textContent = fragment.content
-                        .replace(/<[^>]*>/g, "")
-                        .trim();
+                    textContent = convert(fragment.content, {
+                        wordwrap: false,
+                    }).trim();
                 }
             }
 
