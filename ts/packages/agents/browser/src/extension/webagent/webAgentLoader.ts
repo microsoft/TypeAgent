@@ -11,7 +11,9 @@ import {
     extractComponent as rpcExtractComponent,
     sendNotification,
 } from "./webAgentRpc";
-// import { CrosswordWebAgent } from "./crossword/CrosswordWebAgent";
+import { CrosswordWebAgent } from "./crossword/CrosswordWebAgent";
+import { CommerceWebAgent } from "./commerce/CommerceWebAgent";
+import { InstacartWebAgent } from "./instacart/InstacartWebAgent";
 import { UIActions, EnterTextOptions } from "./WebAgentContext";
 
 declare global {
@@ -99,7 +101,9 @@ function createUIActions(): UIActions {
 }
 
 const registeredAgents: WebAgent[] = [
-    // new CrosswordWebAgent(),
+    new CrosswordWebAgent(),
+    new CommerceWebAgent(),
+    new InstacartWebAgent(),
 ];
 
 let activeAgent: WebAgent | null = null;
@@ -182,6 +186,12 @@ function handleSpaNavigation(): void {
 }
 
 export function initializeWebAgentLoader(): void {
+    // Only activate WebAgents in the top-level frame, not in iframes
+    if (window !== window.top) {
+        console.log("[WebAgentLoader] Skipping initialization in iframe");
+        return;
+    }
+
     console.log("[WebAgentLoader] Initializing WebAgentLoader...");
     console.log(`[WebAgentLoader] Current URL: ${window.location.href}`);
     activateAgentForUrl(window.location.href);

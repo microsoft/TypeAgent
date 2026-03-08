@@ -26,7 +26,7 @@ export interface PageState {
     readyState: DocumentReadyState;
 }
 
-const DEFAULT_RPC_TIMEOUT = 30000;
+const DEFAULT_RPC_TIMEOUT = 60000;
 
 async function sendRpcToAgent(
     method: string,
@@ -87,6 +87,15 @@ export async function extractComponent<T>(
     if (!response.success) {
         throw new Error(response.error || "Failed to extract component");
     }
+
+    console.log(
+        `[WebAgentRpc] Extracted component of type ${type}: Full response: `,
+        response,
+    );
+    console.log(
+        `[WebAgentRpc] Extracted component of type ${type}:`,
+        response.data,
+    );
 
     return response.data as T;
 }
