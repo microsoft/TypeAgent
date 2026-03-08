@@ -100,7 +100,8 @@
     "website-memory": "workspace:*",
     "websocket-utils": "workspace:*",
     "ws": "^8.17.1",
-    "yaml": "^2.3.4"
+    "yaml": "^2.3.4",
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
