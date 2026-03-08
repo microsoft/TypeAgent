@@ -74,6 +74,7 @@
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
     "website-memory": "workspace:*",
+    "taskflow-typeagent": "workspace:*",
     "zod": "^4.1.13"
   },
   "devDependencies": {

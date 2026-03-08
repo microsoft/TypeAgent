@@ -14,7 +14,10 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./manifest.json",
-    "./agent/handlers": "./dist/actionHandler.mjs"
+    "./agent/handlers": "./dist/actionHandler.mjs",
+    "./recipe": "./dist/types/recipe.js",
+    "./recipeCompiler": "./dist/recipeCompiler.js",
+    "./grammarGenerator": "./dist/grammarGenerator.js"
   },
   "scripts": {
     "agc": "agc -i ./src/taskflowSchema.agr -o ./dist/taskflowSchema.ag.json",

@@ -6,9 +6,9 @@ import { WebTask, TaskExecutionResult } from "./types.js";
 import { TraceCollector } from "./tracing/traceCollector.js";
 import { TraceCollectorOptions } from "./tracing/types.js";
 import { PlanGenerator } from "./planning/planGenerator.js";
-import { PlanExecutor } from "./planning/planExecutor.js";
 import { PlanSerializer } from "./planning/planSerializer.js";
 import { ExecutionPlan } from "./planning/types.js";
+import { WebRecipeGenerator } from "./recipeGenerator.js";
 import path from "path";
 
 /**
@@ -475,93 +475,39 @@ export class WebTaskAgent {
                 tracer.setPlanPaths(originalPlanPath);
             }
 
-            // STEP 2: EXECUTE PLAN
-            console.log(`[Execution] Executing plan...`);
-            const executor = new PlanExecutor();
-            const planResult = await executor.executePlan(
-                originalPlan,
-                this.options,
-                this, // Pass WebTaskAgent instance for step execution
-                tracer || undefined,
-            );
+            // STEP 2: Convert plan to recipe for flowInterpreter execution
+            const recipeGen = new WebRecipeGenerator();
+            const recipe = recipeGen.generate(originalPlan);
 
-            console.log(
-                `[Execution] Plan execution ${planResult.success ? "succeeded" : "failed"}`,
-            );
-            console.log(
-                `[Execution] Executed ${planResult.executedSteps}/${planResult.totalSteps} steps`,
-            );
-            if (planResult.corrections.length > 0) {
+            if (recipe) {
                 console.log(
-                    `[Execution] ${planResult.corrections.length} corrections made during execution`,
+                    `[Recipe] Generated recipe: ${recipe.actionName} (${recipe.steps.length} steps)`,
                 );
+
+                // Save recipe for future grammar-based matching
+                const recipePath = path.join(
+                    traceDir,
+                    `${recipe.actionName}.recipe.json`,
+                );
+                const fs = await import("node:fs/promises");
+                await fs.writeFile(
+                    recipePath,
+                    JSON.stringify(recipe, null, 2),
+                );
+                console.log(`[Recipe] Saved to: ${recipePath}`);
             }
 
-            // STEP 3: LEARN AND UPDATE PLAN (if needed)
-            if (tracer) {
-                // Evaluate if plan needs updating
-                const updateDecision =
-                    serializer.shouldUpdatePlan(originalPlan);
-
-                if (updateDecision.shouldUpdate) {
-                    console.log(`[Learning] ${updateDecision.reason}`);
-                    console.log(
-                        `[Learning] Generating revised plan based on execution...`,
-                    );
-
-                    const planner = new PlanGenerator(this.options);
-                    const trace = tracer.getTrace();
-
-                    const revisedPlan = await planner.revisePlan(
-                        originalPlan,
-                        trace,
-                        {
-                            preserveStructure: false,
-                            onlyCorrections: false,
-                        },
-                    );
-
-                    console.log(
-                        `[Learning] Generated revised plan (v${revisedPlan.version})`,
-                    );
-
-                    // Save revised plan to trace dir
-                    const revisedPlanPath = await serializer.saveRevisedPlan(
-                        revisedPlan,
-                        traceDir,
-                    );
-                    await serializer.savePlanSummary(revisedPlan, traceDir);
-                    await serializer.savePlanComparison(
-                        originalPlan,
-                        revisedPlan,
-                        traceDir,
-                    );
-
-                    // Update tracer with revised plan path
-                    tracer.setPlanPaths(originalPlanPath, revisedPlanPath);
-
-                    // Save revised plan to library for future use
-                    await serializer.savePlanToLibrary(revisedPlan);
-
-                    console.log(`[Learning] Saved revised plan and comparison`);
-                } else {
-                    console.log(
-                        `[Learning] Plan is good, no revision needed: ${updateDecision.reason}`,
-                    );
-
-                    // If we generated a new plan (not cached), save it to library
-                    if (!usingCachedPlan) {
-                        await serializer.savePlanToLibrary(originalPlan);
-                        console.log(
-                            `[Learning] Saved new plan to library for future use`,
-                        );
-                    }
-                }
+            // Save plan to library for future use
+            if (!usingCachedPlan) {
+                await serializer.savePlanToLibrary(originalPlan);
+                console.log(
+                    `[Planning] Saved plan to library for future use`,
+                );
             }
 
             // Mark trace complete and save
             if (tracer) {
-                tracer.markComplete(planResult.success, planResult.error);
+                tracer.markComplete(true);
                 await tracer.saveTrace();
             }
 
@@ -569,8 +515,8 @@ export class WebTaskAgent {
 
             return {
                 taskId: task.id,
-                success: planResult.success,
-                data: planResult.data,
+                success: true,
+                data: { plan: originalPlan },
                 duration: duration,
             };
         } catch (error) {

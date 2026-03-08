@@ -27,13 +27,9 @@ import { TypeAgentJsonValidator } from "typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
-import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
-import { PlanGenerator } from "./planning/planGenerator.js";
-import { PlanLibrary } from "./planning/planLibrary.js";
-import { PlanMatcher } from "./planning/planMatcher.js";
-import { PlanExecutor } from "./planning/planExecutor.js";
+import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 
 const model = "claude-sonnet-4-5-20250929";
@@ -753,101 +749,32 @@ async function executeReasoningWithTracing(
         // Save trace
         await tracer.saveTrace();
 
-        // Phase 2: Generate plan from successful trace
+        // Auto-generate recipe from successful trace for future reuse via flowInterpreter
         if (tracer.wasSuccessful()) {
             try {
-                const planGenerator = new PlanGenerator();
-                const planLibrary = new PlanLibrary(
-                    storage,
-                    context.sessionContext.instanceStorage,
-                );
+                const recipeGen = new ReasoningRecipeGenerator();
+                const recipe = await recipeGen.generate(tracer.getTrace());
 
-                const plan = await planGenerator.generatePlan(
-                    tracer.getTrace(),
-                );
-
-                if (plan && planGenerator.validatePlan(plan)) {
-                    // Check for duplicate plans before saving
-                    const existingPlans = await planLibrary.findMatchingPlans(
-                        originalRequest,
-                        plan.intent,
+                if (recipe) {
+                    const pendingDir = path.join(
+                        getRepoRoot(),
+                        "packages",
+                        "agents",
+                        "taskflow",
+                        "pending",
                     );
-
-                    let isDuplicate = false;
-                    let duplicatePlanId: string | undefined;
-
-                    if (existingPlans.length > 0) {
-                        // Use PlanMatcher to check if this plan is essentially a duplicate
-                        const planMatcher = new PlanMatcher(planLibrary);
-
-                        for (const existingPlan of existingPlans) {
-                            // Check if existing plan is user-approved
-                            if (existingPlan.approval?.status === "approved") {
-                                debug(
-                                    `Found user-approved plan: ${existingPlan.planId}, skipping new plan creation`,
-                                );
-
-                                // Update usage of approved plan instead
-                                await planLibrary.updatePlanUsage(
-                                    existingPlan.planId,
-                                    true,
-                                    tracer.getTrace().metrics.duration,
-                                );
-
-                                isDuplicate = true;
-                                duplicatePlanId = existingPlan.planId;
-                                break;
-                            }
-
-                            // Check if the descriptions are very similar
-                            const similarity =
-                                await planMatcher.computeSimilarity(
-                                    plan.description,
-                                    existingPlan.description,
-                                );
-
-                            if (similarity >= 0.8) {
-                                isDuplicate = true;
-                                duplicatePlanId = existingPlan.planId;
-                                debug(
-                                    `Detected duplicate plan (similarity: ${similarity}): ${existingPlan.planId}`,
-                                );
-
-                                // Update the existing plan's usage count
-                                await planLibrary.updatePlanUsage(
-                                    existingPlan.planId,
-                                    true,
-                                    tracer.getTrace().metrics.duration,
-                                );
-                                break;
-                            }
-                        }
-                    }
-
-                    if (isDuplicate) {
-                        debug(
-                            `Skipped creating duplicate plan, updated existing: ${duplicatePlanId}`,
-                        );
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Updated existing workflow plan usage (prevented duplicate)`,
-                        });
-                    } else {
-                        await planLibrary.savePlan(plan);
-                        debug(
-                            `Generated and saved workflow plan: ${plan.planId} (${plan.intent})`,
-                        );
-
-                        // Notify user that a plan was created
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Created reusable workflow plan: ${plan.description}`,
-                        });
-                    }
+                    const { saveRecipe } = await import(
+                        "taskflow-typeagent/recipeCompiler"
+                    );
+                    const filePath = await saveRecipe(recipe, pendingDir);
+                    debug(`Recipe saved: ${filePath}`);
+                    context.actionIO.appendDisplay({
+                        type: "text",
+                        content: `\n✓ Recipe saved: ${recipe.actionName}.recipe.json`,
+                    });
                 }
             } catch (error) {
-                // Don't fail the request if plan generation fails
-                debug("Failed to generate plan from trace:", error);
+                debug("Failed to generate recipe from trace:", error);
             }
         }
 
@@ -860,117 +787,6 @@ async function executeReasoningWithTracing(
         await tracer.saveTrace();
         throw error;
     }
-}
-
-/**
- * Execute reasoning action with planning (Phase 3: plan execution + fallback)
- */
-async function executeReasoningWithPlanning(
-    originalRequest: string,
-    context: ActionContext<CommandHandlerContext>,
-): Promise<any> {
-    const storage = context.sessionContext.sessionStorage;
-
-    if (!storage) {
-        // No session storage available - fallback to standard reasoning
-        debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(originalRequest, context);
-    }
-
-    // Phase 3: Try to find and execute a matching plan
-    try {
-        const planLibrary = new PlanLibrary(
-            storage,
-            context.sessionContext.instanceStorage,
-        );
-        const planMatcher = new PlanMatcher(planLibrary);
-
-        debug("Searching for matching workflow plan...");
-        displayStatus("Checking for matching workflow...", context);
-
-        const match = await planMatcher.findBestMatch(originalRequest);
-
-        if (match) {
-            debug(
-                `Found matching plan: ${match.plan.planId} (confidence: ${match.confidence})`,
-            );
-
-            // Notify user about plan reuse
-            context.actionIO.appendDisplay({
-                type: "text",
-                content: `\n♻️ Reusing workflow: ${match.plan.description} (confidence: ${Math.round(match.confidence * 100)}%)`,
-            });
-
-            // Execute the plan
-            const planExecutor = new PlanExecutor();
-            const executionResult = await planExecutor.executePlan(
-                match.plan,
-                originalRequest,
-                context,
-            );
-
-            if (executionResult.success) {
-                // Update plan usage statistics
-                await planLibrary.updatePlanUsage(
-                    match.plan.planId,
-                    true,
-                    executionResult.duration,
-                );
-
-                debug(
-                    `Plan executed successfully in ${executionResult.duration}ms`,
-                );
-
-                // Notify user of success
-                context.actionIO.appendDisplay({
-                    type: "text",
-                    content: `\n✓ Workflow completed successfully`,
-                });
-
-                // Prompt for review if plan is pending
-                if (match.plan.approval?.status === "pending_review") {
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: `\n💡 This workflow is ready for review.`,
-                    });
-                }
-
-                return executionResult.finalOutput
-                    ? createActionResultNoDisplay(executionResult.finalOutput)
-                    : undefined;
-            } else {
-                // Plan execution failed - update stats and fallback
-                await planLibrary.updatePlanUsage(
-                    match.plan.planId,
-                    false,
-                    executionResult.duration,
-                );
-
-                debug(
-                    `Plan execution failed: ${executionResult.error}, falling back to reasoning`,
-                );
-
-                context.actionIO.appendDisplay({
-                    type: "text",
-                    content: `\n⚠️ Workflow failed, using reasoning instead...`,
-                });
-
-                // Fall through to reasoning
-            }
-        } else {
-            debug("No matching plan found, using reasoning");
-            displayStatus(
-                "No matching workflow found, using reasoning...",
-                context,
-            );
-        }
-    } catch (error) {
-        debug("Plan matching/execution failed:", error);
-        // Fall through to reasoning
-    }
-
-    // Fallback: Execute reasoning with tracing
-    return executeReasoningWithTracing(originalRequest, context);
 }
 
 /**
@@ -1015,10 +831,9 @@ export async function executeReasoning(
     }
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     if (!planReuseEnabled) {
-        // Standard reasoning without planning
         return executeReasoningWithoutPlanning(request, context);
     }
 
-    // Reasoning with planning (trace capture)
-    return executeReasoningWithPlanning(request, context);
+    // Trace capture + auto recipe generation
+    return executeReasoningWithTracing(request, context);
 }
