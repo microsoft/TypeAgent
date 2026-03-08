@@ -100,6 +100,7 @@
     "website-memory": "workspace:*",
     "websocket-utils": "workspace:*",
     "ws": "^8.17.1",
+    "xss": "^1.0.15",
     "yaml": "^2.3.4"
   },
   "devDependencies": {

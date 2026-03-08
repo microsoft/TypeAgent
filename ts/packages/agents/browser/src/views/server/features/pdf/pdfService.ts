@@ -12,8 +12,24 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
 import sanitizeFilename from "sanitize-filename";
+import xss from "xss";
 
 const debug = registerDebug("typeagent:views:server:pdf:service");
+
+function sanitizeBookmark(bookmark: PDFBookmark): PDFBookmark {
+    // Sanitize string fields to mitigate XSS when bookmarks are rendered on the client
+    const sanitized: PDFBookmark = { ...bookmark };
+
+    for (const key of Object.keys(sanitized) as (keyof PDFBookmark)[]) {
+        const value = sanitized[key];
+        if (typeof value === "string") {
+            // Use xss to strip/escape any potentially dangerous HTML/JS
+            (sanitized as any)[key] = xss(value) as PDFBookmark[typeof key];
+        }
+    }
+
+    return sanitized;
+}
 
 /**
  * PDF business logic service
@@ -315,21 +331,25 @@ export class PDFService {
      * Get bookmarks for a document
      */
     getBookmarks(documentId: string): PDFBookmark[] {
-        return this.bookmarks.get(documentId) || [];
+        const docBookmarks = this.bookmarks.get(documentId) || [];
+        // Return sanitized copies to ensure any previously stored data is safe
+        return docBookmarks.map((bookmark) => sanitizeBookmark(bookmark));
     }
 
     /**
      * Add bookmark to a document
      */
     addBookmark(bookmark: PDFBookmark): PDFBookmark {
-        const docBookmarks = this.bookmarks.get(bookmark.documentId) || [];
-        docBookmarks.push(bookmark);
-        this.bookmarks.set(bookmark.documentId, docBookmarks);
+        const sanitizedBookmark = sanitizeBookmark(bookmark);
+        const docBookmarks =
+            this.bookmarks.get(sanitizedBookmark.documentId) || [];
+        docBookmarks.push(sanitizedBookmark);
+        this.bookmarks.set(sanitizedBookmark.documentId, docBookmarks);
 
         debug(
-            `Added bookmark ${bookmark.id} to document ${bookmark.documentId}`,
+            `Added bookmark ${sanitizedBookmark.id} to document ${sanitizedBookmark.documentId}`,
         );
-        return bookmark;
+        return sanitizedBookmark;
     }
 
     /**
