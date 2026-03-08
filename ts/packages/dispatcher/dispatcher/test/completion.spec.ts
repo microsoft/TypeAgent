@@ -499,6 +499,41 @@ describe("Command Completion - startIndex", () => {
             // --debug is consumed; only --level remains. Still a finite set.
             expect(result!.complete).toBe(true);
         });
+
+        it("returns flag value completions for non-boolean flag without trailing space", async () => {
+            const result = await getCommandCompletion(
+                "@comptest flagsonly --level",
+                context,
+            );
+            // "--level" is a recognized number flag — the entire input
+            // is the longest valid prefix.  startIndex = input.length
+            // because the flag name is consumed, not filter text.
+            // Completions should offer the flag's values (if any),
+            // not flag names.
+            expect(result.startIndex).toBe(27); // full input consumed
+            const flags = result.completions.find(
+                (g) => g.name === "Command Flags",
+            );
+            expect(flags).toBeUndefined(); // flag names not offered when pending
+        });
+
+        it("treats unrecognized flag prefix as filter text", async () => {
+            const result = await getCommandCompletion(
+                "@comptest flagsonly --lev",
+                context,
+            );
+            // "--lev" doesn't resolve (exact match only), so parseParams
+            // leaves it unconsumed.  startIndex points to where "--lev"
+            // starts — it is the filter text.
+            // "@comptest flagsonly " = 20 chars consumed.
+            expect(result.startIndex).toBe(20);
+            const flags = result.completions.find(
+                (g) => g.name === "Command Flags",
+            );
+            expect(flags).toBeDefined();
+            expect(flags!.completions).toContain("--debug");
+            expect(flags!.completions).toContain("--level");
+        });
     });
 
     describe("flat descriptor (no subcommand table)", () => {

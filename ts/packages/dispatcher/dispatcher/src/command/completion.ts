@@ -15,7 +15,7 @@ import {
     getFlagType,
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
-import { parseParams } from "./parameters.js";
+import { parseParams, ParseParamsResult } from "./parameters.js";
 import {
     getDefaultSubCommandDescriptor,
     normalizeCommand,
@@ -134,7 +134,11 @@ async function getCommandParameterCompletion(
         return undefined;
     }
     const flags = descriptor.parameters.flags;
-    const params = parseParams(result.suffix, descriptor.parameters, true);
+    const params: ParseParamsResult<ParameterDefinitions> = parseParams(
+        result.suffix,
+        descriptor.parameters,
+        true,
+    );
     const pendingFlag = getPendingFlag(params, flags, completions);
     const agentCommandCompletions: string[] = [];
     if (pendingFlag === undefined) {
@@ -154,7 +158,8 @@ async function getCommandParameterCompletion(
             }
         }
     } else {
-        // get the potential values for the pending flag
+        // The last token is a recognized flag waiting for a value.
+        // Ask the agent for potential values for this flag.
         agentCommandCompletions.push(pendingFlag);
     }
 
@@ -189,15 +194,31 @@ async function getCommandParameterCompletion(
         }
     }
 
-    // Compute startIndex from the parse position.  The filter text is the
-    // last incomplete token the user is typing (or empty at a boundary).
-    const trailingSpace = /\s$/.test(result.suffix);
-    const lastToken =
-        params.tokens.length > 0
-            ? params.tokens[params.tokens.length - 1]
-            : undefined;
-    const filterLength = trailingSpace || !lastToken ? 0 : lastToken.length;
-    const startIndex = inputLength - filterLength;
+    // Compute startIndex from how far parseParams consumed the suffix.
+    // remainderLength is the length of the (trimmed) parameter text
+    // that was NOT successfully parsed — everything before it is part
+    // of the longest valid prefix.
+    let startIndex = inputLength - params.remainderLength;
+
+    // When everything was consumed and there is no trailing whitespace,
+    // the last *value* token may still be in progress — rewind to make
+    // it filter text.  lastCompletableParam is only set when the final
+    // parsed entity was a parameter value (string arg or string flag
+    // value), so pending flags (name consumed, value missing) naturally
+    // keep startIndex at the fully-consumed position.
+    if (
+        params.remainderLength === 0 &&
+        !/\s$/.test(result.suffix) &&
+        params.lastCompletableParam !== undefined
+    ) {
+        const lastToken =
+            params.tokens.length > 0
+                ? params.tokens[params.tokens.length - 1]
+                : undefined;
+        if (lastToken !== undefined) {
+            startIndex -= lastToken.length;
+        }
+    }
 
     // Determine whether the completion set is exhaustive.
     // Agent-provided completions are conservatively treated as
@@ -396,9 +417,7 @@ export async function getCommandCompletion(
                 name: "Agent Names",
                 completions: context.agents
                     .getAppAgentNames()
-                    .filter((name) =>
-                        context.agents.isCommandEnabled(name),
-                    ),
+                    .filter((name) => context.agents.isCommandEnabled(name)),
             });
         }
 

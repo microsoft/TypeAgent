@@ -136,6 +136,16 @@ function parseValueToken(
     }
 }
 
+// Extension of ParsedCommandParams that also reports how much of the
+// parameter string was *not* consumed by the parser.  Used internally by
+// the completion layer to compute startIndex from parse position rather
+// than by reverse-engineering filter text from token lengths.
+export type ParseParamsResult<T extends ParameterDefinitions> =
+    ParsedCommandParams<T> & {
+        /** Length of the (trimmed) parameter text left unconsumed. */
+        remainderLength: number;
+    };
+
 // Tokenizes and parses a parameter string into typed flags and positional
 // arguments according to the given parameter definitions.  Supports quoted
 // values, boolean/number/string/json types, multi-value flags and arguments,
@@ -146,7 +156,7 @@ export function parseParams<T extends ParameterDefinitions>(
     parameters: string,
     paramDefs: T,
     partial: boolean = false,
-): ParsedCommandParams<T> {
+): ParseParamsResult<T> {
     // Use trimStart (not trim) so trailing whitespace is preserved for
     // completion: a trailing space signals that the last token is complete.
     let curr = partial ? parameters.trimStart() : parameters.trim();
@@ -198,6 +208,11 @@ export function parseParams<T extends ParameterDefinitions>(
     let lastCompletableParam: string | undefined = undefined;
     let lastParamImplicitQuotes: boolean = false;
     let advanceMultiple = false;
+    // Track how far the parser successfully consumed.  Updated after
+    // each fully-resolved entity (flag name, flag+value, argument).
+    // On error in partial mode the value stays at the last-good
+    // position, giving the completion layer an accurate remainder.
+    let lastGoodCurrLength = curr.length;
     while (true) {
         try {
             // Save the rest for implicit quote arguments;
@@ -216,6 +231,7 @@ export function parseParams<T extends ParameterDefinitions>(
                 }
                 const [name, flag] = flagInfo;
                 const valueType = getFlagType(flag);
+                lastGoodCurrLength = curr.length; // flag name consumed
                 let value: FlagValueTypes;
                 const rollback = curr;
                 const valueToken = nextToken();
@@ -256,6 +272,7 @@ export function parseParams<T extends ParameterDefinitions>(
                     }
                     parsedFlags[name] = value;
                 }
+                lastGoodCurrLength = curr.length; // flag+value consumed
                 if (valueType === "string") {
                     lastCompletableParam = `--${name}`;
                     lastParamImplicitQuotes = false;
@@ -313,6 +330,7 @@ export function parseParams<T extends ParameterDefinitions>(
                         parsedArgs[name].push(argValue);
                     }
                 }
+                lastGoodCurrLength = curr.length; // argument consumed
                 if (argType === "string") {
                     lastCompletableParam = name;
                     lastParamImplicitQuotes = argDef.implicitQuotes ?? false;
@@ -373,5 +391,6 @@ export function parseParams<T extends ParameterDefinitions>(
         lastCompletableParam,
         lastParamImplicitQuotes,
         nextArgs,
+        remainderLength: lastGoodCurrLength,
     };
 }
