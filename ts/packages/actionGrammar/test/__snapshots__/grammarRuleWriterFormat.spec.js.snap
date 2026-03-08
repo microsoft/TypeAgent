@@ -1,0 +1,431 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Comprehensive formatting exercise default maxLineLength (80) output matches snapshot 1`] = `
+"// Copyright (c) Example.
+// All formatting patterns in one grammar.
+// entities section
+entity Artist, Album; // known types
+// long entity list (breaks at maxLineLength=40)
+entity LongEntityAlpha, LongEntityBeta, LongEntityGamma;
+
+// wildcard import
+import * from "baseGrammar"; // base rules
+// named import
+import { PhraseA, PhraseB } from "phrases"; // helpers
+// long named import (breaks at maxLineLength=40)
+import { LongRuleAlpha, LongRuleBeta, LongRuleGamma } from "longRules";
+
+// spacing annotations
+<WithRequired> [spacing=required] = one two;
+<WithOptional> /* before */ [spacing=optional] /* after */ = three four;
+<WithNone> [spacing=none] = hello world;
+// name-trailing comments
+<NameBlock> /* blk */ = x;
+<NameLine> // line
+ = y;
+// pre-annotation comment
+<PreAnn> /* pre */ [spacing=required] = z;
+// expression types
+<VarString> = hello $(name) world;
+<VarNumber> = volume $(level:number) now;
+<VarRuleRef> = play $(track:<TrackName>);
+<VarOptional> = show $(filter:number)? results;
+<TrackName> = <Simple>;
+<Simple> = one two three;
+<RuleRef> = start <Simple> end;
+<GroupOpt> = (yes | no)? please;
+<GroupStar> = (word)* stop;
+<GroupPlus> = (phrase)+ done;
+<ExprBlockComment> = hello /* mid */ world;
+<ExprLineComment> = hello // comment
+                    world;
+// value types
+<ValString> = greet -> "hello";
+<ValBool> = enable -> true;
+<ValNumber> = count -> -1230;
+<ValVar> = $(x) go -> x;
+<ValObjFlat> = foo -> { actionName: "foo", n: 1 };
+<ValObjEmpty> = empty -> {};
+<ValObjShorthand> = $(x) do -> { x };
+<ValObjNested> = deep -> { a: { b: "v" }, c: [1, 2] };
+<ValArrFlat> = list -> [1, 2, 3];
+<ValArrEmpty> = none -> [];
+<ValArrNested> = mix -> [{ a: 1 }, "b", true];
+// nested broken: inner block forced to expand (key-aligned indentation)
+<NestedArrBreaks> = x -> { items: [alpha, bravo, charlie] };
+<NestedObjBreaks> = x -> { params: { first: "one", second: "two" } };
+<ArrObjBreaks> = x -> [{ first: "one", second: "two", third: "three" }];
+<ArrArrBreaks> = x -> [[alpha, bravo, charlie, delta]];
+<DeepNested> = x -> { outer: { inner: [alpha, bravo, charlie] } };
+<NestedBrokenCmt> = x
+                    -> {
+                         items: [
+                           "a", // item note
+                           "b"
+                         ]
+                       };
+// value comments
+<ValLeadingLine> = foo
+                   -> // before value
+                      { actionName: "bar" };
+<ValLeadingBlock> = foo -> /* note */ { actionName: "bar" };
+<ValTrailingLine> = foo -> { actionName: "bar" } // after
+                  | baz -> { actionName: "qux" };
+<ValTrailingBlock> = foo -> { actionName: "bar" } /* note */
+                   | baz -> { actionName: "qux" };
+<PropLeadingBlock> = foo -> { type: /* before */ "hi" };
+<PropTrailingBlock> = foo -> { type: "hi" /* after */ };
+<PropCommaTrailingLine> = foo
+                          -> {
+                               type: "hi", // trailing line
+                               count: 1
+                             };
+<PropCommaTrailingBlock> = foo
+                           -> {
+                                type: "hi", /* trailing block */
+                                count: 1
+                              };
+<PropKeyLeadingBlock> = foo -> { /* before key */ type: "hi" };
+<ArrElemLeading> = foo -> [/* first */ "a", "b"];
+<ArrElemTrailing> = foo -> ["a" /* trailing */, "b"];
+<ArrCommaTrailingBlock> = foo
+                          -> [
+                               "a", /* after comma */
+                               "b"
+                             ];
+<ArrCommaTrailingLine> = foo
+                         -> [
+                              "a", // after comma
+                              "b"
+                            ];
+<ArrInnerBlock> = foo
+                  -> [
+                       "a",
+                       /* inner block */
+                     ];
+<ArrInnerLine> = foo
+                 -> [
+                      "a",
+                      // inner line
+                    ];
+<ArrTrailingCommaBlock> = foo
+                          -> [
+                               "a", /* trailing */
+                             ];
+<ArrTrailingCommaLine> = foo
+                         -> [
+                              "a", // trailing
+                            ];
+<ArrEmptyInner> = foo
+                  -> [
+                       /* empty array */
+                     ];
+<ObjInnerBlock> = foo
+                  -> {
+                       type: "hi",
+                       /* inner block */
+                     };
+<ObjInnerLine> = foo
+                 -> {
+                      type: "hi",
+                      // inner line
+                    };
+<ObjTrailingCommaBlock> = foo
+                          -> {
+                               type: "hi", /* trailing */
+                             };
+<ObjTrailingCommaLine> = foo
+                         -> {
+                              type: "hi", // trailing
+                            };
+<ObjEmptyInner> = foo
+                  -> {
+                       /* empty object */
+                     };
+// multi-alt with per-alt leading comments
+<MultiAlt> = // first
+             first option here // second
+           | second option here
+           | third; // rule trailing
+// end of file
+"
+`;
+
+exports[`Comprehensive formatting exercise maxLineLength=40 (all broken modes) output matches snapshot 1`] = `
+"// Copyright (c) Example.
+// All formatting patterns in one grammar.
+// entities section
+entity Artist, Album; // known types
+// long entity list (breaks at maxLineLength=40)
+entity
+  LongEntityAlpha,
+  LongEntityBeta,
+  LongEntityGamma;
+
+// wildcard import
+import * from "baseGrammar"; // base rules
+// named import
+import { PhraseA, PhraseB } from "phrases"; // helpers
+// long named import (breaks at maxLineLength=40)
+import {
+  LongRuleAlpha,
+  LongRuleBeta,
+  LongRuleGamma
+} from "longRules";
+
+// spacing annotations
+<WithRequired> [spacing=required] = one
+                                      two;
+<WithOptional> /* before */ [spacing=optional] /* after */ = three
+                                                               four;
+<WithNone> [spacing=none] = hello world;
+// name-trailing comments
+<NameBlock> /* blk */ = x;
+<NameLine> // line
+ = y;
+// pre-annotation comment
+<PreAnn> /* pre */ [spacing=required] = z;
+// expression types
+<VarString> = hello $(name) world;
+<VarNumber> = volume $(level:number) now;
+<VarRuleRef> = play $(track:<TrackName>);
+<VarOptional> = show $(filter:number)?
+                  results;
+<TrackName> = <Simple>;
+<Simple> = one two three;
+<RuleRef> = start <Simple> end;
+<GroupOpt> = (yes | no)? please;
+<GroupStar> = (word)* stop;
+<GroupPlus> = (phrase)+ done;
+<ExprBlockComment> = hello
+                       /* mid */ world;
+<ExprLineComment> = hello // comment
+                    world;
+// value types
+<ValString> = greet -> "hello";
+<ValBool> = enable -> true;
+<ValNumber> = count -> -1230;
+<ValVar> = $(x) go -> x;
+<ValObjFlat> = foo
+               -> {
+                    actionName: "foo",
+                    n: 1
+                  };
+<ValObjEmpty> = empty -> {};
+<ValObjShorthand> = $(x) do -> { x };
+<ValObjNested> = deep
+                 -> {
+                      a: { b: "v" },
+                      c: [1, 2]
+                    };
+<ValArrFlat> = list -> [1, 2, 3];
+<ValArrEmpty> = none -> [];
+<ValArrNested> = mix
+                 -> [
+                      { a: 1 },
+                      "b",
+                      true
+                    ];
+// nested broken: inner block forced to expand (key-aligned indentation)
+<NestedArrBreaks> = x
+                    -> {
+                         items: [
+                           alpha,
+                           bravo,
+                           charlie
+                         ]
+                       };
+<NestedObjBreaks> = x
+                    -> {
+                         params: {
+                           first: "one",
+                           second: "two"
+                         }
+                       };
+<ArrObjBreaks> = x
+                 -> [
+                      {
+                        first: "one",
+                        second: "two",
+                        third: "three"
+                      }
+                    ];
+<ArrArrBreaks> = x
+                 -> [
+                      [
+                        alpha,
+                        bravo,
+                        charlie,
+                        delta
+                      ]
+                    ];
+<DeepNested> = x
+               -> {
+                    outer: {
+                      inner: [
+                        alpha,
+                        bravo,
+                        charlie
+                      ]
+                    }
+                  };
+<NestedBrokenCmt> = x
+                    -> {
+                         items: [
+                           "a", // item note
+                           "b"
+                         ]
+                       };
+// value comments
+<ValLeadingLine> = foo
+                   -> // before value
+                      {
+                        actionName: "bar"
+                      };
+<ValLeadingBlock> = foo
+                    -> /* note */ {
+                         actionName: "bar"
+                       };
+<ValTrailingLine> = foo
+                    -> {
+                         actionName: "bar"
+                       } // after
+                  | baz
+                    -> {
+                         actionName: "qux"
+                       };
+<ValTrailingBlock> = foo
+                     -> {
+                          actionName: "bar"
+                        } /* note */
+                   | baz
+                     -> {
+                          actionName: "qux"
+                        };
+<PropLeadingBlock> = foo
+                     -> {
+                          type: /* before */ "hi"
+                        };
+<PropTrailingBlock> = foo
+                      -> {
+                           type: "hi" /* after */
+                         };
+<PropCommaTrailingLine> = foo
+                          -> {
+                               type: "hi", // trailing line
+                               count: 1
+                             };
+<PropCommaTrailingBlock> = foo
+                           -> {
+                                type: "hi", /* trailing block */
+                                count: 1
+                              };
+<PropKeyLeadingBlock> = foo
+                        -> {
+                             /* before key */ type: "hi"
+                           };
+<ArrElemLeading> = foo
+                   -> [
+                        /* first */ "a",
+                        "b"
+                      ];
+<ArrElemTrailing> = foo
+                    -> [
+                         "a" /* trailing */,
+                         "b"
+                       ];
+<ArrCommaTrailingBlock> = foo
+                          -> [
+                               "a", /* after comma */
+                               "b"
+                             ];
+<ArrCommaTrailingLine> = foo
+                         -> [
+                              "a", // after comma
+                              "b"
+                            ];
+<ArrInnerBlock> = foo
+                  -> [
+                       "a",
+                       /* inner block */
+                     ];
+<ArrInnerLine> = foo
+                 -> [
+                      "a",
+                      // inner line
+                    ];
+<ArrTrailingCommaBlock> = foo
+                          -> [
+                               "a", /* trailing */
+                             ];
+<ArrTrailingCommaLine> = foo
+                         -> [
+                              "a", // trailing
+                            ];
+<ArrEmptyInner> = foo
+                  -> [
+                       /* empty array */
+                     ];
+<ObjInnerBlock> = foo
+                  -> {
+                       type: "hi",
+                       /* inner block */
+                     };
+<ObjInnerLine> = foo
+                 -> {
+                      type: "hi",
+                      // inner line
+                    };
+<ObjTrailingCommaBlock> = foo
+                          -> {
+                               type: "hi", /* trailing */
+                             };
+<ObjTrailingCommaLine> = foo
+                         -> {
+                              type: "hi", // trailing
+                            };
+<ObjEmptyInner> = foo
+                  -> {
+                       /* empty object */
+                     };
+// multi-alt with per-alt leading comments
+<MultiAlt> = // first
+             first option here // second
+           | second option here
+           | third; // rule trailing
+// end of file
+"
+`;
+
+exports[`Structural comment positions output matches snapshot 1`] = `
+"// Grammar exercising comment preservation at all structural positions.
+// entity: per-name leading and trailing block comments
+entity /* eL1 */ Artist /* eT1 */, /* eL2 */ Album;
+
+// import: after-keyword, per-name leading/trailing, after-brace comments
+import /* kw */ { /* nL1 */ PhraseA /* nT1 */, /* nL2 */ PhraseB /* nT2 */ } /* brace */ from "phrases";
+// import wildcard: after-star comment
+import * /* star */ from "baseGrammar";
+
+// rule name: comments inside < >
+</*nL*/NameCmt/*nR*/> = hello;
+// annotation: comments at all four gaps inside [ spacing = value ]
+<AnnCmt> [/*aL*/spacing/*aK*/=/*aV*/required/*aR*/] = world;
+// explicit spacing=auto preserved (not folded away by writer)
+<AutoSpaced> [spacing=auto] = test;
+// variable: block comment between $( and the variable identifier
+<VarParen> = $(/*dp*/x) go;
+// variable: block comment after colon, before string type (implicit default)
+<VarColonStr> = $(x:/*col*/string) go;
+// variable: block comment after colon, before non-string type
+<VarColonNum> = $(x:/*col*/number) go;
+// variable: block comment after plain type name (trailing)
+<VarPlainTypeCmt> = $(x:number/*tc*/) go;
+// variable: block comments inside rule-ref type < >
+<VarRuleRefCmt> = $(x:</*tL*/Inner/*tR*/>) go;
+<Inner> = one;
+// inline rule reference: block comments inside < >
+<InlineRef> = start </*rL*/Other/*rR*/> end;
+<Other> = two;
+"
+`;

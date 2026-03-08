@@ -38,6 +38,7 @@ import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { nullClientIO } from "./interactiveIO.js";
 import { ClientIO, RequestId } from "@typeagent/dispatcher-types";
+import { initializeGeolocation } from "./geolocation.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 
 import {
@@ -619,6 +620,9 @@ export async function initializeCommandHandlerContext(
         await initializeMemory(context, sessionDirPath);
         await addAppAgentProviders(context, options?.appAgentProviders);
 
+        // Initialize geolocation in the background (non-blocking)
+        initializeGeolocation().catch(() => {});
+
         // Initialize grammar generation if using NFA system
         await setupGrammarGeneration(context);
 
@@ -805,6 +809,12 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
         context.agentCache.syncAgentGrammar(schemaName);
     }
 
+    // Enable DFA if configured (NFA must be active first, which it now is)
+    if (config.cache.useDFA) {
+        context.agentCache.grammarStore.setUseDFA(true);
+        debug("DFA matching enabled");
+    }
+
     // Mark as initialized to prevent re-initialization
     context.grammarGenerationInitialized = true;
     debug("Grammar generation configured for NFA system");
@@ -968,6 +978,14 @@ export async function changeContextConfig(
             !systemContext.grammarGenerationInitialized
         ) {
             await setupGrammarGeneration(systemContext);
+        }
+
+        // If useDFA toggled at runtime (only takes effect when NFA grammar system is active)
+        if (
+            changed.cache.useDFA !== undefined &&
+            systemContext.grammarGenerationInitialized
+        ) {
+            agentCache.grammarStore.setUseDFA(changed.cache.useDFA);
         }
     }
 

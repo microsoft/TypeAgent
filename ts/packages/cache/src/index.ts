@@ -12,7 +12,9 @@ export type {
 } from "./explanation/requestAction.js";
 
 export type { ConstructionStore } from "./cache/constructionStore.js";
+export { loadConstructionCacheFile } from "./cache/constructionStore.js";
 export type { MatchOptions } from "./constructions/constructionCache.js";
+export { ConstructionCache } from "./constructions/constructionCache.js";
 export type {
     GenericExplanationResult,
     CorrectionRecord,

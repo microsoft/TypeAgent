@@ -1526,6 +1526,10 @@ export async function handleMessage(
             }
         }
 
+        case "getTabId": {
+            return { tabId: sender.tab?.id ? String(sender.tab.id) : null };
+        }
+
         default:
             return null;
     }
