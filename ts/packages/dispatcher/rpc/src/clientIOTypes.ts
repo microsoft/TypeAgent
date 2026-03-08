@@ -33,6 +33,7 @@ export type ClientIOCallFunctions = {
     clear(requestId: RequestId): void;
     exit(requestId: RequestId): void;
 
+    setUserRequest(requestId: RequestId, command: string, seq?: number): void;
     setDisplayInfo(
         requestId: RequestId,
         source: string,

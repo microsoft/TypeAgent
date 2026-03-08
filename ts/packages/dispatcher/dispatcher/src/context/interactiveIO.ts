@@ -90,6 +90,7 @@ export async function askYesNoWithContext(
 export const nullClientIO: ClientIO = {
     clear: () => {},
     exit: () => process.exit(0),
+    setUserRequest: () => {},
     setDisplayInfo: () => {},
     setDisplay: () => {},
     appendDisplay: () => {},

@@ -137,28 +137,33 @@ async function initializeChatHistory(chatView: ChatView) {
 
 function replayDisplayHistory(dispatcher: Dispatcher, clientIO: ClientIO) {
     const afterSeq = maxSeqSeen >= 0 ? maxSeqSeen : undefined;
-    dispatcher.getDisplayHistory(afterSeq).then((entries: DisplayLogEntry[]) => {
-        for (const entry of entries) {
-            switch (entry.type) {
-                case "set-display":
-                    clientIO.setDisplay(entry.message);
-                    break;
-                case "append-display":
-                    clientIO.appendDisplay(entry.message, entry.mode);
-                    break;
-                case "set-display-info":
-                    clientIO.setDisplayInfo(
-                        entry.requestId,
-                        entry.source,
-                        entry.actionIndex,
-                        entry.action,
-                    );
-                    break;
-                // Skip notify — notifications are ephemeral
+    dispatcher
+        .getDisplayHistory(afterSeq)
+        .then((entries: DisplayLogEntry[]) => {
+            for (const entry of entries) {
+                switch (entry.type) {
+                    case "user-request":
+                        clientIO.setUserRequest(entry.requestId, entry.command);
+                        break;
+                    case "set-display":
+                        clientIO.setDisplay(entry.message);
+                        break;
+                    case "append-display":
+                        clientIO.appendDisplay(entry.message, entry.mode);
+                        break;
+                    case "set-display-info":
+                        clientIO.setDisplayInfo(
+                            entry.requestId,
+                            entry.source,
+                            entry.actionIndex,
+                            entry.action,
+                        );
+                        break;
+                    // Skip notify — notifications are ephemeral
+                }
+                maxSeqSeen = Math.max(maxSeqSeen, entry.seq);
             }
-            maxSeqSeen = Math.max(maxSeqSeen, entry.seq);
-        }
-    });
+        });
 }
 
 function registerClient(
@@ -174,6 +179,16 @@ function registerClient(
         },
         exit: () => {
             window.close();
+        },
+        setUserRequest: (requestId, command, seq?) => {
+            // For remote clients or replay, creates a new MessageGroup
+            // keyed by UUID. For local clients, this is a no-op because
+            // addRemoteUserMessage skips pending locals — they get promoted
+            // lazily by getMessageGroup when the first output arrives.
+            chatView.addRemoteUserMessage(requestId, command);
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
         },
         setDisplayInfo: (requestId, source, actionIndex, action, seq?) => {
             chatView.setDisplayInfo(requestId, source, actionIndex, action);
@@ -643,10 +658,7 @@ function watchForDOMChanges(element: HTMLDivElement) {
             hasTimeout = false;
             const idleTime = Date.now() - lastModifiedTime;
             if (idleTime >= 250) {
-                getClientAPI().saveChatHistory(
-                    element.innerHTML,
-                    maxSeqSeen,
-                );
+                getClientAPI().saveChatHistory(element.innerHTML, maxSeqSeen);
             } else {
                 // not idle long enough, reschedule
                 scheduleSaveChatHistory();

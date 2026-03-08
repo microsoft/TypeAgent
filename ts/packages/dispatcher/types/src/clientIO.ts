@@ -46,6 +46,7 @@ export interface ClientIO {
     exit(requestId: RequestId): void;
 
     // Display
+    setUserRequest(requestId: RequestId, command: string, seq?: number): void;
     setDisplayInfo(
         requestId: RequestId,
         source: string,

@@ -107,6 +107,10 @@ function wrapClientIOWithDisplayLog(
 ): ClientIO {
     return {
         ...clientIO,
+        setUserRequest(requestId, command) {
+            const seq = displayLog.logUserRequest(requestId, command);
+            clientIO.setUserRequest(requestId, command, seq);
+        },
         setDisplayInfo(requestId, source, actionIndex?, action?) {
             const seq = displayLog.logSetDisplayInfo(
                 requestId,

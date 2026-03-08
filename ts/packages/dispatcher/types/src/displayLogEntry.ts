@@ -40,8 +40,17 @@ export type NotifyEntry = {
     source: string;
 };
 
+export type UserRequestEntry = {
+    type: "user-request";
+    seq: number;
+    timestamp: number;
+    requestId: RequestId;
+    command: string;
+};
+
 export type DisplayLogEntry =
     | SetDisplayEntry
     | AppendDisplayEntry
     | SetDisplayInfoEntry
-    | NotifyEntry;
+    | NotifyEntry
+    | UserRequestEntry;

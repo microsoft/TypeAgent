@@ -141,6 +141,23 @@ export class DisplayLog {
     }
 
     /**
+     * Append a user-request entry.
+     * @returns the assigned sequence number
+     */
+    logUserRequest(requestId: RequestId, command: string): number {
+        const seq = this.nextSeq++;
+        this.entries.push({
+            type: "user-request",
+            seq,
+            timestamp: Date.now(),
+            requestId,
+            command,
+        });
+        this.dirty = true;
+        return seq;
+    }
+
+    /**
      * Get the current max sequence number, or -1 if the log is empty.
      */
     getSeq(): number {

@@ -120,9 +120,10 @@ describe("DisplayLog", () => {
             log.logAppendDisplay(msg, "inline");
             log.logSetDisplayInfo(reqId, "src");
             log.logNotify(undefined, "evt", {}, "src");
+            log.logUserRequest(reqId, "hello world");
 
             const entries = log.getEntries();
-            expect(entries.map((e) => e.seq)).toEqual([0, 1, 2, 3]);
+            expect(entries.map((e) => e.seq)).toEqual([0, 1, 2, 3, 4]);
         });
 
         it("should include timestamps", () => {
@@ -224,6 +225,66 @@ describe("DisplayLog", () => {
             const entries2 = log.getEntries();
             expect(entries1).not.toBe(entries2);
             expect(entries1).toEqual(entries2);
+        });
+    });
+
+    describe("logUserRequest", () => {
+        it("should log user-request entries", () => {
+            const log = new DisplayLog(undefined);
+            const reqId = makeRequestId("uuid-123");
+
+            log.logUserRequest(reqId, "play some music");
+
+            const entries = log.getEntries();
+            expect(entries).toHaveLength(1);
+            expect(entries[0].type).toBe("user-request");
+            if (entries[0].type === "user-request") {
+                expect(entries[0].command).toBe("play some music");
+                expect(entries[0].requestId).toBe(reqId);
+            }
+        });
+
+        it("should preserve full RequestId including clientRequestId", () => {
+            const log = new DisplayLog(undefined);
+            const reqId: RequestId = {
+                requestId: "uuid-456",
+                connectionId: "conn-1",
+                clientRequestId: "cmd-0",
+            };
+
+            log.logUserRequest(reqId, "test command");
+
+            const entries = log.getEntries();
+            if (entries[0].type === "user-request") {
+                expect(entries[0].requestId.requestId).toBe("uuid-456");
+                expect(entries[0].requestId.connectionId).toBe("conn-1");
+                expect(entries[0].requestId.clientRequestId).toBe("cmd-0");
+            }
+        });
+
+        it("should interleave with setDisplay entries using same requestId", () => {
+            const log = new DisplayLog(undefined);
+            const reqId = makeRequestId("uuid-789");
+            const msg = makeMessage("response", "agent", reqId);
+
+            log.logUserRequest(reqId, "ask something");
+            log.logSetDisplay(msg);
+
+            const entries = log.getEntries();
+            expect(entries).toHaveLength(2);
+            expect(entries[0].type).toBe("user-request");
+            expect(entries[1].type).toBe("set-display");
+
+            // Both reference the same requestId — this is how clients
+            // associate output with the originating request.
+            if (
+                entries[0].type === "user-request" &&
+                entries[1].type === "set-display"
+            ) {
+                expect(entries[0].requestId.requestId).toBe(
+                    entries[1].message.requestId.requestId,
+                );
+            }
         });
     });
 
@@ -342,17 +403,19 @@ describe("DisplayLog", () => {
                 { fromCache: false, fromUser: true, time: "2s" },
                 "src4",
             );
+            log.logUserRequest(reqId, "original command");
 
             await log.save();
             const loaded = await DisplayLog.load(tmpDir);
             const entries = loaded.getEntries();
 
-            expect(entries).toHaveLength(4);
+            expect(entries).toHaveLength(5);
             expect(entries.map((e) => e.type)).toEqual([
                 "set-display",
                 "append-display",
                 "set-display-info",
                 "notify",
+                "user-request",
             ]);
         });
 
