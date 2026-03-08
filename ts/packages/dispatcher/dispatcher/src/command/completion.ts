@@ -225,26 +225,19 @@ async function getCommandParameterCompletion(
     // remainderLength is the length of the (trimmed) parameter text
     // that was NOT successfully parsed — everything before it is part
     // of the longest valid prefix.
+    //
+    // Because remainderLength excludes inter-token whitespace (the
+    // tokenizer strips it), we back startIndex over any whitespace
+    // that sits between the last consumed token and the unconsumed
+    // remainder so that the separator space is not treated as part
+    // of the consumed prefix.
     let startIndex = inputLength - params.remainderLength;
 
-    // When everything was consumed and there is no trailing whitespace,
-    // the last *value* token may still be in progress — rewind to make
-    // it filter text.  lastCompletableParam is only set when the final
-    // parsed entity was a parameter value (string arg or string flag
-    // value), so pending flags (name consumed, value missing) naturally
-    // keep startIndex at the fully-consumed position.
-    if (
-        params.remainderLength === 0 &&
-        !/\s$/.test(result.suffix) &&
-        params.lastCompletableParam !== undefined
-    ) {
-        const lastToken =
-            params.tokens.length > 0
-                ? params.tokens[params.tokens.length - 1]
-                : undefined;
-        if (lastToken !== undefined) {
-            startIndex -= lastToken.length;
-        }
+    const suffix = result.suffix;
+    let suffixPos = suffix.length - params.remainderLength;
+    while (suffixPos > 0 && /\s/.test(suffix[suffixPos - 1])) {
+        suffixPos--;
+        startIndex--;
     }
 
     // Determine whether the completion set is exhaustive.

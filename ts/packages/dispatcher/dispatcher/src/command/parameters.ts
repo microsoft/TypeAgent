@@ -140,9 +140,20 @@ function parseValueToken(
 // parameter string was *not* consumed by the parser.  Used internally by
 // the completion layer to compute startIndex from parse position rather
 // than by reverse-engineering filter text from token lengths.
+//
+// NOTE: remainderLength measures only the unconsumed *token* text — it
+// does NOT include any inter-token whitespace that the tokenizer
+// stripped between the last consumed token and the unconsumed portion.
+// For example, parsing "hello extra" with a single-arg definition
+// yields remainderLength = 5 ("extra"), not 6 (" extra").  The
+// completion layer in completion.ts accounts for this by backing
+// startIndex over any preceding whitespace after the initial
+// computation.
 export type ParseParamsResult<T extends ParameterDefinitions> =
     ParsedCommandParams<T> & {
-        /** Length of the (trimmed) parameter text left unconsumed. */
+        /** Length of the (trimmed) parameter text left unconsumed.
+         *  Excludes inter-token whitespace between the last consumed
+         *  token and the start of the unconsumed remainder. */
         remainderLength: number;
     };
 

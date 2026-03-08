@@ -210,9 +210,10 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "@comptest run bu" (16 chars)
-            // suffix is "bu", parameter parsing sees token "bu" (2 chars)
-            // startIndex = 16 - 2 = 14
-            expect(result!.startIndex).toBe(14);
+            // suffix is "bu", parameter parsing fully consumes "bu"
+            // remainderLength = 0 → startIndex = 16, then whitespace
+            // backing finds no space at suffix end → startIndex = 16.
+            expect(result!.startIndex).toBe(16);
             // "bu" consumes the "task" arg → nextArgs is empty.
             // Agent is not invoked (bare word, no implicit quotes).
             // Only flags remain (none defined) → exhaustive.
@@ -346,14 +347,43 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             // "@comptest run build " (20 chars)
-            // suffix is "build ", token "build" is complete, trailing space
-            // means filter length = 0, so startIndex = 20
+            // suffix is "build ", token "build" is fully consumed,
+            // remainderLength = 0 → startIndex = 20, then whitespace
+            // backing rewinds over the trailing space → startIndex = 19.
             expect(result).toBeDefined();
-            expect(result!.startIndex).toBe(20);
+            expect(result!.startIndex).toBe(19);
             // All positional args filled ("task" consumed "build"),
             // no flags, agent not invoked (agentCommandCompletions
             // is empty) → exhaustive.
             expect(result!.complete).toBe(true);
+        });
+
+        it("startIndex backs over whitespace before unconsumed remainder", async () => {
+            const result = await getCommandCompletion(
+                "@comptest run hello --unknown",
+                context,
+            );
+            expect(result).toBeDefined();
+            // "@comptest run hello --unknown" (29 chars)
+            // suffix is "hello --unknown", "hello" fills the "task" arg,
+            // "--unknown" is not a defined flag → remainderLength = 9.
+            // startIndex = 29 - 9 = 20, then whitespace backing rewinds
+            // over the space between "hello" and "--unknown" → 19.
+            expect(result!.startIndex).toBe(19);
+        });
+
+        it("startIndex backs over multiple spaces before unconsumed remainder", async () => {
+            const result = await getCommandCompletion(
+                "@comptest run hello   --unknown",
+                context,
+            );
+            expect(result).toBeDefined();
+            // "@comptest run hello   --unknown" (31 chars)
+            // suffix is "hello   --unknown", "hello" fills "task",
+            // "--unknown" unconsumed → remainderLength = 9.
+            // startIndex = 31 - 9 = 22, then whitespace backing rewinds
+            // over three spaces → 19.
+            expect(result!.startIndex).toBe(19);
         });
     });
 
@@ -409,20 +439,19 @@ describe("Command Completion - startIndex", () => {
             expect(result!.separatorMode).toBeUndefined();
         });
 
-        it("returns separatorMode + subcommands for partial unmatched token", async () => {
+        it("returns no separatorMode for partial unmatched token consumed as param", async () => {
             const result = await getCommandCompletion("@comptest ne", context);
             expect(result).toBeDefined();
-            // "ne" doesn't match an explicit subcommand, so resolved to
-            // default — subcommand alternatives included.
-            expect(result!.separatorMode).toBe("space");
+            // "ne" is fully consumed as the "task" arg by parameter
+            // parsing → startIndex = 12 (past command boundary 10),
+            // so subcommands are not included and separatorMode is
+            // not set.
+            expect(result!.separatorMode).toBeUndefined();
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
             );
-            expect(subcommands).toBeDefined();
-            expect(subcommands!.completions).toContain("nested");
-            // startIndex backs up past the space to the agent boundary.
-            // "@comptest" = 9 chars.
-            expect(result!.startIndex).toBe(9);
+            expect(subcommands).toBeUndefined();
+            expect(result!.startIndex).toBe(12);
         });
     });
 
@@ -590,15 +619,17 @@ describe("Command Completion - startIndex", () => {
             );
             // "@comptest build " (16 chars)
             // Resolves to default "run" (not explicit match).
-            // "build" fills the "task" arg, trailing space moves
-            // startIndex to 16 — past the command boundary (10).
+            // "build" fills the "task" arg, trailing space present.
+            // remainderLength = 0 → startIndex = 16, then whitespace
+            // backing rewinds over the trailing space → startIndex = 15,
+            // past the command boundary (10).
             // Subcommand names are no longer relevant at this
             // position; only parameter completions remain.
             const subcommands = result.completions.find(
                 (g) => g.name === "Subcommands",
             );
             expect(subcommands).toBeUndefined();
-            expect(result.startIndex).toBe(16);
+            expect(result.startIndex).toBe(15);
             // All positional args filled, no flags → exhaustive.
             expect(result.complete).toBe(true);
         });
@@ -616,16 +647,15 @@ describe("Command Completion - startIndex", () => {
             expect(subcommands!.completions).toContain("nested");
         });
 
-        it("keeps subcommands when partial token is at the boundary", async () => {
+        it("drops subcommands when partial token is consumed past boundary", async () => {
             const result = await getCommandCompletion("@comptest ne", context);
-            // "@comptest ne" — suffix is "ne", parameter parsing sees
-            // one partial token but startIndex = 10 (command boundary
-            // for separatorMode stripping) → subcommands included.
+            // "@comptest ne" — suffix is "ne", parameter parsing fully
+            // consumes it as the "task" arg → startIndex = 12, which
+            // exceeds commandBoundary (10) → subcommands dropped.
             const subcommands = result.completions.find(
                 (g) => g.name === "Subcommands",
             );
-            expect(subcommands).toBeDefined();
-            expect(subcommands!.completions).toContain("nested");
+            expect(subcommands).toBeUndefined();
         });
     });
 });
