@@ -6,6 +6,7 @@ import {
     Grammar,
     matchGrammar,
     matchGrammarCompletion,
+    GrammarSeparatorMode,
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
@@ -18,6 +19,7 @@ import {
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
+import { SeparatorMode } from "@typeagent/agent-sdk";
 import {
     CompletionProperty,
     CompletionResult,
@@ -31,6 +33,27 @@ import {
     RequestAction,
 } from "../explanation/requestAction.js";
 import { sortMatches } from "./sortMatches.js";
+
+// Merge a GrammarSeparatorMode (from action-grammar) into an accumulator
+// SeparatorMode.  Most restrictive wins: spacePunctuation > optional > none.
+// (Grammar results never produce "space" — that mode is for command dispatch.)
+function mergeGrammarSeparatorMode(
+    current: SeparatorMode | undefined,
+    incoming: GrammarSeparatorMode,
+): SeparatorMode {
+    // GrammarSeparatorMode is structurally compatible with SeparatorMode
+    // (it is a subset: "spacePunctuation" | "optional" | "none").
+    if (current === undefined) {
+        return incoming;
+    }
+    if (current === "spacePunctuation" || incoming === "spacePunctuation") {
+        return "spacePunctuation";
+    }
+    if (current === "optional" || incoming === "optional") {
+        return "optional";
+    }
+    return "none";
+}
 
 interface GrammarEntry {
     grammar: Grammar;
@@ -273,7 +296,7 @@ export class GrammarStoreImpl implements GrammarStore {
         const completions: string[] = [];
         const properties: CompletionProperty[] = [];
         let matchedPrefixLength: number | undefined;
-        let needsSeparator = false;
+        let separatorMode: SeparatorMode | undefined;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -364,8 +387,11 @@ export class GrammarStoreImpl implements GrammarStore {
                                   partial.matchedPrefixLength,
                               );
                 }
-                if (partial.needsSeparator) {
-                    needsSeparator = true;
+                if (partial.separatorMode !== undefined) {
+                    separatorMode = mergeGrammarSeparatorMode(
+                        separatorMode,
+                        partial.separatorMode,
+                    );
                 }
                 if (
                     partial.properties !== undefined &&
@@ -393,7 +419,7 @@ export class GrammarStoreImpl implements GrammarStore {
             completions,
             properties,
             matchedPrefixLength,
-            needsSeparator: needsSeparator || undefined,
+            separatorMode,
         };
     }
 }

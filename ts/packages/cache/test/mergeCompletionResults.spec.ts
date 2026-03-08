@@ -187,55 +187,55 @@ describe("mergeCompletionResults", () => {
         });
     });
 
-    describe("needsSeparator merging", () => {
-        it("returns undefined when neither has needsSeparator", () => {
+    describe("separatorMode merging", () => {
+        it("returns undefined when neither has separatorMode", () => {
             const first: CompletionResult = { completions: ["a"] };
             const second: CompletionResult = { completions: ["b"] };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.needsSeparator).toBeUndefined();
+            expect(result.separatorMode).toBeUndefined();
         });
 
-        it("returns true when first has needsSeparator", () => {
+        it("returns first separatorMode when second is undefined", () => {
             const first: CompletionResult = {
                 completions: ["a"],
-                needsSeparator: true,
+                separatorMode: "spacePunctuation",
             };
             const second: CompletionResult = { completions: ["b"] };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.needsSeparator).toBe(true);
+            expect(result.separatorMode).toBe("spacePunctuation");
         });
 
-        it("returns true when second has needsSeparator", () => {
+        it("returns second separatorMode when first is undefined", () => {
             const first: CompletionResult = { completions: ["a"] };
             const second: CompletionResult = {
                 completions: ["b"],
-                needsSeparator: true,
+                separatorMode: "spacePunctuation",
             };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.needsSeparator).toBe(true);
+            expect(result.separatorMode).toBe("spacePunctuation");
         });
 
-        it("returns true when both have needsSeparator", () => {
+        it("returns most restrictive when both have separatorMode", () => {
             const first: CompletionResult = {
                 completions: ["a"],
-                needsSeparator: true,
+                separatorMode: "spacePunctuation",
             };
             const second: CompletionResult = {
                 completions: ["b"],
-                needsSeparator: true,
+                separatorMode: "optional",
             };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.needsSeparator).toBe(true);
+            expect(result.separatorMode).toBe("spacePunctuation");
         });
 
-        it("preserves needsSeparator when first is undefined", () => {
+        it("preserves separatorMode when first is undefined result", () => {
             const second: CompletionResult = {
                 completions: ["b"],
-                needsSeparator: true,
+                separatorMode: "spacePunctuation",
             };
             const result = mergeCompletionResults(undefined, second);
             expect(result).toBe(second);
-            expect(result!.needsSeparator).toBe(true);
+            expect(result!.separatorMode).toBe("spacePunctuation");
         });
     });
 });

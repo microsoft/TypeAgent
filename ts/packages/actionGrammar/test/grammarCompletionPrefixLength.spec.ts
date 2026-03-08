@@ -222,7 +222,7 @@ describe("Grammar Completion - matchedPrefixLength", () => {
         });
     });
 
-    describe("needsSeparator - Latin multi-part", () => {
+    describe("separatorMode - Latin multi-part", () => {
         // Latin grammar: "play" → "music" requires a space separator
         const g = [
             `<Start> = $(v:<Verb>) music -> true;`,
@@ -230,39 +230,39 @@ describe("Grammar Completion - matchedPrefixLength", () => {
         ].join("\n");
         const grammar = loadGrammarRules("test.grammar", g);
 
-        it("reports needsSeparator for Latin 'play' → 'music'", () => {
+        it("reports separatorMode for Latin 'play' → 'music'", () => {
             const result = matchGrammarCompletion(grammar, "play");
             expect(result.completions).toEqual(["music"]);
-            expect(result.needsSeparator).toBe(true);
+            expect(result.separatorMode).toBe("spacePunctuation");
         });
 
-        it("reports needsSeparator even when trailing space exists", () => {
+        it("reports separatorMode even when trailing space exists", () => {
             const result = matchGrammarCompletion(grammar, "play ");
             expect(result.completions).toEqual(["music"]);
             // matchedPrefixLength is 4 ("play"); the trailing space is
-            // unmatched content beyond that boundary.  needsSeparator
+            // unmatched content beyond that boundary.  separatorMode
             // describes the boundary at matchedPrefixLength, so it is
-            // true (Latin "y" → "m" needs a separator).
+            // "spacePunctuation" (Latin "y" → "m" needs a separator).
             expect(result.matchedPrefixLength).toBe(4);
-            expect(result.needsSeparator).toBe(true);
+            expect(result.separatorMode).toBe("spacePunctuation");
         });
 
-        it("does not report needsSeparator for empty input", () => {
+        it("reports optional separatorMode for empty input", () => {
             const result = matchGrammarCompletion(grammar, "");
             expect(result.completions).toEqual(["play"]);
-            expect(result.needsSeparator).toBeUndefined();
+            expect(result.separatorMode).toBe("optional");
         });
 
-        it("does not report needsSeparator for partial prefix match", () => {
+        it("reports optional separatorMode for partial prefix match", () => {
             // "pl" matches partially → the completion replaces from state.index,
             // so no separator needed (user is typing the keyword)
             const result = matchGrammarCompletion(grammar, "pl");
             expect(result.completions).toEqual(["play"]);
-            expect(result.needsSeparator).toBeUndefined();
+            expect(result.separatorMode).toBe("optional");
         });
     });
 
-    describe("needsSeparator - CJK multi-part", () => {
+    describe("separatorMode - CJK multi-part", () => {
         // CJK grammar: "再生" → "音楽" does NOT require a space separator
         const g = [
             `<Start> [spacing=auto] = $(v:<Verb>) 音楽 -> true;`,
@@ -270,15 +270,15 @@ describe("Grammar Completion - matchedPrefixLength", () => {
         ].join("\n");
         const grammar = loadGrammarRules("test.grammar", g);
 
-        it("does not report needsSeparator for CJK '再生' → '音楽'", () => {
+        it("reports optional separatorMode for CJK '再生' → '音楽'", () => {
             const result = matchGrammarCompletion(grammar, "再生");
             expect(result.completions).toEqual(["音楽"]);
-            // CJK → CJK in auto mode: no separator needed
-            expect(result.needsSeparator).toBeUndefined();
+            // CJK → CJK in auto mode: separator optional
+            expect(result.separatorMode).toBe("optional");
         });
     });
 
-    describe("needsSeparator - mixed scripts", () => {
+    describe("separatorMode - mixed scripts", () => {
         // Latin followed by CJK: no separator needed in auto mode
         const g = [
             `<Start> [spacing=auto] = $(v:<Verb>) 音楽 -> true;`,
@@ -286,65 +286,65 @@ describe("Grammar Completion - matchedPrefixLength", () => {
         ].join("\n");
         const grammar = loadGrammarRules("test.grammar", g);
 
-        it("does not report needsSeparator for Latin 'play' → CJK '音楽'", () => {
+        it("reports optional separatorMode for Latin 'play' → CJK '音楽'", () => {
             const result = matchGrammarCompletion(grammar, "play");
             expect(result.completions).toEqual(["音楽"]);
-            // Latin → CJK in auto mode: different scripts, no separator needed
-            expect(result.needsSeparator).toBeUndefined();
+            // Latin → CJK in auto mode: different scripts, separator optional
+            expect(result.separatorMode).toBe("optional");
         });
     });
 
-    describe("needsSeparator - spacing=required", () => {
+    describe("separatorMode - spacing=required", () => {
         const g = [
             `<Start> [spacing=required] = $(v:<Verb>) music -> true;`,
             `<Verb> [spacing=required] = play -> true;`,
         ].join("\n");
         const grammar = loadGrammarRules("test.grammar", g);
 
-        it("reports needsSeparator when spacing=required", () => {
+        it("reports separatorMode when spacing=required", () => {
             const result = matchGrammarCompletion(grammar, "play");
             expect(result.completions).toEqual(["music"]);
-            expect(result.needsSeparator).toBe(true);
+            expect(result.separatorMode).toBe("spacePunctuation");
         });
     });
 
-    describe("needsSeparator - spacing=optional", () => {
+    describe("separatorMode - spacing=optional", () => {
         const g = [
             `<Start> [spacing=optional] = $(v:<Verb>) music -> true;`,
             `<Verb> [spacing=optional] = play -> true;`,
         ].join("\n");
         const grammar = loadGrammarRules("test.grammar", g);
 
-        it("does not report needsSeparator when spacing=optional", () => {
+        it("reports optional separatorMode when spacing=optional", () => {
             const result = matchGrammarCompletion(grammar, "play");
             expect(result.completions).toEqual(["music"]);
-            expect(result.needsSeparator).toBeUndefined();
+            expect(result.separatorMode).toBe("optional");
         });
     });
 
-    describe("needsSeparator - wildcard entity", () => {
+    describe("separatorMode - wildcard entity", () => {
         // Grammar where the completion is a wildcard entity (not a static string).
-        // needsSeparator describes the boundary at matchedPrefixLength.
+        // separatorMode describes the boundary at matchedPrefixLength.
         const g = [
             `entity TrackName;`,
             `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
         ].join("\n");
         const grammar = loadGrammarRules("test.grammar", g);
 
-        it("reports needsSeparator for 'play' before wildcard", () => {
+        it("reports separatorMode for 'play' before wildcard", () => {
             const result = matchGrammarCompletion(grammar, "play");
             expect(result.properties?.length).toBeGreaterThan(0);
             // matchedPrefixLength=4; boundary "y" → entity needs separator.
-            expect(result.needsSeparator).toBe(true);
+            expect(result.separatorMode).toBe("spacePunctuation");
         });
 
-        it("reports needsSeparator for 'play ' before wildcard", () => {
+        it("reports separatorMode for 'play ' before wildcard", () => {
             // matchedPrefixLength=4 ("play"); the trailing space is
-            // beyond that boundary.  needsSeparator describes the
-            // boundary at matchedPrefixLength: "y" → entity → true.
+            // beyond that boundary.  separatorMode describes the
+            // boundary at matchedPrefixLength: "y" → entity → "spacePunctuation".
             const result = matchGrammarCompletion(grammar, "play ");
             expect(result.properties?.length).toBeGreaterThan(0);
-            expect(result.needsSeparator).toBe(true);
+            expect(result.separatorMode).toBe("spacePunctuation");
         });
     });
 });

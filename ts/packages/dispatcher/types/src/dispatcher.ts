@@ -5,6 +5,7 @@ import {
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
+    SeparatorMode,
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -57,12 +58,10 @@ export type CommandCompletionResult = {
     // what can follow after that prefix.
     startIndex: number;
     completions: CompletionGroup[]; // completions available at the current position
-    // True when the matched prefix and the completion text are
-    // structurally separated (e.g. a space between a command and its
-    // parameters).  This describes the grammar relationship, not whether
-    // the user has already typed the separator — the frontend uses
-    // startIndex and this flag together to decide when to show the menu.
-    needsSeparator?: boolean | undefined;
+    // What kind of separator is required between the matched prefix and
+    // the completion text.  When omitted, defaults to "space".
+    // See SeparatorMode in @typeagent/agent-sdk.
+    separatorMode?: SeparatorMode | undefined;
     // True when the completions listed are the exhaustive set of valid
     // continuations after the prefix.  When true and the user types
     // something that doesn't prefix-match any completion, the caller

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { SeparatorMode } from "@typeagent/agent-sdk";
 import {
     ExecutableAction,
     HistoryContext,
@@ -75,9 +76,9 @@ export type CompletionResult = {
     properties?: CompletionProperty[] | undefined;
     // Characters consumed by the grammar before the completion point.
     matchedPrefixLength?: number | undefined;
-    // True when a separator (e.g. space) must be inserted between the
-    // already-typed prefix and the completion text.
-    needsSeparator?: boolean | undefined;
+    // What kind of separator is required between the already-typed prefix
+    // and the completion text.  See SeparatorMode in @typeagent/agent-sdk.
+    separatorMode?: SeparatorMode | undefined;
 };
 
 export function mergeCompletionResults(
@@ -109,9 +110,28 @@ export function mergeCompletionResults(
                 : first.properties
             : second.properties,
         matchedPrefixLength,
-        needsSeparator:
-            first.needsSeparator || second.needsSeparator || undefined,
+        separatorMode: mergeSeparatorModes(
+            first.separatorMode,
+            second.separatorMode,
+        ),
     };
+}
+
+// Merge two SeparatorMode values — most restrictive wins.
+// Priority: "space" > "spacePunctuation" > "optional" > "none".
+function mergeSeparatorModes(
+    a: SeparatorMode | undefined,
+    b: SeparatorMode | undefined,
+): SeparatorMode | undefined {
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    const order: Record<SeparatorMode, number> = {
+        space: 3,
+        spacePunctuation: 2,
+        optional: 1,
+        none: 0,
+    };
+    return order[a] >= order[b] ? a : b;
 }
 export class ConstructionCache {
     private readonly matchSetsByUid = new Map<string, MatchSet>();

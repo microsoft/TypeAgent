@@ -49,6 +49,23 @@ export type CommandDescriptors =
 //===========================================
 // Command APIs
 //===========================================
+
+// Describes what kind of separator is required between the matched prefix
+// and the completion text.  The frontend uses this to decide when to show
+// the completion menu.
+//
+//   "space"            — whitespace required (default when omitted).
+//                        Used for commands, flags, agent names.
+//   "spacePunctuation" — whitespace or Unicode punctuation ([\s\p{P}])
+//                        required.  Used by the grammar matcher for
+//                        Latin-script completions.
+//   "optional"         — separator accepted but not required; menu shown
+//                        immediately.  Used for CJK / mixed-script
+//                        grammar completions.
+//   "none"             — no separator at all; menu shown immediately.
+//                        Used for [spacing=none] grammars.
+export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+
 export type CompletionGroup = {
     name: string; // The group name for the completion
     completions: string[]; // The list of completions in the group
@@ -61,12 +78,10 @@ export type CompletionGroup = {
     // inserts completions at this offset, replacing space-based heuristics
     // that fail for CJK and other non-space-delimited scripts.
     prefixLength?: number | undefined;
-    // True when the matched prefix and the completion text are
-    // structurally separated (e.g. a space between a command and its
-    // parameters).  This describes the grammar relationship, not whether
-    // the user has already typed the separator — the frontend uses
-    // startIndex and this flag together to decide when to show the menu.
-    needsSeparator?: boolean | undefined;
+    // What kind of separator is required between the matched prefix and
+    // the completion text.  When omitted, defaults to "space" (whitespace
+    // required before completions are shown).  See SeparatorMode.
+    separatorMode?: SeparatorMode | undefined;
 };
 
 export interface AppAgentCommandInterface {

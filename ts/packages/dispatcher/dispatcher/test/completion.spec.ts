@@ -357,35 +357,35 @@ describe("Command Completion - startIndex", () => {
         });
     });
 
-    describe("needsSeparator for command completions", () => {
-        it("returns needsSeparator for subcommand completions at agent boundary", async () => {
+    describe("separatorMode for command completions", () => {
+        it("returns separatorMode for subcommand completions at agent boundary", async () => {
             const result = await getCommandCompletion("@comptest ", context);
             expect(result).toBeDefined();
             // "run" is the default subcommand, so subcommand alternatives
-            // are included and the group has needsSeparator: true.
-            expect(result!.needsSeparator).toBe(true);
+            // are included and the group has separatorMode: "space".
+            expect(result!.separatorMode).toBe("space");
             // startIndex excludes trailing whitespace (matching grammar
             // matcher behaviour where prefixLength doesn't include the
             // separator).
             expect(result!.startIndex).toBe(9);
         });
 
-        it("returns needsSeparator for resolved agent without trailing space", async () => {
+        it("returns separatorMode for resolved agent without trailing space", async () => {
             const result = await getCommandCompletion("@comptest", context);
             expect(result).toBeDefined();
-            expect(result!.needsSeparator).toBe(true);
+            expect(result!.separatorMode).toBe("space");
             // No trailing whitespace to trim — startIndex stays at end
             expect(result!.startIndex).toBe(9);
             // Default subcommand has agent completions → not exhaustive.
             expect(result!.complete).toBe(false);
         });
 
-        it("does not set needsSeparator at top level (@)", async () => {
+        it("does not set separatorMode at top level (@)", async () => {
             const result = await getCommandCompletion("@", context);
             expect(result).toBeDefined();
             // Top-level completions (agent names, system subcommands)
-            // follow '@' directly without a separator.
-            expect(result!.needsSeparator).toBeUndefined();
+            // follow '@' — space is accepted but not required.
+            expect(result!.separatorMode).toBe("optional");
             // Agent names are offered when no agent was recognized,
             // independent of which branch (descriptor/table/neither)
             // produced the subcommand completions.
@@ -398,23 +398,23 @@ describe("Command Completion - startIndex", () => {
             expect(result!.complete).toBe(true);
         });
 
-        it("does not set needsSeparator for parameter completions only", async () => {
+        it("does not set separatorMode for parameter completions only", async () => {
             const result = await getCommandCompletion(
                 "@comptest run bu",
                 context,
             );
             expect(result).toBeDefined();
             // Partial parameter token — only parameter completions returned,
-            // no subcommand group, so needsSeparator is not set.
-            expect(result!.needsSeparator).toBeUndefined();
+            // no subcommand group, so separatorMode is not set.
+            expect(result!.separatorMode).toBeUndefined();
         });
 
-        it("returns needsSeparator + subcommands for partial unmatched token", async () => {
+        it("returns separatorMode + subcommands for partial unmatched token", async () => {
             const result = await getCommandCompletion("@comptest ne", context);
             expect(result).toBeDefined();
             // "ne" doesn't match an explicit subcommand, so resolved to
             // default — subcommand alternatives included.
-            expect(result!.needsSeparator).toBe(true);
+            expect(result!.separatorMode).toBe("space");
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
             );
@@ -620,7 +620,7 @@ describe("Command Completion - startIndex", () => {
             const result = await getCommandCompletion("@comptest ne", context);
             // "@comptest ne" — suffix is "ne", parameter parsing sees
             // one partial token but startIndex = 10 (command boundary
-            // for needsSeparator stripping) → subcommands included.
+            // for separatorMode stripping) → subcommands included.
             const subcommands = result.completions.find(
                 (g) => g.name === "Subcommands",
             );

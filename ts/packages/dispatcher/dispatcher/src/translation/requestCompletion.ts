@@ -4,7 +4,11 @@
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { ExecutableAction, getPropertyInfo, MatchOptions } from "agent-cache";
-import { CompletionGroup, TypeAgentAction } from "@typeagent/agent-sdk";
+import {
+    CompletionGroup,
+    SeparatorMode,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
 import {
     ActionParamType,
@@ -92,7 +96,7 @@ export async function requestCompletion(
     }
 
     const prefixLength = results.matchedPrefixLength;
-    const needsSeparator = results.needsSeparator;
+    const separatorMode = results.separatorMode;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -101,7 +105,7 @@ export async function requestCompletion(
             needQuotes: false, // Request completions are partial, no quotes needed
             kind: "literal",
             prefixLength,
-            needsSeparator,
+            separatorMode,
         });
     }
 
@@ -122,7 +126,7 @@ export async function requestCompletion(
                 context,
                 propertyCompletions,
                 prefixLength,
-                needsSeparator,
+                separatorMode,
             );
         }
     }
@@ -137,7 +141,7 @@ async function collectActionCompletions(
     context: CommandHandlerContext,
     propertyCompletions: Map<string, CompletionGroup>,
     prefixLength?: number | undefined,
-    needsSeparator?: boolean | undefined,
+    separatorMode?: SeparatorMode | undefined,
 ) {
     for (const propertyName of properties) {
         const { action, parameterName } = getPropertyInfo(
@@ -164,7 +168,7 @@ async function collectActionCompletions(
                 sorted: true, // REVIEW: assume property completions are already in desired order by the agent.
                 kind: "entity",
                 prefixLength,
-                needsSeparator,
+                separatorMode,
             });
         }
     }

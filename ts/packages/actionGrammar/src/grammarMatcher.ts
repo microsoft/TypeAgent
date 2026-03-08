@@ -14,6 +14,11 @@ import {
     VarStringPart,
 } from "./grammarTypes.js";
 
+// Separator mode for grammar completion results.
+// Structurally compatible with SeparatorMode from @typeagent/agent-sdk
+// (actionGrammar does not depend on agentSdk).
+export type GrammarSeparatorMode = "spacePunctuation" | "optional" | "none";
+
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
 const debugCompletion = registerDebug("typeagent:grammar:completion");
 
@@ -76,6 +81,49 @@ function requiresSeparator(a: string, b: string, mode: SpacingMode): boolean {
         case undefined: // auto
             return needsSeparatorInAutoMode(a, b);
     }
+}
+
+// Convert a per-candidate (needsSep, spacingMode) pair into a
+// GrammarSeparatorMode value.  When needsSep is true (separator
+// required), the grammar always uses spacePunctuation separators.
+// When needsSep is false, the mode tells us whether the boundary is
+// "optional" (CJK/mixed, or SpacingMode "optional") or "none".
+function candidateSeparatorMode(
+    needsSep: boolean,
+    spacingMode: SpacingMode,
+): GrammarSeparatorMode {
+    if (needsSep) {
+        return "spacePunctuation";
+    }
+    if (spacingMode === "none") {
+        return "none";
+    }
+    return "optional";
+}
+
+// Merge a new candidate's separator mode into the running aggregate.
+// The most restrictive mode wins: spacePunctuation > optional > none.
+function mergeSeparatorMode(
+    current: GrammarSeparatorMode | undefined,
+    needsSep: boolean,
+    spacingMode: SpacingMode,
+): GrammarSeparatorMode {
+    const candidateMode = candidateSeparatorMode(needsSep, spacingMode);
+    if (current === undefined) {
+        return candidateMode;
+    }
+    // "spacePunctuation" is the most restrictive — once set, stays.
+    if (
+        current === "spacePunctuation" ||
+        candidateMode === "spacePunctuation"
+    ) {
+        return "spacePunctuation";
+    }
+    // "optional" is more restrictive than "none".
+    if (current === "optional" || candidateMode === "optional") {
+        return "optional";
+    }
+    return "none";
 }
 
 function isBoundarySatisfied(
@@ -1033,15 +1081,15 @@ export type GrammarCompletionResult = {
     // before the completion point.  The shell uses this to determine where
     // to insert/filter completions (replacing the space-based heuristic).
     matchedPrefixLength?: number | undefined;
-    // True when a separator (e.g. space) must be inserted between the
-    // content at `matchedPrefixLength` and the completion text.  The
-    // caller should check the spacing rules between the last character
-    // of the matched prefix and the first character of each completion.
-    // Example: prefix="play", matchedPrefixLength=4, completion="music"
-    //   → needsSeparator=true (Latin "y" → "m" requires a space).
-    // Example: prefix="再生", matchedPrefixLength=2, completion="音楽"
-    //   → needsSeparator=false (CJK scripts don't require spaces).
-    needsSeparator?: boolean | undefined;
+    // What kind of separator is required between the content at
+    // `matchedPrefixLength` and the completion text.
+    //   "spacePunctuation" — whitespace or punctuation required
+    //     (Latin "y" → "m" requires a separator).
+    //   "optional" — separator accepted but not required
+    //     (CJK 再生 → 音楽 does not require a separator).
+    //   "none" — no separator at all ([spacing=none] grammars).
+    // Omitted when no completions were generated.
+    separatorMode?: GrammarSeparatorMode | undefined;
 };
 
 function getGrammarCompletionProperty(
@@ -1144,10 +1192,10 @@ export function matchGrammar(grammar: Grammar, request: string) {
  * position the completion insertion point correctly (especially important
  * for non-space-separated scripts like CJK).
  *
- * `needsSeparator` indicates whether a separator (e.g. a space) must be
- * inserted between the content at `matchedPrefixLength` and the completion
- * text.  It is determined by the spacing rules between the last character
- * of the matched prefix and the first character of the completion.
+ * `separatorMode` indicates what kind of separator is needed between the
+ * content at `matchedPrefixLength` and the completion text.  It is
+ * determined by the spacing rules between the last character of the
+ * matched prefix and the first character of the completion.
  */
 export function matchGrammarCompletion(
     grammar: Grammar,
@@ -1169,11 +1217,13 @@ export function matchGrammarCompletion(
         text: string;
         prefixLength: number;
         needsSep: boolean;
+        spacingMode: SpacingMode;
     }> = [];
     const propertyCandidates: Array<{
         property: GrammarCompletionProperty;
         prefixLength: number;
         needsSep: boolean;
+        spacingMode: SpacingMode;
     }> = [];
 
     // Track the furthest point the grammar consumed across all
@@ -1259,6 +1309,7 @@ export function matchGrammarCompletion(
                     text: completionText,
                     prefixLength: state.index,
                     needsSep: candidateNeedsSep,
+                    spacingMode: state.spacingMode,
                 });
 
                 // Record how far into the prefix the grammar consumed
@@ -1326,6 +1377,7 @@ export function matchGrammarCompletion(
                         property: completionProperty,
                         prefixLength: candidatePrefixLength,
                         needsSep: candidateNeedsSep,
+                        spacingMode: state.spacingMode,
                     });
 
                     // The wildcard starts at pendingWildcard.start; the
@@ -1378,6 +1430,7 @@ export function matchGrammarCompletion(
                         text: fullText,
                         prefixLength: state.index,
                         needsSep: candidateNeedsSep,
+                        spacingMode: state.spacingMode,
                     });
 
                     // state.index is where matching stopped (before the
@@ -1397,19 +1450,27 @@ export function matchGrammarCompletion(
     // irrelevant when a longer (or exact) match consumed more input.
     const completions: string[] = [];
     const properties: GrammarCompletionProperty[] = [];
-    let needsSeparator = false;
+    let separatorMode: GrammarSeparatorMode | undefined;
 
     if (maxPrefixLength !== undefined) {
         for (const c of completionCandidates) {
             if (c.prefixLength === maxPrefixLength) {
                 completions.push(c.text);
-                needsSeparator = needsSeparator || c.needsSep;
+                separatorMode = mergeSeparatorMode(
+                    separatorMode,
+                    c.needsSep,
+                    c.spacingMode,
+                );
             }
         }
         for (const p of propertyCandidates) {
             if (p.prefixLength === maxPrefixLength) {
                 properties.push(p.property);
-                needsSeparator = needsSeparator || p.needsSep;
+                separatorMode = mergeSeparatorMode(
+                    separatorMode,
+                    p.needsSep,
+                    p.spacingMode,
+                );
             }
         }
     }
@@ -1418,7 +1479,7 @@ export function matchGrammarCompletion(
         completions,
         properties,
         matchedPrefixLength: maxPrefixLength,
-        needsSeparator: needsSeparator || undefined,
+        separatorMode,
     };
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
     return result;

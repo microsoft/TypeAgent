@@ -166,9 +166,9 @@ describe("Grammar Completion - all alternatives after longest match", () => {
         });
     });
 
-    describe("needsSeparator in Category 3b", () => {
+    describe("separatorMode in Category 3b", () => {
         // Category 3b: finalizeState failed, trailing non-separator text
-        // remains.  needsSeparator indicates whether a separator is needed
+        // remains.  separatorMode indicates whether a separator is needed
         // between matchedPrefixLength and the completion text.
 
         describe("Latin grammar (auto spacing)", () => {
@@ -180,7 +180,7 @@ describe("Grammar Completion - all alternatives after longest match", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("reports needsSeparator after consumed Latin prefix with trailing text", () => {
+            it("reports separatorMode after consumed Latin prefix with trailing text", () => {
                 // "play x" → consumed "play" (4 chars), trailing "x" fails.
                 // Completion "music"/"midi" at matchedPrefixLength=4.
                 // Last consumed char: "y" (Latin), first completion char: "m" (Latin)
@@ -188,16 +188,16 @@ describe("Grammar Completion - all alternatives after longest match", () => {
                 const result = matchGrammarCompletion(grammar, "play x");
                 expect(result.completions.sort()).toEqual(["midi", "music"]);
                 expect(result.matchedPrefixLength).toBe(4);
-                expect(result.needsSeparator).toBe(true);
+                expect(result.separatorMode).toBe("spacePunctuation");
             });
 
-            it("reports needsSeparator with partial-match trailing text", () => {
+            it("reports separatorMode with partial-match trailing text", () => {
                 // "play mu" → consumed "play" (4 chars), trailing "mu".
                 // Same boundary: "y" → "m" → separator needed.
                 const result = matchGrammarCompletion(grammar, "play mu");
                 expect(result.completions.sort()).toEqual(["midi", "music"]);
                 expect(result.matchedPrefixLength).toBe(4);
-                expect(result.needsSeparator).toBe(true);
+                expect(result.separatorMode).toBe("spacePunctuation");
             });
         });
 
@@ -210,14 +210,14 @@ describe("Grammar Completion - all alternatives after longest match", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("does not report needsSeparator for CJK → CJK", () => {
+            it("reports optional separatorMode for CJK → CJK", () => {
                 // "再生x" → consumed "再生" (2 chars), trailing "x" fails.
                 // Last consumed char: "生" (CJK), first completion: "音" (CJK)
-                // → no separator needed in auto mode.
+                // → separator optional in auto mode.
                 const result = matchGrammarCompletion(grammar, "再生x");
                 expect(result.completions.sort()).toEqual(["映画", "音楽"]);
                 expect(result.matchedPrefixLength).toBe(2);
-                expect(result.needsSeparator).toBeUndefined();
+                expect(result.separatorMode).toBe("optional");
             });
         });
 
@@ -228,13 +228,13 @@ describe("Grammar Completion - all alternatives after longest match", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("does not report needsSeparator when nothing consumed", () => {
+            it("reports optional separatorMode when nothing consumed", () => {
                 // "xyz" → consumed 0 chars, offers "play" at prefixLength=0.
                 // No last consumed char → no separator check.
                 const result = matchGrammarCompletion(grammar, "xyz");
                 expect(result.completions).toEqual(["play"]);
                 expect(result.matchedPrefixLength).toBe(0);
-                expect(result.needsSeparator).toBeUndefined();
+                expect(result.separatorMode).toBe("optional");
             });
         });
 
@@ -246,11 +246,11 @@ describe("Grammar Completion - all alternatives after longest match", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("reports needsSeparator for spacing=required with trailing text", () => {
+            it("reports separatorMode for spacing=required with trailing text", () => {
                 const result = matchGrammarCompletion(grammar, "play x");
                 expect(result.completions).toEqual(["music"]);
                 expect(result.matchedPrefixLength).toBe(4);
-                expect(result.needsSeparator).toBe(true);
+                expect(result.separatorMode).toBe("spacePunctuation");
             });
         });
 
@@ -262,11 +262,11 @@ describe("Grammar Completion - all alternatives after longest match", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("does not report needsSeparator for spacing=optional", () => {
+            it("reports optional separatorMode for spacing=optional", () => {
                 const result = matchGrammarCompletion(grammar, "play x");
                 expect(result.completions).toEqual(["music"]);
                 expect(result.matchedPrefixLength).toBe(4);
-                expect(result.needsSeparator).toBeUndefined();
+                expect(result.separatorMode).toBe("optional");
             });
         });
 
@@ -278,13 +278,13 @@ describe("Grammar Completion - all alternatives after longest match", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("does not report needsSeparator for Latin → CJK", () => {
+            it("reports optional separatorMode for Latin → CJK", () => {
                 // Last consumed: "y" (Latin), completion: "音" (CJK)
-                // → different scripts, no separator needed in auto mode.
+                // → different scripts, separator optional in auto mode.
                 const result = matchGrammarCompletion(grammar, "play x");
                 expect(result.completions).toEqual(["音楽"]);
                 expect(result.matchedPrefixLength).toBe(4);
-                expect(result.needsSeparator).toBeUndefined();
+                expect(result.separatorMode).toBe("optional");
             });
         });
     });

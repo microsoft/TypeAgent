@@ -9,6 +9,7 @@ import {
     ParameterDefinitions,
     ParsedCommandParams,
     CompletionGroup,
+    SeparatorMode,
 } from "@typeagent/agent-sdk";
 import {
     getFlagMultiple,
@@ -27,6 +28,32 @@ import registerDebug from "debug";
 import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
+
+// Aggregate SeparatorMode from completion groups.
+// The most restrictive separator-requiring mode wins.
+// Priority: "space" > "spacePunctuation" > "optional" > "none" > undefined.
+// Groups that omit separatorMode are ignored (they inherit the default).
+function aggregateSeparatorMode(
+    groups: CompletionGroup[],
+): SeparatorMode | undefined {
+    let result: SeparatorMode | undefined;
+    for (const g of groups) {
+        const mode = g.separatorMode;
+        if (mode === undefined) {
+            continue;
+        }
+        if (mode === "space") {
+            return "space"; // Most restrictive, short-circuit.
+        }
+        if (result === undefined) {
+            result = mode;
+        } else if (mode === "spacePunctuation") {
+            result = "spacePunctuation";
+        }
+        // "optional" and "none" don't override "spacePunctuation"
+    }
+    return result;
+}
 
 // Return the full flag name if we are waiting a flag value.  Add boolean values for completions and return undefined if the flag is boolean.
 function getPendingFlag(
@@ -274,7 +301,7 @@ async function getCommandParameterCompletion(
 //                completions describe what can validly follow.
 //                May be overridden by a grammar-reported prefixLength
 //                from a CompletionGroup.  Trailing whitespace before
-//                startIndex is stripped when needsSeparator is true.
+//                startIndex is stripped when separatorMode requires it.
 //
 //   completions  Array of CompletionGroups from up to three sources:
 //                (a) built-in command / subcommand / agent-name lists,
@@ -282,11 +309,11 @@ async function getCommandParameterCompletion(
 //                (c) agent-provided groups via the agent's
 //                    getCommandCompletion callback.
 //
-//   needsSeparator
-//                true when the prefix and completions are structurally
-//                separated (e.g. a space between a command and its
-//                parameters).  Aggregated: true if *any* group reports
-//                needsSeparator.
+//   separatorMode
+//                Describes what kind of separator is required between
+//                the matched prefix and the completion text.
+//                Aggregated: most restrictive mode from any group wins.
+//                When omitted, consumers default to "space".
 //
 //   complete     true when the returned completions are the *exhaustive*
 //                set of valid continuations after the prefix.  When true
@@ -359,7 +386,7 @@ export async function getCommandCompletion(
                 completions.push({
                     name: "Subcommands",
                     completions: Object.keys(table.commands),
-                    needsSeparator: true,
+                    separatorMode: "space",
                 });
             }
 
@@ -392,11 +419,11 @@ export async function getCommandCompletion(
             completions.push({
                 name: "Subcommands",
                 completions: Object.keys(table.commands),
-                needsSeparator:
+                separatorMode:
                     result.parsedAppAgentName !== undefined ||
                     result.commands.length > 0
-                        ? true
-                        : undefined,
+                        ? "space"
+                        : "optional",
             });
         } else {
             // Both table and descriptor are undefined — the agent
@@ -418,6 +445,7 @@ export async function getCommandCompletion(
                 completions: context.agents
                     .getAppAgentNames()
                     .filter((name) => context.agents.isCommandEnabled(name)),
+                separatorMode: "optional",
             });
         }
 
@@ -432,19 +460,18 @@ export async function getCommandCompletion(
             startIndex = groupPrefixLength;
         }
 
-        // Extract needsSeparator from any group that reports it.
-        const needsSeparator = completions.some(
-            (g) => g.needsSeparator === true,
-        )
-            ? true
-            : undefined;
+        // Extract separatorMode from groups.  The most restrictive
+        // mode wins ("space" and "spacePunctuation" are both
+        // separator-requiring; among those, "space" is more
+        // restrictive because it only allows whitespace).
+        const separatorMode = aggregateSeparatorMode(completions);
 
         // Like the grammar matcher, exclude trailing whitespace before
         // startIndex when a separator is needed — the separator lives
         // between the command anchor and the completion text, not inside
         // the filter prefix.  This handles both "@config " (trailing
         // space) and "@config c" (space between command and partial token).
-        if (needsSeparator) {
+        if (separatorMode === "space" || separatorMode === "spacePunctuation") {
             while (startIndex > 0 && /\s/.test(input[startIndex - 1])) {
                 startIndex--;
             }
@@ -453,7 +480,7 @@ export async function getCommandCompletion(
         const completionResult: CommandCompletionResult = {
             startIndex,
             completions,
-            needsSeparator,
+            separatorMode,
             complete,
         };
 
@@ -466,7 +493,7 @@ export async function getCommandCompletion(
         return {
             startIndex: 0,
             completions: [],
-            needsSeparator: undefined,
+            separatorMode: undefined,
             complete: false,
         };
     }

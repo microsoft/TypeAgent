@@ -72,10 +72,14 @@ async function getCompletionsData(
         const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
 
-        // When the grammar reports a separator is needed between the
+        // When the result reports a separator-requiring mode between the
         // typed prefix and the completion text, prepend a space so the
         // readline display doesn't produce "playmusic" for "play" + "music".
-        const separator = result.needsSeparator ? " " : "";
+        const separator =
+            result.separatorMode === "space" ||
+            result.separatorMode === "spacePunctuation"
+                ? " "
+                : "";
 
         return {
             allCompletions,

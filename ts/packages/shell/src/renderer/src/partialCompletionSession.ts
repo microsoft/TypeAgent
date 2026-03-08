@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandCompletionResult } from "agent-dispatcher";
+import { SeparatorMode } from "@typeagent/agent-sdk";
 import {
     SearchMenuItem,
     SearchMenuPosition,
@@ -33,7 +34,7 @@ export interface ICompletionDispatcher {
 //   EXHAUSTED   current !== undefined && completionP === undefined && noCompletion === true
 //
 // Design principles:
-//   - Completion result fields (noCompletion, needsSeparator) are stored as-is
+//   - Completion result fields (noCompletion, separatorMode) are stored as-is
 //     from the backend response and never mutated as the user keeps typing.
 //     reuseSession() reads them to decide whether to show, hide, or re-fetch.
 //   - reuseSession() makes exactly four kinds of decisions:
@@ -53,8 +54,9 @@ export interface ICompletionDispatcher {
 //       complete=true  → reuse (exhaustive set, nothing else exists)
 //       complete=false → re-fetch (set is partial, backend may know more)
 //   - The anchor (`current`) is never advanced after a result is received.
-//     When `needsSeparator` is true the separator is stripped from the raw
-//     prefix before being passed to the menu, so the trie still matches.
+//     When `separatorMode` requires a separator, the separator is stripped
+//     from the raw prefix before being passed to the menu, so the trie
+//     still matches.
 //
 // This class has no DOM dependencies and is fully unit-testable with Jest.
 export class PartialCompletionSession {
@@ -66,11 +68,12 @@ export class PartialCompletionSession {
     // True when the backend reported no completions for `current` (EXHAUSTED).
     private noCompletion: boolean = false;
 
-    // Saved as-is from the last completion result: whether a separator must
-    // appear in the input immediately after `current` before completions are
-    // valid.  Used by reuseSession() and getCompletionPrefix() to interpret
+    // Saved as-is from the last completion result: what kind of separator
+    // must appear in the input immediately after `current` before
+    // completions are valid.  Defaults to "space" when omitted.
+    // Used by reuseSession() and getCompletionPrefix() to interpret
     // the raw prefix without mutating `current`.
-    private needsSeparator: boolean = false;
+    private separatorMode: SeparatorMode = "space";
 
     // When true, the completion set returned by the backend is exhaustive
     // for THIS level of the command hierarchy.  This affects one decision
@@ -115,7 +118,7 @@ export class PartialCompletionSession {
         this.completionP = undefined;
         this.current = undefined;
         this.noCompletion = false;
-        this.needsSeparator = false;
+        this.separatorMode = "space";
         this.complete = false;
         this.cancelMenu();
     }
@@ -123,7 +126,7 @@ export class PartialCompletionSession {
     // Reset state to IDLE without hiding the menu (used after handleSelect inserts text).
     public resetToIdle(): void {
         this.current = undefined;
-        this.needsSeparator = false;
+        this.separatorMode = "space";
         this.complete = false;
     }
 
@@ -138,9 +141,14 @@ export class PartialCompletionSession {
             return undefined;
         }
         const rawPrefix = input.substring(current.length);
-        if (this.needsSeparator) {
+        if (
+            this.separatorMode === "space" ||
+            this.separatorMode === "spacePunctuation"
+        ) {
             // The separator must be present and is not part of the replaceable prefix.
-            if (!/^\s/.test(rawPrefix)) {
+            const sepRe =
+                this.separatorMode === "space" ? /^\s/ : /^[\s\p{P}]/u;
+            if (!sepRe.test(rawPrefix)) {
                 return undefined;
             }
             return rawPrefix.trimStart();
@@ -195,15 +203,23 @@ export class PartialCompletionSession {
             return true;
         }
 
-        // Separator handling: the character immediately after the anchor must be
-        // whitespace.  Three sub-cases:
+        // Separator handling: the character immediately after the anchor must
+        // satisfy the separatorMode constraint.
+        //   "space":            whitespace required
+        //   "spacePunctuation": whitespace or Unicode punctuation required
+        //   "optional"/"none":  no separator needed, fall through to SHOW
+        //
+        // Three sub-cases when a separator IS required:
         //   ""        — separator not typed yet: HIDE+KEEP (separator may still arrive)
         //   " …"      — separator present: SHOW (fall through, strip it below)
         //   "x…"      — non-separator typed right after anchor: RE-FETCH (the
         //               separator constraint can never be satisfied without
         //               backtracking, so treat this as a new input)
         const rawPrefix = input.substring(current.length);
-        if (this.needsSeparator) {
+        const requiresSep =
+            this.separatorMode === "space" ||
+            this.separatorMode === "spacePunctuation";
+        if (requiresSep) {
             if (rawPrefix === "") {
                 debug(
                     `Partial completion deferred: still waiting for separator`,
@@ -211,14 +227,16 @@ export class PartialCompletionSession {
                 this.menu.hide();
                 return true; // HIDE+KEEP
             }
-            if (!/^\s/.test(rawPrefix)) {
+            const sepRe =
+                this.separatorMode === "space" ? /^\s/ : /^[\s\p{P}]/u;
+            if (!sepRe.test(rawPrefix)) {
                 return false; // RE-FETCH
             }
         }
 
         // SHOW — strip the leading separator (if any) before passing to the
         // menu trie, so completions like "music" match prefix "" not " ".
-        const prefix = this.needsSeparator ? rawPrefix.trimStart() : rawPrefix;
+        const prefix = requiresSep ? rawPrefix.trimStart() : rawPrefix;
 
         const position = getPosition(prefix);
         if (position !== undefined) {
@@ -259,7 +277,7 @@ export class PartialCompletionSession {
         this.cancelMenu();
         this.current = input;
         this.noCompletion = false;
-        this.needsSeparator = false;
+        this.separatorMode = "space";
         this.complete = false;
         this.menu.setChoices([]);
         const completionP = this.dispatcher.getCommandCompletion(input);
@@ -274,7 +292,7 @@ export class PartialCompletionSession {
                 this.completionP = undefined;
                 debug(`Partial completion result: `, result);
 
-                this.needsSeparator = result.needsSeparator === true;
+                this.separatorMode = result.separatorMode ?? "space";
                 this.complete = result.complete;
 
                 // Build completions preserving backend group order.

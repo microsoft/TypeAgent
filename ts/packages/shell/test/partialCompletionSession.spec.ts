@@ -41,7 +41,7 @@ function makeDispatcher(
     result: CommandCompletionResult = {
         startIndex: 0,
         completions: [],
-        needsSeparator: undefined,
+        separatorMode: undefined,
         complete: true,
     },
 ): MockDispatcher {
@@ -452,10 +452,10 @@ describe("PartialCompletionSession — result processing", () => {
         expect(texts).toEqual(["apple", "mango", "zebra"]);
     });
 
-    test("needsSeparator defers menu display until trailing space is present", async () => {
+    test("separatorMode defers menu display until trailing space is present", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["music"], 4, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -474,16 +474,16 @@ describe("PartialCompletionSession — result processing", () => {
         expect(menu.updatePrefix).not.toHaveBeenCalled();
     });
 
-    test("needsSeparator: typing separator shows menu without re-fetch", async () => {
+    test("separatorMode: typing separator shows menu without re-fetch", async () => {
         const menu = makeMenu();
         menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["music"], 4, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
-        // First update: "play" — deferred (needsSeparator, no trailing space)
+        // First update: "play" — deferred (separatorMode, no trailing space)
         session.update("play", getPos);
         await Promise.resolve();
 
@@ -495,11 +495,11 @@ describe("PartialCompletionSession — result processing", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("needsSeparator: menu shown after trailing space is typed", async () => {
+    test("separatorMode: menu shown after trailing space is typed", async () => {
         const menu = makeMenu();
         menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["music"], 5, {
-            needsSeparator: false,
+            separatorMode: undefined,
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -587,13 +587,13 @@ describe("PartialCompletionSession — @command routing", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("@ command: needsSeparator defers menu until space typed", async () => {
+    test("@ command: separatorMode defers menu until space typed", async () => {
         const menu = makeMenu();
         menu.isActive.mockReturnValue(true);
-        // Backend returns subcommands with needsSeparator: true
+        // Backend returns subcommands with separatorMode: "space"
         // (anchor = "@config", subcommands follow after a space)
         const result = makeCompletionResult(["clear", "theme"], 7, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -620,9 +620,9 @@ describe("PartialCompletionSession — @command routing", () => {
     test("@ command: typing after space filters within same session", async () => {
         const menu = makeMenu();
         menu.isActive.mockReturnValue(true);
-        // Backend: needsSeparator, anchor = "@config"
+        // Backend: separatorMode, anchor = "@config"
         const result = makeCompletionResult(["clear", "theme"], 7, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -712,11 +712,11 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
         expect(session.getCompletionPrefix("stop")).toBeUndefined();
     });
 
-    test("needsSeparator: returns stripped prefix when separator is present", async () => {
+    test("separatorMode: returns stripped prefix when separator is present", async () => {
         const menu = makeMenu();
         menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["music"], 4, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const session = new PartialCompletionSession(
             menu,
@@ -730,10 +730,10 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
         expect(session.getCompletionPrefix("play mu")).toBe("mu");
     });
 
-    test("needsSeparator: returns undefined when separator is absent", async () => {
+    test("separatorMode: returns undefined when separator is absent", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["music"], 4, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const session = new PartialCompletionSession(
             menu,
@@ -783,15 +783,15 @@ describe("PartialCompletionSession — resetToIdle", () => {
     });
 });
 
-// ── needsSeparator edge cases ─────────────────────────────────────────────────
+// ── separatorMode edge cases ─────────────────────────────────────────────────
 
-describe("PartialCompletionSession — needsSeparator edge cases", () => {
+describe("PartialCompletionSession — separatorMode edge cases", () => {
     test("re-update with same input before separator does not re-fetch", async () => {
         // Regression: selectionchange can fire again with the same input while
         // the session is waiting for a separator.  Must not trigger a re-fetch.
         const menu = makeMenu();
         const result = makeCompletionResult(["music"], 4, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -807,7 +807,7 @@ describe("PartialCompletionSession — needsSeparator edge cases", () => {
     test("input diverges before separator arrives triggers re-fetch", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["music"], 4, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -829,7 +829,7 @@ describe("PartialCompletionSession — needsSeparator edge cases", () => {
         const menu = makeMenu();
         menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["music"], 4, {
-            needsSeparator: true,
+            separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
