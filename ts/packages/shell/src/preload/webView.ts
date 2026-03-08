@@ -456,8 +456,8 @@ window.addEventListener("message", async (event) => {
         debugWebAgentProxy(`WebAgent -> Dispatcher`, event.data);
         if (event.data.method === "webAgent/register") {
             // Fill in identification information
-            event.data.params.param.title = document.title;
-            event.data.params.param.url = window.location.href;
+            event.data.params.args[0].title = document.title;
+            event.data.params.args[0].url = window.location.href;
         }
         sendToBrowserAgent(event.data);
     }

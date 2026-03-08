@@ -36,6 +36,7 @@ import {
 import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
+import { createCommercePageTranslator } from "./commerce/translator.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import type {
     ElementDescriptionResult,
@@ -946,10 +947,49 @@ async function handleWebAgentRpc(
         }
 
         case "extractComponent": {
-            return {
-                success: false,
-                error: "extractComponent not yet implemented",
-            };
+            try {
+                const { type, userRequest } = params;
+                const browserConnector = context.agentContext.browserConnector;
+
+                if (!browserConnector) {
+                    return {
+                        success: false,
+                        error: "Browser connector not available",
+                    };
+                }
+
+                const htmlFragments = await browserConnector.getHtmlFragments(
+                    false,
+                    "knowledgeExtraction",
+                    clientId,
+                );
+
+                if (!htmlFragments || htmlFragments.length === 0) {
+                    return {
+                        success: false,
+                        error: "No HTML content available from the page",
+                    };
+                }
+
+                const translator =
+                    await createCommercePageTranslator("GPT_5_MINI");
+                const response = await translator.getPageComponentSchema(
+                    type,
+                    userRequest,
+                    htmlFragments,
+                    undefined,
+                );
+
+                return response;
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to extract component",
+                };
+            }
         }
 
         case "notify": {

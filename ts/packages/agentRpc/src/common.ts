@@ -150,7 +150,11 @@ export function createChannelProvider(
             );
             return;
         }
-        debug(`routing message to channel: ${message.name}`);
+        const msgType = message.message?.type || "unknown";
+        const callId = message.message?.callId ?? "n/a";
+        debug(
+            `routing message to channel: ${message.name} (type=${msgType}, callId=${callId})`,
+        );
         channelAdapter.notifyMessage(message.message);
     });
 
@@ -168,6 +172,9 @@ export function createChannelProvider(
     });
     function createChannel(name: string): RpcChannel {
         debug(`createChannel ${name}`);
+        debug(
+            `createChannel ${name} - stack: ${new Error().stack?.split("\n").slice(1, 5).join(" <- ")}`,
+        );
         if (channelAdapters.has(name)) {
             throw new Error(`Channel '${name}' already exists`);
         }

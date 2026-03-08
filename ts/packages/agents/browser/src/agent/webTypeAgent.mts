@@ -22,6 +22,7 @@ const debugError = registerDebug("typeagent:webAgent:error");
 export type WebAgentChannels = {
     channelProvider: ChannelProviderAdapter;
     registerChannel: ChannelAdapter;
+    registeredAgents: Set<string>;
 };
 
 // Built-in WebAgent URL patterns that are auto-approved (no user permission required)
@@ -37,6 +38,20 @@ const BUILTIN_WEBAGENT_URL_PATTERNS = [
     /bestcrosswords\.com\/bestcrosswords\/guestconstructor/,
     // PaleoBioDb
     /paleobiodb\.org/,
+    // Commerce sites
+    /amazon\.(com|co\.uk|de|fr|es|it|nl|in|ca|com\.mx|com\.br|com\.au)/,
+    /target\.com/,
+    /walmart\.com/,
+    /bestbuy\.com/,
+    /homedepot\.com/,
+    /lowes\.com/,
+    /costco\.com/,
+    /ebay\.com/,
+    // Restaurant reservations
+    /opentable\.com/,
+    /resy\.com/,
+    // Grocery
+    /instacart\.com/,
 ];
 
 function isBuiltInWebAgentUrl(url: string): boolean {
@@ -187,6 +202,10 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         }
     });
 
+    // Track pending and registered agents to prevent duplicate registration
+    const pendingRegistrations = new Set<string>();
+    const registeredAgents = new Set<string>();
+
     createRpc("webAgent:server", registerChannel.channel, {
         addTypeAgent: async (param: {
             name: string;
@@ -195,9 +214,28 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
             title: string; // filled in by the proxy (service worker for browser or preload script in electron)
             url: string; // filled in by the proxy (service worker for browser or preload script in electron)
         }): Promise<void> => {
+            debug("Agent requested to add dynamic agent", param);
             const { name, manifest, title, url, agentInterface } = param;
 
+            // Prevent duplicate registrations
+            if (registeredAgents.has(name)) {
+                debug(
+                    "Dynamic agent already registered, ignoring duplicate",
+                    name,
+                );
+                return;
+            }
+            if (pendingRegistrations.has(name)) {
+                debug(
+                    "Dynamic agent registration already in progress, ignoring duplicate",
+                    name,
+                );
+                return;
+            }
+            pendingRegistrations.add(name);
+
             if (!(await checkDynamicAgentPermission(title, url, context))) {
+                pendingRegistrations.delete(name);
                 throw new Error(
                     `Permission denied: Dynamic agent ${param.name} is not allowed to connect to TypeAgent.`,
                 );
@@ -212,10 +250,12 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
                         agentInterface,
                     ),
                 );
+                registeredAgents.add(name);
                 debug("Registered dynamic agent", name);
             } catch (e: any) {
                 // If the channel already exists, the agent is already registered
                 if (e.message?.includes("already exists")) {
+                    registeredAgents.add(name);
                     debug("Dynamic agent already registered, skipping", name);
                     return;
                 }
@@ -223,6 +263,8 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
                 // Clean up the channel if adding the agent fails
                 channelProvider.deleteChannel(`agent:${name}`);
                 throw e;
+            } finally {
+                pendingRegistrations.delete(name);
             }
         },
     });
@@ -230,6 +272,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
     const webAgentChannels = {
         channelProvider,
         registerChannel,
+        registeredAgents,
     };
     context.agentContext.webAgentChannels = webAgentChannels;
     return webAgentChannels;
@@ -258,6 +301,7 @@ export async function processWebAgentMessage(
                     webAgentChannels.channelProvider.deleteChannel(
                         `agent:${name}`,
                     );
+                    webAgentChannels.registeredAgents.delete(name);
                 }
                 break;
         }

@@ -83,47 +83,44 @@ async function waitForPageStability(maxWaitMs = 3000): Promise<void> {
 }
 
 async function checkAndResumeContinuation(): Promise<void> {
+    console.log("[ContinuationHandler] Checking for continuation...");
     webAgentStorage.cleanup();
 
     const tabId = await getTabId();
+    console.log("[ContinuationHandler] tabId:", tabId);
     if (!tabId) {
+        console.log("[ContinuationHandler] No tabId, skipping");
         return;
     }
 
     const continuation = continuationStorage.get(tabId);
+    console.log("[ContinuationHandler] continuation:", continuation);
     if (!continuation) {
+        console.log(
+            "[ContinuationHandler] No continuation found for tabId:",
+            tabId,
+        );
         return;
     }
 
-    const currentUrl = window.location.href;
-    if (!isUrlMatch(continuation.url, currentUrl)) {
-        console.log("Continuation URL mismatch, removing");
-        continuationStorage.remove(tabId);
-        return;
-    }
+    // Remove the continuation from storage before resuming to prevent re-triggering
+    continuationStorage.remove(tabId);
 
     await waitForPageStability();
 
-    console.log("Resuming continuation:", continuation.type, continuation.step);
+    console.log(
+        "[ContinuationHandler] Resuming continuation:",
+        continuation.type,
+        continuation.step,
+        "at URL:",
+        window.location.href,
+    );
 
     window.dispatchEvent(
         new CustomEvent("webagent-continuation-resume", {
             detail: continuation,
         }),
     );
-}
-
-function isUrlMatch(expectedUrl: string, currentUrl: string): boolean {
-    try {
-        const expected = new URL(expectedUrl);
-        const current = new URL(currentUrl);
-        return (
-            expected.hostname === current.hostname &&
-            expected.pathname === current.pathname
-        );
-    } catch {
-        return expectedUrl === currentUrl;
-    }
 }
 
 function handleSpaNavigation(): void {
