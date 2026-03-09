@@ -44,7 +44,9 @@ Return ONLY the patterns, one per line, no numbering or bullets.`;
     const lines = result
         .split("\n")
         .map((l) => l.trim())
-        .filter((l) => l.length > 0 && !l.startsWith("#") && !l.startsWith("-"));
+        .filter(
+            (l) => l.length > 0 && !l.startsWith("#") && !l.startsWith("-"),
+        );
 
     // Validate that pattern parameter references match actual parameters
     const paramNames = new Set(parameters.map((p) => p.name));

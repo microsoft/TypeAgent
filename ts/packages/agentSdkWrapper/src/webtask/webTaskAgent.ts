@@ -490,19 +490,14 @@ export class WebTaskAgent {
                     `${recipe.actionName}.recipe.json`,
                 );
                 const fs = await import("node:fs/promises");
-                await fs.writeFile(
-                    recipePath,
-                    JSON.stringify(recipe, null, 2),
-                );
+                await fs.writeFile(recipePath, JSON.stringify(recipe, null, 2));
                 console.log(`[Recipe] Saved to: ${recipePath}`);
             }
 
             // Save plan to library for future use
             if (!usingCachedPlan) {
                 await serializer.savePlanToLibrary(originalPlan);
-                console.log(
-                    `[Planning] Saved plan to library for future use`,
-                );
+                console.log(`[Planning] Saved plan to library for future use`);
             }
 
             // Mark trace complete and save

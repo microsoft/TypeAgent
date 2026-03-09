@@ -39,7 +39,10 @@ export interface RecipeStep {
     observedOutputFormat?: string;
 }
 
-const TOOL_NAME_MAP: Record<string, { schemaName: string; actionName: string }> = {
+const TOOL_NAME_MAP: Record<
+    string,
+    { schemaName: string; actionName: string }
+> = {
     navigateToUrl: { schemaName: "browser", actionName: "navigateTo" },
     enterTextInElement: { schemaName: "browser", actionName: "enterText" },
     clickElement: { schemaName: "browser", actionName: "click" },
@@ -95,9 +98,7 @@ export class WebRecipeGenerator {
             }));
     }
 
-    private mapType(
-        type: string,
-    ): "string" | "number" | "boolean" {
+    private mapType(type: string): "string" | "number" | "boolean" {
         if (type === "number") return "number";
         if (type === "boolean") return "boolean";
         return "string";
