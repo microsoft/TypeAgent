@@ -253,7 +253,7 @@ function generateRequestId(): string {
  */
 function getCopilotSessionConfig(
     context: ActionContext<CommandHandlerContext>,
-): Partial<SessionConfig> {
+): SessionConfig {
     const systemContext = context.sessionContext.agentContext;
     const activeSchemas = systemContext.agents.getActiveSchemas();
 
@@ -476,7 +476,7 @@ async function executeReasoningWithoutPlanning(
         // Resume existing session by ID (don't reuse session object)
         debug(`Resuming existing session: ${sessionId}`);
         try {
-            session = await client.resumeSession(sessionId);
+            session = await client.resumeSession(sessionId, config);
             debug(`Session resumed successfully: ${sessionId}`);
         } catch (err) {
             debug(
@@ -720,7 +720,7 @@ async function executeReasoningWithTracing(
             // Resume existing session by ID (don't reuse session object)
             debug(`Resuming existing session: ${sessionId}`);
             try {
-                session = await client.resumeSession(sessionId);
+                session = await client.resumeSession(sessionId, config);
                 debug(`Session resumed successfully: ${sessionId}`);
             } catch (err) {
                 debug(
