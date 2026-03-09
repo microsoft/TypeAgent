@@ -7,9 +7,17 @@ import {
     isBuiltInWebAgentRpcResponse,
 } from "../../common/webAgentMessageTypes.mjs";
 import { CrosswordSchema } from "../contentScript/webAgentStorage";
+import {
+    PageComponentDefinition,
+    COMMON_COMPONENTS,
+} from "./common/pageComponents";
+
+// Re-export for convenience
+export type { PageComponentDefinition } from "./common/pageComponents";
 
 export interface ExtractComponentRequest {
-    type: string;
+    typeName: string;
+    schema: string;
     userRequest?: string;
     url: string;
 }
@@ -74,12 +82,56 @@ async function sendRpcToAgent(
     });
 }
 
+/**
+ * Extract a page component using LLM-based extraction.
+ *
+ * @param componentDef - Either a PageComponentDefinition object or a string name of a common component
+ * @param userRequest - Optional context for the extraction (e.g., "find the organic apples product")
+ * @returns The extracted component data
+ *
+ * @example
+ * // Using a common component
+ * import { SearchInput } from "./common/pageComponents";
+ * const search = await extractComponent<SearchInputType>(SearchInput);
+ *
+ * @example
+ * // Using a custom component definition
+ * const recipe = await extractComponent<RecipeType>({
+ *     typeName: "Recipe",
+ *     schema: `{ name: string; ingredients: string[]; }`
+ * });
+ *
+ * @example
+ * // Using a common component by name (backwards compatible)
+ * const search = await extractComponent<SearchInputType>("SearchInput");
+ */
 export async function extractComponent<T>(
-    type: string,
+    componentDef: string | PageComponentDefinition,
     userRequest?: string,
 ): Promise<T> {
+    let typeName: string;
+    let schema: string;
+
+    if (typeof componentDef === "string") {
+        // String name - look up in common components
+        const builtIn = COMMON_COMPONENTS[componentDef];
+        if (!builtIn) {
+            throw new Error(
+                `Unknown built-in component: "${componentDef}". ` +
+                    `Available: ${Object.keys(COMMON_COMPONENTS).join(", ")}`,
+            );
+        }
+        typeName = builtIn.typeName;
+        schema = builtIn.schema;
+    } else {
+        // PageComponentDefinition object
+        typeName = componentDef.typeName;
+        schema = componentDef.schema;
+    }
+
     const response = await sendRpcToAgent("extractComponent", {
-        type,
+        typeName,
+        schema,
         userRequest,
         url: window.location.href,
     });
@@ -89,11 +141,11 @@ export async function extractComponent<T>(
     }
 
     console.log(
-        `[WebAgentRpc] Extracted component of type ${type}: Full response: `,
+        `[WebAgentRpc] Extracted component of type ${typeName}: Full response: `,
         response,
     );
     console.log(
-        `[WebAgentRpc] Extracted component of type ${type}:`,
+        `[WebAgentRpc] Extracted component of type ${typeName}:`,
         response.data,
     );
 
