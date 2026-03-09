@@ -157,7 +157,16 @@ export class CrossContextHtmlReducer {
                 "DOMPurify is required for HTML sanitization to prevent XSS.",
             );
         }
-        let safeHtml = domPurify.sanitize(html, { RETURN_TRUSTED_TYPE: false });
+        // Strip <style> tags before sanitization — JSDOM v26 throws
+        // "Could not parse CSS stylesheet" on certain CSS during parsing,
+        // which crashes DOMPurify.sanitize() before it can act on the HTML.
+        let preprocessed = html.replace(
+            /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi,
+            "",
+        );
+        let safeHtml = domPurify.sanitize(preprocessed, {
+            RETURN_TRUSTED_TYPE: false,
+        });
 
         let doc = this.parseDocument(safeHtml);
         if (!doc) {
@@ -498,7 +507,14 @@ export async function createNodeHtmlReducer(): Promise<CrossContextHtmlReducer> 
                 return dom.window.document;
             },
         };
-        return new CrossContextHtmlReducer({ domParser });
+        // DOMPurify's default export is a factory in Node.js — it needs a
+        // window object to produce a usable instance with .sanitize().
+        const jsdomWindow = new JSDOM("").window;
+        const purifyInstance = DOMPurify(jsdomWindow as any);
+        return new CrossContextHtmlReducer({
+            domParser,
+            DOMPurify: purifyInstance,
+        });
     } catch (error) {
         console.warn(
             "JSDOM not available for Node.js HTML reducer, falling back to auto-detection:",
