@@ -1229,15 +1229,9 @@ importers:
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@24.10.13)(ts-node@10.9.2(@types/node@24.10.13)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
