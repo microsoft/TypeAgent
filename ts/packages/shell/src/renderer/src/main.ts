@@ -25,7 +25,6 @@ import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
 import {
     ClientIO,
-    DisplayLogEntry,
     Dispatcher,
     RequestId,
 } from "agent-dispatcher";
@@ -135,82 +134,70 @@ async function initializeChatHistory(chatView: ChatView) {
     }
 }
 
-function replayDisplayHistory(dispatcher: Dispatcher, clientIO: ClientIO) {
-    const afterSeq = maxSeqSeen >= 0 ? maxSeqSeen : undefined;
-    dispatcher
-        .getDisplayHistory(afterSeq)
-        .then((entries: DisplayLogEntry[]) => {
-            for (const entry of entries) {
-                switch (entry.type) {
-                    case "user-request":
-                        clientIO.setUserRequest(entry.requestId, entry.command);
-                        break;
-                    case "set-display":
-                        clientIO.setDisplay(entry.message);
-                        break;
-                    case "append-display":
-                        clientIO.appendDisplay(entry.message, entry.mode);
-                        break;
-                    case "set-display-info":
-                        clientIO.setDisplayInfo(
-                            entry.requestId,
-                            entry.source,
-                            entry.actionIndex,
-                            entry.action,
-                        );
-                        break;
-                    // Skip notify — notifications are ephemeral
-                }
-                maxSeqSeen = Math.max(maxSeqSeen, entry.seq);
-            }
-        });
-}
-
 function registerClient(
     chatView: ChatView,
     agents: Map<string, string>,
     settingsView: SettingsView,
     tabsView: TabView,
     cameraView: CameraView,
+    chatHistoryReady: Promise<void>,
 ) {
+    let replayPending = true;
+    const replayQueue: Array<() => void> = [];
+    function withReplayQueue(fn: () => void): void {
+        if (replayPending) {
+            replayQueue.push(fn);
+        } else {
+            fn();
+        }
+    }
+
     const clientIO: ClientIO = {
         clear: () => {
-            chatView.clear();
+            withReplayQueue(() => chatView.clear());
         },
         exit: () => {
             window.close();
         },
         setUserRequest: (requestId, command, seq?) => {
-            // For remote clients or replay, creates a new MessageGroup
-            // keyed by UUID. For local clients, this is a no-op because
-            // addRemoteUserMessage skips pending locals — they get promoted
-            // lazily by getMessageGroup when the first output arrives.
-            chatView.addRemoteUserMessage(requestId, command);
-            if (seq !== undefined) {
-                maxSeqSeen = Math.max(maxSeqSeen, seq);
-            }
+            withReplayQueue(() => {
+                if (seq !== undefined) {
+                    maxSeqSeen = Math.max(maxSeqSeen, seq);
+                }
+                // For remote clients or replay, creates a new MessageGroup
+                // keyed by UUID. For local clients, this is a no-op because
+                // addRemoteUserMessage skips pending locals — they get promoted
+                // lazily by getMessageGroup when the first output arrives.
+                chatView.addRemoteUserMessage(requestId, command);
+            });
         },
         setDisplayInfo: (requestId, source, actionIndex, action, seq?) => {
-            chatView.setDisplayInfo(requestId, source, actionIndex, action);
-            if (seq !== undefined) {
-                maxSeqSeen = Math.max(maxSeqSeen, seq);
-            }
+            withReplayQueue(() => {
+                if (seq !== undefined) {
+                    maxSeqSeen = Math.max(maxSeqSeen, seq);
+                }
+                chatView.setDisplayInfo(requestId, source, actionIndex, action);
+            });
         },
         setDisplay: (message, seq?) => {
-            chatView.addAgentMessage(message);
-            if (seq !== undefined) {
-                maxSeqSeen = Math.max(maxSeqSeen, seq);
-            }
+            withReplayQueue(() => {
+                if (seq !== undefined) {
+                    maxSeqSeen = Math.max(maxSeqSeen, seq);
+                }
+                chatView.addAgentMessage(message);
+            });
         },
         appendDisplay: (message, mode, seq?) => {
-            chatView.addAgentMessage(message, { appendMode: mode });
-            if (seq !== undefined) {
-                maxSeqSeen = Math.max(maxSeqSeen, seq);
-            }
+            withReplayQueue(() => {
+                if (seq !== undefined) {
+                    maxSeqSeen = Math.max(maxSeqSeen, seq);
+                }
+                chatView.addAgentMessage(message, { appendMode: mode });
+            });
         },
         appendDiagnosticData: (requestId, data) => {
             // TODO: append data instead of replace
-            chatView.setActionData(requestId, data);
+            withReplayQueue(() => chatView.setActionData(requestId, data));
         },
         setDynamicDisplay: (
             requestId,
@@ -219,12 +206,14 @@ function registerClient(
             displayId,
             nextRefreshMs,
         ) => {
-            chatView.setDynamicDisplay(
-                requestId,
-                source,
-                actionIndex,
-                displayId,
-                nextRefreshMs,
+            withReplayQueue(() =>
+                chatView.setDynamicDisplay(
+                    requestId,
+                    source,
+                    actionIndex,
+                    displayId,
+                    nextRefreshMs,
+                ),
             );
         },
         askYesNo: async (requestId, message, _defaultValue) => {
@@ -238,13 +227,15 @@ function registerClient(
             choices,
             source,
         ) => {
-            chatView.showChoice(
-                requestId,
-                choiceId,
-                type,
-                message,
-                choices,
-                source,
+            withReplayQueue(() =>
+                chatView.showChoice(
+                    requestId,
+                    choiceId,
+                    type,
+                    message,
+                    choices,
+                    source,
+                ),
             );
         },
         proposeAction: async (requestId, actionTemplates, source) => {
@@ -254,88 +245,90 @@ function registerClient(
             throw new Error("Main process should have handled popupQuestion");
         },
         notify: (requestId, event, data, source, seq?) => {
-            if (seq !== undefined) {
-                maxSeqSeen = Math.max(maxSeqSeen, seq);
-            }
-            switch (event) {
-                case "explained":
-                    chatView.notifyExplained(requestId, data);
-                    break;
-                case "randomCommandSelected":
-                    chatView.randomCommandSelected(requestId, data.message);
-                    break;
-                case "grammarRule":
-                    // Update roadrunner color based on grammar result.
-                    // Grammar details are diagnostic-only — accessible via
-                    // the clickable label, not displayed inline.
-                    chatView.updateGrammarResult(
-                        requestId,
-                        data.success,
-                        data.message,
-                    );
-                    break;
-                case "showNotifications":
-                    switch (data) {
-                        case NotifyCommands.Clear:
-                            notifications.length = 0;
-                            break;
-                        case NotifyCommands.ShowAll:
-                            showNotifications(
-                                requestId,
-                                chatView,
-                                notifications,
-                                true,
-                            );
-                            break;
-                        case NotifyCommands.ShowSummary:
-                            summarizeNotifications(
-                                requestId,
-                                chatView,
-                                notifications,
-                            );
-                            break;
-                        case NotifyCommands.ShowUnread:
-                            showNotifications(
-                                requestId,
-                                chatView,
-                                notifications,
-                            );
-                            break;
-                        default:
-                            console.log("unknown notify command");
-                            break;
-                    }
-                    break;
-                case AppAgentEvent.Error:
-                case AppAgentEvent.Warning:
-                case AppAgentEvent.Info:
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
-                    break;
+            withReplayQueue(() => {
+                if (seq !== undefined) {
+                    maxSeqSeen = Math.max(maxSeqSeen, seq);
+                }
+                switch (event) {
+                    case "explained":
+                        chatView.notifyExplained(requestId, data);
+                        break;
+                    case "randomCommandSelected":
+                        chatView.randomCommandSelected(requestId, data.message);
+                        break;
+                    case "grammarRule":
+                        // Update roadrunner color based on grammar result.
+                        // Grammar details are diagnostic-only — accessible via
+                        // the clickable label, not displayed inline.
+                        chatView.updateGrammarResult(
+                            requestId,
+                            data.success,
+                            data.message,
+                        );
+                        break;
+                    case "showNotifications":
+                        switch (data) {
+                            case NotifyCommands.Clear:
+                                notifications.length = 0;
+                                break;
+                            case NotifyCommands.ShowAll:
+                                showNotifications(
+                                    requestId,
+                                    chatView,
+                                    notifications,
+                                    true,
+                                );
+                                break;
+                            case NotifyCommands.ShowSummary:
+                                summarizeNotifications(
+                                    requestId,
+                                    chatView,
+                                    notifications,
+                                );
+                                break;
+                            case NotifyCommands.ShowUnread:
+                                showNotifications(
+                                    requestId,
+                                    chatView,
+                                    notifications,
+                                );
+                                break;
+                            default:
+                                console.log("unknown notify command");
+                                break;
+                        }
+                        break;
+                    case AppAgentEvent.Error:
+                    case AppAgentEvent.Warning:
+                    case AppAgentEvent.Info:
+                        notifications.push({
+                            event,
+                            source,
+                            data,
+                            read: false,
+                            requestId,
+                        });
+                        break;
 
-                // Display-focused events - for now show toast notification inline
-                // TODO: Design for toast notifications in shell
-                case AppAgentEvent.Inline:
-                case AppAgentEvent.Toast:
-                    chatView.addNotificationMessage(data, source, requestId);
-                    // Also add to notifications list for @notify show
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
-                    break;
+                    // Display-focused events - for now show toast notification inline
+                    // TODO: Design for toast notifications in shell
+                    case AppAgentEvent.Inline:
+                    case AppAgentEvent.Toast:
+                        chatView.addNotificationMessage(data, source, requestId);
+                        // Also add to notifications list for @notify show
+                        notifications.push({
+                            event,
+                            source,
+                            data,
+                            read: false,
+                            requestId,
+                        });
+                        break;
 
-                default:
-                // ignore
-            }
+                    default:
+                    // ignore
+                }
+            });
         },
         openLocalView: async () => {
             throw new Error("Main process should have handled openLocalView");
@@ -386,9 +379,42 @@ function registerClient(
 
     const client: Client = {
         clientIO,
-        dispatcherInitialized(dispatcher: Dispatcher): void {
+        async dispatcherInitialized(dispatcher: Dispatcher): Promise<void> {
             chatView.initializeDispatcher(dispatcher);
-            replayDisplayHistory(dispatcher, clientIO);
+            await chatHistoryReady;
+            const afterSeq = maxSeqSeen >= 0 ? maxSeqSeen : undefined;
+            const entries = await dispatcher.getDisplayHistory(afterSeq);
+            for (const entry of entries) {
+                switch (entry.type) {
+                    case "user-request":
+                        chatView.addRemoteUserMessage(
+                            entry.requestId,
+                            entry.command,
+                        );
+                        break;
+                    case "set-display":
+                        chatView.addAgentMessage(entry.message);
+                        break;
+                    case "append-display":
+                        chatView.addAgentMessage(entry.message, {
+                            appendMode: entry.mode,
+                        });
+                        break;
+                    case "set-display-info":
+                        chatView.setDisplayInfo(
+                            entry.requestId,
+                            entry.source,
+                            entry.actionIndex,
+                            entry.action,
+                        );
+                        break;
+                    // Skip notify — notifications are ephemeral
+                }
+                maxSeqSeen = Math.max(maxSeqSeen, entry.seq);
+            }
+            replayPending = false;
+            for (const fn of replayQueue) fn();
+            replayQueue.length = 0;
         },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
             agents.clear();
@@ -580,7 +606,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     chatView.setChatInput(chatInput);
 
-    initializeChatHistory(chatView);
+    const chatHistoryReady = initializeChatHistory(chatView);
 
     const cameraView = new CameraView((image: HTMLImageElement) => {
         // copy image
@@ -616,7 +642,14 @@ document.addEventListener("DOMContentLoaded", async function () {
     );
     tabs.getTabContainerByName("Help").append(new HelpView().getContainer());
 
-    registerClient(chatView, agents, settingsView, tabs, cameraView);
+    registerClient(
+        chatView,
+        agents,
+        settingsView,
+        tabs,
+        cameraView,
+        chatHistoryReady,
+    );
 
     try {
         if (Android !== undefined) {
