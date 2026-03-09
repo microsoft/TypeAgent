@@ -36,7 +36,7 @@ import {
 import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
-import { createCommercePageTranslator } from "./commerce/translator.mjs";
+import { extractPageComponent } from "./componentExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import type {
     ElementDescriptionResult,
@@ -948,13 +948,20 @@ async function handleWebAgentRpc(
 
         case "extractComponent": {
             try {
-                const { type, userRequest } = params;
+                const { typeName, schema, userRequest } = params;
                 const browserConnector = context.agentContext.browserConnector;
 
                 if (!browserConnector) {
                     return {
                         success: false,
                         error: "Browser connector not available",
+                    };
+                }
+
+                if (!schema || !typeName) {
+                    return {
+                        success: false,
+                        error: "Schema and typeName are required",
                     };
                 }
 
@@ -971,10 +978,9 @@ async function handleWebAgentRpc(
                     };
                 }
 
-                const translator =
-                    await createCommercePageTranslator("GPT_5_MINI");
-                const response = await translator.getPageComponentSchema(
-                    type,
+                const response = await extractPageComponent(
+                    typeName,
+                    schema,
                     userRequest,
                     htmlFragments,
                     undefined,

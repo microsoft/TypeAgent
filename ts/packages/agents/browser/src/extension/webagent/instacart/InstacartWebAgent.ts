@@ -8,12 +8,28 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { WebAgent, WebAgentContext } from "../WebAgentContext";
-import { extractComponent } from "../webAgentRpc";
+import { extractComponent, PageComponentDefinition } from "../webAgentRpc";
 import {
     ContinuationState,
     continuationStorage,
 } from "../../contentScript/webAgentStorage";
 import { platformAdapter } from "../../contentScript/platformAdapter";
+import {
+    SearchInput,
+    ProductTile,
+    ShoppingCartButton,
+    ShoppingCartDetails,
+    StoreInfo,
+    NearbyStoresList,
+    NavigationLink,
+    SearchInputType,
+    ProductTileType,
+    ShoppingCartButtonType,
+    ShoppingCartDetailsType,
+    StoreInfoType,
+    NearbyStoresListType,
+    NavigationLinkType,
+} from "../common/pageComponents";
 
 declare global {
     interface Window {
@@ -192,86 +208,156 @@ type BuyItAgain = {
     parameters: { storeName: string; allItems?: boolean; productName?: string };
 };
 
-// Component interfaces
-interface ProductTile {
+// Site-specific component definitions (not in common)
+const HomeLink: PageComponentDefinition = {
+    typeName: "HomeLink",
+    schema: `{ linkSelector: string; }`,
+};
+
+const ListsNavigationLink: PageComponentDefinition = {
+    typeName: "ListsNavigationLink",
+    schema: `{ linkSelector: string; }`,
+};
+
+const ListInfo: PageComponentDefinition = {
+    typeName: "ListInfo",
+    schema: `{
     name: string;
-    brand: string;
-    price: string;
-    quantity: string;
-    availability: string;
     detailsLinkSelector: string;
-    addToCartButtonCssSelector: string;
-}
+}`,
+};
 
-interface SearchInput {
-    cssSelector: string;
-    submitButtonCssSelector: string;
-}
-
-interface HomeLink {
-    linkCssSelector: string;
-}
-
-interface StoreInfo {
-    name: string;
-    subtitle: string;
-    detailsLinkCssSelector: string;
-}
-
-interface NearbyStoresList {
-    stores: StoreInfo[];
-}
-
-interface ListsNavigationLink {
-    linkCssSelector: string;
-}
-
-interface ListInfo {
-    name: string;
-    detailsLinkCssSelector: string;
-}
-
-interface ListDetailsInfo {
+const ListDetailsInfo: PageComponentDefinition = {
+    typeName: "ListDetailsInfo",
+    schema: `{
     name: string;
     storeName?: string;
-    products?: ProductTile[];
-}
+    products?: {
+        name: string;
+        price: string;
+        availability?: string;
+        addToCartButtonSelector?: string;
+    }[];
+}`,
+};
 
-interface RecipeInfo {
+const RecipeInfo: PageComponentDefinition = {
+    typeName: "RecipeInfo",
+    schema: `{
     name: string;
     subtitle: string;
-    detailsLinkCssSelector: string;
-}
+    detailsLinkSelector: string;
+}`,
+};
 
-interface RecipeHeroSection {
+const RecipeHeroSection: PageComponentDefinition = {
+    typeName: "RecipeHeroSection",
+    schema: `{
     recipeName: string;
     summary: string;
-    addAllIngridientsCssSelector: string;
-    saveButtonCssSelector: string;
-    ingredients: ProductTile[];
-    relatedIngredients: ProductTile[];
+    addAllIngredientsSelector: string;
+    saveButtonSelector: string;
+    ingredients: {
+        name: string;
+        price: string;
+        addToCartButtonSelector?: string;
+    }[];
+    relatedIngredients: {
+        name: string;
+        price: string;
+        addToCartButtonSelector?: string;
+    }[];
+}`,
+};
+
+const BuyItAgainNavigationLink: PageComponentDefinition = {
+    typeName: "BuyItAgainNavigationLink",
+    schema: `{ linkSelector: string; }`,
+};
+
+const BuyItAgainHeaderSection: PageComponentDefinition = {
+    typeName: "BuyItAgainHeaderSection",
+    schema: `{
+    allItemsSelector: string;
+    pastOrdersSelector: string;
+    products?: {
+        name: string;
+        price: string;
+        availability?: string;
+        addToCartButtonSelector?: string;
+    }[];
+}`,
+};
+
+// Type interfaces for site-specific components
+interface HomeLinkType {
+    linkSelector: string;
 }
 
-interface ShoppingCartButton {
-    label: string;
-    detailsLinkCssSelector: string;
+interface ListsNavigationLinkType {
+    linkSelector: string;
 }
 
-interface ShoppingCartDetails {
-    storeName: string;
-    deliveryInformation: string;
-    totalAmount: string;
-    productsInCart?: ProductTile[];
+interface ListInfoType {
+    name: string;
+    detailsLinkSelector: string;
 }
 
-interface BuyItAgainNavigationLink {
-    linkCssSelector: string;
+interface ListDetailsInfoType {
+    name: string;
+    storeName?: string;
+    products?: {
+        name: string;
+        price: string;
+        availability?: string;
+        addToCartButtonSelector?: string;
+    }[];
 }
 
-interface BuyItAgainHeaderSection {
-    allItemsCssSelector: string;
-    pastOrdersCssSelector: string;
-    products?: ProductTile[];
+interface RecipeInfoType {
+    name: string;
+    subtitle: string;
+    detailsLinkSelector: string;
+}
+
+interface RecipeHeroSectionType {
+    recipeName: string;
+    summary: string;
+    addAllIngredientsSelector: string;
+    saveButtonSelector: string;
+    ingredients: {
+        name: string;
+        price: string;
+        addToCartButtonSelector?: string;
+    }[];
+    relatedIngredients: {
+        name: string;
+        price: string;
+        addToCartButtonSelector?: string;
+    }[];
+}
+
+interface BuyItAgainNavigationLinkType {
+    linkSelector: string;
+}
+
+interface BuyItAgainHeaderSectionType {
+    allItemsSelector: string;
+    pastOrdersSelector: string;
+    products?: {
+        name: string;
+        price: string;
+        availability?: string;
+        addToCartButtonSelector?: string;
+    }[];
+}
+
+// Local interface for purchase results
+interface PurchaseProductInfo {
+    name: string;
+    price: string;
+    availability?: string;
+    addToCartButtonSelector?: string;
 }
 
 // Continuation types
@@ -298,8 +384,8 @@ interface InstacartContinuationData {
 }
 
 interface PurchaseResults {
-    addedToCart: ProductTile[];
-    unavailable: ProductTile[];
+    addedToCart: PurchaseProductInfo[];
+    unavailable: PurchaseProductInfo[];
     storeName: string;
     deliveryInformation: string;
 }
@@ -488,7 +574,8 @@ export class InstacartWebAgent implements WebAgent {
         if (!this.context) return false;
 
         console.log(`[InstacartWebAgent] Searching for: ${prefix}${keywords}`);
-        const searchInput = await extractComponent<SearchInput>("SearchInput");
+        const searchInput =
+            await extractComponent<SearchInputType>(SearchInput);
 
         if (!searchInput?.cssSelector) {
             console.error("[InstacartWebAgent] Search input not found");
@@ -508,18 +595,18 @@ export class InstacartWebAgent implements WebAgent {
     private async goToHomepage(): Promise<boolean> {
         if (!this.context) return false;
 
-        const homeLink = await extractComponent<HomeLink>("HomeLink");
-        if (!homeLink?.linkCssSelector) {
+        const homeLink = await extractComponent<HomeLinkType>(HomeLink);
+        if (!homeLink?.linkSelector) {
             console.error("[InstacartWebAgent] Home link not found");
             return false;
         }
 
-        await this.context.ui.clickOn(homeLink.linkCssSelector);
+        await this.context.ui.clickOn(homeLink.linkSelector);
         return true;
     }
 
     private async addAllProductsToCart(
-        products: ProductTile[],
+        products: PurchaseProductInfo[],
         storeName: string,
     ): Promise<PurchaseResults> {
         const results: PurchaseResults = {
@@ -532,10 +619,10 @@ export class InstacartWebAgent implements WebAgent {
         for (const product of products) {
             if (product.availability === "Out of stock") {
                 results.unavailable.push(product);
-            } else if (product.addToCartButtonCssSelector) {
+            } else if (product.addToCartButtonSelector) {
                 try {
                     await this.context!.ui.clickOn(
-                        product.addToCartButtonCssSelector,
+                        product.addToCartButtonSelector,
                     );
                     await new Promise((r) => setTimeout(r, 150));
                     results.addedToCart.push(product);
@@ -578,12 +665,12 @@ export class InstacartWebAgent implements WebAgent {
     ): Promise<{ message: string; entities?: any[] }> {
         if (!this.context) throw new Error("Context not available");
 
-        const product = await extractComponent<ProductTile>(
-            "ProductTile",
+        const product = await extractComponent<ProductTileType>(
+            ProductTile,
             productName,
         );
 
-        if (!product?.addToCartButtonCssSelector) {
+        if (!product?.addToCartButtonSelector) {
             return { message: `Could not find "${productName}" on this page` };
         }
 
@@ -591,7 +678,7 @@ export class InstacartWebAgent implements WebAgent {
             return { message: `"${product.name}" is out of stock` };
         }
 
-        await this.context.ui.clickOn(product.addToCartButtonCssSelector);
+        await this.context.ui.clickOn(product.addToCartButtonSelector);
 
         return {
             message: `Added "${product.name}" (${product.price}) to cart`,
@@ -620,16 +707,17 @@ export class InstacartWebAgent implements WebAgent {
         if (!this.context) throw new Error("Context not available");
 
         const cartButton =
-            await extractComponent<ShoppingCartButton>("ShoppingCartButton");
+            await extractComponent<ShoppingCartButtonType>(ShoppingCartButton);
 
-        if (cartButton?.detailsLinkCssSelector) {
-            await this.context.ui.clickOn(cartButton.detailsLinkCssSelector);
+        if (cartButton?.detailsLinkSelector) {
+            await this.context.ui.clickOn(cartButton.detailsLinkSelector);
             await new Promise((r) => setTimeout(r, 500));
         }
 
-        const cartDetails = await extractComponent<ShoppingCartDetails>(
-            "ShoppingCartDetails",
-        );
+        const cartDetails =
+            await extractComponent<ShoppingCartDetailsType>(
+                ShoppingCartDetails,
+            );
 
         if (!cartDetails) {
             return { message: "Could not retrieve cart details", entities: [] };
@@ -641,7 +729,7 @@ export class InstacartWebAgent implements WebAgent {
                 entities.push({
                     name: p.name,
                     type: ["product"],
-                    metadata: { price: p.price, brand: p.brand },
+                    metadata: { price: p.price },
                 });
             }
         }
@@ -735,13 +823,13 @@ export class InstacartWebAgent implements WebAgent {
         if (!this.context) throw new Error("Context not available");
 
         const recipe =
-            await extractComponent<RecipeHeroSection>("RecipeHeroSection");
+            await extractComponent<RecipeHeroSectionType>(RecipeHeroSection);
 
-        if (!recipe?.saveButtonCssSelector) {
+        if (!recipe?.saveButtonSelector) {
             return { message: `Could not find recipe "${recipeName}" to save` };
         }
 
-        await this.context.ui.clickOn(recipe.saveButtonCssSelector);
+        await this.context.ui.clickOn(recipe.saveButtonSelector);
 
         return { message: `Saved recipe "${recipe.recipeName}"` };
     }
@@ -766,7 +854,7 @@ export class InstacartWebAgent implements WebAgent {
         if (!this.context) throw new Error("Context not available");
 
         const storesList =
-            await extractComponent<NearbyStoresList>("NearbyStoresList");
+            await extractComponent<NearbyStoresListType>(NearbyStoresList);
 
         if (!storesList?.stores || storesList.stores.length === 0) {
             return { message: "No nearby stores found on this page" };
@@ -881,8 +969,8 @@ export class InstacartWebAgent implements WebAgent {
     private async continueSearchForProduct_showResults(
         data: InstacartContinuationData,
     ): Promise<{ message: string; entities?: any[] }> {
-        const products = await extractComponent<ProductTile[]>(
-            "ProductTile",
+        const products = await extractComponent<ProductTileType[]>(
+            ProductTile,
             data.keyword,
         );
 
@@ -910,12 +998,12 @@ export class InstacartWebAgent implements WebAgent {
         if (!this.context) throw new Error("Context not available");
 
         if (data.storeName) {
-            const store = await extractComponent<StoreInfo>(
-                "StoreInfo",
+            const store = await extractComponent<StoreInfoType>(
+                StoreInfo,
                 data.storeName,
             );
-            if (store?.detailsLinkCssSelector) {
-                await this.context.ui.clickOn(store.detailsLinkCssSelector);
+            if (store?.linkSelector) {
+                await this.context.ui.clickOn(store.linkSelector);
                 await this.storeContinuation("buyAllInList_inStore", data);
                 return { message: `Selecting store "${data.storeName}"...` };
             }
@@ -931,14 +1019,15 @@ export class InstacartWebAgent implements WebAgent {
     ): Promise<{ message: string }> {
         if (!this.context) throw new Error("Context not available");
 
-        const listsNav = await extractComponent<ListsNavigationLink>(
-            "ListsNavigationLink",
-        );
-        if (!listsNav?.linkCssSelector) {
+        const listsNav =
+            await extractComponent<ListsNavigationLinkType>(
+                ListsNavigationLink,
+            );
+        if (!listsNav?.linkSelector) {
             return { message: "Could not find Lists navigation link" };
         }
 
-        await this.context.ui.clickOn(listsNav.linkCssSelector);
+        await this.context.ui.clickOn(listsNav.linkSelector);
         await this.storeContinuation("buyAllInList_onListsPage", data);
 
         return { message: "Navigating to Lists page..." };
@@ -949,15 +1038,15 @@ export class InstacartWebAgent implements WebAgent {
     ): Promise<{ message: string }> {
         if (!this.context) throw new Error("Context not available");
 
-        const list = await extractComponent<ListInfo>(
-            "ListInfo",
+        const list = await extractComponent<ListInfoType>(
+            ListInfo,
             data.listName,
         );
-        if (!list?.detailsLinkCssSelector) {
+        if (!list?.detailsLinkSelector) {
             return { message: `Could not find list "${data.listName}"` };
         }
 
-        await this.context.ui.clickOn(list.detailsLinkCssSelector);
+        await this.context.ui.clickOn(list.detailsLinkSelector);
         await this.storeContinuation("buyAllInList_onListDetails", data);
 
         return { message: `Opening list "${list.name}"...` };
@@ -969,7 +1058,7 @@ export class InstacartWebAgent implements WebAgent {
         if (!this.context) throw new Error("Context not available");
 
         const listDetails =
-            await extractComponent<ListDetailsInfo>("ListDetailsInfo");
+            await extractComponent<ListDetailsInfoType>(ListDetailsInfo);
 
         if (!listDetails?.products || listDetails.products.length === 0) {
             return { message: "No products found in this list" };
@@ -1000,15 +1089,15 @@ export class InstacartWebAgent implements WebAgent {
     ): Promise<{ message: string }> {
         if (!this.context) throw new Error("Context not available");
 
-        const recipe = await extractComponent<RecipeInfo>(
-            "RecipeInfo",
+        const recipe = await extractComponent<RecipeInfoType>(
+            RecipeInfo,
             data.recipeName,
         );
-        if (!recipe?.detailsLinkCssSelector) {
+        if (!recipe?.detailsLinkSelector) {
             return { message: `Could not find recipe "${data.recipeName}"` };
         }
 
-        await this.context.ui.clickOn(recipe.detailsLinkCssSelector);
+        await this.context.ui.clickOn(recipe.detailsLinkSelector);
         await this.storeContinuation("buyAllInRecipe_onRecipePage", data);
 
         return { message: `Opening recipe "${recipe.name}"...` };
@@ -1020,15 +1109,15 @@ export class InstacartWebAgent implements WebAgent {
         if (!this.context) throw new Error("Context not available");
 
         const recipe =
-            await extractComponent<RecipeHeroSection>("RecipeHeroSection");
+            await extractComponent<RecipeHeroSectionType>(RecipeHeroSection);
 
         if (!recipe) {
             return { message: "Could not find recipe details" };
         }
 
         // Click add all ingredients button
-        if (recipe.addAllIngridientsCssSelector) {
-            await this.context.ui.clickOn(recipe.addAllIngridientsCssSelector);
+        if (recipe.addAllIngredientsSelector) {
+            await this.context.ui.clickOn(recipe.addAllIngredientsSelector);
 
             const entities = recipe.ingredients.map((p) => ({
                 name: p.name,
@@ -1050,16 +1139,16 @@ export class InstacartWebAgent implements WebAgent {
     ): Promise<{ message: string }> {
         if (!this.context) throw new Error("Context not available");
 
-        const store = await extractComponent<StoreInfo>(
-            "StoreInfo",
+        const store = await extractComponent<StoreInfoType>(
+            StoreInfo,
             data.storeName,
         );
 
-        if (!store?.detailsLinkCssSelector) {
+        if (!store?.linkSelector) {
             return { message: `Could not find store "${data.storeName}"` };
         }
 
-        await this.context.ui.clickOn(store.detailsLinkCssSelector);
+        await this.context.ui.clickOn(store.linkSelector);
 
         return { message: `Selected "${store.name}" as your store.` };
     }
@@ -1071,25 +1160,26 @@ export class InstacartWebAgent implements WebAgent {
 
         // First select store if needed
         if (data.storeName) {
-            const store = await extractComponent<StoreInfo>(
-                "StoreInfo",
+            const store = await extractComponent<StoreInfoType>(
+                StoreInfo,
                 data.storeName,
             );
-            if (store?.detailsLinkCssSelector) {
-                await this.context.ui.clickOn(store.detailsLinkCssSelector);
+            if (store?.linkSelector) {
+                await this.context.ui.clickOn(store.linkSelector);
                 await new Promise((r) => setTimeout(r, 500));
             }
         }
 
-        const buyItAgainNav = await extractComponent<BuyItAgainNavigationLink>(
-            "BuyItAgainNavigationLink",
-        );
+        const buyItAgainNav =
+            await extractComponent<BuyItAgainNavigationLinkType>(
+                BuyItAgainNavigationLink,
+            );
 
-        if (!buyItAgainNav?.linkCssSelector) {
+        if (!buyItAgainNav?.linkSelector) {
             return { message: "Could not find Buy It Again navigation" };
         }
 
-        await this.context.ui.clickOn(buyItAgainNav.linkCssSelector);
+        await this.context.ui.clickOn(buyItAgainNav.linkSelector);
         await this.storeContinuation("buyItAgain_onBuyItAgainPage", data);
 
         return { message: "Navigating to Buy It Again..." };
@@ -1100,8 +1190,8 @@ export class InstacartWebAgent implements WebAgent {
     ): Promise<{ message: string; entities?: any[] }> {
         if (!this.context) throw new Error("Context not available");
 
-        const buyItAgain = await extractComponent<BuyItAgainHeaderSection>(
-            "BuyItAgainHeaderSection",
+        const buyItAgain = await extractComponent<BuyItAgainHeaderSectionType>(
+            BuyItAgainHeaderSection,
         );
 
         if (!buyItAgain?.products || buyItAgain.products.length === 0) {
@@ -1128,13 +1218,13 @@ export class InstacartWebAgent implements WebAgent {
                 p.name.toLowerCase().includes(data.productName!.toLowerCase()),
             );
 
-            if (!product?.addToCartButtonCssSelector) {
+            if (!product?.addToCartButtonSelector) {
                 return {
                     message: `Could not find "${data.productName}" in Buy It Again`,
                 };
             }
 
-            await this.context.ui.clickOn(product.addToCartButtonCssSelector);
+            await this.context.ui.clickOn(product.addToCartButtonSelector);
 
             return {
                 message: `Added "${product.name}" from Buy It Again.`,

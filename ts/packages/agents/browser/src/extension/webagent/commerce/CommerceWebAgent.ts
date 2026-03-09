@@ -8,12 +8,26 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { WebAgent, WebAgentContext } from "../WebAgentContext";
-import { extractComponent } from "../webAgentRpc";
+import { extractComponent, PageComponentDefinition } from "../webAgentRpc";
 import {
     ContinuationState,
     continuationStorage,
 } from "../../contentScript/webAgentStorage";
 import { platformAdapter } from "../../contentScript/platformAdapter";
+import {
+    SearchInput,
+    ProductTile,
+    ProductDetailsHero,
+    ShoppingCartButton,
+    ShoppingCartDetails,
+    StoreInfo,
+    SearchInputType,
+    ProductTileType,
+    ProductDetailsHeroType,
+    ShoppingCartButtonType,
+    ShoppingCartDetailsType,
+    StoreInfoType,
+} from "../common/pageComponents";
 
 declare global {
     interface Window {
@@ -132,65 +146,51 @@ type SearchForReservation = {
     };
 };
 
-// Component interfaces for LLM extraction
-interface StoreLocation {
+// Site-specific component definitions (not in common)
+const RestaurantResult: PageComponentDefinition = {
+    typeName: "RestaurantResult",
+    schema: `{
+    restaurantName: string;
+    rating: string;
+    detailsLinkSelector: string;
+}`,
+};
+
+const BookReservationsModule: PageComponentDefinition = {
+    typeName: "BookReservationsModule",
+    schema: `{
+    date: string;
+    targetTime: string;
+    availableTimeSlots?: { time?: string; cssSelector: string; }[];
+    numberOfPeople?: number;
+}`,
+};
+
+const StoreLocation: PageComponentDefinition = {
+    typeName: "StoreLocation",
+    schema: `{
     locationName: string;
     zipCode: string;
-}
+}`,
+};
 
-interface ShoppingCartButton {
-    label: string;
-    detailsLinkCssSelector: string;
-}
-
-interface ShoppingCartDetails {
-    storeName: string;
-    deliveryInformation: string;
-    totalAmount: string;
-    productsInCart?: ProductTile[];
-}
-
-interface ProductTile {
-    productName: string;
-    price: string;
+// Type interfaces for site-specific components
+interface RestaurantResultType {
+    restaurantName: string;
     rating: string;
     detailsLinkSelector: string;
 }
 
-interface ProductDetailsHeroTile {
-    productName: string;
-    price: string;
-    rating: string;
-    cssSelector: string;
-    addToCartButton?: {
-        cssSelector: string;
-    };
-    storeName?: string;
-    physicalLocationInStore?: string;
-    numberInStock?: string;
-}
-
-interface SearchInput {
-    cssSelector: string;
-    submitButtonCssSelector: string;
-}
-
-interface RestaurantResult {
-    restaurantName: string;
-    rating: string;
-    detailsLinkCssSelector: string;
-}
-
-interface BookReservationsModule {
+interface BookReservationsModuleType {
     date: string;
     targetTime: string;
-    availableTimeSlots?: BookSelectorButton[];
+    availableTimeSlots?: { time?: string; cssSelector: string }[];
     numberOfPeople?: number;
 }
 
-interface BookSelectorButton {
-    time?: string;
-    cssSelector: string;
+interface StoreLocationType {
+    locationName: string;
+    zipCode: string;
 }
 
 // Continuation step types for multi-step workflows
@@ -411,7 +411,8 @@ export class CommerceWebAgent implements WebAgent {
         if (!this.context) return false;
 
         console.log(`[CommerceWebAgent] Searching for: ${searchTerm}`);
-        const searchInput = await extractComponent<SearchInput>("SearchInput");
+        const searchInput =
+            await extractComponent<SearchInputType>(SearchInput);
 
         console.log("[CommerceWebAgent] Extracted search input:", searchInput);
 
@@ -439,7 +440,7 @@ export class CommerceWebAgent implements WebAgent {
 
         console.log("[CommerceWebAgent] Extracting StoreLocation...");
         const storeInfo =
-            await extractComponent<StoreLocation>("StoreLocation");
+            await extractComponent<StoreLocationType>(StoreLocation);
 
         if (storeInfo?.locationName) {
             const entity = {
@@ -473,18 +474,19 @@ export class CommerceWebAgent implements WebAgent {
 
         console.log("[CommerceWebAgent] Extracting ShoppingCartButton...");
         const cartButton =
-            await extractComponent<ShoppingCartButton>("ShoppingCartButton");
+            await extractComponent<ShoppingCartButtonType>(ShoppingCartButton);
 
-        if (cartButton?.detailsLinkCssSelector) {
+        if (cartButton?.detailsLinkSelector) {
             console.log("[CommerceWebAgent] Clicking cart button...");
-            await this.context.ui.clickOn(cartButton.detailsLinkCssSelector);
+            await this.context.ui.clickOn(cartButton.detailsLinkSelector);
             await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
         console.log("[CommerceWebAgent] Extracting ShoppingCartDetails...");
-        const cartDetails = await extractComponent<ShoppingCartDetails>(
-            "ShoppingCartDetails",
-        );
+        const cartDetails =
+            await extractComponent<ShoppingCartDetailsType>(
+                ShoppingCartDetails,
+            );
 
         if (cartDetails) {
             if (cartDetails.storeName) {
@@ -502,12 +504,11 @@ export class CommerceWebAgent implements WebAgent {
             if (cartDetails.productsInCart) {
                 for (const product of cartDetails.productsInCart) {
                     entities.push({
-                        name: product.productName,
+                        name: product.name,
                         type: ["product"],
                         metadata: {
                             source: "cart",
                             price: product.price,
-                            rating: product.rating,
                             store: cartDetails.storeName,
                         },
                     });
@@ -535,9 +536,10 @@ export class CommerceWebAgent implements WebAgent {
         }
 
         console.log("[CommerceWebAgent] Extracting BookReservationsModule...");
-        const reservationInfo = await extractComponent<BookReservationsModule>(
-            "BookReservationsModule",
-        );
+        const reservationInfo =
+            await extractComponent<BookReservationsModuleType>(
+                BookReservationsModule,
+            );
 
         if (
             reservationInfo?.availableTimeSlots &&
@@ -722,8 +724,8 @@ export class CommerceWebAgent implements WebAgent {
             `[CommerceWebAgent] On results page, selecting: ${productName}`,
         );
 
-        const product = await extractComponent<ProductTile>(
-            "ProductTile",
+        const product = await extractComponent<ProductTileType>(
+            ProductTile,
             productName,
         );
 
@@ -734,7 +736,7 @@ export class CommerceWebAgent implements WebAgent {
         await this.context.ui.clickOn(product.detailsLinkSelector);
         await this.storeContinuation("buyProduct_onDetails", { productName });
 
-        return { message: `Clicking on "${product.productName}"...` };
+        return { message: `Clicking on "${product.name}"...` };
     }
 
     private async continueBuyProduct_addToCart(
@@ -744,20 +746,19 @@ export class CommerceWebAgent implements WebAgent {
 
         console.log("[CommerceWebAgent] On details page, adding to cart");
 
-        const details = await extractComponent<ProductDetailsHeroTile>(
-            "ProductDetailsHeroTile",
-        );
+        const details =
+            await extractComponent<ProductDetailsHeroType>(ProductDetailsHero);
 
-        if (!details?.addToCartButton?.cssSelector) {
+        if (!details?.addToCartButtonSelector) {
             return {
                 message: "Could not find add-to-cart button on this page",
             };
         }
 
-        await this.context.ui.clickOn(details.addToCartButton.cssSelector);
+        await this.context.ui.clickOn(details.addToCartButtonSelector);
 
         return {
-            message: `Added "${details.productName}" (${details.price}) to cart`,
+            message: `Added "${details.name}" (${details.price}) to cart`,
         };
     }
 
@@ -772,8 +773,8 @@ export class CommerceWebAgent implements WebAgent {
             `[CommerceWebAgent] On results page, selecting: ${productName}`,
         );
 
-        const product = await extractComponent<ProductTile>(
-            "ProductTile",
+        const product = await extractComponent<ProductTileType>(
+            ProductTile,
             productName,
         );
 
@@ -786,7 +787,7 @@ export class CommerceWebAgent implements WebAgent {
             productName,
         });
 
-        return { message: `Clicking on "${product.productName}"...` };
+        return { message: `Clicking on "${product.name}"...` };
     }
 
     private async continueGetLocationInStore_extractLocation(
@@ -799,13 +800,12 @@ export class CommerceWebAgent implements WebAgent {
         // Wait for page to settle
         await new Promise((resolve) => setTimeout(resolve, 1000));
 
-        const details = await extractComponent<ProductDetailsHeroTile>(
-            "ProductDetailsHeroTile",
-        );
+        const details =
+            await extractComponent<ProductDetailsHeroType>(ProductDetailsHero);
 
         if (details?.physicalLocationInStore) {
             const entity = {
-                name: details.productName,
+                name: details.name,
                 type: ["product"],
                 metadata: {
                     source: "store_lookup",
@@ -835,18 +835,18 @@ export class CommerceWebAgent implements WebAgent {
             `[CommerceWebAgent] On results page, selecting: ${restaurantName}`,
         );
 
-        const restaurant = await extractComponent<RestaurantResult>(
-            "RestaurantResult",
+        const restaurant = await extractComponent<RestaurantResultType>(
+            RestaurantResult,
             restaurantName,
         );
 
-        if (!restaurant?.detailsLinkCssSelector) {
+        if (!restaurant?.detailsLinkSelector) {
             return {
                 message: `Could not find "${restaurantName}" in results`,
             };
         }
 
-        await this.context.ui.clickOn(restaurant.detailsLinkCssSelector);
+        await this.context.ui.clickOn(restaurant.detailsLinkSelector);
         await this.storeContinuation("searchForReservation_onRestaurant", data);
 
         return { message: `Opening "${restaurant.restaurantName}"...` };
@@ -859,9 +859,10 @@ export class CommerceWebAgent implements WebAgent {
 
         console.log("[CommerceWebAgent] On restaurant page, showing slots");
 
-        const reservationInfo = await extractComponent<BookReservationsModule>(
-            "BookReservationsModule",
-        );
+        const reservationInfo =
+            await extractComponent<BookReservationsModuleType>(
+                BookReservationsModule,
+            );
 
         const entities: any[] = [];
 
