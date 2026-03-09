@@ -160,10 +160,16 @@ export class CrossContextHtmlReducer {
         // Strip <style> tags before sanitization — JSDOM v26 throws
         // "Could not parse CSS stylesheet" on certain CSS during parsing,
         // which crashes DOMPurify.sanitize() before it can act on the HTML.
-        let preprocessed = html.replace(
-            /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi,
-            "",
-        );
+        let preprocessed = html;
+        let previous: string;
+        do {
+            previous = preprocessed;
+            preprocessed = preprocessed.replace(
+                /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi,
+                "",
+            );
+        } while (preprocessed !== previous);
+
         let safeHtml = domPurify.sanitize(preprocessed, {
             RETURN_TRUSTED_TYPE: false,
         });

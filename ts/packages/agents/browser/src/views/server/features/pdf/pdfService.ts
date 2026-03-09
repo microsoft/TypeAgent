@@ -31,6 +31,33 @@ function sanitizeBookmark(bookmark: PDFBookmark): PDFBookmark {
     return sanitized;
 }
 
+// Recursively sanitize all string properties using the xss library.
+function sanitizeValue<T>(value: T): T {
+    if (typeof value === "string") {
+        return xss(value) as unknown as T;
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => sanitizeValue(item)) as unknown as T;
+    }
+
+    if (value && typeof value === "object") {
+        const result: Record<string, unknown> = {};
+        for (const [key, v] of Object.entries(
+            value as Record<string, unknown>,
+        )) {
+            result[key] = sanitizeValue(v);
+        }
+        return result as T;
+    }
+
+    return value;
+}
+
+function sanitizeAnnotation(annotation: PDFAnnotation): PDFAnnotation {
+    return sanitizeValue(annotation);
+}
+
 /**
  * PDF business logic service
  */
@@ -267,16 +294,17 @@ export class PDFService {
     async addAnnotation(annotation: PDFAnnotation): Promise<PDFAnnotation> {
         const docAnnotations =
             this.annotations.get(annotation.documentId) || [];
-        docAnnotations.push(annotation);
-        this.annotations.set(annotation.documentId, docAnnotations);
+        const sanitizedAnnotation = sanitizeAnnotation(annotation);
+        docAnnotations.push(sanitizedAnnotation);
+        this.annotations.set(sanitizedAnnotation.documentId, docAnnotations);
 
         // Persist to disk
-        await this.saveAnnotationsToDisk(annotation.documentId);
+        await this.saveAnnotationsToDisk(sanitizedAnnotation.documentId);
 
         debug(
-            `Added annotation ${annotation.id} to document ${annotation.documentId}`,
+            `Added annotation ${sanitizedAnnotation.id} to document ${sanitizedAnnotation.documentId}`,
         );
-        return annotation;
+        return sanitizedAnnotation;
     }
 
     /**
@@ -290,16 +318,17 @@ export class PDFService {
         const index = docAnnotations.findIndex((a) => a.id === annotation.id);
 
         if (index !== -1) {
-            docAnnotations[index] = {
+            const sanitizedAnnotation = sanitizeAnnotation({
                 ...annotation,
                 updatedAt: new Date().toISOString(),
-            };
+            });
+            docAnnotations[index] = sanitizedAnnotation;
 
             // Persist to disk
-            await this.saveAnnotationsToDisk(annotation.documentId);
+            await this.saveAnnotationsToDisk(sanitizedAnnotation.documentId);
 
-            debug(`Updated annotation ${annotation.id}`);
-            return docAnnotations[index];
+            debug(`Updated annotation ${sanitizedAnnotation.id}`);
+            return sanitizedAnnotation;
         }
 
         return null;
