@@ -55,9 +55,16 @@ async function validateEntityWildcardMatch(
         // No entity wildcard, nothing to validate.
         return true;
     }
+    debugConstValidation(
+        `Validating entity wildcards: [${match.entityWildcardPropertyNames.join(", ")}] ` +
+            `for actions: [${match.match.actions.map((a) => `${a.action.schemaName}.${a.action.actionName}`).join(", ")}]`,
+    );
     const conversationMemory = context.conversationMemory;
     if (conversationMemory === undefined) {
         // Can't resolve entity without memory.
+        debugConstValidation(
+            `Entity wildcard validation skipped: no conversation memory`,
+        );
         return false;
     }
 
@@ -72,6 +79,9 @@ async function validateEntityWildcardMatch(
             agents,
         );
         if (!canResolve) {
+            debugConstValidation(
+                `Entity wildcard '${propertyName}' could not be resolved`,
+            );
             return false;
         }
     }

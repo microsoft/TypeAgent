@@ -54,6 +54,16 @@ export {
 
 export { GrammarTestCase, GrammarTestResult } from "./testTypes.js";
 
+export {
+    GrammarWarmer,
+    GrammarWarmingConfig,
+    GrammarWarmingResult,
+    PatternVote,
+    WarmingTestCase,
+    HitRateMetrics,
+    IterationMetrics,
+} from "./grammarWarmer.js";
+
 import { ClaudeGrammarGenerator, GrammarAnalysis } from "./grammarGenerator.js";
 import { loadSchemaInfo } from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";

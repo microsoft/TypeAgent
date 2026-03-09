@@ -133,6 +133,10 @@ export function createChannelProvider(
     const debugError = registerDebug(`typeagent:${name}:channel:error`);
     const channelAdapters = new Map<string, ChannelAdapter>();
     sharedChannel.on("message", (message: any) => {
+        if (message === undefined || message === null) {
+            debugError(`Received undefined/null message`);
+            return;
+        }
         if (message.name === undefined) {
             debugError(
                 `Missing channel name in message: ${JSON.stringify(message)}`,
@@ -141,19 +145,36 @@ export function createChannelProvider(
         }
         const channelAdapter = channelAdapters.get(message.name);
         if (channelAdapter === undefined) {
-            debugError(`Invalid channel name ${message.name} in message`);
+            debugError(
+                `Invalid channel name ${message.name} in message (available: ${Array.from(channelAdapters.keys()).join(", ")})`,
+            );
             return;
         }
+        const msgType = message.message?.type || "unknown";
+        const callId = message.message?.callId ?? "n/a";
+        debug(
+            `routing message to channel: ${message.name} (type=${msgType}, callId=${callId})`,
+        );
         channelAdapter.notifyMessage(message.message);
     });
 
     sharedChannel.on("disconnect", () => {
-        for (const channel of channelAdapters.values()) {
+        debug(
+            `sharedChannel disconnect event - disconnecting all ${channelAdapters.size} channels`,
+        );
+        for (const [channelName, channel] of channelAdapters.entries()) {
+            debug(`disconnecting channel: ${channelName}`);
             channel.notifyDisconnected();
         }
+        // Clear the map so channels can be recreated after reconnection
+        channelAdapters.clear();
+        debug(`cleared channelAdapters map`);
     });
     function createChannel(name: string): RpcChannel {
         debug(`createChannel ${name}`);
+        debug(
+            `createChannel ${name} - stack: ${new Error().stack?.split("\n").slice(1, 5).join(" <- ")}`,
+        );
         if (channelAdapters.has(name)) {
             throw new Error(`Channel '${name}' already exists`);
         }

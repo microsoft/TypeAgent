@@ -36,6 +36,7 @@ import {
 import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
 import { handleCommerceAction } from "./commerce/actionHandler.mjs";
+import { createCommercePageTranslator } from "./commerce/translator.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import type {
     ElementDescriptionResult,
@@ -96,7 +97,11 @@ import {
     loadAllowDynamicAgentDomains,
     processWebAgentMessage,
 } from "./webTypeAgent.mjs";
-import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
+import {
+    isWebAgentMessage,
+    isBuiltInWebAgentRpcRequest,
+    BuiltInWebAgentRpcResponse,
+} from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import {
     BrowserActions,
@@ -423,6 +428,31 @@ async function updateBrowserContext(
                 );
 
                 if (isWebAgentMessage(data)) {
+                    // Check for built-in RPC requests (crossword, commerce, etc.)
+                    if (
+                        data.method === "webAgent/message" &&
+                        isBuiltInWebAgentRpcRequest(data.params)
+                    ) {
+                        const { id, method, params } = data.params;
+                        const result = await handleWebAgentRpc(
+                            method,
+                            params,
+                            context,
+                            client.id,
+                        );
+
+                        const response: BuiltInWebAgentRpcResponse = {
+                            source: "dispatcher",
+                            method: "webAgent/message",
+                            type: "builtInRpcResponse",
+                            id,
+                            ...result,
+                        };
+
+                        client.socket.send(JSON.stringify(response));
+                        return;
+                    }
+
                     await processWebAgentMessage(data, context);
                     return;
                 }
@@ -852,6 +882,135 @@ async function processBrowserAgentMessage(
             );
             break;
         }
+    }
+}
+
+async function handleWebAgentRpc(
+    method: string,
+    params: any,
+    context: SessionContext<BrowserActionContext>,
+    clientId: string,
+): Promise<any> {
+    switch (method) {
+        case "extractCrosswordSchema": {
+            try {
+                const schema = await getBoardSchema(context, clientId);
+                if (!schema) {
+                    return {
+                        success: false,
+                        error: "No crossword found on the page",
+                    };
+                }
+
+                const acrossClues: Record<
+                    number,
+                    { text: string; selector: string }
+                > = {};
+                const downClues: Record<
+                    number,
+                    { text: string; selector: string }
+                > = {};
+
+                for (const clue of schema.across) {
+                    acrossClues[clue.number] = {
+                        text: clue.text,
+                        selector: clue.cssSelector || "",
+                    };
+                }
+                for (const clue of schema.down) {
+                    downClues[clue.number] = {
+                        text: clue.text,
+                        selector: clue.cssSelector || "",
+                    };
+                }
+
+                return {
+                    success: true,
+                    data: {
+                        boardId: params?.url || "",
+                        cells: {},
+                        clues: {
+                            across: acrossClues,
+                            down: downClues,
+                        },
+                    },
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to extract crossword schema",
+                };
+            }
+        }
+
+        case "extractComponent": {
+            try {
+                const { type, userRequest } = params;
+                const browserConnector = context.agentContext.browserConnector;
+
+                if (!browserConnector) {
+                    return {
+                        success: false,
+                        error: "Browser connector not available",
+                    };
+                }
+
+                const htmlFragments = await browserConnector.getHtmlFragments(
+                    false,
+                    "knowledgeExtraction",
+                    clientId,
+                );
+
+                if (!htmlFragments || htmlFragments.length === 0) {
+                    return {
+                        success: false,
+                        error: "No HTML content available from the page",
+                    };
+                }
+
+                const translator =
+                    await createCommercePageTranslator("GPT_5_MINI");
+                const response = await translator.getPageComponentSchema(
+                    type,
+                    userRequest,
+                    htmlFragments,
+                    undefined,
+                );
+
+                return response;
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to extract component",
+                };
+            }
+        }
+
+        case "notify": {
+            const { message, notificationId } = params;
+            const id = notificationId || `webagent-${Date.now()}`;
+            context.notify(
+                AppAgentEvent.Inline,
+                {
+                    type: "text",
+                    content: message,
+                },
+                id,
+            );
+            return { success: true };
+        }
+
+        default:
+            return {
+                success: false,
+                error: `Unknown webAgentRpc method: ${method}`,
+            };
     }
 }
 

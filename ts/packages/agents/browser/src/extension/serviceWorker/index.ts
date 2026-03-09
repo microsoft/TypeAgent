@@ -292,9 +292,14 @@ function setupEventListeners(): void {
         webSocket.addEventListener("message", handler);
 
         const agentNames = new Set<string>();
+        const tabId = tab.id;
+        const frameId = port.sender?.frameId;
         port.onMessage.addListener((data) => {
             if (isWebAgentMessage(data)) {
-                debugWebAgentProxy(`WebAgent -> Dispatcher (${url})`, data);
+                debugWebAgentProxy(
+                    `WebAgent -> Dispatcher (${url}, tabId=${tabId}, frameId=${frameId})`,
+                    data,
+                );
                 // relay message from the browser agent message sent via content script to the browser agent via the websocket.
                 if (data.method === "webAgent/register") {
                     // TODO: sniffing the RPC call arguments. Fix typing.
@@ -303,6 +308,8 @@ function setupEventListeners(): void {
                     // Fill in identification information
                     param.title = title;
                     param.url = url;
+                    param.tabId = tabId;
+                    param.frameId = frameId;
                 }
                 webSocket.send(JSON.stringify(data));
             }
