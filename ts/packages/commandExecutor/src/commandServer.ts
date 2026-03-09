@@ -173,6 +173,7 @@ function createMcpClientIO(
     return {
         clear(): void {},
         exit(): void {},
+        setUserRequest(): void {},
         setDisplayInfo(): void {},
         setDisplay(message: IAgentMessage): void {
             logger.log(`ClientIO: setDisplay() - ${JSON.stringify(message)}`);

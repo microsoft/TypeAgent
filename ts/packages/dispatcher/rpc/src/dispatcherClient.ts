@@ -46,5 +46,8 @@ export function createDispatcherRpcClient(
         async respondToChoice(...args) {
             return rpc.invoke("respondToChoice", ...args);
         },
+        getDisplayHistory(...args) {
+            return rpc.invoke("getDisplayHistory", ...args);
+        },
     };
 }

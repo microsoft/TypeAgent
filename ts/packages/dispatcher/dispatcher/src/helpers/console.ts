@@ -170,6 +170,9 @@ function createConsoleClientIO(
         },
 
         // Display
+        setUserRequest() {
+            // Ignored
+        },
         setDisplayInfo() {
             // Ignored
         },

@@ -10,6 +10,7 @@ import type {
     AgentSchemaInfo,
     CommandCompletionResult,
     CommandResult,
+    DisplayLogEntry,
     DispatcherStatus,
     ProcessCommandOptions,
 } from "@typeagent/dispatcher-types";
@@ -56,4 +57,6 @@ export type DispatcherInvokeFunctions = {
         choiceId: string,
         response: boolean | number[],
     ): Promise<CommandResult | undefined>;
+
+    getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
 };
