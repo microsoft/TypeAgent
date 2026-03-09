@@ -50,6 +50,10 @@ function sanitizeObject<T>(value: T): T {
     return value;
 }
 
+function sanitizeAnnotation(annotation: PDFAnnotation): PDFAnnotation {
+    return sanitizeObject(annotation);
+}
+
 // Get the directory name in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -325,8 +329,9 @@ export class PDFRoutes {
                 updatedAt: new Date().toISOString(),
             };
 
+            const sanitizedAnnotation = sanitizeAnnotation(annotation);
             const savedAnnotation =
-                await this.pdfService.addAnnotation(annotation);
+                await this.pdfService.addAnnotation(sanitizedAnnotation);
 
             // Broadcast to other clients
             this.broadcastUpdate(
@@ -357,8 +362,9 @@ export class PDFRoutes {
                 documentId,
             };
 
+            const sanitizedAnnotation = sanitizeAnnotation(annotation);
             const updatedAnnotation =
-                await this.pdfService.updateAnnotation(annotation);
+                await this.pdfService.updateAnnotation(sanitizedAnnotation);
 
             if (!updatedAnnotation) {
                 res.status(404).json({ error: "Annotation not found" });
@@ -416,7 +422,10 @@ export class PDFRoutes {
         try {
             const documentId = req.params.documentId;
             const bookmarks = this.pdfService.getBookmarks(documentId);
-            res.json(bookmarks);
+            const sanitizedBookmarks = bookmarks.map(
+                sanitizeObject<PDFBookmark>,
+            );
+            res.json(sanitizedBookmarks);
         } catch (error) {
             debug("Error getting bookmarks:", error);
             res.status(500).json({ error: "Failed to get bookmarks" });
@@ -438,7 +447,10 @@ export class PDFRoutes {
                 createdAt: new Date().toISOString(),
             };
 
-            const savedBookmark = this.pdfService.addBookmark(bookmark);
+            const sanitizedBookmark = sanitizeObject<PDFBookmark>(bookmark);
+
+            const savedBookmark =
+                this.pdfService.addBookmark(sanitizedBookmark);
 
             // Broadcast to other clients
             this.broadcastUpdate(documentId, "bookmark-added", savedBookmark);
