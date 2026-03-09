@@ -1200,6 +1200,7 @@ export function matchGrammar(grammar: Grammar, request: string) {
 export function matchGrammarCompletion(
     grammar: Grammar,
     prefix: string,
+    minPrefixLength?: number,
 ): GrammarCompletionResult {
     debugCompletion(`Start completion for prefix: "${prefix}"`);
 
@@ -1220,13 +1221,13 @@ export function matchGrammarCompletion(
     // states (including exact matches).  This tells the caller where
     // the "filter text" begins so it doesn't have to guess from
     // whitespace (which breaks for CJK and other non-space scripts).
-    let maxPrefixLength: number | undefined;
+    let maxPrefixLength = minPrefixLength ?? 0;
 
     // Helper: update maxPrefixLength.  When it increases, all previously
-    // accumulated completions came from shorter matches and are
-    // irrelevant — clear them.
+    // accumulated completions from shorter matches are irrelevant
+    // — clear them.
     function updateMaxPrefixLength(prefixLength: number): void {
-        if (maxPrefixLength === undefined || prefixLength > maxPrefixLength) {
+        if (prefixLength > maxPrefixLength) {
             maxPrefixLength = prefixLength;
             completions.length = 0;
             properties.length = 0;

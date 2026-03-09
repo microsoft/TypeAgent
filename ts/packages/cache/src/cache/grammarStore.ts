@@ -295,7 +295,7 @@ export class GrammarStoreImpl implements GrammarStore {
         }
         const completions: string[] = [];
         const properties: CompletionProperty[] = [];
-        let matchedPrefixLength: number | undefined;
+        let matchedPrefixLength = 0;
         let separatorMode: SeparatorMode | undefined;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
@@ -374,42 +374,44 @@ export class GrammarStoreImpl implements GrammarStore {
                 const partial = matchGrammarCompletion(
                     entry.grammar,
                     requestPrefix ?? "",
+                    matchedPrefixLength,
                 );
-                if (partial.completions.length > 0) {
+                const partialPrefixLength =
+                    partial.matchedPrefixLength ?? 0;
+                if (partialPrefixLength > matchedPrefixLength) {
+                    // Longer prefix — discard shorter-match results.
+                    matchedPrefixLength = partialPrefixLength;
+                    completions.length = 0;
+                    properties.length = 0;
+                    separatorMode = undefined;
+                }
+                if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);
-                }
-                if (partial.matchedPrefixLength !== undefined) {
-                    matchedPrefixLength =
-                        matchedPrefixLength === undefined
-                            ? partial.matchedPrefixLength
-                            : Math.max(
-                                  matchedPrefixLength,
-                                  partial.matchedPrefixLength,
-                              );
-                }
-                if (partial.separatorMode !== undefined) {
-                    separatorMode = mergeGrammarSeparatorMode(
-                        separatorMode,
-                        partial.separatorMode,
-                    );
-                }
-                if (
-                    partial.properties !== undefined &&
-                    partial.properties.length > 0
-                ) {
-                    const { schemaName } = splitSchemaNamespaceKey(name);
-                    for (const p of partial.properties) {
-                        const action: any = p.match;
-                        properties.push({
-                            actions: [
-                                createExecutableAction(
-                                    schemaName,
-                                    action.actionName,
-                                    action.parameters,
-                                ),
-                            ],
-                            names: p.propertyNames,
-                        });
+                    if (partial.separatorMode !== undefined) {
+                        separatorMode = mergeGrammarSeparatorMode(
+                            separatorMode,
+                            partial.separatorMode,
+                        );
+                    }
+                    if (
+                        partial.properties !== undefined &&
+                        partial.properties.length > 0
+                    ) {
+                        const { schemaName } =
+                            splitSchemaNamespaceKey(name);
+                        for (const p of partial.properties) {
+                            const action: any = p.match;
+                            properties.push({
+                                actions: [
+                                    createExecutableAction(
+                                        schemaName,
+                                        action.actionName,
+                                        action.parameters,
+                                    ),
+                                ],
+                                names: p.propertyNames,
+                            });
+                        }
                     }
                 }
             }
