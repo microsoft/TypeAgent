@@ -88,6 +88,56 @@ const handlers = {
             },
             run: async () => {},
         },
+        twoarg: {
+            description: "Two-arg command",
+            parameters: {
+                args: {
+                    first: {
+                        description: "First arg",
+                    },
+                    second: {
+                        description: "Second arg",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroup[]> => {
+                return [
+                    {
+                        name: "Values",
+                        completions: ["alpha", "beta"],
+                    },
+                ];
+            },
+        },
+        search: {
+            description: "Implicit-quotes command",
+            parameters: {
+                args: {
+                    query: {
+                        description: "Search query",
+                        implicitQuotes: true,
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                _names: string[],
+            ): Promise<CompletionGroup[]> => {
+                return [
+                    {
+                        name: "Suggestions",
+                        completions: ["hello world", "foo bar"],
+                    },
+                ];
+            },
+        },
     },
 } as const;
 
@@ -196,8 +246,9 @@ describe("Command Completion - startIndex", () => {
             // "@comptest run " → suffix is "" after command resolution,
             // "run" is explicitly matched so no Subcommands group.
             // parameter parsing has no tokens so
-            // startIndex = inputLength - 0 = 14
-            expect(result!.startIndex).toBe(14);
+            // startIndex = inputLength - 0 = 14, then unconditional
+            // whitespace backing rewinds over trailing space → 13.
+            expect(result!.startIndex).toBe(13);
             // Agent getCompletion is invoked for the "task" arg →
             // completions are not exhaustive.
             expect(result!.complete).toBe(false);
@@ -228,8 +279,9 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // "@comptest nested sub " (21 chars)
             // suffix is "" after command resolution;
-            // parameter parsing has no tokens; startIndex = 21 - 0 = 21
-            expect(result!.startIndex).toBe(21);
+            // parameter parsing has no tokens; startIndex = 21 - 0 = 21,
+            // then unconditional whitespace backing → 20.
+            expect(result!.startIndex).toBe(20);
             // Unfilled "value" arg (free-form) → not exhaustive.
             expect(result!.complete).toBe(false);
         });
@@ -242,8 +294,9 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // "@comptest nested sub --ver" (26 chars)
             // suffix is "--ver", parameter parsing sees token "--ver" (5 chars)
-            // startIndex = 26 - 5 = 21
-            expect(result!.startIndex).toBe(21);
+            // startIndex = 26 - 5 = 21, then unconditional whitespace
+            // backing rewinds over the space before "--ver" → 20.
+            expect(result!.startIndex).toBe(20);
             // Unfilled "value" arg → not exhaustive.
             expect(result!.complete).toBe(false);
         });
@@ -275,8 +328,9 @@ describe("Command Completion - startIndex", () => {
             const result = await getCommandCompletion("  ", context);
             expect(result).toBeDefined();
             // "  " normalizes to a command prefix with no suffix;
-            // startIndex = input.length - suffix.length = 2
-            expect(result!.startIndex).toBe(2);
+            // startIndex = input.length - suffix.length = 2, then
+            // unconditional whitespace backing rewinds to 0.
+            expect(result!.startIndex).toBe(0);
         });
     });
 
@@ -348,8 +402,8 @@ describe("Command Completion - startIndex", () => {
             );
             // "@comptest run build " (20 chars)
             // suffix is "build ", token "build" is fully consumed,
-            // remainderLength = 0 → startIndex = 20, then whitespace
-            // backing rewinds over the trailing space → startIndex = 19.
+            // remainderLength = 0 → startIndex = 20, then unconditional
+            // whitespace backing rewinds over trailing space → 19.
             expect(result).toBeDefined();
             expect(result!.startIndex).toBe(19);
             // All positional args filled ("task" consumed "build"),
@@ -367,8 +421,8 @@ describe("Command Completion - startIndex", () => {
             // "@comptest run hello --unknown" (29 chars)
             // suffix is "hello --unknown", "hello" fills the "task" arg,
             // "--unknown" is not a defined flag → remainderLength = 9.
-            // startIndex = 29 - 9 = 20, then whitespace backing rewinds
-            // over the space between "hello" and "--unknown" → 19.
+            // startIndex = 29 - 9 = 20, then unconditional whitespace
+            // backing rewinds over the space → 19.
             expect(result!.startIndex).toBe(19);
         });
 
@@ -381,8 +435,8 @@ describe("Command Completion - startIndex", () => {
             // "@comptest run hello   --unknown" (31 chars)
             // suffix is "hello   --unknown", "hello" fills "task",
             // "--unknown" unconsumed → remainderLength = 9.
-            // startIndex = 31 - 9 = 22, then whitespace backing rewinds
-            // over three spaces → 19.
+            // startIndex = 31 - 9 = 22, then unconditional whitespace
+            // backing rewinds over three spaces → 19.
             expect(result!.startIndex).toBe(19);
         });
     });
@@ -554,8 +608,9 @@ describe("Command Completion - startIndex", () => {
             // "--lev" doesn't resolve (exact match only), so parseParams
             // leaves it unconsumed.  startIndex points to where "--lev"
             // starts — it is the filter text.
-            // "@comptest flagsonly " = 20 chars consumed.
-            expect(result.startIndex).toBe(20);
+            // "@comptest flagsonly " = 20 chars consumed, then
+            // unconditional whitespace backing → 19.
+            expect(result.startIndex).toBe(19);
             const flags = result.completions.find(
                 (g) => g.name === "Command Flags",
             );
@@ -586,8 +641,9 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             // "@flattest --rel" (15 chars)
-            // startIndex = 15 - 5 ("--rel") = 10
-            expect(result.startIndex).toBe(10);
+            // startIndex = 15 - 5 ("--rel") = 10, then unconditional
+            // whitespace backing rewinds over space → 9.
+            expect(result.startIndex).toBe(9);
             expect(result.complete).toBe(false);
         });
 
@@ -620,9 +676,8 @@ describe("Command Completion - startIndex", () => {
             // "@comptest build " (16 chars)
             // Resolves to default "run" (not explicit match).
             // "build" fills the "task" arg, trailing space present.
-            // remainderLength = 0 → startIndex = 16, then whitespace
-            // backing rewinds over the trailing space → startIndex = 15,
-            // past the command boundary (10).
+            // remainderLength = 0 → startIndex = 16, then unconditional
+            // whitespace backing → 15, past the command boundary (10).
             // Subcommand names are no longer relevant at this
             // position; only parameter completions remain.
             const subcommands = result.completions.find(
@@ -656,6 +711,88 @@ describe("Command Completion - startIndex", () => {
                 (g) => g.name === "Subcommands",
             );
             expect(subcommands).toBeUndefined();
+        });
+    });
+
+    describe("lastCompletableParam adjusts startIndex", () => {
+        it("backs startIndex to open-quote token start for '@comptest run \"bu'", async () => {
+            const result = await getCommandCompletion(
+                '@comptest run "bu',
+                context,
+            );
+            // '@comptest run "bu' (17 chars)
+            // suffix is '"bu', parseParams consumes the open-quoted
+            // token through EOF → remainderLength = 0.
+            // lastCompletableParam = "task", quoted = false (open quote).
+            // Exclusive path: startIndex = 17 - 3 = 14, then unconditional
+            // whitespace backing rewinds over the space before '"bu' → 13.
+            expect(result.startIndex).toBe(13);
+            // Agent was invoked → not exhaustive.
+            expect(result.complete).toBe(false);
+            // Flag groups and nextArgs completions should be cleared.
+            const flags = result.completions.find(
+                (g) => g.name === "Command Flags",
+            );
+            expect(flags).toBeUndefined();
+        });
+
+        it("backs startIndex for multi-arg open quote '@comptest twoarg \"partial'", async () => {
+            const result = await getCommandCompletion(
+                '@comptest twoarg "partial',
+                context,
+            );
+            // '@comptest twoarg "partial' (25 chars)
+            // suffix is '"partial', parseParams consumes open quote
+            // through EOF → remainderLength = 0.
+            // lastCompletableParam = "first", quoted = false.
+            // Exclusive path: startIndex = 25 - 8 = 17, then unconditional
+            // whitespace backing rewinds over the space → 16.
+            // "second" from nextArgs should NOT be in agentCommandCompletions.
+            expect(result.startIndex).toBe(16);
+            expect(result.complete).toBe(false);
+        });
+
+        it("backs startIndex for implicitQuotes '@comptest search hello world'", async () => {
+            const result = await getCommandCompletion(
+                "@comptest search hello world",
+                context,
+            );
+            // "@comptest search hello world" (28 chars)
+            // suffix is "hello world", implicitQuotes consumes rest
+            // of line → remainderLength = 0, token = "hello world".
+            // lastCompletableParam = "query", lastParamImplicitQuotes = true.
+            // Exclusive path: startIndex = 28 - 11 = 17, then unconditional
+            // whitespace backing rewinds over the space → 16.
+            expect(result.startIndex).toBe(16);
+            expect(result.complete).toBe(false);
+        });
+
+        it("does not adjust startIndex for fully-quoted token", async () => {
+            const result = await getCommandCompletion(
+                '@comptest run "build"',
+                context,
+            );
+            // '@comptest run "build"' (21 chars)
+            // Token '"build"' is fully quoted → isFullyQuoted returns true.
+            // lastCompletableParam condition does NOT fire.
+            // remainderLength = 0 → startIndex = 21, unconditional
+            // whitespace backing finds no space at input[20]='"' → 21.
+            // "task" is filled, no flags → exhaustive.
+            expect(result.startIndex).toBe(21);
+            expect(result.complete).toBe(true);
+        });
+
+        it("does not adjust startIndex for bare unquoted token", async () => {
+            const result = await getCommandCompletion(
+                "@comptest run bu",
+                context,
+            );
+            // "bu" is not quoted at all → isFullyQuoted returns undefined.
+            // lastParamImplicitQuotes is false for "task" arg.
+            // lastCompletableParam condition does NOT fire.
+            // startIndex stays at 16 (end of input).
+            expect(result.startIndex).toBe(16);
+            expect(result.complete).toBe(true);
         });
     });
 });

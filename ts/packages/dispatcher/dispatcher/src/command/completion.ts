@@ -190,6 +190,15 @@ async function getCommandParameterCompletion(
         agentCommandCompletions.push(pendingFlag);
     }
 
+    // Compute startIndex from how far parseParams consumed the suffix.
+    // remainderLength is the length of the (trimmed) parameter text
+    // that was NOT successfully parsed — everything before it is part
+    // of the longest valid prefix.
+    let startIndex = inputLength - params.remainderLength;
+    debug(
+        `Command completion parameter consumed length: ${params.remainderLength}`,
+    );
+
     let agentInvoked = false;
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion) {
@@ -203,12 +212,24 @@ async function getCommandParameterCompletion(
                 quoted === false ||
                 (quoted === undefined && lastParamImplicitQuotes)
             ) {
+                // The user is inside a token (open quote or
+                // implicitQuotes rest-of-line) — completions for
+                // other parameters or flags at the original
+                // startIndex are invalid because no new token can
+                // start.  Make this path exclusive: clear earlier
+                // completions and adjust startIndex to the token
+                // start so the caller replaces the partial token.
+                agentCommandCompletions.length = 0;
+                completions.length = 0;
                 agentCommandCompletions.push(lastCompletableParam);
+                startIndex -= valueToken.length;
             }
         }
         if (agentCommandCompletions.length > 0) {
-            const sessionContext = context.agents.getSessionContext(
-                result.actualAppAgentName,
+            const agentName = result.actualAppAgentName;
+            const sessionContext = context.agents.getSessionContext(agentName);
+            debug(
+                `Command completion parameter with agent: '${agentName}' with params ${JSON.stringify(agentCommandCompletions)}`,
             );
             const agentGroups = await agent.getCommandCompletion(
                 result.commands,
@@ -216,28 +237,25 @@ async function getCommandParameterCompletion(
                 agentCommandCompletions,
                 sessionContext,
             );
+
+            // Allow grammar-reported prefixLength (from groups) to override
+            // the parse-derived startIndex.  This handles CJK and other
+            // non-space-delimited scripts where the grammar matcher is the
+            // authoritative source for how far into the input it consumed.
+            const groupPrefixLength = agentGroups.find(
+                (g) => g.prefixLength !== undefined,
+            )?.prefixLength;
+            if (groupPrefixLength !== undefined && groupPrefixLength != 0) {
+                startIndex += groupPrefixLength;
+                // we have advanced the startIndex, so existing completions are no longer valid, clear them out.
+                completions.length = 0;
+            }
             completions.push(...agentGroups);
             agentInvoked = true;
+            debug(
+                `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}`,
+            );
         }
-    }
-
-    // Compute startIndex from how far parseParams consumed the suffix.
-    // remainderLength is the length of the (trimmed) parameter text
-    // that was NOT successfully parsed — everything before it is part
-    // of the longest valid prefix.
-    //
-    // Because remainderLength excludes inter-token whitespace (the
-    // tokenizer strips it), we back startIndex over any whitespace
-    // that sits between the last consumed token and the unconsumed
-    // remainder so that the separator space is not treated as part
-    // of the consumed prefix.
-    let startIndex = inputLength - params.remainderLength;
-
-    const suffix = result.suffix;
-    let suffixPos = suffix.length - params.remainderLength;
-    while (suffixPos > 0 && /\s/.test(suffix[suffixPos - 1])) {
-        suffixPos--;
-        startIndex--;
     }
 
     // Determine whether the completion set is exhaustive.
@@ -289,12 +307,21 @@ async function getCommandParameterCompletion(
 // Return fields (see CommandCompletionResult):
 //
 //   startIndex   Length of the longest resolved prefix.
-//                input[0..startIndex) was fully consumed by
-//                normalizeCommand → resolveCommand (→ parseParams);
-//                completions describe what can validly follow.
+//                input[0..startIndex) is the "anchor" — the text
+//                that was fully consumed by normalizeCommand →
+//                resolveCommand (→ parseParams).  Completions
+//                describe what can validly follow after the anchor.
 //                May be overridden by a grammar-reported prefixLength
-//                from a CompletionGroup.  Trailing whitespace before
-//                startIndex is stripped when separatorMode requires it.
+//                from a CompletionGroup.
+//
+//                Trailing whitespace is always stripped from the
+//                anchor so that it sits at the last token boundary.
+//                Consumers treat the text after the anchor as
+//                "rawPrefix", expect it to begin with a separator
+//                (per separatorMode, which defaults to "space"
+//                when omitted), and strip the separator before
+//                filtering.  Keeping whitespace inside the anchor
+//                would violate this contract.
 //
 //   completions  Array of CompletionGroups from up to three sources:
 //                (a) built-in command / subcommand / agent-name lists,
@@ -336,7 +363,11 @@ export async function getCommandCompletion(
         // The parse-derived startIndex: command resolution consumed
         // everything up to the suffix; within the suffix, parameter
         // parsing determines the last incomplete token position.
-        let startIndex = input.length - result.suffix.length;
+        const commandConsumedLength = input.length - result.suffix.length;
+        debug(
+            `Command completion command consumed length: ${commandConsumedLength}, suffix: '${result.suffix}'`,
+        );
+        let startIndex = commandConsumedLength;
 
         // Collect completions
         const completions: CompletionGroup[] = [];
@@ -367,13 +398,12 @@ export async function getCommandCompletion(
             // (moving startIndex forward), they've committed to the
             // default — subcommand names would be filtered against
             // the wrong text at the wrong position.
-            const commandBoundary = input.length - result.suffix.length;
             const addSubcommands =
                 table !== undefined &&
                 !result.matched &&
                 getDefaultSubCommandDescriptor(table) === descriptor &&
                 (parameterCompletions === undefined ||
-                    parameterCompletions.startIndex <= commandBoundary);
+                    parameterCompletions.startIndex <= commandConsumedLength);
 
             if (addSubcommands) {
                 completions.push({
@@ -390,9 +420,7 @@ export async function getCommandCompletion(
                 // specified with nothing more to type.
             } else {
                 completions.push(...parameterCompletions.completions);
-                if (!addSubcommands) {
-                    startIndex = parameterCompletions.startIndex;
-                }
+                startIndex = parameterCompletions.startIndex;
                 complete = parameterCompletions.complete;
             }
         } else if (table !== undefined) {
@@ -442,32 +470,27 @@ export async function getCommandCompletion(
             });
         }
 
-        // Allow grammar-reported prefixLength (from groups) to override
-        // the parse-derived startIndex.  This handles CJK and other
-        // non-space-delimited scripts where the grammar matcher is the
-        // authoritative source for how far into the input it consumed.
-        const groupPrefixLength = completions.find(
-            (g) => g.prefixLength !== undefined,
-        )?.prefixLength;
-        if (groupPrefixLength !== undefined) {
-            startIndex = groupPrefixLength;
-        }
-
         // Extract separatorMode from groups.  The most restrictive
         // mode wins ("space" and "spacePunctuation" are both
         // separator-requiring; among those, "space" is more
         // restrictive because it only allows whitespace).
         const separatorMode = aggregateSeparatorMode(completions);
 
-        // Like the grammar matcher, exclude trailing whitespace before
-        // startIndex when a separator is needed — the separator lives
-        // between the command anchor and the completion text, not inside
-        // the filter prefix.  This handles both "@config " (trailing
-        // space) and "@config c" (space between command and partial token).
-        if (separatorMode === "space" || separatorMode === "spacePunctuation") {
-            while (startIndex > 0 && /\s/.test(input[startIndex - 1])) {
-                startIndex--;
-            }
+        // Always strip trailing whitespace from the anchor.
+        //
+        // Consumers default separatorMode to "space" when the result
+        // omits it, so they always expect the separator to live in
+        // rawPrefix (= input after the anchor), not inside the anchor
+        // itself.  Keeping whitespace inside the anchor would cause
+        // separator validation to fail — rawPrefix would start with
+        // the next token instead of the expected space.
+        //
+        // This is unconditional because parseParams' remainderLength
+        // excludes inter-token whitespace, so the raw startIndex can
+        // land on whitespace even when the result has completions that
+        // don't set separatorMode.
+        while (startIndex > 0 && /\s/.test(input[startIndex - 1])) {
+            startIndex--;
         }
 
         const completionResult: CommandCompletionResult = {
