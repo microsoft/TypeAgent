@@ -1208,29 +1208,31 @@ export function matchGrammarCompletion(
     // parts, wildcard extensions, repeat groups) during processing.
     const pending = initialMatchState(grammar);
 
-    // Accumulate completion candidates with their associated prefix
-    // lengths.  After the main loop we filter to keep only candidates
-    // whose prefix length equals the overall maximum — completions
-    // from shorter partial matches are irrelevant when a longer (or
-    // exact) match exists.
-    const completionCandidates: Array<{
-        text: string;
-        prefixLength: number;
-        needsSep: boolean;
-        spacingMode: SpacingMode;
-    }> = [];
-    const propertyCandidates: Array<{
-        property: GrammarCompletionProperty;
-        prefixLength: number;
-        needsSep: boolean;
-        spacingMode: SpacingMode;
-    }> = [];
+    // Direct output arrays — candidates are added eagerly and cleared
+    // whenever maxPrefixLength increases, so no post-loop filtering is
+    // needed.  Only candidates whose prefix length equals the current
+    // maximum are kept.
+    const completions: string[] = [];
+    const properties: GrammarCompletionProperty[] = [];
+    let separatorMode: GrammarSeparatorMode | undefined;
 
     // Track the furthest point the grammar consumed across all
     // states (including exact matches).  This tells the caller where
     // the "filter text" begins so it doesn't have to guess from
     // whitespace (which breaks for CJK and other non-space scripts).
     let maxPrefixLength: number | undefined;
+
+    // Helper: update maxPrefixLength.  When it increases, all previously
+    // accumulated completions came from shorter matches and are
+    // irrelevant — clear them.
+    function updateMaxPrefixLength(prefixLength: number): void {
+        if (maxPrefixLength === undefined || prefixLength > maxPrefixLength) {
+            maxPrefixLength = prefixLength;
+            completions.length = 0;
+            properties.length = 0;
+            separatorMode = undefined;
+        }
+    }
 
     // --- Main loop: process every pending state ---
     while (pending.length > 0) {
@@ -1260,10 +1262,7 @@ export function matchGrammarCompletion(
             // filtered out in the post-loop step.
             if (matched) {
                 debugCompletion("Matched. Nothing to complete.");
-                maxPrefixLength =
-                    maxPrefixLength === undefined
-                        ? state.index
-                        : Math.max(maxPrefixLength, state.index);
+                updateMaxPrefixLength(state.index);
                 continue;
             }
 
@@ -1278,7 +1277,9 @@ export function matchGrammarCompletion(
                 // The next expected part is a literal keyword string.
                 // Offer it as a completion (e.g. "music" after "play").
                 const completionText = nextPart.value.join(" ");
-                debugCompletion(`Adding completion text: "${completionText}"`);
+                debugCompletion(
+                    `Adding completion candidate: "${completionText}" (consumed ${state.index} chars, spacing=${state.spacingMode ?? "auto"})`,
+                );
 
                 // Determine whether a separator (e.g. space) is needed
                 // between the content at matchedPrefixLength and the
@@ -1305,19 +1306,15 @@ export function matchGrammarCompletion(
                     );
                 }
 
-                completionCandidates.push({
-                    text: completionText,
-                    prefixLength: state.index,
-                    needsSep: candidateNeedsSep,
-                    spacingMode: state.spacingMode,
-                });
-
-                // Record how far into the prefix the grammar consumed
-                // before reaching this completion point.
-                maxPrefixLength =
-                    maxPrefixLength === undefined
-                        ? state.index
-                        : Math.max(maxPrefixLength, state.index);
+                updateMaxPrefixLength(state.index);
+                if (state.index === maxPrefixLength) {
+                    completions.push(completionText);
+                    separatorMode = mergeSeparatorMode(
+                        separatorMode,
+                        candidateNeedsSep,
+                        state.spacingMode,
+                    );
+                }
             }
             // Note: non-string next parts (wildcard, number, rules) in
             // Category 2 don't produce completions here — wildcards are
@@ -1373,19 +1370,15 @@ export function matchGrammarCompletion(
                         );
                     }
 
-                    propertyCandidates.push({
-                        property: completionProperty,
-                        prefixLength: candidatePrefixLength,
-                        needsSep: candidateNeedsSep,
-                        spacingMode: state.spacingMode,
-                    });
-
-                    // The wildcard starts at pendingWildcard.start; the
-                    // grammar consumed everything before that.
-                    maxPrefixLength =
-                        maxPrefixLength === undefined
-                            ? candidatePrefixLength
-                            : Math.max(maxPrefixLength, candidatePrefixLength);
+                    updateMaxPrefixLength(candidatePrefixLength);
+                    if (candidatePrefixLength === maxPrefixLength) {
+                        properties.push(completionProperty);
+                        separatorMode = mergeSeparatorMode(
+                            separatorMode,
+                            candidateNeedsSep,
+                            state.spacingMode,
+                        );
+                    }
                 }
             } else if (!matched) {
                 // --- Category 3b: Completion after consumed prefix ---
@@ -1395,10 +1388,9 @@ export function matchGrammarCompletion(
                 // caller can use matchedPrefixLength to determine how
                 // much of the input was successfully consumed and
                 // filter completions by any trailing text beyond that
-                // point.  Post-loop filtering ensures only candidates
-                // at the maximum prefix length are returned, so
-                // completions from shorter partial matches are
-                // automatically discarded when a longer match exists.
+                // point.  Candidates from shorter partial matches are
+                // automatically discarded when a longer match updates
+                // maxPrefixLength.
                 const currentPart = state.parts[state.partIndex];
                 if (
                     currentPart !== undefined &&
@@ -1426,51 +1418,16 @@ export function matchGrammarCompletion(
                         );
                     }
 
-                    completionCandidates.push({
-                        text: fullText,
-                        prefixLength: state.index,
-                        needsSep: candidateNeedsSep,
-                        spacingMode: state.spacingMode,
-                    });
-
-                    // state.index is where matching stopped (before the
-                    // trailing text), so completions begin there.
-                    maxPrefixLength =
-                        maxPrefixLength === undefined
-                            ? state.index
-                            : Math.max(maxPrefixLength, state.index);
+                    updateMaxPrefixLength(state.index);
+                    if (state.index === maxPrefixLength) {
+                        completions.push(fullText);
+                        separatorMode = mergeSeparatorMode(
+                            separatorMode,
+                            candidateNeedsSep,
+                            state.spacingMode,
+                        );
+                    }
                 }
-            }
-        }
-    }
-
-    // --- Post-loop filtering ---
-    // Only keep candidates whose prefix length equals the overall
-    // maximum.  Completions from shorter partial matches are
-    // irrelevant when a longer (or exact) match consumed more input.
-    const completions: string[] = [];
-    const properties: GrammarCompletionProperty[] = [];
-    let separatorMode: GrammarSeparatorMode | undefined;
-
-    if (maxPrefixLength !== undefined) {
-        for (const c of completionCandidates) {
-            if (c.prefixLength === maxPrefixLength) {
-                completions.push(c.text);
-                separatorMode = mergeSeparatorMode(
-                    separatorMode,
-                    c.needsSep,
-                    c.spacingMode,
-                );
-            }
-        }
-        for (const p of propertyCandidates) {
-            if (p.prefixLength === maxPrefixLength) {
-                properties.push(p.property);
-                separatorMode = mergeSeparatorMode(
-                    separatorMode,
-                    p.needsSep,
-                    p.spacingMode,
-                );
             }
         }
     }
