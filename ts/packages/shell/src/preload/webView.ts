@@ -386,9 +386,14 @@ contextBridge.exposeInMainWorld("browserConnect", {
 
 // Add extension service adapter API for view pages
 contextBridge.exposeInMainWorld("electronAPI", {
-    // Extension service adapter API
-    sendBrowserMessage: async (message: any) => {
-        return ipcRenderer.invoke("browser-extension-message", message);
+    // RPC transport for typed agent communication
+    sendRpcMessage: (message: any) => {
+        ipcRenderer.send("browser-rpc-message", message);
+    },
+    onRpcMessage: (callback: (message: any) => void) => {
+        ipcRenderer.on("browser-rpc-reply", (_event, message) => {
+            callback(message);
+        });
     },
 
     // Storage API using main process persistence

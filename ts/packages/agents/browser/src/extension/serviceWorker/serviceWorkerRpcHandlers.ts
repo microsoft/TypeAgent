@@ -1,0 +1,1514 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { getActiveTab } from "./tabManager";
+import { getTabHTMLFragments, CompressionMode } from "./capture";
+import { getRecordedActions, saveRecordedActions } from "./storage";
+import {
+    sendActionToAgent,
+    ensureWebsocketConnected,
+    getWebSocket,
+} from "./websocket";
+import { screenshotCoordinator } from "./screenshotCoordinator";
+import {
+    connectToDispatcher,
+    isDispatcherConnected,
+} from "./dispatcherConnection";
+import { broadcastEvent } from "./extensionEventHelpers";
+import {
+    knowledgeExtractionCallbacks,
+    handleImportWebsiteDataWithProgress,
+    handleImportHtmlFolder,
+    handleClearWebsiteLibrary,
+    handleCancelImport,
+    handleGetFileImportProgress,
+    handleCancelFileImport,
+    handleDownloadContentWithBrowser,
+    handleProcessHtmlContent,
+    handleTestOffscreenDocument,
+    handleSearchWebMemories,
+    handleSearchByEntities,
+    handleSearchByTopics,
+    handleHybridSearch,
+    handleGetHierarchicalTopics,
+    handleGetTopicMetrics,
+    handleGetSearchSuggestions,
+    handleSaveSearchHistory,
+    handleGetSearchHistory,
+    handleGetSuggestedSearches,
+    handleCheckIndexStatus,
+    indexPageContent,
+    shouldIndexPage,
+    sendProgressToUI,
+} from "./messageHandlers";
+import type { KnowledgeExtractionProgress } from "../interfaces/knowledgeExtraction.types";
+import type { AllServiceWorkerInvokeFunctions } from "../../common/serviceTypes.mjs";
+
+/**
+ * Creates ALL service worker RPC invoke handlers, covering every operation
+ * that the extension views can request. These replace the handleMessage switch.
+ */
+export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
+    async function forward(method: string, params: any): Promise<any> {
+        return sendActionToAgent({
+            actionName: method,
+            parameters: params || {},
+        });
+    }
+
+    return {
+        // =============================================================
+        // Local operations (handled directly in service worker)
+        // =============================================================
+
+        async checkWebSocketConnection() {
+            const ws = getWebSocket();
+            return {
+                connected: ws !== undefined && ws.readyState === WebSocket.OPEN,
+            };
+        },
+
+        async checkConnection() {
+            const ws = getWebSocket();
+            return {
+                connected: ws !== undefined && ws.readyState === WebSocket.OPEN,
+            };
+        },
+
+        async initialize() {
+            console.log("Browser Agent Service Worker started");
+            try {
+                const connected = await ensureWebsocketConnected();
+                if (!connected) {
+                    console.log("WebSocket connection failed on initialize");
+                }
+            } catch (error) {
+                console.error("Error during initialization:", error);
+            }
+            return "initialized";
+        },
+
+        async startRecording() {
+            const tab = await getActiveTab();
+            if (tab?.id) {
+                await chrome.tabs.sendMessage(
+                    tab.id,
+                    { type: "startRecording" },
+                    { frameId: 0 },
+                );
+            }
+            return {};
+        },
+
+        async stopRecording() {
+            const tab = await getActiveTab();
+            if (tab?.id) {
+                const result = await chrome.tabs.sendMessage(
+                    tab.id,
+                    { type: "stopRecording" },
+                    { frameId: 0 },
+                );
+                return result;
+            }
+            return {};
+        },
+
+        async takeScreenshot() {
+            return screenshotCoordinator.captureScreenshot();
+        },
+
+        async captureHtmlFragments() {
+            const tab = await getActiveTab();
+            if (!tab) return [];
+            return getTabHTMLFragments(tab, CompressionMode.None);
+        },
+
+        async saveRecordedActions(params: any) {
+            await saveRecordedActions(
+                params.recordedActions,
+                params.recordedActionPageHTML,
+                params.recordedActionScreenshot,
+                params.actionIndex,
+                params.isCurrentlyRecording,
+            );
+            return {};
+        },
+
+        async recordingStopped(params: any) {
+            await saveRecordedActions(
+                params.recordedActions,
+                params.recordedActionPageHTML,
+                params.recordedActionScreenshot,
+                params.actionIndex,
+                false,
+            );
+            return {};
+        },
+
+        async getRecordedActions() {
+            return getRecordedActions();
+        },
+
+        async downloadData(params: any) {
+            const jsonString = JSON.stringify(params.data, null, 2);
+            const dataUrl =
+                "data:application/json;charset=utf-8," +
+                encodeURIComponent(jsonString);
+            chrome.downloads.download({
+                url: dataUrl,
+                filename: params.filename || "schema-metadata.json",
+                saveAs: true,
+            });
+            return {};
+        },
+
+        async settingsUpdated(params: any) {
+            console.log("Settings updated:", params.settings);
+            await chrome.storage.local.set({
+                knowledgeSettings: params.settings,
+            });
+            return { success: true };
+        },
+
+        async autoIndexSettingChanged(params: any) {
+            console.log("Auto-indexing setting changed:", params.enabled);
+            return { success: true };
+        },
+
+        // =============================================================
+        // Search history (local storage)
+        // =============================================================
+
+        async saveSearchHistory(params: any) {
+            return handleSaveSearchHistory(params);
+        },
+
+        async getSearchHistory() {
+            return handleGetSearchHistory();
+        },
+
+        async getSearchSuggestions(params: any) {
+            return handleGetSearchSuggestions(params);
+        },
+
+        async getSuggestedSearches() {
+            return handleGetSuggestedSearches();
+        },
+
+        // =============================================================
+        // Index status & content download
+        // =============================================================
+
+        async checkIndexStatus() {
+            return handleCheckIndexStatus();
+        },
+
+        async downloadContentWithBrowser(params: any) {
+            return handleDownloadContentWithBrowser(params);
+        },
+
+        async processHtmlContent(params: any) {
+            return handleProcessHtmlContent(params);
+        },
+
+        async testOffscreenDocument(params: any) {
+            return handleTestOffscreenDocument(params);
+        },
+
+        async enableSiteAgent(params: any) {
+            try {
+                await sendActionToAgent({
+                    actionName: "enableSiteTranslator",
+                    parameters: { translator: params.agentName },
+                });
+                return { success: true };
+            } catch (error: any) {
+                return {
+                    success: false,
+                    error: error?.message || "Failed to enable site agent",
+                };
+            }
+        },
+
+        // =============================================================
+        // Chat panel / dispatcher
+        // =============================================================
+
+        async chatPanelConnect() {
+            try {
+                await connectToDispatcher();
+                await ensureWebsocketConnected();
+                return { connected: true };
+            } catch (error: any) {
+                console.error(
+                    "Failed to connect to Agent Server:",
+                    error?.message || error,
+                );
+                return { connected: false, error: error?.message };
+            }
+        },
+
+        async chatPanelConnectionStatus() {
+            return { connected: isDispatcherConnected() };
+        },
+
+        async chatPanelProcessCommand(params: any) {
+            try {
+                const dispatcher = await connectToDispatcher();
+                const result = await dispatcher.processCommand(
+                    params.command,
+                    params.clientRequestId,
+                    params.attachments,
+                );
+                return { success: true, result };
+            } catch (error: any) {
+                console.error(
+                    "Failed to process command:",
+                    error?.message || error,
+                );
+                return { error: error?.message || "Command failed" };
+            }
+        },
+
+        // =============================================================
+        // Complex local handlers (HTML capture + agent forward)
+        // =============================================================
+
+        async extractPageKnowledge(params: any) {
+            const targetTab = await getActiveTab();
+            if (targetTab) {
+                try {
+                    const htmlFragments = await getTabHTMLFragments(
+                        targetTab,
+                        CompressionMode.KnowledgeExtraction,
+                        false,
+                        true,
+                        false,
+                        true,
+                        true,
+                    );
+
+                    const knowledgeResult = await forward(
+                        "extractKnowledgeFromPage",
+                        {
+                            url: targetTab.url,
+                            title: targetTab.title,
+                            htmlFragments: htmlFragments,
+                            extractEntities: true,
+                            extractRelationships: true,
+                            suggestQuestions: true,
+                            mode:
+                                params.extractionSettings?.mode || "content",
+                        },
+                    );
+
+                    return {
+                        knowledge: {
+                            entities: knowledgeResult.entities || [],
+                            relationships:
+                                knowledgeResult.relationships || [],
+                            keyTopics: knowledgeResult.keyTopics || [],
+                            suggestedQuestions:
+                                knowledgeResult.suggestedQuestions || [],
+                            summary: knowledgeResult.summary || "",
+                            contentActions:
+                                knowledgeResult.contentActions || [],
+                            detectedActions:
+                                knowledgeResult.detectedActions || [],
+                            actionSummary: knowledgeResult.actionSummary,
+                            contentMetrics:
+                                knowledgeResult.contentMetrics || {
+                                    readingTime: 0,
+                                    wordCount: 0,
+                                },
+                        },
+                    };
+                } catch (error) {
+                    console.error("Error extracting knowledge:", error);
+                    return {
+                        error: "Failed to extract knowledge from page",
+                    };
+                }
+            }
+            return {
+                error: "No browser tabs are currently open. Please open a browser tab to continue.",
+            };
+        },
+
+        async extractPageKnowledgeStreaming(params: any) {
+            const targetTab = await getActiveTab();
+            if (targetTab && params.streamingEnabled) {
+                const extractionId = params.extractionId;
+
+                const progressCallback = (
+                    progress: KnowledgeExtractionProgress,
+                ) => {
+                    try {
+                        broadcastEvent("knowledgeExtractionProgress", {
+                            extractionId,
+                            progress,
+                        });
+                    } catch (error) {
+                        console.error(
+                            "Failed to send progress to UI:",
+                            error,
+                        );
+                    }
+                };
+
+                knowledgeExtractionCallbacks.set(
+                    extractionId,
+                    progressCallback,
+                );
+
+                try {
+                    const htmlFragments = await getTabHTMLFragments(
+                        targetTab,
+                        CompressionMode.KnowledgeExtraction,
+                        false,
+                        false,
+                        false,
+                        true,
+                        true,
+                    );
+
+                    const knowledgeResult = await forward(
+                        "extractKnowledgeFromPageStreaming",
+                        {
+                            url: targetTab.url,
+                            title: targetTab.title,
+                            mode: params.mode || "content",
+                            extractionId: extractionId,
+                            htmlFragments: htmlFragments,
+                            extractionSettings: params.extractionSettings,
+                            saveToIndex: params.saveToIndex || false,
+                        },
+                    );
+
+                    return {
+                        success: true,
+                        extractionId: extractionId,
+                        finalData: knowledgeResult,
+                    };
+                } catch (error) {
+                    console.error(
+                        "Error in streaming knowledge extraction:",
+                        error,
+                    );
+
+                    const errorProgress: KnowledgeExtractionProgress = {
+                        extractionId,
+                        phase: "error",
+                        totalItems: 1,
+                        processedItems: 0,
+                        errors: [
+                            {
+                                message:
+                                    (error as Error).message || String(error),
+                                timestamp: Date.now(),
+                            },
+                        ],
+                    };
+
+                    const callback =
+                        knowledgeExtractionCallbacks.get(extractionId);
+                    if (callback) {
+                        callback(errorProgress);
+                        knowledgeExtractionCallbacks.delete(extractionId);
+                    }
+
+                    return {
+                        error: "Failed to extract knowledge from page",
+                        extractionId: extractionId,
+                        success: false,
+                    };
+                }
+            }
+            return {
+                error: targetTab
+                    ? "Streaming mode is disabled"
+                    : "No browser tabs are currently open",
+                extractionId: params.extractionId,
+                success: false,
+            };
+        },
+
+        async indexPageContentDirect(params: any) {
+            const targetTab = await getActiveTab();
+            if (targetTab) {
+                const success = await indexPageContent(
+                    targetTab,
+                    params.showNotification !== false,
+                    {
+                        mode: params.mode,
+                        extractedKnowledge: params.extractedKnowledge,
+                    },
+                );
+                return { success };
+            }
+            return {
+                success: false,
+                error: "No browser tabs are currently open. Please open a browser tab to continue.",
+            };
+        },
+
+        async autoIndexPage(params: any) {
+            const targetTab = await getActiveTab();
+            if (targetTab && (await shouldIndexPage(targetTab.url!))) {
+                const success = await indexPageContent(targetTab, false, {
+                    quality: params.quality,
+                    textOnly: params.textOnly,
+                });
+                return { success };
+            }
+            return {
+                success: false,
+                error: "Page not eligible for indexing",
+            };
+        },
+
+        async indexExtractedKnowledge(params: any) {
+            try {
+                const result = await forward("indexWebPageContent", {
+                    url: params.url,
+                    title: params.title,
+                    extractKnowledge: false,
+                    timestamp: params.timestamp || new Date().toISOString(),
+                    mode: params.mode || "content",
+                    extractedKnowledge: params.extractedKnowledge,
+                });
+                return {
+                    success: result.indexed,
+                    entityCount: result.entityCount,
+                    error: result.indexed
+                        ? null
+                        : "Failed to index knowledge",
+                };
+            } catch (error) {
+                console.error("Error indexing extracted knowledge:", error);
+                return {
+                    success: false,
+                    entityCount: 0,
+                    error: "Failed to index extracted knowledge",
+                };
+            }
+        },
+
+        async registerTempSchema(params: any) {
+            try {
+                const currentTab = await getActiveTab();
+                if (currentTab?.url) {
+                    const actionsResult = await forward("getMacrosForUrl", {
+                        url: currentTab.url,
+                        includeGlobal: true,
+                    });
+                    if (
+                        actionsResult.actions &&
+                        actionsResult.actions.length > 0
+                    ) {
+                        console.log(
+                            `Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`,
+                        );
+                    }
+                }
+            } catch (error) {
+                console.warn(
+                    "Failed to get actions from ActionsStore for schema registration:",
+                    error,
+                );
+            }
+            const schemaResult = await forward("registerPageDynamicAgent", {
+                agentName: params.agentName,
+            });
+            return { schema: schemaResult };
+        },
+
+        async refreshSchema() {
+            const discoveryResult = await forward("detectPageActions", {
+                registerAgent: false,
+            });
+            return {
+                schema: discoveryResult.schema,
+                actionDefinitions: discoveryResult.typeDefinitions,
+            };
+        },
+
+        // =============================================================
+        // Agent forwards with local transforms
+        // =============================================================
+
+        async getIntentFromRecording(params: any) {
+            const schemaResult = await forward("getIntentFromRecording", {
+                recordedActionName: params.actionName,
+                recordedActionDescription: params.actionDescription,
+                recordedActionSteps: params.steps,
+                existingActionNames: params.existingActionNames,
+                fragments: params.html,
+                screenshots: params.screenshot,
+            });
+            if (schemaResult.actionId) {
+                broadcastEvent("macroAdded", {
+                    actionId: schemaResult.actionId,
+                });
+            }
+            return {
+                intent: schemaResult.intent,
+                intentJson: schemaResult.intentJson,
+                actions: schemaResult.actions,
+                intentTypeDefinition: schemaResult.intentTypeDefinition,
+                actionId: schemaResult.actionId,
+            };
+        },
+
+        async deleteMacro(params: any) {
+            try {
+                const result = await forward("deleteMacro", {
+                    macroId: params.macroId,
+                });
+                if (result.success) {
+                    broadcastEvent("macroDeleted", {
+                        macroId: params.macroId,
+                    });
+                }
+                return result;
+            } catch (error) {
+                console.error("Failed to delete macro:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        },
+
+        // =============================================================
+        // Simple agent forwards
+        // =============================================================
+
+        async getLibraryStats(params: any) {
+            return forward("getLibraryStats", params || {});
+        },
+
+        async getWebsiteLibraryStats() {
+            return forward("getLibraryStats", {});
+        },
+
+        async getMacrosForUrl(params: any) {
+            return forward("getMacrosForUrl", {
+                url: params.url,
+                includeGlobal: params.includeGlobal ?? true,
+                author: params.author,
+            });
+        },
+
+        async getAllMacros() {
+            try {
+                return await forward("getAllMacros", { includeGlobal: true });
+            } catch (error) {
+                console.error("Error getting all actions:", error);
+                return { actions: [] };
+            }
+        },
+
+        async getActionDomains() {
+            try {
+                return await forward("getActionDomains", {});
+            } catch (error) {
+                console.error("Error getting action domains:", error);
+                return { domains: [] };
+            }
+        },
+
+        async getMacroDomains() {
+            try {
+                return await forward("getActionDomains", {});
+            } catch (error) {
+                console.error("Error getting macro domains:", error);
+                return { domains: [] };
+            }
+        },
+
+        async getViewHostUrl() {
+            return forward("getViewHostUrl", {});
+        },
+
+        async queryKnowledge(params: any) {
+            try {
+                return await forward("searchWebMemories", {
+                    query: params.parameters?.query || params.query,
+                    searchScope:
+                        params.parameters?.searchScope || "current_page",
+                    metadata: { url: params.parameters?.url || params.url },
+                });
+            } catch (error) {
+                console.error("Error querying knowledge:", error);
+                return { error: "Failed to query knowledge" };
+            }
+        },
+
+        async generatePageQuestions(params: any) {
+            try {
+                return await forward("generatePageQuestions", {
+                    url: params.url,
+                    pageKnowledge: params.pageKnowledge,
+                });
+            } catch (error) {
+                console.error("Error generating page questions:", error);
+                return { error: "Failed to generate page questions" };
+            }
+        },
+
+        async discoverRelatedKnowledge(params: any) {
+            try {
+                return await forward("discoverRelatedKnowledge", {
+                    entities: params.entities || [],
+                    topics: params.topics || [],
+                    depth: params.depth || 2,
+                    maxEntities: params.maxEntities || 10,
+                    maxTopics: params.maxTopics || 10,
+                });
+            } catch (error) {
+                console.error(
+                    "Error discovering related knowledge:",
+                    error,
+                );
+                return {
+                    relatedEntities: [],
+                    relatedTopics: [],
+                    success: false,
+                };
+            }
+        },
+
+        async generateGraphQuestions(params: any) {
+            try {
+                return await forward("generateGraphQuestions", {
+                    url: params.url,
+                    relatedEntities: params.relatedEntities,
+                    relatedTopics: params.relatedTopics,
+                });
+            } catch (error) {
+                console.error("Error generating graph questions:", error);
+                return { error: "Failed to generate graph questions" };
+            }
+        },
+
+        async discoverRelationships(params: any) {
+            try {
+                const result = await forward("discoverRelationships", {
+                    url: params.url,
+                    knowledge: params.knowledge,
+                    maxResults: params.maxResults || 10,
+                });
+                return {
+                    success: result.success || false,
+                    relationships: result.relationships || [],
+                    totalFound: result.totalFound || 0,
+                };
+            } catch (error) {
+                console.error("Error discovering relationships:", error);
+                return {
+                    success: false,
+                    relationships: [],
+                    totalFound: 0,
+                    error: "Failed to discover relationships",
+                };
+            }
+        },
+
+        async analyzeKnowledgeGaps(params: any) {
+            try {
+                const result = await forward("analyzeKnowledgeGaps", {
+                    url: params.url,
+                    knowledge: params.knowledge,
+                    relatedContent: params.relatedContent || [],
+                });
+                return {
+                    success: result.success || false,
+                    gaps: result.gaps || [],
+                    totalGaps: result.totalGaps || 0,
+                };
+            } catch (error) {
+                console.error("Error analyzing knowledge gaps:", error);
+                return {
+                    success: false,
+                    gaps: [],
+                    totalGaps: 0,
+                    error: "Failed to analyze knowledge gaps",
+                };
+            }
+        },
+
+        async getPageIndexStatus(params: any) {
+            try {
+                return await forward("checkPageIndexStatus", {
+                    url: params.url,
+                });
+            } catch (error) {
+                console.error("Error checking page index status:", error);
+                return { isIndexed: false, error: "Failed to check status" };
+            }
+        },
+
+        async getPageIndexedKnowledge(params: any) {
+            try {
+                const result = await forward("getPageIndexedKnowledge", {
+                    url: params.url,
+                });
+                return {
+                    isIndexed: result.isIndexed || false,
+                    knowledge: result.knowledge || null,
+                    error: result.error || null,
+                };
+            } catch (error) {
+                console.error(
+                    "Error getting page indexed knowledge:",
+                    error,
+                );
+                return {
+                    isIndexed: false,
+                    knowledge: null,
+                    error: "Failed to retrieve indexed knowledge",
+                };
+            }
+        },
+
+        async getIndexStats() {
+            try {
+                const result = await forward("getKnowledgeIndexStats", {});
+                return {
+                    totalPages: result.totalPages || 0,
+                    totalEntities: result.totalEntities || 0,
+                    totalRelationships: result.totalRelationships || 0,
+                    lastIndexed: result.lastIndexed || "Never",
+                    indexSize: result.indexSize || "0 MB",
+                };
+            } catch (error) {
+                console.error("Error getting index stats:", error);
+                return {
+                    totalPages: 0,
+                    totalEntities: 0,
+                    totalRelationships: 0,
+                    lastIndexed: "Error",
+                    indexSize: "Unknown",
+                };
+            }
+        },
+
+        async getPageQualityMetrics(params: any) {
+            try {
+                const result = await forward("getKnowledgeIndexStats", {
+                    url: params.url,
+                });
+                const pageStats = result.pageStats || {};
+                return {
+                    success: !result.error,
+                    quality: {
+                        score: pageStats.qualityScore || 0.5,
+                        entityCount: pageStats.entityCount || 0,
+                        topicCount: pageStats.topicCount || 0,
+                        actionCount: pageStats.actionCount || 0,
+                        extractionMode:
+                            pageStats.extractionMode || "unknown",
+                        lastUpdated: pageStats.lastUpdated || null,
+                    },
+                };
+            } catch (error) {
+                console.error(
+                    "Error getting page quality metrics:",
+                    error,
+                );
+                return {
+                    success: false,
+                    quality: {
+                        score: 0,
+                        entityCount: 0,
+                        topicCount: 0,
+                        actionCount: 0,
+                        extractionMode: "unknown",
+                        lastUpdated: null,
+                    },
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : String(error),
+                };
+            }
+        },
+
+        async checkAIModelAvailability(params: any) {
+            try {
+                const result = await forward("extractKnowledgeFromPage", {
+                    url: "test://ai-check",
+                    title: "AI Availability Test",
+                    htmlFragments: [
+                        {
+                            text: "test content for AI availability check",
+                        },
+                    ],
+                    extractEntities: false,
+                    extractRelationships: false,
+                    suggestQuestions: false,
+                    mode: "basic",
+                });
+                return {
+                    available: !result.error,
+                    version: result.version || "unknown",
+                    endpoint: result.endpoint || "unknown",
+                };
+            } catch (error) {
+                console.error(
+                    "Error checking AI model availability:",
+                    error,
+                );
+                return {
+                    available: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : String(error),
+                };
+            }
+        },
+
+        async getRecentKnowledgeItems(params: any) {
+            try {
+                const result = await forward("getRecentKnowledgeItems", {
+                    limit: params.limit || 10,
+                    type: params.itemType || "both",
+                });
+                return {
+                    success: result.success || false,
+                    entities: result.entities || [],
+                    topics: result.topics || [],
+                };
+            } catch (error) {
+                console.error(
+                    "Error getting recent knowledge items:",
+                    error,
+                );
+                return {
+                    success: false,
+                    entities: [],
+                    topics: [],
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : String(error),
+                };
+            }
+        },
+
+        async getDiscoverInsights(params: any) {
+            try {
+                const result = await forward("getDiscoverInsights", {
+                    limit: params.limit || 10,
+                    timeframe: params.timeframe || "30d",
+                });
+                return {
+                    success: result.success || false,
+                    trendingTopics: result.trendingTopics || [],
+                    readingPatterns: result.readingPatterns || [],
+                    popularPages: result.popularPages || [],
+                    topDomains: result.topDomains || [],
+                };
+            } catch (error) {
+                console.error("Error getting discover insights:", error);
+                return {
+                    success: false,
+                    trendingTopics: [],
+                    readingPatterns: [],
+                    popularPages: [],
+                    topDomains: [],
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : String(error),
+                };
+            }
+        },
+
+        async getAnalyticsData(params: any) {
+            try {
+                const result = await forward("getAnalyticsData", {
+                    timeRange: params.timeRange || "30d",
+                    includeQuality: params.includeQuality !== false,
+                    includeProgress: params.includeProgress !== false,
+                    topDomainsLimit: params.topDomainsLimit || 10,
+                    activityGranularity:
+                        params.activityGranularity || "day",
+                });
+                return {
+                    success: !result.error,
+                    analytics: result,
+                    error: result.error,
+                };
+            } catch (error) {
+                console.error("Error getting analytics data:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        },
+
+        async getKnowledgeGraphStatus() {
+            try {
+                const result = await forward(
+                    "getKnowledgeGraphStatus",
+                    {},
+                );
+                return {
+                    hasGraph: result.hasGraph || false,
+                    entityCount: result.entityCount || 0,
+                    relationshipCount: result.relationshipCount || 0,
+                    communityCount: result.communityCount || 0,
+                    isBuilding: result.isBuilding || false,
+                    error: result.error || null,
+                };
+            } catch (error) {
+                console.error(
+                    "Error getting knowledge graph status:",
+                    error,
+                );
+                return {
+                    hasGraph: false,
+                    entityCount: 0,
+                    relationshipCount: 0,
+                    communityCount: 0,
+                    isBuilding: false,
+                    error: "Failed to get graph status",
+                };
+            }
+        },
+
+        async buildKnowledgeGraph(params: any) {
+            try {
+                const result = await forward(
+                    "buildKnowledgeGraph",
+                    params.parameters || params || {},
+                );
+                return {
+                    success: result.success || false,
+                    message: result.message || "Graph building started",
+                };
+            } catch (error) {
+                console.error("Error building knowledge graph:", error);
+                return {
+                    success: false,
+                    error: "Failed to build knowledge graph",
+                };
+            }
+        },
+
+        async rebuildKnowledgeGraph() {
+            try {
+                const result = await forward("rebuildKnowledgeGraph", {});
+                return {
+                    success: result.success || false,
+                    message:
+                        result.message || "Graph rebuilding started",
+                };
+            } catch (error) {
+                console.error(
+                    "Error rebuilding knowledge graph:",
+                    error,
+                );
+                return {
+                    success: false,
+                    error: "Failed to rebuild knowledge graph",
+                };
+            }
+        },
+
+        async testMergeTopicHierarchies() {
+            try {
+                return await forward("testMergeTopicHierarchies", {});
+            } catch (error) {
+                console.error("Error testing topic merge:", error);
+                return {
+                    success: false,
+                    mergeCount: 0,
+                    error: "Failed to test topic merge",
+                };
+            }
+        },
+
+        async mergeTopicHierarchies() {
+            try {
+                return await forward("mergeTopicHierarchies", {});
+            } catch (error) {
+                console.error(
+                    "Error merging topic hierarchies:",
+                    error,
+                );
+                return {
+                    success: false,
+                    mergeCount: 0,
+                    error: "Failed to merge topic hierarchies",
+                };
+            }
+        },
+
+        async getGlobalGraphLayoutData(params: any) {
+            try {
+                return await forward(
+                    "getGlobalGraphLayoutData",
+                    params.parameters || params || {},
+                );
+            } catch (error) {
+                console.error(
+                    "Error getting global graph layout data:",
+                    error,
+                );
+                return {
+                    graphologyLayout: {
+                        elements: [],
+                        layoutDuration: 0,
+                        avgSpacing: 0,
+                        communityCount: 0,
+                    },
+                    metadata: {
+                        totalEntitiesInSystem: 0,
+                        selectedEntityCount: 0,
+                        coveragePercentage: 0,
+                        importanceThreshold: 0,
+                        layer: "global_graph_layout",
+                    },
+                };
+            }
+        },
+
+        async getEntityNeighborhood(params: any) {
+            try {
+                return await forward("getEntityNeighborhood", {
+                    entityId: params.entityId,
+                    depth: params.depth,
+                    maxNodes: params.maxNodes,
+                });
+            } catch (error) {
+                console.error(
+                    "Error getting entity neighborhood:",
+                    error,
+                );
+                return [];
+            }
+        },
+
+        async getEntityNeighborhoodLayoutData(params: any) {
+            try {
+                return await forward(
+                    "getEntityNeighborhoodLayoutData",
+                    {
+                        entityId: params.entityId,
+                        depth: params.depth,
+                        maxNodes: params.maxNodes,
+                    },
+                );
+            } catch (error) {
+                console.error(
+                    "Error getting entity neighborhood layout:",
+                    error,
+                );
+                return {
+                    graphologyLayout: {
+                        elements: [],
+                        layoutDuration: 0,
+                        avgSpacing: 0,
+                        communityCount: 0,
+                    },
+                    metadata: {
+                        entityId: params.entityId,
+                        queryDepth: params.depth || 2,
+                        maxNodes: params.maxNodes || 100,
+                        actualNodes: 0,
+                        actualEdges: 0,
+                        layer: "entity_neighborhood",
+                        source: "graphology",
+                    },
+                };
+            }
+        },
+
+        async getGlobalImportanceLayer(params: any) {
+            try {
+                return await forward("getGlobalImportanceLayer", {
+                    maxNodes: params.maxNodes,
+                    includeConnectivity: params.includeConnectivity,
+                });
+            } catch (error) {
+                console.error(
+                    "Error getting global importance layer:",
+                    error,
+                );
+                return {
+                    entities: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
+        },
+
+        async getImportanceStatistics() {
+            try {
+                return await forward("getImportanceStatistics", {});
+            } catch (error) {
+                console.error(
+                    "Error getting importance statistics:",
+                    error,
+                );
+                return {
+                    distribution: [],
+                    recommendedLevel: 1,
+                    levelPreview: [],
+                };
+            }
+        },
+
+        async getViewportBasedNeighborhood(params: any) {
+            try {
+                return await forward("getViewportBasedNeighborhood", {
+                    centerEntity: params.centerEntity,
+                    viewportNodeNames: params.viewportNodeNames,
+                    maxNodes: params.maxNodes,
+                    importanceWeighting: params.importanceWeighting,
+                    includeGlobalContext: params.includeGlobalContext,
+                    exploreFromAllViewportNodes:
+                        params.exploreFromAllViewportNodes,
+                    minDepthFromViewport: params.minDepthFromViewport,
+                });
+            } catch (error) {
+                console.error(
+                    "Error getting viewport-based neighborhood:",
+                    error,
+                );
+                return {
+                    entities: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
+        },
+
+        async getTopicImportanceLayer(params: any) {
+            try {
+                return await forward("getTopicImportanceLayer", {
+                    maxNodes: params.maxNodes,
+                    minImportanceThreshold:
+                        params.minImportanceThreshold,
+                });
+            } catch (error) {
+                console.error(
+                    "Error getting topic importance layer:",
+                    error,
+                );
+                return {
+                    topics: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
+        },
+
+        async getTopicViewportNeighborhood(params: any) {
+            try {
+                return await forward("getTopicViewportNeighborhood", {
+                    centerTopic: params.centerTopic,
+                    viewportTopicIds: params.viewportTopicIds,
+                    maxNodes: params.maxNodes,
+                    maxDepth: params.maxDepth,
+                });
+            } catch (error) {
+                console.error(
+                    "Error getting topic viewport neighborhood:",
+                    error,
+                );
+                return {
+                    topics: [],
+                    relationships: [],
+                    metadata: {
+                        error:
+                            error instanceof Error
+                                ? error.message
+                                : "Unknown error",
+                    },
+                };
+            }
+        },
+
+        async getTopicMetrics(params: any) {
+            return handleGetTopicMetrics(params);
+        },
+
+        async getTopicDetails(params: any) {
+            try {
+                return await forward("getTopicDetails", {
+                    topicId: params.parameters?.topicId || params.topicId,
+                });
+            } catch (error) {
+                console.error("Error fetching topic details:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to fetch topic details",
+                };
+            }
+        },
+
+        async getEntityDetails(params: any) {
+            try {
+                return await forward("getEntityDetails", {
+                    entityName:
+                        params.parameters?.entityName ||
+                        params.entityName,
+                });
+            } catch (error) {
+                console.error("Error getting entity details:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to fetch entity details",
+                };
+            }
+        },
+
+        async getTopicTimelines(params: any) {
+            try {
+                return await forward("getTopicTimelines", {
+                    topicNames:
+                        params.parameters?.topicNames ||
+                        params.topicNames,
+                    maxTimelineEntries:
+                        params.parameters?.maxTimelineEntries ||
+                        params.maxTimelineEntries,
+                    timeRange:
+                        params.parameters?.timeRange || params.timeRange,
+                    includeRelatedTopics:
+                        params.parameters?.includeRelatedTopics ??
+                        params.includeRelatedTopics,
+                    neighborhoodDepth:
+                        params.parameters?.neighborhoodDepth ||
+                        params.neighborhoodDepth,
+                });
+            } catch (error) {
+                console.error("Error getting topic timelines:", error);
+                return {
+                    success: false,
+                    timelines: [],
+                    metadata: {
+                        totalEntries: 0,
+                        timeRange: { earliest: "", latest: "" },
+                        topicsWithActivity: 0,
+                    },
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
+            }
+        },
+
+        async getHierarchicalTopics(params: any) {
+            return handleGetHierarchicalTopics(params);
+        },
+
+        // =============================================================
+        // Delegations to existing helpers (search, import, etc.)
+        // =============================================================
+
+        async searchWebMemories(params: any) {
+            return handleSearchWebMemories(params);
+        },
+
+        async searchByEntities(params: any) {
+            return handleSearchByEntities(params);
+        },
+
+        async searchByTopics(params: any) {
+            return handleSearchByTopics(params);
+        },
+
+        async hybridSearch(params: any) {
+            return handleHybridSearch(params);
+        },
+
+        async importWebsiteDataWithProgress(params: any) {
+            return handleImportWebsiteDataWithProgress(params);
+        },
+
+        async clearWebsiteLibrary() {
+            return handleClearWebsiteLibrary();
+        },
+
+        async cancelImport(params: any) {
+            return handleCancelImport(params.importId);
+        },
+
+        async importHtmlFolder(params: any) {
+            return handleImportHtmlFolder(params);
+        },
+
+        async getFileImportProgress(params: any) {
+            return handleGetFileImportProgress(params.importId);
+        },
+
+        async cancelFileImport(params: any) {
+            return handleCancelFileImport(params.importId);
+        },
+
+        // =============================================================
+        // Aliases used by ExtensionServiceBase views
+        // =============================================================
+
+        async saveSearch(params: any) {
+            return handleSaveSearchHistory(params);
+        },
+
+        async getRecentSearches() {
+            return handleGetSearchHistory();
+        },
+
+        async openOptionsPage() {
+            try {
+                chrome.runtime.openOptionsPage();
+            } catch (error) {
+                console.error("Failed to open options page:", error);
+            }
+        },
+
+        async createTab(params: any) {
+            try {
+                return await chrome.tabs.create({
+                    url: params.url,
+                    active: params.active ?? true,
+                });
+            } catch (error) {
+                console.error("Failed to create tab:", error);
+                throw error;
+            }
+        },
+
+        async extractKnowledge(params: any) {
+            return forward("extractKnowledgeFromPage", {
+                url: params.url,
+            });
+        },
+
+        async checkKnowledgeStatus(params: any) {
+            return forward("checkPageIndexStatus", {
+                url: params.url,
+            });
+        },
+
+        async getAutoIndexSetting() {
+            try {
+                const settings = await chrome.storage.sync.get([
+                    "autoIndexing",
+                ]);
+                return { enabled: settings.autoIndexing || false };
+            } catch (error) {
+                console.error(
+                    "Failed to get auto-index setting:",
+                    error,
+                );
+                return { enabled: false };
+            }
+        },
+
+        async setAutoIndexSetting(params: any) {
+            try {
+                await chrome.storage.sync.set({
+                    autoIndexing: params.enabled,
+                });
+            } catch (error) {
+                console.error(
+                    "Failed to set auto-index setting:",
+                    error,
+                );
+                throw error;
+            }
+        },
+
+        async getExtractionSettings() {
+            try {
+                const settings = await chrome.storage.sync.get([
+                    "extractionSettings",
+                ]);
+                return settings.extractionSettings || null;
+            } catch (error) {
+                console.error(
+                    "Failed to get extraction settings:",
+                    error,
+                );
+                return null;
+            }
+        },
+
+        async saveExtractionSettings(params: any) {
+            try {
+                await chrome.storage.sync.set({
+                    extractionMode: params.settings?.mode || params.mode,
+                    suggestQuestions:
+                        params.settings?.suggestQuestions ??
+                        params.suggestQuestions,
+                });
+            } catch (error) {
+                console.error(
+                    "Failed to save extraction settings:",
+                    error,
+                );
+                throw error;
+            }
+        },
+
+        async notifyAutoIndexSettingChanged(params: any) {
+            console.log(
+                "Auto-indexing setting changed:",
+                params.enabled,
+            );
+            return { success: true };
+        },
+
+        async generateTemporalSuggestions(params: any) {
+            return forward("generateTemporalSuggestions", {
+                maxSuggestions: params.maxSuggestions,
+            });
+        },
+
+        async searchWebMemoriesAdvanced(params: any) {
+            return handleSearchWebMemories({
+                parameters: params.parameters || params,
+            });
+        },
+
+        async getPageSourceInfo(params: any) {
+            return forward("getKnowledgeIndexStats", {
+                url: params.url,
+            });
+        },
+    };
+}

@@ -14,6 +14,7 @@ const debugBrowserIPC = registerDebug("typeagent:browser:ipc");
 export class BrowserAgentIpc {
     private static instance: BrowserAgentIpc;
     public onMessageReceived: ((message: WebSocketMessageV2) => void) | null;
+    public onRpcReply: ((message: any) => void) | null;
     public onSendNotification: ((message: string, id: string) => void) | null;
     private webSocket: any;
     private reconnectionPending: boolean = false;
@@ -26,6 +27,7 @@ export class BrowserAgentIpc {
     private constructor() {
         this.webSocket = null;
         this.onMessageReceived = null;
+        this.onRpcReply = null;
         this.onSendNotification = null;
     }
 
@@ -77,9 +79,17 @@ export class BrowserAgentIpc {
                             ? event.data
                             : await (event.data as Blob).text();
                     try {
-                        const data = JSON.parse(text) as WebSocketMessageV2;
+                        const data = JSON.parse(text) as any;
 
-                        let schema = data.method?.split("/")[0];
+                        // Channel-multiplexed messages: forward agentService replies to renderer
+                        if (data.name === "agentService") {
+                            if (this.onRpcReply) {
+                                this.onRpcReply(data.message);
+                            }
+                            return;
+                        }
+
+                        let schema = (data as WebSocketMessageV2).method?.split("/")[0];
                         schema = schema || "browser";
 
                         // Forward messages for browser, webAgent schemas, and import progress updates
@@ -87,11 +97,11 @@ export class BrowserAgentIpc {
                             (schema == "browser" ||
                                 schema == "webAgent" ||
                                 schema.startsWith("browser.") ||
-                                data.method === "importProgress") &&
+                                (data as WebSocketMessageV2).method === "importProgress") &&
                             this.onMessageReceived
                         ) {
                             debugBrowserIPC("BrowserAgent -> Shell", data);
-                            this.onMessageReceived(data);
+                            this.onMessageReceived(data as WebSocketMessageV2);
                         }
                     } catch {}
                 };
