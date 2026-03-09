@@ -1471,6 +1471,9 @@ importers:
       sanitize-filename:
         specifier: ^1.6.3
         version: 1.6.3
+      taskflow-typeagent:
+        specifier: workspace:*
+        version: link:../taskflow
       textpro:
         specifier: workspace:*
         version: link:../../textPro
@@ -3485,6 +3488,9 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
+      taskflow-typeagent:
+        specifier: workspace:*
+        version: link:../../agents/taskflow
       telemetry:
         specifier: workspace:*
         version: link:../../telemetry
