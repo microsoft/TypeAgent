@@ -23,11 +23,7 @@ import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
-import {
-    ClientIO,
-    Dispatcher,
-    RequestId,
-} from "agent-dispatcher";
+import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
@@ -314,7 +310,11 @@ function registerClient(
                     // TODO: Design for toast notifications in shell
                     case AppAgentEvent.Inline:
                     case AppAgentEvent.Toast:
-                        chatView.addNotificationMessage(data, source, requestId);
+                        chatView.addNotificationMessage(
+                            data,
+                            source,
+                            requestId,
+                        );
                         // Also add to notifications list for @notify show
                         notifications.push({
                             event,
