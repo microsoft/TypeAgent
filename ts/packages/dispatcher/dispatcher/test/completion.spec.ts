@@ -18,6 +18,55 @@ import { getCommandCompletion } from "../src/command/completion.js";
 // ---------------------------------------------------------------------------
 // Test agent with parameters for completion testing
 // ---------------------------------------------------------------------------
+
+// Shared grammar completion mock.  Simulates a grammar that recognises
+// CJK ("東京" → "タワー"/"駅") and English ("Tokyo" → "Tower"/"Station")
+// prefixes.  `token` is the raw last token from parseParams — it may
+// include a leading quote for open-quoted input.
+function grammarCompletion(token: string): CompletionGroup[] {
+    // Strip a leading quote so grammar match logic operates on text only.
+    const text = token.startsWith('"') ? token.substring(1) : token;
+    const quoteOffset = token.length - text.length; // 0 or 1
+
+    if (text.startsWith("Tokyo")) {
+        const suffix = text.substring(5).trim();
+        if (suffix.startsWith("Tower") || suffix.startsWith("Station")) {
+            return []; // completed match
+        }
+        return [
+            {
+                name: "Grammar",
+                completions: ["Tower", "Station"],
+                prefixLength: quoteOffset + 5,
+                separatorMode: "space",
+            },
+        ];
+    }
+    if (text.startsWith("東京")) {
+        const suffix = text.substring(2);
+        if (suffix.startsWith("タワー") || suffix.startsWith("駅")) {
+            return []; // completed match
+        }
+        return [
+            {
+                name: "Grammar",
+                completions: ["タワー", "駅"],
+                prefixLength: quoteOffset + 2,
+                separatorMode: "optional",
+            },
+        ];
+    }
+    // No prefix matched — offer initial completions.
+    return [
+        {
+            name: "Grammar",
+            completions: ["Tokyo ", "東京"],
+            ...(token.length > 0 ? { prefixLength: 0 } : {}),
+            separatorMode: "space",
+        },
+    ];
+}
+
 const handlers = {
     description: "Completion test agent",
     defaultSubCommand: "run",
@@ -35,8 +84,11 @@ const handlers = {
             getCompletion: async (
                 _context: unknown,
                 _params: unknown,
-                _names: string[],
+                names: string[],
             ): Promise<CompletionGroup[]> => {
+                if (!names.includes("task")) {
+                    return [];
+                }
                 return [
                     {
                         name: "Tasks",
@@ -106,6 +158,9 @@ const handlers = {
                 _params: unknown,
                 names: string[],
             ): Promise<CompletionGroup[]> => {
+                if (!names.includes("first") && !names.includes("second")) {
+                    return [];
+                }
                 return [
                     {
                         name: "Values",
@@ -128,14 +183,64 @@ const handlers = {
             getCompletion: async (
                 _context: unknown,
                 _params: unknown,
-                _names: string[],
+                names: string[],
             ): Promise<CompletionGroup[]> => {
+                if (!names.includes("query")) {
+                    return [];
+                }
                 return [
                     {
                         name: "Suggestions",
                         completions: ["hello world", "foo bar"],
                     },
                 ];
+            },
+        },
+        grammar: {
+            description: "Grammar prefixLength command",
+            parameters: {
+                args: {
+                    phrase: {
+                        description: "A CJK phrase",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                params: unknown,
+                names: string[],
+            ): Promise<CompletionGroup[]> => {
+                if (!names.includes("phrase")) {
+                    return [];
+                }
+                const p = params as { tokens?: string[] };
+                const lastToken = p.tokens?.[p.tokens.length - 1] ?? "";
+                return grammarCompletion(lastToken);
+            },
+        },
+        grammariq: {
+            description: "Grammar with implicitQuotes",
+            parameters: {
+                args: {
+                    query: {
+                        description: "CJK search query",
+                        implicitQuotes: true,
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                params: unknown,
+                names: string[],
+            ): Promise<CompletionGroup[]> => {
+                if (!names.includes("query")) {
+                    return [];
+                }
+                const p = params as { tokens?: string[] };
+                const lastToken = p.tokens?.[p.tokens.length - 1] ?? "";
+                return grammarCompletion(lastToken);
             },
         },
     },
@@ -793,6 +898,202 @@ describe("Command Completion - startIndex", () => {
             // startIndex stays at 16 (end of input).
             expect(result.startIndex).toBe(16);
             expect(result.complete).toBe(true);
+        });
+    });
+
+    describe("groupPrefixLength overrides startIndex", () => {
+        it("open-quote CJK advances startIndex by prefixLength", async () => {
+            const result = await getCommandCompletion(
+                '@comptest grammar "東京タ',
+                context,
+            );
+            // '@comptest grammar "東京タ' (22 chars)
+            //   0-8: @comptest  9: sp  10-16: grammar  17: sp
+            //   18: "  19: 東  20: 京  21: タ
+            // suffix = '"東京タ' (4 chars), open-quoted token.
+            // lastCompletableParam fires (quoted=false).
+            //   tokenStartIndex = 22 - 4 = 18 (position of '"')
+            //   startIndex = tokenBoundary(input, 18) = 17
+            // Agent strips opening quote, matches "東京" (2 chars),
+            // returns prefixLength = 3 (1 quote + 2 CJK chars).
+            //   startIndex = tokenStartIndex + 3 = 18 + 3 = 21.
+            // rawPrefix = "タ", "タワー".startsWith("タ") ✓
+            expect(result.startIndex).toBe(21);
+            const grammar = result.completions.find(
+                (g) => g.name === "Grammar",
+            );
+            expect(grammar).toBeDefined();
+            expect(grammar!.completions).toContain("タワー");
+            expect(grammar!.completions).toContain("駅");
+            expect(result.complete).toBe(false);
+        });
+
+        it("implicitQuotes CJK advances startIndex by prefixLength", async () => {
+            const result = await getCommandCompletion(
+                "@comptest grammariq 東京タ",
+                context,
+            );
+            // "@comptest grammariq 東京タ" (23 chars)
+            //   0-8: @comptest  9: sp  10-18: grammariq  19: sp
+            //   20: 東  21: 京  22: タ
+            // suffix = "東京タ" (3 chars), implicitQuotes captures
+            // rest of line as token.
+            // lastCompletableParam fires (implicitQuotes).
+            //   tokenStartIndex = 23 - 3 = 20 (position of "東")
+            //   startIndex = tokenBoundary(input, 20) = 19
+            // Agent matches "東京" (2 chars), returns prefixLength=2.
+            //   startIndex = tokenStartIndex + 2 = 20 + 2 = 22.
+            // rawPrefix = "タ", "タワー".startsWith("タ") ✓
+            expect(result.startIndex).toBe(22);
+            const grammar = result.completions.find(
+                (g) => g.name === "Grammar",
+            );
+            expect(grammar).toBeDefined();
+            expect(grammar!.completions).toContain("タワー");
+            expect(grammar!.completions).toContain("駅");
+            expect(result.complete).toBe(false);
+        });
+
+        it("fully-quoted token does not invoke grammar", async () => {
+            const result = await getCommandCompletion(
+                '@comptest grammar "東京タ"',
+                context,
+            );
+            // Token '"東京タ"' is fully quoted → isFullyQuoted = true.
+            // lastCompletableParam exclusive path does NOT fire.
+            // All args consumed → nextArgs empty → agent not called.
+            // prefixLength never applies.
+            expect(result.startIndex).toBe(23);
+            expect(result.complete).toBe(true);
+            // No Grammar group since agent wasn't invoked.
+            const grammar = result.completions.find(
+                (g) => g.name === "Grammar",
+            );
+            expect(grammar).toBeUndefined();
+        });
+
+        it("bare unquoted token does not invoke grammar", async () => {
+            const result = await getCommandCompletion(
+                "@comptest grammar 東京タ",
+                context,
+            );
+            // "東京タ" has no quotes, grammar command has no
+            // implicitQuotes → lastCompletableParam condition false.
+            // All args consumed → nextArgs empty → agent not called.
+            expect(result.startIndex).toBe(21);
+            expect(result.complete).toBe(true);
+            const grammar = result.completions.find(
+                (g) => g.name === "Grammar",
+            );
+            expect(grammar).toBeUndefined();
+        });
+
+        it("trailing space without text offers initial completions", async () => {
+            const result = await getCommandCompletion(
+                "@comptest grammar ",
+                context,
+            );
+            // "@comptest grammar " (18 chars)
+            // suffix is "", no tokens parsed → nextArgs = ["phrase"].
+            // Agent called, mock sees empty token list → returns
+            // completions ["東京"] with no prefixLength.
+            // groupPrefixLength path does not fire.
+            // startIndex = tokenBoundary(input, 18) = 17.
+            expect(result.startIndex).toBe(17);
+            expect(result.complete).toBe(false);
+            const grammar = result.completions.find(
+                (g) => g.name === "Grammar",
+            );
+            expect(grammar).toBeDefined();
+            expect(grammar!.completions).toContain("Tokyo ");
+            expect(grammar!.completions).toContain("東京");
+        });
+
+        it("clears earlier completions when prefixLength is set", async () => {
+            const result = await getCommandCompletion(
+                '@comptest grammar "東京タ',
+                context,
+            );
+            // When groupPrefixLength fires, parameter/flag
+            // completions from before the agent call are cleared.
+            const flags = result.completions.find(
+                (g) => g.name === "Command Flags",
+            );
+            expect(flags).toBeUndefined();
+        });
+
+        it("does not override startIndex when prefixLength is absent", async () => {
+            // "run" handler returns groups without prefixLength.
+            const result = await getCommandCompletion(
+                "@comptest run bu",
+                context,
+            );
+            expect(result.startIndex).toBe(16);
+        });
+
+        it("English prefix with space separator", async () => {
+            const result = await getCommandCompletion(
+                "@comptest grammariq Tokyo T",
+                context,
+            );
+            // "@comptest grammariq Tokyo T" (27 chars)
+            //   0-8: @comptest  9: sp  10-18: grammariq  19: sp
+            //   20-24: Tokyo  25: sp  26: T
+            // Token = "Tokyo T" (7 chars), implicitQuotes.
+            // lastCompletableParam fires.
+            //   tokenStartIndex = 27 - 7 = 20
+            //   startIndex = tokenBoundary(input, 20) = 19
+            // Mock matches "Tokyo" → prefixLength=5, separatorMode="space".
+            //   startIndex = tokenStartIndex + 5 = 20 + 5 = 25.
+            // rawPrefix = " T", consumer strips space → filter "T".
+            // "Tower".startsWith("T") ✓
+            expect(result.startIndex).toBe(25);
+            const grammar = result.completions.find(
+                (g) => g.name === "Grammar",
+            );
+            expect(grammar).toBeDefined();
+            expect(grammar!.completions).toContain("Tower");
+            expect(grammar!.completions).toContain("Station");
+            expect(result.complete).toBe(false);
+        });
+
+        it("completed CJK match returns no completions", async () => {
+            const result = await getCommandCompletion(
+                "@comptest grammariq 東京タワー",
+                context,
+            );
+            // Token = "東京タワー" (5 chars).  Mock matches "東京"
+            // and finds suffix "タワー" starts with "タワー" →
+            // returns empty (completed match, no more to suggest).
+            // agentGroups is [], no prefixLength.
+            // startIndex = tokenBoundary from lastCompletableParam path.
+            const grammar = result.completions.find(
+                (g) => g.name === "Grammar",
+            );
+            expect(grammar).toBeUndefined();
+            expect(result.complete).toBe(false);
+        });
+
+        it("no-text offers initial completions via grammariq", async () => {
+            const result = await getCommandCompletion(
+                "@comptest grammariq ",
+                context,
+            );
+            // "@comptest grammariq " (20 chars)
+            // No tokens parsed → nextArgs = ["query"].
+            // Mock sees empty token → falls to "no prefix matched"
+            // branch → completions: ["Tokyo ", "東京"],
+            // prefixLength: 0, separatorMode: "space".
+            // groupPrefixLength = 0 → condition false → skip.
+            // startIndex = tokenBoundary(input, 20) = 19.
+            expect(result.startIndex).toBe(19);
+            const grammar = result.completions.find(
+                (g) => g.name === "Grammar",
+            );
+            expect(grammar).toBeDefined();
+            expect(grammar!.completions).toContain("Tokyo ");
+            expect(grammar!.completions).toContain("東京");
+            expect(result.complete).toBe(false);
         });
     });
 });

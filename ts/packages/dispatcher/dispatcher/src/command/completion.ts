@@ -84,6 +84,16 @@ function getPendingFlag(
     return `--${resolvedFlag[0]}`; // use the full flag name in case it was a short flag
 }
 
+// Rewind index past any trailing whitespace in `text` so it sits
+// at the end of the preceding token.  Returns `index` unchanged
+// when the character before it is already non-whitespace.
+function tokenBoundary(text: string, index: number): number {
+    while (index > 0 && /\s/.test(text[index - 1])) {
+        index--;
+    }
+    return index;
+}
+
 // True if surrounded by quotes at both ends (matching single or double quotes).
 // False if only start with a quote.
 // Undefined if no starting quote.
@@ -153,7 +163,7 @@ async function getCommandParameterCompletion(
     descriptor: CommandDescriptor,
     context: CommandHandlerContext,
     result: ResolveCommandResult,
-    inputLength: number,
+    input: string,
 ): Promise<ParameterCompletionResult | undefined> {
     const completions: CompletionGroup[] = [];
     if (typeof descriptor.parameters !== "object") {
@@ -193,8 +203,14 @@ async function getCommandParameterCompletion(
     // Compute startIndex from how far parseParams consumed the suffix.
     // remainderLength is the length of the (trimmed) parameter text
     // that was NOT successfully parsed — everything before it is part
-    // of the longest valid prefix.
-    let startIndex = inputLength - params.remainderLength;
+    // of the longest valid prefix.  Since parseParams strips inter-
+    // token whitespace (trimStart), the raw arithmetic can land on
+    // the separator space — tokenBoundary rewinds to the preceding
+    // token edge.
+    let startIndex = tokenBoundary(
+        input,
+        input.length - params.remainderLength,
+    );
     debug(
         `Command completion parameter consumed length: ${params.remainderLength}`,
     );
@@ -205,6 +221,7 @@ async function getCommandParameterCompletion(
         const { tokens, lastCompletableParam, lastParamImplicitQuotes } =
             params;
 
+        let tokenStartIndex: number | undefined;
         if (lastCompletableParam !== undefined && tokens.length > 0) {
             const valueToken = tokens[tokens.length - 1];
             const quoted = isFullyQuoted(valueToken);
@@ -222,7 +239,8 @@ async function getCommandParameterCompletion(
                 agentCommandCompletions.length = 0;
                 completions.length = 0;
                 agentCommandCompletions.push(lastCompletableParam);
-                startIndex -= valueToken.length;
+                tokenStartIndex = startIndex - valueToken.length;
+                startIndex = tokenBoundary(input, tokenStartIndex);
             }
         }
         if (agentCommandCompletions.length > 0) {
@@ -242,11 +260,15 @@ async function getCommandParameterCompletion(
             // the parse-derived startIndex.  This handles CJK and other
             // non-space-delimited scripts where the grammar matcher is the
             // authoritative source for how far into the input it consumed.
+            // Grammar prefixLength is relative to the token content start
+            // (after the separator space), not to tokenBoundary (before
+            // it), so use tokenStartIndex when available.
             const groupPrefixLength = agentGroups.find(
                 (g) => g.prefixLength !== undefined,
             )?.prefixLength;
             if (groupPrefixLength !== undefined && groupPrefixLength != 0) {
-                startIndex += groupPrefixLength;
+                startIndex =
+                    (tokenStartIndex ?? startIndex) + groupPrefixLength;
                 // we have advanced the startIndex, so existing completions are no longer valid, clear them out.
                 completions.length = 0;
             }
@@ -314,14 +336,22 @@ async function getCommandParameterCompletion(
 //                May be overridden by a grammar-reported prefixLength
 //                from a CompletionGroup.
 //
-//                Trailing whitespace is always stripped from the
-//                anchor so that it sits at the last token boundary.
+//                startIndex is always placed at a token boundary
+//                (not on separator whitespace).  Each production
+//                site — resolveCommand consumed length, parseParams
+//                remainder, and the lastCompletableParam adjustment
+//                — applies tokenBoundary() to enforce this.
 //                Consumers treat the text after the anchor as
 //                "rawPrefix", expect it to begin with a separator
 //                (per separatorMode, which defaults to "space"
 //                when omitted), and strip the separator before
 //                filtering.  Keeping whitespace inside the anchor
 //                would violate this contract.
+//                The grammar-reported prefixLength override (Site 4)
+//                is added to the token start position (before the
+//                separator space), not to tokenBoundary — the grammar
+//                reports how many characters of the token content it
+//                consumed, which is relative to the token start.
 //
 //   completions  Array of CompletionGroups from up to three sources:
 //                (a) built-in command / subcommand / agent-name lists,
@@ -367,7 +397,7 @@ export async function getCommandCompletion(
         debug(
             `Command completion command consumed length: ${commandConsumedLength}, suffix: '${result.suffix}'`,
         );
-        let startIndex = commandConsumedLength;
+        let startIndex = tokenBoundary(input, commandConsumedLength);
 
         // Collect completions
         const completions: CompletionGroup[] = [];
@@ -388,7 +418,7 @@ export async function getCommandCompletion(
                 descriptor,
                 context,
                 result,
-                input.length,
+                input,
             );
 
             // Include sibling subcommand names when resolved to the
@@ -475,23 +505,6 @@ export async function getCommandCompletion(
         // separator-requiring; among those, "space" is more
         // restrictive because it only allows whitespace).
         const separatorMode = aggregateSeparatorMode(completions);
-
-        // Always strip trailing whitespace from the anchor.
-        //
-        // Consumers default separatorMode to "space" when the result
-        // omits it, so they always expect the separator to live in
-        // rawPrefix (= input after the anchor), not inside the anchor
-        // itself.  Keeping whitespace inside the anchor would cause
-        // separator validation to fail — rawPrefix would start with
-        // the next token instead of the expected space.
-        //
-        // This is unconditional because parseParams' remainderLength
-        // excludes inter-token whitespace, so the raw startIndex can
-        // land on whitespace even when the result has completions that
-        // don't set separatorMode.
-        while (startIndex > 0 && /\s/.test(input[startIndex - 1])) {
-            startIndex--;
-        }
 
         const completionResult: CommandCompletionResult = {
             startIndex,
