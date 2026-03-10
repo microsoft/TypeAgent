@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserConnector } from "../browserConnector.mjs";
+import { BrowserControl } from "../../common/browserControl.mjs";
 import {
     BrowseProductCategories,
     NavigateToPage,
@@ -26,7 +26,7 @@ const debug = registerDebug(
 
 // Context interface for temp agent action handler functions
 interface TempAgentActionHandlerContext {
-    browser: BrowserConnector;
+    browser: BrowserControl;
     agent: any;
     sessionContext: SessionContext<BrowserActionContext>;
     actionUtils: ReturnType<typeof setupAuthoringActions>;
@@ -134,7 +134,7 @@ async function handleUserDefinedAction(
 }
 
 export function createTempAgentForSchema(
-    browser: BrowserConnector,
+    browser: BrowserControl,
     agent: any,
     context: SessionContext<BrowserActionContext>,
 ): AppAgent {

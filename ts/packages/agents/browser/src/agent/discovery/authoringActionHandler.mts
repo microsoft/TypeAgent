@@ -6,7 +6,8 @@ import {
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import { BrowserConnector } from "../browserConnector.mjs";
+import { BrowserControl } from "../../common/browserControl.mjs";
+import { getCurrentPageScreenshot } from "../browserActions.mjs";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import {
     CreateOrUpdateWebPlan,
@@ -22,7 +23,7 @@ import { BrowserActionContext } from "../browserActions.mjs";
 
 // Context interface for authoring action handler functions
 interface AuthoringActionHandlerContext {
-    browser: BrowserConnector;
+    browser: BrowserControl;
     agent: SchemaDiscoveryAgent<SchemaDiscoveryActions>;
     sessionContext: SessionContext<BrowserActionContext>;
     actionUtils: ReturnType<typeof setupAuthoringActions>;
@@ -91,7 +92,7 @@ async function getNextAuthoringQuestion(
         const htmlFragments = await ctx.browser.getHtmlFragments();
         let screenshot = "";
         try {
-            screenshot = await ctx.browser.getCurrentPageScreenshot();
+            screenshot = await getCurrentPageScreenshot(ctx.browser);
         } catch (error) {
             console.warn(
                 "Screenshot capture failed, continuing without screenshot:",
@@ -202,7 +203,7 @@ async function getNextPlanRunningQuestion(
             const htmlFragments = await ctx.browser.getHtmlFragments();
             let screenshot = "";
             try {
-                screenshot = await ctx.browser.getCurrentPageScreenshot();
+                screenshot = await getCurrentPageScreenshot(ctx.browser);
             } catch (error) {
                 console.warn(
                     "Screenshot capture failed, continuing without screenshot:",
@@ -266,7 +267,7 @@ function createAuthoringState(): AuthoringActionHandlerContext["state"] {
 }
 
 export function createSchemaAuthoringAgent(
-    browser: BrowserConnector,
+    browser: BrowserControl,
     agent: SchemaDiscoveryAgent<SchemaDiscoveryActions>,
     context: SessionContext<BrowserActionContext>,
 ): AppAgent {

@@ -6,7 +6,6 @@ import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext, getBrowserControl } from "./browserActions.mjs";
-import { BrowserConnector } from "./browserConnector.mjs";
 
 import registerDebug from "debug";
 
@@ -159,19 +158,14 @@ export async function extractCrosswordSchema(
     targetClientId?: string,
 ): Promise<Crossword | undefined> {
     const agentContext = context.agentContext;
-    if (!agentContext.browserConnector) {
+    if (!agentContext.browserControl) {
         throw new Error("No connection to browser session.");
     }
 
-    const browser: BrowserConnector = agentContext.browserConnector;
     const browserControl = getBrowserControl(agentContext);
 
     await browserControl.awaitPageLoad(1000);
-    const htmlFragments = await browser.getHtmlFragments(
-        undefined,
-        undefined,
-        targetClientId,
-    );
+    const htmlFragments = await agentContext.browserControl.getHtmlFragments();
 
     debug(`Found ${htmlFragments.length} HTML fragments on the page.`);
 
