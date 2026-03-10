@@ -14,16 +14,11 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
  * Messages are tagged with `{ type: "rpc", message: <rpc payload> }`.
  */
 export function createChromeRpcClient<
-    InvokeTargets extends Record<
-        string,
-        (...args: any[]) => Promise<any>
-    > = {},
+    InvokeTargets extends Record<string, (...args: any[]) => Promise<any>> = {},
     CallTargets extends Record<string, (...args: any[]) => void> = {},
 >(): { adapter: ChannelAdapter; rpc: ReturnType<typeof createRpc> } {
     const adapter = createChannelAdapter((message: any) => {
-        chrome.runtime
-            .sendMessage({ type: "rpc", message })
-            .catch(() => {});
+        chrome.runtime.sendMessage({ type: "rpc", message }).catch(() => {});
     });
 
     chrome.runtime.onMessage.addListener(

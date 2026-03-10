@@ -225,9 +225,7 @@ export type BrowserAgentInvokeFunctions = {
     // Macros
     detectPageActions(params: { registerAgent?: boolean }): Promise<any>;
 
-    registerPageDynamicAgent(params: {
-        agentName: string;
-    }): Promise<any>;
+    registerPageDynamicAgent(params: { agentName: string }): Promise<any>;
 
     getIntentFromRecording(params: {
         recordedActionName: string;
@@ -269,10 +267,7 @@ export type BrowserAgentInvokeFunctions = {
         activityGranularity?: string;
     }): Promise<any>;
 
-    getWebsiteStats(params: {
-        groupBy?: string;
-        limit?: number;
-    }): Promise<any>;
+    getWebsiteStats(params: { groupBy?: string; limit?: number }): Promise<any>;
 
     // AI availability
     checkAIModelAvailability(params: {
@@ -308,10 +303,7 @@ export type BrowserAgentInvokeFunctions = {
 
 // Fire-and-forget events from agent → extension
 export type BrowserAgentCallFunctions = {
-    importProgress(params: {
-        importId: string;
-        progress: any;
-    }): void;
+    importProgress(params: { importId: string; progress: any }): void;
     knowledgeExtractionProgress(params: {
         extractionId: string;
         progress: any;
@@ -354,10 +346,7 @@ export type ExtensionLocalInvokeFunctions = {
     }): Promise<{ success: boolean }>;
 
     // Search history (local storage)
-    saveSearchHistory(params: {
-        query: string;
-        results?: any;
-    }): Promise<any>;
+    saveSearchHistory(params: { query: string; results?: any }): Promise<any>;
     getSearchHistory(): Promise<any>;
     getSearchSuggestions(params: {
         query: string;
@@ -450,9 +439,7 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         clearWebsiteLibrary(): Promise<any>;
         cancelImport(params: { importId: string }): Promise<any>;
         importHtmlFolder(params: any): Promise<any>;
-        getFileImportProgress(params: {
-            importId: string;
-        }): Promise<any>;
+        getFileImportProgress(params: { importId: string }): Promise<any>;
         cancelFileImport(params: { importId: string }): Promise<any>;
         deleteMacro(params: { macroId: string }): Promise<any>;
         getAllMacros(): Promise<any>;

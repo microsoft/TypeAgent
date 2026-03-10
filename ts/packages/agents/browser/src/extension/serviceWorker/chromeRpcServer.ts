@@ -17,19 +17,14 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 export function createChromeRpcServer<
     InvokeHandlers extends Record<string, (...args: any[]) => Promise<any>>,
     CallHandlers extends Record<string, (...args: any[]) => void> = {},
-    InvokeTargets extends Record<
-        string,
-        (...args: any[]) => Promise<any>
-    > = {},
+    InvokeTargets extends Record<string, (...args: any[]) => Promise<any>> = {},
     CallTargets extends Record<string, (...args: any[]) => void> = {},
 >(
     invokeHandlers: InvokeHandlers,
     callHandlers?: CallHandlers,
 ): { adapter: ChannelAdapter; rpc: ReturnType<typeof createRpc> } {
     const adapter = createChannelAdapter((message: any) => {
-        chrome.runtime
-            .sendMessage({ type: "rpc", message })
-            .catch(() => {});
+        chrome.runtime.sendMessage({ type: "rpc", message }).catch(() => {});
     });
 
     chrome.runtime.onMessage.addListener(
@@ -40,12 +35,12 @@ export function createChromeRpcServer<
         },
     );
 
-    const rpc = createRpc<InvokeTargets, CallTargets, InvokeHandlers, CallHandlers>(
-        "browser:sw",
-        adapter.channel,
-        invokeHandlers,
-        callHandlers,
-    );
+    const rpc = createRpc<
+        InvokeTargets,
+        CallTargets,
+        InvokeHandlers,
+        CallHandlers
+    >("browser:sw", adapter.channel, invokeHandlers, callHandlers);
 
     return { adapter, rpc };
 }

@@ -165,10 +165,7 @@ export async function ensureWebsocketConnected(): Promise<
             undefined, // no invoke handlers — we're the client
             {
                 // Call handlers for fire-and-forget events from agent
-                importProgress(params: {
-                    importId: string;
-                    progress: any;
-                }) {
+                importProgress(params: { importId: string; progress: any }) {
                     broadcastEvent("importProgress", {
                         importId: params.importId,
                         progress: params.progress,
@@ -278,8 +275,7 @@ export async function sendActionToAgent(
             "No agent RPC connection. Ensure WebSocket is connected.",
         );
     }
-    const methodName =
-        action.actionName as keyof BrowserAgentInvokeFunctions;
+    const methodName = action.actionName as keyof BrowserAgentInvokeFunctions;
     return agentRpc.invoke(methodName, action.parameters);
 }
 

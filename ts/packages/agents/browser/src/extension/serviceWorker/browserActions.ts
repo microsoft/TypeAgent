@@ -183,7 +183,9 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             break;
         }
         case "downloadContentWithBrowser": {
-            const { handleDownloadContentWithBrowser } = await import("./messageHandlers.js");
+            const { handleDownloadContentWithBrowser } = await import(
+                "./messageHandlers.js"
+            );
             const result = await handleDownloadContentWithBrowser({
                 url: action.parameters.url,
                 options: action.parameters.options,
@@ -196,7 +198,9 @@ export async function runBrowserAction(action: AppAction): Promise<any> {
             break;
         }
         case "processHtmlContent": {
-            const { handleProcessHtmlContent } = await import("./messageHandlers.js");
+            const { handleProcessHtmlContent } = await import(
+                "./messageHandlers.js"
+            );
             const result = await handleProcessHtmlContent({
                 htmlContent: action.parameters.htmlContent,
                 options: action.parameters.options,

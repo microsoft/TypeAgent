@@ -89,7 +89,9 @@ export class BrowserAgentIpc {
                             return;
                         }
 
-                        let schema = (data as WebSocketMessageV2).method?.split("/")[0];
+                        let schema = (data as WebSocketMessageV2).method?.split(
+                            "/",
+                        )[0];
                         schema = schema || "browser";
 
                         // Forward messages for browser, webAgent schemas, and import progress updates
@@ -97,7 +99,8 @@ export class BrowserAgentIpc {
                             (schema == "browser" ||
                                 schema == "webAgent" ||
                                 schema.startsWith("browser.") ||
-                                (data as WebSocketMessageV2).method === "importProgress") &&
+                                (data as WebSocketMessageV2).method ===
+                                    "importProgress") &&
                             this.onMessageReceived
                         ) {
                             debugBrowserIPC("BrowserAgent -> Shell", data);

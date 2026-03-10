@@ -23,12 +23,11 @@ function getElectronAPI(): ElectronAPI | undefined {
  * Requires `sendRpcMessage` and `onRpcMessage` to be exposed on `window.electronAPI`.
  */
 export function createElectronRpcClient<
-    InvokeTargets extends Record<
-        string,
-        (...args: any[]) => Promise<any>
-    > = {},
+    InvokeTargets extends Record<string, (...args: any[]) => Promise<any>> = {},
     CallTargets extends Record<string, (...args: any[]) => void> = {},
->(): { adapter: ChannelAdapter; rpc: ReturnType<typeof createRpc> } | undefined {
+>():
+    | { adapter: ChannelAdapter; rpc: ReturnType<typeof createRpc> }
+    | undefined {
     const electronAPI = getElectronAPI();
     if (!electronAPI?.sendRpcMessage || !electronAPI?.onRpcMessage) {
         return undefined;

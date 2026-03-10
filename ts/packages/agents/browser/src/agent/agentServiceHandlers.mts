@@ -28,10 +28,7 @@ export function createAgentInvokeHandlers(
         return handleKnowledgeAction(method, params, context);
     }
 
-    async function discoveryHandler(
-        method: string,
-        params: any,
-    ): Promise<any> {
+    async function discoveryHandler(method: string, params: any): Promise<any> {
         const result = await handleSchemaDiscoveryAction(
             { actionName: method as any, parameters: params },
             context,
@@ -59,8 +56,7 @@ export function createAgentInvokeHandlers(
             websiteHandler("searchByEntities", params),
         searchByTopics: (params: any) =>
             websiteHandler("searchByTopics", params),
-        hybridSearch: (params: any) =>
-            websiteHandler("hybridSearch", params),
+        hybridSearch: (params: any) => websiteHandler("hybridSearch", params),
         getHierarchicalTopics: (params: any) =>
             knowledgeHandler("getHierarchicalTopics", params),
         getTopicImportanceLayer: (params: any) =>
@@ -141,12 +137,10 @@ export function createAgentInvokeHandlers(
             discoveryHandler("getIntentFromRecording", params),
         getMacrosForUrl: (params: any) =>
             discoveryHandler("getMacrosForUrl", params),
-        getAllMacros: (params: any) =>
-            discoveryHandler("getAllMacros", params),
+        getAllMacros: (params: any) => discoveryHandler("getAllMacros", params),
         getActionDomains: (params: any) =>
             discoveryHandler("getActionDomains", params),
-        deleteMacro: (params: any) =>
-            discoveryHandler("deleteMacro", params),
+        deleteMacro: (params: any) => discoveryHandler("deleteMacro", params),
 
         // Search/analytics
         getRecentKnowledgeItems: (params: any) =>

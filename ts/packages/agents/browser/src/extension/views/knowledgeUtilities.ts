@@ -28,8 +28,7 @@ let electronRpcSingleton:
     | ReturnType<typeof createElectronRpcClient>
     | undefined;
 function getElectronRpc() {
-    if (!electronRpcSingleton)
-        electronRpcSingleton = createElectronRpcClient();
+    if (!electronRpcSingleton) electronRpcSingleton = createElectronRpcClient();
     return electronRpcSingleton;
 }
 

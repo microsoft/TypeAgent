@@ -69,9 +69,7 @@ import {
     generateDetailedKnowledgeCards,
     generateDynamicKnowledgeHtml,
 } from "./knowledge/ui/knowledgeCardRenderer.mjs";
-import {
-    runningExtractionsCache,
-} from "./knowledge/cache/extractionCache.mjs";
+import { runningExtractionsCache } from "./knowledge/cache/extractionCache.mjs";
 import {
     searchWebMemories,
     SearchWebMemoriesResponse,
@@ -518,7 +516,6 @@ async function updateBrowserContext(
         }
     }
 }
-
 
 async function handleWebAgentRpc(
     method: string,
@@ -1794,8 +1791,6 @@ async function lookup(
     }
 }
 
-
-
 /**
  * Progress update helper function
  */
@@ -2149,7 +2144,6 @@ export async function handleWebsiteAction(
             throw new Error(`Unknown website action: ${actionName}`);
     }
 }
-
 
 function formatLibraryStatsResponse(text: string) {
     const defaultStats = {

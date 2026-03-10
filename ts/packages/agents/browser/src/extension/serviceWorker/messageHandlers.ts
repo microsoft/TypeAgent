@@ -690,7 +690,9 @@ function getContentDownloader(): BrowserContentDownloader {
 /**
  * Handle browser-based content download requests
  */
-export async function handleDownloadContentWithBrowser(message: any): Promise<any> {
+export async function handleDownloadContentWithBrowser(
+    message: any,
+): Promise<any> {
     try {
         const downloader = getContentDownloader();
 

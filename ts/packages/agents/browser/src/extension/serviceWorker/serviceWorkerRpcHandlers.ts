@@ -297,16 +297,14 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                             extractEntities: true,
                             extractRelationships: true,
                             suggestQuestions: true,
-                            mode:
-                                params.extractionSettings?.mode || "content",
+                            mode: params.extractionSettings?.mode || "content",
                         },
                     );
 
                     return {
                         knowledge: {
                             entities: knowledgeResult.entities || [],
-                            relationships:
-                                knowledgeResult.relationships || [],
+                            relationships: knowledgeResult.relationships || [],
                             keyTopics: knowledgeResult.keyTopics || [],
                             suggestedQuestions:
                                 knowledgeResult.suggestedQuestions || [],
@@ -316,11 +314,10 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                             detectedActions:
                                 knowledgeResult.detectedActions || [],
                             actionSummary: knowledgeResult.actionSummary,
-                            contentMetrics:
-                                knowledgeResult.contentMetrics || {
-                                    readingTime: 0,
-                                    wordCount: 0,
-                                },
+                            contentMetrics: knowledgeResult.contentMetrics || {
+                                readingTime: 0,
+                                wordCount: 0,
+                            },
                         },
                     };
                 } catch (error) {
@@ -349,10 +346,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                             progress,
                         });
                     } catch (error) {
-                        console.error(
-                            "Failed to send progress to UI:",
-                            error,
-                        );
+                        console.error("Failed to send progress to UI:", error);
                     }
                 };
 
@@ -480,9 +474,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 return {
                     success: result.indexed,
                     entityCount: result.entityCount,
-                    error: result.indexed
-                        ? null
-                        : "Failed to index knowledge",
+                    error: result.indexed ? null : "Failed to index knowledge",
                 };
             } catch (error) {
                 console.error("Error indexing extracted knowledge:", error);
@@ -670,10 +662,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     maxTopics: params.maxTopics || 10,
                 });
             } catch (error) {
-                console.error(
-                    "Error discovering related knowledge:",
-                    error,
-                );
+                console.error("Error discovering related knowledge:", error);
                 return {
                     relatedEntities: [],
                     relatedTopics: [],
@@ -763,10 +752,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     error: result.error || null,
                 };
             } catch (error) {
-                console.error(
-                    "Error getting page indexed knowledge:",
-                    error,
-                );
+                console.error("Error getting page indexed knowledge:", error);
                 return {
                     isIndexed: false,
                     knowledge: null,
@@ -810,16 +796,12 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                         entityCount: pageStats.entityCount || 0,
                         topicCount: pageStats.topicCount || 0,
                         actionCount: pageStats.actionCount || 0,
-                        extractionMode:
-                            pageStats.extractionMode || "unknown",
+                        extractionMode: pageStats.extractionMode || "unknown",
                         lastUpdated: pageStats.lastUpdated || null,
                     },
                 };
             } catch (error) {
-                console.error(
-                    "Error getting page quality metrics:",
-                    error,
-                );
+                console.error("Error getting page quality metrics:", error);
                 return {
                     success: false,
                     quality: {
@@ -831,9 +813,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                         lastUpdated: null,
                     },
                     error:
-                        error instanceof Error
-                            ? error.message
-                            : String(error),
+                        error instanceof Error ? error.message : String(error),
                 };
             }
         },
@@ -859,16 +839,11 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     endpoint: result.endpoint || "unknown",
                 };
             } catch (error) {
-                console.error(
-                    "Error checking AI model availability:",
-                    error,
-                );
+                console.error("Error checking AI model availability:", error);
                 return {
                     available: false,
                     error:
-                        error instanceof Error
-                            ? error.message
-                            : String(error),
+                        error instanceof Error ? error.message : String(error),
                 };
             }
         },
@@ -885,18 +860,13 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     topics: result.topics || [],
                 };
             } catch (error) {
-                console.error(
-                    "Error getting recent knowledge items:",
-                    error,
-                );
+                console.error("Error getting recent knowledge items:", error);
                 return {
                     success: false,
                     entities: [],
                     topics: [],
                     error:
-                        error instanceof Error
-                            ? error.message
-                            : String(error),
+                        error instanceof Error ? error.message : String(error),
                 };
             }
         },
@@ -923,9 +893,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     popularPages: [],
                     topDomains: [],
                     error:
-                        error instanceof Error
-                            ? error.message
-                            : String(error),
+                        error instanceof Error ? error.message : String(error),
                 };
             }
         },
@@ -937,8 +905,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     includeQuality: params.includeQuality !== false,
                     includeProgress: params.includeProgress !== false,
                     topDomainsLimit: params.topDomainsLimit || 10,
-                    activityGranularity:
-                        params.activityGranularity || "day",
+                    activityGranularity: params.activityGranularity || "day",
                 });
                 return {
                     success: !result.error,
@@ -959,10 +926,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
 
         async getKnowledgeGraphStatus() {
             try {
-                const result = await forward(
-                    "getKnowledgeGraphStatus",
-                    {},
-                );
+                const result = await forward("getKnowledgeGraphStatus", {});
                 return {
                     hasGraph: result.hasGraph || false,
                     entityCount: result.entityCount || 0,
@@ -972,10 +936,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     error: result.error || null,
                 };
             } catch (error) {
-                console.error(
-                    "Error getting knowledge graph status:",
-                    error,
-                );
+                console.error("Error getting knowledge graph status:", error);
                 return {
                     hasGraph: false,
                     entityCount: 0,
@@ -1011,14 +972,10 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 const result = await forward("rebuildKnowledgeGraph", {});
                 return {
                     success: result.success || false,
-                    message:
-                        result.message || "Graph rebuilding started",
+                    message: result.message || "Graph rebuilding started",
                 };
             } catch (error) {
-                console.error(
-                    "Error rebuilding knowledge graph:",
-                    error,
-                );
+                console.error("Error rebuilding knowledge graph:", error);
                 return {
                     success: false,
                     error: "Failed to rebuild knowledge graph",
@@ -1043,10 +1000,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             try {
                 return await forward("mergeTopicHierarchies", {});
             } catch (error) {
-                console.error(
-                    "Error merging topic hierarchies:",
-                    error,
-                );
+                console.error("Error merging topic hierarchies:", error);
                 return {
                     success: false,
                     mergeCount: 0,
@@ -1062,10 +1016,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     params.parameters || params || {},
                 );
             } catch (error) {
-                console.error(
-                    "Error getting global graph layout data:",
-                    error,
-                );
+                console.error("Error getting global graph layout data:", error);
                 return {
                     graphologyLayout: {
                         elements: [],
@@ -1092,24 +1043,18 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     maxNodes: params.maxNodes,
                 });
             } catch (error) {
-                console.error(
-                    "Error getting entity neighborhood:",
-                    error,
-                );
+                console.error("Error getting entity neighborhood:", error);
                 return [];
             }
         },
 
         async getEntityNeighborhoodLayoutData(params: any) {
             try {
-                return await forward(
-                    "getEntityNeighborhoodLayoutData",
-                    {
-                        entityId: params.entityId,
-                        depth: params.depth,
-                        maxNodes: params.maxNodes,
-                    },
-                );
+                return await forward("getEntityNeighborhoodLayoutData", {
+                    entityId: params.entityId,
+                    depth: params.depth,
+                    maxNodes: params.maxNodes,
+                });
             } catch (error) {
                 console.error(
                     "Error getting entity neighborhood layout:",
@@ -1142,10 +1087,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     includeConnectivity: params.includeConnectivity,
                 });
             } catch (error) {
-                console.error(
-                    "Error getting global importance layer:",
-                    error,
-                );
+                console.error("Error getting global importance layer:", error);
                 return {
                     entities: [],
                     relationships: [],
@@ -1163,10 +1105,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             try {
                 return await forward("getImportanceStatistics", {});
             } catch (error) {
-                console.error(
-                    "Error getting importance statistics:",
-                    error,
-                );
+                console.error("Error getting importance statistics:", error);
                 return {
                     distribution: [],
                     recommendedLevel: 1,
@@ -1209,14 +1148,10 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             try {
                 return await forward("getTopicImportanceLayer", {
                     maxNodes: params.maxNodes,
-                    minImportanceThreshold:
-                        params.minImportanceThreshold,
+                    minImportanceThreshold: params.minImportanceThreshold,
                 });
             } catch (error) {
-                console.error(
-                    "Error getting topic importance layer:",
-                    error,
-                );
+                console.error("Error getting topic importance layer:", error);
                 return {
                     topics: [],
                     relationships: [],
@@ -1281,8 +1216,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             try {
                 return await forward("getEntityDetails", {
                     entityName:
-                        params.parameters?.entityName ||
-                        params.entityName,
+                        params.parameters?.entityName || params.entityName,
                 });
             } catch (error) {
                 console.error("Error getting entity details:", error);
@@ -1300,13 +1234,11 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             try {
                 return await forward("getTopicTimelines", {
                     topicNames:
-                        params.parameters?.topicNames ||
-                        params.topicNames,
+                        params.parameters?.topicNames || params.topicNames,
                     maxTimelineEntries:
                         params.parameters?.maxTimelineEntries ||
                         params.maxTimelineEntries,
-                    timeRange:
-                        params.parameters?.timeRange || params.timeRange,
+                    timeRange: params.parameters?.timeRange || params.timeRange,
                     includeRelatedTopics:
                         params.parameters?.includeRelatedTopics ??
                         params.includeRelatedTopics,
@@ -1431,10 +1363,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 ]);
                 return { enabled: settings.autoIndexing || false };
             } catch (error) {
-                console.error(
-                    "Failed to get auto-index setting:",
-                    error,
-                );
+                console.error("Failed to get auto-index setting:", error);
                 return { enabled: false };
             }
         },
@@ -1445,10 +1374,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     autoIndexing: params.enabled,
                 });
             } catch (error) {
-                console.error(
-                    "Failed to set auto-index setting:",
-                    error,
-                );
+                console.error("Failed to set auto-index setting:", error);
                 throw error;
             }
         },
@@ -1460,10 +1386,7 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 ]);
                 return settings.extractionSettings || null;
             } catch (error) {
-                console.error(
-                    "Failed to get extraction settings:",
-                    error,
-                );
+                console.error("Failed to get extraction settings:", error);
                 return null;
             }
         },
@@ -1477,19 +1400,13 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                         params.suggestQuestions,
                 });
             } catch (error) {
-                console.error(
-                    "Failed to save extraction settings:",
-                    error,
-                );
+                console.error("Failed to save extraction settings:", error);
                 throw error;
             }
         },
 
         async notifyAutoIndexSettingChanged(params: any) {
-            console.log(
-                "Auto-indexing setting changed:",
-                params.enabled,
-            );
+            console.log("Auto-indexing setting changed:", params.enabled);
             return { success: true };
         },
 

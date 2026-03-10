@@ -52,9 +52,7 @@ export class AgentWebSocketServer {
      * Set the invoke handlers for the agent service RPC.
      * These handlers will be registered for each new client connection.
      */
-    public setAgentInvokeHandlers(
-        handlers: BrowserAgentInvokeFunctions,
-    ): void {
+    public setAgentInvokeHandlers(handlers: BrowserAgentInvokeFunctions): void {
         this.agentInvokeHandlers = handlers;
     }
 

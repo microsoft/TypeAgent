@@ -7,9 +7,7 @@ export function broadcastEvent<K extends keyof ExtensionEventMap>(
     event: K,
     data: ExtensionEventMap[K],
 ): void {
-    chrome.runtime
-        .sendMessage({ type: "event", event, data })
-        .catch(() => {});
+    chrome.runtime.sendMessage({ type: "event", event, data }).catch(() => {});
 }
 
 export function onExtensionEvent<K extends keyof ExtensionEventMap>(
