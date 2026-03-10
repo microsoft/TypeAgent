@@ -204,6 +204,7 @@ async function getCommandParameterCompletion(
     );
 
     let agentInvoked = false;
+    let agentComplete: boolean | undefined;
     let separatorMode: SeparatorMode | undefined;
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion) {
@@ -262,6 +263,7 @@ async function getCommandParameterCompletion(
             completions.push(...agentResult.groups);
             separatorMode = agentResult.separatorMode;
             agentInvoked = true;
+            agentComplete = agentResult.complete;
             debug(
                 `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}, tokenStartIndex=${tokenStartIndex}`,
             );
@@ -269,15 +271,16 @@ async function getCommandParameterCompletion(
     }
 
     // Determine whether the completion set is exhaustive.
-    // Agent-provided completions are conservatively treated as
-    // non-exhaustive since agents cannot yet signal exhaustiveness.
+    // Agent-provided completions use the agent's self-reported
+    // exhaustiveness (via CompletionGroups.complete), defaulting to
+    // false when the agent doesn't set it.
     // When no agent is involved, completions are exhaustive if:
     //  - A pending boolean flag offers only ["true", "false"]
     //  - All positional args are filled and only enumerable flags remain
     // Otherwise free-form text parameters make the set non-exhaustive.
     let complete: boolean;
     if (agentInvoked) {
-        complete = false;
+        complete = agentComplete ?? false;
     } else if (pendingFlag !== undefined) {
         // A non-boolean pending flag accepts free-form values.
         // (Boolean flags are handled by getPendingFlag returning undefined

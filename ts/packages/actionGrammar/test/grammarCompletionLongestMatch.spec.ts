@@ -477,4 +477,182 @@ describe("Grammar Completion - longest match property", () => {
             expect(r2.matchedPrefixLength).toBe(r3.matchedPrefixLength);
         });
     });
+
+    describe("complete flag - exhaustiveness", () => {
+        describe("string-only completions are exhaustive", () => {
+            const g = [
+                `<Start> = play $(g:<Genre>) -> { genre: g };`,
+                `<Genre> = rock -> "rock";`,
+                `<Genre> = pop -> "pop";`,
+                `<Genre> = jazz -> "jazz";`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("complete=true for first string part on empty input", () => {
+                const result = matchGrammarCompletion(grammar, "");
+                expect(result.completions).toContain("play");
+                expect(result.complete).toBe(true);
+            });
+
+            it("complete=true for alternatives after prefix", () => {
+                const result = matchGrammarCompletion(grammar, "play");
+                expect(result.completions).toContain("rock");
+                expect(result.completions).toContain("pop");
+                expect(result.completions).toContain("jazz");
+                expect(result.complete).toBe(true);
+            });
+
+            it("complete=true for exact match (no completions)", () => {
+                const result = matchGrammarCompletion(grammar, "play rock");
+                expect(result.completions).toHaveLength(0);
+                expect(result.complete).toBe(true);
+            });
+        });
+
+        describe("wildcard/entity completions are not exhaustive", () => {
+            const g = [
+                `entity SongName;`,
+                `<Start> = play $(song:SongName) next -> { song };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("complete=false for entity wildcard property completion", () => {
+                const result = matchGrammarCompletion(grammar, "play");
+                expect(result.properties).toBeDefined();
+                expect(result.properties!.length).toBeGreaterThan(0);
+                expect(result.complete).toBe(false);
+            });
+
+            it("complete=true for string completion after wildcard", () => {
+                const result = matchGrammarCompletion(grammar, "play mysong");
+                expect(result.completions).toContain("next");
+                // The "next" keyword is the only valid continuation
+                // from the grammar — no property completions at this
+                // point — so completions are exhaustive.
+                expect(result.complete).toBe(true);
+            });
+        });
+
+        describe("untyped wildcard produces property completion → not exhaustive", () => {
+            const g = [
+                `<Start> = play $(name) by $(artist) -> { name, artist };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("complete=false for untyped wildcard property", () => {
+                const result = matchGrammarCompletion(grammar, "play");
+                expect(result.properties).toBeDefined();
+                expect(result.properties!.length).toBeGreaterThan(0);
+                expect(result.complete).toBe(false);
+            });
+
+            it("complete=true for 'by' keyword after wildcard captured", () => {
+                const result = matchGrammarCompletion(grammar, "play hello");
+                expect(result.completions).toContain("by");
+                expect(result.complete).toBe(true);
+            });
+        });
+
+        describe("mixed string and entity at same prefix length", () => {
+            // Two rules: one leads to string completion, one to entity.
+            // After matching "play", Rule 2 offers "shuffle" (string)
+            // and Rule 1 opens an entity wildcard (property).
+            // Both are at the same prefix length, so both should be
+            // present and complete should be false due to the entity.
+            const g = [
+                `entity SongName;`,
+                `<Start> = play shuffle -> { action: "shuffle" };`,
+                `<Start> = play $(song:SongName) -> { action: "search", song };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("complete=false when entity property is offered", () => {
+                const result = matchGrammarCompletion(grammar, "play");
+                // The string rule offers "shuffle" and the entity rule
+                // offers a property completion. Both are at prefix=4.
+                expect(result.matchedPrefixLength).toBe(4);
+                expect(result.properties).toBeDefined();
+                expect(result.properties!.length).toBeGreaterThan(0);
+                // Property completions make complete=false.
+                expect(result.complete).toBe(false);
+            });
+        });
+
+        describe("competing rules - longer match resets complete", () => {
+            const g = [
+                `entity SongName;`,
+                `<Start> = $(a:<A>) $(song:SongName) -> { a, song };`,
+                `<Start> = $(a:<A>) $(b:<B>) finish -> { a, b };`,
+                `<A> = alpha -> "a";`,
+                `<B> = bravo -> "b";`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("complete reflects longest prefix length result", () => {
+                const result = matchGrammarCompletion(grammar, "alpha bravo");
+                // Rule 2 matches alpha+bravo (11 chars) and offers "finish"
+                // (string → complete=true).
+                // Rule 1 matches alpha (5 chars) and offers entity
+                // (complete=false) — but this is at a shorter prefix
+                // length so it's discarded.
+                expect(result.completions).toContain("finish");
+                expect(result.matchedPrefixLength).toBe(11);
+                expect(result.complete).toBe(true);
+            });
+        });
+
+        describe("sequential parts - complete stays true throughout", () => {
+            const g = [
+                `<Start> = $(a:<A>) $(b:<B>) $(c:<C>) -> { a, b, c };`,
+                `<A> = first -> "a";`,
+                `<B> = second -> "b";`,
+                `<C> = third -> "c";`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("complete=true for first part", () => {
+                const result = matchGrammarCompletion(grammar, "");
+                expect(result.completions).toContain("first");
+                expect(result.complete).toBe(true);
+            });
+
+            it("complete=true for second part", () => {
+                const result = matchGrammarCompletion(grammar, "first");
+                expect(result.completions).toContain("second");
+                expect(result.complete).toBe(true);
+            });
+
+            it("complete=true for third part", () => {
+                const result = matchGrammarCompletion(grammar, "first second");
+                expect(result.completions).toContain("third");
+                expect(result.complete).toBe(true);
+            });
+
+            it("complete=true for exact full match", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "first second third",
+                );
+                expect(result.completions).toHaveLength(0);
+                expect(result.complete).toBe(true);
+            });
+        });
+
+        describe("optional parts", () => {
+            const g = [
+                `<Start> = $(a:<A>) $(b:<B>)? $(c:<C>) -> { a, c };`,
+                `<A> = begin -> "a";`,
+                `<B> = middle -> "b";`,
+                `<C> = finish -> "c";`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("complete=true for alternatives after optional", () => {
+                const result = matchGrammarCompletion(grammar, "begin");
+                expect(result.completions).toContain("middle");
+                expect(result.completions).toContain("finish");
+                expect(result.complete).toBe(true);
+            });
+        });
+    });
 });

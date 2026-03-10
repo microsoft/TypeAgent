@@ -88,6 +88,12 @@ export type CompletionGroups = {
     // the completion text.  When omitted, defaults to "space" (whitespace
     // required before completions are shown).  See SeparatorMode.
     separatorMode?: SeparatorMode | undefined;
+    // True when the completions are the exhaustive set of valid
+    // continuations after the matched prefix.  When true and the user
+    // types something that doesn't prefix-match any completion, the
+    // caller can skip re-fetching.  False or undefined means additional
+    // valid inputs may exist beyond what is listed.
+    complete?: boolean | undefined;
 };
 
 export interface AppAgentCommandInterface {

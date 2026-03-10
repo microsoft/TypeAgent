@@ -297,6 +297,7 @@ export class GrammarStoreImpl implements GrammarStore {
         const properties: CompletionProperty[] = [];
         let matchedPrefixLength = 0;
         let separatorMode: SeparatorMode | undefined;
+        let complete: boolean | undefined;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -376,14 +377,14 @@ export class GrammarStoreImpl implements GrammarStore {
                     requestPrefix ?? "",
                     matchedPrefixLength,
                 );
-                const partialPrefixLength =
-                    partial.matchedPrefixLength ?? 0;
+                const partialPrefixLength = partial.matchedPrefixLength ?? 0;
                 if (partialPrefixLength > matchedPrefixLength) {
                     // Longer prefix — discard shorter-match results.
                     matchedPrefixLength = partialPrefixLength;
                     completions.length = 0;
                     properties.length = 0;
                     separatorMode = undefined;
+                    complete = undefined;
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);
@@ -393,12 +394,19 @@ export class GrammarStoreImpl implements GrammarStore {
                             partial.separatorMode,
                         );
                     }
+                    // AND-merge: exhaustive only when all grammar
+                    // results at this prefix length are exhaustive.
+                    if (partial.complete !== undefined) {
+                        complete =
+                            complete === undefined
+                                ? partial.complete
+                                : complete && partial.complete;
+                    }
                     if (
                         partial.properties !== undefined &&
                         partial.properties.length > 0
                     ) {
-                        const { schemaName } =
-                            splitSchemaNamespaceKey(name);
+                        const { schemaName } = splitSchemaNamespaceKey(name);
                         for (const p of partial.properties) {
                             const action: any = p.match;
                             properties.push({
@@ -422,6 +430,7 @@ export class GrammarStoreImpl implements GrammarStore {
             properties,
             matchedPrefixLength,
             separatorMode,
+            complete,
         };
     }
 }

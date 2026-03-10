@@ -97,6 +97,7 @@ export async function requestCompletion(
 
     const prefixLength = results.matchedPrefixLength;
     const separatorMode = results.separatorMode;
+    const complete = results.complete;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -108,7 +109,7 @@ export async function requestCompletion(
     }
 
     if (results.properties === undefined) {
-        return { groups: completions, prefixLength, separatorMode };
+        return { groups: completions, prefixLength, separatorMode, complete };
     }
 
     const propertyCompletions = new Map<string, CompletionGroup>();
@@ -128,7 +129,7 @@ export async function requestCompletion(
     }
 
     completions.push(...propertyCompletions.values());
-    return { groups: completions, prefixLength, separatorMode };
+    return { groups: completions, prefixLength, separatorMode, complete };
 }
 
 async function collectActionCompletions(

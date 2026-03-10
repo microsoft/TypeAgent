@@ -1094,6 +1094,12 @@ export type GrammarCompletionResult = {
     //   "none" — no separator at all ([spacing=none] grammars).
     // Omitted when no completions were generated.
     separatorMode?: GrammarSeparatorMode | undefined;
+    // True when `completions` is the exhaustive set of valid
+    // continuations after the matched prefix.  False or undefined
+    // means additional valid inputs may exist that are not listed
+    // (e.g. wildcard/entity slots whose values are external to the
+    // grammar).
+    complete?: boolean | undefined;
 };
 
 function getGrammarCompletionProperty(
@@ -1221,6 +1227,13 @@ export function matchGrammarCompletion(
     const properties: GrammarCompletionProperty[] = [];
     let separatorMode: GrammarSeparatorMode | undefined;
 
+    // Whether the accumulated completions are the exhaustive set of valid
+    // continuations.  Starts true and is set to false when property/wildcard
+    // completions are emitted (entity values are external to the grammar).
+    // Reset to true whenever maxPrefixLength advances (old candidates are
+    // discarded, new batch starts fresh).
+    let complete: boolean = true;
+
     // Track the furthest point the grammar consumed across all
     // states (including exact matches).  This tells the caller where
     // the "filter text" begins so it doesn't have to guess from
@@ -1236,6 +1249,7 @@ export function matchGrammarCompletion(
             completions.length = 0;
             properties.length = 0;
             separatorMode = undefined;
+            complete = true;
         }
     }
 
@@ -1381,6 +1395,9 @@ export function matchGrammarCompletion(
                             candidateNeedsSep,
                             state.spacingMode,
                         );
+                        // Property/wildcard completions are not exhaustive
+                        // — entity values are external to the grammar.
+                        complete = false;
                     }
                 }
             } else if (!matched) {
@@ -1440,6 +1457,7 @@ export function matchGrammarCompletion(
         properties,
         matchedPrefixLength: maxPrefixLength,
         separatorMode,
+        complete,
     };
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
     return result;

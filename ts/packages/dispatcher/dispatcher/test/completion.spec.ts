@@ -255,6 +255,92 @@ const handlers = {
                 return grammarCompletion(lastToken);
             },
         },
+        exhaustive: {
+            description: "Agent returns complete=true",
+            parameters: {
+                args: {
+                    color: {
+                        description: "A color",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("color")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "Colors",
+                            completions: ["red", "green", "blue"],
+                        },
+                    ],
+                    complete: true,
+                };
+            },
+        },
+        nonexhaustive: {
+            description: "Agent returns complete=false",
+            parameters: {
+                args: {
+                    item: {
+                        description: "An item",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("item")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "Items",
+                            completions: ["apple", "banana"],
+                        },
+                    ],
+                    complete: false,
+                };
+            },
+        },
+        nocompletefield: {
+            description: "Agent does not set complete",
+            parameters: {
+                args: {
+                    thing: {
+                        description: "A thing",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("thing")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "Things",
+                            completions: ["widget", "gadget"],
+                        },
+                    ],
+                };
+            },
+        },
     },
 } as const;
 
@@ -669,13 +755,57 @@ describe("Command Completion - startIndex", () => {
             expect(result!.complete).toBe(false);
         });
 
-        it("complete=false when agent completions are invoked", async () => {
+        it("complete=false when agent completions are invoked without complete flag", async () => {
             const result = await getCommandCompletion(
                 "@comptest run ",
                 context,
             );
             expect(result).toBeDefined();
-            // Agent getCompletion is invoked → conservatively not exhaustive.
+            // Agent getCompletion is invoked but does not set complete →
+            // defaults to false.
+            expect(result!.complete).toBe(false);
+        });
+
+        it("complete=true when agent returns complete=true", async () => {
+            const result = await getCommandCompletion(
+                "@comptest exhaustive ",
+                context,
+            );
+            expect(result).toBeDefined();
+            const colors = result!.completions.find((g) => g.name === "Colors");
+            expect(colors).toBeDefined();
+            expect(colors!.completions).toContain("red");
+            expect(colors!.completions).toContain("green");
+            expect(colors!.completions).toContain("blue");
+            // Agent explicitly signals exhaustive completions.
+            expect(result!.complete).toBe(true);
+        });
+
+        it("complete=false when agent returns complete=false", async () => {
+            const result = await getCommandCompletion(
+                "@comptest nonexhaustive ",
+                context,
+            );
+            expect(result).toBeDefined();
+            const items = result!.completions.find((g) => g.name === "Items");
+            expect(items).toBeDefined();
+            expect(items!.completions).toContain("apple");
+            expect(items!.completions).toContain("banana");
+            // Agent explicitly signals non-exhaustive.
+            expect(result!.complete).toBe(false);
+        });
+
+        it("complete=false when agent does not set complete field", async () => {
+            const result = await getCommandCompletion(
+                "@comptest nocompletefield ",
+                context,
+            );
+            expect(result).toBeDefined();
+            const things = result!.completions.find((g) => g.name === "Things");
+            expect(things).toBeDefined();
+            expect(things!.completions).toContain("widget");
+            expect(things!.completions).toContain("gadget");
+            // Agent omits complete → defaults to false.
             expect(result!.complete).toBe(false);
         });
 

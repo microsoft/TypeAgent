@@ -79,6 +79,10 @@ export type CompletionResult = {
     // What kind of separator is required between the already-typed prefix
     // and the completion text.  See SeparatorMode in @typeagent/agent-sdk.
     separatorMode?: SeparatorMode | undefined;
+    // True when the completions are the exhaustive set of valid
+    // continuations.  False or undefined means additional valid inputs
+    // may exist beyond what is listed.
+    complete?: boolean | undefined;
 };
 
 export function mergeCompletionResults(
@@ -114,6 +118,11 @@ export function mergeCompletionResults(
             first.separatorMode,
             second.separatorMode,
         ),
+        // Exhaustive only when both sources are exhaustive.
+        complete:
+            first.complete !== undefined || second.complete !== undefined
+                ? (first.complete ?? false) && (second.complete ?? false)
+                : undefined,
     };
 }
 
