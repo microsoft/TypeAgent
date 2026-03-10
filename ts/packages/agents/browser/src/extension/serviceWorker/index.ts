@@ -59,6 +59,18 @@ export async function initialize(): Promise<void> {
  * Sets up all event listeners
  */
 function setupEventListeners(): void {
+    // Handle simple content script messages (not RPC)
+    chrome.runtime.onMessage.addListener(
+        (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+            if (message.type === "getTabId") {
+                sendResponse({
+                    tabId: sender.tab?.id ? String(sender.tab.id) : null,
+                });
+                return false;
+            }
+        },
+    );
+
     // Browser action click
     chrome.action?.onClicked.addListener(async (tab) => {
         try {
