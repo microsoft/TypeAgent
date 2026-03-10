@@ -134,9 +134,9 @@ export class AgentWebSocketServer {
         this.clients.set(clientId, client);
         debug(`Client connected: ${clientId} (${client.type})`);
 
-        if (!this.activeClientId) {
-            this.selectActiveClient(this.getPreferredClientType?.());
-        }
+        // Always re-evaluate active client when a new client connects
+        // This ensures preferred client type takes precedence when it connects
+        this.selectActiveClient(this.getPreferredClientType?.());
 
         ws.send(
             JSON.stringify({
@@ -207,14 +207,21 @@ export class AgentWebSocketServer {
         preferredClientType?: "extension" | "electron",
     ): void {
         if (preferredClientType) {
+            // If preferred type is set, ONLY allow that type to become active
             for (const [id, client] of this.clients) {
                 if (client.type === preferredClientType) {
                     this.setActiveClient(id);
                     return;
                 }
             }
+            // Preferred type not found - don't set any active client, wait for it
+            debug(
+                `Preferred client type '${preferredClientType}' not available yet, waiting...`,
+            );
+            return;
         }
 
+        // No preferred type - use default priority: electron > extension > any
         for (const [id, client] of this.clients) {
             if (client.type === "electron") {
                 this.setActiveClient(id);
