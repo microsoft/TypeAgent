@@ -3,6 +3,19 @@
 
 import { WebSocketServer, WebSocket } from "ws";
 import { IncomingMessage } from "http";
+import {
+    createChannelProviderAdapter,
+    type ChannelProviderAdapter,
+} from "@typeagent/agent-rpc/channel";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
+import type {
+    BrowserAgentInvokeFunctions,
+    BrowserAgentCallFunctions,
+} from "../common/serviceTypes.mjs";
+import type {
+    BrowserControlInvokeFunctions,
+    BrowserControlCallFunctions,
+} from "../common/browserControl.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:agent-ws");
@@ -14,21 +27,33 @@ export interface BrowserClient {
     socket: WebSocket;
     connectedAt: Date;
     lastActivity: Date;
+    channelProvider?: ChannelProviderAdapter;
+    agentRpc?: any;
+    browserControlRpc?: any;
 }
 
 export class AgentWebSocketServer {
     private server: WebSocketServer;
     private clients = new Map<string, BrowserClient>();
     private activeClientId: string | null = null;
-    public onClientMessage?: (client: BrowserClient, message: string) => void;
+    public onWebAgentMessage?: (client: BrowserClient, data: any) => void;
     public getPreferredClientType?: () => "extension" | "electron" | undefined;
     public onClientConnected?: (client: BrowserClient) => void;
     public onClientDisconnected?: (client: BrowserClient) => void;
+    private agentInvokeHandlers?: BrowserAgentInvokeFunctions;
 
     constructor(port: number = 8081) {
         this.server = new WebSocketServer({ port });
         this.setupHandlers();
         debug(`Agent WebSocket server started on port ${port}`);
+    }
+
+    /**
+     * Set the invoke handlers for the agent service RPC.
+     * These handlers will be registered for each new client connection.
+     */
+    public setAgentInvokeHandlers(handlers: BrowserAgentInvokeFunctions): void {
+        this.agentInvokeHandlers = handlers;
     }
 
     private setupHandlers(): void {
@@ -54,9 +79,46 @@ export class AgentWebSocketServer {
         const existing = this.clients.get(clientId);
         if (existing) {
             debug(`Closing duplicate connection for ${clientId}`);
+            if (existing.channelProvider) {
+                existing.channelProvider.notifyDisconnected();
+            }
             existing.socket.close(1013, "duplicate");
             this.clients.delete(clientId);
         }
+
+        // Create channel provider for this client connection
+        const clientChannelProvider = createChannelProviderAdapter(
+            `agent:${clientId}`,
+            (message: any) => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify(message));
+                }
+            },
+        );
+
+        // Set up agentService RPC channel for this client
+        let clientAgentRpc: any | undefined;
+        if (this.agentInvokeHandlers) {
+            const agentServiceChannel =
+                clientChannelProvider.createChannel("agentService");
+            clientAgentRpc = createRpc<
+                {},
+                BrowserAgentCallFunctions,
+                BrowserAgentInvokeFunctions
+            >(
+                `agent:service:${clientId}`,
+                agentServiceChannel,
+                this.agentInvokeHandlers,
+            );
+        }
+
+        // Set up browserControl RPC channel for this client
+        const browserControlChannel =
+            clientChannelProvider.createChannel("browserControl");
+        const clientBrowserControlRpc = createRpc<
+            BrowserControlInvokeFunctions,
+            BrowserControlCallFunctions
+        >(`browser:control:${clientId}`, browserControlChannel);
 
         const client: BrowserClient = {
             id: clientId,
@@ -64,6 +126,9 @@ export class AgentWebSocketServer {
             socket: ws,
             connectedAt: new Date(),
             lastActivity: new Date(),
+            channelProvider: clientChannelProvider,
+            agentRpc: clientAgentRpc,
+            browserControlRpc: clientBrowserControlRpc,
         };
 
         this.clients.set(clientId, client);
@@ -81,7 +146,6 @@ export class AgentWebSocketServer {
             }),
         );
 
-        // Notify about new client connection
         if (this.onClientConnected) {
             this.onClientConnected(client);
         }
@@ -89,27 +153,42 @@ export class AgentWebSocketServer {
         ws.on("message", (message: string) => {
             client.lastActivity = new Date();
 
+            let data: any;
             try {
-                const data = JSON.parse(message);
-                if (
-                    data.method === "keepAlive" ||
-                    data.messageType === "keepAlive"
-                ) {
-                    return;
-                }
-            } catch {}
+                data = JSON.parse(message);
+            } catch {
+                return;
+            }
 
-            if (this.onClientMessage) {
-                this.onClientMessage(client, message);
+            // Filter keepalive messages
+            if (
+                data.method === "keepAlive" ||
+                data.messageType === "keepAlive"
+            ) {
+                return;
+            }
+
+            // Channel-multiplexed format (from createChannelProviderAdapter)
+            if (data.name !== undefined) {
+                clientChannelProvider.notifyMessage(data);
+                return;
+            }
+
+            // Web agent messages (forwarded from content scripts)
+            if (data.source === "webAgent" && this.onWebAgentMessage) {
+                this.onWebAgentMessage(client, data);
             }
         });
 
         ws.on("close", () => {
             debug(`Client disconnected: ${clientId}`);
 
-            // Notify about client disconnection before removing from clients map
             if (this.onClientDisconnected) {
                 this.onClientDisconnected(client);
+            }
+
+            if (client.channelProvider) {
+                client.channelProvider.notifyDisconnected();
             }
 
             this.clients.delete(clientId);
@@ -127,7 +206,6 @@ export class AgentWebSocketServer {
     public selectActiveClient(
         preferredClientType?: "extension" | "electron",
     ): void {
-        // If we have a preferred client type, use it
         if (preferredClientType) {
             for (const [id, client] of this.clients) {
                 if (client.type === preferredClientType) {
@@ -137,7 +215,6 @@ export class AgentWebSocketServer {
             }
         }
 
-        // Default behavior: prefer electron over extension
         for (const [id, client] of this.clients) {
             if (client.type === "electron") {
                 this.setActiveClient(id);
@@ -145,7 +222,6 @@ export class AgentWebSocketServer {
             }
         }
 
-        // Fallback to first available client
         const firstClient = this.clients.keys().next();
         this.activeClientId = firstClient.done ? null : firstClient.value;
 
@@ -165,7 +241,6 @@ export class AgentWebSocketServer {
             `getActiveClient: fallbackType=${fallbackType}, activeClientId=${this.activeClientId}`,
         );
 
-        // First try to get the currently active client
         const activeClient = this.activeClientId
             ? this.clients.get(this.activeClientId) || null
             : null;
@@ -178,8 +253,6 @@ export class AgentWebSocketServer {
             debugClientRouting(`getActiveClient: No active client found`);
         }
 
-        // If we have an active client and either no fallback type specified
-        // or the active client matches the fallback type, return it
         if (
             activeClient &&
             (!fallbackType || activeClient.type === fallbackType)
@@ -190,7 +263,6 @@ export class AgentWebSocketServer {
             return activeClient;
         }
 
-        // If we need a specific type and active client doesn't match, find one
         if (fallbackType) {
             debugClientRouting(
                 `getActiveClient: Active client doesn't match fallbackType='${fallbackType}', searching for matching client`,
@@ -208,8 +280,6 @@ export class AgentWebSocketServer {
             );
         }
 
-        // Return the active client even if it doesn't match the fallback type,
-        // or null if there's no active client
         debugClientRouting(
             `getActiveClient: Returning ${activeClient ? `active client type='${activeClient.type}'` : "null"} as final fallback`,
         );
@@ -243,19 +313,33 @@ export class AgentWebSocketServer {
         return false;
     }
 
-    public sendToClient(clientId: string, message: string): boolean {
+    /**
+     * Send a fire-and-forget event to a client via agentRpc.
+     * This replaces the legacy pattern of sending raw JSON messages for progress events.
+     */
+    public sendEventToClient<K extends keyof BrowserAgentCallFunctions>(
+        clientId: string,
+        event: K,
+        ...args: Parameters<BrowserAgentCallFunctions[K]>
+    ): boolean {
         const client = this.clients.get(clientId);
-        if (client && client.socket.readyState === WebSocket.OPEN) {
-            client.socket.send(message);
+        if (client?.agentRpc) {
+            (client.agentRpc.send as any)(event, ...args);
             return true;
         }
         return false;
     }
 
-    public sendToActiveClient(message: string): boolean {
+    /**
+     * Send a fire-and-forget event to the active client via agentRpc.
+     */
+    public sendEventToActiveClient<K extends keyof BrowserAgentCallFunctions>(
+        event: K,
+        ...args: Parameters<BrowserAgentCallFunctions[K]>
+    ): boolean {
         const client = this.getActiveClient();
-        if (client && client.socket.readyState === WebSocket.OPEN) {
-            client.socket.send(message);
+        if (client?.agentRpc) {
+            (client.agentRpc.send as any)(event, ...args);
             return true;
         }
         return false;

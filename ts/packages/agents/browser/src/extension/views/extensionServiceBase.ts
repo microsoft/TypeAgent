@@ -114,7 +114,8 @@ export interface EntityMatch {
 }
 
 /**
- * Abstract base class for extension services
+ * Abstract base class for extension services.
+ * Subclasses route messages through typed RPC clients internally.
  */
 export abstract class ExtensionServiceBase {
     // ===================================================================

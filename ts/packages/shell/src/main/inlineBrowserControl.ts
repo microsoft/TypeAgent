@@ -575,6 +575,15 @@ export function createInlineBrowserControl(
             );
             return filePath;
         },
+        async runBrowserAction(
+            actionName: string,
+            _parameters: any,
+            _schemaName?: string,
+        ): Promise<any> {
+            throw new Error(
+                `runBrowserAction not implemented for inline browser: ${actionName}`,
+            );
+        },
     };
     return {
         control,

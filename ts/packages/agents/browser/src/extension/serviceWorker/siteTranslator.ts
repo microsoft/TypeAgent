@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ensureWebsocketConnected, getWebSocket } from "./websocket";
+import { ensureWebsocketConnected, sendActionToAgent } from "./websocket";
 
 let currentSiteTranslator = "";
 let currentCrosswordUrl = "";
@@ -25,19 +25,15 @@ export async function toggleSiteTranslator(
             currentSiteTranslator = schemaName;
         }
 
-        // Trigger translator change if WebSocket is open
-        const webSocket = getWebSocket();
-        if (
-            webSocket &&
-            webSocket.readyState === WebSocket.OPEN &&
-            schemaName
-        ) {
-            webSocket.send(
-                JSON.stringify({
-                    method: method,
-                    params: { translator: schemaName },
-                }),
-            );
+        if (schemaName) {
+            try {
+                await sendActionToAgent({
+                    actionName: method,
+                    parameters: { translator: schemaName },
+                });
+            } catch (error) {
+                console.error("Failed to send site translator action:", error);
+            }
         }
     }
 }

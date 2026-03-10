@@ -65,7 +65,7 @@ function handleUserMessage(text: string) {
 
     chrome.runtime
         .sendMessage({
-            type: "chatPanel:processCommand",
+            type: "chatPanelProcessCommand",
             command: text,
             clientRequestId: requestId,
         })
@@ -176,7 +176,7 @@ function handleServiceWorkerMessage(message: any): void {
  */
 function attemptConnect() {
     chrome.runtime
-        .sendMessage({ type: "chatPanel:connect" })
+        .sendMessage({ type: "chatPanelConnect" })
         .then((response) => {
             if (response?.connected) {
                 setConnectionStatus(true);

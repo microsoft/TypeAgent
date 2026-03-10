@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { sendActionToAgent } from "./websocket";
-import { getWebSocket } from "./websocket";
 
 /**
  * Initializes the context menu items
