@@ -554,26 +554,37 @@ describe("Grammar Completion - longest match property", () => {
         });
 
         describe("mixed string and entity at same prefix length", () => {
-            // Two rules: one leads to string completion, one to entity.
-            // After matching "play", Rule 2 offers "shuffle" (string)
-            // and Rule 1 opens an entity wildcard (property).
-            // Both are at the same prefix length, so both should be
-            // present and complete should be false due to the entity.
-            const g = [
-                `entity SongName;`,
-                `<Start> = play shuffle -> { action: "shuffle" };`,
-                `<Start> = play $(song:SongName) -> { action: "search", song };`,
-            ].join("\n");
-            const grammar = loadGrammarRules("test.grammar", g);
+            // Two rules sharing "play" prefix: one leads to string
+            // completion ("shuffle"), one to entity property.
+            // Both completions should be present regardless of rule order.
 
-            it("complete=false when entity property is offered", () => {
+            it("entity rule first, string rule second", () => {
+                const g = [
+                    `entity SongName;`,
+                    `<Start> = play $(song:SongName) -> { action: "search", song };`,
+                    `<Start> = play shuffle -> { action: "shuffle" };`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
                 const result = matchGrammarCompletion(grammar, "play");
-                // The string rule offers "shuffle" and the entity rule
-                // offers a property completion. Both are at prefix=4.
                 expect(result.matchedPrefixLength).toBe(4);
+                expect(result.completions).toContain("shuffle");
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
-                // Property completions make complete=false.
+                expect(result.complete).toBe(false);
+            });
+
+            it("string rule first, entity rule second", () => {
+                const g = [
+                    `entity SongName;`,
+                    `<Start> = play shuffle -> { action: "shuffle" };`,
+                    `<Start> = play $(song:SongName) -> { action: "search", song };`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+                const result = matchGrammarCompletion(grammar, "play");
+                expect(result.matchedPrefixLength).toBe(4);
+                expect(result.completions).toContain("shuffle");
+                expect(result.properties).toBeDefined();
+                expect(result.properties!.length).toBeGreaterThan(0);
                 expect(result.complete).toBe(false);
             });
         });

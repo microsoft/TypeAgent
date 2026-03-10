@@ -6,34 +6,38 @@ import { matchGrammarCompletion } from "../src/grammarMatcher.js";
 
 describe("Grammar Completion - matchedPrefixLength", () => {
     describe("single string part", () => {
-        // All words in one string part — matchedPrefixLength is always 0
-        // because the completion is the full string part text.
+        // All words in one string part — when no leading words match,
+        // matchedPrefixLength is 0 and only the first word is offered
+        // as a completion.  When leading words match, matchedPrefixLength
+        // advances and only the remaining words are offered.
         const g = `<Start> = play music -> true;`;
         const grammar = loadGrammarRules("test.grammar", g);
 
-        it("returns full part as completion for empty input", () => {
+        it("returns first word as completion for empty input", () => {
             const result = matchGrammarCompletion(grammar, "");
-            expect(result.completions).toEqual(["play music"]);
+            expect(result.completions).toEqual(["play"]);
             expect(result.matchedPrefixLength).toBe(0);
         });
 
-        it("returns full part as completion for partial prefix", () => {
+        it("returns first word as completion for partial prefix", () => {
             const result = matchGrammarCompletion(grammar, "pl");
-            expect(result.completions).toEqual(["play music"]);
+            expect(result.completions).toEqual(["play"]);
             expect(result.matchedPrefixLength).toBe(0);
         });
 
-        it("returns full part as completion for first word typed", () => {
+        it("returns remaining words as completion for first word typed", () => {
             const result = matchGrammarCompletion(grammar, "play ");
-            expect(result.completions).toEqual(["play music"]);
-            expect(result.matchedPrefixLength).toBe(0);
+            // tryPartialStringMatch splits the multi-word part: "play"
+            // is consumed (4 chars), "music" remains as the completion.
+            expect(result.completions).toEqual(["music"]);
+            expect(result.matchedPrefixLength).toBe(4);
         });
 
-        it("returns all first parts for non-matching input", () => {
+        it("returns first word for non-matching input", () => {
             const result = matchGrammarCompletion(grammar, "xyz");
-            // Nothing consumed; the first string part is offered
-            // unconditionally so the caller can filter by trailing text.
-            expect(result.completions).toEqual(["play music"]);
+            // Nothing consumed; only the first word of the string part is
+            // offered so the caller can filter by trailing text.
+            expect(result.completions).toEqual(["play"]);
             expect(result.matchedPrefixLength).toBe(0);
         });
 
@@ -186,20 +190,23 @@ describe("Grammar Completion - matchedPrefixLength", () => {
     });
 
     describe("CJK single string part", () => {
-        // Single string part — matchedPrefixLength is 0 (all text in one part)
+        // Single string part — only the first word is offered initially.
+        // After the first word matches, the remaining words are offered.
         const g = `<Start> [spacing=auto] = 再生 音楽 -> true;`;
         const grammar = loadGrammarRules("test.grammar", g);
 
-        it("returns full part for empty input", () => {
+        it("returns first word for empty input", () => {
             const result = matchGrammarCompletion(grammar, "");
-            expect(result.completions).toEqual(["再生 音楽"]);
+            expect(result.completions).toEqual(["再生"]);
             expect(result.matchedPrefixLength).toBe(0);
         });
 
-        it("returns full part for partial CJK prefix", () => {
+        it("returns remaining words for partial CJK prefix", () => {
             const result = matchGrammarCompletion(grammar, "再生");
-            expect(result.completions).toEqual(["再生 音楽"]);
-            expect(result.matchedPrefixLength).toBe(0);
+            // tryPartialStringMatch splits the multi-word part: "再生"
+            // is consumed (2 chars), "音楽" remains as the completion.
+            expect(result.completions).toEqual(["音楽"]);
+            expect(result.matchedPrefixLength).toBe(2);
         });
     });
 

@@ -1207,6 +1207,60 @@ export function matchGrammar(grammar: Grammar, request: string) {
  * determined by the spacing rules between the last character of the
  * matched prefix and the first character of the completion.
  */
+/**
+ * Try to partially match leading words of a multi-word string part
+ * against the prefix starting at `startIndex`.  Returns the consumed
+ * length and the remaining (unmatched) words as the completion text.
+ *
+ * - All words matched → returns undefined (caller should treat as
+ *   a full match, not a completion candidate).
+ * - Some words matched → returns consumed length + next word.
+ * - No words matched → returns startIndex + first word.
+ *
+ * Always returns exactly one word as the completion text,
+ * providing one-word-at-a-time progression.
+ */
+function tryPartialStringMatch(
+    part: StringPart,
+    prefix: string,
+    startIndex: number,
+    spacingMode: CompiledSpacingMode,
+): { consumedLength: number; remainingText: string } | undefined {
+    const words = part.value;
+    let index = startIndex;
+    let matchedWords = 0;
+
+    for (const word of words) {
+        const escaped = escapeMatch(word);
+        const regExpStr =
+            spacingMode === "none"
+                ? escaped
+                : `[${separatorRegExpStr}]*?${escaped}`;
+        const re = new RegExp(regExpStr, "iuy");
+        re.lastIndex = index;
+        const m = re.exec(prefix);
+        if (m === null) {
+            break;
+        }
+        const newIndex = m.index + m[0].length;
+        if (!isBoundarySatisfied(prefix, newIndex, spacingMode)) {
+            break;
+        }
+        index = newIndex;
+        matchedWords++;
+    }
+
+    // No partial match found — either zero or all words matched
+    if (matchedWords >= words.length) {
+        return undefined;
+    }
+
+    return {
+        consumedLength: index,
+        remainingText: words[matchedWords],
+    };
+}
+
 export function matchGrammarCompletion(
     grammar: Grammar,
     prefix: string,
@@ -1293,46 +1347,48 @@ export function matchGrammarCompletion(
 
             debugCompletion(`Completing ${nextPart.type} part ${state.name}`);
             if (nextPart.type === "string") {
-                updateMaxPrefixLength(state.index);
-                if (state.index === maxPrefixLength) {
-                    // The next expected part is a literal keyword string.
-                    // Offer it as a completion (e.g. "music" after "play").
-                    const completionText = nextPart.value.join(" ");
-                    debugCompletion(
-                        `Adding completion text: "${completionText}" (consumed ${state.index} chars, spacing=${state.spacingMode ?? "auto"})`,
-                    );
+                // Use tryPartialStringMatch for one-word-at-a-time
+                // progression through string parts.
+                const partial = tryPartialStringMatch(
+                    nextPart,
+                    prefix,
+                    state.index,
+                    state.spacingMode,
+                );
+                if (partial !== undefined) {
+                    const candidatePrefixLength = partial.consumedLength;
+                    const completionText = partial.remainingText;
+                    updateMaxPrefixLength(candidatePrefixLength);
+                    if (candidatePrefixLength === maxPrefixLength) {
+                        debugCompletion(
+                            `Adding completion text: "${completionText}" (consumed ${candidatePrefixLength} chars, spacing=${state.spacingMode ?? "auto"})`,
+                        );
 
-                    // Determine whether a separator (e.g. space) is needed
-                    // between the content at matchedPrefixLength and the
-                    // completion text.  Check the boundary between the last
-                    // consumed character and the first character of the
-                    // completion.  This is purely a property of the
-                    // boundary — it does not account for any unmatched
-                    // trailing content the user may have typed beyond
-                    // matchedPrefixLength (e.g. a trailing space).
-                    // Example: prefix="play"  completion="music" → true (Latin).
-                    // Example: prefix="play " completion="music" → true (matched
-                    //   prefix is "play"; separator still needed at that boundary).
-                    // Example: prefix="再生" completion="音楽" → false (CJK).
-                    let candidateNeedsSep = false;
-                    if (
-                        state.index > 0 &&
-                        completionText.length > 0 &&
-                        state.spacingMode !== "none"
-                    ) {
-                        candidateNeedsSep = requiresSeparator(
-                            prefix[state.index - 1],
-                            completionText[0],
+                        // Determine whether a separator (e.g. space) is needed
+                        // between the content at matchedPrefixLength and the
+                        // completion text.  Check the boundary between the last
+                        // consumed character and the first character of the
+                        // completion.
+                        let candidateNeedsSep = false;
+                        if (
+                            candidatePrefixLength > 0 &&
+                            completionText.length > 0 &&
+                            state.spacingMode !== "none"
+                        ) {
+                            candidateNeedsSep = requiresSeparator(
+                                prefix[candidatePrefixLength - 1],
+                                completionText[0],
+                                state.spacingMode,
+                            );
+                        }
+
+                        completions.push(completionText);
+                        separatorMode = mergeSeparatorMode(
+                            separatorMode,
+                            candidateNeedsSep,
                             state.spacingMode,
                         );
                     }
-
-                    completions.push(completionText);
-                    separatorMode = mergeSeparatorMode(
-                        separatorMode,
-                        candidateNeedsSep,
-                        state.spacingMode,
-                    );
                 }
             }
             // Note: non-string next parts (wildcard, number, rules) in
@@ -1416,11 +1472,27 @@ export function matchGrammarCompletion(
                     currentPart !== undefined &&
                     currentPart.type === "string"
                 ) {
-                    updateMaxPrefixLength(state.index);
-                    if (state.index === maxPrefixLength) {
-                        const fullText = currentPart.value.join(" ");
+                    // For multi-word string parts (e.g. ["play", "shuffle"]),
+                    // the all-at-once regex may have failed even though some
+                    // leading words DO match the prefix.  Try word-by-word
+                    // to recover the partial match and offer only the next
+                    // unmatched word as the completion (one word at a time).
+                    const partial = tryPartialStringMatch(
+                        currentPart,
+                        prefix,
+                        state.index,
+                        state.spacingMode,
+                    );
+                    if (partial === undefined) {
+                        continue;
+                    }
+                    const candidatePrefixLength = partial.consumedLength;
+                    const completionText = partial.remainingText;
+
+                    updateMaxPrefixLength(candidatePrefixLength);
+                    if (candidatePrefixLength === maxPrefixLength) {
                         debugCompletion(
-                            `Adding completion: "${fullText}" (consumed ${state.index} chars)`,
+                            `Adding completion: "${completionText}" (consumed ${candidatePrefixLength} chars)`,
                         );
 
                         // Determine whether a separator is needed between
@@ -1429,18 +1501,18 @@ export function matchGrammarCompletion(
                         // and the first character of the completion.
                         let candidateNeedsSep = false;
                         if (
-                            state.index > 0 &&
-                            fullText.length > 0 &&
+                            candidatePrefixLength > 0 &&
+                            completionText.length > 0 &&
                             state.spacingMode !== "none"
                         ) {
                             candidateNeedsSep = requiresSeparator(
-                                prefix[state.index - 1],
-                                fullText[0],
+                                prefix[candidatePrefixLength - 1],
+                                completionText[0],
                                 state.spacingMode,
                             );
                         }
 
-                        completions.push(fullText);
+                        completions.push(completionText);
                         separatorMode = mergeSeparatorMode(
                             separatorMode,
                             candidateNeedsSep,
