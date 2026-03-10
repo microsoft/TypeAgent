@@ -26,6 +26,7 @@
   "main": "index.js",
   "scripts": {
     "agc": "agc -i ./src/agent/browserSchema.agr -o ./dist/agent/browserSchema.ag.json",
+    "agc:crossword": "agc -i ./src/extension/webagent/crossword/crosswordSchema.agr -o ./dist/extension/webagent/crossword/crosswordSchema.ag.json",
     "asc": "asc -i ./src/agent/browserActionSchema.mts -o ./dist/agent/browserSchema.pas.json -t BrowserActions -e BrowserEntities",
     "build": "fluid-build . -t build",
     "build:dev": "fluid-build . -t build:dev",

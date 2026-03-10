@@ -183,6 +183,30 @@ export class CrosswordWebAgent implements WebAgent {
         // Set flag immediately to prevent race conditions with double registration
         this.registered = true;
 
+        // Load compiled grammar
+        let grammarContent: string | undefined;
+        try {
+            const grammarUrl = this.getGrammarUrl();
+            if (grammarUrl) {
+                console.log(
+                    `[CrosswordWebAgent] Loading grammar from: ${grammarUrl}`,
+                );
+                const response = await fetch(grammarUrl);
+                if (response.ok) {
+                    grammarContent = await response.text();
+                    console.log(
+                        "[CrosswordWebAgent] Grammar loaded successfully",
+                    );
+                } else {
+                    console.warn(
+                        `[CrosswordWebAgent] Failed to load grammar: ${response.status}`,
+                    );
+                }
+            }
+        } catch (error) {
+            console.warn("[CrosswordWebAgent] Error loading grammar:", error);
+        }
+
         const agent = this.createAppAgent();
         const manifest: AppAgentManifest = {
             emojiChar: "🧩",
@@ -193,6 +217,9 @@ export class CrosswordWebAgent implements WebAgent {
                     "This allows users to interact with a crossword puzzle. Users can enter text into clue answers and query clue values.",
                 schemaType: "CrosswordActions",
                 schemaFile: { content: CROSSWORD_SCHEMA_TS, format: "ts" },
+                grammarFile: grammarContent
+                    ? { content: grammarContent, format: "ag" }
+                    : undefined,
             },
         };
 
@@ -210,6 +237,18 @@ export class CrosswordWebAgent implements WebAgent {
                 error,
             );
         }
+    }
+
+    private getGrammarUrl(): string | undefined {
+        // In Chrome extension context
+        if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+            return chrome.runtime.getURL(
+                "webagent/crossword/crosswordSchema.ag.json",
+            );
+        }
+        // In Electron context, grammar is loaded relative to the script
+        // The grammar file should be in the same relative location
+        return undefined; // Electron will need different handling
     }
 
     private createAppAgent(): AppAgent {

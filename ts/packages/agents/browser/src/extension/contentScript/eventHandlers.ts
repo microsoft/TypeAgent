@@ -72,28 +72,6 @@ function setupMessageListeners(): void {
                 return false;
             }
 
-            if (message.type === "setupCrosswordObserver") {
-                // Forward to MAIN world
-                sendMainWorldRequest({
-                    actionName: "setupCrosswordObserver",
-                    parameters: {
-                        selectors: message.selectors,
-                        texts: message.texts,
-                    },
-                })
-                    .then(() => {
-                        sendResponse({ success: true });
-                    })
-                    .catch((error) => {
-                        console.error(
-                            "Error installing crossword observer:",
-                            error,
-                        );
-                        sendResponse({ success: false, error: error.message });
-                    });
-                return true; // Async response
-            }
-
             const handleAction = async () => {
                 await handleMessage(message, sendResponse);
             };
@@ -391,24 +369,6 @@ export async function handleMessage(
             case "extractSchemaLinkedPages": {
                 extractSchemaFromLinkedPages();
                 sendResponse({});
-                break;
-            }
-
-            case "setupCrosswordObserver": {
-                console.log(
-                    "Received request to install crossword observer with selectors:",
-                    message.selectors,
-                    "and texts:",
-                    message.texts,
-                );
-                // Forward to MAIN world
-                sendMainWorldRequest({
-                    actionName: "setupCrosswordObserver",
-                    parameters: {
-                        selectors: message.selectors,
-                        texts: message.texts,
-                    },
-                });
                 break;
             }
 
