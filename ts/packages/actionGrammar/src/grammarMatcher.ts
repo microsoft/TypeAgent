@@ -1279,40 +1279,40 @@ export function matchGrammarCompletion(
 
             debugCompletion(`Completing ${nextPart.type} part ${state.name}`);
             if (nextPart.type === "string") {
-                // The next expected part is a literal keyword string.
-                // Offer it as a completion (e.g. "music" after "play").
-                const completionText = nextPart.value.join(" ");
-                debugCompletion(
-                    `Adding completion candidate: "${completionText}" (consumed ${state.index} chars, spacing=${state.spacingMode ?? "auto"})`,
-                );
-
-                // Determine whether a separator (e.g. space) is needed
-                // between the content at matchedPrefixLength and the
-                // completion text.  Check the boundary between the last
-                // consumed character and the first character of the
-                // completion.  This is purely a property of the
-                // boundary — it does not account for any unmatched
-                // trailing content the user may have typed beyond
-                // matchedPrefixLength (e.g. a trailing space).
-                // Example: prefix="play"  completion="music" → true (Latin).
-                // Example: prefix="play " completion="music" → true (matched
-                //   prefix is "play"; separator still needed at that boundary).
-                // Example: prefix="再生" completion="音楽" → false (CJK).
-                let candidateNeedsSep = false;
-                if (
-                    state.index > 0 &&
-                    completionText.length > 0 &&
-                    state.spacingMode !== "none"
-                ) {
-                    candidateNeedsSep = requiresSeparator(
-                        prefix[state.index - 1],
-                        completionText[0],
-                        state.spacingMode,
-                    );
-                }
-
                 updateMaxPrefixLength(state.index);
                 if (state.index === maxPrefixLength) {
+                    // The next expected part is a literal keyword string.
+                    // Offer it as a completion (e.g. "music" after "play").
+                    const completionText = nextPart.value.join(" ");
+                    debugCompletion(
+                        `Adding completion candidate: "${completionText}" (consumed ${state.index} chars, spacing=${state.spacingMode ?? "auto"})`,
+                    );
+
+                    // Determine whether a separator (e.g. space) is needed
+                    // between the content at matchedPrefixLength and the
+                    // completion text.  Check the boundary between the last
+                    // consumed character and the first character of the
+                    // completion.  This is purely a property of the
+                    // boundary — it does not account for any unmatched
+                    // trailing content the user may have typed beyond
+                    // matchedPrefixLength (e.g. a trailing space).
+                    // Example: prefix="play"  completion="music" → true (Latin).
+                    // Example: prefix="play " completion="music" → true (matched
+                    //   prefix is "play"; separator still needed at that boundary).
+                    // Example: prefix="再生" completion="音楽" → false (CJK).
+                    let candidateNeedsSep = false;
+                    if (
+                        state.index > 0 &&
+                        completionText.length > 0 &&
+                        state.spacingMode !== "none"
+                    ) {
+                        candidateNeedsSep = requiresSeparator(
+                            prefix[state.index - 1],
+                            completionText[0],
+                            state.spacingMode,
+                        );
+                    }
+
                     completions.push(completionText);
                     separatorMode = mergeSeparatorMode(
                         separatorMode,
@@ -1350,33 +1350,31 @@ export function matchGrammarCompletion(
                     pendingWildcard.valueId,
                 );
                 if (completionProperty !== undefined) {
-                    debugCompletion(
-                        `Adding completion property: ${JSON.stringify(completionProperty)}`,
-                    );
-
                     const candidatePrefixLength = pendingWildcard.start;
-
-                    // Determine whether a separator is needed between
-                    // the content at matchedPrefixLength and the
-                    // completion (the wildcard entity value).  Check
-                    // the boundary between the last consumed character
-                    // before the wildcard and the first character of the
-                    // entity value.  We use "a" as a representative word
-                    // character since the actual value is unknown.
-                    let candidateNeedsSep = false;
-                    if (
-                        pendingWildcard.start > 0 &&
-                        state.spacingMode !== "none"
-                    ) {
-                        candidateNeedsSep = requiresSeparator(
-                            prefix[pendingWildcard.start - 1],
-                            "a",
-                            state.spacingMode,
-                        );
-                    }
-
                     updateMaxPrefixLength(candidatePrefixLength);
                     if (candidatePrefixLength === maxPrefixLength) {
+                        debugCompletion(
+                            `Adding completion property: ${JSON.stringify(completionProperty)}`,
+                        );
+                        // Determine whether a separator is needed between
+                        // the content at matchedPrefixLength and the
+                        // completion (the wildcard entity value).  Check
+                        // the boundary between the last consumed character
+                        // before the wildcard and the first character of the
+                        // entity value.  We use "a" as a representative word
+                        // character since the actual value is unknown.
+                        let candidateNeedsSep = false;
+                        if (
+                            pendingWildcard.start > 0 &&
+                            state.spacingMode !== "none"
+                        ) {
+                            candidateNeedsSep = requiresSeparator(
+                                prefix[pendingWildcard.start - 1],
+                                "a",
+                                state.spacingMode,
+                            );
+                        }
+
                         properties.push(completionProperty);
                         separatorMode = mergeSeparatorMode(
                             separatorMode,
@@ -1401,30 +1399,30 @@ export function matchGrammarCompletion(
                     currentPart !== undefined &&
                     currentPart.type === "string"
                 ) {
-                    const fullText = currentPart.value.join(" ");
-                    debugCompletion(
-                        `Adding completion: "${fullText}" (consumed ${state.index} chars)`,
-                    );
-
-                    // Determine whether a separator is needed between
-                    // the matched prefix and the completion text.  Check
-                    // the boundary between the last consumed character
-                    // and the first character of the completion.
-                    let candidateNeedsSep = false;
-                    if (
-                        state.index > 0 &&
-                        fullText.length > 0 &&
-                        state.spacingMode !== "none"
-                    ) {
-                        candidateNeedsSep = requiresSeparator(
-                            prefix[state.index - 1],
-                            fullText[0],
-                            state.spacingMode,
-                        );
-                    }
-
                     updateMaxPrefixLength(state.index);
                     if (state.index === maxPrefixLength) {
+                        const fullText = currentPart.value.join(" ");
+                        debugCompletion(
+                            `Adding completion: "${fullText}" (consumed ${state.index} chars)`,
+                        );
+
+                        // Determine whether a separator is needed between
+                        // the matched prefix and the completion text.  Check
+                        // the boundary between the last consumed character
+                        // and the first character of the completion.
+                        let candidateNeedsSep = false;
+                        if (
+                            state.index > 0 &&
+                            fullText.length > 0 &&
+                            state.spacingMode !== "none"
+                        ) {
+                            candidateNeedsSep = requiresSeparator(
+                                prefix[state.index - 1],
+                                fullText[0],
+                                state.spacingMode,
+                            );
+                        }
+
                         completions.push(fullText);
                         separatorMode = mergeSeparatorMode(
                             separatorMode,
