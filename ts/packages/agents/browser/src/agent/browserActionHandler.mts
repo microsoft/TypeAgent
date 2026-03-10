@@ -6,6 +6,7 @@ import {
     ActionIO,
     ActionResult,
     AppAgent,
+    AppAgentEvent,
     AppAgentInitSettings,
     DisplayType,
     DynamicDisplay,
@@ -27,11 +28,10 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import { handleCrosswordAction } from "./crossword/actionHandler.mjs";
-
 import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
-import { handleCommerceAction } from "./commerce/actionHandler.mjs";
+import { extractPageComponent } from "./componentExtractor.mjs";
+import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import type {
     ElementDescriptionResult,
@@ -54,7 +54,6 @@ import {
 
 import registerDebug from "debug";
 
-import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { createGraphologyPersistenceManager } from "./knowledge/utils/graphologyPersistence.mjs";
 import { ExtractKnowledgeHandler } from "./knowledge/extractKnowledgeCommand.mjs";
@@ -86,6 +85,10 @@ import {
     loadAllowDynamicAgentDomains,
     processWebAgentMessage,
 } from "./webTypeAgent.mjs";
+import {
+    isBuiltInWebAgentRpcRequest,
+    BuiltInWebAgentRpcResponse,
+} from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import {
     BrowserActions,
@@ -102,9 +105,6 @@ import {
     getWebsiteStats,
 } from "./websiteMemory.mjs";
 import { initializeImportWebSocketHandler } from "./import/importWebSocketHandler.mjs";
-import { CrosswordActions } from "./crossword/schema/userActions.mjs";
-import { InstacartActions } from "./instacart/schema/userActions.mjs";
-import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import {
@@ -402,7 +402,32 @@ async function updateBrowserContext(
             };
 
             context.agentContext.agentWebSocketServer.onWebAgentMessage =
-                async (_client: BrowserClient, data: any) => {
+                async (client: BrowserClient, data: any) => {
+                    // Check for built-in RPC requests (crossword, commerce, etc.)
+                    if (
+                        data.method === "webAgent/message" &&
+                        isBuiltInWebAgentRpcRequest(data.params)
+                    ) {
+                        const { id, method, params } = data.params;
+                        const result = await handleWebAgentRpc(
+                            method,
+                            params,
+                            context,
+                            client.id,
+                        );
+
+                        const response: BuiltInWebAgentRpcResponse = {
+                            source: "dispatcher",
+                            method: "webAgent/message",
+                            type: "builtInRpcResponse",
+                            id,
+                            ...result,
+                        };
+
+                        client.socket.send(JSON.stringify(response));
+                        return;
+                    }
+
                     await processWebAgentMessage(data, context);
                 };
         }
@@ -494,6 +519,141 @@ async function updateBrowserContext(
     }
 }
 
+
+async function handleWebAgentRpc(
+    method: string,
+    params: any,
+    context: SessionContext<BrowserActionContext>,
+    clientId: string,
+): Promise<any> {
+    switch (method) {
+        case "extractCrosswordSchema": {
+            try {
+                const schema = await extractCrosswordSchema(context, clientId);
+                if (!schema) {
+                    return {
+                        success: false,
+                        error: "No crossword found on the page",
+                    };
+                }
+
+                const acrossClues: Record<
+                    number,
+                    { text: string; selector: string }
+                > = {};
+                const downClues: Record<
+                    number,
+                    { text: string; selector: string }
+                > = {};
+
+                for (const clue of schema.across) {
+                    acrossClues[clue.number] = {
+                        text: clue.text,
+                        selector: clue.cssSelector || "",
+                    };
+                }
+                for (const clue of schema.down) {
+                    downClues[clue.number] = {
+                        text: clue.text,
+                        selector: clue.cssSelector || "",
+                    };
+                }
+
+                return {
+                    success: true,
+                    data: {
+                        boardId: params?.url || "",
+                        cells: {},
+                        clues: {
+                            across: acrossClues,
+                            down: downClues,
+                        },
+                    },
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to extract crossword schema",
+                };
+            }
+        }
+
+        case "extractComponent": {
+            try {
+                const { typeName, schema, userRequest } = params;
+                const browserConnector = context.agentContext.browserConnector;
+
+                if (!browserConnector) {
+                    return {
+                        success: false,
+                        error: "Browser connector not available",
+                    };
+                }
+
+                if (!schema || !typeName) {
+                    return {
+                        success: false,
+                        error: "Schema and typeName are required",
+                    };
+                }
+
+                const htmlFragments = await browserConnector.getHtmlFragments(
+                    false,
+                    "knowledgeExtraction",
+                    clientId,
+                );
+
+                if (!htmlFragments || htmlFragments.length === 0) {
+                    return {
+                        success: false,
+                        error: "No HTML content available from the page",
+                    };
+                }
+
+                const response = await extractPageComponent(
+                    typeName,
+                    schema,
+                    userRequest,
+                    htmlFragments,
+                    undefined,
+                );
+
+                return response;
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to extract component",
+                };
+            }
+        }
+
+        case "notify": {
+            const { message, notificationId } = params;
+            const id = notificationId || `webagent-${Date.now()}`;
+            context.notify(
+                AppAgentEvent.Inline,
+                {
+                    type: "text",
+                    content: message,
+                },
+                id,
+            );
+            return { success: true };
+        }
+
+        default:
+            return {
+                success: false,
+                error: `Unknown webAgentRpc method: ${method}`,
+            };
+    }
+}
 
 async function initializeWebsiteIndex(
     context: SessionContext<BrowserActionContext>,
@@ -1258,9 +1418,6 @@ async function executeBrowserAction(
         | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
-        | TypeAgentAction<CrosswordActions, "browser.crossword">
-        | TypeAgentAction<ShoppingActions, "browser.commerce">
-        | TypeAgentAction<InstacartActions, "browser.instacart">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
         | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
 
@@ -1482,40 +1639,7 @@ async function executeBrowserAction(
             // context.actionIO.setDisplay("Running remote action.");
 
             let schemaName = "browser";
-            if (action.schemaName === "browser.crossword") {
-                const crosswordResult = await handleCrosswordAction(
-                    action,
-                    context.sessionContext,
-                );
-                return createActionResult(crosswordResult);
-            } else if (action.schemaName === "browser.commerce") {
-                const commerceResult = await handleCommerceAction(
-                    action,
-                    context,
-                );
-                if (commerceResult !== undefined) {
-                    if (commerceResult instanceof String) {
-                        return createActionResult(
-                            commerceResult as unknown as string,
-                        );
-                    } else {
-                        return commerceResult as ActionResult;
-                    }
-                }
-            } else if (action.schemaName === "browser.instacart") {
-                const instacartResult = await handleInstacartAction(
-                    action,
-                    context.sessionContext,
-                );
-
-                return createActionResult(
-                    instacartResult.displayText,
-                    undefined,
-                    instacartResult.entities,
-                );
-
-                // return createActionResult(instacartResult);
-            } else if (action.schemaName === "browser.actionDiscovery") {
+            if (action.schemaName === "browser.actionDiscovery") {
                 const discoveryResult = await handleSchemaDiscoveryAction(
                     action,
                     context.sessionContext,

@@ -7,6 +7,8 @@ export {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
+export { DisplayLog } from "./displayLog.js";
+export type { DisplayLogEntry } from "./displayLog.js";
 
 // Internal exports for CLI/testing/debugging purposes
 

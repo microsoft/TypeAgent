@@ -42,34 +42,6 @@
         "schemaType": "ExternalBrowserActions"
       }
     },
-    "crossword": {
-      "defaultEnabled": false,
-      "transient": true,
-      "schema": {
-        "description": "This allows users to interact with a crossword puzzle.",
-        "schemaFile": "./crossword/schema/userActions.mts",
-        "schemaType": "CrosswordActions"
-      }
-    },
-    "commerce": {
-      "defaultEnabled": false,
-      "transient": true,
-      "schema": {
-        "description": "This allows users to interact with e-commerce websites to find, compare and purchase various products.",
-        "cached": false,
-        "schemaFile": "./commerce/schema/userActions.mts",
-        "schemaType": "ShoppingActions"
-      }
-    },
-    "instacart": {
-      "defaultEnabled": false,
-      "transient": true,
-      "schema": {
-        "description": "This allows users to interact with Instacart to find, compare and purchase various products.",
-        "schemaFile": "./instacart/schema/userActions.mts",
-        "schemaType": "InstacartActions"
-      }
-    },
     "actionDiscovery": {
       "defaultEnabled": false,
       "transient": true,

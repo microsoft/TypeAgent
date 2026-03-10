@@ -88,11 +88,26 @@ function resolveRef(
     const dot = ref.indexOf(".");
     if (dot !== -1) {
         const stepId = ref.substring(0, dot);
-        const field = ref.substring(dot + 1);
+        const rest = ref.substring(dot + 1);
         const sr = stepResults.get(stepId);
         if (sr !== undefined) {
-            if (field === "text") return sr.text;
-            if (field === "data") return sr.data;
+            if (rest === "text") return sr.text;
+            if (rest === "data") return sr.data;
+            // Handle nested property access: ${stepId.data.prop} or ${stepId.data.prop.nested}
+            if (rest.startsWith("data.")) {
+                let value: unknown = sr.data;
+                for (const key of rest.substring(5).split(".")) {
+                    if (
+                        value === null ||
+                        value === undefined ||
+                        typeof value !== "object"
+                    ) {
+                        return undefined;
+                    }
+                    value = (value as Record<string, unknown>)[key];
+                }
+                return value;
+            }
         }
         return undefined;
     }

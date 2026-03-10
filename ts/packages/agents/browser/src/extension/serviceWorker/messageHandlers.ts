@@ -31,6 +31,19 @@ export function handleKnowledgeExtractionProgress(
     }
 }
 
+/**
+ * Handles simple content script messages that don't go through the RPC layer.
+ */
+export function handleContentScriptMessage(
+    message: any,
+    sender: chrome.runtime.MessageSender,
+): any | undefined {
+    if (message.type === "getTabId") {
+        return { tabId: sender.tab?.id ? String(sender.tab.id) : null };
+    }
+    return undefined;
+}
+
 // Website Library Panel handlers
 export async function handleImportWebsiteDataWithProgress(message: any) {
     const importId = message.importId;

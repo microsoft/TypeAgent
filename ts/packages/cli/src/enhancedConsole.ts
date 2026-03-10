@@ -366,6 +366,9 @@ export function createEnhancedClientIO(
         },
 
         // Display
+        setUserRequest() {
+            // Ignored
+        },
         setDisplayInfo() {
             // Ignored
         },

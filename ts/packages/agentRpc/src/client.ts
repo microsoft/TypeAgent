@@ -243,6 +243,11 @@ export async function createAgentRpcClient(
                     ),
                 );
             } catch (e: any) {
+                // If channel already exists, the agent was registered via a different path
+                // (e.g., WebAgent via webTypeAgent.mts). Skip duplicate registration.
+                if (e.message?.includes("already exists")) {
+                    return;
+                }
                 // Clean up the channel if adding the agent fails
                 channelProvider.deleteChannel(param.name);
                 throw e;

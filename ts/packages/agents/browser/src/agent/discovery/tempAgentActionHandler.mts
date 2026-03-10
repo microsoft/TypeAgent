@@ -7,7 +7,6 @@ import {
     BrowseProductCategories,
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
-import { handleCommerceAction } from "../commerce/actionHandler.mjs";
 import { NavigationLink } from "./schema/pageComponents.mjs";
 import {
     PageActionsPlan,
@@ -150,14 +149,6 @@ export function createTempAgentForSchema(
     return {
         async executeAction(action: any, tempContext: any): Promise<undefined> {
             switch (action.actionName) {
-                case "addToCart":
-                case "viewShoppingCart":
-                case "findNearbyStore":
-                case "getLocationInStore":
-                case "searchForProduct":
-                case "selectSearchResult":
-                    handleCommerceAction(action, tempContext);
-                    break;
                 case "browseProductCategories":
                     await handleBrowseProductCategory(action, ctx);
                     break;

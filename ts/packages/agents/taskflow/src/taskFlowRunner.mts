@@ -110,6 +110,7 @@ function createCapturingClientIO(collector: { messages: string[] }): ClientIO {
     return {
         clear(_requestId) {},
         exit(_requestId) {},
+        setUserRequest() {},
         setDisplayInfo(_requestId, _source, _actionIndex, _action) {},
         setDisplay(message: IAgentMessage): void {
             capture(message);

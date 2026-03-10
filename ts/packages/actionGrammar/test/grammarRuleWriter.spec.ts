@@ -360,15 +360,17 @@ import { RuleX } from "grammarB";
     it("with spacing=none annotation", () => {
         validateRoundTrip(`<test> [spacing=none] = hello world;`);
     });
-    it("with spacing=auto annotation (normalized away by writer)", () => {
-        // "auto" is the default (undefined); the writer omits the annotation
+    it("with spacing=auto annotation (preserved by writer)", () => {
+        // Explicit [spacing=auto] annotation is stored as "auto" and round-trips.
         const result = parseGrammarRules(
             "orig",
             `<test> [spacing=auto] = hello world;`,
             false,
         );
-        expect(result.definitions[0].spacingMode).toBeUndefined();
-        expect(writeGrammarRules(result)).toBe("<test> = hello world;\n");
+        expect(result.definitions[0].spacingMode).toBe("auto");
+        expect(writeGrammarRules(result)).toBe(
+            "<test> [spacing=auto] = hello world;\n",
+        );
     });
     it("per-rule annotations — mixed modes", () => {
         validateRoundTrip(`<before> = one two;
@@ -381,5 +383,846 @@ import { RuleX } from "grammarB";
     it("annotation then unannotated rule (auto default)", () => {
         validateRoundTrip(`<rule1> [spacing=required] = hello world;
 <rule2> = hello world;`);
+    });
+});
+
+// ─── Comment preservation round-trips ─────────────────────────────────────────
+
+describe("Comment preservation", () => {
+    it("file-level leading line comment (copyright header)", () => {
+        roundTrip(`// Copyright (c) Foo.
+// Licensed under MIT.
+
+<A> = x;
+`);
+    });
+
+    it("line comment before rule definition", () => {
+        roundTrip(`// a rule
+<A> = x;
+`);
+    });
+
+    it("trailing line comment after rule definition", () => {
+        roundTrip(`<A> = x; // trailing
+`);
+    });
+
+    it("line comment before second alternative", () => {
+        roundTrip(`<A> = x
+// second alt
+| y;
+`);
+    });
+
+    it("block comment as leading comment before rule", () => {
+        roundTrip(`/* block comment */
+<A> = x;
+`);
+    });
+
+    it("trailing block comment after rule", () => {
+        roundTrip(`<A> = x; /* block trailing */
+`);
+    });
+
+    it("line comment between words in expression", () => {
+        roundTrip(`<A> = hello // mid-expr comment
+world;
+`);
+    });
+
+    it("block comment between words in expression", () => {
+        roundTrip(`<A> = hello /* mid */ world;
+`);
+    });
+
+    it("comment between variable and rule ref in expression", () => {
+        roundTrip(`<A> = $(x:wildcard) // note
+<B>;
+<B> = foo;
+`);
+    });
+
+    it("line comment after import with trailing comment", () => {
+        roundTrip(`// section
+import * from "other.agr"; // imp comment
+<A> = x;
+`);
+    });
+
+    it("entity declaration with leading and trailing comments", () => {
+        roundTrip(`// entities
+entity Foo, Bar; // the entities
+<A> = x;
+`);
+    });
+
+    it("combination: file header + per-rule + per-alt comments", () => {
+        roundTrip(`// Header
+
+// Rule A
+<A> = // first alt
+x
+// second alt
+| y;
+// Rule B
+<B> = z;
+`);
+    });
+
+    it("// and /* */ styles are both preserved and not conflated", () => {
+        const src = `// line comment
+<A> = hello /* block */ world;
+`;
+        const parsed = parseGrammarRules("t", src, false);
+        expect(parsed.leadingComments).toEqual([
+            { style: "line", text: " line comment" },
+        ]);
+        const exprs = parsed.definitions[0].rules[0].expressions;
+        // The block comment is now a leadingComment on the following expr.
+        const worldExpr = exprs.find(
+            (e) => e.type === "string" && e.value[0] === "world",
+        );
+        expect(worldExpr?.leadingComments).toEqual([
+            { style: "block", text: " block " },
+        ]);
+        roundTrip(src);
+    });
+
+    it("comments at end of file are preserved", () => {
+        roundTrip(`<A> = x;
+// end of file comment
+`);
+    });
+
+    it("multiple comments at end of file are preserved", () => {
+        roundTrip(`<A> = x;
+// first trailing
+// second trailing
+`);
+    });
+
+    it("line comment right after -> is preserved (valueLeadingComments)", () => {
+        const src = `<A> = foo -> // leading comment
+   { actionName: "bar" };
+`;
+        const parsed = parseGrammarRules("t", src, false);
+        expect(parsed.definitions[0].rules[0].valueLeadingComments).toEqual([
+            { style: "line", text: " leading comment" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("block comment right after -> is preserved inline", () => {
+        roundTrip(`<A> = foo -> /* note */ { actionName: "bar" };
+`);
+    });
+
+    it("line comment after value (before |) is preserved as valueTrailingComments", () => {
+        const src = `<A> = foo -> { actionName: "bar" } // trailing comment
+| baz -> { actionName: "qux" };
+`;
+        const parsed = parseGrammarRules("t", src, false);
+        expect(parsed.definitions[0].rules[0].valueTrailingComments).toEqual([
+            { style: "line", text: " trailing comment" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("trailing line comment stays flat (-> inline) and causes no blank line before |", () => {
+        // The trailing // comment must not force the group into broken mode (-> on
+        // its own line) nor produce a blank line before the next alternative.
+        // BreakPart makes the list break at | without adding an extra newline.
+        // Note: // ends the line, so | must be on the next line in the source.
+        const src = `<Pause> = pause -> { actionName: "pause" }// c
+| pause music -> { actionName: "pause" };`;
+        // <Pause> = 10 chars → col=8; flat group "pause -> ...// c" = 36 chars → 10+36=46 ≤ 80 → flat
+        expect(fmt(src)).toBe(
+            `<Pause> = pause -> { actionName: "pause" } // c\n        | pause music -> { actionName: "pause" };\n`,
+        );
+        roundTrip(src);
+    });
+
+    it("block comment between rule name and = is preserved (beforeEqualsComments)", () => {
+        roundTrip(`<A> /* blah */ = x;
+`);
+    });
+
+    it("line comment between rule name and = is preserved (beforeEqualsComments)", () => {
+        roundTrip(`<A> // blah
+= x;
+`);
+    });
+
+    it("block comment between annotation and = is preserved (beforeEqualsComments)", () => {
+        roundTrip(`<A> [spacing=required] /* blah */ = x;
+`);
+    });
+
+    it("block comment between rule name and annotation is preserved (beforeAnnotationComments)", () => {
+        roundTrip(`<A> /* before */ [spacing=required] = x;
+`);
+    });
+
+    it("comments both before and after annotation are preserved", () => {
+        roundTrip(`<A> /* before */ [spacing=required] /* after */ = x;
+`);
+    });
+
+    it("block comment after value (before |) is preserved as valueTrailingComments", () => {
+        roundTrip(`<A> = foo -> { actionName: "bar" } /* note */ | baz -> { actionName: "qux" };
+`);
+    });
+
+    it("combination: value leading + trailing comments", () => {
+        roundTrip(`<A> = foo -> // before value
+   { actionName: "bar" } // after value
+| baz;
+`);
+    });
+
+    // ── Value node comments (leadingComments / trailingComments on ValueNode) ──
+
+    it("block comment after ':' on object property value is preserved", () => {
+        roundTrip(`<A> = foo -> { type: /* before */ "greeting" };
+`);
+    });
+
+    it("line comment after ':' on object property value is preserved", () => {
+        roundTrip(`<A> = foo -> {
+   type: // before
+   "greeting"
+};
+`);
+    });
+
+    it("trailing block comment on object property value is preserved", () => {
+        roundTrip(`<A> = foo -> { type: "greeting" /* after */ };
+`);
+    });
+
+    it("trailing line comment on object property value is preserved", () => {
+        roundTrip(`<A> = foo -> {
+   count: 1 // after
+};
+`);
+    });
+
+    it("block comment after '[' on first array element is preserved", () => {
+        roundTrip(`<A> = foo -> [/* first */ "a", "b"];
+`);
+    });
+
+    it("block comment after ',' on subsequent array element is preserved", () => {
+        roundTrip(`<A> = foo -> ["a", /* second */ "b"];
+`);
+    });
+
+    it("line comment between ',' and next array element is preserved as leadingComments", () => {
+        // "a", // comment → comment becomes leadingComments on "b"
+        roundTrip(`<A> = foo -> [
+   "a", // first
+   "b"
+];
+`);
+    });
+
+    it("block comment before ',' on array element is preserved as trailingComments", () => {
+        roundTrip(`<A> = foo -> ["a" /* trailing */, "b"];
+`);
+    });
+
+    // ── Array element trailing comments ────────────────────────────────────────
+
+    it("/* */ comment after ',' is leading on next element (not trailing on previous)", () => {
+        roundTrip(`<A> = foo -> ["a", /* note */ "b"];
+`);
+    });
+
+    it("// comment after ',' is preserved as trailingComment on that element", () => {
+        roundTrip(`<A> = foo -> [
+   "a", // note
+   "b"
+];
+`);
+    });
+
+    it("trailingComment and leadingComments on next element coexist correctly", () => {
+        roundTrip(`<A> = foo -> [
+   "a", // trailing
+   /* leading */ "b"
+];
+`);
+    });
+
+    it("/* */ after comma stays flat when it fits as leading comment", () => {
+        // Block comment after comma is now leading on next element, not trailing.
+        // No itemTrailingText → flat mode is possible.
+        const once = fmt(`<A> = foo -> [\n  "a", /* note */ "b"\n];\n`);
+        expect(once).toBe(`<A> = foo -> ["a", /* note */ "b"];\n`);
+        expect(fmt(once)).toBe(once); // idempotent
+    });
+
+    it("/* */ trailing comment round-trips", () => {
+        roundTrip(`<A> = foo -> ["a", /* note */ "b"];
+`);
+    });
+
+    // ── Trailing comma and closingComments ────────────────────────────────────────
+
+    it("trailing comma with block innerComment round-trips in broken mode (array)", () => {
+        roundTrip(`<A> = foo -> [
+   "a",
+   /* footer */
+];
+`);
+    });
+
+    it("trailing comma with line innerComment round-trips in broken mode (array)", () => {
+        roundTrip(`<A> = foo -> [
+   "a",
+   // footer
+];
+`);
+    });
+
+    it("trailing comma with block innerComment round-trips in broken mode (object)", () => {
+        roundTrip(`<A> = foo -> {
+   type: "greeting",
+   /* footer */
+};
+`);
+    });
+
+    it("innerComment in empty array round-trips", () => {
+        roundTrip(`<A> = foo -> [
+   /* empty */
+];
+`);
+    });
+
+    it("innerComment in empty object round-trips", () => {
+        roundTrip(`<A> = foo -> {
+   /* empty */
+};
+`);
+    });
+
+    it("trailing comment on last item + closingComment round-trips (object)", () => {
+        roundTrip(`<A> = foo -> {
+   type: "greeting", /*trailing*/
+   /* closing */
+};
+`);
+    });
+
+    it("trailing comment on last item + closingComment round-trips (array)", () => {
+        roundTrip(`<A> = foo -> [
+   "a", /*trailing*/
+   /* closing */
+];
+`);
+    });
+
+    it("line trailing comment on last item + closingComment round-trips (object)", () => {
+        roundTrip(`<A> = foo -> {
+   type: "greeting", // trailing
+   /* closing */
+};
+`);
+    });
+
+    it("line trailing comment on last item + closingComment round-trips (array)", () => {
+        roundTrip(`<A> = foo -> [
+   "a", // trailing
+   /* closing */
+];
+`);
+    });
+
+    // ── Object property key leading comments ───────────────────────────────────
+
+    it("block comment before first property key is preserved", () => {
+        roundTrip(`<A> = foo -> { /* first */ type: "greeting" };
+`);
+    });
+
+    it("block comment on same line as comma becomes leadingComment on next property", () => {
+        roundTrip(`<A> = foo -> { type: "greeting", /* second */ count: 1 };
+`);
+    });
+
+    it("line comment before first property key is preserved", () => {
+        roundTrip(`<A> = foo -> {
+   // first prop
+   type: "greeting"
+};
+`);
+    });
+
+    it("line comment before subsequent property key is preserved", () => {
+        roundTrip(`<A> = foo -> {
+   type: "greeting",
+   // second prop
+   count: 1
+};
+`);
+    });
+
+    it("block comment before shorthand property key is preserved", () => {
+        roundTrip(`<A> = $(x) foo -> { /* before */ x };
+`);
+    });
+
+    it("// line comment after comma is preserved as trailingComment on that property", () => {
+        roundTrip(`<A> = foo -> {
+   type: "greeting", // note
+   count: 1
+};
+`);
+    });
+
+    it("// trailing and /* */ leading are both preserved and round-trip correctly", () => {
+        roundTrip(`<A> = foo -> {
+   type: "greeting", // trailing
+   /* leading */ count: 1
+};
+`);
+    });
+
+    it("/* */ leading comment on subsequent key stays inline when object fits flat", () => {
+        expect(
+            fmt(
+                `<A> = foo -> {\n  key: blah,\n  /* leading */ key2: blah2\n};\n`,
+            ),
+        ).toBe(`<A> = foo -> { key: blah, /* leading */ key2: blah2 };\n`);
+    });
+
+    it("/* */ leading comment on subsequent key round-trips through flat form", () => {
+        roundTrip(`<A> = foo -> { key: blah, /* leading */ key2: blah2 };\n`);
+    });
+
+    it("block trailing and block leading comments coexist on separate lines (object)", () => {
+        // Multi-line form: /*trailing*/ is at end of line → trailing on k.
+        // /*leading*/ is on the next line → leading on k2.
+        const multiLine = `<A> = foo -> {
+   k: v, /*trailing*/
+   /*leading*/ k2: v2
+};
+`;
+        const parsed = parseGrammarRules("test", multiLine, false);
+        const props = parsed.definitions[0].rules[0].value!;
+        expect(props.type).toBe("object");
+        const objProps = (props as any).value;
+        // Block comment at end of line → trailing on first prop
+        expect(objProps[0].trailingComments).toEqual([
+            { style: "block", text: "trailing" },
+        ]);
+        // Block comment on next line → leading on second prop
+        expect(objProps[1].leadingComments).toEqual([
+            { style: "block", text: "leading" },
+        ]);
+    });
+
+    it("block trailing and block leading comments round-trip (object)", () => {
+        // Writer must keep broken mode so the parser can distinguish trailing
+        // comments (after ",") from leading comments (before next key).
+        roundTrip(`<A> = foo -> {
+   k: v, /*trailing*/
+   /*leading*/ k2: v2
+};
+`);
+    });
+
+    it("block trailing and block leading comments round-trip (array)", () => {
+        // Same for array elements
+        roundTrip(`<A> = foo -> [
+   "a", /*trailing*/
+   /*leading*/ "b"
+];
+`);
+    });
+});
+
+// ─── Entity and import block formatting ───────────────────────────────────────
+
+describe("Entity block formatting", () => {
+    it("short entity list stays flat", () => {
+        expect(fmt("entity Foo, Bar;", 40)).toBe("entity Foo, Bar;\n\n");
+    });
+
+    it("single entity stays flat", () => {
+        expect(fmt("entity Foo;", 40)).toBe("entity Foo;\n\n");
+    });
+
+    it("long entity list breaks into block", () => {
+        expect(
+            fmt("entity VeryLongName, AnotherLongName, YetAnother;", 30),
+        ).toBe(
+            "entity\n  VeryLongName,\n  AnotherLongName,\n  YetAnother;\n\n",
+        );
+    });
+
+    it("entity block round-trips", () => {
+        roundTrip(
+            "entity VeryLongEntityName, AnotherLongEntityName, ThirdEntity;",
+            30,
+        );
+    });
+
+    it("entity block with trailing comment", () => {
+        // Trailing comment stays on same line as ";"
+        expect(fmt("entity VeryLongName, AnotherLongName; // note", 30)).toBe(
+            "entity\n  VeryLongName,\n  AnotherLongName; // note\n\n",
+        );
+    });
+
+    it("entity block with trailing comment round-trips", () => {
+        roundTrip("entity VeryLongName, AnotherLongName; // note", 30);
+    });
+
+    it("entity block with block comments on names", () => {
+        roundTrip(
+            "entity /* a */ VeryLongName /* b */, /* c */ AnotherLong /* d */;",
+            30,
+        );
+    });
+
+    it("multi-line entity input round-trips", () => {
+        roundTrip(
+            `entity
+  Foo,
+  Bar,
+  Baz;
+<A> = x;
+`,
+            80,
+        );
+    });
+});
+
+describe("Import block formatting", () => {
+    it("short import list stays flat", () => {
+        expect(fmt('import { A, B } from "file";', 40)).toBe(
+            'import { A, B } from "file";\n\n',
+        );
+    });
+
+    it("single import stays flat", () => {
+        expect(fmt('import { Name } from "file";', 40)).toBe(
+            'import { Name } from "file";\n\n',
+        );
+    });
+
+    it("long import list breaks into block", () => {
+        expect(
+            fmt(
+                'import { VeryLongRuleName, AnotherLongRule, ThirdRule } from "file";',
+                40,
+            ),
+        ).toBe(
+            'import {\n  VeryLongRuleName,\n  AnotherLongRule,\n  ThirdRule\n} from "file";\n\n',
+        );
+    });
+
+    it("import block round-trips", () => {
+        roundTrip(
+            'import { VeryLongRuleName, AnotherLongRule, ThirdRule } from "file";',
+            40,
+        );
+    });
+
+    it("wildcard import unaffected by maxLineLength", () => {
+        expect(fmt('import * from "file";', 10)).toBe(
+            'import * from "file";\n\n',
+        );
+    });
+
+    it("import block with block comments on names", () => {
+        roundTrip(
+            'import { /* a */ VeryLongName /* b */, /* c */ AnotherLong /* d */ } from "file";',
+            30,
+        );
+    });
+
+    it("import block with afterCloseBrace comment", () => {
+        roundTrip(
+            'import { VeryLongName, AnotherLong } /* note */ from "file";',
+            30,
+        );
+    });
+
+    it("multi-line import input round-trips", () => {
+        roundTrip(
+            `import {
+  RuleA,
+  RuleB,
+  RuleC
+} from "file";
+<A> = x;
+`,
+            80,
+        );
+    });
+});
+
+describe("Flat-line comment positions → broken-mode output", () => {
+    // These tests verify that comments written on a single flat line are parsed
+    // into the correct AST position (leading/trailing/after-comma/closing) so
+    // that when the formatter re-emits in broken mode, each comment appears
+    // exactly where it should.
+
+    // ── Array ─────────────────────────────────────────────────────────────────
+
+    it("array: leading comment before first element", () => {
+        const src = `<A> = foo -> [/*L*/ "a", "b"];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const arr = parsed.definitions[0].rules[0].value!;
+        expect(arr.type).toBe("array");
+        const elems = (arr as any).value;
+        expect(elems[0].value.leadingComments).toEqual([
+            { style: "block", text: "L" },
+        ]);
+        expect(elems[1].value.leadingComments).toBeUndefined();
+        roundTrip(src);
+    });
+
+    it("array: trailing comment after value (before comma)", () => {
+        const src = `<A> = foo -> ["a" /*T*/, "b"];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const elems = (parsed.definitions[0].rules[0].value as any).value;
+        expect(elems[0].value.trailingComments).toEqual([
+            { style: "block", text: "T" },
+        ]);
+        expect(elems[0].trailingComments).toBeUndefined();
+        roundTrip(src);
+    });
+
+    it("array: comment after comma becomes next element's leadingComments", () => {
+        const src = `<A> = foo -> ["a", /*C*/ "b"];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const elems = (parsed.definitions[0].rules[0].value as any).value;
+        // Block comment after comma → leadingComments on element[1]'s value
+        expect(elems[0].trailingComments).toBeUndefined();
+        expect(elems[1].value.leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("array: trailing comment after last value (before ])", () => {
+        const src = `<A> = foo -> ["a", "b" /*T*/];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const elems = (parsed.definitions[0].rules[0].value as any).value;
+        expect(elems[1].value.trailingComments).toEqual([
+            { style: "block", text: "T" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("array: all four positions produce correct output", () => {
+        // /*A*/ → elem[0].value.leadingComments (before value)
+        // /*B*/ → elem[0].value.trailingComments (after value, before comma)
+        // /*C*/ → elem[1].value.leadingComments (after comma, block → leading)
+        // /*D*/ → elem[1].value.trailingComments (after last value)
+        const flat = `<A> = foo -> [/*A*/ "a" /*B*/, /*C*/ "b" /*D*/];\n`;
+        const broken = fmt(flat);
+        // Comments force broken mode only via value comments (line comments)
+        // or closingLines; block comments after commas are now leading and
+        // don't force broken mode by themselves.
+        expect(broken).toContain(`/*A*/ "a" /*B*/`);
+        expect(broken).toContain(`/*C*/ "b" /*D*/`);
+        expect(fmt(broken)).toBe(broken); // idempotent
+        roundTrip(flat);
+    });
+
+    // ── Object ────────────────────────────────────────────────────────────────
+
+    it("object: leading comment before first property key", () => {
+        const src = `<A> = foo -> { /*L*/ k: v, k2: v2 };\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const props = (parsed.definitions[0].rules[0].value as any).value;
+        expect(props[0].leadingComments).toEqual([
+            { style: "block", text: "L" },
+        ]);
+        expect(props[1].leadingComments).toBeUndefined();
+        roundTrip(src);
+    });
+
+    it("object: trailing comment after property value (before comma)", () => {
+        const src = `<A> = foo -> { k: v /*T*/, k2: v2 };\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const props = (parsed.definitions[0].rules[0].value as any).value;
+        expect(props[0].value.trailingComments).toEqual([
+            { style: "block", text: "T" },
+        ]);
+        expect(props[0].trailingComments).toBeUndefined();
+        roundTrip(src);
+    });
+
+    it("object: comment after comma becomes next property's leadingComments", () => {
+        const src = `<A> = foo -> { k: v, /*C*/ k2: v2 };\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const props = (parsed.definitions[0].rules[0].value as any).value;
+        // Block comment after comma → leadingComments on next property
+        expect(props[0].trailingComments).toBeUndefined();
+        expect(props[1].leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("object: trailing comment after last property value (before })", () => {
+        const src = `<A> = foo -> { k: v, k2: v2 /*T*/ };\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const props = (parsed.definitions[0].rules[0].value as any).value;
+        expect(props[1].value.trailingComments).toEqual([
+            { style: "block", text: "T" },
+        ]);
+        roundTrip(src);
+    });
+
+    it("object: all four positions produce correct output", () => {
+        const flat = `<A> = foo -> { /*A*/ k: v /*B*/, /*C*/ k2: v2 /*D*/ };\n`;
+        const broken = fmt(flat);
+        expect(broken).toContain(`/*A*/ k: v /*B*/`);
+        expect(broken).toContain(`/*C*/ k2: v2 /*D*/`);
+        expect(fmt(broken)).toBe(broken); // idempotent
+        roundTrip(flat);
+    });
+
+    // ── Same-line vs next-line: after-comma position depends on line break ────
+
+    it("array: block comment after comma at EOL is trailing; inline is leading", () => {
+        // Same line, followed by more content → leading on element[1]
+        const flat = `<A> = foo -> ["a", /*C*/ "b"];\n`;
+        const flatParsed = parseGrammarRules("flt", flat, false);
+        const flatElems = (flatParsed.definitions[0].rules[0].value as any)
+            .value;
+        expect(flatElems[0].trailingComments).toBeUndefined();
+        expect(flatElems[1].value.leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+
+        // At end of line (newline follows) → trailing on element[0]
+        const eol = `<A> = foo -> [\n  "a", /*C*/\n  "b"\n];\n`;
+        const eolParsed = parseGrammarRules("eol", eol, false);
+        const eolElems = (eolParsed.definitions[0].rules[0].value as any).value;
+        expect(eolElems[0].trailingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+        expect(eolElems[1].value.leadingComments).toBeUndefined();
+
+        // Next line (no content after comma) → leading on element[1]
+        const multi = `<A> = foo -> [\n  "a",\n  /*C*/ "b"\n];\n`;
+        const multiParsed = parseGrammarRules("multi", multi, false);
+        const multiElems = (multiParsed.definitions[0].rules[0].value as any)
+            .value;
+        expect(multiElems[0].trailingComments).toBeUndefined();
+        expect(multiElems[1].value.leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+    });
+
+    it("object: block comment after comma at EOL is trailing; inline is leading", () => {
+        // Same line, followed by more content → leading on prop[1]
+        const flat = `<A> = foo -> { k: v, /*C*/ k2: v2 };\n`;
+        const flatParsed = parseGrammarRules("flt", flat, false);
+        const flatProps = (flatParsed.definitions[0].rules[0].value as any)
+            .value;
+        expect(flatProps[0].trailingComments).toBeUndefined();
+        expect(flatProps[1].leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+
+        // At end of line → trailing on prop[0]
+        const eol = `<A> = foo -> {\n  k: v, /*C*/\n  k2: v2\n};\n`;
+        const eolParsed = parseGrammarRules("eol", eol, false);
+        const eolProps = (eolParsed.definitions[0].rules[0].value as any).value;
+        expect(eolProps[0].trailingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+        expect(eolProps[1].leadingComments).toBeUndefined();
+
+        // Next line → leading on prop[1]
+        const multi = `<A> = foo -> {\n  k: v,\n  /*C*/ k2: v2\n};\n`;
+        const multiParsed = parseGrammarRules("multi", multi, false);
+        const multiProps = (multiParsed.definitions[0].rules[0].value as any)
+            .value;
+        expect(multiProps[0].trailingComments).toBeUndefined();
+        expect(multiProps[1].leadingComments).toEqual([
+            { style: "block", text: "C" },
+        ]);
+    });
+
+    it("array: // line comment after comma is still trailing", () => {
+        const src = `<A> = foo -> [\n  "a", // line\n  "b"\n];\n`;
+        const parsed = parseGrammarRules("test", src, false);
+        const elems = (parsed.definitions[0].rules[0].value as any).value;
+        expect(elems[0].trailingComments).toEqual([
+            { style: "line", text: " line" },
+        ]);
+        expect(elems[1].value.leadingComments).toBeUndefined();
+    });
+});
+
+describe("Comment preservation round-trips (structural positions)", () => {
+    it("block comment inside rule name angle brackets", () => {
+        roundTrip(`</*A*/Rule/*B*/> = hello;\n`);
+    });
+
+    it("block comments in [spacing=...] annotation", () => {
+        roundTrip(`<Rule> [/*a*/spacing/*b*/=/*c*/required/*d*/] = hello;\n`);
+    });
+
+    it("spacing=auto round-trips with explicit annotation", () => {
+        roundTrip(`<Rule> [spacing=auto] = hello;\n`);
+    });
+
+    it("block comment between $( and variable name", () => {
+        roundTrip(`<Rule> = $(/*c*/x);\n`);
+    });
+
+    it("block comment after colon in variable specifier", () => {
+        roundTrip(`<Rule> = $(x:/*c*/string);\n`);
+    });
+
+    it("block comment inside rule reference angle brackets in variable type", () => {
+        roundTrip(`<Rule> = $(x:</*a*/Inner/*b*/>);\n`);
+    });
+
+    it("block comment inside inline rule reference angle brackets", () => {
+        roundTrip(`<Rule> = </*a*/Other/*b*/>;\n`);
+    });
+
+    it("block comments inside import braces (leading and trailing per name)", () => {
+        roundTrip(
+            `import { /* A */ Name1 /* B */, /* C */ Name2 /* D */ } from "file.agr";\n`,
+        );
+    });
+
+    it("block comment after 'import' keyword and after closing brace", () => {
+        roundTrip(
+            `import /* after-import */ { Name1 } /* after-brace */ from "file.agr";\n`,
+        );
+    });
+
+    it("wildcard import with block comment after star", () => {
+        roundTrip(`import * /* after-star */ from "other.agr";\n`);
+    });
+
+    it("wildcard import with block comment after import keyword", () => {
+        roundTrip(
+            `import /* after-import */ * /* after-star */ from "other.agr";\n`,
+        );
+    });
+
+    it("comments inside empty object value", () => {
+        roundTrip(`<A> = x -> { /* only comment */ };\n`);
+    });
+
+    it("comments inside empty array value", () => {
+        roundTrip(`<A> = x -> [ /* only comment */ ];\n`);
     });
 });

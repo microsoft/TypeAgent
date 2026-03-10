@@ -18,57 +18,7 @@ export async function toggleSiteTranslator(
     await ensureWebsocketConnected();
 
     if (targetTab.url) {
-        const host = new URL(targetTab.url).host;
-
-        // Crossword site handling
-        if (
-            targetTab.url.startsWith("https://embed.universaluclick.com/") ||
-            targetTab.url.startsWith(
-                "https://data.puzzlexperts.com/puzzleapp",
-            ) ||
-            targetTab.url.startsWith("https://nytsyn.pzzl.com/cwd_seattle") ||
-            targetTab.url.startsWith("https://www.wsj.com/puzzles/crossword") ||
-            targetTab.url.startsWith(
-                "https://www.seattletimes.com/games-nytimes-crossword",
-            ) ||
-            targetTab.url.startsWith(
-                "https://www.denverpost.com/games/daily-crossword",
-            ) ||
-            targetTab.url.startsWith(
-                "https://www.denverpost.com/puzzles/?amu=/iwin-crossword",
-            ) ||
-            targetTab.url.startsWith(
-                "https://www.bestcrosswords.com/bestcrosswords/guestconstructor",
-            )
-        ) {
-            method = "enableSiteTranslator";
-            schemaName = "browser.crossword";
-            currentSiteTranslator = schemaName;
-            currentCrosswordUrl = targetTab.url;
-        }
-
-        // Commerce site handling
-        const commerceHosts = [
-            "www.homedepot.com",
-            "www.target.com",
-            "www.walmart.com",
-            "www.opentable.com",
-        ];
-
-        if (commerceHosts.includes(host)) {
-            method = "enableSiteTranslator";
-            schemaName = "browser.commerce";
-            currentSiteTranslator = schemaName;
-        }
-
-        // Instacart site handling
-        if (host === "instacart.com" || host === "www.instacart.com") {
-            method = "enableSiteTranslator";
-            schemaName = "browser.instacart";
-            currentSiteTranslator = schemaName;
-        }
-
-        // Default to actionDiscovery if no specific translator is identified
+        // Register discovery helper
         if (schemaName === "") {
             method = "enableSiteTranslator";
             schemaName = "browser.actionDiscovery";

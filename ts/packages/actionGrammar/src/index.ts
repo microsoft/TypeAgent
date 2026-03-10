@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type { GrammarJson, Grammar } from "./grammarTypes.js";
+export type {
+    GrammarJson,
+    Grammar,
+    CompiledSpacingMode,
+} from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
@@ -12,7 +16,6 @@ export type {
     GrammarParseResult,
     ImportStatement,
     RuleDefinition,
-    SpacingMode,
 } from "./grammarRuleParser.js";
 
 // Writer / formatter

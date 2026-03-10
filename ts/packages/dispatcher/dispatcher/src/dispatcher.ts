@@ -17,6 +17,7 @@ import {
     Dispatcher,
     RequestId,
 } from "@typeagent/dispatcher-types";
+import type { DisplayLogEntry } from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import { getActionContext } from "./execute/actionContext.js";
@@ -276,6 +277,9 @@ export function createDispatcherFromContext(
                 propertyName,
                 context,
             );
+        },
+        async getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]> {
+            return context.displayLog.getEntries(afterSeq);
         },
         async close() {
             await closeFn?.();

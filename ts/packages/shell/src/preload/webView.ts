@@ -386,6 +386,9 @@ contextBridge.exposeInMainWorld("browserConnect", {
 
 // Add extension service adapter API for view pages
 contextBridge.exposeInMainWorld("electronAPI", {
+    // Get the current tab ID
+    getTabId: () => currentActiveTabId || (window as any)._tabId || null,
+
     // RPC transport for typed agent communication
     sendRpcMessage: (message: any) => {
         ipcRenderer.send("browser-rpc-message", message);
@@ -458,8 +461,8 @@ window.addEventListener("message", async (event) => {
         debugWebAgentProxy(`WebAgent -> Dispatcher`, event.data);
         if (event.data.method === "webAgent/register") {
             // Fill in identification information
-            event.data.params.param.title = document.title;
-            event.data.params.param.url = window.location.href;
+            event.data.params.args[0].title = document.title;
+            event.data.params.args[0].url = window.location.href;
         }
         sendToBrowserAgent(event.data);
     }
