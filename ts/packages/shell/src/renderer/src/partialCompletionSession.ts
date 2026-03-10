@@ -30,11 +30,10 @@ export interface ICompletionDispatcher {
 // States:
 //   IDLE        current === undefined
 //   PENDING     current !== undefined && completionP !== undefined
-//   ACTIVE      current !== undefined && completionP === undefined && noCompletion === false
-//   EXHAUSTED   current !== undefined && completionP === undefined && noCompletion === true
+//   ACTIVE      current !== undefined && completionP === undefined
 //
 // Design principles:
-//   - Completion result fields (noCompletion, separatorMode) are stored as-is
+//   - Completion result fields (separatorMode, complete) are stored as-is
 //     from the backend response and never mutated as the user keeps typing.
 //     reuseSession() reads them to decide whether to show, hide, or re-fetch.
 //   - reuseSession() makes exactly four kinds of decisions:
@@ -64,9 +63,6 @@ export class PartialCompletionSession {
     // when the request is issued, then narrowed to input[0..startIndex] when
     // the backend reports how much the grammar consumed.  `undefined` = IDLE.
     private current: string | undefined = undefined;
-
-    // True when the backend reported no completions for `current` (EXHAUSTED).
-    private noCompletion: boolean = false;
 
     // Saved as-is from the last completion result: what kind of separator
     // must appear in the input immediately after `current` before
@@ -117,7 +113,6 @@ export class PartialCompletionSession {
     public hide(): void {
         this.completionP = undefined;
         this.current = undefined;
-        this.noCompletion = false;
         this.separatorMode = "space";
         this.complete = false;
         this.cancelMenu();
@@ -163,9 +158,9 @@ export class PartialCompletionSession {
     //   PENDING    — a fetch is in flight; wait for it (return true, no-op).
     //   RE-FETCH   — input has moved outside the anchor; the saved result no
     //                longer applies (return false).
-    //   HIDE+KEEP  — input is within the anchor but the result's constraints
-    //                aren't satisfied yet (no completions, or separator not
-    //                typed); hide the menu but don't re-fetch (return true).
+    //   HIDE+KEEP  — input is within the anchor but the separator hasn't
+    //                been typed yet; hide the menu but don't re-fetch
+    //                (return true).
     //   UNIQUE     — prefix exactly matches one entry and is not a prefix of
     //                any other; re-fetch for the NEXT level (return false).
     //                Unconditional — `complete` is irrelevant here.
@@ -192,15 +187,6 @@ export class PartialCompletionSession {
         // RE-FETCH — input moved past the anchor (e.g. backspace, new word).
         if (!input.startsWith(current)) {
             return false;
-        }
-
-        // HIDE+KEEP — backend found no completions for this anchor.
-        if (this.noCompletion) {
-            debug(
-                `Partial completion skipped: No completions for '${current}'`,
-            );
-            this.menu.hide();
-            return true;
         }
 
         // Separator handling: the character immediately after the anchor must
@@ -276,7 +262,6 @@ export class PartialCompletionSession {
         debug(`Partial completion start: '${input}'`);
         this.cancelMenu();
         this.current = input;
-        this.noCompletion = false;
         this.separatorMode = "space";
         this.complete = false;
         this.menu.setChoices([]);
@@ -321,10 +306,16 @@ export class PartialCompletionSession {
                     debug(
                         `Partial completion skipped: No completions for '${input}'`,
                     );
-                    // Keep this.current at the value startNewSession set
-                    // (the full input) so the EXHAUSTED anchor covers the
-                    // entire typed text.
-                    this.noCompletion = true;
+                    // Keep this.current at the full input so the anchor
+                    // covers the entire typed text.  The menu stays empty,
+                    // so reuseSession()'s SHOW path will use `complete` to
+                    // decide: complete=true → reuse (nothing more exists);
+                    // complete=false → re-fetch when new input arrives.
+                    //
+                    // Override separatorMode: with no completions, there is
+                    // nothing to separate from, so the separator check in
+                    // reuseSession() should not interfere.
+                    this.separatorMode = "none";
                     return;
                 }
 

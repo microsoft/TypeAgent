@@ -113,7 +113,7 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(menu.updatePrefix).toHaveBeenCalled();
     });
 
-    test("PENDING → EXHAUSTED: empty result suppresses re-fetch while input has same prefix", async () => {
+    test("PENDING → ACTIVE: empty result (complete=true) suppresses re-fetch while input has same prefix", async () => {
         const menu = makeMenu();
         const dispatcher = makeDispatcher();
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -121,19 +121,19 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("play", getPos);
         await Promise.resolve();
 
-        // Should be EXHAUSTED — no new fetch even with extended input
+        // Empty completions + complete=true — no new fetch even with extended input
         session.update("play s", getPos);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("EXHAUSTED → IDLE: backspace past anchor triggers a new fetch", async () => {
+    test("empty result: backspace past anchor triggers a new fetch", async () => {
         const menu = makeMenu();
         const dispatcher = makeDispatcher();
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("play", getPos);
-        await Promise.resolve(); // → EXHAUSTED with current="play"
+        await Promise.resolve(); // → ACTIVE (empty, complete=true) with current="play"
 
         // Backspace past anchor
         session.update("pla", getPos);
@@ -637,28 +637,27 @@ describe("PartialCompletionSession — @command routing", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("@ command: empty result enters EXHAUSTED (no re-fetch)", async () => {
+    test("@ command: empty result (complete=true) suppresses re-fetch", async () => {
         const menu = makeMenu();
         const dispatcher = makeDispatcher();
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("@unknown", getPos);
-        await Promise.resolve(); // → EXHAUSTED
+        await Promise.resolve(); // → empty completions, complete=true
 
         // Still within anchor — no re-fetch
         session.update("@unknownmore", getPos);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-        expect(menu.hide).toHaveBeenCalled();
     });
 
-    test("@ command: backspace past anchor after EXHAUSTED triggers re-fetch", async () => {
+    test("@ command: backspace past anchor after empty result triggers re-fetch", async () => {
         const menu = makeMenu();
         const dispatcher = makeDispatcher();
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("@unknown", getPos);
-        await Promise.resolve(); // → EXHAUSTED with current="@unknown"
+        await Promise.resolve(); // → empty completions with current="@unknown"
 
         // Backspace past anchor
         session.update("@unknow", getPos);
