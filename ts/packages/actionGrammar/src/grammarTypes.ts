@@ -1,7 +1,46 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ValueNode } from "./grammarRuleParser.js";
+/**
+ * SpacingMode after compilation — "auto" is folded to undefined so it never
+ * appears in compiled grammar output (.ag.json) or at match time.
+ */
+export type CompiledSpacingMode = "required" | "optional" | "none" | undefined;
+
+// ── Compiled value node types ─────────────────────────────────────────────────
+// ValueNode variants *without* comment annotations.  GrammarRule and
+// GrammarRuleJson use these so parser comment fields are never serialized into
+// .ag.json files.  grammarRuleParser.ts imports the base types below and
+// augments them with leadingComments / trailingComments for parse-time use.
+
+export type CompiledLiteralValueNode = {
+    type: "literal";
+    value: boolean | string | number;
+};
+export type CompiledVariableValueNode = {
+    type: "variable";
+    name: string;
+};
+// Note: CompiledObjectValueNode uses an unordered dict for values because
+// property order is irrelevant at match time.  The parser-time ObjectValueNode
+// (in grammarRuleParser.ts) uses an ordered ObjectProperty[] array instead so
+// it can preserve per-property comments and original source order for
+// round-trip fidelity.
+export type CompiledObjectValueNode = {
+    type: "object";
+    value: { [key: string]: CompiledValueNode | null };
+};
+export type CompiledArrayValueNode = {
+    type: "array";
+    value: CompiledValueNode[];
+};
+
+/** ValueNode without comment annotations — used in compiled grammar output (.ag.json). */
+export type CompiledValueNode =
+    | CompiledLiteralValueNode
+    | CompiledVariableValueNode
+    | CompiledObjectValueNode
+    | CompiledArrayValueNode;
 
 /**
  * Grammar Types - in memory
@@ -59,7 +98,8 @@ export type GrammarPart =
     | PhraseSetPart;
 export type GrammarRule = {
     parts: GrammarPart[];
-    value?: ValueNode | undefined;
+    value?: CompiledValueNode | undefined;
+    spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
 
 export type Grammar = {
@@ -112,7 +152,8 @@ export type GrammarPartJson =
 
 export type GrammarRuleJson = {
     parts: GrammarPartJson[];
-    value?: ValueNode | undefined;
+    value?: CompiledValueNode | undefined;
+    spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
 export type GrammarRulesJson = GrammarRuleJson[];
 export type GrammarJson = GrammarRulesJson[];

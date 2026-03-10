@@ -114,6 +114,14 @@ export async function initializeBrowserExtension(_appPath: string) {
             const shellWindow = getShellWindow();
             shellWindow?.sendMessageToInlineWebContent(message);
         };
+
+        BrowserAgentIpc.getinstance().onSendNotification = (
+            message: string,
+            id: string,
+        ) => {
+            const shellWindow = getShellWindow();
+            shellWindow?.sendSystemNotification(message, id);
+        };
     });
 
     ipcMain.on("send-to-browser-ipc", async (_, data: WebSocketMessageV2) => {

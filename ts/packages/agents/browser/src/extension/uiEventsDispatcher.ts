@@ -334,7 +334,6 @@ window.addEventListener("message", async (event: any) => {
                     message.parameters.optionLabel,
                 );
             }
-
             window.postMessage(
                 {
                     type: "main-world-response",

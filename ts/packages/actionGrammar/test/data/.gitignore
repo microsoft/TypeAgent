@@ -1,0 +1,7 @@
+# External NLU datasets (download on demand, not committed)
+# SNIPS NLU Benchmark
+snips_*.json
+
+# Amazon MASSIVE
+1.0/
+massive.tar.gz

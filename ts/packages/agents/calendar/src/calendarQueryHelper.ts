@@ -8,6 +8,12 @@ import {
     getISODayEndTime,
     parseFuzzyDateString,
 } from "typechat-utils";
+import {
+    getCurrentWeekDates,
+    getCurrentMonthDates,
+    getNextDaysDates,
+    getNWeeksDateRangeISO,
+} from "graph-utils";
 
 export function generateEventReferenceCriteria(
     eventReference: EventReference,
@@ -61,103 +67,20 @@ export function getTimeRangeBasedQuery(
     return undefined;
 }
 
-export function getCurrentWeekDates(): { startDate: Date; endDate: Date } {
-    const currentDate = new Date();
-    const currentDayOfWeek = currentDate.getDay();
-    const diff =
-        currentDate.getDate() -
-        currentDayOfWeek +
-        (currentDayOfWeek === 0 ? -6 : 1); // Adjust for Sunday if necessary
-    const weekStart = new Date(currentDate.setDate(diff));
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
-    return { startDate: weekStart, endDate: weekEnd };
-}
-
-export function getCurrentMonthDates(): { startDate: Date; endDate: Date } {
-    const currentDate = new Date();
-    const monthStart = new Date(
-        currentDate.getFullYear(),
-        currentDate.getMonth(),
-        1,
-    );
-    const monthEnd = new Date(
-        currentDate.getFullYear(),
-        currentDate.getMonth() + 1,
-        0,
-    );
-    return { startDate: monthStart, endDate: monthEnd };
-}
-
-export function getNextDaysDates(numDays: number): {
-    startDate: Date;
-    endDate: Date;
-} {
-    const currentDate = new Date();
-    const startYear = currentDate.getFullYear();
-    const startMonth = currentDate.getMonth();
-    const startDay = currentDate.getDate();
-
-    const startDateLocal = new Date(
-        startYear,
-        startMonth,
-        startDay,
-        0,
-        0,
-        0,
-        0,
-    );
-
-    const endDateLocal = new Date(
-        startYear,
-        startMonth,
-        startDay + numDays,
-        23,
-        59,
-        59,
-        999,
-    );
-
-    const startDateUTC = new Date(
-        startDateLocal.getTime() - startDateLocal.getTimezoneOffset() * 60000,
-    );
-    const endDateUTC = new Date(
-        endDateLocal.getTime() - endDateLocal.getTimezoneOffset() * 60000,
-    );
-
-    return { startDate: startDateUTC, endDate: endDateUTC };
-}
-
-export function getNWeeksDateRangeISO(nWeeks: number): {
-    startDateTime: string;
-    endDateTime: string;
-} {
-    const currentDate = new Date();
-    const startDate = new Date(
-        currentDate.getFullYear(),
-        currentDate.getMonth(),
-        currentDate.getDate(),
-    );
-
-    let nDays = nWeeks * 7;
-    startDate.setHours(0, 0, 0, 0); // Set to the start of the day (12:00:00 AM)
-    const endDate = new Date(startDate);
-    endDate.setDate(startDate.getDate() + nDays); // Add 13 days to cover a full two weeks
-    endDate.setHours(23, 59, 59, 999); // Set to just before midnight (11:59:59 PM)
-
-    const startDateTime = startDate.toISOString();
-    const endDateTime = endDate.toISOString();
-
-    return {
-        startDateTime,
-        endDateTime,
-    };
-}
+export {
+    getCurrentWeekDates,
+    getCurrentMonthDates,
+    getNextDaysDates,
+    getNWeeksDateRangeISO,
+};
 
 export function generateNaturalLanguageCriteria(
     input: string,
 ): string | undefined {
-    switch (input.toLowerCase()) {
+    // Normalize: grammar matching may deliver a rich value object (e.g. CalendarDayRangeValue)
+    // whose toString() returns the original text. String() is a no-op for plain strings.
+    const text = String(input).toLowerCase();
+    switch (text) {
         case "this week":
             const { startDate: thisWeekStart, endDate: thisWeekEnd } =
                 getCurrentWeekDates();
@@ -180,7 +103,10 @@ export function generateNaturalLanguageCriteria(
 }
 
 export function generateQueryFromFuzzyDay(input: string): string | undefined {
-    switch (input.toLowerCase()) {
+    // Normalize: grammar matching may deliver a rich value object (e.g. CalendarDateValue,
+    // CalendarDayRangeValue) whose toString() returns the original text.
+    const text = String(input);
+    switch (text.toLowerCase()) {
         case "this week":
             const { startDate: thisWeekStart, endDate: thisWeekEnd } =
                 getCurrentWeekDates();
@@ -203,7 +129,7 @@ export function generateQueryFromFuzzyDay(input: string): string | undefined {
             return `startdatetime=${tomorrowStart.toISOString()}&enddatetime=${tomorrowEnd.toISOString()}`;
         default:
             const curDate =
-                getDateRelativeToDayV2(input) ?? parseFuzzyDateString(input);
+                getDateRelativeToDayV2(text) ?? parseFuzzyDateString(text);
 
             if (curDate != undefined) {
                 return `startdatetime=${getISODayStartTime(

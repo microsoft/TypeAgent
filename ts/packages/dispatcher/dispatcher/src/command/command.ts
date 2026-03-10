@@ -371,6 +371,7 @@ export async function processCommand(
     // Process one command at at time.
     return context.commandLock(async () => {
         beginProcessCommand(requestId, context, options);
+        context.clientIO.setUserRequest(requestId, originalInput);
         try {
             await processCommandNoLock(originalInput, context, attachments);
         } finally {

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as sqlite from "better-sqlite3";
+import type * as sqlite from "better-sqlite3";
 import * as kp from "knowpro";
 import { sql_makeInPlaceholders } from "./sqliteCommon.js";
 

@@ -72,6 +72,11 @@ export type BrowserControlInvokeFunctions = {
     ): Promise<any>;
     awaitPageLoad(timeout?: number): Promise<string>;
     awaitPageInteraction(timeout?: number): Promise<void>;
+    downloadImage(
+        cssSelector?: string,
+        imageDescription?: string,
+        filename?: string,
+    ): Promise<string>;
 };
 
 export type BrowserControlCallFunctions = {

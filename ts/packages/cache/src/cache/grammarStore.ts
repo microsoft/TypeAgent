@@ -10,6 +10,11 @@ import {
     compileGrammarToNFA,
     matchGrammarWithNFA,
     computeNFACompletions,
+    DFA,
+    compileNFAToDFA,
+    matchDFAWithSplitting,
+    getDFACompletions,
+    tokenizeRequest,
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
@@ -30,12 +35,14 @@ import { sortMatches } from "./sortMatches.js";
 interface GrammarEntry {
     grammar: Grammar;
     nfa?: NFA;
+    dfa?: DFA;
 }
 
 export class GrammarStoreImpl implements GrammarStore {
     private readonly grammars: Map<string, GrammarEntry> = new Map();
     private enabled: boolean = true;
     private useNFA: boolean = false;
+    private useDFA: boolean = false;
 
     public constructor(
         private readonly schemaInfoProvider: SchemaInfoProvider | undefined,
@@ -68,6 +75,36 @@ export class GrammarStoreImpl implements GrammarStore {
         }
         this.useNFA = useNFA;
     }
+    /**
+     * Enable or disable DFA matching.
+     * DFA requires NFA to be enabled first.
+     * When enabling DFA for the first time, compiles existing NFAs to DFAs.
+     */
+    public setUseDFA(useDFA: boolean): void {
+        if (useDFA && !this.useDFA) {
+            // Ensure NFA is compiled first
+            if (!this.useNFA) {
+                this.setUseNFA(true);
+            }
+            // Compile existing NFAs to DFAs
+            for (const [key, entry] of this.grammars) {
+                if (entry.nfa && !entry.dfa) {
+                    try {
+                        const schemaName =
+                            splitSchemaNamespaceKey(key).schemaName;
+                        entry.dfa = compileNFAToDFA(entry.nfa, schemaName);
+                    } catch (error) {
+                        console.error(
+                            `Failed to compile NFA to DFA for ${key}:`,
+                            error,
+                        );
+                    }
+                }
+            }
+        }
+        this.useDFA = useDFA;
+    }
+
     public addGrammar(schemaName: string, grammar: Grammar): void {
         const namespaceKey = getSchemaNamespaceKey(
             schemaName,
@@ -84,6 +121,16 @@ export class GrammarStoreImpl implements GrammarStore {
                     error,
                 );
                 // Fall back to old matcher if compilation fails
+            }
+        }
+        if (this.useDFA && entry.nfa) {
+            try {
+                entry.dfa = compileNFAToDFA(entry.nfa, schemaName);
+            } catch (error) {
+                console.error(
+                    `Failed to compile NFA to DFA for ${schemaName}:`,
+                    error,
+                );
             }
         }
         this.grammars.set(namespaceKey, entry);
@@ -133,15 +180,44 @@ export class GrammarStoreImpl implements GrammarStore {
             }
 
             const { schemaName } = splitSchemaNamespaceKey(name);
+            const matchMode =
+                this.useDFA && entry.dfa
+                    ? "DFA"
+                    : this.useNFA && entry.nfa
+                      ? "NFA"
+                      : "legacy";
             debug(
-                `Matching "${request}" against ${schemaName} (${this.useNFA ? "NFA" : "legacy"}) - NFA states: ${entry.nfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
+                `Matching "${request}" against ${schemaName} (${matchMode}) - NFA states: ${entry.nfa?.states.length || 0}, DFA states: ${entry.dfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
             );
 
-            // Use NFA matcher if available, otherwise fall back to old matcher
-            const grammarMatches =
-                this.useNFA && entry.nfa
-                    ? matchGrammarWithNFA(entry.grammar, entry.nfa, request)
-                    : matchGrammar(entry.grammar, request);
+            // Choose matcher: DFA > NFA > legacy
+            let grammarMatches;
+            if (this.useDFA && entry.dfa) {
+                const tokens = tokenizeRequest(request);
+                const dfaResult = matchDFAWithSplitting(entry.dfa, tokens);
+                grammarMatches = dfaResult.matched
+                    ? [
+                          {
+                              match: dfaResult.actionValue ?? request,
+                              matchedValueCount:
+                                  dfaResult.fixedStringPartCount +
+                                  dfaResult.checkedWildcardCount +
+                                  dfaResult.uncheckedWildcardCount,
+                              wildcardCharCount:
+                                  dfaResult.uncheckedWildcardCount,
+                              entityWildcardPropertyNames: [],
+                          },
+                      ]
+                    : [];
+            } else if (this.useNFA && entry.nfa) {
+                grammarMatches = matchGrammarWithNFA(
+                    entry.grammar,
+                    entry.nfa,
+                    request,
+                );
+            } else {
+                grammarMatches = matchGrammar(entry.grammar, request);
+            }
 
             if (grammarMatches.length === 0) {
                 debug(`No matches in ${schemaName} grammar`);
@@ -201,7 +277,40 @@ export class GrammarStoreImpl implements GrammarStore {
             if (filter && !filter.has(name)) {
                 continue;
             }
-            if (this.useNFA && entry.nfa) {
+            if (this.useDFA && entry.dfa) {
+                // DFA-based completions
+                const tokens = requestPrefix
+                    ? requestPrefix
+                          .trim()
+                          .split(/\s+/)
+                          .filter((t) => t.length > 0)
+                    : [];
+                const dfaCompResult = getDFACompletions(entry.dfa, tokens);
+                if (
+                    dfaCompResult.completions &&
+                    dfaCompResult.completions.length > 0
+                ) {
+                    completions.push(...dfaCompResult.completions);
+                }
+                if (
+                    dfaCompResult.properties &&
+                    dfaCompResult.properties.length > 0
+                ) {
+                    const { schemaName } = splitSchemaNamespaceKey(name);
+                    for (const p of dfaCompResult.properties) {
+                        properties.push({
+                            actions: [
+                                createExecutableAction(
+                                    schemaName,
+                                    p.actionName,
+                                    {},
+                                ),
+                            ],
+                            names: [p.propertyPath],
+                        });
+                    }
+                }
+            } else if (this.useNFA && entry.nfa) {
                 // NFA-based completions: tokenize into complete whole tokens
                 const tokens = requestPrefix
                     ? requestPrefix

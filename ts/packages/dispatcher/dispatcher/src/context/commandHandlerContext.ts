@@ -38,6 +38,7 @@ import { ActionConfigProvider } from "../translation/actionConfigProvider.js";
 import { getCacheFactory } from "../utils/cacheFactory.js";
 import { nullClientIO } from "./interactiveIO.js";
 import { ClientIO, RequestId } from "@typeagent/dispatcher-types";
+import { initializeGeolocation } from "./geolocation.js";
 import { ChatHistory, createChatHistory } from "./chatHistory.js";
 
 import {
@@ -81,6 +82,7 @@ import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.j
 import { createBuiltinAppAgentProvider } from "./inlineAgentProvider.js";
 import { CommandResult } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
+import { DisplayLog } from "../displayLog.js";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
@@ -98,6 +100,51 @@ import { DefaultAzureCredential } from "@azure/identity";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
+
+function wrapClientIOWithDisplayLog(
+    clientIO: ClientIO,
+    displayLog: DisplayLog,
+): ClientIO {
+    return {
+        ...clientIO,
+        setUserRequest(requestId, command) {
+            const seq = displayLog.logUserRequest(requestId, command);
+            clientIO.setUserRequest(requestId, command, seq);
+        },
+        setDisplayInfo(requestId, source, actionIndex?, action?) {
+            const seq = displayLog.logSetDisplayInfo(
+                requestId,
+                source,
+                actionIndex,
+                action,
+            );
+            clientIO.setDisplayInfo(
+                requestId,
+                source,
+                actionIndex,
+                action,
+                seq,
+            );
+        },
+        setDisplay(message) {
+            const seq = displayLog.logSetDisplay(message);
+            clientIO.setDisplay(message, seq);
+        },
+        appendDisplay(message, mode) {
+            const seq = displayLog.logAppendDisplay(message, mode);
+            clientIO.appendDisplay(message, mode, seq);
+        },
+        notify(notificationId, event, data, source) {
+            const seq = displayLog.logNotify(
+                notificationId,
+                event,
+                data,
+                source,
+            );
+            clientIO.notify(notificationId, event, data, source, seq);
+        },
+    };
+}
 
 export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
@@ -152,6 +199,7 @@ export type CommandHandlerContext = {
     agentCache: AgentCache;
     agentGrammarRegistry: AgentGrammarRegistry; // NFA-based grammar system for cache matching
     grammarGenerationInitialized: boolean; // Track if NFA grammar generation has been set up
+    persistedGrammarStore?: PersistedGrammarStore; // Persistence layer for dynamic grammar rules
     currentScriptDir: string;
     logger?: Logger | undefined;
     currentRequestId: RequestId | undefined;
@@ -178,6 +226,8 @@ export type CommandHandlerContext = {
 
     userRequestKnowledgeExtraction: boolean;
     actionResultKnowledgeExtraction: boolean;
+
+    displayLog: DisplayLog;
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -538,7 +588,11 @@ export async function initializeCommandHandlerContext(
         }
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
-        const clientIO = options?.clientIO ?? nullClientIO;
+        const displayLog = await DisplayLog.load(sessionDirPath);
+        const clientIO = wrapClientIOWithDisplayLog(
+            options?.clientIO ?? nullClientIO,
+            displayLog,
+        );
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
@@ -613,10 +667,15 @@ export async function initializeCommandHandlerContext(
             actionResultKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.actionResultKnowledgeExtraction ?? true,
+
+            displayLog,
         };
 
         await initializeMemory(context, sessionDirPath);
         await addAppAgentProviders(context, options?.appAgentProviders);
+
+        // Initialize geolocation in the background (non-blocking)
+        initializeGeolocation().catch(() => {});
 
         // Initialize grammar generation if using NFA system
         await setupGrammarGeneration(context);
@@ -739,6 +798,9 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
         await grammarStore.newStore(grammarStorePath);
     }
 
+    // Expose the persistence store on the context for management actions
+    context.persistedGrammarStore = grammarStore;
+
     // Enable auto-save
     await grammarStore.setAutoSave(config.cache.autoSave);
 
@@ -799,6 +861,12 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     debug(`Syncing ${registeredAgents.length} agent grammars to store`);
     for (const schemaName of registeredAgents) {
         context.agentCache.syncAgentGrammar(schemaName);
+    }
+
+    // Enable DFA if configured (NFA must be active first, which it now is)
+    if (config.cache.useDFA) {
+        context.agentCache.grammarStore.setUseDFA(true);
+        debug("DFA matching enabled");
     }
 
     // Mark as initialized to prevent re-initialization
@@ -866,6 +934,7 @@ export async function closeCommandHandlerContext(
 ) {
     // Save the session because the token count is in it.
     context.session.save();
+    await context.displayLog.save();
     await context.agents.close();
     if (context.instanceDirLock) {
         await context.instanceDirLock();
@@ -876,7 +945,10 @@ export async function setSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     session: Session,
 ) {
+    // Persist the old session's display log before switching
+    await context.displayLog.save();
     context.session = session;
+    context.displayLog = await DisplayLog.load(session.getSessionDirPath());
     await context.agents.close();
 
     await initializeMemory(context, session.getSessionDirPath());
@@ -964,6 +1036,14 @@ export async function changeContextConfig(
             !systemContext.grammarGenerationInitialized
         ) {
             await setupGrammarGeneration(systemContext);
+        }
+
+        // If useDFA toggled at runtime (only takes effect when NFA grammar system is active)
+        if (
+            changed.cache.useDFA !== undefined &&
+            systemContext.grammarGenerationInitialized
+        ) {
+            agentCache.grammarStore.setUseDFA(changed.cache.useDFA);
         }
     }
 

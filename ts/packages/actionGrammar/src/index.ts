@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type { GrammarJson, Grammar } from "./grammarTypes.js";
+export type {
+    GrammarJson,
+    Grammar,
+    CompiledSpacingMode,
+} from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
@@ -36,6 +40,13 @@ export {
     Ordinal,
     Cardinal,
     CalendarDate,
+    CalendarDateValue,
+    CalendarTime,
+    CalendarTimeValue,
+    CalendarTimeRange,
+    CalendarTimeRangeValue,
+    CalendarDayRange,
+    CalendarDayRangeValue,
     registerBuiltInEntities,
 } from "./builtInEntities.js";
 
@@ -68,7 +79,11 @@ export type {
 export {
     matchNFA,
     sortNFAMatches,
+    buildFirstTokenIndex,
+    matchNFAWithIndex,
     type NFAMatchResult,
+    type NFAExecutionState,
+    type FirstTokenIndex,
 } from "./nfaInterpreter.js";
 export { compileGrammarToNFA, normalizeGrammar } from "./nfaCompiler.js";
 export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
@@ -114,18 +129,32 @@ export type {
     DFAExecutionContext,
     DFATransition,
     DFAWildcardTransition,
+    DFAPhraseSetTransition,
+    MatchAST,
+    MatchNode,
+    TokenMatchNode,
+    WildcardMatchNode,
+    PhraseSetMatchNode,
+    RuleRefMatchNode,
 } from "./dfa.js";
 export { DFABuilder } from "./dfa.js";
 export { compileNFAToDFA } from "./dfaCompiler.js";
 export {
     matchDFA,
+    matchDFAWithSplitting,
+    matchDFAToAST,
+    matchDFAToASTWithSplitting,
+    evaluateMatchAST,
     getDFACompletions,
     printDFA,
     type DFAMatchResult,
+    type DFAASTMatchResult,
     type DFACompletionResult,
     type DFACompletionGroup,
+    type DFAPropertyCompletion,
     type WildcardCompletionInfo,
 } from "./dfaMatcher.js";
+export { splitToken, applySplitToTokens } from "./tokenSplit.js";
 export {
     DFACompilationManager,
     globalDFACompilationManager,

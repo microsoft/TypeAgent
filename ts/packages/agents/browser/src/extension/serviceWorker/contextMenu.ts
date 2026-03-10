@@ -9,24 +9,6 @@ import { getWebSocket } from "./websocket";
  */
 export function initializeContextMenu(): void {
     chrome.contextMenus.create({
-        title: "Refresh crossword agent",
-        id: "reInitCrosswordPage",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        title: "Clear crossword cache",
-        id: "clearCrosswordPageCache",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    // Add separator
-    chrome.contextMenus.create({
-        type: "separator",
-        id: "menuSeparator",
-    });
-
-    chrome.contextMenus.create({
         title: "Discover page macros",
         id: "discoverPageActions",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
@@ -71,43 +53,6 @@ export async function handleContextMenuClick(
     }
 
     switch (info.menuItemId) {
-        case "reInitCrosswordPage": {
-            // insert site-specific script
-            await chrome.tabs.sendMessage(tab.id!, {
-                type: "setup_UniversalCrossword",
-            });
-
-            // trigger translator
-            const webSocket = getWebSocket();
-            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                webSocket.send(
-                    JSON.stringify({
-                        method: "enableSiteTranslator",
-                        params: { translator: "browser.crossword" },
-                    }),
-                );
-            }
-
-            break;
-        }
-        case "clearCrosswordPageCache": {
-            // remove cached schema for current tab
-            // trigger translator
-            const webSocket = getWebSocket();
-            if (
-                tab.url &&
-                webSocket &&
-                webSocket.readyState === WebSocket.OPEN
-            ) {
-                webSocket.send(
-                    JSON.stringify({
-                        method: "removeCrosswordPageCache",
-                        params: { url: tab.url },
-                    }),
-                );
-            }
-            break;
-        }
         case "discoverPageActions": {
             await chrome.sidePanel.open({ tabId: tab.id! });
 

@@ -27,13 +27,9 @@ import { TypeAgentJsonValidator } from "typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
-import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
-import { PlanGenerator } from "./planning/planGenerator.js";
-import { PlanLibrary } from "./planning/planLibrary.js";
-import { PlanMatcher } from "./planning/planMatcher.js";
-import { PlanExecutor } from "./planning/planExecutor.js";
+import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 
 const model = "claude-sonnet-4-5-20250929";
@@ -353,6 +349,135 @@ function getClaudeOptions(
                 "",
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
+                "",
+                "# TaskFlow Recording",
+                "",
+                "TRIGGERS:",
+                "- 'learn: [task]' or 'remember how to [task]' or 'record [task]' → STANDARD recording",
+                "- 'dev: learn: [task]' or 'dev: record [task]' → DEV MODE recording (see below)",
+                "",
+                "STANDARD RECORDING STEPS (run in TypeAgent shell — do NOT write TypeScript here):",
+                "1. Call discover_actions for each agent schema needed.",
+                "2. SOURCE RESEARCH — required before recording any web fetch step:",
+                "   Goal: find a stable, server-side-rendered page whose URL can be templated with",
+                "   the flow's parameters so the compiled flow works for ALL valid inputs.",
+                "",
+                "   PROCESS:",
+                "   a. Use your WebSearch tool to look for authoritative sites that list the data.",
+                "      For each candidate site, inspect its URLs: does the flow parameter (category,",
+                "      genre, keyword, product type, etc.) appear in the URL path or query string?",
+                "   b. Fetch 2-3 URLs on that site substituting different parameter values to confirm",
+                "      the pattern is consistent and the data is server-rendered (not JS-only).",
+                "      Example of what you're looking for: site.com/data/{param}/list",
+                "      where {param} varies per user input.",
+                "   c. Once confirmed, record the URL as a template: site.com/data/${paramName}/list",
+                "      Space-to-hyphen normalization is automatic in utility.webFetch.",
+                "   d. Only fall back to utility.webSearch if after trying 3+ candidate sites you",
+                "      cannot find any with a parameterizable URL pattern.",
+                "   e. NEVER record a fixed URL for one specific input value — the recipe must work",
+                "      for all valid values of every flow parameter.",
+                "",
+                "3. STEP COST — prefer the cheapest path that works:",
+                "   • utility.webFetch(parameterized-url) + utility.llmTransform  ~5s  → PREFERRED",
+                "   • utility.webSearch + utility.llmTransform                     ~8s  → only if (2d)",
+                "   • utility.claudeTask                                           ~35s → LAST RESORT",
+                "4. Devise the full step sequence — identify which steps need LLM interpretation.",
+                "   Available utility actions:",
+                "     webSearch(query, numResults?), webFetch(url),",
+                "     readFile(path), writeFile(path, content),",
+                "     llmTransform(input, prompt, parseJson?, model?),",
+                "     claudeTask(goal, parseJson?, model?, maxTurns?)  ← EXPENSIVE, sparingly",
+                "5. Add a testValue to each parameter for use during compilation.",
+                "6. Note the expected output format of each step in observedOutputFormat if known.",
+                "7. Write recipe files — CHECK BEFORE WRITING:",
+                "   Use Read to check if the file already exists.",
+                "   If pending/ACTION_NAME.recipe.json already exists → append _v2, _v3, etc.",
+                "   and tell the user which name you used.",
+                "   a. packages/agents/taskflow/pending/ACTION_NAME.recipe.json",
+                "      — fast path: webFetch+llmTransform (or webSearch+llmTransform if no stable URL)",
+                "   b. packages/agents/taskflow/pending/ACTION_NAME_claude.recipe.json",
+                "      — comparison path using claudeTask for the research/data step",
+                "      — actionName must be ACTION_NAME + 'Claude' (e.g. createPlaylistClaude)",
+                "      — description: 'Comparison flow using claudeTask — compare latency/quality'",
+                "      — IMPORTANT: claudeTask only has WebSearch/WebFetch tools — it CANNOT call",
+                "        TypeAgent actions (no createPlaylist, no player, no agents). So the recipe",
+                "        must still have a separate callAction step for any TypeAgent action needed.",
+                "        Structure: [claudeTask step to research/fetch data, parseJson:true]",
+                "                 + [callAction step to act on the result (e.g. player.createPlaylist)]",
+                "      — always write this companion recipe so the two approaches can be A/B tested",
+                "8. If you noticed gaps (missing actions, output format issues), also write:",
+                "   packages/agents/taskflow/pending/suggestions/ACTION_NAME.suggestions.md",
+                "9. Tell user: 'Recipe saved. To compile, run from packages/agents/taskflow:'",
+                "   pnpm run compile",
+                "",
+                "DEV MODE RECORDING — interactive improvement loop:",
+                "When triggered with 'dev: learn: [task]':",
+                "- Follow standard recording steps 1-5",
+                "- BEFORE writing the recipe, surface improvement opportunities:",
+                "  * 'action X returns plain text — JSON output would let the compiled flow work with",
+                "    typed data. Want me to add outputFormat support to that action? (~5 min)'",
+                "  * 'there is no action for Y — want me to create one now?'",
+                "  * 'steps A and B could be a single action — want me to add a combined action?'",
+                "- If developer says yes: use Read/Write/Edit/Bash tools to implement the change,",
+                "  build it (cd to the agent package and run pnpm run tsc), then continue recording",
+                "  with the improved action",
+                "- After all improvements are done, write the recipe using the improved actions",
+                "- Use your built-in tools (WebSearch, WebFetch, Read) for YOUR reasoning only —",
+                "  the recipe records TypeAgent action calls, not your reasoning tool calls",
+                "- Apply the same step-cost hierarchy (step 3 above): prefer webFetch+llmTransform",
+                "  over claudeTask; only use claudeTask when no stable URL pattern is findable",
+                "",
+                "RECIPE FORMAT (write as JSON):",
+                "{",
+                '  "version": 1,',
+                '  "actionName": "camelCaseActionName",',
+                '  "description": "what this flow does",',
+                '  "parameters": [',
+                '    { "name": "param", "type": "string|number|boolean", "required": true|false,',
+                '      "default": defaultValue, "description": "..." }',
+                "  ],",
+                '  "steps": [',
+                '    { "id": "stepId",',
+                '      "schemaName": "exactSchemaFromDiscover",',
+                '      "actionName": "exactActionFromDiscover",',
+                '      "parameters": {',
+                '        "key": "${paramName}",',
+                '        "nested": { "inner": "${paramName}" },',
+                '        "fromPriorStep": "${stepId.text}"',
+                "      }",
+                "    }",
+                "  ],",
+                '  "grammarPatterns": [',
+                '    "3-5 natural invocation patterns with $(param:wildcard) or $(param:number) captures"',
+                "  ]",
+                "}",
+                "",
+                "STEP PARAMETER REFERENCES:",
+                '- "${paramName}"     → flow parameter value',
+                '- "${stepId.text}"   → prior step plain text output',
+                '- "${stepId.data}"   → prior step output parsed as JSON',
+                '- "prefix ${p} sfx" → interpolated string',
+                "- Static values (strings, numbers, booleans, objects, arrays) passed through as-is",
+                "- Nested objects and arrays resolve ${...} recursively",
+                "",
+                "LLM STEPS: use utility.llmTransform (not a 'query' step type):",
+                '  { "id": "summary", "schemaName": "utility", "actionName": "llmTransform",',
+                '    "parameters": { "input": "${priorStep.text}", "prompt": "Summarize...",',
+                '    "model": "claude-haiku-4-5-20251001" } }',
+                "",
+                "GRAMMAR PATTERN RULES:",
+                "- ONLY TWO capture types exist: $(name:wildcard) for strings, $(name:number) for numbers",
+                "  NEVER write $(name:string) or $(name:integer) — those are invalid and will fail to compile",
+                "- Optional words: (word)?   Alternatives: word1 | word2",
+                "- Bare variable names in action body: { genre } not { genre: $genre }",
+                "",
+                "PARAMETER RULES:",
+                "- Required: domain-specific, no reasonable default (e.g. genre, recipient)",
+                "- Optional with default: sensible default exists (e.g. quantity=10, timePeriod='this month')",
+                "- Use exact schemaName from discover_actions; utility agent is schemaName 'utility'",
+                "- For query steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
+                "  genuinely complex multi-step reasoning",
+                "- mkdir -p packages/agents/taskflow/pending packages/agents/taskflow/pending/suggestions",
             ].join("\n"),
         },
         mcpServers: {
@@ -624,101 +749,32 @@ async function executeReasoningWithTracing(
         // Save trace
         await tracer.saveTrace();
 
-        // Phase 2: Generate plan from successful trace
+        // Auto-generate recipe from successful trace for future reuse via flowInterpreter
         if (tracer.wasSuccessful()) {
             try {
-                const planGenerator = new PlanGenerator();
-                const planLibrary = new PlanLibrary(
-                    storage,
-                    context.sessionContext.instanceStorage,
-                );
+                const recipeGen = new ReasoningRecipeGenerator();
+                const recipe = await recipeGen.generate(tracer.getTrace());
 
-                const plan = await planGenerator.generatePlan(
-                    tracer.getTrace(),
-                );
-
-                if (plan && planGenerator.validatePlan(plan)) {
-                    // Check for duplicate plans before saving
-                    const existingPlans = await planLibrary.findMatchingPlans(
-                        originalRequest,
-                        plan.intent,
+                if (recipe) {
+                    const pendingDir = path.join(
+                        getRepoRoot(),
+                        "packages",
+                        "agents",
+                        "taskflow",
+                        "pending",
                     );
-
-                    let isDuplicate = false;
-                    let duplicatePlanId: string | undefined;
-
-                    if (existingPlans.length > 0) {
-                        // Use PlanMatcher to check if this plan is essentially a duplicate
-                        const planMatcher = new PlanMatcher(planLibrary);
-
-                        for (const existingPlan of existingPlans) {
-                            // Check if existing plan is user-approved
-                            if (existingPlan.approval?.status === "approved") {
-                                debug(
-                                    `Found user-approved plan: ${existingPlan.planId}, skipping new plan creation`,
-                                );
-
-                                // Update usage of approved plan instead
-                                await planLibrary.updatePlanUsage(
-                                    existingPlan.planId,
-                                    true,
-                                    tracer.getTrace().metrics.duration,
-                                );
-
-                                isDuplicate = true;
-                                duplicatePlanId = existingPlan.planId;
-                                break;
-                            }
-
-                            // Check if the descriptions are very similar
-                            const similarity =
-                                await planMatcher.computeSimilarity(
-                                    plan.description,
-                                    existingPlan.description,
-                                );
-
-                            if (similarity >= 0.8) {
-                                isDuplicate = true;
-                                duplicatePlanId = existingPlan.planId;
-                                debug(
-                                    `Detected duplicate plan (similarity: ${similarity}): ${existingPlan.planId}`,
-                                );
-
-                                // Update the existing plan's usage count
-                                await planLibrary.updatePlanUsage(
-                                    existingPlan.planId,
-                                    true,
-                                    tracer.getTrace().metrics.duration,
-                                );
-                                break;
-                            }
-                        }
-                    }
-
-                    if (isDuplicate) {
-                        debug(
-                            `Skipped creating duplicate plan, updated existing: ${duplicatePlanId}`,
-                        );
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Updated existing workflow plan usage (prevented duplicate)`,
-                        });
-                    } else {
-                        await planLibrary.savePlan(plan);
-                        debug(
-                            `Generated and saved workflow plan: ${plan.planId} (${plan.intent})`,
-                        );
-
-                        // Notify user that a plan was created
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Created reusable workflow plan: ${plan.description}`,
-                        });
-                    }
+                    const { saveRecipe } = await import(
+                        "taskflow-typeagent/recipeCompiler"
+                    );
+                    const filePath = await saveRecipe(recipe, pendingDir);
+                    debug(`Recipe saved: ${filePath}`);
+                    context.actionIO.appendDisplay({
+                        type: "text",
+                        content: `\n✓ Recipe saved: ${recipe.actionName}.recipe.json`,
+                    });
                 }
             } catch (error) {
-                // Don't fail the request if plan generation fails
-                debug("Failed to generate plan from trace:", error);
+                debug("Failed to generate recipe from trace:", error);
             }
         }
 
@@ -731,117 +787,6 @@ async function executeReasoningWithTracing(
         await tracer.saveTrace();
         throw error;
     }
-}
-
-/**
- * Execute reasoning action with planning (Phase 3: plan execution + fallback)
- */
-async function executeReasoningWithPlanning(
-    originalRequest: string,
-    context: ActionContext<CommandHandlerContext>,
-): Promise<any> {
-    const storage = context.sessionContext.sessionStorage;
-
-    if (!storage) {
-        // No session storage available - fallback to standard reasoning
-        debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(originalRequest, context);
-    }
-
-    // Phase 3: Try to find and execute a matching plan
-    try {
-        const planLibrary = new PlanLibrary(
-            storage,
-            context.sessionContext.instanceStorage,
-        );
-        const planMatcher = new PlanMatcher(planLibrary);
-
-        debug("Searching for matching workflow plan...");
-        displayStatus("Checking for matching workflow...", context);
-
-        const match = await planMatcher.findBestMatch(originalRequest);
-
-        if (match) {
-            debug(
-                `Found matching plan: ${match.plan.planId} (confidence: ${match.confidence})`,
-            );
-
-            // Notify user about plan reuse
-            context.actionIO.appendDisplay({
-                type: "text",
-                content: `\n♻️ Reusing workflow: ${match.plan.description} (confidence: ${Math.round(match.confidence * 100)}%)`,
-            });
-
-            // Execute the plan
-            const planExecutor = new PlanExecutor();
-            const executionResult = await planExecutor.executePlan(
-                match.plan,
-                originalRequest,
-                context,
-            );
-
-            if (executionResult.success) {
-                // Update plan usage statistics
-                await planLibrary.updatePlanUsage(
-                    match.plan.planId,
-                    true,
-                    executionResult.duration,
-                );
-
-                debug(
-                    `Plan executed successfully in ${executionResult.duration}ms`,
-                );
-
-                // Notify user of success
-                context.actionIO.appendDisplay({
-                    type: "text",
-                    content: `\n✓ Workflow completed successfully`,
-                });
-
-                // Prompt for review if plan is pending
-                if (match.plan.approval?.status === "pending_review") {
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: `\n💡 This workflow is ready for review.`,
-                    });
-                }
-
-                return executionResult.finalOutput
-                    ? createActionResultNoDisplay(executionResult.finalOutput)
-                    : undefined;
-            } else {
-                // Plan execution failed - update stats and fallback
-                await planLibrary.updatePlanUsage(
-                    match.plan.planId,
-                    false,
-                    executionResult.duration,
-                );
-
-                debug(
-                    `Plan execution failed: ${executionResult.error}, falling back to reasoning`,
-                );
-
-                context.actionIO.appendDisplay({
-                    type: "text",
-                    content: `\n⚠️ Workflow failed, using reasoning instead...`,
-                });
-
-                // Fall through to reasoning
-            }
-        } else {
-            debug("No matching plan found, using reasoning");
-            displayStatus(
-                "No matching workflow found, using reasoning...",
-                context,
-            );
-        }
-    } catch (error) {
-        debug("Plan matching/execution failed:", error);
-        // Fall through to reasoning
-    }
-
-    // Fallback: Execute reasoning with tracing
-    return executeReasoningWithTracing(originalRequest, context);
 }
 
 /**
@@ -886,10 +831,9 @@ export async function executeReasoning(
     }
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     if (!planReuseEnabled) {
-        // Standard reasoning without planning
         return executeReasoningWithoutPlanning(request, context);
     }
 
-    // Reasoning with planning (trace capture)
-    return executeReasoningWithPlanning(request, context);
+    // Trace capture + auto recipe generation
+    return executeReasoningWithTracing(request, context);
 }

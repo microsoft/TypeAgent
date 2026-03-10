@@ -7,6 +7,8 @@ export {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
+export { DisplayLog } from "./displayLog.js";
+export type { DisplayLogEntry } from "./displayLog.js";
 
 // Internal exports for CLI/testing/debugging purposes
 
@@ -26,11 +28,21 @@ export {
 } from "./utils/test/explanationTestData.js";
 
 export { getAssistantSelectionSchemas } from "./translation/unknownSwitcher.js";
-export { getFullSchemaText } from "./translation/agentTranslators.js";
+export {
+    getFullSchemaText,
+    getAppAgentName,
+    loadAgentJsonTranslator,
+} from "./translation/agentTranslators.js";
+export type {
+    TypeAgentTranslator,
+    TranslatedAction,
+} from "./translation/agentTranslators.js";
 export { tryGetActionSchema } from "./translation/actionSchemaFileCache.js";
-export { getAppAgentName } from "./translation/agentTranslators.js";
 export { createSchemaInfoProvider } from "./translation/actionSchemaFileCache.js";
 export { getAllActionConfigProvider } from "./context/inlineAgentProvider.js";
+export type { ComposeSchemaOptions } from "./translation/actionSchemaJsonTranslator.js";
+export type { ActionConfig } from "./translation/actionConfig.js";
+export type { ActionConfigProvider } from "./translation/actionConfigProvider.js";
 
 export {
     ChatHistoryInput,
@@ -38,3 +50,13 @@ export {
     ChatHistoryInputAssistant,
     isChatHistoryInput,
 } from "./context/chatHistory.js";
+
+export {
+    getSessionsDirPath,
+    getSessionDirPath,
+    getSessionNames,
+    getSessionConstructionDirPath,
+    getSessionConstructionDirPaths,
+} from "./context/session.js";
+
+export { initializeGeolocation } from "./context/geolocation.js";

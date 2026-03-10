@@ -72,7 +72,15 @@ class PhraseSetRegistry {
         const key = tokens.join(" ");
         if (matcher.phraseKeys.has(key)) return false;
         matcher.phraseKeys.add(key);
-        matcher.phrases.push(tokens);
+        // Insert sorted longest-first so greedy matchers find the longest match first
+        const insertIdx = matcher.phrases.findIndex(
+            (p) => p.length < tokens.length,
+        );
+        if (insertIdx === -1) {
+            matcher.phrases.push(tokens);
+        } else {
+            matcher.phrases.splice(insertIdx, 0, tokens);
+        }
         return true;
     }
 

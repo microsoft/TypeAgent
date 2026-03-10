@@ -28,14 +28,31 @@ import { uint8ArrayToBase64 } from "@typeagent/common-utils";
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 
+// The canonical MessageGroup key is requestId.requestId — a UUID assigned by
+// the dispatcher (via randomUUID()). This value is guaranteed to be unique
+// within a session, which decouples the keying strategy from the client-assigned
+// clientRequestId. Client-side messages (e.g. notifications) set requestId to
+// "" and use clientRequestId as the map key instead.
+//
+// Returns undefined when requestId.requestId is empty (""), which indicates
+// the message was generated client-side and has no server-assigned UUID.
 function getMessageGroupId(requestId: RequestId): string | undefined {
-    return requestId.clientRequestId as string | undefined;
+    return requestId.requestId || undefined;
 }
 
 export class ChatView {
     private readonly topDiv: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
+    // Server-UUID-keyed MessageGroups (promoted from pendingLocalGroups, or
+    // created directly for remote replay via addRemoteUserMessage).
     private readonly idToMessageGroup: Map<string, MessageGroup> = new Map();
+    // Locally-created MessageGroups waiting for the server-assigned UUID.
+    // Keyed by the temp clientRequestId (e.g. "cmd-0"). Moved into
+    // idToMessageGroup (under the canonical UUID) when setUserRequest arrives.
+    private readonly pendingLocalGroups: Map<string, MessageGroup> = new Map();
+    // Client-only MessageGroups that will never receive a server UUID
+    // (e.g. notifications, agent-initiated messages). Keyed by clientRequestId.
+    private readonly clientMessageGroups: Map<string, MessageGroup> = new Map();
     private inputContainer: HTMLDivElement | undefined;
     private _settingsView: SettingsView | undefined;
     private _dispatcher: Dispatcher | undefined;
@@ -308,30 +325,65 @@ export class ChatView {
 
     private getMessageGroup(requestId: RequestId) {
         const id = getMessageGroupId(requestId);
-        const messageGroup = id ? this.idToMessageGroup.get(id) : undefined;
-        if (messageGroup === undefined) {
-            // for agent initiated messages and notifications we need to create an associated message group
-            if (id?.startsWith("agent-") || id?.startsWith("notification-")) {
-                const mg: MessageGroup = new MessageGroup(
-                    this,
-                    this.settingsView!,
-                    "",
-                    this.messageDiv,
-                    undefined,
-                    this.agents,
-                    this.hideMetrics,
-                );
 
-                this.idToMessageGroup.set(id, mg);
+        // Server-assigned UUID exists — look up directly.
+        if (id !== undefined) {
+            const messageGroup = this.idToMessageGroup.get(id);
+            if (messageGroup !== undefined) {
+                return messageGroup;
+            }
 
-                mg.hideUserMessage();
-
-                return mg;
+            // Lazy promotion: check whether the clientRequestId matches a
+            // pending local MessageGroup. The first server message carrying
+            // both the UUID and the matching clientRequestId promotes the
+            // pending entry into idToMessageGroup.
+            const clientId = requestId.clientRequestId as string | undefined;
+            if (clientId) {
+                const pending = this.pendingLocalGroups.get(clientId);
+                if (pending) {
+                    this.pendingLocalGroups.delete(clientId);
+                    this.idToMessageGroup.set(id, pending);
+                    return pending;
+                }
             }
 
             console.error(`Invalid requestId ${id}`);
+            return undefined;
         }
-        return messageGroup;
+
+        // Client-side message (no server UUID) — use clientRequestId as key.
+        const clientId = requestId.clientRequestId as string | undefined;
+        if (!clientId) {
+            console.error(`Invalid requestId: no id or clientRequestId`);
+            return undefined;
+        }
+
+        const messageGroup = this.clientMessageGroups.get(clientId);
+        if (messageGroup !== undefined) {
+            return messageGroup;
+        }
+
+        // Auto-create for notification message groups.
+        if (
+            clientId.startsWith("agent-") ||
+            clientId.startsWith("notification-")
+        ) {
+            const mg: MessageGroup = new MessageGroup(
+                this,
+                this.settingsView!,
+                "",
+                this.messageDiv,
+                undefined,
+                this.agents,
+                this.hideMetrics,
+            );
+            this.clientMessageGroups.set(clientId, mg);
+            mg.hideUserMessage();
+            return mg;
+        }
+
+        console.error(`Invalid clientRequestId ${clientId}`);
+        return undefined;
     }
 
     showStatusMessage(msg: IAgentMessage, temporary: boolean) {
@@ -342,6 +394,8 @@ export class ChatView {
     clear() {
         this.messageDiv.replaceChildren();
         this.idToMessageGroup.clear();
+        this.pendingLocalGroups.clear();
+        this.clientMessageGroups.clear();
         this.commandBackStackIndex = -1;
         this.commandBackStack = [];
     }
@@ -350,7 +404,7 @@ export class ChatView {
         request: string | { type: "html"; content: string },
         hidden: boolean = false,
     ) {
-        const id = this.idGenerator.genId();
+        const localId = this.idGenerator.genId();
 
         let images: string[] = [];
         let requestText: string;
@@ -366,12 +420,21 @@ export class ChatView {
             requestText = request.content;
         }
 
+        // Start command processing first so we have the promise for MessageGroup.
+        // localId becomes clientRequestId in the RequestId; the server assigns
+        // a UUID (requestId.requestId) and broadcasts it via setUserRequest.
+        const commandResult = this.getDispatcher().processCommand(
+            requestText,
+            localId,
+            images,
+        );
+
         const mg: MessageGroup = new MessageGroup(
             this,
             this.settingsView!,
             request,
             this.messageDiv,
-            this.getDispatcher().processCommand(requestText, id, images),
+            commandResult,
             this.agents,
             this.hideMetrics,
         );
@@ -380,10 +443,38 @@ export class ChatView {
             mg.hideUserMessage();
         }
 
-        this.idToMessageGroup.set(id, mg);
+        // Hold in pending map until setUserRequest arrives with the UUID.
+        this.pendingLocalGroups.set(localId, mg);
         this.updateScroll();
         this.commandBackStackIndex = 0;
         this.commandBackStack = [];
+    }
+
+    addRemoteUserMessage(requestId: RequestId, command: string) {
+        const id = requestId.requestId;
+        if (!id || this.idToMessageGroup.has(id)) {
+            return;
+        }
+
+        // Don't create a remote MG if this is actually a local command
+        // still waiting for promotion (handled lazily by getMessageGroup).
+        const localId = requestId.clientRequestId as string | undefined;
+        if (localId && this.pendingLocalGroups.has(localId)) {
+            return;
+        }
+
+        const mg: MessageGroup = new MessageGroup(
+            this,
+            this.settingsView!,
+            command,
+            this.messageDiv,
+            undefined,
+            this.agents,
+            this.hideMetrics,
+        );
+
+        this.idToMessageGroup.set(id, mg);
+        this.updateScroll();
     }
 
     async extractMultiModalContent(tempDiv: HTMLDivElement): Promise<string[]> {
@@ -412,44 +503,21 @@ export class ChatView {
         return retVal;
     }
 
-    notifyExplained(requestId: string | RequestId, data: NotifyExplainedData) {
-        const id =
-            typeof requestId === "string"
-                ? requestId
-                : getMessageGroupId(requestId);
-        if (id) {
-            this.idToMessageGroup.get(id)?.notifyExplained(data);
-        }
+    notifyExplained(requestId: RequestId, data: NotifyExplainedData) {
+        this.getMessageGroup(requestId)?.notifyExplained(data);
     }
 
     updateGrammarResult(
-        requestId: string | RequestId,
+        requestId: RequestId,
         success: boolean,
         message?: string,
     ) {
-        const id =
-            typeof requestId === "string"
-                ? requestId
-                : getMessageGroupId(requestId);
-        if (id) {
-            this.idToMessageGroup
-                .get(id)
-                ?.updateGrammarResult(success, message);
-        }
+        this.getMessageGroup(requestId)?.updateGrammarResult(success, message);
     }
 
-    randomCommandSelected(requestId: string | RequestId, message: string) {
-        const id =
-            typeof requestId === "string"
-                ? requestId
-                : getMessageGroupId(requestId);
-        if (id) {
-            const pair = this.idToMessageGroup.get(id);
-            if (pair !== undefined) {
-                if (message.length > 0) {
-                    pair.updateUserMessage(message);
-                }
-            }
+    randomCommandSelected(requestId: RequestId, message: string) {
+        if (message.length > 0) {
+            this.getMessageGroup(requestId)?.updateUserMessage(message);
         }
     }
 
@@ -696,6 +764,12 @@ export class ChatView {
     public setMetricsVisible(visible: boolean) {
         this.hideMetrics = !visible;
         for (const messageGroup of this.idToMessageGroup.values()) {
+            messageGroup.setMetricsVisible(visible);
+        }
+        for (const messageGroup of this.pendingLocalGroups.values()) {
+            messageGroup.setMetricsVisible(visible);
+        }
+        for (const messageGroup of this.clientMessageGroups.values()) {
             messageGroup.setMetricsVisible(visible);
         }
     }

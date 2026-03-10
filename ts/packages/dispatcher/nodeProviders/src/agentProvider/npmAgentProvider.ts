@@ -22,7 +22,7 @@ export type NpmAppAgentInfo = {
     execMode?: ExecutionMode;
 };
 
-function patchPaths(manifest: ActionManifest, dir: string) {
+function patchPaths(manifest: ActionManifest | AppAgentManifest, dir: string) {
     if (manifest.schema) {
         if (typeof manifest.schema.schemaFile === "string") {
             manifest.schema.schemaFile = path.resolve(
@@ -36,6 +36,15 @@ function patchPaths(manifest: ActionManifest, dir: string) {
                 dir,
                 manifest.schema.grammarFile,
             );
+        }
+    }
+    // Resolve flow file paths to absolute paths
+    const appManifest = manifest as AppAgentManifest;
+    if (appManifest.flows) {
+        for (const [actionName, flowPath] of Object.entries(
+            appManifest.flows,
+        )) {
+            appManifest.flows[actionName] = path.resolve(dir, flowPath);
         }
     }
     if (manifest.subActionManifests) {

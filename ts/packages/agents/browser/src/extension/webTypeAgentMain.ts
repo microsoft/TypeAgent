@@ -11,11 +11,13 @@ import {
     AgentInterfaceFunctionName,
     createAgentRpcServer,
 } from "@typeagent/agent-rpc/server";
-import { isWebAgentMessageFromDispatcher } from "../common/webAgentMessageTypes.mjs";
 import {
+    isWebAgentMessageFromDispatcher,
+    isBuiltInWebAgentRpcResponse,
     WebAgentRegisterMessage,
     WebAgentRpcMessage,
 } from "../common/webAgentMessageTypes.mjs";
+import { initializeWebAgentLoader } from "./webagent/webAgentLoader";
 
 declare global {
     function registerTypeAgent(
@@ -83,6 +85,9 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     );
     manager = {
         addTypeAgent: async (name, manifest, agent) => {
+            // Clean up any stale channel from a previous registration attempt
+            messageChannelProvider.deleteChannel(`agent:${name}`);
+
             const { closeFn, agentInterface } = createAgentRpcServer(
                 name,
                 agent,
@@ -107,12 +112,22 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
     const messageHandler = (event: MessageEvent) => {
         const data = event.data;
         if (isWebAgentMessageFromDispatcher(data)) {
+            // Built-in RPC responses use a different schema and are handled
+            // by listeners in webAgentRpc.ts, not the channel provider
+            if (isBuiltInWebAgentRpcResponse(data)) {
+                return;
+            }
+
             switch (data.method) {
                 case "webAgent/register":
-                    registerChannel.notifyMessage(data.params);
+                    if (data.params !== undefined) {
+                        registerChannel.notifyMessage(data.params);
+                    }
                     break;
                 case "webAgent/message":
-                    messageChannelProvider.notifyMessage(data.params);
+                    if (data.params !== undefined) {
+                        messageChannelProvider.notifyMessage(data.params);
+                    }
                     break;
                 case "webAgent/disconnect":
                     messageChannelProvider.notifyDisconnected();
@@ -139,3 +154,12 @@ actualGlobal.registerTypeAgent = async (
     const manager = ensureDynamicTypeAgentManager();
     await manager.addTypeAgent(name, manifest, agent);
 };
+
+// Initialize WebAgentLoader for URL-based WebAgent activation (crossword, commerce, etc.)
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+        initializeWebAgentLoader();
+    });
+} else {
+    initializeWebAgentLoader();
+}

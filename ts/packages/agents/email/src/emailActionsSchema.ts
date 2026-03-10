@@ -57,7 +57,7 @@ interface MsgDateTimeRange {
     dayRange?: string;
 }
 
-interface MessageReference {
+export interface MessageReference {
     // Email address of the sender, infer the sender based on the user input
     // like look for message fror by Jen and Ben should add Jen and Ben as senders
     senders?: string[];

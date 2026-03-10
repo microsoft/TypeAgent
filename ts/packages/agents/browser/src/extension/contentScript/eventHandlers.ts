@@ -25,6 +25,7 @@ import { awaitPageIncrementalUpdates } from "./loadingDetector";
 import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
 import { createRpc } from "@typeagent/agent-rpc/rpc";
+import { sendMessageToBackground, sendMainWorldRequest } from "./messaging";
 
 // Set up history interception for SPA navigation
 const interceptHistory = (method: "pushState" | "replaceState") => {
@@ -203,6 +204,22 @@ function setupMessageListeners(): void {
 }
 
 /**
+ * Handles crossword change detection and triggers re-initialization
+ * @param url The URL where the change was detected
+ */
+async function handleCrosswordChanged(url: string): Promise<void> {
+    try {
+        await sendMessageToBackground({
+            type: "enableSiteAgent",
+            agentName: "browser.crossword",
+            reinitialize: true,
+        });
+    } catch (error) {
+        console.error("Error sending message to background:", error);
+    }
+}
+
+/**
  * Sets up event listeners for the page
  */
 function setupPageEventListeners(): void {
@@ -218,6 +235,19 @@ function setupPageEventListeners(): void {
         async function (e: any) {
             var message = e.detail;
             console.log("received from UI Events:", message);
+        },
+    );
+
+    // Listen for crossword automation events
+    document.addEventListener(
+        "fromCrosswordAutomation",
+        async function (e: any) {
+            const message = e.detail;
+            console.log("Crossword automation event:", message);
+
+            if (message.type === "crosswordChanged") {
+                await handleCrosswordChanged(message.url);
+            }
         },
     );
 }
@@ -339,6 +369,82 @@ export async function handleMessage(
             case "extractSchemaLinkedPages": {
                 extractSchemaFromLinkedPages();
                 sendResponse({});
+                break;
+            }
+
+            case "get_image_url": {
+                try {
+                    let imgElement: HTMLImageElement | null = null;
+
+                    // Try CSS selector first if provided
+                    if (message.cssSelector) {
+                        const element = document.querySelector(
+                            message.cssSelector,
+                        );
+                        if (element instanceof HTMLImageElement) {
+                            imgElement = element;
+                        } else {
+                            sendResponse({
+                                error: `Element found with selector '${message.cssSelector}' is not an image`,
+                            });
+                            return;
+                        }
+                    }
+                    // Try finding by description if provided
+                    else if (message.imageDescription) {
+                        // Simple heuristic: find images with matching alt text or title
+                        const images = Array.from(
+                            document.querySelectorAll("img"),
+                        );
+                        const description =
+                            message.imageDescription.toLowerCase();
+                        imgElement =
+                            images.find(
+                                (img) =>
+                                    img.alt
+                                        ?.toLowerCase()
+                                        .includes(description) ||
+                                    img.title
+                                        ?.toLowerCase()
+                                        .includes(description),
+                            ) || null;
+
+                        if (!imgElement) {
+                            sendResponse({
+                                error: `No image found matching description: ${message.imageDescription}`,
+                            });
+                            return;
+                        }
+                    } else {
+                        sendResponse({
+                            error: "Either cssSelector or imageDescription must be provided",
+                        });
+                        return;
+                    }
+
+                    if (!imgElement) {
+                        sendResponse({ error: "Image not found" });
+                        return;
+                    }
+
+                    // Get the image URL (handle both src and srcset)
+                    const imageUrl = imgElement.currentSrc || imgElement.src;
+
+                    if (!imageUrl) {
+                        sendResponse({ error: "Image has no source URL" });
+                        return;
+                    }
+
+                    // Convert relative URLs to absolute
+                    const absoluteUrl = new URL(imageUrl, window.location.href)
+                        .href;
+
+                    sendResponse({ imageUrl: absoluteUrl });
+                } catch (error: any) {
+                    sendResponse({
+                        error: `Error getting image URL: ${error.message}`,
+                    });
+                }
                 break;
             }
 

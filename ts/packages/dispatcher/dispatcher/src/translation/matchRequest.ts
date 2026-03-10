@@ -55,9 +55,16 @@ async function validateEntityWildcardMatch(
         // No entity wildcard, nothing to validate.
         return true;
     }
+    debugConstValidation(
+        `Validating entity wildcards: [${match.entityWildcardPropertyNames.join(", ")}] ` +
+            `for actions: [${match.match.actions.map((a) => `${a.action.schemaName}.${a.action.actionName}`).join(", ")}]`,
+    );
     const conversationMemory = context.conversationMemory;
     if (conversationMemory === undefined) {
         // Can't resolve entity without memory.
+        debugConstValidation(
+            `Entity wildcard validation skipped: no conversation memory`,
+        );
         return false;
     }
 
@@ -72,6 +79,9 @@ async function validateEntityWildcardMatch(
             agents,
         );
         if (!canResolve) {
+            debugConstValidation(
+                `Entity wildcard '${propertyName}' could not be resolved`,
+            );
             return false;
         }
     }
@@ -170,12 +180,21 @@ export function getActivityNamespaceSuffix(
     return cacheSpec !== "shared" ? activityContext!.activityName : undefined;
 }
 
+// Prefixes that must always reach Claude reasoning — never matched by grammar.
+const REASONING_PREFIXES = ["learn:", "dev:", "remember how to ", "record "];
+
 export async function matchRequest(
     context: ActionContext<CommandHandlerContext>,
     request: string,
     history?: HistoryContext,
     activeSchemas?: string[],
 ): Promise<TranslationResult | undefined> {
+    // Bypass grammar cache for recording/reasoning-directed requests.
+    const lower = request.trimStart().toLowerCase();
+    if (REASONING_PREFIXES.some((p) => lower.startsWith(p))) {
+        return undefined;
+    }
+
     const systemContext = context.sessionContext.agentContext;
     const agentCache = systemContext.agentCache;
     if (!agentCache.isEnabled()) {

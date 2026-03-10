@@ -5,6 +5,7 @@ import { initializeEventHandlers } from "./eventHandlers";
 import { restoreRecordingState } from "./recording";
 import { interceptHistory } from "./spaNavigation";
 import { PDFInterceptor } from "./pdfInterceptor";
+import { initializeContinuationHandler } from "./continuationHandler";
 import "./autoIndexing"; // Initialize auto-indexing
 
 // Imports to help with bundling
@@ -21,6 +22,36 @@ import "./spaNavigation";
 import "./types";
 
 /**
+ * Injects the tabId into the MAIN world so WebAgents can access it.
+ * This is needed because chrome.runtime APIs are not available in the MAIN world.
+ * Uses both script injection and postMessage for reliability.
+ */
+async function injectTabIdIntoMainWorld(): Promise<void> {
+    try {
+        const response = await chrome.runtime.sendMessage({ type: "getTabId" });
+        const tabId = response?.tabId;
+        if (tabId) {
+            // Method 1: Inject script to set window._tabId directly
+            const script = document.createElement("script");
+            script.textContent = `window._tabId = "${tabId}";`;
+            (document.head || document.documentElement).appendChild(script);
+            script.remove();
+
+            // Method 2: Post message for any listeners waiting for tabId
+            window.postMessage(
+                { type: "typeagent-tabId", tabId },
+                window.location.origin,
+            );
+        }
+    } catch (e) {
+        console.error("[ContentScript] Failed to inject tabId:", e);
+    }
+}
+
+// Inject tabId as early as possible (before DOMContentLoaded)
+injectTabIdIntoMainWorld();
+
+/**
  * Initializes the content script
  */
 async function initialize(): Promise<void> {
@@ -34,6 +65,9 @@ async function initialize(): Promise<void> {
 
     // Initialize PDF interceptor
     await initializePDFInterceptor();
+
+    // Initialize WebAgent continuation handler
+    initializeContinuationHandler();
 
     // Restore recording state if any
     await restoreRecordingStateFromStorage();

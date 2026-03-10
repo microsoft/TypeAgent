@@ -4,7 +4,24 @@
 import registerDebug from "debug";
 import { Grammar } from "./grammarTypes.js";
 import { NFA } from "./nfa.js";
-import { matchNFA } from "./nfaInterpreter.js";
+import {
+    matchNFAWithIndex,
+    buildFirstTokenIndex,
+    sortNFAMatches,
+    type FirstTokenIndex,
+} from "./nfaInterpreter.js";
+import { applySplitToTokens } from "./tokenSplit.js";
+
+// Lazy-built, NFA-lifetime cache: one index per NFA object.
+const indexCache = new WeakMap<NFA, FirstTokenIndex>();
+function getIndex(nfa: NFA): FirstTokenIndex {
+    let idx = indexCache.get(nfa);
+    if (!idx) {
+        idx = buildFirstTokenIndex(nfa);
+        indexCache.set(nfa, idx);
+    }
+    return idx;
+}
 
 const debug = registerDebug("typeagent:actionGrammar:nfaMatcher");
 
@@ -62,12 +79,41 @@ export function tokenizeRequest(request: string): string[] {
         .filter((token) => token.length > 0);
 }
 
+// ---------------------------------------------------------------------------
+// Token pre-splitting for optional/auto spacing mode
+// ---------------------------------------------------------------------------
+
+/**
+ * Collect all split candidates stored on NFA rule entry states.
+ * Only states from optional/auto rules carry splitCandidates (set by the
+ * compiler).  Returns candidates sorted longest-first, ready for greedy scan.
+ */
+function collectNFASplitCandidates(nfa: NFA): string[] {
+    const candidates = new Set<string>();
+    for (const state of nfa.states) {
+        if (state.splitCandidates) {
+            for (const c of state.splitCandidates) {
+                candidates.add(c);
+            }
+        }
+    }
+    return Array.from(candidates).sort((a, b) => b.length - a.length);
+}
+
+// splitToken and applySplitToTokens are imported from tokenSplit.ts
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 /**
  * Match a request string against a grammar using NFA
  *
- * The grammar rule itself is expected to account for all tokens in the request,
- * using optional built-in categories ((<Polite>)?, (<FillerWord>)?, etc.) for
- * leading/trailing courtesy words and hesitations.
+ * Two-pass strategy for spacing modes:
+ *   Pass 1 — original whitespace tokens: correct for spacing=required rules.
+ *   Pass 2 — pre-split tokens (only when the NFA has optional/auto rules with
+ *             split candidates): handles fused tokens like "Swift's" or "黃色汽車".
+ * The higher-priority result across both passes is returned.
  *
  * @param _grammar The grammar structure (unused, kept for API compatibility)
  * @param nfa The compiled NFA
@@ -87,26 +133,48 @@ export function matchGrammarWithNFA(
         return [];
     }
 
-    const nfaResult = matchNFA(nfa, tokens);
-    if (!nfaResult.matched) {
+    const index = getIndex(nfa);
+
+    // Pass 1: original token array (handles spacing=required correctly)
+    const origResult = matchNFAWithIndex(nfa, index, tokens);
+
+    // Pass 2: pre-split fused tokens for optional/auto rules
+    let bestResult = origResult;
+    const splitCandidates = collectNFASplitCandidates(nfa);
+    const splitTokens = applySplitToTokens(tokens, splitCandidates);
+    if (splitTokens !== null) {
+        debug(
+            `Split tokens: [${splitTokens.join(", ")}] (${splitTokens.length} tokens)`,
+        );
+        const splitResult = matchNFAWithIndex(nfa, index, splitTokens);
+        if (splitResult.matched) {
+            if (!origResult.matched) {
+                bestResult = splitResult;
+            } else {
+                [bestResult] = sortNFAMatches([origResult, splitResult]);
+            }
+        }
+    }
+
+    if (!bestResult.matched) {
         debug(`Match result: NO MATCH`);
         return [];
     }
 
     debug(`Match result: MATCHED`);
-    debug(`Action value: %O`, nfaResult.actionValue);
+    debug(`Action value: %O`, bestResult.actionValue);
 
-    const actionObject = nfaResult.actionValue ?? request;
-    const wildcardCharCount = nfaResult.uncheckedWildcardCount;
+    const actionObject = bestResult.actionValue ?? request;
+    const wildcardCharCount = bestResult.uncheckedWildcardCount;
     const entityWildcardPropertyNames: string[] = [];
 
     return [
         {
             match: actionObject,
             matchedValueCount:
-                nfaResult.fixedStringPartCount +
-                nfaResult.checkedWildcardCount +
-                nfaResult.uncheckedWildcardCount,
+                bestResult.fixedStringPartCount +
+                bestResult.checkedWildcardCount +
+                bestResult.uncheckedWildcardCount,
             wildcardCharCount,
             entityWildcardPropertyNames,
         },
