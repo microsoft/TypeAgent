@@ -17,7 +17,7 @@ import {
     AppAgentManifest,
     TypeAgentAction,
     AppAgentInitSettings,
-    CompletionGroup,
+    CompletionGroups,
 } from "@typeagent/agent-sdk";
 
 import {
@@ -170,7 +170,7 @@ export function createAgentRpcServer(
             }
             return agent.getCommands(getSessionContextShim(param));
         },
-        async getCommandCompletion(param): Promise<CompletionGroup[]> {
+        async getCommandCompletion(param): Promise<CompletionGroups> {
             if (agent.getCommandCompletion === undefined) {
                 throw new Error("Invalid invocation of getCommandCompletion");
             }

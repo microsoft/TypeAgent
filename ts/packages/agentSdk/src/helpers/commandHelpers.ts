@@ -7,7 +7,7 @@ import {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
-    CompletionGroup,
+    CompletionGroups,
 } from "../command.js";
 import {
     ParameterDefinitions,
@@ -42,7 +42,7 @@ export type CommandHandler = CommandDescriptor & {
         context: SessionContext<unknown>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<CompletionGroup[]>;
+    ): Promise<CompletionGroups>;
 };
 
 type CommandHandlerTypes = CommandHandlerNoParams | CommandHandler;
@@ -171,7 +171,11 @@ export function getCommandInterface(
             context: SessionContext<unknown>,
         ) => {
             const handler = getCommandHandler(handlers, commands);
-            return handler.getCompletion?.(context, params, names) ?? [];
+            return (
+                handler.getCompletion?.(context, params, names) ?? {
+                    groups: [],
+                }
+            );
         };
     }
     return commandInterface;

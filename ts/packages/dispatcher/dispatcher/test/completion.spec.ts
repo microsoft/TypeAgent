@@ -4,7 +4,7 @@
 import {
     AppAgent,
     AppAgentManifest,
-    CompletionGroup,
+    CompletionGroups,
 } from "@typeagent/agent-sdk";
 import { AppAgentProvider } from "../src/agentProvider/agentProvider.js";
 import {
@@ -23,7 +23,7 @@ import { getCommandCompletion } from "../src/command/completion.js";
 // CJK ("東京" → "タワー"/"駅") and English ("Tokyo" → "Tower"/"Station")
 // prefixes.  `token` is the raw last token from parseParams — it may
 // include a leading quote for open-quoted input.
-function grammarCompletion(token: string): CompletionGroup[] {
+function grammarCompletion(token: string): CompletionGroups {
     // Strip a leading quote so grammar match logic operates on text only.
     const text = token.startsWith('"') ? token.substring(1) : token;
     const quoteOffset = token.length - text.length; // 0 or 1
@@ -31,40 +31,46 @@ function grammarCompletion(token: string): CompletionGroup[] {
     if (text.startsWith("Tokyo")) {
         const suffix = text.substring(5).trim();
         if (suffix.startsWith("Tower") || suffix.startsWith("Station")) {
-            return []; // completed match
+            return { groups: [] }; // completed match
         }
-        return [
-            {
-                name: "Grammar",
-                completions: ["Tower", "Station"],
-                prefixLength: quoteOffset + 5,
-                separatorMode: "space",
-            },
-        ];
+        return {
+            groups: [
+                {
+                    name: "Grammar",
+                    completions: ["Tower", "Station"],
+                },
+            ],
+            prefixLength: quoteOffset + 5,
+            separatorMode: "space",
+        };
     }
     if (text.startsWith("東京")) {
         const suffix = text.substring(2);
         if (suffix.startsWith("タワー") || suffix.startsWith("駅")) {
-            return []; // completed match
+            return { groups: [] }; // completed match
         }
-        return [
-            {
-                name: "Grammar",
-                completions: ["タワー", "駅"],
-                prefixLength: quoteOffset + 2,
-                separatorMode: "optional",
-            },
-        ];
+        return {
+            groups: [
+                {
+                    name: "Grammar",
+                    completions: ["タワー", "駅"],
+                },
+            ],
+            prefixLength: quoteOffset + 2,
+            separatorMode: "optional",
+        };
     }
     // No prefix matched — offer initial completions.
-    return [
-        {
-            name: "Grammar",
-            completions: ["Tokyo ", "東京"],
-            ...(token.length > 0 ? { prefixLength: 0 } : {}),
-            separatorMode: "space",
-        },
-    ];
+    return {
+        groups: [
+            {
+                name: "Grammar",
+                completions: ["Tokyo ", "東京"],
+            },
+        ],
+        ...(token.length > 0 ? { prefixLength: 0 } : {}),
+        separatorMode: "space",
+    };
 }
 
 const handlers = {
@@ -85,16 +91,18 @@ const handlers = {
                 _context: unknown,
                 _params: unknown,
                 names: string[],
-            ): Promise<CompletionGroup[]> => {
+            ): Promise<CompletionGroups> => {
                 if (!names.includes("task")) {
-                    return [];
+                    return { groups: [] };
                 }
-                return [
-                    {
-                        name: "Tasks",
-                        completions: ["build", "test", "deploy"],
-                    },
-                ];
+                return {
+                    groups: [
+                        {
+                            name: "Tasks",
+                            completions: ["build", "test", "deploy"],
+                        },
+                    ],
+                };
             },
         },
         nested: {
@@ -157,16 +165,18 @@ const handlers = {
                 _context: unknown,
                 _params: unknown,
                 names: string[],
-            ): Promise<CompletionGroup[]> => {
+            ): Promise<CompletionGroups> => {
                 if (!names.includes("first") && !names.includes("second")) {
-                    return [];
+                    return { groups: [] };
                 }
-                return [
-                    {
-                        name: "Values",
-                        completions: ["alpha", "beta"],
-                    },
-                ];
+                return {
+                    groups: [
+                        {
+                            name: "Values",
+                            completions: ["alpha", "beta"],
+                        },
+                    ],
+                };
             },
         },
         search: {
@@ -184,16 +194,18 @@ const handlers = {
                 _context: unknown,
                 _params: unknown,
                 names: string[],
-            ): Promise<CompletionGroup[]> => {
+            ): Promise<CompletionGroups> => {
                 if (!names.includes("query")) {
-                    return [];
+                    return { groups: [] };
                 }
-                return [
-                    {
-                        name: "Suggestions",
-                        completions: ["hello world", "foo bar"],
-                    },
-                ];
+                return {
+                    groups: [
+                        {
+                            name: "Suggestions",
+                            completions: ["hello world", "foo bar"],
+                        },
+                    ],
+                };
             },
         },
         grammar: {
@@ -210,9 +222,9 @@ const handlers = {
                 _context: unknown,
                 params: unknown,
                 names: string[],
-            ): Promise<CompletionGroup[]> => {
+            ): Promise<CompletionGroups> => {
                 if (!names.includes("phrase")) {
-                    return [];
+                    return { groups: [] };
                 }
                 const p = params as { tokens?: string[] };
                 const lastToken = p.tokens?.[p.tokens.length - 1] ?? "";
@@ -234,9 +246,9 @@ const handlers = {
                 _context: unknown,
                 params: unknown,
                 names: string[],
-            ): Promise<CompletionGroup[]> => {
+            ): Promise<CompletionGroups> => {
                 if (!names.includes("query")) {
-                    return [];
+                    return { groups: [] };
                 }
                 const p = params as { tokens?: string[] };
                 const lastToken = p.tokens?.[p.tokens.length - 1] ?? "";

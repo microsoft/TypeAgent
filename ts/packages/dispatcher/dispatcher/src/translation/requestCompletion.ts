@@ -6,7 +6,7 @@ import registerDebug from "debug";
 import { ExecutableAction, getPropertyInfo, MatchOptions } from "agent-cache";
 import {
     CompletionGroup,
-    SeparatorMode,
+    CompletionGroups,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
@@ -77,7 +77,7 @@ function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
 export async function requestCompletion(
     requestPrefix: string | undefined,
     context: CommandHandlerContext,
-): Promise<CompletionGroup[]> {
+): Promise<CompletionGroups> {
     debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
     const namespaceKeys = getCompletionNamespaceKeys(context);
     debugCompletion(`Request completion namespace keys`, namespaceKeys);
@@ -92,7 +92,7 @@ export async function requestCompletion(
     const results = context.agentCache.completion(requestPrefix, options);
 
     if (results === undefined) {
-        return [];
+        return { groups: [] };
     }
 
     const prefixLength = results.matchedPrefixLength;
@@ -104,13 +104,11 @@ export async function requestCompletion(
             completions: results.completions,
             needQuotes: false, // Request completions are partial, no quotes needed
             kind: "literal",
-            prefixLength,
-            separatorMode,
         });
     }
 
     if (results.properties === undefined) {
-        return completions;
+        return { groups: completions, prefixLength, separatorMode };
     }
 
     const propertyCompletions = new Map<string, CompletionGroup>();
@@ -125,14 +123,12 @@ export async function requestCompletion(
                 completionProperty.actions,
                 context,
                 propertyCompletions,
-                prefixLength,
-                separatorMode,
             );
         }
     }
 
     completions.push(...propertyCompletions.values());
-    return completions;
+    return { groups: completions, prefixLength, separatorMode };
 }
 
 async function collectActionCompletions(
@@ -140,8 +136,6 @@ async function collectActionCompletions(
     partialActions: ExecutableAction[],
     context: CommandHandlerContext,
     propertyCompletions: Map<string, CompletionGroup>,
-    prefixLength?: number | undefined,
-    separatorMode?: SeparatorMode | undefined,
 ) {
     for (const propertyName of properties) {
         const { action, parameterName } = getPropertyInfo(
@@ -167,8 +161,6 @@ async function collectActionCompletions(
                 needQuotes: false, // Request completions are partial, no quotes needed
                 sorted: true, // REVIEW: assume property completions are already in desired order by the agent.
                 kind: "entity",
-                prefixLength,
-                separatorMode,
             });
         }
     }

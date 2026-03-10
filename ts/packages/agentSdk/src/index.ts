@@ -30,6 +30,7 @@ export {
     CommandDescriptorTable,
     AppAgentCommandInterface,
     CompletionGroup,
+    CompletionGroups,
     SeparatorMode,
 } from "./command.js";
 

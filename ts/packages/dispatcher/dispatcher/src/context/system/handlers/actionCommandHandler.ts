@@ -5,6 +5,7 @@ import {
     ActionContext,
     AppAction,
     CompletionGroup,
+    CompletionGroups,
     ParsedCommandParams,
     PartialParsedCommandParams,
     SessionContext,
@@ -343,7 +344,7 @@ export class ActionCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<CompletionGroup[]> {
+    ): Promise<CompletionGroups> {
         const systemContext = context.agentContext;
         const completions: CompletionGroup[] = [];
         for (const name of names) {
@@ -430,6 +431,6 @@ export class ActionCommandHandler implements CommandHandler {
                 continue;
             }
         }
-        return completions;
+        return { groups: completions };
     }
 }
