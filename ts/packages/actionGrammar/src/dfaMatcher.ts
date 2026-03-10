@@ -15,8 +15,7 @@ import { normalizeToken } from "./nfaMatcher.js";
 import { applySplitToTokens } from "./tokenSplit.js";
 import { matchNFA } from "./nfaInterpreter.js";
 import type { NFAMatchResult } from "./nfaInterpreter.js";
-import type { Grammar } from "./grammarTypes.js";
-import type { ValueNode } from "./grammarRuleParser.js";
+import type { Grammar, CompiledValueNode } from "./grammarTypes.js";
 
 // ─── DFA First-Token Index ──────────────────────────────────────────────────
 // O(1) pre-filter: reject tokens whose first word can't start any DFA path.
@@ -1086,7 +1085,7 @@ export function getDFACompletions(
 //
 // The DFA acts as a pure recognizer producing a MatchAST. Value computation
 // is deferred to a bottom-up walk of the AST using the grammar's name-based
-// ValueNode expressions.
+// CompiledValueNode expressions.
 //
 // Matching strategy: MINIMAL MUNCH with priorities
 //   1. Try exact token transition (literal match)
@@ -1847,7 +1846,7 @@ function backtrack(
 /**
  * Evaluate a MatchAST to produce the action value.
  *
- * Uses the grammar's ValueNode expressions (name-based variable references)
+ * Uses the grammar's CompiledValueNode expressions (name-based variable references)
  * to compute the final action object from the structural parse tree.
  *
  * @param ast The parse tree from matchDFAToAST
@@ -1927,7 +1926,7 @@ function buildBindings(parts: MatchNode[], grammar: Grammar): Map<string, any> {
 }
 
 /**
- * Find the ValueNode expression for a match, searching through nested
+ * Find the CompiledValueNode expression for a match, searching through nested
  * RulesPart structures if needed.
  *
  * The DFA AST matcher inlines alternatives: when a grammar has
@@ -1940,7 +1939,7 @@ function buildBindings(parts: MatchNode[], grammar: Grammar): Map<string, any> {
 function findValueExpression(
     rule: import("./grammarTypes.js").GrammarRule,
     astParts: MatchNode[],
-): ValueNode | undefined {
+): CompiledValueNode | undefined {
     // Direct value on the rule — use it
     if (rule.value) return rule.value;
 
@@ -2034,9 +2033,12 @@ function matchesRuleStructure(
 }
 
 /**
- * Evaluate a grammar ValueNode using name-based bindings.
+ * Evaluate a grammar CompiledValueNode using name-based bindings.
  */
-function evaluateValueNode(node: ValueNode, bindings: Map<string, any>): any {
+function evaluateValueNode(
+    node: CompiledValueNode,
+    bindings: Map<string, any>,
+): any {
     switch (node.type) {
         case "literal":
             return node.value;

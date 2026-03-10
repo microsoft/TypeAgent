@@ -25,7 +25,7 @@ export async function connectDispatcher(
     onDisconnect?: () => void,
 ): Promise<Dispatcher> {
     return new Promise((resolve, reject: (e: Error) => void) => {
-        const ws = new WebSocket(url); // Replace with the actual WebSocket server URL
+        const ws = new WebSocket(url);
         const channel = createChannelProviderAdapter(
             "agent-server:client",
             (message: any) => {

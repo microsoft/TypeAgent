@@ -28,7 +28,7 @@ import {
 import { getHistoryContext } from "./interpretRequest.js";
 import {
     getActionSchema,
-    getActionSchemaParameterType,
+    tryGetActionSchemaParameterType,
 } from "./actionSchemaUtils.js";
 import { getParamPatternValue } from "./actionSchemaFileCache.js";
 
@@ -203,13 +203,15 @@ export async function getActionParamCompletion(
     let paramCompletionEmojis: CompletionEmojis | undefined;
     if (actionSchemaFile !== undefined) {
         const actionSchema = getActionSchema(actionSchemaFile, actionName);
-        const actionParametersType = getActionSchemaParameterType(
+        const actionParametersType = tryGetActionSchemaParameterType(
             actionSchemaFile,
             actionName,
             actionSchema,
         );
-        fieldType = getPropertyType(actionParametersType, parameterName);
-        resolvedFieldType = resolveTypeReference(fieldType);
+        if (actionParametersType !== undefined) {
+            fieldType = getPropertyType(actionParametersType, parameterName);
+            resolvedFieldType = resolveTypeReference(fieldType);
+        }
         switch (resolvedFieldType?.type) {
             case "string-union":
                 literalCompletion = [...resolvedFieldType.typeEnum];

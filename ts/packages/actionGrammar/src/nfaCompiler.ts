@@ -10,8 +10,8 @@ import {
     VarNumberPart,
     RulesPart,
     PhraseSetPart,
+    CompiledSpacingMode,
 } from "./grammarTypes.js";
-import { SpacingMode } from "./grammarRuleParser.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
     parseValueExpression,
@@ -57,7 +57,7 @@ interface RuleCompilationContext {
     /** Map from variable name to property path (for completion metadata) */
     completionPropertyPaths?: Map<string, string> | undefined;
     /** Spacing mode for this rule (controls token boundary behaviour) */
-    spacingMode?: SpacingMode;
+    spacingMode?: CompiledSpacingMode;
     /**
      * When set, compileStringPart deposits non-word-starting tokens here so
      * they can be stored as splitCandidates on the rule entry state.
@@ -773,7 +773,7 @@ function compileStringPart(
     part: StringPart,
     fromState: number,
     toState: number,
-    spacingMode?: SpacingMode,
+    spacingMode?: CompiledSpacingMode,
     splitCandidatesCollector?: Set<string>,
 ): number {
     // Normalize grammar tokens (lowercase + strip trailing punctuation) so they

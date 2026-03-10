@@ -1403,7 +1403,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       dompurify:
-        specifier: ^3.3.1
+        specifier: ^3.3.2
         version: 3.3.2
       express:
         specifier: ^4.22.0
@@ -1471,6 +1471,9 @@ importers:
       sanitize-filename:
         specifier: ^1.6.3
         version: 1.6.3
+      taskflow-typeagent:
+        specifier: workspace:*
+        version: link:../taskflow
       textpro:
         specifier: workspace:*
         version: link:../../textPro
@@ -1489,6 +1492,9 @@ importers:
       ws:
         specifier: ^8.17.1
         version: 8.18.2
+      xss:
+        specifier: ^1.0.15
+        version: 1.0.15
       yaml:
         specifier: ^2.3.4
         version: 2.7.0
@@ -2003,8 +2009,8 @@ importers:
         specifier: ^4.3.4
         version: 4.4.1
       dompurify:
-        specifier: ^3.2.6
-        version: 3.2.6
+        specifier: ^3.3.2
+        version: 3.3.2
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2933,7 +2939,7 @@ importers:
         specifier: ^6.0.2
         version: 6.0.5
       dompurify:
-        specifier: ^3.3.1
+        specifier: ^3.3.2
         version: 3.3.2
       markdown-it:
         specifier: ^14.1.0
@@ -3485,6 +3491,9 @@ importers:
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
+      taskflow-typeagent:
+        specifier: workspace:*
+        version: link:../../agents/taskflow
       telemetry:
         specifier: workspace:*
         version: link:../../telemetry
@@ -4103,8 +4112,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       dompurify:
-        specifier: ^3.2.6
-        version: 3.2.6
+        specifier: ^3.3.2
+        version: 3.3.2
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
@@ -4249,7 +4258,7 @@ importers:
         specifier: workspace:*
         version: link:../dispatcher/nodeProviders
       dompurify:
-        specifier: ^3.3.1
+        specifier: ^3.3.2
         version: 3.3.2
       dotenv:
         specifier: ^16.3.1
@@ -8871,6 +8880,9 @@ packages:
     resolution: {integrity: sha512-HTUrgRJ7r4dsZKU6GjmpfRK1O76h97Z8MfS1G0FozR+oF2kG6Vfe8JE6zwrkbxigziPHinCJ+gCPjA9EaBDtRw==}
     engines: {node: '>= 6'}
 
+  cssfilter@0.0.10:
+    resolution: {integrity: sha512-FAaLDaplstoRsDR8XGYH51znUN0UY7nMc6Z9/fvE8EXGwvJE9hu7W2vHwx1+bd6gCYnln9nLbzxFTrcO9YQDZw==}
+
   cssom@0.3.8:
     resolution: {integrity: sha512-b0tGHbfegbhPJpxpiBPU2sCkigAqtM9O121le6bbOlgyV+NyGyCmVfJ6QW9eRjz8CpNfWEOYBIMIGRYkLwsIYg==}
 
@@ -9300,9 +9312,6 @@ packages:
   domhandler@5.0.3:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
-
-  dompurify@3.2.6:
-    resolution: {integrity: sha512-/2GogDQlohXPZe6D6NOgQvXLPSYBqIWMnZ8zzOhn09REE4eyAzb+Hed3jhoM9OkuaJ8P6ZGTTVWQKAi8ieIzfQ==}
 
   dompurify@3.3.2:
     resolution: {integrity: sha512-6obghkliLdmKa56xdbLOpUZ43pAR6xFy1uOrxBaIDjT+yaRuuybLjGS9eVBoSR/UPU5fq3OXClEHLJNGvbxKpQ==}
@@ -14223,6 +14232,11 @@ packages:
 
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
+
+  xss@1.0.15:
+    resolution: {integrity: sha512-FVdlVVC67WOIPvfOwhoMETV72f6GbW7aOabBC3WxN/oUdoEMDyLz4OgRv5/gck2ZeNqEQu+Tb0kloovXOfpYVg==}
+    engines: {node: '>= 0.10.0'}
+    hasBin: true
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -20365,6 +20379,8 @@ snapshots:
 
   css-what@6.1.0: {}
 
+  cssfilter@0.0.10: {}
+
   cssom@0.3.8: {}
 
   cssom@0.5.0: {}
@@ -20799,10 +20815,6 @@ snapshots:
   domhandler@5.0.3:
     dependencies:
       domelementtype: 2.3.0
-
-  dompurify@3.2.6:
-    optionalDependencies:
-      '@types/trusted-types': 2.0.7
 
   dompurify@3.3.2:
     optionalDependencies:
@@ -27257,6 +27269,11 @@ snapshots:
   xmlbuilder@15.1.1: {}
 
   xmlchars@2.2.0: {}
+
+  xss@1.0.15:
+    dependencies:
+      commander: 2.20.3
+      cssfilter: 0.0.10
 
   xtend@4.0.2: {}
 

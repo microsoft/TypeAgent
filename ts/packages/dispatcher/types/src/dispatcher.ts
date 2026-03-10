@@ -9,7 +9,24 @@ import {
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
+import type { DisplayLogEntry } from "./displayLogEntry.js";
 
+/**
+ * Identifies a command request across the dispatcher and all connected clients.
+ *
+ * - `requestId` is assigned by the dispatcher via `randomUUID()` and is
+ *   **guaranteed unique within a session**. It serves as the canonical key for
+ *   associating all output (setDisplay, appendDisplay, etc.) with the
+ *   originating request. Clients should use this value — not clientRequestId —
+ *   to key message groups and other per-request state.
+ *
+ * - `clientRequestId` is an opaque, client-assigned identifier passed through
+ *   by the dispatcher. Its format and uniqueness are client-specific (e.g. the
+ *   shell uses incrementing "cmd-0", "cmd-1", ...) and it is NOT guaranteed
+ *   unique across sessions or clients.
+ *
+ * - `connectionId` identifies the client connection that originated the request.
+ */
 export type RequestId = {
     connectionId?: string | undefined;
     requestId: string;
@@ -193,4 +210,10 @@ export interface Dispatcher {
         choiceId: string,
         response: boolean | number[],
     ): Promise<CommandResult | undefined>;
+
+    /**
+     * Get the display log entries for the current session.
+     * @param afterSeq if provided, return only entries with seq > afterSeq
+     */
+    getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
 }
