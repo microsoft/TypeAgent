@@ -66,7 +66,9 @@ export class SearchMenu {
         this.prefix = prefix;
         const items = this.trie.dataWithPrefix(normalizeMatchText(prefix));
         const uniquelySatisfied =
-            items.length === 1 && items[0].matchText === prefix;
+            items.length === 1 &&
+            normalizeMatchText(items[0].matchText) ===
+                normalizeMatchText(prefix);
         const showMenu = items.length !== 0 && !uniquelySatisfied;
 
         if (showMenu) {
