@@ -28,7 +28,6 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
 import { extractPageComponent } from "./componentExtractor.mjs";
 import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
@@ -441,21 +440,14 @@ async function updateBrowserContext(
                 );
         }
 
-        if (!context.agentContext.browserConnector) {
+        if (!context.agentContext.browserControl) {
             const browserControls = context.agentContext
                 .useExternalBrowserControl
                 ? context.agentContext.externalBrowserControl?.control
                 : context.agentContext.clientBrowserControl;
 
-            if (browserControls && context.agentContext.agentWebSocketServer) {
-                debugClientRouting(
-                    `Creating BrowserConnector with preferredClientType = '${context.agentContext.preferredClientType}'`,
-                );
-                context.agentContext.browserConnector = new BrowserConnector(
-                    context.agentContext.agentWebSocketServer,
-                    browserControls,
-                    context.agentContext.preferredClientType,
-                );
+            if (browserControls) {
+                context.agentContext.browserControl = browserControls;
             }
         }
 
@@ -581,12 +573,12 @@ async function handleWebAgentRpc(
         case "extractComponent": {
             try {
                 const { typeName, schema, userRequest } = params;
-                const browserConnector = context.agentContext.browserConnector;
+                const browserCtrl = context.agentContext.browserControl;
 
-                if (!browserConnector) {
+                if (!browserCtrl) {
                     return {
                         success: false,
-                        error: "Browser connector not available",
+                        error: "Browser control not available",
                     };
                 }
 
@@ -597,10 +589,9 @@ async function handleWebAgentRpc(
                     };
                 }
 
-                const htmlFragments = await browserConnector.getHtmlFragments(
+                const htmlFragments = await browserCtrl.getHtmlFragments(
                     false,
                     "knowledgeExtraction",
-                    clientId,
                 );
 
                 if (!htmlFragments || htmlFragments.length === 0) {
@@ -1630,11 +1621,9 @@ async function executeBrowserAction(
                 }
             }
     }
-    const connector = context.sessionContext.agentContext.browserConnector;
-    if (connector) {
+    const browserCtrl = context.sessionContext.agentContext.browserControl;
+    if (browserCtrl) {
         try {
-            // context.actionIO.setDisplay("Running remote action.");
-
             let schemaName = "browser";
             if (action.schemaName === "browser.actionDiscovery") {
                 const discoveryResult = await handleSchemaDiscoveryAction(
@@ -1645,7 +1634,11 @@ async function executeBrowserAction(
                 return createActionResult(discoveryResult.displayText);
             }
 
-            await connector?.sendActionToBrowser(action, schemaName);
+            await browserCtrl.runBrowserAction(
+                action.actionName,
+                action.parameters,
+                schemaName,
+            );
         } catch (ex: any) {
             if (ex instanceof Error) {
                 console.error(ex);
@@ -1654,7 +1647,7 @@ async function executeBrowserAction(
             }
         }
     } else {
-        console.error("No WebSocket server available.");
+        console.error("No browser control available.");
     }
     return undefined;
 }
@@ -2796,22 +2789,11 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
 
-                        // Recreate BrowserConnector with new preferredClientType
-                        const browserControls =
+                        // Update browserControl to use external browser
+                        const externalControl =
                             agentContext.externalBrowserControl?.control;
-                        if (
-                            browserControls &&
-                            agentContext.agentWebSocketServer
-                        ) {
-                            debugClientRouting(
-                                "[@browser external on] Recreating BrowserConnector with preferredClientType = 'extension'",
-                            );
-                            agentContext.browserConnector =
-                                new BrowserConnector(
-                                    agentContext.agentWebSocketServer,
-                                    browserControls,
-                                    agentContext.preferredClientType,
-                                );
+                        if (externalControl) {
+                            agentContext.browserControl = externalControl;
                         }
 
                         await context.queueToggleTransientAgent(
@@ -2852,22 +2834,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
 
-                        // Recreate BrowserConnector with new preferredClientType
-                        const browserControls =
-                            agentContext.clientBrowserControl;
-                        if (
-                            browserControls &&
-                            agentContext.agentWebSocketServer
-                        ) {
-                            debugClientRouting(
-                                "[@browser external off] Recreating BrowserConnector with preferredClientType = 'electron'",
-                            );
-                            agentContext.browserConnector =
-                                new BrowserConnector(
-                                    agentContext.agentWebSocketServer,
-                                    browserControls,
-                                    agentContext.preferredClientType,
-                                );
+                        // Update browserControl to use client browser
+                        if (agentContext.clientBrowserControl) {
+                            agentContext.browserControl =
+                                agentContext.clientBrowserControl;
                         }
 
                         await context.queueToggleTransientAgent(

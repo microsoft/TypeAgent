@@ -2,8 +2,12 @@
 // Licensed under the MIT License.
 
 import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
-import { BrowserConnector } from "../browserConnector.mjs";
+import {
+    BrowserActionContext,
+    getBrowserControl,
+    getCurrentPageScreenshot,
+} from "../browserActions.mjs";
+import { BrowserControl } from "../../common/browserControl.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
 import {
     ActionSchemaTypeDefinition,
@@ -81,7 +85,7 @@ export class EntityCollector {
 
 // Context interface for discovery action handler functions
 interface DiscoveryActionHandlerContext {
-    browser: BrowserConnector;
+    browser: BrowserControl;
     agent: any;
     entities: EntityCollector;
     sessionContext: SessionContext<BrowserActionContext>;
@@ -94,7 +98,7 @@ async function handleFindUserActions(
     const htmlFragments = await ctx.browser.getHtmlFragments();
     let screenshot = "";
     try {
-        screenshot = await ctx.browser.getCurrentPageScreenshot();
+        screenshot = await getCurrentPageScreenshot(ctx.browser);
     } catch (error) {
         console.warn(
             "Screenshot capture failed, continuing without screenshot:",
@@ -360,7 +364,7 @@ async function handleGetPageSummary(
     const htmlFragments = await ctx.browser.getHtmlFragments();
     let screenshot = "";
     try {
-        screenshot = await ctx.browser.getCurrentPageScreenshot();
+        screenshot = await getCurrentPageScreenshot(ctx.browser);
     } catch (error) {
         console.warn(
             "Screenshot capture failed, continuing without screenshot:",
@@ -1001,11 +1005,11 @@ export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
     context: SessionContext<BrowserActionContext>,
 ) {
-    if (!context.agentContext.browserConnector) {
+    if (!context.agentContext.browserControl) {
         throw new Error("No connection to browser session.");
     }
 
-    const browser: BrowserConnector = context.agentContext.browserConnector;
+    const browser: BrowserControl = context.agentContext.browserControl;
     const agent = await createDiscoveryPageTranslator("GPT_5_2");
 
     // Create entity collector and action context

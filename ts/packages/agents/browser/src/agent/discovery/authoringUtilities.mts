@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { BrowserConnector } from "../browserConnector.mjs";
+import { BrowserControl } from "../../common/browserControl.mjs";
+import { getCurrentPageScreenshot } from "../browserActions.mjs";
 
 import {
     DropdownControl,
@@ -18,7 +19,7 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:discover:utilities");
 
 export function setupAuthoringActions(
-    browser: BrowserConnector,
+    browser: BrowserControl,
     agent: any,
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -38,7 +39,7 @@ export function setupAuthoringActions(
 
         if (!screenshot) {
             try {
-                screenshot = await browser.getCurrentPageScreenshot();
+                screenshot = await getCurrentPageScreenshot(browser);
             } catch (error) {
                 console.warn(
                     "Screenshot capture failed, continuing without screenshot:",
@@ -78,7 +79,7 @@ export function setupAuthoringActions(
         const htmlFragments = await browser.getHtmlFragments();
         let screenshot = "";
         try {
-            screenshot = await browser.getCurrentPageScreenshot();
+            screenshot = await getCurrentPageScreenshot(browser);
         } catch (error) {
             console.warn(
                 "Screenshot capture failed, continuing without screenshot:",
@@ -155,7 +156,7 @@ export function setupAuthoringActions(
         for (const [index, step] of targetPlan.steps.entries()) {
             let screenshot = "";
             try {
-                screenshot = await browser.getCurrentPageScreenshot();
+                screenshot = await getCurrentPageScreenshot(browser);
             } catch (error) {
                 console.warn(
                     "Screenshot capture failed, continuing without screenshot:",
@@ -285,7 +286,7 @@ export function setupAuthoringActions(
 
         let screenshot = "";
         try {
-            screenshot = await browser.getCurrentPageScreenshot();
+            screenshot = await getCurrentPageScreenshot(browser);
         } catch (error) {
             console.warn(
                 "Screenshot capture failed, continuing without screenshot:",
