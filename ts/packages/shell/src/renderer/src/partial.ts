@@ -283,20 +283,34 @@ export class PartialCompletion {
         r.deleteContents();
         r.insertNode(newNode);
 
-        r.collapse(false);
+        // Normalize merges adjacent text nodes so getSelectionEndNode()
+        // returns a single text node.  Then place the cursor at its end
+        // so isSelectionAtEnd() passes.  Without this, r.collapse(false)
+        // leaves endContainer pointing at the parent element, which does
+        // not match the deepest-last-child that isSelectionAtEnd() expects.
+        const textEntry = this.input.getTextEntry();
+        textEntry.normalize();
+        const endNode = this.input.getSelectionEndNode();
+        const cursorRange = document.createRange();
+        cursorRange.setStart(endNode, endNode.textContent?.length ?? 0);
+        cursorRange.collapse(true);
         const s = document.getSelection();
         if (s) {
             s.removeAllRanges();
-            s.addRange(r);
+            s.addRange(cursorRange);
         }
 
         // Make sure the text entry remains focused after replacement.
-        this.input.getTextEntry().focus();
+        textEntry.focus();
 
         // Reset completion state so the next update requests fresh completions.
         this.session.resetToIdle();
 
         debug(`Partial completion replaced: ${replaceText}`);
+
+        // Explicitly trigger a completion update.  The selectionchange event
+        // alone is unreliable after programmatic DOM manipulation.
+        this.update(false);
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {
