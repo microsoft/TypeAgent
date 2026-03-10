@@ -1761,10 +1761,6 @@ async function changeSearchProvider(
         const params: ParsedCommandParams<any> = {
             args: { provider: `${action.parameters.name}` },
             flags: {},
-            tokens: [],
-            lastCompletableParam: undefined,
-            lastParamImplicitQuotes: false,
-            nextArgs: [],
         };
 
         await cmd.run(context, params);

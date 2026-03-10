@@ -7,7 +7,6 @@ import {
     CommandDescriptor,
     FlagDefinitions,
     ParameterDefinitions,
-    ParsedCommandParams,
     CompletionGroup,
     CompletionGroups,
     SeparatorMode,
@@ -47,7 +46,7 @@ function mergeSeparatorMode(
 
 // Return the full flag name if we are waiting a flag value.  Add boolean values for completions and return undefined if the flag is boolean.
 function getPendingFlag(
-    params: ParsedCommandParams<ParameterDefinitions>,
+    params: ParseParamsResult<ParameterDefinitions>,
     flags: FlagDefinitions | undefined,
     completions: CompletionGroup[],
 ) {

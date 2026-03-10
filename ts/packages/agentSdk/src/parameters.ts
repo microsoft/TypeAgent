@@ -140,12 +140,6 @@ type ArgsOutput<T extends ArgDefinitions | undefined> = T extends ArgDefinitions
 export type ParsedCommandParams<T extends ParameterDefinitions> = {
     args: ArgsOutput<T["args"]>;
     flags: FlagsOutput<T["flags"]>;
-
-    // Information for partial command completion.
-    tokens: string[]; // The list of tokens parsed from the command.
-    lastCompletableParam: string | undefined; // The last parameter that was parsed that can be completed.
-    lastParamImplicitQuotes: boolean; // If the last parameter is implicitly quoted.
-    nextArgs: string[]; // A list of potential arguments next.
 };
 
 export type PartialParsedCommandParams<T extends ParameterDefinitions> =

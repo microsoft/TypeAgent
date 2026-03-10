@@ -151,6 +151,12 @@ function parseValueToken(
 // computation.
 export type ParseParamsResult<T extends ParameterDefinitions> =
     ParsedCommandParams<T> & {
+        // Information for partial command completion.
+        tokens: string[]; // The list of tokens parsed from the command.
+        lastCompletableParam: string | undefined; // The last parameter that was parsed that can be completed.
+        lastParamImplicitQuotes: boolean; // If the last parameter is implicitly quoted.
+        nextArgs: string[]; // A list of potential arguments next.
+
         /** Length of the (trimmed) parameter text left unconsumed.
          *  Excludes inter-token whitespace between the last consumed
          *  token and the start of the unconsumed remainder. */
