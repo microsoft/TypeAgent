@@ -1285,7 +1285,7 @@ export function matchGrammarCompletion(
                     // Offer it as a completion (e.g. "music" after "play").
                     const completionText = nextPart.value.join(" ");
                     debugCompletion(
-                        `Adding completion candidate: "${completionText}" (consumed ${state.index} chars, spacing=${state.spacingMode ?? "auto"})`,
+                        `Adding completion text: "${completionText}" (consumed ${state.index} chars, spacing=${state.spacingMode ?? "auto"})`,
                     );
 
                     // Determine whether a separator (e.g. space) is needed
