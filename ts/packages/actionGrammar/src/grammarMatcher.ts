@@ -94,7 +94,7 @@ function requiresSeparator(
 // "optional" (CJK/mixed, or SpacingMode "optional") or "none".
 function candidateSeparatorMode(
     needsSep: boolean,
-    spacingMode: SpacingMode,
+    spacingMode: CompiledSpacingMode,
 ): GrammarSeparatorMode {
     if (needsSep) {
         return "spacePunctuation";
@@ -110,7 +110,7 @@ function candidateSeparatorMode(
 function mergeSeparatorMode(
     current: GrammarSeparatorMode | undefined,
     needsSep: boolean,
-    spacingMode: SpacingMode,
+    spacingMode: CompiledSpacingMode,
 ): GrammarSeparatorMode {
     const candidateMode = candidateSeparatorMode(needsSep, spacingMode);
     if (current === undefined) {
