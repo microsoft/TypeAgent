@@ -7,8 +7,6 @@ settings:
 overrides:
   node-gyp: ^12.2.0
 
-packageExtensionsChecksum: sha256-PEREC6UZlJodcfpIGuKSRVRYUVr2LQ3jT3mkwMH0UAY=
-
 importers:
 
   .:
