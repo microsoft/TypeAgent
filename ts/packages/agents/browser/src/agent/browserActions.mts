@@ -3,7 +3,6 @@
 
 import { BrowserControl, SearchProvider } from "../common/browserControl.mjs";
 import { ExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
-import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";
 import { BrowserConnector } from "./browserConnector.mjs";
@@ -28,8 +27,6 @@ export type BrowserActionContext = {
     currentClient?: BrowserClient;
     extractionClients?: Map<string, string>;
     webAgentChannels?: WebAgentChannels | undefined;
-    crosswordCachedSchemas?: Map<string, Crossword> | undefined;
-    crossWordState?: Crossword | undefined;
     browserProcess?: ChildProcess | undefined;
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];

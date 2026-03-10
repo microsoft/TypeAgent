@@ -4,7 +4,21 @@
 import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
-import { HtmlFragments, ContentSection } from "./commerce/translator.mjs";
+
+export type HtmlFragments = {
+    frameId: string;
+    content: string;
+    text?: string;
+    cssSelector?: string;
+};
+
+export interface ContentSection {
+    type: "text" | "image_url";
+    text?: string;
+    image_url?: {
+        url: string;
+    };
+}
 
 export async function extractPageComponent(
     typeName: string,

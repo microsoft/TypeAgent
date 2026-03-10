@@ -3,7 +3,8 @@
 import { build } from "vite";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { copyFileSync, mkdirSync, cpSync } from "fs";
+import { copyFileSync, mkdirSync, cpSync, existsSync } from "fs";
+import { execSync } from "child_process";
 import chalk from "chalk";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -185,6 +186,12 @@ if (verbose)
         ),
     );
 
+// Path to crossword grammar source (used later for compilation)
+const crosswordAgrPath = resolve(
+    srcDir,
+    "webagent/crossword/crosswordSchema.agr",
+);
+
 //
 // ------------------------
 // 🔹 Browser Extension
@@ -230,6 +237,35 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
 if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
 copyCommonStaticAssets(chromeOutDir);
+
+// Compile and copy WebAgent grammars
+if (verbose) console.log(chalk.cyan("📝 Compiling WebAgent grammars..."));
+const chromeGrammarPath = resolve(
+    chromeOutDir,
+    "webagent/crossword/crosswordSchema.ag.json",
+);
+if (existsSync(crosswordAgrPath)) {
+    mkdirSync(dirname(chromeGrammarPath), { recursive: true });
+    try {
+        execSync(`npx agc -i "${crosswordAgrPath}" -o "${chromeGrammarPath}"`, {
+            cwd: resolve(__dirname, ".."),
+            stdio: verbose ? "inherit" : "pipe",
+        });
+        if (verbose) console.log(chalk.green("✅ Crossword grammar compiled"));
+    } catch (error) {
+        console.error(
+            chalk.red("❌ Failed to compile crossword grammar:"),
+            error.message,
+        );
+        process.exit(1);
+    }
+} else {
+    if (verbose)
+        console.log(
+            chalk.yellow("⚠️  Crossword grammar file not found, skipping"),
+        );
+}
+
 if (verbose) console.log(chalk.green("✅ Chrome static assets copied"));
 
 //
@@ -282,6 +318,19 @@ copyFileSync(
     `${electronOutDir}/manifest.json`,
 );
 copyCommonStaticAssets(electronOutDir);
+
+// Copy compiled WebAgent grammars to electron output
+if (existsSync(chromeGrammarPath)) {
+    const electronGrammarDir = resolve(electronOutDir, "webagent/crossword");
+    mkdirSync(electronGrammarDir, { recursive: true });
+    copyFileSync(
+        chromeGrammarPath,
+        resolve(electronGrammarDir, "crosswordSchema.ag.json"),
+    );
+    if (verbose)
+        console.log(chalk.green("✅ Crossword grammar copied to Electron"));
+}
+
 if (verbose) console.log(chalk.green("✅ Electron static assets copied\n"));
 
 // Update build hash to mark successful completion
