@@ -28,15 +28,10 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import {
-    getBoardSchema,
-    handleCrosswordAction,
-} from "./crossword/actionHandler.mjs";
-
 import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
-import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 import { extractPageComponent } from "./componentExtractor.mjs";
+import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import type {
     ElementDescriptionResult,
@@ -59,7 +54,6 @@ import {
 
 import registerDebug from "debug";
 
-import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { createGraphologyPersistenceManager } from "./knowledge/utils/graphologyPersistence.mjs";
 import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
@@ -118,9 +112,6 @@ import {
     getWebsiteStats,
 } from "./websiteMemory.mjs";
 import { initializeImportWebSocketHandler } from "./import/importWebSocketHandler.mjs";
-import { CrosswordActions } from "./crossword/schema/userActions.mjs";
-import { InstacartActions } from "./instacart/schema/userActions.mjs";
-import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
 import {
@@ -133,7 +124,6 @@ import {
 } from "../common/browserControl.mjs";
 import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
-import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -595,108 +585,12 @@ async function processBrowserAgentMessage(
         }
         case "enableSiteTranslator": {
             const targetTranslator = data.params.translator;
-            if (targetTranslator == "browser.crossword") {
-                // initialize crossword state
-                browserControls.setAgentStatus(
-                    true,
-                    `Initializing ${targetTranslator}`,
-                );
-
-                const notificationId = `crossword-${Date.now()}`;
-                context.notify(
-                    AppAgentEvent.Inline,
-                    {
-                        type: "text",
-                        content: `Loading the crossword agent to get it ready for interaction...`,
-                    },
-                    notificationId,
-                );
-
-                try {
-                    debugClientRouting(
-                        `Calling getBoardSchema with client.id='${client.id}'`,
-                    );
-                    context.agentContext.crossWordState = await getBoardSchema(
-                        context,
-                        client.id,
-                    );
-
-                    browserControls.setAgentStatus(
-                        false,
-                        `Finished initializing ${targetTranslator}`,
-                    );
-                } catch (e) {
-                    browserControls.setAgentStatus(
-                        false,
-                        `Failed to initialize ${targetTranslator}`,
-                    );
-
-                    debug(
-                        `Failed to initialize ${targetTranslator}. Details ${e}`,
-                    );
-                }
-
-                if (context.agentContext.crossWordState) {
-                    const acrossClues =
-                        context.agentContext.crossWordState.across?.length || 0;
-                    const downClues =
-                        context.agentContext.crossWordState.down?.length || 0;
-
-                    // Send schema to browser extension/electron for observer installation
-                    const schema = context.agentContext.crossWordState;
-                    const allClues = [...schema.across, ...schema.down];
-                    const sampleClues = allClues.slice(0, 5);
-
-                    if (client && client.socket && sampleClues.length > 0) {
-                        try {
-                            client.socket.send(
-                                JSON.stringify({
-                                    method: "browser.crossword/schemaReady",
-                                    params: {
-                                        selectors: sampleClues.map(
-                                            (c) => c.cssSelector,
-                                        ),
-                                        texts: sampleClues.map((c) => c.text),
-                                    },
-                                }),
-                            );
-                        } catch (e) {
-                            debug(
-                                "Failed to send crossword schema to client",
-                                e,
-                            );
-                        }
-                    }
-
-                    context.notify(
-                        AppAgentEvent.Inline,
-                        {
-                            type: "text",
-                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
-                        },
-                        notificationId,
-                    );
-                } else {
-                    context.notify(
-                        AppAgentEvent.Inline,
-                        {
-                            type: "text",
-                            content: `There was an error when initializing the crossword. Try re-loading the page.`,
-                        },
-                        notificationId,
-                    );
-                }
-            }
             await context.toggleTransientAgent(targetTranslator, true);
             break;
         }
         case "disableSiteTranslator": {
             const targetTranslator = data.params.translator;
             await context.toggleTransientAgent(targetTranslator, false);
-            break;
-        }
-        case "removeCrosswordPageCache": {
-            await deleteCachedSchema(context, data.params.url);
             break;
         }
         case "addTabIdToIndex":
@@ -894,7 +788,7 @@ async function handleWebAgentRpc(
     switch (method) {
         case "extractCrosswordSchema": {
             try {
-                const schema = await getBoardSchema(context, clientId);
+                const schema = await extractCrosswordSchema(context, clientId);
                 if (!schema) {
                     return {
                         success: false,
@@ -1783,9 +1677,6 @@ async function executeBrowserAction(
         | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
-        | TypeAgentAction<CrosswordActions, "browser.crossword">
-        | TypeAgentAction<ShoppingActions, "browser.commerce">
-        | TypeAgentAction<InstacartActions, "browser.instacart">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
         | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
 
@@ -2007,40 +1898,7 @@ async function executeBrowserAction(
             // context.actionIO.setDisplay("Running remote action.");
 
             let schemaName = "browser";
-            if (action.schemaName === "browser.crossword") {
-                const crosswordResult = await handleCrosswordAction(
-                    action,
-                    context.sessionContext,
-                );
-                return createActionResult(crosswordResult);
-            } else if (action.schemaName === "browser.commerce") {
-                const commerceResult = await handleCommerceAction(
-                    action,
-                    context,
-                );
-                if (commerceResult !== undefined) {
-                    if (commerceResult instanceof String) {
-                        return createActionResult(
-                            commerceResult as unknown as string,
-                        );
-                    } else {
-                        return commerceResult as ActionResult;
-                    }
-                }
-            } else if (action.schemaName === "browser.instacart") {
-                const instacartResult = await handleInstacartAction(
-                    action,
-                    context.sessionContext,
-                );
-
-                return createActionResult(
-                    instacartResult.displayText,
-                    undefined,
-                    instacartResult.entities,
-                );
-
-                // return createActionResult(instacartResult);
-            } else if (action.schemaName === "browser.actionDiscovery") {
+            if (action.schemaName === "browser.actionDiscovery") {
                 const discoveryResult = await handleSchemaDiscoveryAction(
                     action,
                     context.sessionContext,
