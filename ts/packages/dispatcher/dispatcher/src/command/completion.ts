@@ -207,10 +207,8 @@ async function getCommandParameterCompletion(
     // token whitespace (trimStart), the raw arithmetic can land on
     // the separator space — tokenBoundary rewinds to the preceding
     // token edge.
-    let startIndex = tokenBoundary(
-        input,
-        input.length - params.remainderLength,
-    );
+    const remainderIndex = input.length - params.remainderLength;
+    let startIndex = tokenBoundary(input, remainderIndex);
     debug(
         `Command completion parameter consumed length: ${params.remainderLength}`,
     );
@@ -221,7 +219,7 @@ async function getCommandParameterCompletion(
         const { tokens, lastCompletableParam, lastParamImplicitQuotes } =
             params;
 
-        let tokenStartIndex: number | undefined;
+        let tokenStartIndex = remainderIndex;
         if (lastCompletableParam !== undefined && tokens.length > 0) {
             const valueToken = tokens[tokens.length - 1];
             const quoted = isFullyQuoted(valueToken);
@@ -239,7 +237,7 @@ async function getCommandParameterCompletion(
                 agentCommandCompletions.length = 0;
                 completions.length = 0;
                 agentCommandCompletions.push(lastCompletableParam);
-                tokenStartIndex = startIndex - valueToken.length;
+                tokenStartIndex = remainderIndex - valueToken.length;
                 startIndex = tokenBoundary(input, tokenStartIndex);
             }
         }
@@ -267,15 +265,14 @@ async function getCommandParameterCompletion(
                 (g) => g.prefixLength !== undefined,
             )?.prefixLength;
             if (groupPrefixLength !== undefined && groupPrefixLength != 0) {
-                startIndex =
-                    (tokenStartIndex ?? startIndex) + groupPrefixLength;
+                startIndex = tokenStartIndex + groupPrefixLength;
                 // we have advanced the startIndex, so existing completions are no longer valid, clear them out.
                 completions.length = 0;
             }
             completions.push(...agentGroups);
             agentInvoked = true;
             debug(
-                `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}`,
+                `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}, tokenStartIndex=${tokenStartIndex}`,
             );
         }
     }
