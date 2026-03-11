@@ -35,14 +35,17 @@ import {
 import { sortMatches } from "./sortMatches.js";
 
 // Merge a GrammarSeparatorMode (from action-grammar) into an accumulator
-// SeparatorMode.  Most restrictive wins: spacePunctuation > optional > none.
+// SeparatorMode.  The mode requiring the strongest separator wins
+// (i.e. the mode that demands the most from the user):
+// spacePunctuation > optional > none.
 // (Grammar results never produce "space" — that mode is for command dispatch.)
 function mergeGrammarSeparatorMode(
     current: SeparatorMode | undefined,
     incoming: GrammarSeparatorMode,
 ): SeparatorMode {
-    // GrammarSeparatorMode is structurally compatible with SeparatorMode
-    // (it is a subset: "spacePunctuation" | "optional" | "none").
+    // GrammarSeparatorMode is a subset of SeparatorMode
+    // ("spacePunctuation" | "optional" | "none") — values are directly
+    // assignable.
     if (current === undefined) {
         return incoming;
     }

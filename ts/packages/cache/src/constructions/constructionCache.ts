@@ -96,7 +96,9 @@ export function mergeCompletionResults(
     if (second === undefined) {
         return first;
     }
-    // Take the max matchedPrefixLength across both results.
+    // TODO: Be consistent with grammarMatcher and eagerly discard
+    // shorter-prefix completions instead of retaining them and
+    // relying on the caller to filter.
     let matchedPrefixLength: number | undefined;
     if (
         first.matchedPrefixLength !== undefined ||
@@ -127,7 +129,8 @@ export function mergeCompletionResults(
     };
 }
 
-// Merge two SeparatorMode values — most restrictive wins.
+// Merge two SeparatorMode values — the mode requiring the strongest
+// separator wins (i.e. the mode that demands the most from the user).
 // Priority: "space" > "spacePunctuation" > "optional" > "none".
 function mergeSeparatorModes(
     a: SeparatorMode | undefined,

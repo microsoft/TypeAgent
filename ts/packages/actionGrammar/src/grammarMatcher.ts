@@ -15,8 +15,10 @@ import {
 } from "./grammarTypes.js";
 
 // Separator mode for grammar completion results.
-// Structurally compatible with SeparatorMode from @typeagent/agent-sdk
-// (actionGrammar does not depend on agentSdk).
+// A subset of SeparatorMode from @typeagent/agent-sdk (which also
+// includes "space").  actionGrammar does not depend on agentSdk, so
+// the type is redefined here; values are directly assignable to
+// SeparatorMode.
 export type GrammarSeparatorMode = "spacePunctuation" | "optional" | "none";
 
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
@@ -50,8 +52,9 @@ const digitRe = /[0-9]/;
 // while still requiring them when both sides use word spaces
 // (e.g. Latin followed by Latin).
 function isWordBoundaryScript(c: string): boolean {
-    // Fast path: all ASCII letters are Latin-script (boundary required).
-    // ASCII digits and punctuation/space fall through to return false here
+    // Fast path: all ASCII characters are handled here without the regex.
+    // ASCII letters are Latin-script (boundary required).
+    // ASCII digits, punctuation, and space return false
     // (digits are handled separately by digitRe, punctuation/space never need a boundary).
     const code = c.charCodeAt(0);
     if (code < 128) {
@@ -90,8 +93,8 @@ function requiresSeparator(
 // Convert a per-candidate (needsSep, spacingMode) pair into a
 // GrammarSeparatorMode value.  When needsSep is true (separator
 // required), the grammar always uses spacePunctuation separators.
-// When needsSep is false, the mode tells us whether the boundary is
-// "optional" (CJK/mixed, or SpacingMode "optional") or "none".
+// When needsSep is false: "none" spacingMode → "none", otherwise
+// → "optional" (covers auto mode/CJK/mixed and explicit "optional").
 function candidateSeparatorMode(
     needsSep: boolean,
     spacingMode: CompiledSpacingMode,
@@ -106,8 +109,9 @@ function candidateSeparatorMode(
 }
 
 // Merge a new candidate's separator mode into the running aggregate.
-// The most restrictive mode wins: spacePunctuation > optional > none.
-function mergeSeparatorMode(
+// The mode requiring the strongest separator wins (i.e. the mode that
+// demands the most from the user): spacePunctuation > optional > none.
+function mergeGrammarSeparatorMode(
     current: GrammarSeparatorMode | undefined,
     needsSep: boolean,
     spacingMode: CompiledSpacingMode,
@@ -116,14 +120,14 @@ function mergeSeparatorMode(
     if (current === undefined) {
         return candidateMode;
     }
-    // "spacePunctuation" is the most restrictive — once set, stays.
+    // "spacePunctuation" requires a separator — strongest requirement.
     if (
         current === "spacePunctuation" ||
         candidateMode === "spacePunctuation"
     ) {
         return "spacePunctuation";
     }
-    // "optional" is more restrictive than "none".
+    // "optional" is a stronger requirement than "none".
     if (current === "optional" || candidateMode === "optional") {
         return "optional";
     }
@@ -1085,8 +1089,11 @@ export type GrammarCompletionResult = {
     // before the completion point.  The shell uses this to determine where
     // to insert/filter completions (replacing the space-based heuristic).
     matchedPrefixLength?: number | undefined;
-    // What kind of separator is required between the content at
-    // `matchedPrefixLength` and the completion text.
+    // What kind of separator is expected between the content at
+    // `matchedPrefixLength` and the completion text.  This is a
+    // *completion-result* concept (GrammarSeparatorMode), derived from the
+    // per-rule *match-time* spacing rules (CompiledSpacingMode /
+    // spacingMode) but distinct from them.
     //   "spacePunctuation" — whitespace or punctuation required
     //     (Latin "y" → "m" requires a separator).
     //   "optional" — separator accepted but not required
@@ -1160,55 +1167,6 @@ export function matchGrammar(grammar: Grammar, request: string) {
 }
 
 /**
- * Given a grammar and a user-typed prefix string, determine what completions
- * are available.  The algorithm greedily matches as many grammar parts as
- * possible against the prefix (the "longest completable prefix"), then
- * reports completions from the *next* unmatched part.
- *
- * The function explores every alternative rule/state in the grammar (via the
- * `pending` work-list).  Each state is run through `matchState` which
- * consumes as many parts as the prefix allows.  The state then falls into
- * one of three categories:
- *
- * 1. **Exact match** — the prefix satisfies every part in the rule.
- *    No completion is needed, but `maxPrefixLength` is updated to
- *    the full input length so that completion candidates from shorter
- *    partial matches are filtered out in the post-loop step.
- *
- * 2. **Partial match, finalized** — the prefix was consumed (possibly with
- *    trailing separators) but the rule still has remaining parts.
- *    `matchState` returns `false` (could not match the next part) and
- *    `finalizeState` returns `true` (no trailing non-separator junk).
- *    The next unmatched part produces a completion candidate:
- *      - String part → literal keyword completion (e.g. "music").
- *      - Wildcard / number → property completion (handled elsewhere).
- *
- * 3. **Partial match, NOT finalized** — either:
- *      a. A pending wildcard could not be finalized (trailing text is only
- *         separators with no wildcard content) → emit a property completion
- *         for the wildcard's entity type.
- *      b. Trailing text remains that didn't match any part → emit the
- *         next string part as a completion candidate unconditionally.
- *         The caller uses `matchedPrefixLength` to filter by trailing
- *         text.
- *
- * After processing all states, only candidates whose `prefixLength`
- * equals the overall `maxPrefixLength` are returned.  This ensures
- * completions from shorter partial matches are discarded when a longer
- * (or exact) match consumed more input.
- *
- * `matchedPrefixLength` tracks the furthest point consumed across all
- * states — including exact matches (via `Math.max`).  This tells the
- * caller where the completable portion of the input ends, so it can
- * position the completion insertion point correctly (especially important
- * for non-space-separated scripts like CJK).
- *
- * `separatorMode` indicates what kind of separator is needed between the
- * content at `matchedPrefixLength` and the completion text.  It is
- * determined by the spacing rules between the last character of the
- * matched prefix and the first character of the completion.
- */
-/**
  * Try to partially match leading words of a multi-word string part
  * against the prefix starting at `startIndex`.  Returns the consumed
  * length and the remaining (unmatched) words as the completion text.
@@ -1218,8 +1176,9 @@ export function matchGrammar(grammar: Grammar, request: string) {
  * - Some words matched → returns consumed length + next word.
  * - No words matched → returns startIndex + first word.
  *
- * Always returns exactly one word as the completion text,
- * providing one-word-at-a-time progression.
+ * When returning a non-undefined result, it contains exactly one
+ * word as the completion text, providing one-word-at-a-time
+ * progression.
  */
 function tryPartialStringMatch(
     part: StringPart,
@@ -1262,6 +1221,60 @@ function tryPartialStringMatch(
     };
 }
 
+/**
+ * Given a grammar and a user-typed prefix string, determine what completions
+ * are available.  The algorithm greedily matches as many grammar parts as
+ * possible against the prefix (the "longest completable prefix"), then
+ * reports completions from the *next* unmatched part.
+ *
+ * The function explores every alternative rule/state in the grammar (via the
+ * `pending` work-list).  Each state is run through `matchState` which
+ * consumes as many parts as the prefix allows.  The state then falls into
+ * one of three categories:
+ *
+ * 1. **Exact match** — the prefix satisfies every part in the rule.
+ *    No completion is needed, but `maxPrefixLength` is updated to
+ *    the full input length so that completion candidates from shorter
+ *    partial matches are eagerly discarded (via `updateMaxPrefixLength`).
+ *
+ * 2. **Partial match, finalized** — the prefix was consumed (possibly with
+ *    trailing separators) but the rule still has remaining parts.
+ *    `matchState` returns `false` (could not match the next part) and
+ *    `finalizeState` returns `true` (no trailing non-separator junk).
+ *    The next unmatched part produces a completion candidate:
+ *      - String part → literal keyword completion (e.g. "music").
+ *      - Wildcard / number → property completion (handled elsewhere).
+ *
+ * 3. **Partial match, NOT finalized** — either:
+ *      a. A pending wildcard could not be finalized (trailing text is only
+ *         separators with no wildcard content) → emit a property completion
+ *         for the wildcard's entity type.
+ *      b. Trailing text remains that didn't match any part →
+ *         attempt word-by-word matching of the current string part
+ *         against that text (via `tryPartialStringMatch`).  If some
+ *         leading words match they advance the consumed prefix; the
+ *         next unmatched word is emitted as a completion candidate.
+ *         Candidates from shorter partial matches are automatically
+ *         discarded when a longer match updates `maxPrefixLength`.
+ *
+ * During processing, whenever `maxPrefixLength` advances, all
+ * previously accumulated candidates are cleared.  Only candidates
+ * whose prefix length equals the current maximum are kept.  This
+ * ensures completions from shorter partial matches are discarded
+ * when a longer (or exact) match consumed more input.
+ *
+ * `matchedPrefixLength` tracks the furthest point consumed across all
+ * states — including exact matches (via `Math.max`).  This tells the
+ * caller where the completable portion of the input ends, so it can
+ * position the completion insertion point correctly (especially important
+ * for non-space-separated scripts like CJK).
+ *
+ * `separatorMode` (a {@link GrammarSeparatorMode}) indicates what kind of
+ * separator is needed between the content at `matchedPrefixLength` and the
+ * completion text.  It is determined by the spacing rules (the per-rule
+ * {@link CompiledSpacingMode}) between the last character of the matched
+ * prefix and the first character of the completion.
+ */
 export function matchGrammarCompletion(
     grammar: Grammar,
     prefix: string,
@@ -1333,8 +1346,8 @@ export function matchGrammarCompletion(
             // --- Category 1: Exact match ---
             // All parts matched AND prefix was fully consumed.
             // Nothing left to complete; but record how far we got
-            // so that completions from shorter partial matches are
-            // filtered out in the post-loop step.
+            // so that completion candidates from shorter partial
+            // matches are eagerly discarded.
             if (matched) {
                 debugCompletion("Matched. Nothing to complete.");
                 updateMaxPrefixLength(state.index);
@@ -1385,7 +1398,7 @@ export function matchGrammarCompletion(
                         }
 
                         completions.push(completionText);
-                        separatorMode = mergeSeparatorMode(
+                        separatorMode = mergeGrammarSeparatorMode(
                             separatorMode,
                             candidateNeedsSep,
                             state.spacingMode,
@@ -1448,7 +1461,7 @@ export function matchGrammarCompletion(
                         }
 
                         properties.push(completionProperty);
-                        separatorMode = mergeSeparatorMode(
+                        separatorMode = mergeGrammarSeparatorMode(
                             separatorMode,
                             candidateNeedsSep,
                             state.spacingMode,
@@ -1515,7 +1528,7 @@ export function matchGrammarCompletion(
                         }
 
                         completions.push(completionText);
-                        separatorMode = mergeSeparatorMode(
+                        separatorMode = mergeGrammarSeparatorMode(
                             separatorMode,
                             candidateNeedsSep,
                             state.spacingMode,

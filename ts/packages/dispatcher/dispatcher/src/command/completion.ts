@@ -29,7 +29,8 @@ import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
 
-// Merge two SeparatorMode values — most restrictive wins.
+// Merge two SeparatorMode values — the mode requiring the strongest
+// separator wins (i.e. the mode that demands the most from the user).
 // Priority: "space" > "spacePunctuation" > "optional" > "none" > undefined.
 function mergeSeparatorMode(
     a: SeparatorMode | undefined,
