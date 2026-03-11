@@ -478,7 +478,7 @@ describe("Grammar Completion - longest match property", () => {
         });
     });
 
-    describe("complete flag - exhaustiveness", () => {
+    describe("closedSet flag - exhaustiveness", () => {
         describe("string-only completions are exhaustive", () => {
             const g = [
                 `<Start> = play $(g:<Genre>) -> { genre: g };`,
@@ -488,24 +488,24 @@ describe("Grammar Completion - longest match property", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("complete=true for first string part on empty input", () => {
+            it("closedSet=true for first string part on empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
                 expect(result.completions).toContain("play");
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
 
-            it("complete=true for alternatives after prefix", () => {
+            it("closedSet=true for alternatives after prefix", () => {
                 const result = matchGrammarCompletion(grammar, "play");
                 expect(result.completions).toContain("rock");
                 expect(result.completions).toContain("pop");
                 expect(result.completions).toContain("jazz");
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
 
-            it("complete=true for exact match (no completions)", () => {
+            it("closedSet=true for exact match (no completions)", () => {
                 const result = matchGrammarCompletion(grammar, "play rock");
                 expect(result.completions).toHaveLength(0);
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
         });
 
@@ -516,20 +516,20 @@ describe("Grammar Completion - longest match property", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("complete=false for entity wildcard property completion", () => {
+            it("closedSet=false for entity wildcard property completion", () => {
                 const result = matchGrammarCompletion(grammar, "play");
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
-                expect(result.complete).toBe(false);
+                expect(result.closedSet).toBe(false);
             });
 
-            it("complete=true for string completion after wildcard", () => {
+            it("closedSet=true for string completion after wildcard", () => {
                 const result = matchGrammarCompletion(grammar, "play mysong");
                 expect(result.completions).toContain("next");
                 // The "next" keyword is the only valid continuation
                 // from the grammar — no property completions at this
                 // point — so completions are exhaustive.
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
         });
 
@@ -539,17 +539,17 @@ describe("Grammar Completion - longest match property", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("complete=false for untyped wildcard property", () => {
+            it("closedSet=false for untyped wildcard property", () => {
                 const result = matchGrammarCompletion(grammar, "play");
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
-                expect(result.complete).toBe(false);
+                expect(result.closedSet).toBe(false);
             });
 
-            it("complete=true for 'by' keyword after wildcard captured", () => {
+            it("closedSet=true for 'by' keyword after wildcard captured", () => {
                 const result = matchGrammarCompletion(grammar, "play hello");
                 expect(result.completions).toContain("by");
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
         });
 
@@ -570,7 +570,7 @@ describe("Grammar Completion - longest match property", () => {
                 expect(result.completions).toContain("shuffle");
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
-                expect(result.complete).toBe(false);
+                expect(result.closedSet).toBe(false);
             });
 
             it("string rule first, entity rule second", () => {
@@ -585,11 +585,11 @@ describe("Grammar Completion - longest match property", () => {
                 expect(result.completions).toContain("shuffle");
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
-                expect(result.complete).toBe(false);
+                expect(result.closedSet).toBe(false);
             });
         });
 
-        describe("competing rules - longer match resets complete", () => {
+        describe("competing rules - longer match resets closedSet", () => {
             const g = [
                 `entity SongName;`,
                 `<Start> = $(a:<A>) $(song:SongName) -> { a, song };`,
@@ -599,20 +599,20 @@ describe("Grammar Completion - longest match property", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("complete reflects longest prefix length result", () => {
+            it("closedSet reflects longest prefix length result", () => {
                 const result = matchGrammarCompletion(grammar, "alpha bravo");
                 // Rule 2 matches alpha+bravo (11 chars) and offers "finish"
-                // (string → complete=true).
+                // (string → closedSet=true).
                 // Rule 1 matches alpha (5 chars) and offers entity
-                // (complete=false) — but this is at a shorter prefix
+                // (closedSet=false) — but this is at a shorter prefix
                 // length so it's discarded.
                 expect(result.completions).toContain("finish");
                 expect(result.matchedPrefixLength).toBe(11);
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
         });
 
-        describe("sequential parts - complete stays true throughout", () => {
+        describe("sequential parts - closedSet stays true throughout", () => {
             const g = [
                 `<Start> = $(a:<A>) $(b:<B>) $(c:<C>) -> { a, b, c };`,
                 `<A> = first -> "a";`,
@@ -621,31 +621,31 @@ describe("Grammar Completion - longest match property", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("complete=true for first part", () => {
+            it("closedSet=true for first part", () => {
                 const result = matchGrammarCompletion(grammar, "");
                 expect(result.completions).toContain("first");
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
 
-            it("complete=true for second part", () => {
+            it("closedSet=true for second part", () => {
                 const result = matchGrammarCompletion(grammar, "first");
                 expect(result.completions).toContain("second");
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
 
-            it("complete=true for third part", () => {
+            it("closedSet=true for third part", () => {
                 const result = matchGrammarCompletion(grammar, "first second");
                 expect(result.completions).toContain("third");
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
 
-            it("complete=true for exact full match", () => {
+            it("closedSet=true for exact full match", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "first second third",
                 );
                 expect(result.completions).toHaveLength(0);
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
         });
 
@@ -658,11 +658,11 @@ describe("Grammar Completion - longest match property", () => {
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("complete=true for alternatives after optional", () => {
+            it("closedSet=true for alternatives after optional", () => {
                 const result = matchGrammarCompletion(grammar, "begin");
                 expect(result.completions).toContain("middle");
                 expect(result.completions).toContain("finish");
-                expect(result.complete).toBe(true);
+                expect(result.closedSet).toBe(true);
             });
         });
     });

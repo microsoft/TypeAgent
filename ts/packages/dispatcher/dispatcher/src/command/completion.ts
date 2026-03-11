@@ -133,9 +133,9 @@ function collectFlags(
 
 // Internal result from parameter-level completion.
 //
-// `complete` uses a conservative heuristic:
+// `closedSet` uses a conservative heuristic:
 //  - false when the agent's getCommandCompletion was invoked (agents
-//    cannot yet signal whether their set is exhaustive).
+//    cannot yet signal whether their set is closed).
 //  - false when a pending non-boolean flag accepts free-form input.
 //  - true  when all positional args are filled and only enumerable
 //    flag names remain (a finite, known set).
@@ -143,7 +143,7 @@ type ParameterCompletionResult = {
     completions: CompletionGroup[];
     startIndex: number;
     separatorMode: SeparatorMode | undefined;
-    complete: boolean;
+    closedSet: boolean;
 };
 
 // Complete parameter values and flags for an already-resolved command
@@ -204,7 +204,7 @@ async function getCommandParameterCompletion(
     );
 
     let agentInvoked = false;
-    let agentComplete: boolean | undefined;
+    let agentClosedSet: boolean | undefined;
     let separatorMode: SeparatorMode | undefined;
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion) {
@@ -263,37 +263,37 @@ async function getCommandParameterCompletion(
             completions.push(...agentResult.groups);
             separatorMode = agentResult.separatorMode;
             agentInvoked = true;
-            agentComplete = agentResult.complete;
+            agentClosedSet = agentResult.closedSet;
             debug(
                 `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}, tokenStartIndex=${tokenStartIndex}`,
             );
         }
     }
 
-    // Determine whether the completion set is exhaustive.
+    // Determine whether the completion set is a closed set.
     // Agent-provided completions use the agent's self-reported
-    // exhaustiveness (via CompletionGroups.complete), defaulting to
+    // closedSet flag (via CompletionGroups.closedSet), defaulting to
     // false when the agent doesn't set it.
-    // When no agent is involved, completions are exhaustive if:
+    // When no agent is involved, the set is closed if:
     //  - A pending boolean flag offers only ["true", "false"]
     //  - All positional args are filled and only enumerable flags remain
-    // Otherwise free-form text parameters make the set non-exhaustive.
-    let complete: boolean;
+    // Otherwise free-form text parameters make the set open.
+    let closedSet: boolean;
     if (agentInvoked) {
-        complete = agentComplete ?? false;
+        closedSet = agentClosedSet ?? false;
     } else if (pendingFlag !== undefined) {
         // A non-boolean pending flag accepts free-form values.
         // (Boolean flags are handled by getPendingFlag returning undefined
         //  and pushing ["true", "false"] into completions directly.)
-        complete = false;
+        closedSet = false;
     } else {
-        // No agent, no pending flag.  Exhaustive when there are no
+        // No agent, no pending flag.  Closed set when there are no
         // unfilled positional args (nextArgs is empty) and only
         // flags remain — flag names are a finite, known set.
-        complete = params.nextArgs.length === 0;
+        closedSet = params.nextArgs.length === 0;
     }
 
-    return { completions, startIndex, separatorMode, complete };
+    return { completions, startIndex, separatorMode, closedSet };
 }
 
 //
@@ -304,7 +304,7 @@ async function getCommandParameterCompletion(
 //
 // Always returns a result — every input has a longest valid prefix
 // (at minimum the empty string, startIndex=0).  An empty completions
-// array with complete=true means the command is fully specified and
+// array with closedSet=true means the command is fully specified and
 // nothing further can follow.
 //
 // The portion of input after the prefix (the "suffix") is NOT a gate
@@ -356,13 +356,13 @@ async function getCommandParameterCompletion(
 //                Merged: most restrictive mode from any source wins.
 //                When omitted, consumers default to "space".
 //
-//   complete     true when the returned completions are the *exhaustive*
-//                set of valid continuations after the prefix.  When true
+//   closedSet   true when the returned completions form a *closed set*
+//                of valid continuations after the prefix.  When true
 //                and the user types something that doesn't prefix-match
 //                any completion, the caller can skip re-fetching because
 //                no other valid input exists.  Subcommand and agent-name
-//                lists are always exhaustive.  Parameter completions are
-//                exhaustive only when no agent was invoked and no
+//                lists are always closed sets.  Parameter completions are
+//                closed only when no agent was invoked and no
 //                free-form positional args remain unfilled — see
 //                ParameterCompletionResult for the heuristic.
 //
@@ -401,7 +401,7 @@ export async function getCommandCompletion(
         }
 
         const descriptor = result.descriptor;
-        let complete = true;
+        let closedSet = true;
         if (descriptor !== undefined) {
             // Get parameter completions first — we need to know
             // whether parameters consumed past the command boundary
@@ -447,7 +447,7 @@ export async function getCommandCompletion(
                     separatorMode,
                     parameterCompletions.separatorMode,
                 );
-                complete = parameterCompletions.complete;
+                closedSet = parameterCompletions.closedSet;
             }
         } else if (table !== undefined) {
             // descriptor is undefined: the suffix didn't resolve to any
@@ -477,7 +477,7 @@ export async function getCommandCompletion(
         } else {
             // Both table and descriptor are undefined — the agent
             // returned no commands at all.  Nothing to add;
-            // completions stays empty, complete stays true.
+            // completions stays empty, closedSet stays true.
         }
 
         // Independently of which branch above ran, offer agent names
@@ -502,20 +502,20 @@ export async function getCommandCompletion(
             startIndex,
             completions,
             separatorMode,
-            complete,
+            closedSet,
         };
 
         debug(`Command completion result:`, completionResult);
         return completionResult;
     } catch (e: any) {
         debugError(`Command completion error: ${e}\n${e.stack}`);
-        // On error, return a safe default — don't claim exhaustiveness
+        // On error, return a safe default — don't claim closedSet
         // since we don't know what went wrong.
         return {
             startIndex: 0,
             completions: [],
             separatorMode: undefined,
-            complete: false,
+            closedSet: false,
         };
     }
 }

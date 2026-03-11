@@ -33,7 +33,7 @@ export interface ICompletionDispatcher {
 //   ACTIVE      current !== undefined && completionP === undefined
 //
 // Design principles:
-//   - Completion result fields (separatorMode, complete) are stored as-is
+//   - Completion result fields (separatorMode, closedSet) are stored as-is
 //     from the backend response and never mutated as the user keeps typing.
 //     reuseSession() reads them to decide whether to show, hide, or re-fetch.
 //   - reuseSession() makes exactly four kinds of decisions:
@@ -46,12 +46,12 @@ export interface ICompletionDispatcher {
 //       4. Uniquely satisfied — the user has exactly typed one completion
 //          entry (and it is not a prefix of any other).  Always re-fetch to
 //          get the NEXT level's completions (e.g. agent name → subcommands).
-//          This re-fetch is unconditional: `complete` is irrelevant here
-//          because it describes THIS level's exhaustiveness, not the next's.
-//   - The `complete` flag controls the no-match fallthrough: when the trie
+//          This re-fetch is unconditional: `closedSet` is irrelevant here
+//          because it describes THIS level, not the next's.
+//   - The `closedSet` flag controls the no-match fallthrough: when the trie
 //     has zero matches for the typed prefix:
-//       complete=true  → reuse (exhaustive set, nothing else exists)
-//       complete=false → re-fetch (set is partial, backend may know more)
+//       closedSet=true  → reuse (closed set, nothing else exists)
+//       closedSet=false → re-fetch (set is open, backend may know more)
 //   - The anchor (`current`) is never advanced after a result is received.
 //     When `separatorMode` requires a separator, the separator is stripped
 //     from the raw prefix before being passed to the menu, so the trie
@@ -71,18 +71,19 @@ export class PartialCompletionSession {
     // the raw prefix without mutating `current`.
     private separatorMode: SeparatorMode = "space";
 
-    // When true, the completion set returned by the backend is exhaustive
-    // for THIS level of the command hierarchy.  This affects one decision
-    // in reuseSession():
+    // When true, the completion set returned by the backend is a closed
+    // set for THIS level of the command hierarchy — if the user types
+    // something not in the list, no further completions can exist beyond
+    // it.  This affects one decision in reuseSession():
     //
-    //   No trie matches: complete=true → reuse (nothing else exists, no
-    //   point re-fetching); complete=false → re-fetch (the backend may
+    //   No trie matches: closedSet=true → reuse (nothing else exists, no
+    //   point re-fetching); closedSet=false → re-fetch (the backend may
     //   know about completions we haven't loaded).
     //
-    // Notably, `complete` does NOT suppress the uniquelySatisfied re-fetch.
+    // Notably, `closedSet` does NOT suppress the uniquelySatisfied re-fetch.
     // uniquelySatisfied means the user needs the NEXT level's completions,
-    // which is a different question from whether THIS level is exhaustive.
-    private complete: boolean = false;
+    // which is a different question from whether THIS level is a closed set.
+    private closedSet: boolean = false;
 
     // The in-flight completion request, or undefined when settled.
     private completionP:
@@ -114,7 +115,7 @@ export class PartialCompletionSession {
         this.completionP = undefined;
         this.current = undefined;
         this.separatorMode = "space";
-        this.complete = false;
+        this.closedSet = false;
         this.cancelMenu();
     }
 
@@ -122,7 +123,7 @@ export class PartialCompletionSession {
     public resetToIdle(): void {
         this.current = undefined;
         this.separatorMode = "space";
-        this.complete = false;
+        this.closedSet = false;
     }
 
     // Returns the text typed after the anchor (`current`), or undefined when
@@ -163,12 +164,12 @@ export class PartialCompletionSession {
     //                (return true).
     //   UNIQUE     — prefix exactly matches one entry and is not a prefix of
     //                any other; re-fetch for the NEXT level (return false).
-    //                Unconditional — `complete` is irrelevant here.
+    //                Unconditional — `closedSet` is irrelevant here.
     //   SHOW       — constraints satisfied; update the menu.  The final
-    //                return is `this.complete || this.menu.isActive()`:
+    //                return is `this.closedSet || this.menu.isActive()`:
     //                reuse when the trie still has matches, or when the set
-    //                is exhaustive (nothing new to fetch).  Re-fetch only
-    //                when the trie is empty AND the set is non-exhaustive.
+    //                is closed (nothing new to fetch).  Re-fetch only
+    //                when the trie is empty AND the set is open.
     private reuseSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
@@ -245,13 +246,13 @@ export class PartialCompletionSession {
 
         // When the menu is still active (trie has matches) we always
         // reuse — the loaded completions are still useful.  When there are
-        // NO matches, the decision depends on `complete`:
-        //   complete=true  → the set is exhaustive; the user typed past all
-        //                    valid continuations, so re-fetching won't help.
-        //   complete=false → the set is NOT exhaustive; the user may have
-        //                    typed something valid that wasn't loaded, so
-        //                    re-fetch with the longer input.
-        return this.complete || this.menu.isActive();
+        // NO matches, the decision depends on `closedSet`:
+        //   closedSet=true  → the set is closed; the user typed past all
+        //                     valid continuations, so re-fetching won't help.
+        //   closedSet=false → the set is NOT closed; the user may have
+        //                     typed something valid that wasn't loaded, so
+        //                     re-fetch with the longer input.
+        return this.closedSet || this.menu.isActive();
     }
 
     // Start a new completion session: issue backend request and process result.
@@ -263,7 +264,7 @@ export class PartialCompletionSession {
         this.cancelMenu();
         this.current = input;
         this.separatorMode = "space";
-        this.complete = false;
+        this.closedSet = false;
         this.menu.setChoices([]);
         const completionP = this.dispatcher.getCommandCompletion(input);
         this.completionP = completionP;
@@ -278,7 +279,7 @@ export class PartialCompletionSession {
                 debug(`Partial completion result: `, result);
 
                 this.separatorMode = result.separatorMode ?? "space";
-                this.complete = result.complete;
+                this.closedSet = result.closedSet;
 
                 // Build completions preserving backend group order.
                 const completions: SearchMenuItem[] = [];
@@ -308,9 +309,9 @@ export class PartialCompletionSession {
                     );
                     // Keep this.current at the full input so the anchor
                     // covers the entire typed text.  The menu stays empty,
-                    // so reuseSession()'s SHOW path will use `complete` to
-                    // decide: complete=true → reuse (nothing more exists);
-                    // complete=false → re-fetch when new input arrives.
+                    // so reuseSession()'s SHOW path will use `closedSet` to
+                    // decide: closedSet=true → reuse (nothing more exists);
+                    // closedSet=false → re-fetch when new input arrives.
                     //
                     // Override separatorMode: with no completions, there is
                     // nothing to separate from, so the separator check in

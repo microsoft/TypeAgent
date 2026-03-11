@@ -42,7 +42,7 @@ function makeDispatcher(
         startIndex: 0,
         completions: [],
         separatorMode: undefined,
-        complete: true,
+        closedSet: true,
     },
 ): MockDispatcher {
     return {
@@ -61,7 +61,7 @@ function makeCompletionResult(
     opts: Partial<CommandCompletionResult> = {},
 ): CommandCompletionResult {
     const group: CompletionGroup = { name: "test", completions };
-    return { startIndex, completions: [group], complete: false, ...opts };
+    return { startIndex, completions: [group], closedSet: false, ...opts };
 }
 
 // ── State machine tests ───────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(menu.updatePrefix).toHaveBeenCalled();
     });
 
-    test("PENDING → ACTIVE: empty result (complete=true) suppresses re-fetch while input has same prefix", async () => {
+    test("PENDING → ACTIVE: empty result (closedSet=true) suppresses re-fetch while input has same prefix", async () => {
         const menu = makeMenu();
         const dispatcher = makeDispatcher();
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -121,7 +121,7 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("play", getPos);
         await Promise.resolve();
 
-        // Empty completions + complete=true — no new fetch even with extended input
+        // Empty completions + closedSet=true — no new fetch even with extended input
         session.update("play s", getPos);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
@@ -133,7 +133,7 @@ describe("PartialCompletionSession — state transitions", () => {
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("play", getPos);
-        await Promise.resolve(); // → ACTIVE (empty, complete=true) with current="play"
+        await Promise.resolve(); // → ACTIVE (empty, closedSet=true) with current="play"
 
         // Backspace past anchor
         session.update("pla", getPos);
@@ -142,11 +142,11 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith("pla");
     });
 
-    test("ACTIVE → hide+keep: complete=true, trie has no matches — no re-fetch", async () => {
+    test("ACTIVE → hide+keep: closedSet=true, trie has no matches — no re-fetch", async () => {
         const menu = makeMenu();
         // isActive returns true on first call (after setChoices), false on second (all filtered)
         menu.isActive.mockReturnValueOnce(true).mockReturnValueOnce(false);
-        const result = makeCompletionResult(["song"], 5, { complete: true });
+        const result = makeCompletionResult(["song"], 5, { closedSet: true });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
@@ -154,25 +154,25 @@ describe("PartialCompletionSession — state transitions", () => {
         await Promise.resolve(); // → ACTIVE, anchor = "play "
 
         // User types more; trie returns no matches but input is within anchor.
-        // complete=true → exhaustive set, no point re-fetching.
+        // closedSet=true → exhaustive set, no point re-fetching.
         session.update("play xyz", getPos);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
         expect(menu.hide).toHaveBeenCalled();
     });
 
-    test("ACTIVE → re-fetch: complete=false, trie has no matches — re-fetches", async () => {
+    test("ACTIVE → re-fetch: closedSet=false, trie has no matches — re-fetches", async () => {
         const menu = makeMenu();
         // isActive: true after initial load, false for "xyz" — non-exhaustive set
         menu.isActive.mockReturnValueOnce(true).mockReturnValueOnce(false);
-        const result = makeCompletionResult(["song"], 5); // complete=false default
+        const result = makeCompletionResult(["song"], 5); // closedSet=false default
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("play ", getPos);
         await Promise.resolve(); // → ACTIVE, anchor = "play "
 
-        // User types text with no trie match.  complete=false → set is NOT
+        // User types text with no trie match.  closedSet=false → set is NOT
         // exhaustive, so we should re-fetch in case the backend knows more.
         session.update("play xyz", getPos);
 
@@ -182,7 +182,7 @@ describe("PartialCompletionSession — state transitions", () => {
         );
     });
 
-    test("ACTIVE → backspace restores menu after no-match without re-fetch (complete=true)", async () => {
+    test("ACTIVE → backspace restores menu after no-match without re-fetch (closedSet=true)", async () => {
         const menu = makeMenu();
         // isActive: true after initial load, false for "xyz" prefix, true again for "so"
         menu.isActive
@@ -190,7 +190,7 @@ describe("PartialCompletionSession — state transitions", () => {
             .mockReturnValueOnce(false) // "xyz" — trie no match
             .mockReturnValueOnce(true); // "so" — trie matches "song"
         const result = makeCompletionResult(["song", "shuffle"], 5, {
-            complete: true,
+            closedSet: true,
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -198,7 +198,7 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("play ", getPos);
         await Promise.resolve(); // → ACTIVE, anchor = "play "
 
-        // User types non-matching text.  complete=true → no re-fetch.
+        // User types non-matching text.  closedSet=true → no re-fetch.
         session.update("play xyz", getPos);
         expect(menu.hide).toHaveBeenCalled();
 
@@ -305,13 +305,13 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith("@");
     });
 
-    test("empty input: unique match triggers re-fetch even when complete=true", async () => {
+    test("empty input: unique match triggers re-fetch even when closedSet=true", async () => {
         const menu = makeMenu();
         menu.isActive.mockReturnValue(true);
         menu.updatePrefix.mockReturnValue(true);
-        // complete=true means exhaustive at THIS level, but uniquelySatisfied
+        // closedSet=true means exhaustive at THIS level, but uniquelySatisfied
         // means the user needs NEXT level completions — always re-fetch.
-        const result = makeCompletionResult(["@"], 0, { complete: true });
+        const result = makeCompletionResult(["@"], 0, { closedSet: true });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
@@ -377,7 +377,7 @@ describe("PartialCompletionSession — result processing", () => {
         const result: CommandCompletionResult = {
             startIndex: 5,
             completions: [group1, group2],
-            complete: false,
+            closedSet: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -409,7 +409,7 @@ describe("PartialCompletionSession — result processing", () => {
         const result: CommandCompletionResult = {
             startIndex: 0,
             completions: [group],
-            complete: false,
+            closedSet: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -438,7 +438,7 @@ describe("PartialCompletionSession — result processing", () => {
         const result: CommandCompletionResult = {
             startIndex: 0,
             completions: [group],
-            complete: false,
+            closedSet: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -519,7 +519,7 @@ describe("PartialCompletionSession — result processing", () => {
         const result: CommandCompletionResult = {
             startIndex: 0,
             completions: [{ name: "empty", completions: [] }],
-            complete: false,
+            closedSet: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -637,13 +637,13 @@ describe("PartialCompletionSession — @command routing", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("@ command: empty result (complete=true) suppresses re-fetch", async () => {
+    test("@ command: empty result (closedSet=true) suppresses re-fetch", async () => {
         const menu = makeMenu();
         const dispatcher = makeDispatcher();
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("@unknown", getPos);
-        await Promise.resolve(); // → empty completions, complete=true
+        await Promise.resolve(); // → empty completions, closedSet=true
 
         // Still within anchor — no re-fetch
         session.update("@unknownmore", getPos);

@@ -256,7 +256,7 @@ const handlers = {
             },
         },
         exhaustive: {
-            description: "Agent returns complete=true",
+            description: "Agent returns closedSet=true",
             parameters: {
                 args: {
                     color: {
@@ -280,12 +280,12 @@ const handlers = {
                             completions: ["red", "green", "blue"],
                         },
                     ],
-                    complete: true,
+                    closedSet: true,
                 };
             },
         },
         nonexhaustive: {
-            description: "Agent returns complete=false",
+            description: "Agent returns closedSet=false",
             parameters: {
                 args: {
                     item: {
@@ -309,12 +309,12 @@ const handlers = {
                             completions: ["apple", "banana"],
                         },
                     ],
-                    complete: false,
+                    closedSet: false,
                 };
             },
         },
         nocompletefield: {
-            description: "Agent does not set complete",
+            description: "Agent does not set closedSet",
             parameters: {
                 args: {
                     thing: {
@@ -454,7 +454,7 @@ describe("Command Completion - startIndex", () => {
             expect(result!.startIndex).toBe(13);
             // Agent getCompletion is invoked for the "task" arg →
             // completions are not exhaustive.
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
 
         it("returns startIndex accounting for partial param for '@comptest run bu'", async () => {
@@ -471,7 +471,7 @@ describe("Command Completion - startIndex", () => {
             // "bu" consumes the "task" arg → nextArgs is empty.
             // Agent is not invoked (bare word, no implicit quotes).
             // Only flags remain (none defined) → exhaustive.
-            expect(result!.complete).toBe(true);
+            expect(result!.closedSet).toBe(true);
         });
 
         it("returns startIndex for nested command '@comptest nested sub '", async () => {
@@ -486,7 +486,7 @@ describe("Command Completion - startIndex", () => {
             // then unconditional whitespace backing → 20.
             expect(result!.startIndex).toBe(20);
             // Unfilled "value" arg (free-form) → not exhaustive.
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
 
         it("returns startIndex for partial flag '@comptest nested sub --ver'", async () => {
@@ -501,7 +501,7 @@ describe("Command Completion - startIndex", () => {
             // backing rewinds over the space before "--ver" → 20.
             expect(result!.startIndex).toBe(20);
             // Unfilled "value" arg → not exhaustive.
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
     });
 
@@ -518,7 +518,7 @@ describe("Command Completion - startIndex", () => {
             expect(prefixes!.completions).toContain("@");
             // Empty input normalizes to "{requestHandler} request" which
             // has open parameters → not exhaustive.
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
 
         it("returns startIndex 0 for empty input", async () => {
@@ -548,7 +548,7 @@ describe("Command Completion - startIndex", () => {
             expect(subcommands!.completions).toContain("run");
             expect(subcommands!.completions).toContain("nested");
             // Default subcommand "run" has agent completions → not exhaustive.
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
             // Agent was recognized → no agent names offered.
             const agentGroup = result!.completions.find(
                 (g) => g.name === "Agent Names",
@@ -573,7 +573,7 @@ describe("Command Completion - startIndex", () => {
                 (g) => g.name === "Subcommands",
             );
             expect(subcommandGroup).toBeDefined();
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
         });
 
         it("returns completions for unknown agent with startIndex at '@'", async () => {
@@ -593,7 +593,7 @@ describe("Command Completion - startIndex", () => {
                 (g) => g.name === "Subcommands",
             );
             expect(subcommandGroup).toBeDefined();
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
         });
     });
 
@@ -612,7 +612,7 @@ describe("Command Completion - startIndex", () => {
             // All positional args filled ("task" consumed "build"),
             // no flags, agent not invoked (agentCommandCompletions
             // is empty) → exhaustive.
-            expect(result!.complete).toBe(true);
+            expect(result!.closedSet).toBe(true);
         });
 
         it("startIndex backs over whitespace before unconsumed remainder", async () => {
@@ -664,7 +664,7 @@ describe("Command Completion - startIndex", () => {
             // No trailing whitespace to trim — startIndex stays at end
             expect(result!.startIndex).toBe(9);
             // Default subcommand has agent completions → not exhaustive.
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
 
         it("does not set separatorMode at top level (@)", async () => {
@@ -682,7 +682,7 @@ describe("Command Completion - startIndex", () => {
             expect(agentGroup).toBeDefined();
             expect(agentGroup!.completions).toContain("comptest");
             // Subcommand + agent name sets are finite → exhaustive.
-            expect(result!.complete).toBe(true);
+            expect(result!.closedSet).toBe(true);
         });
 
         it("does not set separatorMode for parameter completions only", async () => {
@@ -712,7 +712,7 @@ describe("Command Completion - startIndex", () => {
         });
     });
 
-    describe("complete flag", () => {
+    describe("closedSet flag", () => {
         it("returns empty completions for command with no parameters", async () => {
             const result = await getCommandCompletion(
                 "@comptest noop ",
@@ -721,12 +721,12 @@ describe("Command Completion - startIndex", () => {
             // "noop" has no parameters at all → nothing more to type.
             // getCommandParameterCompletion returns undefined and
             // no subcommand alternatives exist (explicit match) →
-            // empty completions with complete=true.
+            // empty completions with closedSet=true.
             expect(result.completions).toHaveLength(0);
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
         });
 
-        it("complete=true for flags-only command with no args unfilled", async () => {
+        it("closedSet=true for flags-only command with no args unfilled", async () => {
             const result = await getCommandCompletion(
                 "@comptest flagsonly ",
                 context,
@@ -734,7 +734,7 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // No positional args, only flags. nextArgs is empty.
             // No agent getCompletion. Flags are a finite set → exhaustive.
-            expect(result!.complete).toBe(true);
+            expect(result!.closedSet).toBe(true);
             const flags = result!.completions.find(
                 (g) => g.name === "Command Flags",
             );
@@ -743,7 +743,7 @@ describe("Command Completion - startIndex", () => {
             expect(flags!.completions).toContain("--level");
         });
 
-        it("complete=true for boolean flag pending", async () => {
+        it("closedSet=true for boolean flag pending", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub --verbose ",
                 context,
@@ -751,22 +751,22 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // --verbose is boolean; getPendingFlag pushed ["true", "false"]
             // and returned undefined (not a pending non-boolean flag).
-            // nextArgs still has "value" unfilled → complete = false.
-            expect(result!.complete).toBe(false);
+            // nextArgs still has "value" unfilled → closedSet = false.
+            expect(result!.closedSet).toBe(false);
         });
 
-        it("complete=false when agent completions are invoked without complete flag", async () => {
+        it("closedSet=false when agent completions are invoked without closedSet flag", async () => {
             const result = await getCommandCompletion(
                 "@comptest run ",
                 context,
             );
             expect(result).toBeDefined();
-            // Agent getCompletion is invoked but does not set complete →
+            // Agent getCompletion is invoked but does not set closedSet →
             // defaults to false.
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
 
-        it("complete=true when agent returns complete=true", async () => {
+        it("closedSet=true when agent returns closedSet=true", async () => {
             const result = await getCommandCompletion(
                 "@comptest exhaustive ",
                 context,
@@ -778,10 +778,10 @@ describe("Command Completion - startIndex", () => {
             expect(colors!.completions).toContain("green");
             expect(colors!.completions).toContain("blue");
             // Agent explicitly signals exhaustive completions.
-            expect(result!.complete).toBe(true);
+            expect(result!.closedSet).toBe(true);
         });
 
-        it("complete=false when agent returns complete=false", async () => {
+        it("closedSet=false when agent returns closedSet=false", async () => {
             const result = await getCommandCompletion(
                 "@comptest nonexhaustive ",
                 context,
@@ -792,10 +792,10 @@ describe("Command Completion - startIndex", () => {
             expect(items!.completions).toContain("apple");
             expect(items!.completions).toContain("banana");
             // Agent explicitly signals non-exhaustive.
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
 
-        it("complete=false when agent does not set complete field", async () => {
+        it("closedSet=false when agent does not set closedSet field", async () => {
             const result = await getCommandCompletion(
                 "@comptest nocompletefield ",
                 context,
@@ -805,11 +805,11 @@ describe("Command Completion - startIndex", () => {
             expect(things).toBeDefined();
             expect(things!.completions).toContain("widget");
             expect(things!.completions).toContain("gadget");
-            // Agent omits complete → defaults to false.
-            expect(result!.complete).toBe(false);
+            // Agent omits closedSet → defaults to false.
+            expect(result!.closedSet).toBe(false);
         });
 
-        it("complete=false for unfilled positional args without agent", async () => {
+        it("closedSet=false for unfilled positional args without agent", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub ",
                 context,
@@ -817,17 +817,17 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // "value" arg is unfilled, no agent getCompletion → not exhaustive
             // (free-form text).
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
 
-        it("complete=true for flags-only after one flag is set", async () => {
+        it("closedSet=true for flags-only after one flag is set", async () => {
             const result = await getCommandCompletion(
                 "@comptest flagsonly --debug true ",
                 context,
             );
             expect(result).toBeDefined();
             // --debug is consumed; only --level remains. Still a finite set.
-            expect(result!.complete).toBe(true);
+            expect(result!.closedSet).toBe(true);
         });
 
         it("returns flag value completions for non-boolean flag without trailing space", async () => {
@@ -879,7 +879,7 @@ describe("Command Completion - startIndex", () => {
             expect(flags).toBeDefined();
             expect(flags!.completions).toContain("--release");
             // Unfilled "target" arg → not exhaustive.
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("returns correct startIndex for flat agent with partial token", async () => {
@@ -891,7 +891,7 @@ describe("Command Completion - startIndex", () => {
             // startIndex = 15 - 5 ("--rel") = 10, then unconditional
             // whitespace backing rewinds over space → 9.
             expect(result.startIndex).toBe(9);
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("falls back to system for agent with no commands", async () => {
@@ -933,7 +933,7 @@ describe("Command Completion - startIndex", () => {
             expect(subcommands).toBeUndefined();
             expect(result.startIndex).toBe(15);
             // All positional args filled, no flags → exhaustive.
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
         });
 
         it("keeps subcommands when at the command boundary", async () => {
@@ -975,7 +975,7 @@ describe("Command Completion - startIndex", () => {
             // whitespace backing rewinds over the space before '"bu' → 13.
             expect(result.startIndex).toBe(13);
             // Agent was invoked → not exhaustive.
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
             // Flag groups and nextArgs completions should be cleared.
             const flags = result.completions.find(
                 (g) => g.name === "Command Flags",
@@ -996,7 +996,7 @@ describe("Command Completion - startIndex", () => {
             // whitespace backing rewinds over the space → 16.
             // "second" from nextArgs should NOT be in agentCommandCompletions.
             expect(result.startIndex).toBe(16);
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("backs startIndex for implicitQuotes '@comptest search hello world'", async () => {
@@ -1011,7 +1011,7 @@ describe("Command Completion - startIndex", () => {
             // Exclusive path: startIndex = 28 - 11 = 17, then unconditional
             // whitespace backing rewinds over the space → 16.
             expect(result.startIndex).toBe(16);
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("does not adjust startIndex for fully-quoted token", async () => {
@@ -1026,7 +1026,7 @@ describe("Command Completion - startIndex", () => {
             // whitespace backing finds no space at input[20]='"' → 21.
             // "task" is filled, no flags → exhaustive.
             expect(result.startIndex).toBe(21);
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
         });
 
         it("does not adjust startIndex for bare unquoted token", async () => {
@@ -1039,7 +1039,7 @@ describe("Command Completion - startIndex", () => {
             // lastCompletableParam condition does NOT fire.
             // startIndex stays at 16 (end of input).
             expect(result.startIndex).toBe(16);
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
         });
     });
 
@@ -1067,7 +1067,7 @@ describe("Command Completion - startIndex", () => {
             expect(grammar).toBeDefined();
             expect(grammar!.completions).toContain("タワー");
             expect(grammar!.completions).toContain("駅");
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("implicitQuotes CJK advances startIndex by prefixLength", async () => {
@@ -1093,7 +1093,7 @@ describe("Command Completion - startIndex", () => {
             expect(grammar).toBeDefined();
             expect(grammar!.completions).toContain("タワー");
             expect(grammar!.completions).toContain("駅");
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("fully-quoted token does not invoke grammar", async () => {
@@ -1106,7 +1106,7 @@ describe("Command Completion - startIndex", () => {
             // All args consumed → nextArgs empty → agent not called.
             // prefixLength never applies.
             expect(result.startIndex).toBe(23);
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
             // No Grammar group since agent wasn't invoked.
             const grammar = result.completions.find(
                 (g) => g.name === "Grammar",
@@ -1123,7 +1123,7 @@ describe("Command Completion - startIndex", () => {
             // implicitQuotes → lastCompletableParam condition false.
             // All args consumed → nextArgs empty → agent not called.
             expect(result.startIndex).toBe(21);
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
             const grammar = result.completions.find(
                 (g) => g.name === "Grammar",
             );
@@ -1142,7 +1142,7 @@ describe("Command Completion - startIndex", () => {
             // groupPrefixLength path does not fire.
             // startIndex = tokenBoundary(input, 18) = 17.
             expect(result.startIndex).toBe(17);
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
             const grammar = result.completions.find(
                 (g) => g.name === "Grammar",
             );
@@ -1196,7 +1196,7 @@ describe("Command Completion - startIndex", () => {
             expect(grammar).toBeDefined();
             expect(grammar!.completions).toContain("Tower");
             expect(grammar!.completions).toContain("Station");
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("completed CJK match returns no completions", async () => {
@@ -1213,7 +1213,7 @@ describe("Command Completion - startIndex", () => {
                 (g) => g.name === "Grammar",
             );
             expect(grammar).toBeUndefined();
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("no-text offers initial completions via grammariq", async () => {
@@ -1235,7 +1235,7 @@ describe("Command Completion - startIndex", () => {
             expect(grammar).toBeDefined();
             expect(grammar!.completions).toContain("Tokyo ");
             expect(grammar!.completions).toContain("東京");
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
     });
 });

@@ -239,110 +239,110 @@ describe("mergeCompletionResults", () => {
         });
     });
 
-    describe("complete merging", () => {
-        it("returns undefined when neither has complete", () => {
+    describe("closedSet merging", () => {
+        it("returns undefined when neither has closedSet", () => {
             const first: CompletionResult = { completions: ["a"] };
             const second: CompletionResult = { completions: ["b"] };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.complete).toBeUndefined();
+            expect(result.closedSet).toBeUndefined();
         });
 
         it("returns true only when both are true", () => {
             const first: CompletionResult = {
                 completions: ["a"],
-                complete: true,
+                closedSet: true,
             };
             const second: CompletionResult = {
                 completions: ["b"],
-                complete: true,
+                closedSet: true,
             };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.complete).toBe(true);
+            expect(result.closedSet).toBe(true);
         });
 
         it("returns false when first is true and second is false", () => {
             const first: CompletionResult = {
                 completions: ["a"],
-                complete: true,
+                closedSet: true,
             };
             const second: CompletionResult = {
                 completions: ["b"],
-                complete: false,
+                closedSet: false,
             };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("returns false when first is false and second is true", () => {
             const first: CompletionResult = {
                 completions: ["a"],
-                complete: false,
+                closedSet: false,
             };
             const second: CompletionResult = {
                 completions: ["b"],
-                complete: true,
+                closedSet: true,
             };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
         it("returns false when both are false", () => {
             const first: CompletionResult = {
                 completions: ["a"],
-                complete: false,
+                closedSet: false,
             };
             const second: CompletionResult = {
                 completions: ["b"],
-                complete: false,
+                closedSet: false,
             };
             const result = mergeCompletionResults(first, second)!;
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
-        it("returns false when only first has complete=true and second is undefined", () => {
+        it("returns false when only first has closedSet=true and second is undefined", () => {
             const first: CompletionResult = {
                 completions: ["a"],
-                complete: true,
+                closedSet: true,
             };
             const second: CompletionResult = {
                 completions: ["b"],
             };
             const result = mergeCompletionResults(first, second)!;
             // undefined treated as false → true && false = false
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
-        it("returns false when only second has complete=true and first is undefined", () => {
+        it("returns false when only second has closedSet=true and first is undefined", () => {
             const first: CompletionResult = {
                 completions: ["a"],
             };
             const second: CompletionResult = {
                 completions: ["b"],
-                complete: true,
+                closedSet: true,
             };
             const result = mergeCompletionResults(first, second)!;
             // undefined treated as false → false && true = false
-            expect(result.complete).toBe(false);
+            expect(result.closedSet).toBe(false);
         });
 
-        it("preserves complete when first result is undefined", () => {
+        it("preserves closedSet when first result is undefined", () => {
             const second: CompletionResult = {
                 completions: ["b"],
-                complete: true,
+                closedSet: true,
             };
             const result = mergeCompletionResults(undefined, second);
             expect(result).toBe(second);
-            expect(result!.complete).toBe(true);
+            expect(result!.closedSet).toBe(true);
         });
 
-        it("preserves complete when second result is undefined", () => {
+        it("preserves closedSet when second result is undefined", () => {
             const first: CompletionResult = {
                 completions: ["a"],
-                complete: false,
+                closedSet: false,
             };
             const result = mergeCompletionResults(first, undefined);
             expect(result).toBe(first);
-            expect(result!.complete).toBe(false);
+            expect(result!.closedSet).toBe(false);
         });
     });
 });

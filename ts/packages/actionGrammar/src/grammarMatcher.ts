@@ -1094,12 +1094,13 @@ export type GrammarCompletionResult = {
     //   "none" — no separator at all ([spacing=none] grammars).
     // Omitted when no completions were generated.
     separatorMode?: GrammarSeparatorMode | undefined;
-    // True when `completions` is the exhaustive set of valid
-    // continuations after the matched prefix.  False or undefined
-    // means additional valid inputs may exist that are not listed
-    // (e.g. wildcard/entity slots whose values are external to the
-    // grammar).
-    complete?: boolean | undefined;
+    // True when `completions` is the closed set of valid
+    // continuations after the matched prefix — if the user types
+    // something not in the list, no further completions can exist
+    // beyond it.  False or undefined means the parser can continue
+    // past unrecognized input and find more completions (e.g.
+    // wildcard/entity slots whose values are external to the grammar).
+    closedSet?: boolean | undefined;
 };
 
 function getGrammarCompletionProperty(
@@ -1281,12 +1282,13 @@ export function matchGrammarCompletion(
     const properties: GrammarCompletionProperty[] = [];
     let separatorMode: GrammarSeparatorMode | undefined;
 
-    // Whether the accumulated completions are the exhaustive set of valid
-    // continuations.  Starts true and is set to false when property/wildcard
+    // Whether the accumulated completions form a closed set — if the
+    // user types something not listed, no further completions can exist
+    // beyond it.  Starts true and is set to false when property/wildcard
     // completions are emitted (entity values are external to the grammar).
     // Reset to true whenever maxPrefixLength advances (old candidates are
     // discarded, new batch starts fresh).
-    let complete: boolean = true;
+    let closedSet: boolean = true;
 
     // Track the furthest point the grammar consumed across all
     // states (including exact matches).  This tells the caller where
@@ -1303,7 +1305,7 @@ export function matchGrammarCompletion(
             completions.length = 0;
             properties.length = 0;
             separatorMode = undefined;
-            complete = true;
+            closedSet = true;
         }
     }
 
@@ -1451,9 +1453,9 @@ export function matchGrammarCompletion(
                             candidateNeedsSep,
                             state.spacingMode,
                         );
-                        // Property/wildcard completions are not exhaustive
-                        // — entity values are external to the grammar.
-                        complete = false;
+                        // Property/wildcard completions are not a closed
+                        // set — entity values are external to the grammar.
+                        closedSet = false;
                     }
                 }
             } else if (!matched) {
@@ -1529,7 +1531,7 @@ export function matchGrammarCompletion(
         properties,
         matchedPrefixLength: maxPrefixLength,
         separatorMode,
-        complete,
+        closedSet,
     };
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
     return result;

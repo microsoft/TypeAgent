@@ -79,11 +79,12 @@ export type CommandCompletionResult = {
     // the completion text.  When omitted, defaults to "space".
     // See SeparatorMode in @typeagent/agent-sdk.
     separatorMode?: SeparatorMode | undefined;
-    // True when the completions listed are the exhaustive set of valid
-    // continuations after the prefix.  When true and the user types
-    // something that doesn't prefix-match any completion, the caller
-    // can skip refetching since no other valid input exists.
-    complete: boolean;
+    // True when the completions form a closed set — if the user types
+    // something not in the list, no further completions can exist
+    // beyond it.  When true and the user types something that doesn't
+    // prefix-match any completion, the caller can skip refetching since
+    // no other valid input exists.
+    closedSet: boolean;
 };
 
 export type AppAgentStatus = {

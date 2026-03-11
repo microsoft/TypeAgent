@@ -297,7 +297,7 @@ export class GrammarStoreImpl implements GrammarStore {
         const properties: CompletionProperty[] = [];
         let matchedPrefixLength = 0;
         let separatorMode: SeparatorMode | undefined;
-        let complete: boolean | undefined;
+        let closedSet: boolean | undefined;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -384,7 +384,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     completions.length = 0;
                     properties.length = 0;
                     separatorMode = undefined;
-                    complete = undefined;
+                    closedSet = undefined;
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);
@@ -394,13 +394,13 @@ export class GrammarStoreImpl implements GrammarStore {
                             partial.separatorMode,
                         );
                     }
-                    // AND-merge: exhaustive only when all grammar
-                    // results at this prefix length are exhaustive.
-                    if (partial.complete !== undefined) {
-                        complete =
-                            complete === undefined
-                                ? partial.complete
-                                : complete && partial.complete;
+                    // AND-merge: closed set only when all grammar
+                    // results at this prefix length are closed sets.
+                    if (partial.closedSet !== undefined) {
+                        closedSet =
+                            closedSet === undefined
+                                ? partial.closedSet
+                                : closedSet && partial.closedSet;
                     }
                     if (
                         partial.properties !== undefined &&
@@ -430,7 +430,7 @@ export class GrammarStoreImpl implements GrammarStore {
             properties,
             matchedPrefixLength,
             separatorMode,
-            complete,
+            closedSet,
         };
     }
 }
