@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TST } from "./prefixTree";
+import { SearchMenuBase } from "./searchMenuBase";
 import { InlineSearchMenuUI } from "./searchMenuUI/inlineSearchMenuUI";
 import { LocalSearchMenuUI } from "./searchMenuUI/localSearchMenuUI";
 import {
@@ -10,87 +10,38 @@ import {
     SearchMenuUI,
 } from "./searchMenuUI/searchMenuUI";
 
-function normalizeMatchText(text: string): string {
-    // Remove diacritical marks, and case replace any space characters with the normalized ' '.
-    return text
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "") // Remove combining diacritical marks
-        .replace(/\s/g, " ")
-        .toLowerCase();
-}
-
-export class SearchMenu {
+export class SearchMenu extends SearchMenuBase {
     private searchMenuUI: SearchMenuUI | undefined;
-    private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
-    private prefix: string | undefined;
     constructor(
         private readonly onCompletion: (item: SearchMenuItem) => void,
         private readonly inline: boolean,
         private readonly textEntry?: HTMLSpanElement,
-    ) {}
-
-    public isActive() {
-        return this.searchMenuUI !== undefined;
+    ) {
+        super();
     }
 
-    public setChoices(choices: SearchMenuItem[]) {
-        this.prefix = undefined;
-        this.trie.init();
-        for (const choice of choices) {
-            // choices are sorted in priority order so prefer first norm text
-            const normText = normalizeMatchText(choice.matchText);
-            if (!this.trie.get(normText)) {
-                this.trie.insert(normText, choice);
-            }
+    protected override onShow(
+        position: SearchMenuPosition,
+        prefix: string,
+        items: SearchMenuItem[],
+    ): void {
+        if (this.searchMenuUI === undefined) {
+            this.searchMenuUI = this.inline
+                ? new InlineSearchMenuUI(this.onCompletion, this.textEntry!)
+                : new LocalSearchMenuUI(this.onCompletion);
         }
+        this.searchMenuUI.update({ position, prefix, items });
     }
 
-    public numChoices() {
-        return this.trie.size();
+    protected override onUpdatePosition(position: SearchMenuPosition): void {
+        this.searchMenuUI!.update({ position });
     }
 
-    public hasExactMatch(text: string): boolean {
-        return this.trie.contains(normalizeMatchText(text));
+    protected override onHide(): void {
+        this.searchMenuUI!.close();
+        this.searchMenuUI = undefined;
     }
 
-    public updatePrefix(prefix: string, position: SearchMenuPosition): boolean {
-        if (this.numChoices() === 0) {
-            return false;
-        }
-
-        if (this.prefix === prefix && this.searchMenuUI !== undefined) {
-            // No need to update existing searchMenuUI, just update the position.
-            this.searchMenuUI.update({ position });
-            return false;
-        }
-
-        this.prefix = prefix;
-        const items = this.trie.dataWithPrefix(normalizeMatchText(prefix));
-        const uniquelySatisfied =
-            items.length === 1 &&
-            normalizeMatchText(items[0].matchText) ===
-                normalizeMatchText(prefix);
-        const showMenu = items.length !== 0 && !uniquelySatisfied;
-
-        if (showMenu) {
-            if (this.searchMenuUI === undefined) {
-                this.searchMenuUI = this.inline
-                    ? new InlineSearchMenuUI(this.onCompletion, this.textEntry!)
-                    : new LocalSearchMenuUI(this.onCompletion);
-            }
-            this.searchMenuUI.update({ position, prefix, items });
-        } else {
-            this.hide();
-        }
-        return uniquelySatisfied;
-    }
-
-    public hide() {
-        if (this.searchMenuUI) {
-            this.searchMenuUI.close();
-            this.searchMenuUI = undefined;
-        }
-    }
     public handleMouseWheel(deltaY: number) {
         this.searchMenuUI?.adjustSelection(deltaY);
     }

@@ -10,73 +10,30 @@ import {
 import { SearchMenuPosition } from "../src/preload/electronTypes.js";
 import { CompletionGroup } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "agent-dispatcher";
-import { TST, BaseTSTData } from "../src/renderer/src/prefixTree.js";
+import { SearchMenuBase } from "../src/renderer/src/searchMenuBase.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// Duplicated from search.ts (not exported, avoids DOM imports).
-function normalizeMatchText(text: string): string {
-    return text
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s/g, " ")
-        .toLowerCase();
-}
-
-interface TrieItem extends BaseTSTData {
-    matchText: string;
-    selectedText: string;
-    needQuotes?: boolean;
-    emojiChar?: string;
-}
-
-// Real trie-backed ISearchMenu — same logic as SearchMenu but without DOM UI.
+// Real trie-backed ISearchMenu backed by SearchMenuBase.
 // Every method is a jest.fn() wrapping the real implementation so tests can
 // assert on call counts and arguments.
-class TestSearchMenu implements ISearchMenu {
-    private trie: TST<TrieItem> = new TST<TrieItem>();
-    private _isActive: boolean = false;
-
-    setChoices = jest.fn<ISearchMenu["setChoices"]>((choices) => {
-        this.trie.init();
-        this._isActive = false;
-        for (const choice of choices) {
-            const normText = normalizeMatchText(choice.matchText);
-            if (!this.trie.get(normText)) {
-                this.trie.insert(normText, choice as TrieItem);
-            }
-        }
-    });
+class TestSearchMenu extends SearchMenuBase {
+    setChoices = jest.fn<ISearchMenu["setChoices"]>((choices) =>
+        super.setChoices(choices),
+    );
 
     updatePrefix = jest.fn<ISearchMenu["updatePrefix"]>(
-        (prefix: string, _position: SearchMenuPosition): boolean => {
-            if (this.trie.size() === 0) {
-                return false;
-            }
-            const items = this.trie.dataWithPrefix(normalizeMatchText(prefix));
-            const uniquelySatisfied =
-                items.length === 1 &&
-                normalizeMatchText(items[0].matchText) ===
-                    normalizeMatchText(prefix);
-            const showMenu = items.length !== 0 && !uniquelySatisfied;
-            this._isActive = showMenu;
-            return uniquelySatisfied;
-        },
+        (prefix: string, position: SearchMenuPosition): boolean =>
+            super.updatePrefix(prefix, position),
     );
 
     hasExactMatch = jest.fn<ISearchMenu["hasExactMatch"]>(
-        (text: string): boolean => {
-            return this.trie.contains(normalizeMatchText(text));
-        },
+        (text: string): boolean => super.hasExactMatch(text),
     );
 
-    hide = jest.fn<ISearchMenu["hide"]>(() => {
-        this._isActive = false;
-    });
+    hide = jest.fn<ISearchMenu["hide"]>(() => super.hide());
 
-    isActive = jest.fn<ISearchMenu["isActive"]>(() => {
-        return this._isActive;
-    });
+    isActive = jest.fn<ISearchMenu["isActive"]>(() => super.isActive());
 }
 
 function makeMenu(): TestSearchMenu {
