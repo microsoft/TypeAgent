@@ -49,10 +49,11 @@ export class SearchMenu {
         return this.trie.size();
     }
 
-    public updatePrefix(
-        prefix: string,
-        position: SearchMenuPosition,
-    ): boolean {
+    public hasExactMatch(text: string): boolean {
+        return this.trie.contains(normalizeMatchText(text));
+    }
+
+    public updatePrefix(prefix: string, position: SearchMenuPosition): boolean {
         if (this.numChoices() === 0) {
             return false;
         }

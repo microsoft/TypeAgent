@@ -17,6 +17,8 @@ export interface ISearchMenu {
     // Returns true when the prefix uniquely satisfies exactly one entry
     // (exact match that is not a prefix of any other entry).
     updatePrefix(prefix: string, position: SearchMenuPosition): boolean;
+    // Returns true when text is an exact match for a completion entry.
+    hasExactMatch(text: string): boolean;
     hide(): void;
     isActive(): boolean;
 }
@@ -237,6 +239,21 @@ export class PartialCompletionSession {
                 // completions (e.g. agent name → subcommands), so re-fetch.
                 debug(
                     `Partial completion re-fetch: '${prefix}' uniquely satisfied`,
+                );
+                return false; // RE-FETCH for next level of completions
+            }
+
+            // Committed-past-boundary: the prefix contains whitespace or
+            // punctuation, meaning the user typed past a completion entry.
+            // If the text before the first separator exactly matches a
+            // completion, re-fetch for the next level.  This handles the
+            // case where an entry (e.g. "set") is also a prefix of other
+            // entries ("setWindowState") so uniquelySatisfied is false,
+            // but the user committed by typing a separator.
+            const sepMatch = prefix.match(/^(.+?)[\s\p{P}]/u);
+            if (sepMatch !== null && this.menu.hasExactMatch(sepMatch[1])) {
+                debug(
+                    `Partial completion re-fetch: '${sepMatch[1]}' committed with separator`,
                 );
                 return false; // RE-FETCH for next level of completions
             }
