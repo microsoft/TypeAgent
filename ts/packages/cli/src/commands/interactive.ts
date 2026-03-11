@@ -221,6 +221,7 @@ export default class Interactive extends Command {
                     flags.testUI
                         ? (line: string) => getCompletionsData(line, dispatcher)
                         : undefined,
+                    flags.testUI ? dispatcher : undefined,
                 );
             } finally {
                 await dispatcher.close();

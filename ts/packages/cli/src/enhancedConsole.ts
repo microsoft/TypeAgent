@@ -42,6 +42,11 @@ let currentSpinner: EnhancedSpinner | null = null;
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
 
+// Track the active request for cancellation support
+let currentRequestId: string | undefined;
+let isProcessing = false;
+let lastCtrlCTime = 0;
+
 // Grammar log file path
 const grammarLogPath = path.join(
     process.env.HOME || process.env.USERPROFILE || ".",
@@ -366,8 +371,8 @@ export function createEnhancedClientIO(
         },
 
         // Display
-        setUserRequest() {
-            // Ignored
+        setUserRequest(requestId: RequestId) {
+            currentRequestId = requestId.requestId;
         },
         setDisplayInfo() {
             // Ignored
@@ -814,6 +819,7 @@ function formatDisplayContent(content: string | DisplayContent): string {
 async function questionWithCompletion(
     message: string,
     getCompletions: (input: string) => Promise<any>,
+    history: string[] = [],
 ): Promise<string> {
     return new Promise<string>((resolve) => {
         let input = "";
@@ -821,6 +827,8 @@ async function questionWithCompletion(
         let allCompletions: string[] = []; // All available completions
         let filteredCompletions: string[] = []; // Filtered based on user typing
         let completionIndex = 0;
+        let historyIndex = history.length; // Start past the end (current empty input)
+        let savedInput = ""; // Saves current input when navigating history
         let filterStartIndex = -1; // Where filtering begins
         let completionPrefix = ""; // Fixed prefix before completions
         let updatingCompletions = false;
@@ -861,10 +869,11 @@ async function questionWithCompletion(
             }
         };
 
-        // Render the prompt and input with inline gray suggestion
+        // Render the prompt, input, bottom rule, and contextual hint
         const render = () => {
             // Build entire output as a single string to prevent cursor flashing
             const promptText = chalk.cyanBright(message);
+            const width = process.stdout.columns || 80;
 
             // Calculate cursor column based on cursorPos within input
             const cursorCol =
@@ -872,10 +881,8 @@ async function questionWithCompletion(
                 getDisplayWidth(input.substring(0, cursorPos)) +
                 1;
 
-            // Don't clear whole line first - overwrite in place, then clear to end
-            // This avoids the brief "blank line" flash
             let output = ANSI.hideCursor;
-            output += "\r"; // Move to column 0 (carriage return)
+            output += "\r";
             output += promptText + input;
 
             // Show inline completion if available
@@ -884,7 +891,6 @@ async function questionWithCompletion(
                 completionIndex < filteredCompletions.length
             ) {
                 const completion = filteredCompletions[completionIndex];
-                // Build full completion from prefix + completion text
                 const fullCompletion =
                     completionPrefix +
                     (filterStartIndex > completionPrefix.length ? " " : "") +
@@ -896,14 +902,28 @@ async function questionWithCompletion(
                 }
             }
 
-            // Clear from cursor to end of line (removes leftover chars from previous longer content)
             output += "\x1b[K";
 
-            // Position cursor at end of input using absolute positioning
+            // Bottom rule
+            output +=
+                "\n" + ANSI.dim + "─".repeat(width) + ANSI.reset + "\x1b[K";
+
+            // Contextual hint line
+            let hint: string;
+            if (filteredCompletions.length > 0) {
+                hint = "↑↓ completions · tab accept · esc clear";
+            } else if (input.length > 0) {
+                hint = "↑↓ history · esc clear";
+            } else {
+                hint = "↑↓ history";
+            }
+            output += "\n  " + chalk.dim(hint) + "\x1b[K";
+
+            // Cursor back to input line (up 2: bottom rule + hint)
+            output += "\x1b[2A";
             output += `\x1b[${cursorCol}G`;
             output += ANSI.showCursor;
 
-            // Write everything in one call
             stdout.write(output);
         };
 
@@ -949,19 +969,37 @@ async function questionWithCompletion(
             if (data.startsWith("\x1b[")) {
                 // Arrow keys
                 if (data === "\x1b[A") {
-                    // Arrow Up - cycle to previous completion
                     if (filteredCompletions.length > 0) {
+                        // Cycle to previous completion
                         completionIndex =
                             (completionIndex - 1 + filteredCompletions.length) %
                             filteredCompletions.length;
                         render();
+                    } else if (history.length > 0 && historyIndex > 0) {
+                        // Navigate to previous history entry
+                        if (historyIndex === history.length) {
+                            savedInput = input;
+                        }
+                        historyIndex--;
+                        input = history[historyIndex];
+                        cursorPos = input.length;
+                        render();
                     }
                     return;
                 } else if (data === "\x1b[B") {
-                    // Arrow Down - cycle to next completion
                     if (filteredCompletions.length > 0) {
+                        // Cycle to next completion
                         completionIndex =
                             (completionIndex + 1) % filteredCompletions.length;
+                        render();
+                    } else if (historyIndex < history.length) {
+                        // Navigate to next history entry
+                        historyIndex++;
+                        input =
+                            historyIndex === history.length
+                                ? savedInput
+                                : history[historyIndex];
+                        cursorPos = input.length;
                         render();
                     }
                     return;
@@ -979,20 +1017,31 @@ async function questionWithCompletion(
                         render();
                     }
                     return;
-                } else if (data === "\x1b") {
-                    // Esc - clear completions
+                }
+                return;
+            }
+
+            if (data === "\x1b") {
+                if (filteredCompletions.length > 0) {
+                    // Esc with completions showing — clear completions
                     allCompletions = [];
                     filteredCompletions = [];
                     filterStartIndex = -1;
-                    render();
-                    return;
+                } else {
+                    // Esc with no completions — clear input
+                    input = "";
+                    cursorPos = 0;
+                    historyIndex = history.length;
                 }
+                render();
+                return;
             }
 
             const code = data.charCodeAt(0);
 
             if (code === 3) {
-                // Ctrl+C
+                // Ctrl+C — clear bottom rule + hint before exit
+                stdout.write("\n\n\x1b[K\n");
                 cleanup();
                 process.exit(0);
             } else if (code === 13) {
@@ -1009,11 +1058,25 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                 }
-                // Windows Terminal ConPTY echoes in raw mode
-                // Move cursor up one line, clear it, and write clean output
-                stdout.write("\x1b[1A"); // Move cursor up 1 line
-                stdout.write("\r" + ANSI.clearLine); // Clear the line
-                stdout.write(chalk.cyanBright(message) + input + "\n");
+                // ConPTY on Windows can echo the input line when Enter
+                // is pressed, causing a duplicate. Overwrite the entire
+                // 3-line frame (input + bottom rule + hint) from scratch.
+                const width = process.stdout.columns || 80;
+                const styledInput = chalk.cyanBright(message) + input;
+                let out = ANSI.hideCursor;
+                // Go up to input line: ConPTY echo moved us 1 down,
+                // but we may also be on a ConPTY-echoed duplicate line.
+                // Use save/restore isn't reliable, so go up 3 lines
+                // (echo line + hint + bottom rule) to be safe, then
+                // clear everything downward.
+                out += "\x1b[3A";
+                out += "\r" + ANSI.clearLine + styledInput;
+                out +=
+                    "\n" + ANSI.dim + "─".repeat(width) + ANSI.reset + "\x1b[K";
+                out += "\n\x1b[K"; // clear hint line
+                out += "\n\x1b[K"; // clear any ConPTY echo remnant
+                out += ANSI.showCursor;
+                stdout.write(out);
                 cleanup();
                 resolve(input);
             } else if (code === 9) {
@@ -1118,13 +1181,29 @@ async function question(
 }
 
 /**
- * Initialize enhanced console
- * Note: Raw mode is intentionally NOT used to avoid conflicts with readline input.
- * Ctrl+C is handled by the default SIGINT handler.
+ * Initialize enhanced console with cancellation support.
+ * During command execution, Escape and Ctrl+C trigger command cancellation.
+ * Double Ctrl+C within 1 second exits the process.
  */
-function initializeEnhancedConsole(_rl?: readline.promises.Interface) {
-    // Set up SIGINT handler for spinner cleanup
+function initializeEnhancedConsole(
+    _rl?: readline.promises.Interface,
+    dispatcherRef?: { current?: Dispatcher },
+) {
     process.on("SIGINT", () => {
+        if (isProcessing && dispatcherRef?.current && currentRequestId) {
+            const now = Date.now();
+            if (now - lastCtrlCTime < 1000) {
+                // Double Ctrl+C — force exit
+                if (currentSpinner) {
+                    currentSpinner.stop();
+                    currentSpinner = null;
+                }
+                process.exit(0);
+            }
+            lastCtrlCTime = now;
+            dispatcherRef.current.cancelCommand(currentRequestId);
+            return;
+        }
         if (currentSpinner) {
             currentSpinner.stop();
             currentSpinner = null;
@@ -1151,7 +1230,8 @@ export async function withEnhancedConsoleClientIO(
     usingEnhancedConsole = true;
 
     try {
-        initializeEnhancedConsole(rl);
+        const dispatcherRef: { current?: Dispatcher } = {};
+        initializeEnhancedConsole(rl, dispatcherRef);
 
         // Show welcome header
         const width = process.stdout.columns || 80;
@@ -1162,8 +1242,6 @@ export async function withEnhancedConsoleClientIO(
         );
         console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
         console.log("");
-
-        const dispatcherRef: { current?: Dispatcher } = {};
         await callback(
             createEnhancedClientIO(rl, dispatcherRef),
             (d: Dispatcher) => {
@@ -1181,6 +1259,50 @@ export async function withEnhancedConsoleClientIO(
 }
 
 /**
+ * Enable raw mode on stdin during command execution so we can detect
+ * Escape and Ctrl+C for cancellation. Returns a cleanup function.
+ */
+function startExecutionKeyListener(
+    dispatcher: Dispatcher | undefined,
+): () => void {
+    if (!dispatcher || !process.stdin.isTTY) {
+        return () => {};
+    }
+
+    const onData = (data: Buffer | string) => {
+        // stdin encoding may be set to utf8 by questionWithCompletion,
+        // so data can be a string. Use charCodeAt for consistent handling.
+        const code = typeof data === "string" ? data.charCodeAt(0) : data[0];
+        if (data.length === 1 && code === 0x1b && currentRequestId) {
+            // Escape key — cancel current command
+            dispatcher.cancelCommand(currentRequestId);
+        } else if (data.length === 1 && code === 3 && currentRequestId) {
+            // Ctrl+C during raw mode — cancel or double-press exit
+            const now = Date.now();
+            if (now - lastCtrlCTime < 1000) {
+                if (currentSpinner) {
+                    currentSpinner.stop();
+                    currentSpinner = null;
+                }
+                process.exit(0);
+            }
+            lastCtrlCTime = now;
+            dispatcher.cancelCommand(currentRequestId);
+        }
+    };
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on("data", onData);
+
+    return () => {
+        process.stdin.removeListener("data", onData);
+        // Don't change raw mode or pause here — let the next input handler
+        // (questionWithCompletion) manage stdin state when it starts.
+    };
+}
+
+/**
  * Enhanced command processor with spinner support and tab completion
  */
 export async function processCommandsEnhanced<T>(
@@ -1189,6 +1311,7 @@ export async function processCommandsEnhanced<T>(
     context: T,
     inputs?: string[],
     getCompletions?: (line: string, context: T) => Promise<any>,
+    dispatcherForCancel?: Dispatcher,
 ) {
     const fs = await import("node:fs");
     let history: string[] = [];
@@ -1199,25 +1322,17 @@ export async function processCommandsEnhanced<T>(
         history = hh.commands;
     }
 
-    // Create completer function for tab completion
-    const completer = getCompletions
-        ? async (line: string): Promise<[string[], string]> => {
-              try {
-                  const completions = await getCompletions(line, context);
-                  return [completions, line];
-              } catch {
-                  return [[], line];
-              }
-          }
-        : undefined;
-
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        history,
-        terminal: true,
-        completer,
-    });
+    // Only create readline when not using inline completions.
+    // questionWithCompletion manages stdin directly; a readline attached
+    // to the same stdin would consume events and break input.
+    const rl = getCompletions
+        ? undefined
+        : createInterface({
+              input: process.stdin,
+              output: process.stdout,
+              history,
+              terminal: true,
+          });
 
     const promptColor = chalk.cyanBright;
 
@@ -1239,9 +1354,16 @@ export async function processCommandsEnhanced<T>(
             request = await questionWithCompletion(
                 promptColor(prompt),
                 (line: string) => getCompletions(line, context),
+                history,
             );
         } else {
             request = await question(promptColor(prompt), rl);
+            // Non-completions path has no bottom rule; draw separator after input
+            if (request.length) {
+                process.stdout.write(
+                    ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
+                );
+            }
         }
 
         // Skip empty input - just loop back to show prompt again
@@ -1249,21 +1371,43 @@ export async function processCommandsEnhanced<T>(
             continue;
         }
 
-        // Draw separator after input
-        process.stdout.write(ANSI.dim + "─".repeat(width) + ANSI.reset + "\n");
-
         if (
             request.toLowerCase() === "quit" ||
             request.toLowerCase() === "exit"
         ) {
+            // Clear the frame remnants (bottom rule + hint) without moving cursor
+            process.stdout.write(
+                "\x1b[s" + // save cursor position
+                    "\n\x1b[K" + // move to bottom rule line, clear it
+                    "\n\x1b[K" + // move to hint line, clear it
+                    "\x1b[u", // restore cursor position
+            );
             break;
         }
 
         try {
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
+            // Show execution hint below spinner
+            const execHint = chalk.dim(
+                "  esc cancel · ctrl+c cancel (2× exit)",
+            );
+            process.stdout.write("\n" + execHint + "\x1b[K\x1b[1A\r");
 
-            await processCommand(request, context);
+            isProcessing = true;
+            currentRequestId = undefined;
+            const stopKeyListener =
+                startExecutionKeyListener(dispatcherForCancel);
+            let result: any;
+            try {
+                result = await processCommand(request, context);
+            } finally {
+                stopKeyListener();
+                isProcessing = false;
+            }
+
+            // Clear execution hint line before stopping spinner
+            process.stdout.write("\n\x1b[K\x1b[1A");
 
             // Wait for any pending choice prompt to complete
             // before showing "Complete" and the next prompt.
@@ -1272,11 +1416,16 @@ export async function processCommandsEnhanced<T>(
                 pendingChoicePromise = null;
             }
 
-            // Stop spinner on success (no-op if choice already cleared it)
-            stopSpinner("success", "Complete");
+            if (result?.cancelled) {
+                stopSpinner("warn", "Cancelled");
+            } else {
+                // Stop spinner on success (no-op if choice already cleared it)
+                stopSpinner("success", "Complete");
+            }
 
             history.push(request);
         } catch (error) {
+            isProcessing = false;
             stopSpinner("fail", "Error");
             console.log(chalk.red("### ERROR:"));
             console.log(error);
@@ -1287,7 +1436,7 @@ export async function processCommandsEnhanced<T>(
         // save command history
         fs.writeFileSync(
             "command_history.json",
-            JSON.stringify({ commands: (rl as any).history }),
+            JSON.stringify({ commands: history }),
         );
     }
 }

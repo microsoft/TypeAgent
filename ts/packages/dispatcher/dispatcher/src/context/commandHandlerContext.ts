@@ -203,6 +203,7 @@ export type CommandHandlerContext = {
     currentScriptDir: string;
     logger?: Logger | undefined;
     currentRequestId: RequestId | undefined;
+    currentAbortSignal: AbortSignal | undefined;
     noReasoning: boolean;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
@@ -221,6 +222,10 @@ export type CommandHandlerContext = {
     metricsManager?: RequestMetricsManager | undefined;
     commandProfiler?: Profiler | undefined;
     promptLogger?: PromptLogger | undefined;
+
+    // Maps requestId string → AbortController for in-flight commands.
+    // Used by cancelCommand() to abort a running command.
+    activeRequests: Map<string, AbortController>;
 
     instanceDirLock: (() => Promise<void>) | undefined;
 
@@ -632,6 +637,7 @@ export async function initializeCommandHandlerContext(
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
             currentRequestId: undefined,
+            currentAbortSignal: undefined,
             noReasoning: false,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
@@ -653,6 +659,7 @@ export async function initializeCommandHandlerContext(
             promptLogger: createPromptLogger(getCosmosFactories()),
             batchMode: false,
             pendingChoiceRoutes: new Map(),
+            activeRequests: new Map(),
             instanceDirLock,
             constructionProvider,
             collectCommandResult: options?.collectCommandResult ?? false,
