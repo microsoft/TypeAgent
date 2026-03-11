@@ -5,7 +5,7 @@ import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 import { openai as ai } from "aiclient";
 import { SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext, getBrowserControl } from "./browserActions.mjs";
+import { BrowserActionContext } from "./browserActions.mjs";
 
 import registerDebug from "debug";
 
@@ -162,12 +162,15 @@ export async function extractCrosswordSchema(
         throw new Error("No connection to browser session.");
     }
 
-    const browserControl = getBrowserControl(agentContext);
+    const extractionStart = performance.now();
 
-    await browserControl.awaitPageLoad(1000);
+    // R4: Removed redundant server-side awaitPageLoad — client already waits
+    // via awaitPageReady() before issuing this RPC call.
     const htmlFragments = await agentContext.browserControl.getHtmlFragments();
-
-    debug(`Found ${htmlFragments.length} HTML fragments on the page.`);
+    const fragmentsElapsed = (performance.now() - extractionStart).toFixed(0);
+    debug(
+        `Found ${htmlFragments.length} HTML fragments in ${fragmentsElapsed}ms`,
+    );
 
     // Filter to candidate fragments that might contain crossword
     const candidateFragments: HtmlFragments[] = [];
@@ -180,9 +183,12 @@ export async function extractCrosswordSchema(
         checkPromises.push(checkIsCrosswordOnPage([fragment]));
     }
 
+    const presenceStart = performance.now();
     const checkResults = await Promise.all(checkPromises);
-    let fragmentIndex = 0;
+    const presenceElapsed = (performance.now() - presenceStart).toFixed(0);
+    debug(`Presence detection completed in ${presenceElapsed}ms`);
 
+    let fragmentIndex = 0;
     for (const fragment of htmlFragments) {
         if (!fragment.content || fragment.content.length < 500) {
             continue;
@@ -205,13 +211,21 @@ export async function extractCrosswordSchema(
         `Found ${candidateFragments.length} candidate fragments for crossword.`,
     );
 
-    // Extract clues from each candidate fragment
-    for (const fragment of candidateFragments) {
-        const result = await extractCluesWithSelectors([fragment]);
-        if (result) {
-            debug("Successfully extracted crossword schema.");
-            return result;
-        }
+    // R3: Extract clues from all candidates in parallel, return first valid result
+    const clueStart = performance.now();
+    const extractionResults = await Promise.all(
+        candidateFragments.map((fragment) =>
+            extractCluesWithSelectors([fragment]),
+        ),
+    );
+    const clueElapsed = (performance.now() - clueStart).toFixed(0);
+    debug(`Clue extraction completed in ${clueElapsed}ms`);
+
+    const validResult = extractionResults.find((r) => r !== undefined);
+    if (validResult) {
+        const totalElapsed = (performance.now() - extractionStart).toFixed(0);
+        debug(`Successfully extracted crossword schema in ${totalElapsed}ms`);
+        return validResult;
     }
 
     debug("No valid crossword clues found on the page.");

@@ -33,6 +33,12 @@ export interface WebAgentContext {
     storage: typeof webAgentStorage;
     getTabId(): Promise<string | null>;
     getCurrentUrl(): string;
+    awaitPageReady(options?: PageReadyOptions): Promise<void>;
+}
+
+export interface PageReadyOptions {
+    stabilityMs?: number;
+    timeoutMs?: number;
 }
 
 export interface WebAgent {

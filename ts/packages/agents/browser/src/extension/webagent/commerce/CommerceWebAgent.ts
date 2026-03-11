@@ -12,6 +12,7 @@ import { extractComponent, PageComponentDefinition } from "../webAgentRpc";
 import {
     ContinuationState,
     continuationStorage,
+    registrationStorage,
 } from "../../contentScript/webAgentStorage";
 import { platformAdapter } from "../../contentScript/platformAdapter";
 import {
@@ -218,27 +219,41 @@ export class CommerceWebAgent implements WebAgent {
     private registered = false;
 
     async initialize(context: WebAgentContext): Promise<void> {
+        const initStart = performance.now();
         console.log("[CommerceWebAgent] initialize() called");
         this.context = context;
         const url = context.getCurrentUrl();
         console.log(`[CommerceWebAgent] URL: ${url}`);
 
+        const suppressNotify =
+            registrationStorage.wasRecentlyRegistered("commerce");
         const notificationId = `commerce-${Date.now()}`;
-        await context.notify(
-            "Loading the commerce agent for shopping assistance...",
-            notificationId,
+        if (!suppressNotify) {
+            await context.notify(
+                "Loading the commerce agent for shopping assistance...",
+                notificationId,
+            );
+        }
+
+        // R1: Use smart page readiness instead of fixed 1000ms delay
+        const readyStart = performance.now();
+        await context.awaitPageReady({ stabilityMs: 500, timeoutMs: 3000 });
+        console.log(
+            `[CommerceWebAgent] Page ready wait: ${(performance.now() - readyStart).toFixed(0)}ms`,
         );
 
-        // wait for page to settle
-        await new Promise((resolve) => setTimeout(resolve, 1000));
         await this.registerWithTypeAgent();
 
-        await context.notify(
-            "Commerce agent ready. Try asking to buy a product, view your cart, or find nearby stores.",
-            notificationId,
-        );
+        if (!suppressNotify) {
+            await context.notify(
+                "Commerce agent ready. Try asking to buy a product, view your cart, or find nearby stores.",
+                notificationId,
+            );
+        }
 
-        console.log("[CommerceWebAgent] Initialization complete");
+        console.log(
+            `[CommerceWebAgent] Total initialization: ${(performance.now() - initStart).toFixed(0)}ms`,
+        );
     }
 
     private async registerWithTypeAgent(): Promise<void> {
@@ -270,6 +285,7 @@ export class CommerceWebAgent implements WebAgent {
         try {
             console.log("[CommerceWebAgent] Registering with TypeAgent...");
             await window.registerTypeAgent("commerce", manifest, agent);
+            registrationStorage.markRegistered("commerce");
             console.log(
                 "[CommerceWebAgent] Successfully registered with TypeAgent",
             );
@@ -479,7 +495,10 @@ export class CommerceWebAgent implements WebAgent {
         if (cartButton?.detailsLinkSelector) {
             console.log("[CommerceWebAgent] Clicking cart button...");
             await this.context.ui.clickOn(cartButton.detailsLinkSelector);
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await this.context.awaitPageReady({
+                stabilityMs: 300,
+                timeoutMs: 2000,
+            });
         }
 
         console.log("[CommerceWebAgent] Extracting ShoppingCartDetails...");
@@ -797,8 +816,13 @@ export class CommerceWebAgent implements WebAgent {
 
         console.log("[CommerceWebAgent] On details page, extracting location");
 
-        // Wait for page to settle
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Wait for page to settle using smart readiness detection
+        if (this.context) {
+            await this.context.awaitPageReady({
+                stabilityMs: 500,
+                timeoutMs: 3000,
+            });
+        }
 
         const details =
             await extractComponent<ProductDetailsHeroType>(ProductDetailsHero);
