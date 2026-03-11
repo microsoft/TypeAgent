@@ -66,6 +66,15 @@ export type CommandDescriptors =
 //                        Used for [spacing=none] grammars.
 export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 
+// Controls when the session considers a typed completion "committed" and
+// triggers a re-fetch for the next hierarchical level.
+//   "explicit" — the user must type an explicit delimiter (e.g. space or
+//                punctuation) after the matched token to commit it.
+//                Suppresses eager re-fetch on unique match.
+//   "eager"    — commit as soon as the typed prefix uniquely satisfies a
+//                completion.  Re-fetches immediately for the next level.
+export type CommitMode = "explicit" | "eager";
+
 export type CompletionGroup = {
     name: string; // The group name for the completion
     completions: string[]; // The list of completions in the group
@@ -95,6 +104,11 @@ export type CompletionGroups = {
     // False or undefined means the parser can continue past
     // unrecognized input and find more completions.
     closedSet?: boolean | undefined;
+    // Controls when a uniquely-satisfied completion triggers a re-fetch
+    // for the next hierarchical level.  See CommitMode.
+    // When omitted, the dispatcher decides (typically "explicit" for
+    // command/parameter completions).
+    commitMode?: CommitMode | undefined;
 };
 
 export interface AppAgentCommandInterface {

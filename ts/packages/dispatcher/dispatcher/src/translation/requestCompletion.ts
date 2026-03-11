@@ -109,7 +109,13 @@ export async function requestCompletion(
     }
 
     if (results.properties === undefined) {
-        return { groups: completions, prefixLength, separatorMode, closedSet };
+        return {
+            groups: completions,
+            prefixLength,
+            separatorMode,
+            closedSet,
+            commitMode: "eager",
+        };
     }
 
     const propertyCompletions = new Map<string, CompletionGroup>();
@@ -129,7 +135,13 @@ export async function requestCompletion(
     }
 
     completions.push(...propertyCompletions.values());
-    return { groups: completions, prefixLength, separatorMode, closedSet };
+    return {
+        groups: completions,
+        prefixLength,
+        separatorMode,
+        closedSet,
+        commitMode: "eager",
+    };
 }
 
 async function collectActionCompletions(

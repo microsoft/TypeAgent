@@ -85,6 +85,13 @@ export type CommandCompletionResult = {
     // prefix-match any completion, the caller can skip refetching since
     // no other valid input exists.
     closedSet: boolean;
+    // Controls when a uniquely-satisfied completion triggers a re-fetch
+    // for the next hierarchical level.
+    //   "explicit" — user must type a delimiter to commit; suppresses
+    //                 eager re-fetch on unique match.
+    //   "eager"    — re-fetch immediately on unique satisfaction.
+    // When omitted, defaults to "explicit".
+    commitMode?: "explicit" | "eager";
 };
 
 export type AppAgentStatus = {

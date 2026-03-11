@@ -8,6 +8,7 @@
   },
   "include": [
     "renderer/src/partialCompletionSession.ts",
+    "renderer/src/prefixTree.ts",
     "preload/electronTypes.ts",
     "preload/shellSettingsType.ts"
   ]

@@ -464,14 +464,15 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "@comptest run bu" (16 chars)
-            // suffix is "bu", parameter parsing fully consumes "bu"
-            // remainderLength = 0 → startIndex = 16, then whitespace
-            // backing finds no space at suffix end → startIndex = 16.
-            expect(result!.startIndex).toBe(16);
-            // "bu" consumes the "task" arg → nextArgs is empty.
-            // Agent is not invoked (bare word, no implicit quotes).
-            // Only flags remain (none defined) → exhaustive.
-            expect(result!.closedSet).toBe(true);
+            // No trailing space → hasTrailingSpace=false.
+            // suffix is "bu", parameter parsing fully consumes "bu".
+            // lastCompletableParam="task", bare unquoted token,
+            // !hasTrailingSpace → exclusive path fires: backs up
+            // startIndex to the start of "bu" → 13.
+            expect(result!.startIndex).toBe(13);
+            // Agent IS invoked ("task" in agentCommandCompletions).
+            // Agent does not set closedSet → defaults to false.
+            expect(result!.closedSet).toBe(false);
         });
 
         it("returns startIndex for nested command '@comptest nested sub '", async () => {
@@ -700,15 +701,16 @@ describe("Command Completion - startIndex", () => {
             const result = await getCommandCompletion("@comptest ne", context);
             expect(result).toBeDefined();
             // "ne" is fully consumed as the "task" arg by parameter
-            // parsing → startIndex = 12 (past command boundary 10),
-            // so subcommands are not included and separatorMode is
-            // not set.
-            expect(result!.separatorMode).toBeUndefined();
+            // parsing.  No trailing space → backs up to the start
+            // of "ne" → parameterCompletions.startIndex = 9.  Since
+            // startIndex (9) ≤ commandConsumedLength (10), sibling
+            // subcommands are included with separatorMode="space".
+            expect(result!.separatorMode).toBe("space");
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
             );
-            expect(subcommands).toBeUndefined();
-            expect(result!.startIndex).toBe(12);
+            expect(subcommands).toBeDefined();
+            expect(result!.startIndex).toBe(9);
         });
     });
 
@@ -830,21 +832,21 @@ describe("Command Completion - startIndex", () => {
             expect(result!.closedSet).toBe(true);
         });
 
-        it("returns flag value completions for non-boolean flag without trailing space", async () => {
+        it("returns flag names for non-boolean flag without trailing space", async () => {
             const result = await getCommandCompletion(
                 "@comptest flagsonly --level",
                 context,
             );
-            // "--level" is a recognized number flag — the entire input
-            // is the longest valid prefix.  startIndex = input.length
-            // because the flag name is consumed, not filter text.
-            // Completions should offer the flag's values (if any),
-            // not flag names.
-            expect(result.startIndex).toBe(27); // full input consumed
+            // "--level" is a recognized number flag, but no trailing
+            // space → user hasn't committed.  Offer flag names at the
+            // start of "--level" (position 20) instead of flag values.
+            expect(result.startIndex).toBe(20);
             const flags = result.completions.find(
                 (g) => g.name === "Command Flags",
             );
-            expect(flags).toBeUndefined(); // flag names not offered when pending
+            expect(flags).toBeDefined();
+            expect(flags!.completions).toContain("--debug");
+            expect(flags!.completions).toContain("--level");
         });
 
         it("treats unrecognized flag prefix as filter text", async () => {
@@ -949,15 +951,17 @@ describe("Command Completion - startIndex", () => {
             expect(subcommands!.completions).toContain("nested");
         });
 
-        it("drops subcommands when partial token is consumed past boundary", async () => {
+        it("includes subcommands when no trailing space at default command", async () => {
             const result = await getCommandCompletion("@comptest ne", context);
-            // "@comptest ne" — suffix is "ne", parameter parsing fully
-            // consumes it as the "task" arg → startIndex = 12, which
-            // exceeds commandBoundary (10) → subcommands dropped.
+            // "@comptest ne" — suffix is "ne", parameter parsing
+            // fully consumes it as the "task" arg.  No trailing space
+            // backs up startIndex to 9, which is ≤ commandBoundary
+            // (10), so subcommands ARE included.
             const subcommands = result.completions.find(
                 (g) => g.name === "Subcommands",
             );
-            expect(subcommands).toBeUndefined();
+            expect(subcommands).toBeDefined();
+            expect(subcommands!.completions).toContain("nested");
         });
     });
 
@@ -1021,25 +1025,24 @@ describe("Command Completion - startIndex", () => {
             );
             // '@comptest run "build"' (21 chars)
             // Token '"build"' is fully quoted → isFullyQuoted returns true.
-            // lastCompletableParam condition does NOT fire.
-            // remainderLength = 0 → startIndex = 21, unconditional
-            // whitespace backing finds no space at input[20]='"' → 21.
-            // "task" is filled, no flags → exhaustive.
+            // Fully-quoted tokens are committed by their closing quote;
+            // neither lastCompletableParam nor the fallback back-up fires.
+            // startIndex stays at 21.
             expect(result.startIndex).toBe(21);
             expect(result.closedSet).toBe(true);
         });
 
-        it("does not adjust startIndex for bare unquoted token", async () => {
+        it("adjusts startIndex for bare unquoted token without trailing space", async () => {
             const result = await getCommandCompletion(
                 "@comptest run bu",
                 context,
             );
-            // "bu" is not quoted at all → isFullyQuoted returns undefined.
-            // lastParamImplicitQuotes is false for "task" arg.
-            // lastCompletableParam condition does NOT fire.
-            // startIndex stays at 16 (end of input).
-            expect(result.startIndex).toBe(16);
-            expect(result.closedSet).toBe(true);
+            // "bu" is not quoted → isFullyQuoted returns undefined.
+            // No trailing space → lastCompletableParam exclusive path
+            // fires: backs up startIndex to the start of "bu" → 13.
+            // Agent IS invoked for "task" completions.
+            expect(result.startIndex).toBe(13);
+            expect(result.closedSet).toBe(false);
         });
     });
 
@@ -1102,9 +1105,9 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             // Token '"東京タ"' is fully quoted → isFullyQuoted = true.
-            // lastCompletableParam exclusive path does NOT fire.
-            // All args consumed → nextArgs empty → agent not called.
-            // prefixLength never applies.
+            // Fully-quoted tokens are committed; neither
+            // lastCompletableParam nor the fallback back-up fires.
+            // startIndex stays at 23.
             expect(result.startIndex).toBe(23);
             expect(result.closedSet).toBe(true);
             // No Grammar group since agent wasn't invoked.
@@ -1114,20 +1117,25 @@ describe("Command Completion - startIndex", () => {
             expect(grammar).toBeUndefined();
         });
 
-        it("bare unquoted token does not invoke grammar", async () => {
+        it("bare unquoted token invokes grammar without trailing space", async () => {
             const result = await getCommandCompletion(
                 "@comptest grammar 東京タ",
                 context,
             );
-            // "東京タ" has no quotes, grammar command has no
-            // implicitQuotes → lastCompletableParam condition false.
-            // All args consumed → nextArgs empty → agent not called.
-            expect(result.startIndex).toBe(21);
-            expect(result.closedSet).toBe(true);
+            // "東京タ" has no quotes and no trailing space.
+            // lastCompletableParam exclusive path fires
+            // (!hasTrailingSpace && pendingFlag === undefined).
+            // Agent is invoked with grammar mock → matches "東京" →
+            // returns prefixLength=2.  tokenStartIndex = 21-3 = 18,
+            // startIndex = 18 + 2 = 20.
+            expect(result.startIndex).toBe(20);
+            expect(result.closedSet).toBe(false);
             const grammar = result.completions.find(
                 (g) => g.name === "Grammar",
             );
-            expect(grammar).toBeUndefined();
+            expect(grammar).toBeDefined();
+            expect(grammar!.completions).toContain("タワー");
+            expect(grammar!.completions).toContain("駅");
         });
 
         it("trailing space without text offers initial completions", async () => {
@@ -1166,11 +1174,12 @@ describe("Command Completion - startIndex", () => {
 
         it("does not override startIndex when prefixLength is absent", async () => {
             // "run" handler returns groups without prefixLength.
+            // No trailing space → backs up to start of "bu".
             const result = await getCommandCompletion(
                 "@comptest run bu",
                 context,
             );
-            expect(result.startIndex).toBe(16);
+            expect(result.startIndex).toBe(13);
         });
 
         it("English prefix with space separator", async () => {

@@ -4,6 +4,7 @@
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 
 import {
+    CommitMode,
     CommandDescriptor,
     FlagDefinitions,
     ParameterDefinitions,
@@ -145,6 +146,7 @@ type ParameterCompletionResult = {
     startIndex: number;
     separatorMode: SeparatorMode | undefined;
     closedSet: boolean;
+    commitMode: CommitMode | undefined;
 };
 
 // Complete parameter values and flags for an already-resolved command
@@ -155,6 +157,7 @@ async function getCommandParameterCompletion(
     context: CommandHandlerContext,
     result: ResolveCommandResult,
     input: string,
+    hasTrailingSpace: boolean,
 ): Promise<ParameterCompletionResult | undefined> {
     const completions: CompletionGroup[] = [];
     if (typeof descriptor.parameters !== "object") {
@@ -169,8 +172,13 @@ async function getCommandParameterCompletion(
     );
     const pendingFlag = getPendingFlag(params, flags, completions);
     const agentCommandCompletions: string[] = [];
-    if (pendingFlag === undefined) {
-        // TODO: auto inject boolean value for boolean args.
+    if (pendingFlag !== undefined && hasTrailingSpace) {
+        // The last token is a recognized flag and the user committed
+        // it with a trailing space.  Ask the agent for flag values.
+        agentCommandCompletions.push(pendingFlag);
+    } else {
+        // Either no pending flag, or the flag isn't committed yet
+        // (no trailing space).  Offer positional args and flag names.
         agentCommandCompletions.push(...params.nextArgs);
         if (flags !== undefined) {
             const flagCompletions = collectFlags(
@@ -185,10 +193,6 @@ async function getCommandParameterCompletion(
                 });
             }
         }
-    } else {
-        // The last token is a recognized flag waiting for a value.
-        // Ask the agent for potential values for this flag.
-        agentCommandCompletions.push(pendingFlag);
     }
 
     // Compute startIndex from how far parseParams consumed the suffix.
@@ -206,6 +210,7 @@ async function getCommandParameterCompletion(
 
     let agentInvoked = false;
     let agentClosedSet: boolean | undefined;
+    let agentCommitMode: CommitMode | undefined;
     let separatorMode: SeparatorMode | undefined;
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion) {
@@ -218,7 +223,10 @@ async function getCommandParameterCompletion(
             const quoted = isFullyQuoted(valueToken);
             if (
                 quoted === false ||
-                (quoted === undefined && lastParamImplicitQuotes)
+                (quoted === undefined && lastParamImplicitQuotes) ||
+                (quoted === undefined &&
+                    !hasTrailingSpace &&
+                    pendingFlag === undefined)
             ) {
                 // The user is inside a token (open quote or
                 // implicitQuotes rest-of-line) — completions for
@@ -265,9 +273,30 @@ async function getCommandParameterCompletion(
             separatorMode = agentResult.separatorMode;
             agentInvoked = true;
             agentClosedSet = agentResult.closedSet;
+            agentCommitMode = agentResult.commitMode;
             debug(
                 `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}, tokenStartIndex=${tokenStartIndex}`,
             );
+        }
+    }
+
+    // When there is no trailing space, the last consumed token
+    // hasn't been committed.  If no earlier path already adjusted
+    // startIndex (lastCompletableParam / grammar-prefixLength),
+    // back up to the start of that token so the caller's trie can
+    // filter completions against it.
+    // Exception: fully-quoted tokens (e.g. "build") are committed
+    // by their closing quote — no back-up needed.
+    const unadjustedStartIndex = tokenBoundary(input, remainderIndex);
+    if (
+        !hasTrailingSpace &&
+        params.remainderLength === 0 &&
+        params.tokens.length > 0 &&
+        startIndex === unadjustedStartIndex
+    ) {
+        const lastToken = params.tokens[params.tokens.length - 1];
+        if (isFullyQuoted(lastToken) !== true) {
+            startIndex = unadjustedStartIndex - lastToken.length;
         }
     }
 
@@ -294,7 +323,11 @@ async function getCommandParameterCompletion(
         closedSet = params.nextArgs.length === 0;
     }
 
-    return { completions, startIndex, separatorMode, closedSet };
+    // Propagate agent-provided commitMode.  When the agent doesn't
+    // specify one, leave undefined so the caller can apply its default.
+    const commitMode: CommitMode | undefined = agentCommitMode;
+
+    return { completions, startIndex, separatorMode, closedSet, commitMode };
 }
 
 //
@@ -390,6 +423,7 @@ export async function getCommandCompletion(
             `Command completion command consumed length: ${commandConsumedLength}, suffix: '${result.suffix}'`,
         );
         let startIndex = tokenBoundary(input, commandConsumedLength);
+        const hasTrailingSpace = /\s$/.test(partialCommand);
 
         // Collect completions and track separatorMode across all sources.
         const completions: CompletionGroup[] = [];
@@ -403,7 +437,30 @@ export async function getCommandCompletion(
 
         const descriptor = result.descriptor;
         let closedSet = true;
-        if (descriptor !== undefined) {
+        let commitMode: "explicit" | "eager" = "explicit";
+
+        // When the last command token was exactly matched but the
+        // user hasn't typed a trailing space, they haven't committed
+        // it yet.  Offer subcommand alternatives at that token's
+        // position instead of jumping to parameter completions.
+        const uncommittedCommand =
+            descriptor !== undefined &&
+            result.matched &&
+            !hasTrailingSpace &&
+            result.suffix === "" &&
+            table !== undefined;
+
+        if (uncommittedCommand) {
+            const lastCmd = result.commands[result.commands.length - 1];
+            startIndex =
+                tokenBoundary(input, commandConsumedLength) - lastCmd.length;
+            completions.push({
+                name: "Subcommands",
+                completions: Object.keys(table!.commands),
+            });
+            separatorMode = mergeSeparatorMode(separatorMode, "none");
+            // closedSet stays true: subcommand names are exhaustive.
+        } else if (descriptor !== undefined) {
             // Get parameter completions first — we need to know
             // whether parameters consumed past the command boundary
             // before deciding if subcommand alternatives apply.
@@ -412,6 +469,7 @@ export async function getCommandCompletion(
                 context,
                 result,
                 input,
+                hasTrailingSpace,
             );
 
             // Include sibling subcommand names when resolved to the
@@ -449,6 +507,9 @@ export async function getCommandCompletion(
                     parameterCompletions.separatorMode,
                 );
                 closedSet = parameterCompletions.closedSet;
+                if (parameterCompletions.commitMode === "eager") {
+                    commitMode = "eager";
+                }
             }
         } else if (table !== undefined) {
             // descriptor is undefined: the suffix didn't resolve to any
@@ -504,6 +565,7 @@ export async function getCommandCompletion(
             completions,
             separatorMode,
             closedSet,
+            commitMode,
         };
 
         debug(`Command completion result:`, completionResult);

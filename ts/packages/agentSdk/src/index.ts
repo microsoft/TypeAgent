@@ -29,6 +29,7 @@ export {
     CommandDescriptors,
     CommandDescriptorTable,
     AppAgentCommandInterface,
+    CommitMode,
     CompletionGroup,
     CompletionGroups,
     SeparatorMode,

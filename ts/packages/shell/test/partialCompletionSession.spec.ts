@@ -10,29 +10,77 @@ import {
 import { SearchMenuPosition } from "../src/preload/electronTypes.js";
 import { CompletionGroup } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "agent-dispatcher";
+import { TST, BaseTSTData } from "../src/renderer/src/prefixTree.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-type MockMenu = {
-    setChoices: jest.MockedFunction<ISearchMenu["setChoices"]>;
-    updatePrefix: jest.MockedFunction<ISearchMenu["updatePrefix"]>;
-    hasExactMatch: jest.MockedFunction<ISearchMenu["hasExactMatch"]>;
-    hide: jest.MockedFunction<ISearchMenu["hide"]>;
-    isActive: jest.MockedFunction<ISearchMenu["isActive"]>;
-};
+// Duplicated from search.ts (not exported, avoids DOM imports).
+function normalizeMatchText(text: string): string {
+    return text
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s/g, " ")
+        .toLowerCase();
+}
 
-function makeMenu(): MockMenu {
-    return {
-        setChoices: jest.fn<ISearchMenu["setChoices"]>(),
-        updatePrefix: jest
-            .fn<ISearchMenu["updatePrefix"]>()
-            .mockReturnValue(false),
-        hasExactMatch: jest
-            .fn<ISearchMenu["hasExactMatch"]>()
-            .mockReturnValue(false),
-        hide: jest.fn<ISearchMenu["hide"]>(),
-        isActive: jest.fn<ISearchMenu["isActive"]>().mockReturnValue(false),
-    };
+interface TrieItem extends BaseTSTData {
+    matchText: string;
+    selectedText: string;
+    needQuotes?: boolean;
+    emojiChar?: string;
+}
+
+// Real trie-backed ISearchMenu — same logic as SearchMenu but without DOM UI.
+// Every method is a jest.fn() wrapping the real implementation so tests can
+// assert on call counts and arguments.
+class TestSearchMenu implements ISearchMenu {
+    private trie: TST<TrieItem> = new TST<TrieItem>();
+    private _isActive: boolean = false;
+
+    setChoices = jest.fn<ISearchMenu["setChoices"]>((choices) => {
+        this.trie.init();
+        this._isActive = false;
+        for (const choice of choices) {
+            const normText = normalizeMatchText(choice.matchText);
+            if (!this.trie.get(normText)) {
+                this.trie.insert(normText, choice as TrieItem);
+            }
+        }
+    });
+
+    updatePrefix = jest.fn<ISearchMenu["updatePrefix"]>(
+        (prefix: string, _position: SearchMenuPosition): boolean => {
+            if (this.trie.size() === 0) {
+                return false;
+            }
+            const items = this.trie.dataWithPrefix(normalizeMatchText(prefix));
+            const uniquelySatisfied =
+                items.length === 1 &&
+                normalizeMatchText(items[0].matchText) ===
+                    normalizeMatchText(prefix);
+            const showMenu = items.length !== 0 && !uniquelySatisfied;
+            this._isActive = showMenu;
+            return uniquelySatisfied;
+        },
+    );
+
+    hasExactMatch = jest.fn<ISearchMenu["hasExactMatch"]>(
+        (text: string): boolean => {
+            return this.trie.contains(normalizeMatchText(text));
+        },
+    );
+
+    hide = jest.fn<ISearchMenu["hide"]>(() => {
+        this._isActive = false;
+    });
+
+    isActive = jest.fn<ISearchMenu["isActive"]>(() => {
+        return this._isActive;
+    });
+}
+
+function makeMenu(): TestSearchMenu {
+    return new TestSearchMenu();
 }
 
 type MockDispatcher = {
@@ -105,7 +153,6 @@ describe("PartialCompletionSession — state transitions", () => {
 
     test("PENDING → ACTIVE: completions returned → setChoices + updatePrefix called", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["song", "shuffle"], 4);
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -153,8 +200,6 @@ describe("PartialCompletionSession — state transitions", () => {
 
     test("ACTIVE → hide+keep: closedSet=true, trie has no matches — no re-fetch", async () => {
         const menu = makeMenu();
-        // isActive returns true on first call (after setChoices), false on second (all filtered)
-        menu.isActive.mockReturnValueOnce(true).mockReturnValueOnce(false);
         const result = makeCompletionResult(["song"], 4, {
             closedSet: true,
         });
@@ -174,8 +219,6 @@ describe("PartialCompletionSession — state transitions", () => {
 
     test("ACTIVE → re-fetch: closedSet=false, trie has no matches — re-fetches", async () => {
         const menu = makeMenu();
-        // isActive: true after initial load, false for "xyz" — non-exhaustive set
-        menu.isActive.mockReturnValueOnce(true).mockReturnValueOnce(false);
         const result = makeCompletionResult(["song"], 4); // closedSet=false default
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -195,11 +238,6 @@ describe("PartialCompletionSession — state transitions", () => {
 
     test("ACTIVE → backspace restores menu after no-match without re-fetch (closedSet=true)", async () => {
         const menu = makeMenu();
-        // isActive: true after initial load, false for "xyz" prefix, true again for "so"
-        menu.isActive
-            .mockReturnValueOnce(true) // initial reuseSession after result
-            .mockReturnValueOnce(false) // "xyz" — trie no match
-            .mockReturnValueOnce(true); // "so" — trie matches "song"
         const result = makeCompletionResult(["song", "shuffle"], 4, {
             closedSet: true,
         });
@@ -266,7 +304,6 @@ describe("PartialCompletionSession — state transitions", () => {
 
     test("empty input fetches completions from backend", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["@"], 0, {
             separatorMode: "none",
         });
@@ -286,7 +323,6 @@ describe("PartialCompletionSession — state transitions", () => {
 
     test("empty input: second update reuses session without re-fetch", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["@"], 0, {
             separatorMode: "none",
         });
@@ -301,13 +337,11 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("empty input: unique match triggers re-fetch", async () => {
+    test("empty input: unique match triggers re-fetch (commitMode=eager)", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
-        // updatePrefix returns true = uniquely satisfied
-        menu.updatePrefix.mockReturnValue(true);
         const result = makeCompletionResult(["@"], 0, {
             separatorMode: "none",
+            commitMode: "eager",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -322,15 +356,14 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith("@");
     });
 
-    test("empty input: unique match triggers re-fetch even when closedSet=true", async () => {
+    test("empty input: unique match triggers re-fetch even when closedSet=true (commitMode=eager)", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
-        menu.updatePrefix.mockReturnValue(true);
         // closedSet=true means exhaustive at THIS level, but uniquelySatisfied
         // means the user needs NEXT level completions — always re-fetch.
         const result = makeCompletionResult(["@"], 0, {
             closedSet: true,
             separatorMode: "none",
+            commitMode: "eager",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -346,9 +379,6 @@ describe("PartialCompletionSession — state transitions", () => {
 
     test("empty input: ambiguous prefix does not re-fetch", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
-        // updatePrefix returns false = not uniquely satisfied
-        menu.updatePrefix.mockReturnValue(false);
         const result = makeCompletionResult(["@config", "@configure"], 0, {
             separatorMode: "none",
         });
@@ -370,7 +400,6 @@ describe("PartialCompletionSession — state transitions", () => {
 describe("PartialCompletionSession — result processing", () => {
     test("startIndex narrows the anchor (current) to input[0..startIndex]", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         // startIndex=4 means grammar consumed "play" (4 chars); the
         // trailing space is the separator between anchor and completions.
         const result = makeCompletionResult(["song", "shuffle"], 4);
@@ -386,7 +415,6 @@ describe("PartialCompletionSession — result processing", () => {
 
     test("group order preserved: items appear in backend-provided group order", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const group1: CompletionGroup = {
             name: "grammar",
             completions: ["by"],
@@ -422,7 +450,6 @@ describe("PartialCompletionSession — result processing", () => {
 
     test("needQuotes propagated from group to each SearchMenuItem", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const group: CompletionGroup = {
             name: "entities",
             completions: ["Bohemian Rhapsody"],
@@ -452,7 +479,6 @@ describe("PartialCompletionSession — result processing", () => {
 
     test("unsorted group items are sorted alphabetically", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const group: CompletionGroup = {
             name: "test",
             completions: ["zebra", "apple", "mango"],
@@ -500,7 +526,6 @@ describe("PartialCompletionSession — result processing", () => {
 
     test("separatorMode: typing separator shows menu without re-fetch", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["music"], 4, {
             separatorMode: "space",
         });
@@ -521,7 +546,6 @@ describe("PartialCompletionSession — result processing", () => {
 
     test("separatorMode: menu shown after trailing space is typed", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["music"], 4, {
             separatorMode: undefined,
         });
@@ -613,7 +637,6 @@ describe("PartialCompletionSession — @command routing", () => {
 
     test("@ command: separatorMode defers menu until space typed", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         // Backend returns subcommands with separatorMode: "space"
         // (anchor = "@config", subcommands follow after a space)
         const result = makeCompletionResult(["clear", "theme"], 7, {
@@ -643,7 +666,6 @@ describe("PartialCompletionSession — @command routing", () => {
 
     test("@ command: typing after space filters within same session", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         // Backend: separatorMode, anchor = "@config"
         const result = makeCompletionResult(["clear", "theme"], 7, {
             separatorMode: "space",
@@ -706,7 +728,6 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
 
     test("returns suffix after anchor when input starts with anchor", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["song"], 4);
         const session = new PartialCompletionSession(
             menu,
@@ -721,7 +742,6 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
 
     test("returns undefined when input diverges from anchor", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["song"], 4);
         const session = new PartialCompletionSession(
             menu,
@@ -737,7 +757,6 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
 
     test("separatorMode: returns stripped prefix when separator is present", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["music"], 4, {
             separatorMode: "space",
         });
@@ -776,7 +795,6 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
 describe("PartialCompletionSession — resetToIdle", () => {
     test("clears session so next update re-fetches", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const dispatcher = makeDispatcher(makeCompletionResult(["song"], 4));
         const session = new PartialCompletionSession(menu, dispatcher);
 
@@ -792,7 +810,6 @@ describe("PartialCompletionSession — resetToIdle", () => {
 
     test("does not hide the menu (caller is responsible for that)", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const dispatcher = makeDispatcher(makeCompletionResult(["song"], 4));
         const session = new PartialCompletionSession(menu, dispatcher);
 
@@ -850,7 +867,6 @@ describe("PartialCompletionSession — separatorMode edge cases", () => {
     test("separator already in input when result arrives shows menu immediately", async () => {
         // User typed "play " fast enough that the promise resolves after the space.
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["music"], 4, {
             separatorMode: "space",
         });
@@ -878,7 +894,6 @@ describe("PartialCompletionSession — separatorMode edge cases", () => {
 describe("PartialCompletionSession — miscellaneous", () => {
     test("getPosition returning undefined hides the menu", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         const result = makeCompletionResult(["song"], 4);
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -895,7 +910,6 @@ describe("PartialCompletionSession — miscellaneous", () => {
 
     test("startIndex beyond input length falls back to full input as anchor", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
         // startIndex=99 is beyond "play" (length 4) — anchor falls back to "play"
         const result = makeCompletionResult(["song"], 99, {
             separatorMode: "none",
@@ -917,8 +931,6 @@ describe("PartialCompletionSession — miscellaneous", () => {
 describe("PartialCompletionSession — committed-past-boundary re-fetch", () => {
     test("closedSet=true: typing space after exact match triggers re-fetch", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
-        menu.hasExactMatch.mockImplementation((text) => text === "set");
         const result = makeCompletionResult(
             ["set", "setWindowState", "setWindowZoomLevel"],
             4,
@@ -942,8 +954,6 @@ describe("PartialCompletionSession — committed-past-boundary re-fetch", () => 
 
     test("closedSet=true: typing multiple spaces after exact match triggers re-fetch", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
-        menu.hasExactMatch.mockImplementation((text) => text === "set");
         const result = makeCompletionResult(
             ["set", "setWindowState", "setWindowZoomLevel"],
             4,
@@ -963,8 +973,6 @@ describe("PartialCompletionSession — committed-past-boundary re-fetch", () => 
 
     test("closedSet=true: typing punctuation after exact match triggers re-fetch", async () => {
         const menu = makeMenu();
-        menu.isActive.mockReturnValue(true);
-        menu.hasExactMatch.mockImplementation((text) => text === "set");
         const result = makeCompletionResult(
             ["set", "setWindowState", "setWindowZoomLevel"],
             4,
@@ -985,9 +993,6 @@ describe("PartialCompletionSession — committed-past-boundary re-fetch", () => 
 
     test("closedSet=true: typing separator after non-matching text does NOT re-fetch", async () => {
         const menu = makeMenu();
-        // isActive: true after initial load, false after "xyz " (no trie match)
-        menu.isActive.mockReturnValueOnce(true).mockReturnValue(false);
-        menu.hasExactMatch.mockReturnValue(false);
         const result = makeCompletionResult(
             ["set", "setWindowState", "setWindowZoomLevel"],
             4,
@@ -1003,6 +1008,131 @@ describe("PartialCompletionSession — committed-past-boundary re-fetch", () => 
         session.update("play xyz ", getPos);
 
         expect(menu.hasExactMatch).toHaveBeenCalledWith("xyz");
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── commitMode ────────────────────────────────────────────────────────────────
+
+describe("PartialCompletionSession — commitMode", () => {
+    test("commitMode=explicit (default): uniquely satisfied does NOT re-fetch", async () => {
+        const menu = makeMenu();
+        // Default commitMode (omitted → "explicit")
+        const result = makeCompletionResult(["song"], 4, {
+            separatorMode: "space",
+            closedSet: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos);
+        await Promise.resolve(); // → ACTIVE, anchor = "play"
+
+        session.update("play song", getPos);
+
+        // "song" uniquely matched, but commitMode="explicit" — B4 suppressed
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("commitMode=explicit: uniquely satisfied + trailing space triggers re-fetch via B5", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song"], 4, {
+            separatorMode: "space",
+            closedSet: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos);
+        await Promise.resolve(); // → ACTIVE, anchor = "play"
+
+        // First: "play song" — uniquely satisfied but suppressed (no trailing space)
+        session.update("play song", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+
+        // Second: "play song " — user typed space → B5 fires (committed past boundary)
+        session.update("play song ", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "play song ",
+        );
+    });
+
+    test("commitMode=eager: uniquely satisfied triggers immediate re-fetch", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song"], 4, {
+            separatorMode: "space",
+            commitMode: "eager",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos);
+        await Promise.resolve(); // → ACTIVE, anchor = "play"
+
+        session.update("play song", getPos);
+
+        // commitMode="eager" — B4 fires immediately
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "play song",
+        );
+    });
+
+    test("commitMode=explicit: B5 committed-past-boundary still fires", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["set", "setWindowState"], 4, {
+            separatorMode: "space",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos);
+        await Promise.resolve();
+
+        // "set " — contains separator after exact match → B5 fires
+        session.update("play set ", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "play set ",
+        );
+    });
+
+    test("commitMode=explicit: open-set no-matches still triggers re-fetch (C6 unaffected)", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song"], 4, {
+            separatorMode: "space",
+            closedSet: false,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos);
+        await Promise.resolve();
+
+        // "xyz" — no trie match, closedSet=false → C6 re-fetch
+        session.update("play xyz", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    test("commitMode defaults to explicit when omitted from result", async () => {
+        const menu = makeMenu();
+        // No commitMode in result — defaults to "explicit"
+        const result = makeCompletionResult(["song"], 4, {
+            separatorMode: "space",
+            closedSet: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos);
+        await Promise.resolve();
+
+        session.update("play song", getPos);
+
+        // Default commitMode="explicit" — B4 suppressed
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });
