@@ -160,10 +160,41 @@ export class PartialCompletionSession {
     //                reuse when the trie still has matches, or when the set
     //                is closed (nothing new to fetch).  Re-fetch only
     //                when the trie is empty AND the set is open.
+    //
+    // Re-fetch triggers (returns false → startNewSession):
+    //
+    // A. Session invalidation — anchor is stale; backend result was computed
+    //    for a prefix that no longer matches the input.  Unconditional.
+    //   1. No session       — anchor is undefined (IDLE state).
+    //   2. Anchor diverged  — input no longer starts with the saved anchor
+    //                         (e.g. backspace deleted into the anchor region).
+    //   3. Bad separator    — separatorMode requires whitespace (or punctuation)
+    //                         immediately after anchor, but a non-separator
+    //                         character was typed instead. The constraint can
+    //                         never be satisfied, so treat as new input.
+    //
+    // B. Hierarchical navigation — user completed this level; re-fetch for
+    //    the NEXT level's completions.  Unconditional (closedSet describes
+    //    THIS level, not the next).
+    //   4. Uniquely satisfied — typed prefix exactly matches one completion and
+    //                         is not a prefix of any other. Re-fetch for the
+    //                         NEXT level (e.g. agent name → subcommands).
+    //   5. Committed past boundary — prefix contains a separator after a valid
+    //                         completion match (e.g. "set " where "set" matches
+    //                         but so does "setWindowState"). The user committed
+    //                         by typing a separator; re-fetch for next level.
+    //
+    // C. Open-set discovery — trie has zero matches and the set is not
+    //    exhaustive; the backend may know about completions not yet loaded.
+    //    Gated by closedSet === false.
+    //   6. Open set, no matches — trie has zero matches for the typed prefix
+    //                         AND closedSet is false. The backend may know about
+    //                         completions not yet loaded.
     private reuseSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
     ): boolean {
+        // [A1] No session — IDLE state, must fetch.
         const anchor = this.anchor;
         if (anchor === undefined) {
             return false;
@@ -175,7 +206,7 @@ export class PartialCompletionSession {
             return true;
         }
 
-        // RE-FETCH — input moved past the anchor (e.g. backspace, new word).
+        // [A2] RE-FETCH — input moved past the anchor (e.g. backspace, new word).
         if (!input.startsWith(anchor)) {
             return false;
         }
@@ -203,7 +234,11 @@ export class PartialCompletionSession {
                 return true; // HIDE+KEEP
             }
             if (!this.separatorRegex().test(rawPrefix)) {
-                return false; // RE-FETCH
+                // [A3] closedSet is not consulted here: it describes whether
+                // the completion *entries* are exhaustive, not whether
+                // the anchor token can extend.  The grammar may parse
+                // the longer input on a completely different path.
+                return false; // RE-FETCH (session invalidation)
             }
         }
 
@@ -223,17 +258,18 @@ export class PartialCompletionSession {
                 position,
             );
             if (uniquelySatisfied) {
-                // The user has typed text that exactly matches one completion
-                // and is not a prefix of any other.  We need the NEXT level's
-                // completions (e.g. agent name → subcommands), so re-fetch.
+                // [B4] The user has typed text that exactly matches one
+                // completion and is not a prefix of any other.  We need the
+                // NEXT level's completions (e.g. agent name → subcommands),
+                // so re-fetch.
                 debug(
                     `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied`,
                 );
-                return false; // RE-FETCH for next level of completions
+                return false; // RE-FETCH (hierarchical navigation)
             }
 
-            // Committed-past-boundary: the prefix contains whitespace or
-            // punctuation, meaning the user typed past a completion entry.
+            // [B5] Committed-past-boundary: the prefix contains whitespace
+            // or punctuation, meaning the user typed past a completion entry.
             // If the text before the first separator exactly matches a
             // completion, re-fetch for the next level.  This handles the
             // case where an entry (e.g. "set") is also a prefix of other
@@ -244,20 +280,20 @@ export class PartialCompletionSession {
                 debug(
                     `Partial completion re-fetch: '${sepMatch[1]}' committed with separator`,
                 );
-                return false; // RE-FETCH for next level of completions
+                return false; // RE-FETCH (hierarchical navigation)
             }
         } else {
             this.menu.hide();
         }
 
-        // When the menu is still active (trie has matches) we always
+        // [C6] When the menu is still active (trie has matches) we always
         // reuse — the loaded completions are still useful.  When there are
         // NO matches, the decision depends on `closedSet`:
         //   closedSet=true  → the set is closed; the user typed past all
         //                     valid continuations, so re-fetching won't help.
         //   closedSet=false → the set is NOT closed; the user may have
         //                     typed something valid that wasn't loaded, so
-        //                     re-fetch with the longer input.
+        //                     re-fetch with the longer input (open-set discovery).
         return this.closedSet || this.menu.isActive();
     }
 
