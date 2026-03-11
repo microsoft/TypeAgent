@@ -131,10 +131,11 @@ export class PartialCompletionSession {
         this.startNewSession(input, getPosition);
     }
 
-    // Reset to IDLE and hide the menu.
+    // Hide the menu and cancel any in-flight fetch, but preserve session
+    // state so reuseSession() can still match the anchor if the user
+    // returns (e.g. cursor moved away then back without typing).
     public hide(): void {
         this.completionP = undefined;
-        this.resetSessionFields();
         this.menu.hide();
     }
 
@@ -193,7 +194,9 @@ export class PartialCompletionSession {
     //                         character was typed instead. The constraint can
     //                         never be satisfied, so treat as new input.
     //
-    // B. Hierarchical navigation — user completed this level; re-fetch for\n    //    the NEXT level's completions.  closedSet describes THIS level,\n    //    not the next.", "oldString": "    // B. Hierarchical navigation — user completed this level; re-fetch for\n    //    the NEXT level's completions.  Unconditional (closedSet describes\n    //    THIS level, not the next)."
+    // B. Hierarchical navigation — user completed this level; re-fetch for
+    //    the NEXT level's completions.  closedSet describes THIS level,
+    //    not the next.
     //   4. Uniquely satisfied — typed prefix exactly matches one completion and
     //                         is not a prefix of any other. Re-fetch for the
     //                         NEXT level (e.g. agent name → subcommands).
@@ -215,20 +218,24 @@ export class PartialCompletionSession {
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
     ): boolean {
+        // PENDING — a fetch is already in flight.
+        if (this.completionP !== undefined) {
+            debug(`Partial completion pending: ${this.anchor}`);
+            return true;
+        }
+
         // [A1] No session — IDLE state, must fetch.
         const anchor = this.anchor;
         if (anchor === undefined) {
+            debug(`Partial completion re-fetch: no active session (IDLE)`);
             return false;
-        }
-
-        // PENDING — a fetch is already in flight.
-        if (this.completionP !== undefined) {
-            debug(`Partial completion pending: ${anchor}`);
-            return true;
         }
 
         // [A2] RE-FETCH — input moved past the anchor (e.g. backspace, new word).
         if (!input.startsWith(anchor)) {
+            debug(
+                `Partial completion re-fetch: anchor diverged (anchor='${anchor}', input='${input}')`,
+            );
             return false;
         }
 
@@ -259,6 +266,9 @@ export class PartialCompletionSession {
                 // the completion *entries* are exhaustive, not whether
                 // the anchor token can extend.  The grammar may parse
                 // the longer input on a completely different path.
+                debug(
+                    `Partial completion re-fetch: non-separator after anchor (mode='${this.separatorMode}', rawPrefix='${rawPrefix}')`,
+                );
                 return false; // RE-FETCH (session invalidation)
             }
         }
@@ -284,11 +294,16 @@ export class PartialCompletionSession {
             // Only re-fetch when commitMode="eager" (tokens can abut
             // without whitespace).  When "explicit", B5 handles it
             // once the user types a separator.
-            if (uniquelySatisfied && this.commitMode === "eager") {
+            if (uniquelySatisfied) {
+                if (this.commitMode === "eager") {
+                    debug(
+                        `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied (eager commit)`,
+                    );
+                    return false; // RE-FETCH (hierarchical navigation)
+                }
                 debug(
-                    `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied (eager commit)`,
+                    `Partial completion: '${completionPrefix}' uniquely satisfied but commitMode='${this.commitMode}', deferring to separator`,
                 );
-                return false; // RE-FETCH (hierarchical navigation)
             }
 
             // [B5] Committed-past-boundary: the prefix contains whitespace
@@ -306,6 +321,9 @@ export class PartialCompletionSession {
                 return false; // RE-FETCH (hierarchical navigation)
             }
         } else {
+            debug(
+                `Partial completion: no position for prefix '${completionPrefix}', hiding menu`,
+            );
             this.menu.hide();
         }
 
@@ -317,7 +335,12 @@ export class PartialCompletionSession {
         //   closedSet=false → the set is NOT closed; the user may have
         //                     typed something valid that wasn't loaded, so
         //                     re-fetch with the longer input (open-set discovery).
-        return this.closedSet || this.menu.isActive();
+        const active = this.menu.isActive();
+        const reuse = this.closedSet || active;
+        debug(
+            `Partial completion ${reuse ? "reuse" : "re-fetch"}: closedSet=${this.closedSet}, menuActive=${active}`,
+        );
+        return reuse;
     }
 
     // Start a new completion session: issue backend request and process result.
