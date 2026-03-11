@@ -246,8 +246,8 @@ export class PartialCompletion {
         // Compute the filter prefix relative to the current anchor.
         // Must be read before resetToIdle() clears the session's anchor.
         const currentInput = this.getCurrentInputForCompletion();
-        const prefix = this.session.getCompletionPrefix(currentInput);
-        if (prefix === undefined) {
+        const completionPrefix = this.session.getCompletionPrefix(currentInput);
+        if (completionPrefix === undefined) {
             debugError(`Partial completion abort select: prefix not found`);
             return;
         }
@@ -257,7 +257,7 @@ export class PartialCompletion {
                 ? `"${item.selectedText.replaceAll('"', '\\"')}"`
                 : item.selectedText;
 
-        const offset = this.getCurrentInput().length - prefix.length;
+        const offset = this.getCurrentInput().length - completionPrefix.length;
         const leafNode = getLeafNode(this.input.getTextEntry(), offset);
         if (leafNode === undefined) {
             debugError(
@@ -267,7 +267,7 @@ export class PartialCompletion {
         }
         const endLeafNode = getLeafNode(
             this.input.getTextEntry(),
-            offset + prefix.length,
+            offset + completionPrefix.length,
         );
         if (endLeafNode === undefined) {
             debugError(

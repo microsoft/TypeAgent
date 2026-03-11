@@ -30,9 +30,9 @@ export interface ICompletionDispatcher {
 // PartialCompletionSession manages the state machine for command completion.
 //
 // States:
-//   IDLE        current === undefined
-//   PENDING     current !== undefined && completionP !== undefined
-//   ACTIVE      current !== undefined && completionP === undefined
+//   IDLE        anchor === undefined
+//   PENDING     anchor !== undefined && completionP !== undefined
+//   ACTIVE      anchor !== undefined && completionP === undefined
 //
 // Design principles:
 //   - Completion result fields (separatorMode, closedSet) are stored as-is
@@ -54,7 +54,7 @@ export interface ICompletionDispatcher {
 //     has zero matches for the typed prefix:
 //       closedSet=true  → reuse (closed set, nothing else exists)
 //       closedSet=false → re-fetch (set is open, backend may know more)
-//   - The anchor (`current`) is never advanced after a result is received.
+//   - The anchor is never advanced after a result is received.
 //     When `separatorMode` requires a separator, the separator is stripped
 //     from the raw prefix before being passed to the menu, so the trie
 //     still matches.
@@ -64,13 +64,13 @@ export class PartialCompletionSession {
     // The "anchor" prefix for the current session.  Set to the full input
     // when the request is issued, then narrowed to input[0..startIndex] when
     // the backend reports how much the grammar consumed.  `undefined` = IDLE.
-    private current: string | undefined = undefined;
+    private anchor: string | undefined = undefined;
 
     // Saved as-is from the last completion result: what kind of separator
-    // must appear in the input immediately after `current` before
+    // must appear in the input immediately after `anchor` before
     // completions are valid.  Defaults to "space" when omitted.
     // Used by reuseSession() and getCompletionPrefix() to interpret
-    // the raw prefix without mutating `current`.
+    // the raw prefix without mutating `anchor`.
     private separatorMode: SeparatorMode = "space";
 
     // When true, the completion set returned by the backend is a closed
@@ -115,38 +115,26 @@ export class PartialCompletionSession {
     // Reset to IDLE and hide the menu.
     public hide(): void {
         this.completionP = undefined;
-        this.current = undefined;
-        this.separatorMode = "space";
-        this.closedSet = false;
-        this.cancelMenu();
+        this.resetSessionFields();
+        this.menu.hide();
     }
 
     // Reset state to IDLE without hiding the menu (used after handleSelect inserts text).
     public resetToIdle(): void {
-        this.current = undefined;
-        this.separatorMode = "space";
-        this.closedSet = false;
+        this.resetSessionFields();
     }
 
-    // Returns the text typed after the anchor (`current`), or undefined when
+    // Returns the text typed after the anchor, or undefined when
     // the input has diverged past the anchor or the separator is not yet present.
     public getCompletionPrefix(input: string): string | undefined {
-        const current = this.current;
-        if (current === undefined) {
+        const anchor = this.anchor;
+        if (anchor === undefined || !input.startsWith(anchor)) {
             return undefined;
         }
-        if (!input.startsWith(current)) {
-            return undefined;
-        }
-        const rawPrefix = input.substring(current.length);
-        if (
-            this.separatorMode === "space" ||
-            this.separatorMode === "spacePunctuation"
-        ) {
+        const rawPrefix = input.substring(anchor.length);
+        if (this.requiresSeparator()) {
             // The separator must be present and is not part of the replaceable prefix.
-            const sepRe =
-                this.separatorMode === "space" ? /^\s/ : /^[\s\p{P}]/u;
-            if (!sepRe.test(rawPrefix)) {
+            if (!this.separatorRegex().test(rawPrefix)) {
                 return undefined;
             }
             return rawPrefix.trimStart();
@@ -176,19 +164,19 @@ export class PartialCompletionSession {
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
     ): boolean {
-        const current = this.current;
-        if (current === undefined) {
+        const anchor = this.anchor;
+        if (anchor === undefined) {
             return false;
         }
 
         // PENDING — a fetch is already in flight.
         if (this.completionP !== undefined) {
-            debug(`Partial completion pending: ${current}`);
+            debug(`Partial completion pending: ${anchor}`);
             return true;
         }
 
         // RE-FETCH — input moved past the anchor (e.g. backspace, new word).
-        if (!input.startsWith(current)) {
+        if (!input.startsWith(anchor)) {
             return false;
         }
 
@@ -204,10 +192,8 @@ export class PartialCompletionSession {
         //   "x…"      — non-separator typed right after anchor: RE-FETCH (the
         //               separator constraint can never be satisfied without
         //               backtracking, so treat this as a new input)
-        const rawPrefix = input.substring(current.length);
-        const requiresSep =
-            this.separatorMode === "space" ||
-            this.separatorMode === "spacePunctuation";
+        const rawPrefix = input.substring(anchor.length);
+        const requiresSep = this.requiresSeparator();
         if (requiresSep) {
             if (rawPrefix === "") {
                 debug(
@@ -216,29 +202,32 @@ export class PartialCompletionSession {
                 this.menu.hide();
                 return true; // HIDE+KEEP
             }
-            const sepRe =
-                this.separatorMode === "space" ? /^\s/ : /^[\s\p{P}]/u;
-            if (!sepRe.test(rawPrefix)) {
+            if (!this.separatorRegex().test(rawPrefix)) {
                 return false; // RE-FETCH
             }
         }
 
         // SHOW — strip the leading separator (if any) before passing to the
         // menu trie, so completions like "music" match prefix "" not " ".
-        const prefix = requiresSep ? rawPrefix.trimStart() : rawPrefix;
+        const completionPrefix = requiresSep
+            ? rawPrefix.trimStart()
+            : rawPrefix;
 
-        const position = getPosition(prefix);
+        const position = getPosition(completionPrefix);
         if (position !== undefined) {
             debug(
-                `Partial completion update: '${prefix}' @ ${JSON.stringify(position)}`,
+                `Partial completion update: '${completionPrefix}' @ ${JSON.stringify(position)}`,
             );
-            const uniquelySatisfied = this.menu.updatePrefix(prefix, position);
+            const uniquelySatisfied = this.menu.updatePrefix(
+                completionPrefix,
+                position,
+            );
             if (uniquelySatisfied) {
                 // The user has typed text that exactly matches one completion
                 // and is not a prefix of any other.  We need the NEXT level's
                 // completions (e.g. agent name → subcommands), so re-fetch.
                 debug(
-                    `Partial completion re-fetch: '${prefix}' uniquely satisfied`,
+                    `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied`,
                 );
                 return false; // RE-FETCH for next level of completions
             }
@@ -250,7 +239,7 @@ export class PartialCompletionSession {
             // case where an entry (e.g. "set") is also a prefix of other
             // entries ("setWindowState") so uniquelySatisfied is false,
             // but the user committed by typing a separator.
-            const sepMatch = prefix.match(/^(.+?)[\s\p{P}]/u);
+            const sepMatch = completionPrefix.match(/^(.+?)[\s\p{P}]/u);
             if (sepMatch !== null && this.menu.hasExactMatch(sepMatch[1])) {
                 debug(
                     `Partial completion re-fetch: '${sepMatch[1]}' committed with separator`,
@@ -278,10 +267,9 @@ export class PartialCompletionSession {
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
     ): void {
         debug(`Partial completion start: '${input}'`);
-        this.cancelMenu();
-        this.current = input;
-        this.separatorMode = "space";
-        this.closedSet = false;
+        this.menu.hide();
+        this.resetSessionFields();
+        this.anchor = input;
         this.menu.setChoices([]);
         const completionP = this.dispatcher.getCommandCompletion(input);
         this.completionP = completionP;
@@ -324,7 +312,7 @@ export class PartialCompletionSession {
                     debug(
                         `Partial completion skipped: No completions for '${input}'`,
                     );
-                    // Keep this.current at the full input so the anchor
+                    // Keep this.anchor at the full input so the anchor
                     // covers the entire typed text.  The menu stays empty,
                     // so reuseSession()'s SHOW path will use `closedSet` to
                     // decide: closedSet=true → reuse (nothing more exists);
@@ -343,7 +331,7 @@ export class PartialCompletionSession {
                     result.startIndex >= 0 && result.startIndex <= input.length
                         ? input.substring(0, result.startIndex)
                         : input;
-                this.current = partial;
+                this.anchor = partial;
 
                 this.menu.setChoices(completions);
 
@@ -357,7 +345,20 @@ export class PartialCompletionSession {
             });
     }
 
-    private cancelMenu(): void {
-        this.menu.hide();
+    private resetSessionFields(): void {
+        this.anchor = undefined;
+        this.separatorMode = "space";
+        this.closedSet = false;
+    }
+
+    private requiresSeparator(): boolean {
+        return (
+            this.separatorMode === "space" ||
+            this.separatorMode === "spacePunctuation"
+        );
+    }
+
+    private separatorRegex(): RegExp {
+        return this.separatorMode === "space" ? /^\s/ : /^[\s\p{P}]/u;
     }
 }
