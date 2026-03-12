@@ -304,6 +304,7 @@ export class PartialCompletionSession {
                 debug(
                     `Partial completion: '${completionPrefix}' uniquely satisfied but commitMode='${this.commitMode}', deferring to separator`,
                 );
+                return true; // REUSE — wait for explicit separator before re-fetching
             }
 
             // [B5] Committed-past-boundary: the prefix contains whitespace

@@ -1092,4 +1092,26 @@ describe("PartialCompletionSession — commitMode", () => {
         // Default commitMode="explicit" — B4 suppressed
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
+
+    test("commitMode=explicit + closedSet=false: uniquely satisfied does NOT re-fetch", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song"], 4, {
+            separatorMode: "space",
+            closedSet: false,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos);
+        await Promise.resolve();
+
+        // "song" uniquely matches — commitMode="explicit" must suppress re-fetch
+        // even though closedSet=false (closedSet describes THIS level, not next)
+        session.update("play song", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+
+        // Only after typing a separator should B5 trigger a re-fetch
+        session.update("play song ", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+    });
 });
