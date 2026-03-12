@@ -137,6 +137,32 @@ type ParameterCompletionResult = {
 // Complete parameter values and flags for an already-resolved command
 // descriptor.  Returns undefined when the descriptor declares no
 // parameters (the caller decides whether sibling subcommands suffice).
+//
+// ── Spec ──────────────────────────────────────────────────────────────────
+//
+// 1. Parse parameters partially up to the longest valid index.
+//
+// 2. If parsing did NOT consume all input (remainderLength > 0):
+//    → startIndex = position after the longest valid prefix.
+//    → Offer completions for whatever can validly follow that prefix
+//      (next positional args, flag names).
+//
+// 3. If parsing consumed all input (remainderLength === 0):
+//
+//    a. If any of the following are true, the user is still typing the
+//       last token — return startIndex at the *beginning* of that token
+//       and offer completions for it:
+//         • No trailing space (cursor is at the end of the last token).
+//         • The last parameter uses implicitQuotes (rest-of-line capture,
+//           never "committed" by whitespace).
+//         • The last token is partially quoted (open quote without a
+//           matching close quote).
+//
+//    b. Otherwise (trailing space present, last token is bare or fully
+//       quoted) — the last token has been committed.  Return startIndex
+//       at the *end* of the last token (excluding the trailing space)
+//       and offer completions for the next parameters.
+//
 async function getCommandParameterCompletion(
     descriptor: CommandDescriptor,
     context: CommandHandlerContext,
@@ -272,16 +298,23 @@ async function getCommandParameterCompletion(
     // filter completions against it.
     // Exception: fully-quoted tokens (e.g. "build") are committed
     // by their closing quote — no back-up needed.
+    // Exception: when the agent was already invoked (for nextArgs),
+    // its completions describe the *next* position — backing up
+    // would create a mismatch between startIndex and completions.
     const unadjustedStartIndex = tokenBoundary(input, remainderIndex);
     if (
         !hasTrailingSpace &&
+        !agentInvoked &&
         params.remainderLength === 0 &&
         params.tokens.length > 0 &&
         startIndex === unadjustedStartIndex
     ) {
         const lastToken = params.tokens[params.tokens.length - 1];
         if (isFullyQuoted(lastToken) !== true) {
-            startIndex = unadjustedStartIndex - lastToken.length;
+            startIndex = tokenBoundary(
+                input,
+                unadjustedStartIndex - lastToken.length,
+            );
         }
     }
 

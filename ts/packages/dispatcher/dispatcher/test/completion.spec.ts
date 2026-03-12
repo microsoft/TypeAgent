@@ -395,22 +395,75 @@ const noCommandsAgent: AppAgent = {
     // getCommands not defined → resolveCommand sees descriptors=undefined
 };
 
+// ---------------------------------------------------------------------------
+// numstr agent — number arg followed by string arg (with getCompletion)
+// ---------------------------------------------------------------------------
+const numstrHandlers = {
+    description: "Agent with number then string arg",
+    defaultSubCommand: "numstr",
+    commands: {
+        numstr: {
+            description: "Number then string command",
+            parameters: {
+                args: {
+                    count: {
+                        description: "A count",
+                        type: "number" as const,
+                    },
+                    name: {
+                        description: "A name",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("name")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "Names",
+                            completions: ["alice", "bob"],
+                        },
+                    ],
+                };
+            },
+        },
+    },
+} as const;
+
+const numstrConfig: AppAgentManifest = {
+    emojiChar: "🔢",
+    description: "Numstr completion test",
+};
+
+const numstrAgent: AppAgent = {
+    ...getCommandInterface(numstrHandlers),
+};
+
 const testCompletionAgentProviderMulti: AppAgentProvider = {
-    getAppAgentNames: () => ["comptest", "flattest", "nocmdtest"],
+    getAppAgentNames: () => ["comptest", "flattest", "nocmdtest", "numstrtest"],
     getAppAgentManifest: async (name: string) => {
         if (name === "comptest") return config;
         if (name === "flattest") return flatConfig;
         if (name === "nocmdtest") return noCommandsConfig;
+        if (name === "numstrtest") return numstrConfig;
         throw new Error(`Unknown: ${name}`);
     },
     loadAppAgent: async (name: string) => {
         if (name === "comptest") return agent;
         if (name === "flattest") return flatAgent;
         if (name === "nocmdtest") return noCommandsAgent;
+        if (name === "numstrtest") return numstrAgent;
         throw new Error(`Unknown: ${name}`);
     },
     unloadAppAgent: async (name: string) => {
-        if (!["comptest", "flattest", "nocmdtest"].includes(name))
+        if (!["comptest", "flattest", "nocmdtest", "numstrtest"].includes(name))
             throw new Error(`Unknown: ${name}`);
     },
 };
@@ -839,8 +892,9 @@ describe("Command Completion - startIndex", () => {
             );
             // "--level" is a recognized number flag, but no trailing
             // space → user hasn't committed.  Offer flag names at the
-            // start of "--level" (position 20) instead of flag values.
-            expect(result.startIndex).toBe(20);
+            // tokenBoundary before "--level" (position 19, end of
+            // "flagsonly") instead of flag values.
+            expect(result.startIndex).toBe(19);
             const flags = result.completions.find(
                 (g) => g.name === "Command Flags",
             );
@@ -1244,6 +1298,113 @@ describe("Command Completion - startIndex", () => {
             expect(grammar).toBeDefined();
             expect(grammar!.completions).toContain("Tokyo ");
             expect(grammar!.completions).toContain("東京");
+            expect(result.closedSet).toBe(false);
+        });
+    });
+
+    describe("Bug 1: fallback startIndex uses tokenBoundary", () => {
+        // When the agent has no getCommandCompletion, the fallback
+        // back-up path handles no-trailing-space.  It must apply
+        // tokenBoundary() so startIndex lands at the end of the
+        // preceding token (before separator whitespace), matching
+        // the convention every other code path follows.
+        it("startIndex at tokenBoundary for '@comptest nested sub val' (no agent getCommandCompletion)", async () => {
+            const result = await getCommandCompletion(
+                "@comptest nested sub val",
+                context,
+            );
+            // "@comptest nested sub val" (24 chars)
+            //   0-8: @comptest  9: sp  10-15: nested  16: sp
+            //   17-19: sub  20: sp  21-23: val
+            // "nested sub" has no getCommandCompletion, so the
+            // exclusive path inside `if (agent.getCommandCompletion)`
+            // is skipped.  The fallback back-up fires because
+            // !hasTrailingSpace, remainderLength=0, tokens=["val"].
+            // It should apply tokenBoundary to land at 20 (end of
+            // "sub"), not 21 (raw token start of "val").
+            expect(result.startIndex).toBe(20);
+        });
+
+        it("startIndex at tokenBoundary for '@comptest nested sub --verbose val' (no agent getCommandCompletion)", async () => {
+            const result = await getCommandCompletion(
+                "@comptest nested sub --verbose val",
+                context,
+            );
+            // "@comptest nested sub --verbose val" (33 chars)
+            //   0-8: @comptest  9: sp  10-15: nested  16: sp
+            //   17-19: sub  20: sp  21-29: --verbose  30: sp
+            //   31-33: val
+            // --verbose is parsed as boolean flag (defaults true),
+            // then "val" fills the "value" arg.  No trailing space.
+            // Fallback should land at tokenBoundary before "val" → 30
+            // (end of "--verbose"), not 31.
+            expect(result.startIndex).toBe(30);
+        });
+    });
+
+    describe("Bug 2: fallback does not fire when agent was invoked", () => {
+        // When the last consumed parameter is non-string (e.g. number),
+        // lastCompletableParam is undefined so the exclusive path
+        // doesn't fire.  But the agent IS invoked for nextArgs.
+        // The fallback must NOT back up startIndex because the
+        // completions describe the NEXT position, not the current token.
+        it("does not back up over number arg for '@numstrtest numstr 42' (no trailing space)", async () => {
+            const result = await getCommandCompletion(
+                "@numstrtest numstr 42",
+                context,
+            );
+            // "@numstrtest numstr 42" (21 chars)
+            //   0-10: @numstrtest  11: sp  12-17: numstr  18: sp
+            //   19-20: 42
+            // suffix = "42", parseParams consumes 42 as number arg
+            // "count".  remainderLength=0, lastCompletableParam=undefined
+            // (number type).  nextArgs=["name"], agent invoked for
+            // "name" completions.  Fallback should NOT fire because
+            // the agent was already invoked — startIndex should stay
+            // at the end of consumed text (21), not back up to 19.
+            expect(result.startIndex).toBe(21);
+            // Agent was invoked for "name" completions.
+            const names = result.completions.find((g) => g.name === "Names");
+            expect(names).toBeDefined();
+            expect(names!.completions).toContain("alice");
+            expect(names!.completions).toContain("bob");
+            expect(result.closedSet).toBe(false);
+        });
+
+        it("baseline: '@numstrtest numstr 42 ' with trailing space works correctly", async () => {
+            const result = await getCommandCompletion(
+                "@numstrtest numstr 42 ",
+                context,
+            );
+            // "@numstrtest numstr 42 " (22 chars)
+            // Trailing space → hasTrailingSpace=true, fallback never
+            // fires.  startIndex = tokenBoundary(input, 22) = 21
+            // (rewinds over trailing space to end of "42").
+            // Agent invoked for "name" completions.
+            expect(result.startIndex).toBe(21);
+            const names = result.completions.find((g) => g.name === "Names");
+            expect(names).toBeDefined();
+            expect(names!.completions).toContain("alice");
+            expect(names!.completions).toContain("bob");
+            expect(result.closedSet).toBe(false);
+        });
+
+        it("does not back up over number arg for '@numstrtest numstr 42 al' (partial second arg)", async () => {
+            const result = await getCommandCompletion(
+                "@numstrtest numstr 42 al",
+                context,
+            );
+            // "@numstrtest numstr 42 al" (24 chars)
+            // suffix = "42 al", parseParams: 42 → count, "al" → name.
+            // lastCompletableParam = "name" (string), no trailing space.
+            // Exclusive path fires (bare token, !hasTrailingSpace):
+            //   backs up to before "al" → tokenBoundary(input, 22) = 21.
+            // Agent invoked for "name".
+            expect(result.startIndex).toBe(21);
+            const names = result.completions.find((g) => g.name === "Names");
+            expect(names).toBeDefined();
+            expect(names!.completions).toContain("alice");
+            expect(names!.completions).toContain("bob");
             expect(result.closedSet).toBe(false);
         });
     });
