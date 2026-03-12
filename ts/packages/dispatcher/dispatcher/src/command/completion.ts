@@ -337,6 +337,27 @@ function resolveCompletionTarget(
 //       the last token (excluding trailing space) and offer completions
 //       for the next parameters.
 //
+// ── Exceptions to case 3a ────────────────────────────────────────────────
+//
+// Case 3a depends on lastCompletableParam (for 3a-i) and pendingFlag
+// (for 3a-ii).  parseParams only sets lastCompletableParam for
+// *string*-type parameters: number, boolean, and json params leave it
+// undefined.  This means the following scenarios fall through to 3b
+// even though the user has not typed a trailing space:
+//
+//   • A number arg without trailing space    (e.g. "cmd 42")
+//   • A boolean arg without trailing space   (e.g. "cmd true")
+//   • A number flag value without trailing space (e.g. "cmd --level 5")
+//
+// In these cases startIndex stays at the end of the last token and
+// completions describe what comes *next* rather than the current
+// token.  This is acceptable because non-string values are not
+// meaningful targets for prefix-match completion — there is no useful
+// set of candidates to filter against a partial "42" or "tru".  The
+// caller's trie will see an empty suffix (startIndex == input.length)
+// and present the next-parameter completions unfiltered, which is the
+// most useful behavior for the user.
+//
 async function getCommandParameterCompletion(
     descriptor: CommandDescriptor,
     context: CommandHandlerContext,
