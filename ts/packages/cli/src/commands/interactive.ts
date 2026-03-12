@@ -26,6 +26,7 @@ import {
     processCommandsEnhanced,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
+import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import { createInterface } from "readline/promises";
@@ -52,6 +53,16 @@ async function getCompletionsData(
     dispatcher: Dispatcher,
 ): Promise<CompletionData | null> {
     try {
+        // Handle slash command completions
+        if (isSlashCommand(line)) {
+            const completions = getSlashCompletions(line);
+            if (completions.length === 0) return null;
+            return {
+                allCompletions: completions,
+                filterStartIndex: 0,
+                prefix: "",
+            };
+        }
         // Token-boundary logic: for non-@ input, only send complete tokens
         // to the backend. The NFA can only match whole tokens, so sending a
         // partial word like "p" fails. Instead, send up to the last token
@@ -140,6 +151,11 @@ export default class Interactive extends Command {
                 "Enable enhanced terminal UI with spinners and visual prompts",
             default: false,
         }),
+        verbose: Flags.string({
+            description:
+                "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
+            required: false,
+        }),
     };
     static args = {
         input: Args.file({
@@ -153,6 +169,18 @@ export default class Interactive extends Command {
 
         if (flags.debug) {
             inspector.open(undefined, undefined, true);
+        }
+
+        if (flags.verbose !== undefined) {
+            const { default: registerDebug } = await import("debug");
+            const namespaces = flags.verbose || "typeagent:*";
+            registerDebug.enable(namespaces);
+            process.env.DEBUG = namespaces;
+            // Also set internal verbose state for prompt indicator
+            const { enableVerboseFromFlag } = await import(
+                "../slashCommands.js"
+            );
+            enableVerboseFromFlag(namespaces);
         }
 
         // Choose between standard and enhanced UI

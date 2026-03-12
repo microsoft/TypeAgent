@@ -35,6 +35,11 @@ import readline from "readline";
 import { convert } from "html-to-text";
 import { marked } from "marked";
 import { markedTerminal } from "marked-terminal";
+import {
+    isSlashCommand,
+    handleSlashCommand,
+    getVerboseIndicator,
+} from "./slashCommands.js";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -915,7 +920,7 @@ async function questionWithCompletion(
             } else if (input.length > 0) {
                 hint = "↑↓ history · esc clear";
             } else {
-                hint = "↑↓ history";
+                hint = "↑↓ history · /help commands";
             }
             output += "\n  " + chalk.dim(hint) + "\x1b[K";
 
@@ -1385,6 +1390,24 @@ export async function processCommandsEnhanced<T>(
             break;
         }
 
+        // Handle slash commands before sending to dispatcher
+        if (isSlashCommand(request)) {
+            try {
+                const slashResult = await handleSlashCommand(request, (cmd) =>
+                    processCommand(cmd, context),
+                );
+                if (slashResult.exit) {
+                    process.stdout.write("\x1b[s\n\x1b[K\n\x1b[K\x1b[u");
+                    break;
+                }
+            } catch (error) {
+                console.log(chalk.red(`Error: ${error}`));
+            }
+            history.push(request);
+            console.log("");
+            continue;
+        }
+
         try {
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
@@ -1468,5 +1491,5 @@ function getNextInput(
  * Returns a clean prompt regardless of status text
  */
 export function getEnhancedConsolePrompt(_text: string): string {
-    return "> ";
+    return `${getVerboseIndicator()}> `;
 }
