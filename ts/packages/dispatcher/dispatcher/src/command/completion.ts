@@ -31,33 +31,47 @@ import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
 
-// Return the full flag name if we are waiting a flag value.  Add boolean values for completions and return undefined if the flag is boolean.
-function getPendingFlag(
+// Detect whether the last parsed token is a recognized flag name
+// awaiting a value.  Pure: returns metadata only, no side effects.
+//
+//   pendingFlag      — for non-boolean flags: the canonical name
+//                       (e.g. "--level") to pass to the agent for
+//                       value completions.  undefined for boolean
+//                       flags (they default to true and don't pend).
+//   booleanFlagName  — for boolean flags: the canonical display name
+//                       (e.g. "--debug") so the caller can offer
+//                       ["true", "false"].  undefined otherwise.
+type PendingFlagInfo = {
+    pendingFlag: string | undefined;
+    booleanFlagName: string | undefined;
+};
+
+function detectPendingFlag(
     params: ParseParamsResult<ParameterDefinitions>,
     flags: FlagDefinitions | undefined,
-    completions: CompletionGroup[],
-) {
+): PendingFlagInfo {
     if (params.tokens.length === 0 || flags === undefined) {
-        return undefined;
+        return { pendingFlag: undefined, booleanFlagName: undefined };
     }
     const lastToken = params.tokens[params.tokens.length - 1];
     const resolvedFlag = resolveFlag(flags, lastToken);
     if (resolvedFlag === undefined) {
-        return undefined;
+        return { pendingFlag: undefined, booleanFlagName: undefined };
     }
     const type = getFlagType(resolvedFlag[1]);
     if (type === "boolean") {
-        completions.push({
-            name: `--${resolvedFlag[0]}`,
-            completions: ["true", "false"],
-        });
-        return undefined; // doesn't require a value.
+        return {
+            pendingFlag: undefined,
+            booleanFlagName: `--${resolvedFlag[0]}`,
+        };
     }
     if (type === "json") {
-        return lastToken;
+        return { pendingFlag: lastToken, booleanFlagName: undefined };
     }
-
-    return `--${resolvedFlag[0]}`; // use the full flag name in case it was a short flag
+    return {
+        pendingFlag: `--${resolvedFlag[0]}`,
+        booleanFlagName: undefined,
+    };
 }
 
 // Rewind index past any trailing whitespace in `text` so it sits
@@ -137,11 +151,11 @@ type ParameterCompletionResult = {
 // ── resolveCompletionTarget ──────────────────────────────────────────────
 //
 // Pure decision logic: given the parse result, determine *what* to
-// complete and *where* the completion attaches.  No agent I/O.
+// complete and *where* the completion attaches.  No I/O, no completion
+// building — the caller materialises completions from the target.
 //
 // Returns:
 //   completionNames  — parameter/flag names to ask the agent about.
-//   completions      — built-in completions (flag names, boolean values).
 //   startIndex       — index into `input` where the completion region
 //                       begins (before any grammar matchedPrefixLength
 //                       override).
@@ -155,12 +169,17 @@ type ParameterCompletionResult = {
 //                       false because any text is valid.  False for
 //                       enumerable completions (flag names, nextArgs)
 //                       even when startIndex points at the current token.
+//   includeFlags     — true when the caller should add flag-name
+//                       completions via collectFlags.
+//   booleanFlagName  — when non-undefined, the caller should add
+//                       ["true","false"] completions for this flag.
 type CompletionTarget = {
     completionNames: string[];
-    completions: CompletionGroup[];
     startIndex: number;
     tokenStartIndex: number;
     isPartialValue: boolean;
+    includeFlags: boolean;
+    booleanFlagName: string | undefined;
 };
 
 function resolveCompletionTarget(
@@ -169,40 +188,23 @@ function resolveCompletionTarget(
     input: string,
     hasTrailingSpace: boolean,
 ): CompletionTarget {
-    const completions: CompletionGroup[] = [];
     const remainderIndex = input.length - params.remainderLength;
 
     // ── Pending flag detection ───────────────────────────────────────
-    // If the last parsed token is a recognized flag name, it may be
-    // awaiting a value.  Boolean flags get inline completions
-    // (["true","false"]) and are NOT considered pending.
-    const pendingFlag = getPendingFlag(params, flags, completions);
+    const { pendingFlag, booleanFlagName } = detectPendingFlag(params, flags);
 
     // ── Spec case 2: partial parse (remainderLength > 0) ────────────
     // Parsing stopped partway.  Offer what can follow the longest
     // valid prefix.
     if (params.remainderLength > 0) {
-        const completionNames = [...params.nextArgs];
-        if (flags !== undefined) {
-            const flagCompletions = collectFlags(
-                completionNames,
-                flags,
-                params.flags,
-            );
-            if (flagCompletions.length > 0) {
-                completions.push({
-                    name: "Command Flags",
-                    completions: flagCompletions,
-                });
-            }
-        }
         const startIndex = tokenBoundary(input, remainderIndex);
         return {
-            completionNames,
-            completions,
+            completionNames: [...params.nextArgs],
             startIndex,
             tokenStartIndex: startIndex,
             isPartialValue: false,
+            includeFlags: true,
+            booleanFlagName,
         };
     }
 
@@ -210,10 +212,6 @@ function resolveCompletionTarget(
     const { tokens, lastCompletableParam, lastParamImplicitQuotes } = params;
 
     // ── Spec case 3a: user is still editing the last token ──────
-    // The last token is uncommitted when there is no trailing space
-    // (or when quoting / implicitQuotes prevent commitment).  Two
-    // sub-cases: editing a free-form parameter value, or editing a
-    // flag name.
 
     // 3a-i: free-form parameter value.  lastCompletableParam is set
     // only for string-type params — the only type whose partial text
@@ -232,10 +230,11 @@ function resolveCompletionTarget(
             const startIndex = tokenBoundary(input, tokenStartIndex);
             return {
                 completionNames: [lastCompletableParam],
-                completions: [], // flags/nextArgs are irrelevant here
                 startIndex,
                 tokenStartIndex,
                 isPartialValue: true,
+                includeFlags: false,
+                booleanFlagName: undefined,
             };
         }
     }
@@ -249,57 +248,36 @@ function resolveCompletionTarget(
         const flagToken = tokens[tokens.length - 1];
         const flagTokenStart = remainderIndex - flagToken.length;
         const startIndex = tokenBoundary(input, flagTokenStart);
-        const completionNames: string[] = [];
-        if (flags !== undefined) {
-            const flagCompletions = collectFlags(
-                completionNames,
-                flags,
-                params.flags,
-            );
-            if (flagCompletions.length > 0) {
-                completions.push({
-                    name: "Command Flags",
-                    completions: flagCompletions,
-                });
-            }
-        }
         return {
-            completionNames,
-            completions,
+            completionNames: [],
             startIndex,
             tokenStartIndex: startIndex,
             isPartialValue: false,
+            includeFlags: true,
+            booleanFlagName,
         };
     }
 
     // ── Spec case 3b: last token committed, complete next ───────
     const startIndex = tokenBoundary(input, remainderIndex);
-    const completionNames: string[] = [];
     if (pendingFlag !== undefined && hasTrailingSpace) {
         // Flag awaiting a value and the user committed with a space.
-        completionNames.push(pendingFlag);
-    } else {
-        completionNames.push(...params.nextArgs);
-        if (flags !== undefined) {
-            const flagCompletions = collectFlags(
-                completionNames,
-                flags,
-                params.flags,
-            );
-            if (flagCompletions.length > 0) {
-                completions.push({
-                    name: "Command Flags",
-                    completions: flagCompletions,
-                });
-            }
-        }
+        return {
+            completionNames: [pendingFlag],
+            startIndex,
+            tokenStartIndex: startIndex,
+            isPartialValue: false,
+            includeFlags: false,
+            booleanFlagName: undefined,
+        };
     }
     return {
-        completionNames,
-        completions,
+        completionNames: [...params.nextArgs],
         startIndex,
         tokenStartIndex: startIndex,
         isPartialValue: false,
+        includeFlags: true,
+        booleanFlagName,
     };
 }
 
@@ -382,12 +360,37 @@ async function getCommandParameterCompletion(
         hasTrailingSpace,
     );
     let { startIndex } = target;
-    const completions = [...target.completions];
     debug(
         `Command completion parameter consumed length: ${params.remainderLength}`,
     );
 
-    // ── 2. Invoke agent (if available) ───────────────────────────────
+    // ── 2. Materialise built-in completions from the target ──────────
+    const completions: CompletionGroup[] = [];
+    if (target.booleanFlagName !== undefined) {
+        completions.push({
+            name: target.booleanFlagName,
+            completions: ["true", "false"],
+        });
+    }
+    if (target.includeFlags && descriptor.parameters.flags !== undefined) {
+        const flagCompletions = collectFlags(
+            target.completionNames,
+            descriptor.parameters.flags,
+            params.flags,
+        );
+        if (flagCompletions.length > 0) {
+            completions.push({
+                name: "Command Flags",
+                completions: flagCompletions,
+            });
+        }
+    }
+
+    // ── 3. Invoke agent (if available) ───────────────────────────────
+    // Note: collectFlags (above) mutates target.completionNames as a
+    // side effect, appending "--key." entries for JSON property flags.
+    // This must happen before the agent call so the agent sees the
+    // full list of names to complete.
     let agentInvoked = false;
     let agentClosedSet: boolean | undefined;
     let agentCommitMode: CommitMode | undefined;
@@ -428,7 +431,7 @@ async function getCommandParameterCompletion(
         );
     }
 
-    // ── 3. Determine closedSet ───────────────────────────────────────
+    // ── 4. Determine closedSet ───────────────────────────────────────
     let closedSet: boolean;
     if (agentInvoked) {
         closedSet = agentClosedSet ?? false;
