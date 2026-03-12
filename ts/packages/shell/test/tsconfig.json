@@ -6,6 +6,6 @@
     "outDir": "../dist/test",
     "types": ["node", "jest"]
   },
-  "include": ["partialCompletionSession.spec.ts"],
+  "include": ["partialCompletion/**/*.ts"],
   "references": [{ "path": "../src" }]
 }
