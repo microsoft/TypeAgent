@@ -70,6 +70,9 @@ export class ChatView {
     public userGivenName: string = "";
     public chatInput: ChatInput | undefined;
     public tts?: TTS | undefined;
+    public onRequestComplete?: () => void;
+    private activeRequestId?: string;
+    private stopButton?: HTMLButtonElement;
 
     private notificationCount = 0;
     constructor(
@@ -158,9 +161,53 @@ export class ChatView {
         this.chatInput.textarea.enable(true);
         this.chatInput.focus();
 
+        // Create stop button (hidden by default, shares position with send button)
+        this.stopButton = document.createElement("button");
+        this.stopButton.className = "chat-input-button chat-stop-button";
+        this.stopButton.innerHTML = "■";
+        this.stopButton.style.display = "none";
+        this.stopButton.addEventListener("click", () => this.cancelCommand());
+        this.chatInput.sendButton.parentElement?.appendChild(this.stopButton);
+
+        // Wire request completion to toggle buttons back
+        this.onRequestComplete = () => {
+            this.activeRequestId = undefined;
+            this.showStopButton(false);
+        };
+
+        // Escape key cancels during processing
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && this.activeRequestId) {
+                e.preventDefault();
+                this.cancelCommand();
+            }
+        });
+
         // delay initialization.
         if (this.partialCompletionEnabled) {
             this.ensurePartialCompletion();
+        }
+    }
+
+    public setActiveRequestId(requestId: string) {
+        this.activeRequestId = requestId;
+        this.showStopButton(true);
+    }
+
+    private cancelCommand() {
+        if (this.activeRequestId && this._dispatcher) {
+            this._dispatcher.cancelCommand(this.activeRequestId);
+        }
+    }
+
+    private showStopButton(processing: boolean) {
+        if (!this.chatInput || !this.stopButton) return;
+        if (processing) {
+            this.chatInput.sendButton.style.display = "none";
+            this.stopButton.style.display = "";
+        } else {
+            this.stopButton.style.display = "none";
+            this.chatInput.sendButton.style.display = "";
         }
     }
 

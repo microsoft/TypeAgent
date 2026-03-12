@@ -57,7 +57,7 @@ export class MessageGroup {
 
         if (requestPromise) {
             requestPromise
-                .then((result) => this.requestCompleted(result?.metrics))
+                .then((result) => this.requestCompleted(result))
                 .catch((error) => this.requestException(error));
         }
     }
@@ -94,9 +94,14 @@ export class MessageGroup {
         agentMessage.updateActionData(data);
     }
 
-    private requestCompleted(metrics: RequestMetrics | undefined) {
-        this.updateMetrics(metrics);
-        if (this.statusMessage === undefined) {
+    private requestCompleted(result: CommandResult | undefined) {
+        this.updateMetrics(result?.metrics);
+        if (result?.cancelled) {
+            this.addStatusMessage(
+                { message: "⚠ Cancelled", source: "shell" },
+                false,
+            );
+        } else if (this.statusMessage === undefined) {
             this.addStatusMessage(
                 { message: "Command completed", source: "shell" },
                 false,
@@ -105,6 +110,7 @@ export class MessageGroup {
             this.statusMessage.complete();
             this.chatView.updateScroll();
         }
+        this.chatView.onRequestComplete?.();
     }
 
     private requestException(error: any) {
@@ -113,6 +119,7 @@ export class MessageGroup {
             { message: `Processing Error: ${error}`, source: "shell" },
             false,
         );
+        this.chatView.onRequestComplete?.();
     }
 
     private ensureStatusMessage(source: string) {
