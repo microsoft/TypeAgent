@@ -19,7 +19,7 @@
     "src/**/*ActionSchema*"
   ],
   "scripts": {
-    "build": "concurrently npm:prepare-vite npm:build:electron:esm",
+    "build": "concurrently npm:prepare-vite npm:build:electron:esm npm:tsc:model",
     "build:electron:cjs": "electron-vite build src/preload --config electron.vite.preload-cjs.config.mts --logLevel error",
     "build:electron:esm": "electron-vite build",
     "clean": "rimraf --glob out dist deploy *.tsbuildinfo *.done.build.log",

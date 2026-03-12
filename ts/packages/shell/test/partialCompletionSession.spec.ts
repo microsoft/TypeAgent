@@ -216,7 +216,7 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(menu.updatePrefix).toHaveBeenCalledWith("so", anyPosition);
     });
 
-    test("hide() resets to IDLE so next update starts fresh", async () => {
+    test("hide() preserves anchor so same input reuses session", async () => {
         const menu = makeMenu();
         const dispatcher = makeDispatcher(makeCompletionResult(["song"], 4));
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -227,9 +227,27 @@ describe("PartialCompletionSession — state transitions", () => {
         session.hide();
         expect(menu.hide).toHaveBeenCalled();
 
-        // After hide, next update should fetch again
+        // After hide, same input within anchor reuses session — no re-fetch
         session.update("play", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("hide() preserves anchor: diverged input triggers re-fetch", async () => {
+        const menu = makeMenu();
+        const dispatcher = makeDispatcher(makeCompletionResult(["song"], 4));
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        session.hide();
+
+        // Input that diverges from anchor triggers a new fetch
+        session.update("stop", getPos);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "stop",
+        );
     });
 
     test("hide() cancels an in-flight request (stale result is ignored)", async () => {
@@ -1113,5 +1131,359 @@ describe("PartialCompletionSession — commitMode", () => {
         // Only after typing a separator should B5 trigger a re-fetch
         session.update("play song ", getPos);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+    });
+});
+
+// ── separatorMode: "spacePunctuation" ─────────────────────────────────────────
+
+describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
+    test("space satisfies spacePunctuation separator", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "spacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Space satisfies spacePunctuation
+        session.update("play ", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("punctuation satisfies spacePunctuation separator", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "spacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Punctuation mark satisfies spacePunctuation.
+        // The leading punctuation separator is stripped, just like whitespace.
+        session.update("play.mu", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("mu", anyPosition);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("letter after anchor triggers re-fetch under spacePunctuation", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "spacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // A letter is neither space nor punctuation — triggers re-fetch (A3)
+        session.update("playx", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "playx",
+        );
+    });
+
+    test("no separator yet hides menu under spacePunctuation", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "spacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Exact anchor, no separator — menu hidden but session kept
+        menu.hide.mockClear();
+        session.update("play", getPos);
+
+        expect(menu.hide).toHaveBeenCalled();
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── separatorMode: "optional" ─────────────────────────────────────────────────
+
+describe("PartialCompletionSession — separatorMode: optional", () => {
+    test("completions shown immediately without separator", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "optional",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // "optional" does not require a separator — menu shown immediately
+        // rawPrefix="" → updatePrefix("", ...)
+        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+    });
+
+    test("typing after anchor filters within session", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music", "movie"], 4, {
+            separatorMode: "optional",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        session.update("playmu", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("mu", anyPosition);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── emojiChar propagation ─────────────────────────────────────────────────────
+
+describe("PartialCompletionSession — emojiChar propagation", () => {
+    test("emojiChar from group is propagated to each SearchMenuItem", async () => {
+        const menu = makeMenu();
+        const group: CompletionGroup = {
+            name: "agents",
+            completions: ["player", "calendar"],
+            emojiChar: "\uD83C\uDFB5",
+            sorted: true,
+        };
+        const result: CommandCompletionResult = {
+            startIndex: 0,
+            completions: [group],
+            closedSet: false,
+            separatorMode: "none",
+        };
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("", getPos);
+        await Promise.resolve();
+
+        expect(menu.setChoices).toHaveBeenCalledWith(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    selectedText: "player",
+                    emojiChar: "\uD83C\uDFB5",
+                }),
+                expect.objectContaining({
+                    selectedText: "calendar",
+                    emojiChar: "\uD83C\uDFB5",
+                }),
+            ]),
+        );
+    });
+
+    test("emojiChar absent from group means no emojiChar on items", async () => {
+        const menu = makeMenu();
+        const group: CompletionGroup = {
+            name: "plain",
+            completions: ["alpha"],
+            sorted: true,
+        };
+        const result: CommandCompletionResult = {
+            startIndex: 0,
+            completions: [group],
+            closedSet: false,
+            separatorMode: "none",
+        };
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("", getPos);
+        await Promise.resolve();
+
+        const calls = menu.setChoices.mock.calls;
+        const items = calls[calls.length - 1][0] as Record<string, unknown>[];
+        expect(items[0]).not.toHaveProperty("emojiChar");
+    });
+});
+
+// ── backend error handling ────────────────────────────────────────────────────
+
+describe("PartialCompletionSession — backend error handling", () => {
+    test("rejected promise clears PENDING state so next update can proceed", async () => {
+        const menu = makeMenu();
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockRejectedValueOnce(new Error("network error"))
+                .mockResolvedValue(makeCompletionResult(["song"], 4)),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        // Flush rejected promise + catch handler
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // After rejection, anchor is still "play" with separatorMode="space".
+        // Diverged input triggers a re-fetch (anchor no longer matches).
+        session.update("stop", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "stop",
+        );
+    });
+
+    test("rejected promise: same input within anchor does not re-fetch", async () => {
+        const menu = makeMenu();
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockRejectedValueOnce(new Error("network error"))
+                .mockResolvedValue(makeCompletionResult(["song"], 4)),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // Same input — anchor still matches, reuse session (no re-fetch)
+        session.update("play", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("rejected promise does not leave session stuck in PENDING", async () => {
+        const menu = makeMenu();
+        let rejectFn!: (e: Error) => void;
+        const rejecting = new Promise<CommandCompletionResult>(
+            (_, reject) => (rejectFn = reject),
+        );
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockReturnValueOnce(rejecting)
+                .mockResolvedValue(makeCompletionResult(["song"], 4)),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+
+        // While PENDING, second update is suppressed
+        session.update("play more", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+
+        // Now reject
+        rejectFn(new Error("timeout"));
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // Session is no longer PENDING — diverged input triggers re-fetch
+        session.update("stop", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    test("rejected promise does not populate menu", async () => {
+        const menu = makeMenu();
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockRejectedValue(new Error("timeout")),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // setChoices should only have the initial empty-array call, not real items
+        expect(menu.setChoices).toHaveBeenCalledTimes(1);
+        expect(menu.setChoices).toHaveBeenCalledWith([]);
+    });
+});
+
+// ── startIndex edge cases ─────────────────────────────────────────────────────
+
+describe("PartialCompletionSession — startIndex edge cases", () => {
+    test("negative startIndex falls back to full input as anchor", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song"], -1, {
+            separatorMode: "none",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Anchor is "play" (full input).  rawPrefix="" → updatePrefix("", ...)
+        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+    });
+
+    test("startIndex=0 sets empty anchor", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["play"], 0, {
+            separatorMode: "none",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Anchor is "" (empty).  rawPrefix="play" → updatePrefix("play", ...)
+        expect(menu.updatePrefix).toHaveBeenCalledWith("play", anyPosition);
+    });
+});
+
+// ── mixed sorted/unsorted groups ──────────────────────────────────────────────
+
+describe("PartialCompletionSession — mixed sorted/unsorted groups", () => {
+    test("sorted group preserves order while unsorted group is alphabetized", async () => {
+        const menu = makeMenu();
+        const sortedGroup: CompletionGroup = {
+            name: "grammar",
+            completions: ["zebra", "apple"],
+            sorted: true,
+        };
+        const unsortedGroup: CompletionGroup = {
+            name: "entities",
+            completions: ["cherry", "banana"],
+            sorted: false,
+        };
+        const result: CommandCompletionResult = {
+            startIndex: 0,
+            completions: [sortedGroup, unsortedGroup],
+            closedSet: false,
+            separatorMode: "none",
+        };
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("x", getPos);
+        await Promise.resolve();
+
+        const calls = menu.setChoices.mock.calls;
+        const items = calls[calls.length - 1][0] as {
+            selectedText: string;
+            sortIndex: number;
+        }[];
+        const texts = items.map((i) => i.selectedText);
+
+        // Sorted group: order preserved (zebra before apple)
+        // Unsorted group: alphabetized (banana before cherry)
+        // Cross-group: sorted group first
+        expect(texts).toEqual(["zebra", "apple", "banana", "cherry"]);
+
+        // sortIndex is sequential across both groups
+        expect(items.map((i) => i.sortIndex)).toEqual([0, 1, 2, 3]);
     });
 });

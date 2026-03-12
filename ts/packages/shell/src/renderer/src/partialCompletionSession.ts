@@ -157,7 +157,7 @@ export class PartialCompletionSession {
             if (!this.separatorRegex().test(rawPrefix)) {
                 return undefined;
             }
-            return rawPrefix.trimStart();
+            return this.stripLeadingSeparator(rawPrefix);
         }
         return rawPrefix;
     }
@@ -276,7 +276,7 @@ export class PartialCompletionSession {
         // SHOW — strip the leading separator (if any) before passing to the
         // menu trie, so completions like "music" match prefix "" not " ".
         const completionPrefix = requiresSep
-            ? rawPrefix.trimStart()
+            ? this.stripLeadingSeparator(rawPrefix)
             : rawPrefix;
 
         const position = getPosition(completionPrefix);
@@ -445,5 +445,14 @@ export class PartialCompletionSession {
 
     private separatorRegex(): RegExp {
         return this.separatorMode === "space" ? /^\s/ : /^[\s\p{P}]/u;
+    }
+
+    // Strip leading separator characters from rawPrefix.
+    // For "space" mode, only whitespace is stripped.
+    // For "spacePunctuation" mode, leading whitespace and punctuation are stripped.
+    private stripLeadingSeparator(rawPrefix: string): string {
+        return this.separatorMode === "space"
+            ? rawPrefix.trimStart()
+            : rawPrefix.replace(/^[\s\p{P}]+/u, "");
     }
 }
