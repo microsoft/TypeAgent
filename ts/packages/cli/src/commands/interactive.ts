@@ -57,7 +57,7 @@ async function getCompletionsData(
         // startIndex), so we no longer need space-based token-boundary
         // heuristics here.
         const result = await dispatcher.getCommandCompletion(line);
-        if (!result || !result.completions || result.completions.length === 0) {
+        if (result.completions.length === 0) {
             return null;
         }
 

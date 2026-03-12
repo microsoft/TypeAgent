@@ -107,9 +107,7 @@ export class PartialCompletionSession {
     private commitMode: CommitMode = "explicit";
 
     // The in-flight completion request, or undefined when settled.
-    private completionP:
-        | Promise<CommandCompletionResult | undefined>
-        | undefined;
+    private completionP: Promise<CommandCompletionResult> | undefined;
 
     constructor(
         private readonly menu: ISearchMenu,

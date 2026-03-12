@@ -15,6 +15,7 @@ import {
 import {
     getFlagMultiple,
     getFlagType,
+    mergeSeparatorMode,
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
 import { parseParams, ParseParamsResult } from "./parameters.js";
@@ -29,22 +30,6 @@ import registerDebug from "debug";
 import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 const debug = registerDebug("typeagent:command:completion");
 const debugError = registerDebug("typeagent:command:completion:error");
-
-// Merge two SeparatorMode values — the mode requiring the strongest
-// separator wins (i.e. the mode that demands the most from the user).
-// Priority: "space" > "spacePunctuation" > "optional" > "none" > undefined.
-function mergeSeparatorMode(
-    a: SeparatorMode | undefined,
-    b: SeparatorMode | undefined,
-): SeparatorMode | undefined {
-    if (a === undefined) return b;
-    if (b === undefined) return a;
-    if (a === "space" || b === "space") return "space";
-    if (a === "spacePunctuation" || b === "spacePunctuation")
-        return "spacePunctuation";
-    if (a === "optional" || b === "optional") return "optional";
-    return "none";
-}
 
 // Return the full flag name if we are waiting a flag value.  Add boolean values for completions and return undefined if the flag is boolean.
 function getPendingFlag(

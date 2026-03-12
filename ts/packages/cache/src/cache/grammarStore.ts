@@ -6,7 +6,6 @@ import {
     Grammar,
     matchGrammar,
     matchGrammarCompletion,
-    GrammarSeparatorMode,
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
@@ -20,6 +19,7 @@ import {
 
 const debug = registerDebug("typeagent:cache:grammarStore");
 import { SeparatorMode } from "@typeagent/agent-sdk";
+import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     CompletionProperty,
     CompletionResult,
@@ -33,30 +33,6 @@ import {
     RequestAction,
 } from "../explanation/requestAction.js";
 import { sortMatches } from "./sortMatches.js";
-
-// Merge a GrammarSeparatorMode (from action-grammar) into an accumulator
-// SeparatorMode.  The mode requiring the strongest separator wins
-// (i.e. the mode that demands the most from the user):
-// spacePunctuation > optional > none.
-// (Grammar results never produce "space" — that mode is for command dispatch.)
-function mergeGrammarSeparatorMode(
-    current: SeparatorMode | undefined,
-    incoming: GrammarSeparatorMode,
-): SeparatorMode {
-    // GrammarSeparatorMode is a subset of SeparatorMode
-    // ("spacePunctuation" | "optional" | "none") — values are directly
-    // assignable.
-    if (current === undefined) {
-        return incoming;
-    }
-    if (current === "spacePunctuation" || incoming === "spacePunctuation") {
-        return "spacePunctuation";
-    }
-    if (current === "optional" || incoming === "optional") {
-        return "optional";
-    }
-    return "none";
-}
 
 interface GrammarEntry {
     grammar: Grammar;
@@ -392,7 +368,7 @@ export class GrammarStoreImpl implements GrammarStore {
                 if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);
                     if (partial.separatorMode !== undefined) {
-                        separatorMode = mergeGrammarSeparatorMode(
+                        separatorMode = mergeSeparatorMode(
                             separatorMode,
                             partial.separatorMode,
                         );

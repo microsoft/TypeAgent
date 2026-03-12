@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { SeparatorMode } from "@typeagent/agent-sdk";
+import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     ExecutableAction,
     HistoryContext,
@@ -117,7 +118,7 @@ export function mergeCompletionResults(
                 : first.properties
             : second.properties,
         matchedPrefixLength,
-        separatorMode: mergeSeparatorModes(
+        separatorMode: mergeSeparatorMode(
             first.separatorMode,
             second.separatorMode,
         ),
@@ -129,23 +130,6 @@ export function mergeCompletionResults(
     };
 }
 
-// Merge two SeparatorMode values — the mode requiring the strongest
-// separator wins (i.e. the mode that demands the most from the user).
-// Priority: "space" > "spacePunctuation" > "optional" > "none".
-function mergeSeparatorModes(
-    a: SeparatorMode | undefined,
-    b: SeparatorMode | undefined,
-): SeparatorMode | undefined {
-    if (a === undefined) return b;
-    if (b === undefined) return a;
-    const order: Record<SeparatorMode, number> = {
-        space: 3,
-        spacePunctuation: 2,
-        optional: 1,
-        none: 0,
-    };
-    return order[a] >= order[b] ? a : b;
-}
 export class ConstructionCache {
     private readonly matchSetsByUid = new Map<string, MatchSet>();
 

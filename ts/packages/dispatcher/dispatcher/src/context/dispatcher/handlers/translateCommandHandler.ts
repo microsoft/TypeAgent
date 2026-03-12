@@ -88,6 +88,8 @@ export class TranslateCommandHandler implements CommandHandler {
                 result.groups.push(...requestResult.groups);
                 result.prefixLength = requestResult.prefixLength;
                 result.separatorMode = requestResult.separatorMode;
+                result.closedSet = requestResult.closedSet;
+                result.commitMode = requestResult.commitMode;
             }
         }
         return result;

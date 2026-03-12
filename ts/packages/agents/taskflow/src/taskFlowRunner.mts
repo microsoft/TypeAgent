@@ -10,11 +10,11 @@ import type {
 } from "@typeagent/dispatcher-types";
 import {
     DisplayAppendMode,
-    getContentForType,
     type DisplayContent,
     type MessageContent,
     type TypedDisplayContent,
 } from "@typeagent/agent-sdk";
+import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
 import { convert } from "html-to-text";
 
 // ── Text utilities ───────────────────────────────────────────────────────────

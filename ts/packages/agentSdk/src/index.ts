@@ -54,7 +54,6 @@ export {
     TypedDisplayContent,
     DisplayAppendMode,
     DisplayMessageKind,
-    getContentForType,
 } from "./display.js";
 
 export {

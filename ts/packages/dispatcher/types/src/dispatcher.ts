@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    CommitMode,
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
@@ -70,9 +71,9 @@ export type CommandResult = {
 };
 
 export type CommandCompletionResult = {
-    // Length of the longest valid (parsable) prefix of the input.
-    // input[0..startIndex) is fully resolved; completions describe
-    // what can follow after that prefix.
+    // Index into the input where the resolved prefix ends and the
+    // filter/completion region begins.  input[0..startIndex) is fully
+    // resolved; completions describe what can follow after that prefix.
     startIndex: number;
     completions: CompletionGroup[]; // completions available at the current position
     // What kind of separator is required between the matched prefix and
@@ -91,7 +92,7 @@ export type CommandCompletionResult = {
     //                 eager re-fetch on unique match.
     //   "eager"    — re-fetch immediately on unique satisfaction.
     // When omitted, defaults to "explicit".
-    commitMode?: "explicit" | "eager";
+    commitMode?: CommitMode;
 };
 
 export type AppAgentStatus = {
