@@ -81,6 +81,9 @@ export function getActionContext(
         get actionIO() {
             return actionIO;
         },
+        get abortSignal() {
+            return context.currentAbortSignal;
+        },
         async queueToggleTransientAgent(subAgentName: string, active: boolean) {
             if (!subAgentName.startsWith(`${appAgentName}.`)) {
                 throw new Error(`Invalid sub agent name: ${subAgentName}`);
