@@ -134,6 +134,175 @@ type ParameterCompletionResult = {
     commitMode: CommitMode | undefined;
 };
 
+// ── resolveCompletionTarget ──────────────────────────────────────────────
+//
+// Pure decision logic: given the parse result, determine *what* to
+// complete and *where* the completion attaches.  No agent I/O.
+//
+// Returns:
+//   completionNames  — parameter/flag names to ask the agent about.
+//   completions      — built-in completions (flag names, boolean values).
+//   startIndex       — index into `input` where the completion region
+//                       begins (before any grammar matchedPrefixLength
+//                       override).
+//   tokenStartIndex  — raw position of the last token's first character,
+//                       used by the caller to apply matchedPrefixLength
+//                       arithmetic.  Equal to startIndex when no token is
+//                       being edited (next-param / remainder modes).
+//   isPartialValue   — true when the user is mid-edit on a free-form
+//                       parameter value (string arg or string flag value).
+//                       When true and no agent is invoked, closedSet is
+//                       false because any text is valid.  False for
+//                       enumerable completions (flag names, nextArgs)
+//                       even when startIndex points at the current token.
+type CompletionTarget = {
+    completionNames: string[];
+    completions: CompletionGroup[];
+    startIndex: number;
+    tokenStartIndex: number;
+    isPartialValue: boolean;
+};
+
+function resolveCompletionTarget(
+    params: ParseParamsResult<ParameterDefinitions>,
+    flags: FlagDefinitions | undefined,
+    input: string,
+    hasTrailingSpace: boolean,
+): CompletionTarget {
+    const completions: CompletionGroup[] = [];
+    const remainderIndex = input.length - params.remainderLength;
+
+    // ── Pending flag detection ───────────────────────────────────────
+    // If the last parsed token is a recognized flag name, it may be
+    // awaiting a value.  Boolean flags get inline completions
+    // (["true","false"]) and are NOT considered pending.
+    const pendingFlag = getPendingFlag(params, flags, completions);
+
+    // ── Spec case 2: partial parse (remainderLength > 0) ────────────
+    // Parsing stopped partway.  Offer what can follow the longest
+    // valid prefix.
+    if (params.remainderLength > 0) {
+        const completionNames = [...params.nextArgs];
+        if (flags !== undefined) {
+            const flagCompletions = collectFlags(
+                completionNames,
+                flags,
+                params.flags,
+            );
+            if (flagCompletions.length > 0) {
+                completions.push({
+                    name: "Command Flags",
+                    completions: flagCompletions,
+                });
+            }
+        }
+        const startIndex = tokenBoundary(input, remainderIndex);
+        return {
+            completionNames,
+            completions,
+            startIndex,
+            tokenStartIndex: startIndex,
+            isPartialValue: false,
+        };
+    }
+
+    // ── Spec case 3: full parse (remainderLength === 0) ─────────────
+    const { tokens, lastCompletableParam, lastParamImplicitQuotes } = params;
+
+    // ── Spec case 3a: user is still editing the last token ──────
+    // The last token is uncommitted when there is no trailing space
+    // (or when quoting / implicitQuotes prevent commitment).  Two
+    // sub-cases: editing a free-form parameter value, or editing a
+    // flag name.
+
+    // 3a-i: free-form parameter value.  lastCompletableParam is set
+    // only for string-type params — the only type whose partial text
+    // is meaningful for prefix-match completion.
+    if (lastCompletableParam !== undefined && tokens.length > 0) {
+        const valueToken = tokens[tokens.length - 1];
+        const quoted = isFullyQuoted(valueToken);
+        if (
+            quoted === false ||
+            (quoted === undefined && lastParamImplicitQuotes) ||
+            (quoted === undefined &&
+                !hasTrailingSpace &&
+                pendingFlag === undefined)
+        ) {
+            const tokenStartIndex = remainderIndex - valueToken.length;
+            const startIndex = tokenBoundary(input, tokenStartIndex);
+            return {
+                completionNames: [lastCompletableParam],
+                completions: [], // flags/nextArgs are irrelevant here
+                startIndex,
+                tokenStartIndex,
+                isPartialValue: true,
+            };
+        }
+    }
+
+    // 3a-ii: uncommitted flag name.  A recognized flag was consumed
+    // but the user hasn't typed a trailing space — they might still
+    // change their mind (e.g. replace "--level" with "--debug").
+    // Back up to the flag token's start and offer flag names.
+    // isPartialValue is false: flag names are an enumerable set.
+    if (pendingFlag !== undefined && !hasTrailingSpace) {
+        const flagToken = tokens[tokens.length - 1];
+        const flagTokenStart = remainderIndex - flagToken.length;
+        const startIndex = tokenBoundary(input, flagTokenStart);
+        const completionNames: string[] = [];
+        if (flags !== undefined) {
+            const flagCompletions = collectFlags(
+                completionNames,
+                flags,
+                params.flags,
+            );
+            if (flagCompletions.length > 0) {
+                completions.push({
+                    name: "Command Flags",
+                    completions: flagCompletions,
+                });
+            }
+        }
+        return {
+            completionNames,
+            completions,
+            startIndex,
+            tokenStartIndex: startIndex,
+            isPartialValue: false,
+        };
+    }
+
+    // ── Spec case 3b: last token committed, complete next ───────
+    const startIndex = tokenBoundary(input, remainderIndex);
+    const completionNames: string[] = [];
+    if (pendingFlag !== undefined && hasTrailingSpace) {
+        // Flag awaiting a value and the user committed with a space.
+        completionNames.push(pendingFlag);
+    } else {
+        completionNames.push(...params.nextArgs);
+        if (flags !== undefined) {
+            const flagCompletions = collectFlags(
+                completionNames,
+                flags,
+                params.flags,
+            );
+            if (flagCompletions.length > 0) {
+                completions.push({
+                    name: "Command Flags",
+                    completions: flagCompletions,
+                });
+            }
+        }
+    }
+    return {
+        completionNames,
+        completions,
+        startIndex,
+        tokenStartIndex: startIndex,
+        isPartialValue: false,
+    };
+}
+
 // Complete parameter values and flags for an already-resolved command
 // descriptor.  Returns undefined when the descriptor declares no
 // parameters (the caller decides whether sibling subcommands suffice).
@@ -149,19 +318,24 @@ type ParameterCompletionResult = {
 //
 // 3. If parsing consumed all input (remainderLength === 0):
 //
-//    a. If any of the following are true, the user is still typing the
-//       last token — return startIndex at the *beginning* of that token
-//       and offer completions for it:
-//         • No trailing space (cursor is at the end of the last token).
-//         • The last parameter uses implicitQuotes (rest-of-line capture,
-//           never "committed" by whitespace).
-//         • The last token is partially quoted (open quote without a
-//           matching close quote).
+//    a. The user is still editing the last token — return startIndex
+//       at the *beginning* of that token:
 //
-//    b. Otherwise (trailing space present, last token is bare or fully
-//       quoted) — the last token has been committed.  Return startIndex
-//       at the *end* of the last token (excluding the trailing space)
-//       and offer completions for the next parameters.
+//       i.  Free-form parameter value (lastCompletableParam is set):
+//           triggered when the token is partially quoted, uses
+//           implicitQuotes, or is a bare unquoted token with no
+//           trailing space.  Completions come from the agent for
+//           that parameter.
+//
+//       ii. Uncommitted flag name (pendingFlag with no trailing
+//           space): the flag was recognized but the user hasn't
+//           committed it.  Offer flag names so the user can change
+//           their choice.
+//
+//    b. Otherwise — the last token has been committed (trailing space
+//       present, or fully quoted).  Return startIndex at the *end* of
+//       the last token (excluding trailing space) and offer completions
+//       for the next parameters.
 //
 async function getCommandParameterCompletion(
     descriptor: CommandDescriptor,
@@ -170,182 +344,89 @@ async function getCommandParameterCompletion(
     input: string,
     hasTrailingSpace: boolean,
 ): Promise<ParameterCompletionResult | undefined> {
-    const completions: CompletionGroup[] = [];
     if (typeof descriptor.parameters !== "object") {
-        // No more completion, return undefined;
         return undefined;
     }
-    const flags = descriptor.parameters.flags;
     const params: ParseParamsResult<ParameterDefinitions> = parseParams(
         result.suffix,
         descriptor.parameters,
         true,
     );
-    const pendingFlag = getPendingFlag(params, flags, completions);
-    const agentCommandCompletions: string[] = [];
-    if (pendingFlag !== undefined && hasTrailingSpace) {
-        // The last token is a recognized flag and the user committed
-        // it with a trailing space.  Ask the agent for flag values.
-        agentCommandCompletions.push(pendingFlag);
-    } else {
-        // Either no pending flag, or the flag isn't committed yet
-        // (no trailing space).  Offer positional args and flag names.
-        agentCommandCompletions.push(...params.nextArgs);
-        if (flags !== undefined) {
-            const flagCompletions = collectFlags(
-                agentCommandCompletions,
-                flags,
-                params.flags,
-            );
-            if (flagCompletions.length > 0) {
-                completions.push({
-                    name: "Command Flags",
-                    completions: flagCompletions,
-                });
-            }
-        }
-    }
 
-    // Compute startIndex from how far parseParams consumed the suffix.
-    // remainderLength is the length of the (trimmed) parameter text
-    // that was NOT successfully parsed — everything before it is part
-    // of the longest valid prefix.  Since parseParams strips inter-
-    // token whitespace (trimStart), the raw arithmetic can land on
-    // the separator space — tokenBoundary rewinds to the preceding
-    // token edge.
-    const remainderIndex = input.length - params.remainderLength;
-    let startIndex = tokenBoundary(input, remainderIndex);
+    // ── 1. Decide what to complete and where ─────────────────────────
+    const target = resolveCompletionTarget(
+        params,
+        descriptor.parameters.flags,
+        input,
+        hasTrailingSpace,
+    );
+    let { startIndex } = target;
+    const completions = [...target.completions];
     debug(
         `Command completion parameter consumed length: ${params.remainderLength}`,
     );
 
+    // ── 2. Invoke agent (if available) ───────────────────────────────
     let agentInvoked = false;
     let agentClosedSet: boolean | undefined;
     let agentCommitMode: CommitMode | undefined;
     let separatorMode: SeparatorMode | undefined;
+
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
-    if (agent.getCommandCompletion) {
-        const { tokens, lastCompletableParam, lastParamImplicitQuotes } =
-            params;
+    if (agent.getCommandCompletion && target.completionNames.length > 0) {
+        const agentName = result.actualAppAgentName;
+        const sessionContext = context.agents.getSessionContext(agentName);
+        debug(
+            `Command completion parameter with agent: '${agentName}' with params ${JSON.stringify(target.completionNames)}`,
+        );
+        const agentResult: CompletionGroups = await agent.getCommandCompletion(
+            result.commands,
+            params,
+            target.completionNames,
+            sessionContext,
+        );
 
-        let tokenStartIndex = remainderIndex;
-        if (lastCompletableParam !== undefined && tokens.length > 0) {
-            const valueToken = tokens[tokens.length - 1];
-            const quoted = isFullyQuoted(valueToken);
-            if (
-                quoted === false ||
-                (quoted === undefined && lastParamImplicitQuotes) ||
-                (quoted === undefined &&
-                    !hasTrailingSpace &&
-                    pendingFlag === undefined)
-            ) {
-                // The user is inside a token (open quote or
-                // implicitQuotes rest-of-line) — completions for
-                // other parameters or flags at the original
-                // startIndex are invalid because no new token can
-                // start.  Make this path exclusive: clear earlier
-                // completions and adjust startIndex to the token
-                // start so the caller replaces the partial token.
-                agentCommandCompletions.length = 0;
-                completions.length = 0;
-                agentCommandCompletions.push(lastCompletableParam);
-                tokenStartIndex = remainderIndex - valueToken.length;
-                startIndex = tokenBoundary(input, tokenStartIndex);
-            }
+        // Allow grammar-reported matchedPrefixLength to override
+        // the parse-derived startIndex.  This handles CJK and other
+        // non-space-delimited scripts where the grammar matcher is
+        // the authoritative source for how far into the input it
+        // consumed.  matchedPrefixLength is relative to the token
+        // content start, so add it to tokenStartIndex.
+        const groupPrefixLength = agentResult.matchedPrefixLength;
+        if (groupPrefixLength !== undefined && groupPrefixLength !== 0) {
+            startIndex = target.tokenStartIndex + groupPrefixLength;
+            completions.length = 0; // grammar overrides built-in completions
         }
-        if (agentCommandCompletions.length > 0) {
-            const agentName = result.actualAppAgentName;
-            const sessionContext = context.agents.getSessionContext(agentName);
-            debug(
-                `Command completion parameter with agent: '${agentName}' with params ${JSON.stringify(agentCommandCompletions)}`,
-            );
-            const agentResult: CompletionGroups =
-                await agent.getCommandCompletion(
-                    result.commands,
-                    params,
-                    agentCommandCompletions,
-                    sessionContext,
-                );
-
-            // Allow grammar-reported matchedPrefixLength to override
-            // the parse-derived startIndex.  This handles CJK and other
-            // non-space-delimited scripts where the grammar matcher is the
-            // authoritative source for how far into the input it consumed.
-            // Grammar matchedPrefixLength is relative to the token content
-            // start (after the separator space), not to tokenBoundary
-            // (before it), so use tokenStartIndex when available.
-            const groupPrefixLength = agentResult.matchedPrefixLength;
-            if (groupPrefixLength !== undefined && groupPrefixLength != 0) {
-                startIndex = tokenStartIndex + groupPrefixLength;
-                // we have advanced the startIndex, so existing completions are no longer valid, clear them out.
-                completions.length = 0;
-            }
-            completions.push(...agentResult.groups);
-            separatorMode = agentResult.separatorMode;
-            agentInvoked = true;
-            agentClosedSet = agentResult.closedSet;
-            agentCommitMode = agentResult.commitMode;
-            debug(
-                `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}, tokenStartIndex=${tokenStartIndex}`,
-            );
-        }
+        completions.push(...agentResult.groups);
+        separatorMode = agentResult.separatorMode;
+        agentInvoked = true;
+        agentClosedSet = agentResult.closedSet;
+        agentCommitMode = agentResult.commitMode;
+        debug(
+            `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}, tokenStartIndex=${target.tokenStartIndex}`,
+        );
     }
 
-    // When there is no trailing space, the last consumed token
-    // hasn't been committed.  If no earlier path already adjusted
-    // startIndex (lastCompletableParam / grammar-matchedPrefixLength),
-    // back up to the start of that token so the caller's trie can
-    // filter completions against it.
-    // Exception: fully-quoted tokens (e.g. "build") are committed
-    // by their closing quote — no back-up needed.
-    // Exception: when the agent was already invoked (for nextArgs),
-    // its completions describe the *next* position — backing up
-    // would create a mismatch between startIndex and completions.
-    const unadjustedStartIndex = tokenBoundary(input, remainderIndex);
-    if (
-        !hasTrailingSpace &&
-        !agentInvoked &&
-        params.remainderLength === 0 &&
-        params.tokens.length > 0 &&
-        startIndex === unadjustedStartIndex
-    ) {
-        const lastToken = params.tokens[params.tokens.length - 1];
-        if (isFullyQuoted(lastToken) !== true) {
-            startIndex = tokenBoundary(
-                input,
-                unadjustedStartIndex - lastToken.length,
-            );
-        }
-    }
-
-    // Determine whether the completion set is a closed set.
-    // Agent-provided completions use the agent's self-reported
-    // closedSet flag (via CompletionGroups.closedSet), defaulting to
-    // false when the agent doesn't set it.
-    // When no agent is involved, the set is closed if:
-    //  - A pending boolean flag offers only ["true", "false"]
-    //  - All positional args are filled and only enumerable flags remain
-    // Otherwise free-form text parameters make the set open.
+    // ── 3. Determine closedSet ───────────────────────────────────────
     let closedSet: boolean;
     if (agentInvoked) {
         closedSet = agentClosedSet ?? false;
-    } else if (pendingFlag !== undefined) {
-        // A non-boolean pending flag accepts free-form values.
-        // (Boolean flags are handled by getPendingFlag returning undefined
-        //  and pushing ["true", "false"] into completions directly.)
+    } else if (target.isPartialValue) {
+        // Editing a free-form value with no agent → open set.
         closedSet = false;
     } else {
-        // No agent, no pending flag.  Closed set when there are no
-        // unfilled positional args (nextArgs is empty) and only
-        // flags remain — flag names are a finite, known set.
+        // No agent.  Closed when all positional args are filled and
+        // only flags (a finite set) remain.
         closedSet = params.nextArgs.length === 0;
     }
 
-    // Propagate agent-provided commitMode.  When the agent doesn't
-    // specify one, leave undefined so the caller can apply its default.
-    const commitMode: CommitMode | undefined = agentCommitMode;
-
-    return { completions, startIndex, separatorMode, closedSet, commitMode };
+    return {
+        completions,
+        startIndex,
+        separatorMode,
+        closedSet,
+        commitMode: agentCommitMode,
+    };
 }
 
 //
