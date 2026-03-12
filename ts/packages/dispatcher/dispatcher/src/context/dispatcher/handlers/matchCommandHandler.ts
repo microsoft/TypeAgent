@@ -61,7 +61,7 @@ export class MatchCommandHandler implements CommandHandler {
                     context.agentContext,
                 );
                 result.groups.push(...requestResult.groups);
-                result.prefixLength = requestResult.prefixLength;
+                result.matchedPrefixLength = requestResult.matchedPrefixLength;
                 result.separatorMode = requestResult.separatorMode;
                 result.closedSet = requestResult.closedSet;
                 result.commitMode = requestResult.commitMode;

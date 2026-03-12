@@ -14,12 +14,10 @@ import {
     VarStringPart,
 } from "./grammarTypes.js";
 
-// Separator mode for grammar completion results.
-// A subset of SeparatorMode from @typeagent/agent-sdk (which also
-// includes "space").  actionGrammar does not depend on agentSdk, so
-// the type is redefined here; values are directly assignable to
-// SeparatorMode.
-export type GrammarSeparatorMode = "spacePunctuation" | "optional" | "none";
+// Separator mode for completion results.  Identical to SeparatorMode
+// from @typeagent/agent-sdk; independently defined here so
+// actionGrammar does not depend on agentSdk.
+type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
 const debugCompletion = registerDebug("typeagent:grammar:completion");
@@ -91,14 +89,14 @@ function requiresSeparator(
 }
 
 // Convert a per-candidate (needsSep, spacingMode) pair into a
-// GrammarSeparatorMode value.  When needsSep is true (separator
-// required), the grammar always uses spacePunctuation separators.
+// SeparatorMode value.  When needsSep is true (separator required),
+// the grammar always uses spacePunctuation separators.
 // When needsSep is false: "none" spacingMode → "none", otherwise
 // → "optional" (covers auto mode/CJK/mixed and explicit "optional").
 function candidateSeparatorMode(
     needsSep: boolean,
     spacingMode: CompiledSpacingMode,
-): GrammarSeparatorMode {
+): SeparatorMode {
     if (needsSep) {
         return "spacePunctuation";
     }
@@ -111,11 +109,11 @@ function candidateSeparatorMode(
 // Merge a new candidate's separator mode into the running aggregate.
 // The mode requiring the strongest separator wins (i.e. the mode that
 // demands the most from the user): spacePunctuation > optional > none.
-function mergeGrammarSeparatorMode(
-    current: GrammarSeparatorMode | undefined,
+function mergeSeparatorMode(
+    current: SeparatorMode | undefined,
     needsSep: boolean,
     spacingMode: CompiledSpacingMode,
-): GrammarSeparatorMode {
+): SeparatorMode {
     const candidateMode = candidateSeparatorMode(needsSep, spacingMode);
     if (current === undefined) {
         return candidateMode;
@@ -1091,7 +1089,7 @@ export type GrammarCompletionResult = {
     matchedPrefixLength?: number | undefined;
     // What kind of separator is expected between the content at
     // `matchedPrefixLength` and the completion text.  This is a
-    // *completion-result* concept (GrammarSeparatorMode), derived from the
+    // *completion-result* concept (SeparatorMode), derived from the
     // per-rule *match-time* spacing rules (CompiledSpacingMode /
     // spacingMode) but distinct from them.
     //   "spacePunctuation" — whitespace or punctuation required
@@ -1100,7 +1098,7 @@ export type GrammarCompletionResult = {
     //     (CJK 再生 → 音楽 does not require a separator).
     //   "none" — no separator at all ([spacing=none] grammars).
     // Omitted when no completions were generated.
-    separatorMode?: GrammarSeparatorMode | undefined;
+    separatorMode?: SeparatorMode | undefined;
     // True when `completions` is the closed set of valid
     // continuations after the matched prefix — if the user types
     // something not in the list, no further completions can exist
@@ -1269,7 +1267,7 @@ function tryPartialStringMatch(
  * position the completion insertion point correctly (especially important
  * for non-space-separated scripts like CJK).
  *
- * `separatorMode` (a {@link GrammarSeparatorMode}) indicates what kind of
+ * `separatorMode` (a {@link SeparatorMode}) indicates what kind of
  * separator is needed between the content at `matchedPrefixLength` and the
  * completion text.  It is determined by the spacing rules (the per-rule
  * {@link CompiledSpacingMode}) between the last character of the matched
@@ -1293,7 +1291,7 @@ export function matchGrammarCompletion(
     // maximum are kept.
     const completions: string[] = [];
     const properties: GrammarCompletionProperty[] = [];
-    let separatorMode: GrammarSeparatorMode | undefined;
+    let separatorMode: SeparatorMode | undefined;
 
     // Whether the accumulated completions form a closed set — if the
     // user types something not listed, no further completions can exist
@@ -1398,7 +1396,7 @@ export function matchGrammarCompletion(
                         }
 
                         completions.push(completionText);
-                        separatorMode = mergeGrammarSeparatorMode(
+                        separatorMode = mergeSeparatorMode(
                             separatorMode,
                             candidateNeedsSep,
                             state.spacingMode,
@@ -1461,7 +1459,7 @@ export function matchGrammarCompletion(
                         }
 
                         properties.push(completionProperty);
-                        separatorMode = mergeGrammarSeparatorMode(
+                        separatorMode = mergeSeparatorMode(
                             separatorMode,
                             candidateNeedsSep,
                             state.spacingMode,
@@ -1528,7 +1526,7 @@ export function matchGrammarCompletion(
                         }
 
                         completions.push(completionText);
-                        separatorMode = mergeGrammarSeparatorMode(
+                        separatorMode = mergeSeparatorMode(
                             separatorMode,
                             candidateNeedsSep,
                             state.spacingMode,

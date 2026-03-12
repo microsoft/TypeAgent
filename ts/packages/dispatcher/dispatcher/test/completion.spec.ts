@@ -40,7 +40,7 @@ function grammarCompletion(token: string): CompletionGroups {
                     completions: ["Tower", "Station"],
                 },
             ],
-            prefixLength: quoteOffset + 5,
+            matchedPrefixLength: quoteOffset + 5,
             separatorMode: "space",
         };
     }
@@ -56,7 +56,7 @@ function grammarCompletion(token: string): CompletionGroups {
                     completions: ["タワー", "駅"],
                 },
             ],
-            prefixLength: quoteOffset + 2,
+            matchedPrefixLength: quoteOffset + 2,
             separatorMode: "optional",
         };
     }
@@ -68,7 +68,7 @@ function grammarCompletion(token: string): CompletionGroups {
                 completions: ["Tokyo ", "東京"],
             },
         ],
-        ...(token.length > 0 ? { prefixLength: 0 } : {}),
+        ...(token.length > 0 ? { matchedPrefixLength: 0 } : {}),
         separatorMode: "space",
     };
 }
@@ -209,7 +209,7 @@ const handlers = {
             },
         },
         grammar: {
-            description: "Grammar prefixLength command",
+            description: "Grammar matchedPrefixLength command",
             parameters: {
                 args: {
                     phrase: {
@@ -653,7 +653,7 @@ describe("Command Completion - startIndex", () => {
             // are included and the group has separatorMode: "space".
             expect(result!.separatorMode).toBe("space");
             // startIndex excludes trailing whitespace (matching grammar
-            // matcher behaviour where prefixLength doesn't include the
+            // matcher behaviour where matchedPrefixLength doesn't include the
             // separator).
             expect(result!.startIndex).toBe(9);
         });
@@ -1047,7 +1047,7 @@ describe("Command Completion - startIndex", () => {
     });
 
     describe("groupPrefixLength overrides startIndex", () => {
-        it("open-quote CJK advances startIndex by prefixLength", async () => {
+        it("open-quote CJK advances startIndex by matchedPrefixLength", async () => {
             const result = await getCommandCompletion(
                 '@comptest grammar "東京タ',
                 context,
@@ -1060,7 +1060,7 @@ describe("Command Completion - startIndex", () => {
             //   tokenStartIndex = 22 - 4 = 18 (position of '"')
             //   startIndex = tokenBoundary(input, 18) = 17
             // Agent strips opening quote, matches "東京" (2 chars),
-            // returns prefixLength = 3 (1 quote + 2 CJK chars).
+            // returns matchedPrefixLength = 3 (1 quote + 2 CJK chars).
             //   startIndex = tokenStartIndex + 3 = 18 + 3 = 21.
             // rawPrefix = "タ", "タワー".startsWith("タ") ✓
             expect(result.startIndex).toBe(21);
@@ -1073,7 +1073,7 @@ describe("Command Completion - startIndex", () => {
             expect(result.closedSet).toBe(false);
         });
 
-        it("implicitQuotes CJK advances startIndex by prefixLength", async () => {
+        it("implicitQuotes CJK advances startIndex by matchedPrefixLength", async () => {
             const result = await getCommandCompletion(
                 "@comptest grammariq 東京タ",
                 context,
@@ -1086,7 +1086,7 @@ describe("Command Completion - startIndex", () => {
             // lastCompletableParam fires (implicitQuotes).
             //   tokenStartIndex = 23 - 3 = 20 (position of "東")
             //   startIndex = tokenBoundary(input, 20) = 19
-            // Agent matches "東京" (2 chars), returns prefixLength=2.
+            // Agent matches "東京" (2 chars), returns matchedPrefixLength=2.
             //   startIndex = tokenStartIndex + 2 = 20 + 2 = 22.
             // rawPrefix = "タ", "タワー".startsWith("タ") ✓
             expect(result.startIndex).toBe(22);
@@ -1126,7 +1126,7 @@ describe("Command Completion - startIndex", () => {
             // lastCompletableParam exclusive path fires
             // (!hasTrailingSpace && pendingFlag === undefined).
             // Agent is invoked with grammar mock → matches "東京" →
-            // returns prefixLength=2.  tokenStartIndex = 21-3 = 18,
+            // returns matchedPrefixLength=2.  tokenStartIndex = 21-3 = 18,
             // startIndex = 18 + 2 = 20.
             expect(result.startIndex).toBe(20);
             expect(result.closedSet).toBe(false);
@@ -1146,7 +1146,7 @@ describe("Command Completion - startIndex", () => {
             // "@comptest grammar " (18 chars)
             // suffix is "", no tokens parsed → nextArgs = ["phrase"].
             // Agent called, mock sees empty token list → returns
-            // completions ["東京"] with no prefixLength.
+            // completions ["東京"] with no matchedPrefixLength.
             // groupPrefixLength path does not fire.
             // startIndex = tokenBoundary(input, 18) = 17.
             expect(result.startIndex).toBe(17);
@@ -1159,7 +1159,7 @@ describe("Command Completion - startIndex", () => {
             expect(grammar!.completions).toContain("東京");
         });
 
-        it("clears earlier completions when prefixLength is set", async () => {
+        it("clears earlier completions when matchedPrefixLength is set", async () => {
             const result = await getCommandCompletion(
                 '@comptest grammar "東京タ',
                 context,
@@ -1172,8 +1172,8 @@ describe("Command Completion - startIndex", () => {
             expect(flags).toBeUndefined();
         });
 
-        it("does not override startIndex when prefixLength is absent", async () => {
-            // "run" handler returns groups without prefixLength.
+        it("does not override startIndex when matchedPrefixLength is absent", async () => {
+            // "run" handler returns groups without matchedPrefixLength.
             // No trailing space → backs up to start of "bu".
             const result = await getCommandCompletion(
                 "@comptest run bu",
@@ -1194,7 +1194,7 @@ describe("Command Completion - startIndex", () => {
             // lastCompletableParam fires.
             //   tokenStartIndex = 27 - 7 = 20
             //   startIndex = tokenBoundary(input, 20) = 19
-            // Mock matches "Tokyo" → prefixLength=5, separatorMode="space".
+            // Mock matches "Tokyo" → matchedPrefixLength=5, separatorMode="space".
             //   startIndex = tokenStartIndex + 5 = 20 + 5 = 25.
             // rawPrefix = " T", consumer strips space → filter "T".
             // "Tower".startsWith("T") ✓
@@ -1216,7 +1216,7 @@ describe("Command Completion - startIndex", () => {
             // Token = "東京タワー" (5 chars).  Mock matches "東京"
             // and finds suffix "タワー" starts with "タワー" →
             // returns empty (completed match, no more to suggest).
-            // agentGroups is [], no prefixLength.
+            // agentGroups is [], no matchedPrefixLength.
             // startIndex = tokenBoundary from lastCompletableParam path.
             const grammar = result.completions.find(
                 (g) => g.name === "Grammar",
@@ -1234,7 +1234,7 @@ describe("Command Completion - startIndex", () => {
             // No tokens parsed → nextArgs = ["query"].
             // Mock sees empty token → falls to "no prefix matched"
             // branch → completions: ["Tokyo ", "東京"],
-            // prefixLength: 0, separatorMode: "space".
+            // matchedPrefixLength: 0, separatorMode: "space".
             // groupPrefixLength = 0 → condition false → skip.
             // startIndex = tokenBoundary(input, 20) = 19.
             expect(result.startIndex).toBe(19);

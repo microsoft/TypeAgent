@@ -241,14 +241,14 @@ async function getCommandParameterCompletion(
                     sessionContext,
                 );
 
-            // Allow grammar-reported prefixLength to override
+            // Allow grammar-reported matchedPrefixLength to override
             // the parse-derived startIndex.  This handles CJK and other
             // non-space-delimited scripts where the grammar matcher is the
             // authoritative source for how far into the input it consumed.
-            // Grammar prefixLength is relative to the token content start
-            // (after the separator space), not to tokenBoundary (before
-            // it), so use tokenStartIndex when available.
-            const groupPrefixLength = agentResult.prefixLength;
+            // Grammar matchedPrefixLength is relative to the token content
+            // start (after the separator space), not to tokenBoundary
+            // (before it), so use tokenStartIndex when available.
+            const groupPrefixLength = agentResult.matchedPrefixLength;
             if (groupPrefixLength !== undefined && groupPrefixLength != 0) {
                 startIndex = tokenStartIndex + groupPrefixLength;
                 // we have advanced the startIndex, so existing completions are no longer valid, clear them out.
@@ -267,7 +267,7 @@ async function getCommandParameterCompletion(
 
     // When there is no trailing space, the last consumed token
     // hasn't been committed.  If no earlier path already adjusted
-    // startIndex (lastCompletableParam / grammar-prefixLength),
+    // startIndex (lastCompletableParam / grammar-matchedPrefixLength),
     // back up to the start of that token so the caller's trie can
     // filter completions against it.
     // Exception: fully-quoted tokens (e.g. "build") are committed
@@ -343,7 +343,7 @@ async function getCommandParameterCompletion(
 //                that was fully consumed by normalizeCommand →
 //                resolveCommand (→ parseParams).  Completions
 //                describe what can validly follow after the anchor.
-//                May be overridden by a grammar-reported prefixLength
+//                May be overridden by a grammar-reported matchedPrefixLength
 //                from a CompletionGroups result.
 //
 //                startIndex is always placed at a token boundary
@@ -357,7 +357,7 @@ async function getCommandParameterCompletion(
 //                when omitted), and strip the separator before
 //                filtering.  Keeping whitespace inside the anchor
 //                would violate this contract.
-//                The grammar-reported prefixLength override (Site 4)
+//                The grammar-reported matchedPrefixLength override (Site 4)
 //                is added to the token start position (before the
 //                separator space), not to tokenBoundary — the grammar
 //                reports how many characters of the token content it

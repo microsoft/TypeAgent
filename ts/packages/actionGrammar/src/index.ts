@@ -28,8 +28,6 @@ export {
     GrammarCompletionResult,
 } from "./grammarMatcher.js";
 
-export type { GrammarSeparatorMode } from "./grammarMatcher.js";
-
 // Entity system
 export type { EntityValidator, EntityConverter } from "./entityRegistry.js";
 export {

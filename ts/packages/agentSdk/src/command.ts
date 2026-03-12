@@ -92,7 +92,7 @@ export type CompletionGroups = {
     // before the completion point.  When present, the shell inserts
     // completions at this offset, replacing space-based heuristics that fail
     // for CJK and other non-space-delimited scripts.
-    prefixLength?: number | undefined;
+    matchedPrefixLength?: number | undefined;
     // What kind of separator is required between the matched prefix and
     // the completion text.  When omitted, defaults to "space" (whitespace
     // required before completions are shown).  See SeparatorMode.
