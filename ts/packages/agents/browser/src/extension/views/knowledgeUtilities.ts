@@ -1017,10 +1017,12 @@ export class KnowledgeConnectionManager {
                 ).electronAPI.checkWebSocketConnection();
                 return response?.connected === true;
             } else if (typeof chrome !== "undefined" && chrome.runtime) {
-                // Chrome extension context
-                const response = await chrome.runtime.sendMessage({
-                    type: "checkWebSocketConnection",
-                });
+                // Chrome extension context — use RPC client
+                const { rpc } = getChromeRpc();
+                const response = await (rpc as any).invoke(
+                    "checkWebSocketConnection",
+                    { type: "checkWebSocketConnection" },
+                );
                 return response?.connected === true;
             }
             return false;
@@ -1110,10 +1112,12 @@ export class UnifiedConnectionManager {
                 ).electronAPI.checkWebSocketConnection();
                 return response?.connected === true;
             } else if (typeof chrome !== "undefined" && chrome.runtime) {
-                // Chrome extension context
-                const response = await chrome.runtime.sendMessage({
-                    type: "checkWebSocketConnection",
-                });
+                // Chrome extension context - use RPC
+                const { rpc } = getChromeRpc();
+                const response = await (rpc as any).invoke(
+                    "checkWebSocketConnection",
+                    { type: "checkWebSocketConnection" },
+                );
                 return response?.connected === true;
             }
             return false;

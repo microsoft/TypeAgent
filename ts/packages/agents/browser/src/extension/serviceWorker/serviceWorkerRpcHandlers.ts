@@ -520,8 +520,8 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 registerAgent: false,
             });
             return {
-                schema: discoveryResult.schema,
-                actionDefinitions: discoveryResult.typeDefinitions,
+                schema: discoveryResult?.schema ?? [],
+                actionDefinitions: discoveryResult?.typeDefinitions,
             };
         },
 

@@ -1,6 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { createChromeRpcClient } from "./chromeRpcClient";
+
+let chromeRpcSingleton: ReturnType<typeof createChromeRpcClient> | undefined;
+function getChromeRpc() {
+    if (!chromeRpcSingleton) chromeRpcSingleton = createChromeRpcClient();
+    return chromeRpcSingleton;
+}
+
 interface ExtensionSettings {
     websocketHost: string;
     defaultExtractionMode: "basic" | "content" | "full";
@@ -115,9 +123,11 @@ class EnhancedOptionsPage {
             '<i class="bi bi-hourglass-split"></i><span>Checking AI model availability...</span>';
 
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "checkAIModelAvailability",
-            });
+            const { rpc } = getChromeRpc();
+            const response = await (rpc as any).invoke(
+                "checkAIModelAvailability",
+                { type: "checkAIModelAvailability" },
+            );
 
             this.aiStatus = {
                 available: response.available || false,
@@ -231,7 +241,8 @@ class EnhancedOptionsPage {
             this.showStatus("Settings saved successfully!", "success");
 
             // Notify background script of settings change
-            chrome.runtime.sendMessage({
+            const { rpc } = getChromeRpc();
+            (rpc as any).invoke("settingsUpdated", {
                 type: "settingsUpdated",
                 settings: this.settings,
             });
