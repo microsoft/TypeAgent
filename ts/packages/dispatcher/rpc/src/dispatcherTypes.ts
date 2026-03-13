@@ -58,3 +58,7 @@ export type DispatcherInvokeFunctions = {
 
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
 };
+
+export type DispatcherCallFunctions = {
+    cancelCommand(requestId: string): void;
+};

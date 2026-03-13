@@ -4,6 +4,13 @@
 import {
     getMacrosForUrl,
     deleteMacro,
+    refreshSchema as refreshSchemaRpc,
+    startRecording,
+    stopRecording,
+    captureHtmlFragments,
+    registerTempSchema as registerTempSchemaRpc,
+    getIntentFromRecording,
+    checkConnection,
     showNotification,
     showLoadingState,
     showEmptyState,
@@ -134,8 +141,8 @@ class ActionDiscoveryPanel {
         const statusElement = document.getElementById("connectionStatus")!;
 
         try {
-            const response = await chrome.runtime.sendMessage({ type: "ping" });
-            this.connectionStatus.connected = true;
+            const response = await checkConnection();
+            this.connectionStatus.connected = response?.connected ?? true;
             // Hide connection status when connected
             statusElement.style.display = "none";
         } catch (error) {
@@ -262,24 +269,10 @@ class ActionDiscoveryPanel {
 
             if (currentActions.length === 0 || forceRefresh) {
                 // Discovery now auto-saves actions to ActionsStore
-                const response = await chrome.runtime.sendMessage({
-                    type: "refreshSchema",
-                });
-
-                if (chrome.runtime.lastError) {
-                    console.error(
-                        "Error fetching schema:",
-                        chrome.runtime.lastError,
-                    );
-                    showErrorState(
-                        itemsList,
-                        "Failed to scan page for actions",
-                    );
-                    return;
-                }
+                const response = await refreshSchemaRpc();
 
                 // Actions are now automatically saved
-                this.renderSchemaResults(response.schema);
+                this.renderSchemaResults(response.schema ?? []);
 
                 if (response.schema && response.schema.length > 0) {
                     console.log(
@@ -333,7 +326,7 @@ class ActionDiscoveryPanel {
 
     private async registerTempSchema() {
         try {
-            await chrome.runtime.sendMessage({ type: "registerTempSchema" });
+            await registerTempSchemaRpc();
         } catch (error) {
             console.error("Error registering temp schema:", error);
         }
@@ -512,7 +505,7 @@ class ActionDiscoveryPanel {
 
     private async startModalRecording() {
         try {
-            await chrome.runtime.sendMessage({ type: "startRecording" });
+            await startRecording();
 
             recording = true;
             const recordBtn = document.getElementById("modalRecordAction");
@@ -537,9 +530,7 @@ class ActionDiscoveryPanel {
 
     private async stopModalRecording() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                type: "stopRecording",
-            });
+            const response = await stopRecording();
 
             if (response && response.recordedActions) {
                 const stepsContainer = document.getElementById(
@@ -614,9 +605,7 @@ class ActionDiscoveryPanel {
             let html = JSON.parse(stepsContainer?.dataset?.html || '""');
 
             if (!html || html === "[]") {
-                const htmlFragments = await chrome.runtime.sendMessage({
-                    type: "captureHtmlFragments",
-                });
+                const htmlFragments = await captureHtmlFragments();
                 if (htmlFragments && htmlFragments.length > 0) {
                     html = [htmlFragments[0].content];
                 }
@@ -632,19 +621,14 @@ class ActionDiscoveryPanel {
             );
 
             // Create and auto-save action in one step
-            const response = await chrome.runtime.sendMessage({
-                type: "getIntentFromRecording",
+            const response = await getIntentFromRecording({
+                actionName: macroName,
+                actionDescription: stepsDescription,
+                steps: JSON.stringify(steps),
+                existingActionNames: existingMacroNames,
                 html: html.map((str: string) => ({ content: str, frameId: 0 })),
                 screenshot,
-                macroName,
-                actionDescription: stepsDescription,
-                existingMacroNames,
-                steps: JSON.stringify(steps),
             });
-
-            if (chrome.runtime.lastError) {
-                throw new Error(chrome.runtime.lastError.message);
-            }
 
             // Action is automatically saved during processing
             if (response.actionId) {
@@ -701,10 +685,7 @@ class ActionDiscoveryPanel {
             // Delete each user action
             let deletedCount = 0;
             for (const action of userActions) {
-                const result = await chrome.runtime.sendMessage({
-                    type: "deleteMacro",
-                    actionId: action.id,
-                });
+                const result = await deleteMacro(action.id);
                 if (result?.success) {
                     deletedCount++;
                 }

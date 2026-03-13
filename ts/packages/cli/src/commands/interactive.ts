@@ -26,6 +26,7 @@ import {
     processCommandsEnhanced,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
+import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import { createInterface } from "readline/promises";
@@ -52,6 +53,16 @@ async function getCompletionsData(
     dispatcher: Dispatcher,
 ): Promise<CompletionData | null> {
     try {
+        // Handle slash command completions
+        if (isSlashCommand(line)) {
+            const completions = getSlashCompletions(line);
+            if (completions.length === 0) return null;
+            return {
+                allCompletions: completions,
+                filterStartIndex: 0,
+                prefix: "",
+            };
+        }
         // Send the full input to the backend.  The grammar matcher reports
         // how much of the input it consumed (matchedPrefixLength →
         // startIndex), so we no longer need space-based token-boundary
@@ -126,6 +137,11 @@ export default class Interactive extends Command {
                 "Enable enhanced terminal UI with spinners and visual prompts",
             default: false,
         }),
+        verbose: Flags.string({
+            description:
+                "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
+            required: false,
+        }),
     };
     static args = {
         input: Args.file({
@@ -139,6 +155,18 @@ export default class Interactive extends Command {
 
         if (flags.debug) {
             inspector.open(undefined, undefined, true);
+        }
+
+        if (flags.verbose !== undefined) {
+            const { default: registerDebug } = await import("debug");
+            const namespaces = flags.verbose || "typeagent:*";
+            registerDebug.enable(namespaces);
+            process.env.DEBUG = namespaces;
+            // Also set internal verbose state for prompt indicator
+            const { enableVerboseFromFlag } = await import(
+                "../slashCommands.js"
+            );
+            enableVerboseFromFlag(namespaces);
         }
 
         // Choose between standard and enhanced UI
@@ -207,6 +235,7 @@ export default class Interactive extends Command {
                     flags.testUI
                         ? (line: string) => getCompletionsData(line, dispatcher)
                         : undefined,
+                    flags.testUI ? dispatcher : undefined,
                 );
             } finally {
                 await dispatcher.close();

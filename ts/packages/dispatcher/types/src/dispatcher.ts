@@ -64,6 +64,9 @@ export type CommandResult = {
     // last error message
     lastError?: string;
 
+    // True if the command was cancelled via cancelCommand().
+    cancelled?: boolean;
+
     // Actions that were executed as part of the command.
     actions?: TypeAgentAction[];
     metrics?: RequestMetrics;
@@ -225,4 +228,16 @@ export interface Dispatcher {
      * @param afterSeq if provided, return only entries with seq > afterSeq
      */
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
+
+    /**
+     * Cancel an in-flight command. If the command identified by requestId is
+     * currently executing, its AbortController is triggered, causing the
+     * command pipeline to stop at the next cancellation checkpoint.
+     *
+     * This is a fire-and-forget operation — the in-flight processCommand()
+     * call will resolve with `{ cancelled: true }`.
+     *
+     * @param requestId the requestId string of the command to cancel
+     */
+    cancelCommand(requestId: string): void;
 }

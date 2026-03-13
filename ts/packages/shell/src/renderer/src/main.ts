@@ -160,6 +160,7 @@ function registerClient(
                 if (seq !== undefined) {
                     maxSeqSeen = Math.max(maxSeqSeen, seq);
                 }
+                chatView.setActiveRequestId(requestId.requestId);
                 // For remote clients or replay, creates a new MessageGroup
                 // keyed by UUID. For local clients, this is a no-op because
                 // addRemoteUserMessage skips pending locals — they get promoted

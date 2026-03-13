@@ -341,7 +341,9 @@ export async function processCommandNoLock(
     attachments?: string[],
 ) {
     try {
+        context.currentAbortSignal?.throwIfAborted();
         const result = await parseCommand(originalInput, context);
+        context.currentAbortSignal?.throwIfAborted();
         return await executeCommand(
             result.command,
             result.params,
@@ -350,6 +352,9 @@ export async function processCommandNoLock(
             attachments,
         );
     } catch (e: any) {
+        if (e.name === "AbortError") {
+            throw e;
+        }
         context.clientIO.appendDisplay(
             makeClientIOMessage(
                 context,
@@ -378,8 +383,10 @@ function beginProcessCommand(
     requestId: RequestId,
     context: CommandHandlerContext,
     options?: ProcessCommandOptions,
+    signal?: AbortSignal,
 ) {
     context.currentRequestId = requestId;
+    context.currentAbortSignal = signal;
     context.commandResult = undefined;
     context.noReasoning = options?.noReasoning ?? false;
 
@@ -423,6 +430,7 @@ function endProcessCommand(
     const result = context.commandResult;
     context.commandResult = undefined;
     context.currentRequestId = undefined;
+    context.currentAbortSignal = undefined;
 
     return result;
 }
@@ -436,11 +444,26 @@ export async function processCommand(
 ): Promise<CommandResult | undefined> {
     // Process one command at at time.
     return context.commandLock(async () => {
-        beginProcessCommand(requestId, context, options);
+        const abortController = new AbortController();
+        const requestIdStr = requestId.requestId;
+        context.activeRequests.set(requestIdStr, abortController);
+        beginProcessCommand(
+            requestId,
+            context,
+            options,
+            abortController.signal,
+        );
         context.clientIO.setUserRequest(requestId, originalInput);
         try {
             await processCommandNoLock(originalInput, context, attachments);
+        } catch (e: any) {
+            if (e.name === "AbortError") {
+                ensureCommandResult(context).cancelled = true;
+            } else {
+                throw e;
+            }
         } finally {
+            context.activeRequests.delete(requestIdStr);
             return endProcessCommand(requestId, context);
         }
     });

@@ -12,6 +12,7 @@ import { extractComponent, PageComponentDefinition } from "../webAgentRpc";
 import {
     ContinuationState,
     continuationStorage,
+    registrationStorage,
 } from "../../contentScript/webAgentStorage";
 import { platformAdapter } from "../../contentScript/platformAdapter";
 import {
@@ -398,25 +399,34 @@ export class InstacartWebAgent implements WebAgent {
     private registered = false;
 
     async initialize(context: WebAgentContext): Promise<void> {
+        const initStart = performance.now();
         console.log("[InstacartWebAgent] initialize() called");
         this.context = context;
         const url = context.getCurrentUrl();
         console.log(`[InstacartWebAgent] URL: ${url}`);
 
+        const suppressNotify =
+            registrationStorage.wasRecentlyRegistered("instacart");
         const notificationId = `instacart-${Date.now()}`;
-        await context.notify(
-            "Loading the Instacart agent for grocery shopping...",
-            notificationId,
-        );
+        if (!suppressNotify) {
+            await context.notify(
+                "Loading the Instacart agent for grocery shopping...",
+                notificationId,
+            );
+        }
 
         await this.registerWithTypeAgent();
 
-        await context.notify(
-            "Instacart agent ready. Try searching for products, viewing your cart, or buying items from your lists.",
-            notificationId,
-        );
+        if (!suppressNotify) {
+            await context.notify(
+                "Instacart agent ready. Try searching for products, viewing your cart, or buying items from your lists.",
+                notificationId,
+            );
+        }
 
-        console.log("[InstacartWebAgent] Initialization complete");
+        console.log(
+            `[InstacartWebAgent] Total initialization: ${(performance.now() - initStart).toFixed(0)}ms`,
+        );
     }
 
     private async registerWithTypeAgent(): Promise<void> {
@@ -452,6 +462,7 @@ export class InstacartWebAgent implements WebAgent {
         try {
             console.log("[InstacartWebAgent] Registering with TypeAgent...");
             await window.registerTypeAgent("instacart", manifest, agent);
+            registrationStorage.markRegistered("instacart");
             console.log(
                 "[InstacartWebAgent] Successfully registered with TypeAgent",
             );
@@ -711,7 +722,10 @@ export class InstacartWebAgent implements WebAgent {
 
         if (cartButton?.detailsLinkSelector) {
             await this.context.ui.clickOn(cartButton.detailsLinkSelector);
-            await new Promise((r) => setTimeout(r, 500));
+            await this.context.awaitPageReady({
+                stabilityMs: 300,
+                timeoutMs: 2000,
+            });
         }
 
         const cartDetails =
@@ -780,7 +794,10 @@ export class InstacartWebAgent implements WebAgent {
 
         // Go to homepage first for recipe search
         await this.goToHomepage();
-        await new Promise((r) => setTimeout(r, 500));
+        await this.context.awaitPageReady({
+            stabilityMs: 300,
+            timeoutMs: 2000,
+        });
 
         const searched = await this.searchOnWebsite(keyword, "recipes: ");
         if (!searched) {
@@ -802,7 +819,10 @@ export class InstacartWebAgent implements WebAgent {
 
         // Go to homepage first
         await this.goToHomepage();
-        await new Promise((r) => setTimeout(r, 500));
+        await this.context.awaitPageReady({
+            stabilityMs: 300,
+            timeoutMs: 2000,
+        });
 
         const searched = await this.searchOnWebsite(recipeName, "recipes: ");
         if (!searched) {
@@ -1166,7 +1186,10 @@ export class InstacartWebAgent implements WebAgent {
             );
             if (store?.linkSelector) {
                 await this.context.ui.clickOn(store.linkSelector);
-                await new Promise((r) => setTimeout(r, 500));
+                await this.context.awaitPageReady({
+                    stabilityMs: 300,
+                    timeoutMs: 2000,
+                });
             }
         }
 

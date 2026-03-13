@@ -2,12 +2,11 @@
 // Licensed under the MIT License.
 
 import { AppAgent, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserConnector } from "../browserConnector.mjs";
+import { BrowserControl } from "../../common/browserControl.mjs";
 import {
     BrowseProductCategories,
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
-import { handleCommerceAction } from "../commerce/actionHandler.mjs";
 import { NavigationLink } from "./schema/pageComponents.mjs";
 import {
     PageActionsPlan,
@@ -27,7 +26,7 @@ const debug = registerDebug(
 
 // Context interface for temp agent action handler functions
 interface TempAgentActionHandlerContext {
-    browser: BrowserConnector;
+    browser: BrowserControl;
     agent: any;
     sessionContext: SessionContext<BrowserActionContext>;
     actionUtils: ReturnType<typeof setupAuthoringActions>;
@@ -135,7 +134,7 @@ async function handleUserDefinedAction(
 }
 
 export function createTempAgentForSchema(
-    browser: BrowserConnector,
+    browser: BrowserControl,
     agent: any,
     context: SessionContext<BrowserActionContext>,
 ): AppAgent {
@@ -150,14 +149,6 @@ export function createTempAgentForSchema(
     return {
         async executeAction(action: any, tempContext: any): Promise<undefined> {
             switch (action.actionName) {
-                case "addToCart":
-                case "viewShoppingCart":
-                case "findNearbyStore":
-                case "getLocationInStore":
-                case "searchForProduct":
-                case "selectSearchResult":
-                    handleCommerceAction(action, tempContext);
-                    break;
                 case "browseProductCategories":
                     await handleBrowseProductCategory(action, ctx);
                     break;

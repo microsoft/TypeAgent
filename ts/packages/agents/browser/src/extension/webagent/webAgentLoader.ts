@@ -5,15 +5,17 @@ import {
     ContinuationState,
     webAgentStorage,
 } from "../contentScript/webAgentStorage";
-import { WebAgent, WebAgentContext, matchesUrl } from "./WebAgentContext";
+import {
+    WebAgent,
+    WebAgentContext,
+    PageReadyOptions,
+    matchesUrl,
+} from "./WebAgentContext";
 import { sendUIEventsRequest } from "../contentScript/elementInteraction";
 import {
     extractComponent as rpcExtractComponent,
     sendNotification,
 } from "./webAgentRpc";
-import { CrosswordWebAgent } from "./crossword/CrosswordWebAgent";
-import { CommerceWebAgent } from "./commerce/CommerceWebAgent";
-import { InstacartWebAgent } from "./instacart/InstacartWebAgent";
 import { UIActions, EnterTextOptions } from "./WebAgentContext";
 
 declare global {
@@ -22,6 +24,7 @@ declare global {
             getTabId?: () => string | null;
         };
         _tabId?: string;
+        __webAgentRegister?: (agent: WebAgent) => void;
     }
 }
 
@@ -100,14 +103,68 @@ function createUIActions(): UIActions {
     };
 }
 
-const registeredAgents: WebAgent[] = [
-    new CrosswordWebAgent(),
-    new CommerceWebAgent(),
-    new InstacartWebAgent(),
-];
+// Agents are registered dynamically via site-specific scripts (sites/crossword.ts, etc.)
+// injected only on matching URLs by the extension manifest.
+const registeredAgents: WebAgent[] = [];
 
 let activeAgent: WebAgent | null = null;
 let activeContext: WebAgentContext | null = null;
+
+// Continuation received before agent finished initializing.
+// Dispatched after activateAgentForUrl completes.
+let pendingContinuation: ContinuationState | null = null;
+
+async function awaitPageReady(options?: PageReadyOptions): Promise<void> {
+    const stabilityMs = options?.stabilityMs ?? 500;
+    const timeoutMs = options?.timeoutMs ?? 5000;
+
+    if (document.readyState === "loading") {
+        await new Promise<void>((r) =>
+            document.addEventListener("DOMContentLoaded", () => r(), {
+                once: true,
+            }),
+        );
+    }
+
+    // Use MutationObserver-based stability detection:
+    // watch for DOM mutations to settle, resolving when no mutations
+    // occur within the stability window.
+    await new Promise<void>((resolve) => {
+        let stabilityTimer: number | null = null;
+        const maxTimer = window.setTimeout(() => {
+            cleanup();
+            resolve();
+        }, timeoutMs);
+
+        const observer = new MutationObserver(() => {
+            if (stabilityTimer !== null) {
+                window.clearTimeout(stabilityTimer);
+            }
+            stabilityTimer = window.setTimeout(() => {
+                cleanup();
+                resolve();
+            }, stabilityMs);
+        });
+
+        function cleanup() {
+            observer.disconnect();
+            if (stabilityTimer !== null) window.clearTimeout(stabilityTimer);
+            window.clearTimeout(maxTimer);
+        }
+
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+        });
+
+        // If the DOM is already stable, start the stability timer immediately
+        stabilityTimer = window.setTimeout(() => {
+            cleanup();
+            resolve();
+        }, stabilityMs);
+    });
+}
 
 function createWebAgentContext(
     continuation?: ContinuationState,
@@ -120,6 +177,7 @@ function createWebAgentContext(
         storage: webAgentStorage,
         getTabId,
         getCurrentUrl: () => window.location.href,
+        awaitPageReady,
     };
 }
 
@@ -148,6 +206,15 @@ async function activateAgentForUrl(url: string): Promise<void> {
         console.log(
             `[WebAgentLoader] WebAgent ${matchingAgent.name} initialized in ${elapsed}ms`,
         );
+        // Dispatch any continuation that arrived during initialization
+        if (pendingContinuation) {
+            const continuation = pendingContinuation;
+            pendingContinuation = null;
+            console.log(
+                `[WebAgentLoader] Dispatching queued continuation ${continuation.step} to ${matchingAgent.name}`,
+            );
+            dispatchContinuation(continuation);
+        }
     } else if (!matchingAgent && activeAgent) {
         console.log(
             `[WebAgentLoader] Deactivating WebAgent: ${activeAgent.name}`,
@@ -163,19 +230,33 @@ async function activateAgentForUrl(url: string): Promise<void> {
     }
 }
 
+function dispatchContinuation(continuation: ContinuationState): void {
+    if (!activeAgent || !activeContext) {
+        console.warn("[WebAgentLoader] No active agent to handle continuation");
+        return;
+    }
+    if (activeAgent.handleContinuation) {
+        activeContext.continuation = continuation;
+        activeAgent.handleContinuation(continuation, activeContext);
+    }
+}
+
 function handleContinuationResume(event: Event): void {
     const customEvent = event as CustomEvent<ContinuationState>;
     const continuation = customEvent.detail;
 
     if (!activeAgent || !activeContext) {
-        console.warn("No active agent to handle continuation");
+        console.log(
+            "[WebAgentLoader] Continuation received, agent not ready yet — queuing",
+        );
+        pendingContinuation = continuation;
         return;
     }
 
-    if (activeAgent.handleContinuation) {
-        activeContext.continuation = continuation;
-        activeAgent.handleContinuation(continuation, activeContext);
-    }
+    console.log(
+        `[WebAgentLoader] Dispatching continuation ${continuation.step} to ${activeAgent.name}`,
+    );
+    dispatchContinuation(continuation);
 }
 
 function handleSpaNavigation(): void {
@@ -195,6 +276,11 @@ export function initializeWebAgentLoader(): void {
     console.log("[WebAgentLoader] Initializing WebAgentLoader...");
     console.log(`[WebAgentLoader] Current URL: ${window.location.href}`);
     activateAgentForUrl(window.location.href);
+
+    // Expose registerWebAgent on window so site-specific IIFE bundles
+    // (sites/commerce.js, etc.) share the same loader state instead of
+    // getting their own duplicate copy of module variables.
+    window.__webAgentRegister = registerWebAgent;
 
     window.addEventListener("spa-navigation", handleSpaNavigation);
     window.addEventListener(

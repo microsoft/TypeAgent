@@ -110,6 +110,54 @@ export async function deleteMacro(macroId: string): Promise<DeleteMacroResult> {
     return await extensionService.deleteMacro(macroId);
 }
 
+export async function refreshSchema(): Promise<{
+    schema?: any[];
+    actionDefinitions?: any;
+}> {
+    return await extensionService.refreshSchema();
+}
+
+export async function startRecording(): Promise<void> {
+    return await extensionService.startRecording();
+}
+
+export async function stopRecording(): Promise<any> {
+    return await extensionService.stopRecording();
+}
+
+export async function captureHtmlFragments(): Promise<any[]> {
+    return await extensionService.captureHtmlFragments();
+}
+
+export async function registerTempSchema(): Promise<void> {
+    return await extensionService.registerTempSchema();
+}
+
+export async function getIntentFromRecording(params: {
+    actionName: string;
+    actionDescription: string;
+    steps: string;
+    existingActionNames: string[];
+    html: any[];
+    screenshot: any;
+}): Promise<any> {
+    return await extensionService.getIntentFromRecording(params);
+}
+
+export async function settingsUpdated(settings: any): Promise<void> {
+    return await extensionService.settingsUpdated(settings);
+}
+
+export async function checkConnection(): Promise<any> {
+    return await extensionService.checkConnection();
+}
+
+export async function checkWebSocketConnection(): Promise<{
+    connected: boolean;
+}> {
+    return await extensionService.checkWebSocketConnection();
+}
+
 export async function deleteMultipleMacros(
     macroIds: string[],
 ): Promise<BulkDeleteResult> {

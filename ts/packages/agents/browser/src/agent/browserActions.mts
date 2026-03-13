@@ -3,10 +3,8 @@
 
 import { BrowserControl, SearchProvider } from "../common/browserControl.mjs";
 import { ExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
-import { Crossword } from "./crossword/schema/pageSchema.mjs";
 import { ChildProcess } from "child_process";
 import { TabTitleIndex } from "./tabTitleIndex.mjs";
-import { BrowserConnector } from "./browserConnector.mjs";
 import { TextEmbeddingModel } from "aiclient";
 import type { WebsiteCollection, IndexData } from "website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
@@ -24,12 +22,10 @@ export type BrowserActionContext = {
     useExternalBrowserControl: boolean;
     preferredClientType?: "extension" | "electron";
     agentWebSocketServer?: AgentWebSocketServer;
-    browserConnector?: BrowserConnector;
+    browserControl?: BrowserControl;
     currentClient?: BrowserClient;
     extractionClients?: Map<string, string>;
     webAgentChannels?: WebAgentChannels | undefined;
-    crosswordCachedSchemas?: Map<string, Crossword> | undefined;
-    crossWordState?: Crossword | undefined;
     browserProcess?: ChildProcess | undefined;
     tabTitleIndex?: TabTitleIndex | undefined;
     allowDynamicAgentDomains?: string[];
@@ -112,4 +108,33 @@ export function getSessionBrowserControl(
     sessionContext: SessionContext<BrowserActionContext>,
 ) {
     return getBrowserControl(sessionContext.agentContext);
+}
+
+export async function getCurrentPageScreenshot(
+    browserControl: BrowserControl,
+): Promise<string> {
+    return await Promise.race<string>([
+        (async () => {
+            try {
+                return await browserControl.captureScreenshot();
+            } catch (err) {
+                const message = (err as Error)?.message || "";
+                if (
+                    message.includes(
+                        "MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND",
+                    ) ||
+                    message.includes("Tabs cannot be edited right now")
+                ) {
+                    return "";
+                }
+                throw new Error(`Screenshot capture failed: ${message}`);
+            }
+        })(),
+        new Promise((_, reject) =>
+            setTimeout(
+                () => reject(new Error("Screenshot capture timed out")),
+                10000,
+            ),
+        ),
+    ]);
 }

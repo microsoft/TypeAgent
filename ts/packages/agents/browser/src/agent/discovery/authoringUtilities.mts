@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { BrowserConnector } from "../browserConnector.mjs";
+import { BrowserControl } from "../../common/browserControl.mjs";
+import { getCurrentPageScreenshot } from "../browserActions.mjs";
 
 import {
     DropdownControl,
@@ -18,7 +19,7 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:discover:utilities");
 
 export function setupAuthoringActions(
-    browser: BrowserConnector,
+    browser: BrowserControl,
     agent: any,
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -38,7 +39,7 @@ export function setupAuthoringActions(
 
         if (!screenshot) {
             try {
-                screenshot = await browser.getCurrentPageScreenshot();
+                screenshot = await getCurrentPageScreenshot(browser);
             } catch (error) {
                 console.warn(
                     "Screenshot capture failed, continuing without screenshot:",
@@ -47,11 +48,15 @@ export function setupAuthoringActions(
                 screenshot = "";
             }
         }
+
+        // Only include screenshot if it's not empty
+        const screenshots = screenshot ? [screenshot] : [];
+
         const response = await agent.getPageComponentSchema(
             componentType,
             selectionCondition,
             htmlFragments,
-            screenshot,
+            screenshots,
         );
 
         if (!response.success) {
@@ -78,19 +83,23 @@ export function setupAuthoringActions(
         const htmlFragments = await browser.getHtmlFragments();
         let screenshot = "";
         try {
-            screenshot = await browser.getCurrentPageScreenshot();
+            screenshot = await getCurrentPageScreenshot(browser);
         } catch (error) {
             console.warn(
                 "Screenshot capture failed, continuing without screenshot:",
                 (error as Error)?.message,
             );
         }
+
+        // Only include screenshot if it's not empty
+        const screenshots = screenshot ? [screenshot] : [];
+
         let recordedSteps = "";
         const descriptionResponse = await agent.getDetailedStepsFromDescription(
             actionName,
             description,
             htmlFragments,
-            screenshot,
+            screenshots,
         );
         if (descriptionResponse.success) {
             debug(descriptionResponse.data);
@@ -155,7 +164,7 @@ export function setupAuthoringActions(
         for (const [index, step] of targetPlan.steps.entries()) {
             let screenshot = "";
             try {
-                screenshot = await browser.getCurrentPageScreenshot();
+                screenshot = await getCurrentPageScreenshot(browser);
             } catch (error) {
                 console.warn(
                     "Screenshot capture failed, continuing without screenshot:",
@@ -285,7 +294,7 @@ export function setupAuthoringActions(
 
         let screenshot = "";
         try {
-            screenshot = await browser.getCurrentPageScreenshot();
+            screenshot = await getCurrentPageScreenshot(browser);
         } catch (error) {
             console.warn(
                 "Screenshot capture failed, continuing without screenshot:",

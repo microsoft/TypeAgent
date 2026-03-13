@@ -299,6 +299,12 @@ export function createDispatcherFromContext(
         async getAgentSchemas(agentName?: string) {
             return getAgentSchemas(context, agentName);
         },
+        cancelCommand(requestId: string) {
+            const controller = context.activeRequests.get(requestId);
+            if (controller) {
+                controller.abort();
+            }
+        },
         async respondToChoice(choiceId: string, response: boolean | number[]) {
             return context.commandLock(async () => {
                 const pending = context.pendingChoiceRoutes.get(choiceId);

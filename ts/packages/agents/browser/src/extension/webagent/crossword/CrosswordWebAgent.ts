@@ -12,6 +12,7 @@ import {
     ContinuationState,
     CrosswordSchema,
     crosswordSchemaStorage,
+    registrationStorage,
 } from "../../contentScript/webAgentStorage";
 import { extractCrosswordSchema } from "../webAgentRpc";
 
@@ -94,38 +95,53 @@ export class CrosswordWebAgent implements WebAgent {
     private registered = false;
 
     async initialize(context: WebAgentContext): Promise<void> {
+        const initStart = performance.now();
         console.log("[CrosswordWebAgent] initialize() called");
         this.context = context;
         const url = context.getCurrentUrl();
         console.log(`[CrosswordWebAgent] URL: ${url}`);
+        const suppressNotify =
+            registrationStorage.wasRecentlyRegistered("crossword");
         const notificationId = `crossword-${Date.now()}`;
 
-        console.log("[CrosswordWebAgent] Sending loading notification...");
-        await context.notify(
-            "Loading the crossword agent to get it ready for interaction...",
-            notificationId,
+        if (!suppressNotify) {
+            await context.notify(
+                "Loading the crossword agent to get it ready for interaction...",
+                notificationId,
+            );
+        }
+
+        // R6: Register early so the agent is visible in the UI while schema loads
+        await this.registerWithTypeAgent();
+        const regElapsed = (performance.now() - initStart).toFixed(0);
+        console.log(
+            `[CrosswordWebAgent] Early registration done in ${regElapsed}ms`,
         );
 
-        console.log("[CrosswordWebAgent] Checking for cached schema...");
+        const cacheStart = performance.now();
         this.schema = crosswordSchemaStorage.get(url);
+        const cacheElapsed = (performance.now() - cacheStart).toFixed(0);
+        console.log(
+            `[CrosswordWebAgent] Cache check: ${cacheElapsed}ms, hit=${!!this.schema}`,
+        );
 
         if (!this.schema) {
+            // R1: Use smart page readiness instead of fixed 1000ms delay
+            const readyStart = performance.now();
+            await context.awaitPageReady({ stabilityMs: 500, timeoutMs: 3000 });
+            const readyElapsed = (performance.now() - readyStart).toFixed(0);
             console.log(
-                "[CrosswordWebAgent] Schema not cached, waiting for page to fully load...",
+                `[CrosswordWebAgent] Page ready wait: ${readyElapsed}ms`,
             );
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-            console.log("[CrosswordWebAgent] Fetching schema from server...");
+
             try {
-                const startTime = performance.now();
+                const rpcStart = performance.now();
                 this.schema = await extractCrosswordSchema();
-                const elapsed = (performance.now() - startTime).toFixed(0);
+                const rpcElapsed = (performance.now() - rpcStart).toFixed(0);
                 console.log(
-                    `[CrosswordWebAgent] Schema fetched in ${elapsed}ms`,
+                    `[CrosswordWebAgent] Schema extraction RPC: ${rpcElapsed}ms`,
                 );
                 crosswordSchemaStorage.set(url, this.schema);
-                console.log(
-                    "[CrosswordWebAgent] Schema cached to localStorage",
-                );
             } catch (error) {
                 console.error(
                     "[CrosswordWebAgent] Failed to extract schema:",
@@ -137,10 +153,6 @@ export class CrosswordWebAgent implements WebAgent {
                 );
                 return;
             }
-        } else {
-            console.log(
-                "[CrosswordWebAgent] Using cached schema from localStorage",
-            );
         }
 
         if (this.schema) {
@@ -150,19 +162,18 @@ export class CrosswordWebAgent implements WebAgent {
                 `[CrosswordWebAgent] Schema loaded: ${acrossCount} across, ${downCount} down clues`,
             );
 
-            // Register with TypeAgent
-            await this.registerWithTypeAgent();
-
-            console.log("[CrosswordWebAgent] Sending success notification...");
             await context.notify(
                 `The crossword is fully loaded and ready for interaction with ${acrossCount} across and ${downCount} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
                 notificationId,
             );
 
-            console.log("[CrosswordWebAgent] Setting up mutation observer...");
             this.setupMutationObserver();
-            console.log("[CrosswordWebAgent] Initialization complete");
         }
+
+        const totalElapsed = (performance.now() - initStart).toFixed(0);
+        console.log(
+            `[CrosswordWebAgent] Total initialization: ${totalElapsed}ms`,
+        );
     }
 
     private async registerWithTypeAgent(): Promise<void> {
@@ -183,6 +194,30 @@ export class CrosswordWebAgent implements WebAgent {
         // Set flag immediately to prevent race conditions with double registration
         this.registered = true;
 
+        // Load compiled grammar
+        let grammarContent: string | undefined;
+        try {
+            const grammarUrl = this.getGrammarUrl();
+            if (grammarUrl) {
+                console.log(
+                    `[CrosswordWebAgent] Loading grammar from: ${grammarUrl}`,
+                );
+                const response = await fetch(grammarUrl);
+                if (response.ok) {
+                    grammarContent = await response.text();
+                    console.log(
+                        "[CrosswordWebAgent] Grammar loaded successfully",
+                    );
+                } else {
+                    console.warn(
+                        `[CrosswordWebAgent] Failed to load grammar: ${response.status}`,
+                    );
+                }
+            }
+        } catch (error) {
+            console.warn("[CrosswordWebAgent] Error loading grammar:", error);
+        }
+
         const agent = this.createAppAgent();
         const manifest: AppAgentManifest = {
             emojiChar: "🧩",
@@ -193,12 +228,16 @@ export class CrosswordWebAgent implements WebAgent {
                     "This allows users to interact with a crossword puzzle. Users can enter text into clue answers and query clue values.",
                 schemaType: "CrosswordActions",
                 schemaFile: { content: CROSSWORD_SCHEMA_TS, format: "ts" },
+                grammarFile: grammarContent
+                    ? { content: grammarContent, format: "ag" }
+                    : undefined,
             },
         };
 
         try {
             console.log("[CrosswordWebAgent] Registering with TypeAgent...");
             await window.registerTypeAgent("crossword", manifest, agent);
+            registrationStorage.markRegistered("crossword");
             console.log(
                 "[CrosswordWebAgent] Successfully registered with TypeAgent",
             );
@@ -210,6 +249,18 @@ export class CrosswordWebAgent implements WebAgent {
                 error,
             );
         }
+    }
+
+    private getGrammarUrl(): string | undefined {
+        // In Chrome extension context
+        if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+            return chrome.runtime.getURL(
+                "webagent/crossword/crosswordSchema.ag.json",
+            );
+        }
+        // In Electron context, grammar is loaded relative to the script
+        // The grammar file should be in the same relative location
+        return undefined; // Electron will need different handling
     }
 
     private createAppAgent(): AppAgent {

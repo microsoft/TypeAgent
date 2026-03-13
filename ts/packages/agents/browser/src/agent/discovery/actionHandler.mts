@@ -2,8 +2,12 @@
 // Licensed under the MIT License.
 
 import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
-import { BrowserConnector } from "../browserConnector.mjs";
+import {
+    BrowserActionContext,
+    getBrowserControl,
+    getCurrentPageScreenshot,
+} from "../browserActions.mjs";
+import { BrowserControl } from "../../common/browserControl.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
 import {
     ActionSchemaTypeDefinition,
@@ -36,10 +40,10 @@ import {
     convertStepsToYAML,
     extractParametersFromIntent,
     filterUnusedParameters,
+    generateMacroId,
 } from "./yamlMacro/macroHelper.mjs";
 import { MacroConverter } from "./yamlMacro/converter.mjs";
 import { ArtifactsStorage } from "./yamlMacro/artifactsStorage.mjs";
-import { MinimalYAMLParser } from "./yamlMacro/minimalParser.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
 
@@ -81,7 +85,7 @@ export class EntityCollector {
 
 // Context interface for discovery action handler functions
 interface DiscoveryActionHandlerContext {
-    browser: BrowserConnector;
+    browser: BrowserControl;
     agent: any;
     entities: EntityCollector;
     sessionContext: SessionContext<BrowserActionContext>;
@@ -94,7 +98,7 @@ async function handleFindUserActions(
     const htmlFragments = await ctx.browser.getHtmlFragments();
     let screenshot = "";
     try {
-        screenshot = await ctx.browser.getCurrentPageScreenshot();
+        screenshot = await getCurrentPageScreenshot(ctx.browser);
     } catch (error) {
         console.warn(
             "Screenshot capture failed, continuing without screenshot:",
@@ -103,10 +107,13 @@ async function handleFindUserActions(
     }
     let pageSummary = "";
 
+    // Only include screenshot if it's not empty
+    const screenshots = screenshot ? [screenshot] : [];
+
     const summaryResponse = await ctx.agent.getPageSummary(
         undefined,
         htmlFragments,
-        [screenshot],
+        screenshots,
     );
 
     let schemaDescription =
@@ -124,7 +131,7 @@ async function handleFindUserActions(
     const response = await ctx.agent.getCandidateUserActions(
         undefined,
         htmlFragments,
-        [screenshot],
+        screenshots,
         pageSummary,
     );
 
@@ -360,18 +367,24 @@ async function handleGetPageSummary(
     const htmlFragments = await ctx.browser.getHtmlFragments();
     let screenshot = "";
     try {
-        screenshot = await ctx.browser.getCurrentPageScreenshot();
+        screenshot = await getCurrentPageScreenshot(ctx.browser);
     } catch (error) {
         console.warn(
             "Screenshot capture failed, continuing without screenshot:",
             (error as Error)?.message,
         );
     }
+
+    // Only include screenshot if it's not empty
+    const screenshots = screenshot ? [screenshot] : [];
+
     const timerName = `Summarizing page`;
     console.time(timerName);
-    const response = await ctx.agent.getPageSummary(undefined, htmlFragments, [
-        screenshot,
-    ]);
+    const response = await ctx.agent.getPageSummary(
+        undefined,
+        htmlFragments,
+        screenshots,
+    );
 
     if (!response.success) {
         console.error("Attempt to get page summary failed");
@@ -610,6 +623,11 @@ async function handleGetIntentFromReccording(
     action: GetIntentFromRecording,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
+    // Filter empty screenshots to avoid "Invalid image URL" errors
+    const screenshots = action.parameters.screenshots?.filter(
+        (s: string) => s && s.trim() !== "",
+    );
+
     let recordedSteps = action.parameters.recordedActionSteps;
     if (
         recordedSteps === undefined ||
@@ -621,7 +639,7 @@ async function handleGetIntentFromReccording(
                 action.parameters.recordedActionName,
                 action.parameters.recordedActionDescription,
                 action.parameters.fragments,
-                action.parameters.screenshots,
+                screenshots,
             );
         if (descriptionResponse.success) {
             debug(descriptionResponse.data);
@@ -657,7 +675,7 @@ async function handleGetIntentFromReccording(
         action.parameters.recordedActionDescription,
         recordedSteps,
         action.parameters.fragments,
-        action.parameters.screenshots,
+        screenshots,
     );
 
     if (!intentResponse.success) {
@@ -708,7 +726,7 @@ async function handleGetIntentFromReccording(
         intentData,
         recordedSteps,
         action.parameters.fragments,
-        action.parameters.screenshots,
+        screenshots,
     );
 
     if (!stepsResponse.success) {
@@ -790,65 +808,48 @@ async function handleGetIntentFromReccording(
             );
             const yamlParameters = convertParametersToYAML(filteredParams);
 
-            // Create full YAML macro from recording using tested converter
-            const { yamlMacro, recordingId } =
-                await yamlExt.createYAMLFromRecording({
-                    name: intentData.actionName,
-                    description:
-                        action.parameters.recordedActionDescription ||
-                        `User action: ${intentData.actionName}`,
-                    author: "user",
-                    category: "utility",
-                    domain,
-                    url,
-                    parameters: yamlParameters,
-                    steps: yamlSteps,
-                    ...(action.parameters.screenshots && {
-                        screenshots: action.parameters.screenshots,
+            // Create full YAML macro from recording
+            const { yamlMacro } = await yamlExt.createYAMLFromRecording({
+                name: intentData.actionName,
+                description:
+                    action.parameters.recordedActionDescription ||
+                    `User action: ${intentData.actionName}`,
+                author: "user",
+                category: "utility",
+                domain,
+                url,
+                parameters: yamlParameters,
+                steps: yamlSteps,
+                ...(screenshots &&
+                    screenshots.length > 0 && {
+                        screenshots: screenshots,
                     }),
-                    recordedSteps: JSON.parse(recordedSteps || "[]"),
-                });
+                recordedSteps: JSON.parse(recordedSteps || "[]"),
+            });
 
-            // Convert to minimal format for storage
+            // Convert YAML to StoredMacro format
             const artifactsStorage = new ArtifactsStorage(
                 macrosBasePath,
                 ctx.sessionContext.sessionStorage,
             );
             const converter = new MacroConverter(artifactsStorage);
-            const minimalYaml = converter.convertFullToMinimal(yamlMacro);
+            const macroId = generateMacroId();
+            const storedMacro = await converter.convertYAMLToJSON(
+                yamlMacro,
+                macroId,
+            );
 
-            // Save minimal YAML directly to MacroStore
-            const metadata: {
-                category?: any;
-                author?: any;
-                tags?: string[];
-                recordingId?: string;
-            } = {
-                author: yamlMacro.macro.author as any,
-                category: yamlMacro.macro.category as any,
-                recordingId,
-            };
-            if (yamlMacro.macro.tags) {
-                metadata.tags = yamlMacro.macro.tags;
-            }
-            const macroId =
-                await ctx.sessionContext.agentContext.macrosStore.saveMinimalMacro(
-                    minimalYaml,
-                    metadata,
+            // Save using standard saveMacro method
+            const result =
+                await ctx.sessionContext.agentContext.macrosStore.saveMacro(
+                    storedMacro,
                 );
-
-            const result = { success: true, macroId };
 
             if (result.success) {
                 actionId = result.macroId;
                 debug(
-                    `Auto-saved authored action as minimal YAML: ${action.parameters.recordedActionName} (ID: ${macroId})`,
+                    `Auto-saved authored action: ${action.parameters.recordedActionName} (ID: ${actionId})`,
                 );
-
-                // Log minimal YAML for debugging
-                const minimalParser = new MinimalYAMLParser();
-                const minimalYamlString = minimalParser.stringify(minimalYaml);
-                debug("Minimal YAML macro:\n", minimalYamlString);
             }
         } catch (error) {
             console.warn("Failed to auto-save authored action:", error);
@@ -1001,11 +1002,11 @@ export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
     context: SessionContext<BrowserActionContext>,
 ) {
-    if (!context.agentContext.browserConnector) {
+    if (!context.agentContext.browserControl) {
         throw new Error("No connection to browser session.");
     }
 
-    const browser: BrowserConnector = context.agentContext.browserConnector;
+    const browser: BrowserControl = context.agentContext.browserControl;
     const agent = await createDiscoveryPageTranslator("GPT_5_2");
 
     // Create entity collector and action context
