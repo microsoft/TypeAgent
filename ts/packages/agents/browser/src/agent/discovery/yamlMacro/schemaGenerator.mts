@@ -38,12 +38,17 @@ export function generateActionSchemaDefinition(
 
     const parameterFields: any = {};
     for (const [name, param] of Object.entries(parameters)) {
-        let typeDefinition: any = { type: param.type };
+        // Normalize "any" type to "string" as action schema doesn't support "any"
+        let paramType = param.type === "any" ? "string" : param.type;
+        let typeDefinition: any = { type: paramType };
 
-        if (param.type === "array" && param.itemType) {
+        if (paramType === "array" && param.itemType) {
+            // Also normalize itemType if it's "any"
+            const itemType =
+                param.itemType === "any" ? "string" : param.itemType;
             typeDefinition = {
                 type: "array",
-                elementType: { type: param.itemType },
+                elementType: { type: itemType },
             };
         }
 

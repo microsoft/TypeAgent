@@ -7,19 +7,13 @@ import { PatternResolver } from "./patternResolver.mjs";
 import {
     StoredMacro,
     MacroIndex,
-    MacroScope,
-    MacroCategory,
-    MacroAuthor,
     StoreStatistics,
     SaveResult,
     ValidationResult,
 } from "./types.mjs";
 import { MacroConverter } from "../discovery/yamlMacro/converter.mjs";
 import { YAMLMacroParser } from "../discovery/yamlMacro/yamlParser.mjs";
-import { MinimalYAMLParser } from "../discovery/yamlMacro/minimalParser.mjs";
-import { MinimalYAMLMacro } from "../discovery/yamlMacro/types.mjs";
 import { ArtifactsStorage } from "../discovery/yamlMacro/artifactsStorage.mjs";
-import { generateMacroId } from "../discovery/yamlMacro/macroHelper.mjs";
 import registerDebug from "debug";
 const debug = registerDebug("typeagent:browser:macro:store");
 
@@ -171,8 +165,8 @@ export class MacroStore {
                 indexEntry.filePath?.endsWith(".json");
 
             if (isYaml) {
-                // Load YAML format using minimal parser
-                return await this.getStoredMacroFromMinimal(id);
+                // Load YAML format (all YAML files now use full format)
+                return await this.getStoredMacroFromFullYAML(id);
             } else if (isJson) {
                 // Load legacy JSON format directly
                 const macro = await this.fileManager.readJson<StoredMacro>(
@@ -200,97 +194,6 @@ export class MacroStore {
     }
 
     /**
-     * Save macro in minimal YAML format
-     */
-    async saveMinimalMacro(
-        yaml: MinimalYAMLMacro,
-        metadata: {
-            category?: MacroCategory;
-            author?: MacroAuthor;
-            tags?: string[];
-            recordingId?: string;
-        } = {},
-    ): Promise<string> {
-        this.ensureInitialized();
-
-        const id = generateMacroId();
-        const parser = new MinimalYAMLParser();
-        const yamlString = parser.stringify(yaml);
-
-        const scope: MacroScope = {
-            type: "domain",
-            domain: yaml.domain,
-            priority: 80,
-        };
-
-        const filePath = this.fileManager.getMacroFilePath(id, scope, "yaml");
-        await this.fileManager.writeText(filePath, yamlString);
-
-        const now = new Date().toISOString();
-        const minimalStoredMacro: StoredMacro & { recordingId?: string } = {
-            id,
-            name: yaml.name,
-            version: "1.0.0",
-            description: yaml.description,
-            category: metadata.category || "utility",
-            tags: metadata.tags || [],
-            author: metadata.author || "user",
-            scope,
-            urlPatterns: [],
-            definition: {
-                intentJson: { actionName: yaml.name, parameters: [] },
-                macroSteps: [],
-                description: yaml.description,
-            },
-            context: {},
-            metadata: {
-                createdAt: now,
-                updatedAt: now,
-                usageCount: 0,
-                isValid: true,
-            },
-            ...(metadata.recordingId && { recordingId: metadata.recordingId }),
-        };
-
-        this.indexManager.addMacro(minimalStoredMacro as any, filePath, "yaml");
-        await this.saveMacroIndex();
-
-        // Clear pattern resolver cache so new macro appears immediately
-        this.patternResolver.clearCache();
-
-        debug(`Minimal macro saved: ${yaml.name} (${id})`);
-
-        return id;
-    }
-
-    /**
-     * Load macro from minimal YAML format
-     */
-    async getMinimalMacro(id: string): Promise<MinimalYAMLMacro | null> {
-        this.ensureInitialized();
-
-        try {
-            const indexEntry = this.indexManager.getMacroEntry(id);
-            if (!indexEntry) return null;
-
-            if (indexEntry.fileFormat !== "yaml") {
-                throw new Error(`Macro ${id} is not in YAML format`);
-            }
-
-            const yamlContent = await this.fileManager.readText(
-                indexEntry.filePath,
-            );
-            if (!yamlContent) return null;
-
-            const parser = new MinimalYAMLParser();
-            return parser.parse(yamlContent);
-        } catch (error) {
-            console.error(`Failed to get minimal macro ${id}:`, error);
-            return null;
-        }
-    }
-
-    /**
      * Get the raw YAML content from disk (for UI display)
      */
     async getRawYAML(id: string): Promise<string | null> {
@@ -312,109 +215,40 @@ export class MacroStore {
     }
 
     /**
-     * Convert minimal YAML + index metadata to StoredMacro
+     * Load macro from full YAML format
      */
-    async getStoredMacroFromMinimal(id: string): Promise<StoredMacro | null> {
-        const minimal = await this.getMinimalMacro(id);
-        if (!minimal) return null;
+    async getStoredMacroFromFullYAML(id: string): Promise<StoredMacro | null> {
+        this.ensureInitialized();
 
-        const indexEntry = this.indexManager.getMacroEntry(id);
-        if (!indexEntry) return null;
+        try {
+            const indexEntry = this.indexManager.getMacroEntry(id);
+            if (!indexEntry) return null;
 
-        const rawYAML = await this.getRawYAML(id);
+            const yamlContent = await this.fileManager.readText(
+                indexEntry.filePath,
+            );
+            if (!yamlContent) return null;
 
-        const parameters = Object.entries(minimal.parameters || {}).map(
-            ([key, param]) => ({
-                shortName: key,
-                description: param.description,
-                type: param.type as "string" | "number" | "boolean",
-                required: param.required,
-                defaultValue: param.default,
-                valueOptions: param.options,
-            }),
-        );
+            const parser = new YAMLMacroParser();
+            const fullYaml = parser.parse(yamlContent);
 
-        // Generate macroDefinition for schema registration
-        const pascalCaseName =
-            minimal.name.charAt(0).toUpperCase() + minimal.name.slice(1);
-        const macroDefinition = {
-            type: pascalCaseName,
-            actionName: minimal.name,
-            parameters: parameters.map((p) => ({
-                name: p.shortName,
-                type: p.type,
-                description: p.description,
-                optional: !p.required,
-                ...(p.valueOptions && { valueOptions: p.valueOptions }),
-            })),
-        };
-
-        let screenshot: string[] | undefined;
-        let steps: any | undefined;
-
-        if (indexEntry.recordingId) {
-            try {
-                const artifactsBasePath = "actionsStore/macros";
-                const artifactsStorage = new ArtifactsStorage(
-                    artifactsBasePath,
+            const converter = new MacroConverter(
+                new ArtifactsStorage(
+                    "actionsStore/macros",
                     this.sessionStorage,
-                );
-                const artifacts = await artifactsStorage.loadArtifacts(
-                    indexEntry.recordingId,
-                );
-                screenshot = artifacts.screenshot;
-                steps = artifacts.steps;
-            } catch (error) {
-                debug(`Failed to load artifacts for macro ${id}:`, error);
-            }
+                ),
+            );
+            const storedMacro = await converter.convertYAMLToJSON(fullYaml, id);
+
+            // Attach raw YAML content for UI display
+            return {
+                ...storedMacro,
+                rawYAML: yamlContent,
+            };
+        } catch (error) {
+            console.error(`Failed to get full YAML macro ${id}:`, error);
+            return null;
         }
-
-        const macroSteps = minimal.steps.map((step) => ({
-            actionName: step.action,
-            description: step.description,
-            parameters: step.parameters,
-            type: step.action,
-            target: step.parameters?.selector,
-            value: step.parameters?.value,
-            ...(step.parameters && { options: step.parameters }),
-        }));
-
-        return {
-            id,
-            name: minimal.name,
-            version: "1.0.0",
-            description: minimal.description,
-            category: indexEntry.category,
-            tags: [],
-            author: indexEntry.author,
-            scope: indexEntry.scope,
-            urlPatterns: [
-                {
-                    pattern: minimal.url,
-                    type: "exact",
-                    priority: 100,
-                },
-            ],
-            definition: {
-                intentJson: {
-                    actionName: minimal.name,
-                    parameters,
-                },
-                macroSteps,
-                macroDefinition,
-                description: minimal.description,
-                ...(screenshot && { screenshot }),
-                ...(steps && { steps }),
-            },
-            context: {},
-            metadata: {
-                createdAt: indexEntry.lastModified,
-                updatedAt: indexEntry.lastModified,
-                usageCount: indexEntry.usageCount,
-                isValid: true,
-            },
-            ...(rawYAML && { rawYAML }),
-        };
     }
 
     /**
