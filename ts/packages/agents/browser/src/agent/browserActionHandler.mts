@@ -87,6 +87,8 @@ import {
     BuiltInWebAgentRpcResponse,
 } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
+import { handleWebFlowAction } from "./webFlows/actionHandler.mjs";
+import { WebFlowActions } from "./webFlows/schema/webFlowActions.mjs";
 import {
     BrowserActions,
     OpenWebPage,
@@ -332,6 +334,22 @@ async function updateBrowserContext(
             } catch (error) {
                 debug("Failed to initialize ActionsStore:", error);
                 // Continue without ActionsStore - will fall back to legacy storage
+            }
+        }
+
+        // Initialize WebFlowStore (uses instance storage for cross-session persistence)
+        if (!context.agentContext.webFlowStore && context.instanceStorage) {
+            try {
+                const { WebFlowStore } = await import(
+                    "./webFlows/store/webFlowStore.mjs"
+                );
+                context.agentContext.webFlowStore = new WebFlowStore(
+                    context.instanceStorage,
+                );
+                await context.agentContext.webFlowStore.initialize();
+                debug("WebFlowStore initialized successfully");
+            } catch (error) {
+                debug("Failed to initialize WebFlowStore:", error);
             }
         }
 
@@ -1407,7 +1425,8 @@ async function executeBrowserAction(
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
-        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
+        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">
+        | TypeAgentAction<WebFlowActions, "browser.webFlows">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1632,6 +1651,15 @@ async function executeBrowserAction(
                 );
 
                 return createActionResult(discoveryResult.displayText);
+            }
+
+            if (action.schemaName === "browser.webFlows") {
+                const webFlowResult = await handleWebFlowAction(
+                    action,
+                    context.sessionContext,
+                );
+
+                return createActionResult(webFlowResult.displayText);
             }
 
             await browserCtrl.runBrowserAction(

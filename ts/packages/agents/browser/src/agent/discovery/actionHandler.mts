@@ -44,6 +44,7 @@ import {
 import { MacroConverter } from "./yamlMacro/converter.mjs";
 import { ArtifactsStorage } from "./yamlMacro/artifactsStorage.mjs";
 import { MinimalYAMLParser } from "./yamlMacro/minimalParser.mjs";
+import { MacroToWebFlowConverter } from "../webFlows/macroToWebFlowConverter.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
 
@@ -296,6 +297,39 @@ async function handleFindUserActions(
             debug(
                 `Auto-saved ${savedCount} new discovered actions for ${domain} (skipped ${skippedCount} existing)`,
             );
+
+            // Also convert saved macros to webFlows
+            if (
+                savedCount > 0 &&
+                ctx.sessionContext.agentContext.webFlowStore
+            ) {
+                try {
+                    const converter = new MacroToWebFlowConverter();
+                    const allMacros =
+                        await ctx.sessionContext.agentContext.macrosStore.getMacrosForUrl(
+                            url!,
+                        );
+                    const newlyDiscovered = allMacros.filter(
+                        (m: any) =>
+                            m.author === "discovered" &&
+                            !existingActionNames.has(m.name),
+                    );
+                    const flows = converter.convertMany(newlyDiscovered);
+                    for (const flow of flows) {
+                        await ctx.sessionContext.agentContext.webFlowStore.save(
+                            flow,
+                        );
+                    }
+                    debug(
+                        `Converted ${flows.length} discovered macros to webFlows`,
+                    );
+                } catch (webFlowError) {
+                    debug(
+                        "Failed to convert discovered macros to webFlows:",
+                        webFlowError,
+                    );
+                }
+            }
         } catch (error) {
             debug("Failed to auto-save discovered actions:", error);
             // Continue without failing the discovery operation
@@ -853,6 +887,39 @@ async function handleGetIntentFromReccording(
                 const minimalParser = new MinimalYAMLParser();
                 const minimalYamlString = minimalParser.stringify(minimalYaml);
                 debug("Minimal YAML macro:\n", minimalYamlString);
+
+                // Also save as webFlow if WebFlowStore is available
+                if (ctx.sessionContext.agentContext.webFlowStore) {
+                    try {
+                        const webFlowConverter =
+                            new MacroToWebFlowConverter();
+                        const savedMacro =
+                            await ctx.sessionContext.agentContext.macrosStore.getMacro(
+                                macroId,
+                            );
+                        if (savedMacro) {
+                            const flow =
+                                webFlowConverter.convert(savedMacro);
+                            if (flow) {
+                                flow.source = {
+                                    type: "recording",
+                                    timestamp: new Date().toISOString(),
+                                };
+                                await ctx.sessionContext.agentContext.webFlowStore.save(
+                                    flow,
+                                );
+                                debug(
+                                    `Also saved as webFlow: ${flow.name}`,
+                                );
+                            }
+                        }
+                    } catch (webFlowError) {
+                        debug(
+                            "Failed to save as webFlow:",
+                            webFlowError,
+                        );
+                    }
+                }
             }
         } catch (error) {
             console.warn("Failed to auto-save authored action:", error);

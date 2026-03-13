@@ -1,0 +1,511 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { SessionContext } from "@typeagent/agent-sdk";
+import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
+import { WebFlowStore } from "./store/webFlowStore.mjs";
+import { WebFlowActions } from "./schema/webFlowActions.mjs";
+import { validateWebFlowScript } from "./scriptValidator.mjs";
+import { executeWebFlowScript } from "./scriptExecutor.mjs";
+import { createFrozenBrowserApi } from "./webFlowBrowserApi.mjs";
+import { WebFlowBrowserAPIImpl } from "./webFlowBrowserApi.mjs";
+import { BrowserReasoningAgent } from "./reasoning/browserReasoningAgent.mjs";
+import { BrowserReasoningTrace } from "./reasoning/browserReasoningTypes.mjs";
+import { generateWebFlowFromTrace } from "./scriptGenerator.mjs";
+import {
+    normalizeRecording,
+    RecordingData,
+} from "./recordingNormalizer.mjs";
+import { MacroToWebFlowConverter } from "./macroToWebFlowConverter.mjs";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:browser:webflows:handler");
+
+export interface WebFlowActionResult {
+    displayText: string;
+    data?: unknown;
+}
+
+async function getStore(
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowStore> {
+    if (context.agentContext.webFlowStore) {
+        return context.agentContext.webFlowStore;
+    }
+    // Fallback: initialize on-demand if not set up during updateAgentContext
+    const store = new WebFlowStore(context.instanceStorage);
+    await store.initialize();
+    context.agentContext.webFlowStore = store;
+    debug("WebFlowStore initialized on-demand");
+    return store;
+}
+
+async function handleListWebFlows(
+    action: WebFlowActions & { actionName: "listWebFlows" },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const store = await getStore(context);
+    const scope = action.parameters?.scope ?? "all";
+
+    if (scope === "site") {
+        const browser = getBrowserControl(context.agentContext);
+        const url = await browser.getPageUrl();
+        const domain = new URL(url).hostname;
+        const names = await store.listForDomain(domain);
+        return {
+            displayText: names.length > 0
+                ? `WebFlows for ${domain}:\n${names.map((n) => `  - ${n}`).join("\n")}`
+                : `No WebFlows found for ${domain}`,
+            data: { flows: names, domain },
+        };
+    }
+
+    const entries = await store.listAll();
+    if (scope === "global") {
+        const global = entries.filter((e) => e.scope.type === "global");
+        return {
+            displayText: global.length > 0
+                ? `Global WebFlows:\n${global.map((e) => `  - ${e.description}`).join("\n")}`
+                : "No global WebFlows found",
+            data: { flows: global },
+        };
+    }
+
+    return {
+        displayText: entries.length > 0
+            ? `All WebFlows (${entries.length}):\n${entries.map((e) => `  - ${e.description} [${e.scope.type}]`).join("\n")}`
+            : "No WebFlows found",
+        data: { flows: entries },
+    };
+}
+
+async function handleDeleteWebFlow(
+    action: WebFlowActions & { actionName: "deleteWebFlow" },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const store = await getStore(context);
+    const { name } = action.parameters;
+    const deleted = await store.delete(name);
+
+    if (deleted) {
+        debug(`Deleted WebFlow: ${name}`);
+        return {
+            displayText: `WebFlow "${name}" deleted`,
+            data: { success: true, name },
+        };
+    }
+
+    return {
+        displayText: `WebFlow "${name}" not found`,
+        data: { success: false, name },
+    };
+}
+
+async function handleEditWebFlowScope(
+    action: WebFlowActions & { actionName: "editWebFlowScope" },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const store = await getStore(context);
+    const { name, scopeType, domains } = action.parameters;
+
+    const flow = await store.get(name);
+    if (!flow) {
+        return {
+            displayText: `WebFlow "${name}" not found`,
+            data: { success: false },
+        };
+    }
+
+    flow.scope = {
+        type: scopeType,
+        ...(scopeType === "site" && domains && { domains }),
+    };
+    await store.save(flow);
+
+    debug(`Updated scope for WebFlow "${name}" to ${scopeType}`);
+    return {
+        displayText: `WebFlow "${name}" scope updated to ${scopeType}${domains ? ` (${domains.join(", ")})` : ""}`,
+        data: { success: true, name, scope: flow.scope },
+    };
+}
+
+async function handleDynamicFlowExecution(
+    actionName: string,
+    params: Record<string, unknown>,
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const store = await getStore(context);
+    const flow = await store.get(actionName);
+
+    if (!flow) {
+        return {
+            displayText: `WebFlow "${actionName}" not found`,
+            data: { success: false, error: "not_found" },
+        };
+    }
+
+    const browser = getBrowserControl(context.agentContext);
+
+    // Validate scope against current page
+    if (flow.scope.type === "site" && flow.scope.domains?.length) {
+        const url = await browser.getPageUrl();
+        const currentDomain = new URL(url).hostname;
+        const allowed = flow.scope.domains.some((d) =>
+            currentDomain.endsWith(d),
+        );
+        if (!allowed) {
+            return {
+                displayText: `WebFlow "${actionName}" is scoped to ${flow.scope.domains.join(", ")} but current page is ${currentDomain}`,
+                data: { success: false, error: "scope_mismatch" },
+            };
+        }
+    }
+
+    // Validate script
+    const validation = validateWebFlowScript(
+        flow.script,
+        Object.keys(flow.parameters),
+    );
+    if (!validation.valid) {
+        const errors = validation.errors
+            .filter((e) => e.severity === "error")
+            .map((e) => e.message);
+        return {
+            displayText: `WebFlow "${actionName}" has validation errors: ${errors.join("; ")}`,
+            data: { success: false, error: "validation_failed", errors },
+        };
+    }
+
+    // Fill in defaults for missing optional params
+    const resolvedParams: Record<string, unknown> = {};
+    for (const [key, paramDef] of Object.entries(flow.parameters)) {
+        if (params[key] !== undefined) {
+            resolvedParams[key] = params[key];
+        } else if (paramDef.default !== undefined) {
+            resolvedParams[key] = paramDef.default;
+        } else if (paramDef.required) {
+            return {
+                displayText: `Missing required parameter "${key}" for WebFlow "${actionName}"`,
+                data: { success: false, error: "missing_param", param: key },
+            };
+        }
+    }
+
+    debug(`Executing WebFlow "${actionName}" with params:`, resolvedParams);
+
+    const browserApi = createFrozenBrowserApi(browser, flow.scope);
+    const result = await executeWebFlowScript(
+        flow.script,
+        browserApi,
+        resolvedParams,
+    );
+
+    return {
+        displayText: result.success
+            ? result.message ?? `WebFlow "${actionName}" completed`
+            : `WebFlow "${actionName}" failed: ${result.error}`,
+        data: result,
+    };
+}
+
+async function handleStartGoalDrivenTask(
+    action: WebFlowActions & { actionName: "startGoalDrivenTask" },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const browser = getBrowserControl(context.agentContext);
+    const { goal, startUrl, maxSteps } = action.parameters;
+
+    const browserApi = new WebFlowBrowserAPIImpl(browser);
+    const agent = new BrowserReasoningAgent(browserApi, {
+        onThinking: (text) => debug(`[thinking] ${text.slice(0, 100)}...`),
+        onToolCall: (tool, args) => debug(`[tool_call] ${tool}`),
+        onText: (text) => debug(`[text] ${text.slice(0, 100)}...`),
+    });
+
+    debug(`Starting goal-driven task: "${goal}"`);
+    const trace = await agent.executeGoal({
+        goal,
+        ...(startUrl && { startUrl }),
+        maxSteps: maxSteps ?? 30,
+    });
+
+    // Save trace to instance storage for later script generation
+    let traceId: string | undefined;
+    if (context.instanceStorage && trace.result.success) {
+        try {
+            traceId = `trace-${Date.now()}`;
+            await context.instanceStorage.write(
+                `webflows/traces/${traceId}.json`,
+                JSON.stringify(trace, null, 4),
+            );
+            debug(`Saved trace: ${traceId}`);
+        } catch (error) {
+            debug("Failed to save trace:", error);
+        }
+    }
+
+    const stepSummary = trace.steps
+        .map(
+            (s) =>
+                `  ${s.stepNumber}. ${s.action.tool}(${Object.values(s.action.args).join(", ")}) → ${s.result.success ? "ok" : "fail"}`,
+        )
+        .join("\n");
+
+    return {
+        displayText: trace.result.success
+            ? `Goal completed in ${trace.steps.length} steps (${(trace.duration / 1000).toFixed(1)}s):\n${stepSummary}\n\nSummary: ${trace.result.summary}${traceId ? `\n\nTrace saved as: ${traceId}` : ""}`
+            : `Goal failed after ${trace.steps.length} steps: ${trace.result.summary}`,
+        data: { ...trace, traceId },
+    };
+}
+
+async function handleGenerateWebFlow(
+    action: WebFlowActions & { actionName: "generateWebFlow" },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const { traceId, name, description } = action.parameters;
+
+    if (!context.instanceStorage) {
+        return {
+            displayText: "No instance storage available",
+            data: { success: false },
+        };
+    }
+
+    // Load trace from storage
+    let trace: BrowserReasoningTrace;
+    try {
+        const traceJson = await context.instanceStorage.read(
+            `webflows/traces/${traceId}.json`,
+            "utf8",
+        );
+        trace = JSON.parse(traceJson);
+    } catch {
+        return {
+            displayText: `Trace "${traceId}" not found`,
+            data: { success: false, error: "trace_not_found" },
+        };
+    }
+
+    debug(`Generating WebFlow from trace "${traceId}" (${trace.steps.length} steps)`);
+
+    const flow = await generateWebFlowFromTrace(trace, {
+        ...(name && { suggestedName: name }),
+        ...(description && { description }),
+    });
+
+    if (!flow) {
+        return {
+            displayText: "Failed to generate WebFlow from trace. The LLM could not produce a valid script.",
+            data: { success: false, error: "generation_failed" },
+        };
+    }
+
+    // Save the generated flow
+    const store = await getStore(context);
+    await store.save(flow);
+    debug(`Saved generated WebFlow: ${flow.name}`);
+
+    return {
+        displayText: `WebFlow "${flow.name}" generated and saved.\n  Parameters: ${Object.keys(flow.parameters).join(", ") || "none"}\n  Scope: ${flow.scope.type}${flow.scope.domains ? ` (${flow.scope.domains.join(", ")})` : ""}\n  Grammar patterns: ${flow.grammarPatterns.length}`,
+        data: { success: true, flow },
+    };
+}
+
+async function handleGenerateWebFlowFromRecording(
+    action: WebFlowActions & { actionName: "generateWebFlowFromRecording" },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const { description, name } = action.parameters;
+    const browser = getBrowserControl(context.agentContext);
+
+    // Get recording data from the macros store or session storage
+    // The recording data is typically stored in session storage after recording stops
+    if (!context.sessionStorage) {
+        return {
+            displayText: "No session storage available for recordings",
+            data: { success: false },
+        };
+    }
+
+    let recordingData: RecordingData;
+    try {
+        const rawJson = await context.sessionStorage.read(
+            "recording/latest.json",
+            "utf8",
+        );
+        const raw = JSON.parse(rawJson);
+        recordingData = {
+            actions: raw.recordedActions ?? raw.actions ?? [],
+            pageHtml: raw.recordedActionPageHTML ?? raw.pageHtml,
+            screenshots: raw.annotatedScreenshot ?? raw.screenshots,
+            startUrl: raw.startUrl ?? (await browser.getPageUrl()),
+            description,
+        };
+    } catch {
+        return {
+            displayText: "No recording data found. Record a user interaction first.",
+            data: { success: false, error: "no_recording" },
+        };
+    }
+
+    if (recordingData.actions.length === 0) {
+        return {
+            displayText: "Recording is empty — no actions were captured.",
+            data: { success: false, error: "empty_recording" },
+        };
+    }
+
+    debug(`Normalizing recording: ${recordingData.actions.length} raw actions`);
+    const trace = normalizeRecording(recordingData);
+
+    // Save the normalized trace
+    let traceId: string | undefined;
+    if (context.instanceStorage) {
+        try {
+            traceId = `recording-${Date.now()}`;
+            await context.instanceStorage.write(
+                `webflows/traces/${traceId}.json`,
+                JSON.stringify(trace, null, 4),
+            );
+        } catch (error) {
+            debug("Failed to save recording trace:", error);
+        }
+    }
+
+    debug(`Generating WebFlow from recording (${trace.steps.length} normalized steps)`);
+    const flow = await generateWebFlowFromTrace(trace, {
+        ...(name && { suggestedName: name }),
+        description,
+    });
+
+    if (!flow) {
+        return {
+            displayText: "Failed to generate WebFlow from recording. The LLM could not produce a valid script.",
+            data: { success: false, error: "generation_failed", traceId },
+        };
+    }
+
+    // Override source type to recording
+    flow.source = {
+        type: "recording",
+        timestamp: new Date().toISOString(),
+        ...(traceId && { traceId }),
+    };
+
+    const store = await getStore(context);
+    await store.save(flow);
+    debug(`Saved WebFlow from recording: ${flow.name}`);
+
+    return {
+        displayText: `WebFlow "${flow.name}" generated from recording and saved.\n  Parameters: ${Object.keys(flow.parameters).join(", ") || "none"}\n  Scope: ${flow.scope.type}${flow.scope.domains ? ` (${flow.scope.domains.join(", ")})` : ""}\n  Grammar patterns: ${flow.grammarPatterns.length}`,
+        data: { success: true, flow, traceId },
+    };
+}
+
+async function handleConvertMacrosToWebFlows(
+    action: WebFlowActions & { actionName: "convertMacrosToWebFlows" },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const macrosStore = context.agentContext.macrosStore;
+    if (!macrosStore) {
+        return {
+            displayText: "MacroStore not available",
+            data: { success: false },
+        };
+    }
+
+    const store = await getStore(context);
+    const converter = new MacroToWebFlowConverter();
+    const domain = action.parameters?.domain;
+
+    let macros: any[];
+    if (domain) {
+        macros = await macrosStore.getMacrosForUrl(`https://${domain}/`);
+    } else {
+        macros = await macrosStore.getAllMacros();
+    }
+
+    const discoveredMacros = macros.filter(
+        (m: any) => m.author === "discovered",
+    );
+    const flows = converter.convertMany(discoveredMacros);
+
+    let savedCount = 0;
+    for (const flow of flows) {
+        await store.save(flow);
+        savedCount++;
+    }
+
+    debug(
+        `Bulk converted ${savedCount} macros to webFlows${domain ? ` for ${domain}` : ""}`,
+    );
+
+    return {
+        displayText: `Converted ${savedCount} macros to webFlows${domain ? ` for ${domain}` : ""} (${discoveredMacros.length} discovered macros found)`,
+        data: { success: true, converted: savedCount, total: discoveredMacros.length },
+    };
+}
+
+export async function handleWebFlowAction(
+    action: { actionName: string; parameters?: Record<string, unknown> },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    switch (action.actionName) {
+        case "listWebFlows":
+            return handleListWebFlows(
+                action as WebFlowActions & { actionName: "listWebFlows" },
+                context,
+            );
+        case "deleteWebFlow":
+            return handleDeleteWebFlow(
+                action as WebFlowActions & { actionName: "deleteWebFlow" },
+                context,
+            );
+        case "editWebFlowScope":
+            return handleEditWebFlowScope(
+                action as WebFlowActions & { actionName: "editWebFlowScope" },
+                context,
+            );
+        case "startGoalDrivenTask":
+            return handleStartGoalDrivenTask(
+                action as WebFlowActions & {
+                    actionName: "startGoalDrivenTask";
+                },
+                context,
+            );
+        case "generateWebFlow":
+            return handleGenerateWebFlow(
+                action as WebFlowActions & {
+                    actionName: "generateWebFlow";
+                },
+                context,
+            );
+        case "generateWebFlowFromRecording":
+            return handleGenerateWebFlowFromRecording(
+                action as WebFlowActions & {
+                    actionName: "generateWebFlowFromRecording";
+                },
+                context,
+            );
+        case "convertMacrosToWebFlows":
+            return handleConvertMacrosToWebFlows(
+                action as WebFlowActions & {
+                    actionName: "convertMacrosToWebFlows";
+                },
+                context,
+            );
+        default:
+            return handleDynamicFlowExecution(
+                action.actionName,
+                action.parameters ?? {},
+                context,
+            );
+    }
+}
+
+export function getWebFlowStore(
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowStore> {
+    return getStore(context);
+}

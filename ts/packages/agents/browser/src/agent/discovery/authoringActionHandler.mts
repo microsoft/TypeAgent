@@ -20,6 +20,10 @@ import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { SchemaDiscoveryAgent } from "./translator.mjs";
 import { WebPlanResult, WebPlanSuggestions } from "./schema/evaluatePlan.mjs";
 import { BrowserActionContext } from "../browserActions.mjs";
+import { WebFlowDefinition } from "../webFlows/types.js";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:browser:authoring");
 
 // Context interface for authoring action handler functions
 interface AuthoringActionHandlerContext {
@@ -260,6 +264,101 @@ async function handleRunWebPlan(
     return result;
 }
 
+async function handleSaveCurrentWebPlan(
+    ctx: AuthoringActionHandlerContext,
+    actionContext: any,
+): Promise<any> {
+    const draft = ctx.state.webPlanDraft;
+    const intentInfo = ctx.state.intentInfo;
+
+    if (!draft.webPlanName || !draft.webPlanDescription) {
+        const msg =
+            "Cannot save: the plan needs at least a name and description. Please continue editing first.";
+        actionContext.actionIO.appendDisplay({
+            type: "text",
+            speak: true,
+            content: msg,
+        });
+        return createActionResultNoDisplay(msg);
+    }
+
+    const store = ctx.sessionContext.agentContext.webFlowStore;
+    if (!store) {
+        const msg =
+            "WebFlow store is not available. The plan could not be saved.";
+        actionContext.actionIO.appendDisplay({
+            type: "text",
+            speak: true,
+            content: msg,
+        });
+        return createActionResultNoDisplay(msg);
+    }
+
+    // Build parameters from intent info
+    const params: WebFlowDefinition["parameters"] = {};
+    if (intentInfo?.intentJson?.parameters) {
+        for (const p of intentInfo.intentJson.parameters) {
+            params[p.shortName] = {
+                type: p.type as "string" | "number" | "boolean",
+                required: p.required,
+                description: p.description,
+                ...(p.defaultValue !== undefined && {
+                    default: p.defaultValue,
+                }),
+            };
+        }
+    }
+
+    // Build a script stub from the plan steps
+    const lines: string[] = ["async function execute(browser, params) {"];
+    if (draft.webPlanSteps) {
+        for (const step of draft.webPlanSteps) {
+            lines.push(`  // ${step}`);
+        }
+    }
+    lines.push(
+        '  return { success: true, message: "Plan executed" };',
+    );
+    lines.push("}");
+
+    const flow: WebFlowDefinition = {
+        name: toCamelCase(draft.webPlanName),
+        description: draft.webPlanDescription,
+        version: 1,
+        parameters: params,
+        script: lines.join("\n"),
+        grammarPatterns: [],
+        scope: { type: "global" },
+        source: {
+            type: "manual",
+            timestamp: new Date().toISOString(),
+        },
+    };
+
+    await store.save(flow);
+    debug(`Saved web plan as webFlow: ${flow.name}`);
+
+    const msg = `Plan "${draft.webPlanName}" saved as webFlow "${flow.name}". You can run it with the webFlows system.`;
+    actionContext.actionIO.appendDisplay({
+        type: "text",
+        speak: true,
+        content: msg,
+    });
+    return createActionResultNoDisplay(msg);
+}
+
+function toCamelCase(str: string): string {
+    return str
+        .replace(/[^a-zA-Z0-9\s]/g, "")
+        .split(/\s+/)
+        .map((word, i) =>
+            i === 0
+                ? word.toLowerCase()
+                : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+        )
+        .join("");
+}
+
 function createAuthoringState(): AuthoringActionHandlerContext["state"] {
     return {
         webPlanDraft: {},
@@ -303,7 +402,6 @@ export function createSchemaAuthoringAgent(
                         },
                     };
                     return result;
-                    break;
                 case "runCurrentWebPlan":
                     const runResult = await handleRunWebPlan(
                         action,
@@ -311,7 +409,11 @@ export function createSchemaAuthoringAgent(
                         actionContext,
                     );
                     return runResult;
-                    break;
+                case "saveCurrentWebPlan":
+                    return await handleSaveCurrentWebPlan(
+                        ctx,
+                        actionContext,
+                    );
                 default:
                     break;
             }
