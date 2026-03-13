@@ -45,6 +45,8 @@ TypeAgent is a **personal agent** that routes natural language requests to speci
 User input → Grammar matcher → Typed action → Dispatcher → Agent handler → ActionResult
 ```
 
+Detail architecture descriptions are located in the **`docs/architecture`** directory.
+
 ### Key packages
 
 - **`packages/dispatcher/`** — Core routing engine. Matches user input to agents and dispatches typed actions.
