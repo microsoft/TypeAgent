@@ -40,6 +40,9 @@ export interface StoredMacro {
 
     // Management
     metadata: MacroMetadata; // Timestamps, usage, relationships
+
+    // Raw YAML content (for UI display)
+    rawYAML?: string; // Original YAML representation
 }
 
 export type MacroCategory =

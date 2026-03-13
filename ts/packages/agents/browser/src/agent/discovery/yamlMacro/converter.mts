@@ -2,12 +2,7 @@
 // Licensed under the MIT License.
 
 import registerDebug from "debug";
-import {
-    YAMLMacro,
-    MinimalYAMLMacro,
-    YAMLParameterDefinition,
-    YAMLMacroStep,
-} from "./types.mjs";
+import { YAMLMacro, YAMLParameterDefinition, YAMLMacroStep } from "./types.mjs";
 import {
     generateIntentSchema,
     generateActionSchemaDefinition,
@@ -159,8 +154,20 @@ export class MacroConverter {
             for (const [key, value] of Object.entries(
                 definition.detectedSchema.parameters,
             )) {
+                // Infer type from example value, defaulting to string for complex types
+                let paramType: "string" | "number" | "boolean" = "string";
+                const valueType = typeof value;
+                if (valueType === "number") {
+                    paramType = "number";
+                } else if (valueType === "boolean") {
+                    paramType = "boolean";
+                } else {
+                    // Default to string for string, null, undefined, object, array, etc.
+                    paramType = "string";
+                }
+
                 parameters[key] = {
-                    type: typeof value === "string" ? "string" : "any",
+                    type: paramType,
                     description: `Parameter ${key}`,
                     required: false,
                     example: value,
@@ -238,16 +245,5 @@ export class MacroConverter {
         );
 
         return { yaml: yamlMacro, ...(recordingId && { recordingId }) };
-    }
-
-    convertFullToMinimal(fullYaml: YAMLMacro): MinimalYAMLMacro {
-        return {
-            name: fullYaml.macro.name,
-            description: fullYaml.macro.description,
-            domain: fullYaml.macro.scope.domain,
-            url: fullYaml.macro.urlPatterns?.[0]?.pattern || "",
-            parameters: fullYaml.macro.parameters,
-            steps: fullYaml.macro.steps,
-        };
     }
 }

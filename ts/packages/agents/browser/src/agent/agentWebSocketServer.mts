@@ -244,19 +244,11 @@ export class AgentWebSocketServer {
     public getActiveClient(
         fallbackType?: "extension" | "electron",
     ): BrowserClient | null {
-        debugClientRouting(
-            `getActiveClient: fallbackType=${fallbackType}, activeClientId=${this.activeClientId}`,
-        );
-
         const activeClient = this.activeClientId
             ? this.clients.get(this.activeClientId) || null
             : null;
 
-        if (activeClient) {
-            debugClientRouting(
-                `getActiveClient: Found active client type='${activeClient.type}', id='${activeClient.id}'`,
-            );
-        } else {
+        if (!activeClient) {
             debugClientRouting(`getActiveClient: No active client found`);
         }
 
@@ -264,9 +256,6 @@ export class AgentWebSocketServer {
             activeClient &&
             (!fallbackType || activeClient.type === fallbackType)
         ) {
-            debugClientRouting(
-                `getActiveClient: Returning active client (matches fallback or no fallback specified)`,
-            );
             return activeClient;
         }
 
@@ -286,10 +275,6 @@ export class AgentWebSocketServer {
                 `getActiveClient: No client found with fallbackType='${fallbackType}'`,
             );
         }
-
-        debugClientRouting(
-            `getActiveClient: Returning ${activeClient ? `active client type='${activeClient.type}'` : "null"} as final fallback`,
-        );
         return activeClient;
     }
 
