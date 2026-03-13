@@ -759,6 +759,59 @@ export abstract class ExtensionServiceBase {
         };
     }
 
+    async refreshSchema(): Promise<{
+        schema?: any[];
+        actionDefinitions?: any;
+    }> {
+        const response = await this.sendMessage<{
+            schema?: any[];
+            actionDefinitions?: any;
+        }>({
+            type: "refreshSchema",
+        });
+        return response || {};
+    }
+
+    async startRecording(): Promise<void> {
+        await this.sendMessage({ type: "startRecording" });
+    }
+
+    async stopRecording(): Promise<any> {
+        return await this.sendMessage({ type: "stopRecording" });
+    }
+
+    async captureHtmlFragments(): Promise<any[]> {
+        const response = await this.sendMessage<any[]>({
+            type: "captureHtmlFragments",
+        });
+        return response || [];
+    }
+
+    async registerTempSchema(): Promise<void> {
+        await this.sendMessage({ type: "registerTempSchema" });
+    }
+
+    async getIntentFromRecording(params: {
+        actionName: string;
+        actionDescription: string;
+        steps: string;
+        existingActionNames: string[];
+        html: any[];
+        screenshot: any;
+    }): Promise<any> {
+        return await this.sendMessage({
+            type: "getIntentFromRecording",
+            ...params,
+        });
+    }
+
+    async settingsUpdated(settings: any): Promise<void> {
+        await this.sendMessage({
+            type: "settingsUpdated",
+            settings,
+        });
+    }
+
     // ===================================================================
     // ABSTRACT METHODS - Must be implemented by concrete classes
     // ===================================================================

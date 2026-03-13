@@ -2,6 +2,13 @@
 // Licensed under the MIT License.
 
 import type { PlatformServices } from "../../common/platformServices.mjs";
+import { createChromeRpcClient } from "./chromeRpcClient";
+
+let chromeRpcSingleton: ReturnType<typeof createChromeRpcClient> | undefined;
+function getChromeRpc() {
+    if (!chromeRpcSingleton) chromeRpcSingleton = createChromeRpcClient();
+    return chromeRpcSingleton;
+}
 
 export function createChromePlatform(): PlatformServices {
     return {
@@ -32,9 +39,11 @@ export function createChromePlatform(): PlatformServices {
         },
         connection: {
             async checkWebSocket() {
-                const result = await chrome.runtime.sendMessage({
-                    type: "checkWebSocketConnection",
-                });
+                const { rpc } = getChromeRpc();
+                const result = await (rpc as any).invoke(
+                    "checkWebSocketConnection",
+                    { type: "checkWebSocketConnection" },
+                );
                 return { connected: result?.connected ?? false };
             },
         },

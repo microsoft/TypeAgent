@@ -103,12 +103,16 @@ async function getNextAuthoringQuestion(
                 (error as Error)?.message,
             );
         }
+
+        // Only include screenshot if it's not empty
+        const screenshots = screenshot ? [screenshot] : [];
+
         const suggestedStepsResponse = await ctx.agent.getWebPlanSuggestedSteps(
             action.parameters.webPlanName!,
             action.parameters.webPlanDescription!,
             action.parameters.webPlanSteps,
             htmlFragments,
-            [screenshot],
+            screenshots,
         );
 
         if (suggestedStepsResponse.success) {
@@ -215,12 +219,15 @@ async function getNextPlanRunningQuestion(
                 );
             }
 
+            // Only include screenshot if it's not empty
+            const screenshots = screenshot ? [screenshot] : [];
+
             const evaluationResult = await ctx.agent.getWebPlanRunResult(
                 action.parameters.webPlanName!,
                 action.parameters.webPlanDescription!,
                 paramsMap,
                 htmlFragments,
-                [screenshot],
+                screenshots,
             );
 
             if (evaluationResult.success) {
