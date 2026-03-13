@@ -3,6 +3,7 @@
 
 import { SeparatorMode } from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
+import { needsSeparatorInAutoMode } from "action-grammar";
 import {
     ExecutableAction,
     HistoryContext,
@@ -29,28 +30,6 @@ import { getLanguageTools } from "../utils/language.js";
 const debugConst = registerDebug("typeagent:const");
 const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 const debugCompletion = registerDebug("typeagent:const:completion");
-
-// Separator heuristic for "auto" spacing mode.  A separator is required
-// between two adjacent characters only when both belong to a word-boundary
-// script (e.g. Latin + Latin) or both are digits.  This mirrors the
-// grammar matcher's needsSeparatorInAutoMode without adding a cross-package
-// dependency.
-const wordBoundaryScriptRe =
-    /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
-const digitRe = /[0-9]/;
-function isWordBoundaryScript(c: string): boolean {
-    const code = c.charCodeAt(0);
-    if (code < 128) {
-        return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-    }
-    return wordBoundaryScriptRe.test(c);
-}
-function needsSeparatorInAutoMode(a: string, b: string): boolean {
-    if (digitRe.test(a) && digitRe.test(b)) {
-        return true;
-    }
-    return isWordBoundaryScript(a) && isWordBoundaryScript(b);
-}
 
 // Agent Cache define the namespace policy.  At the cache, it just combine the keys into a string for lookup.
 function getConstructionNamespace(namespaceKeys: string[]) {

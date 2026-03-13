@@ -105,6 +105,36 @@ function isFullyQuoted(value: string) {
     );
 }
 
+// True when the user is mid-edit on a free-form parameter value:
+//   - partially quoted (opening quote, no closing)
+//   - implicitQuotes parameter (rest-of-line)
+//   - bare unquoted token with no trailing space and no pending flag
+function isEditingFreeFormValue(
+    quoted: boolean | undefined,
+    implicitQuotes: boolean,
+    hasTrailingSpace: boolean,
+    pendingFlag: string | undefined,
+): boolean {
+    if (quoted === false) return true; // partially quoted
+    if (quoted !== undefined) return false; // fully quoted → committed
+    return implicitQuotes || (!hasTrailingSpace && pendingFlag === undefined);
+}
+
+// Determine closedSet for parameter completion:
+//   - Agent is authoritative when invoked.
+//   - Free-form text with no agent → open set (anything is valid).
+//   - No agent and all positional args filled → only flags remain (finite set).
+function computeClosedSet(
+    agentInvoked: boolean,
+    agentClosedSet: boolean | undefined,
+    isPartialValue: boolean,
+    hasRemainingArgs: boolean,
+): boolean {
+    if (agentInvoked) return agentClosedSet ?? false;
+    if (isPartialValue) return false;
+    return !hasRemainingArgs;
+}
+
 function collectFlags(
     agentCommandCompletions: string[],
     flags: FlagDefinitions,
@@ -133,19 +163,9 @@ function collectFlags(
 }
 
 // Internal result from parameter-level completion.
-//
-// `closedSet` uses a conservative heuristic:
-//  - When the agent's getCommandCompletion was invoked, closedSet
-//    comes from the agent's response (defaults to false when the
-//    agent omits it).
-//  - false when editing a free-form parameter value with no agent.
-//  - true  when all positional args are filled and only enumerable
-//    flag names remain (a finite, known set).
-type ParameterCompletionResult = {
-    completions: CompletionGroup[];
-    startIndex: number;
-    separatorMode: SeparatorMode | undefined;
-    closedSet: boolean;
+// Mirrors CommandCompletionResult but allows commitMode to be undefined
+// (the caller decides the default).
+type ParameterCompletionResult = Omit<CommandCompletionResult, "commitMode"> & {
     commitMode: CommitMode | undefined;
 };
 
@@ -221,11 +241,12 @@ function resolveCompletionTarget(
         const valueToken = tokens[tokens.length - 1];
         const quoted = isFullyQuoted(valueToken);
         if (
-            quoted === false ||
-            (quoted === undefined && lastParamImplicitQuotes) ||
-            (quoted === undefined &&
-                !hasTrailingSpace &&
-                pendingFlag === undefined)
+            isEditingFreeFormValue(
+                quoted,
+                lastParamImplicitQuotes,
+                hasTrailingSpace,
+                pendingFlag,
+            )
         ) {
             const tokenStartIndex = remainderIndex - valueToken.length;
             const startIndex = tokenBoundary(input, tokenStartIndex);
@@ -432,25 +453,89 @@ async function getCommandParameterCompletion(
         );
     }
 
-    // ── 4. Determine closedSet ───────────────────────────────────────
-    let closedSet: boolean;
-    if (agentInvoked) {
-        closedSet = agentClosedSet ?? false;
-    } else if (target.isPartialValue) {
-        // Editing a free-form value with no agent → open set.
-        closedSet = false;
-    } else {
-        // No agent.  Closed when all positional args are filled and
-        // only flags (a finite set) remain.
-        closedSet = params.nextArgs.length === 0;
-    }
-
     return {
         completions,
         startIndex,
         separatorMode,
-        closedSet,
+        closedSet: computeClosedSet(
+            agentInvoked,
+            agentClosedSet,
+            target.isPartialValue,
+            params.nextArgs.length > 0,
+        ),
         commitMode: agentCommitMode,
+    };
+}
+
+// Complete a resolved command descriptor: parameter completions plus
+// optional sibling subcommand names from the parent table.
+async function completeDescriptor(
+    descriptor: CommandDescriptor,
+    context: CommandHandlerContext,
+    result: ResolveCommandResult,
+    input: string,
+    hasTrailingSpace: boolean,
+    commandConsumedLength: number,
+): Promise<{
+    completions: CompletionGroup[];
+    startIndex: number | undefined;
+    separatorMode: SeparatorMode | undefined;
+    closedSet: boolean;
+    commitMode: CommitMode | undefined;
+}> {
+    const completions: CompletionGroup[] = [];
+    let separatorMode: SeparatorMode | undefined;
+
+    const parameterCompletions = await getCommandParameterCompletion(
+        descriptor,
+        context,
+        result,
+        input,
+        hasTrailingSpace,
+    );
+
+    // Include sibling subcommand names when resolved to the default
+    // (not an explicit match), but only if parameter parsing hasn't
+    // consumed past the command boundary.  Once the user has typed
+    // tokens that fill parameters (moving startIndex forward),
+    // they've committed to the default — subcommand names would be
+    // filtered against the wrong text at the wrong position.
+    const table = result.table;
+    const addSubcommands =
+        table !== undefined &&
+        !result.matched &&
+        getDefaultSubCommandDescriptor(table) === descriptor &&
+        (parameterCompletions === undefined ||
+            parameterCompletions.startIndex <= commandConsumedLength);
+
+    if (addSubcommands) {
+        completions.push({
+            name: "Subcommands",
+            completions: Object.keys(table!.commands),
+        });
+        separatorMode = mergeSeparatorMode(separatorMode, "space");
+    }
+
+    if (parameterCompletions === undefined) {
+        return {
+            completions,
+            startIndex: undefined,
+            separatorMode,
+            closedSet: true,
+            commitMode: undefined,
+        };
+    }
+
+    completions.push(...parameterCompletions.completions);
+    return {
+        completions,
+        startIndex: parameterCompletions.startIndex,
+        separatorMode: mergeSeparatorMode(
+            separatorMode,
+            parameterCompletions.separatorMode,
+        ),
+        closedSet: parameterCompletions.closedSet,
+        commitMode: parameterCompletions.commitMode,
     };
 }
 
@@ -579,55 +664,25 @@ export async function getCommandCompletion(
             separatorMode = mergeSeparatorMode(separatorMode, "none");
             // closedSet stays true: subcommand names are exhaustive.
         } else if (descriptor !== undefined) {
-            // Get parameter completions first — we need to know
-            // whether parameters consumed past the command boundary
-            // before deciding if subcommand alternatives apply.
-            const parameterCompletions = await getCommandParameterCompletion(
+            const desc = await completeDescriptor(
                 descriptor,
                 context,
                 result,
                 input,
                 hasTrailingSpace,
+                commandConsumedLength,
             );
-
-            // Include sibling subcommand names when resolved to the
-            // default (not an explicit match), but only if parameter
-            // parsing hasn't consumed past the command boundary.
-            // Once the user has typed tokens that fill parameters
-            // (moving startIndex forward), they've committed to the
-            // default — subcommand names would be filtered against
-            // the wrong text at the wrong position.
-            const addSubcommands =
-                table !== undefined &&
-                !result.matched &&
-                getDefaultSubCommandDescriptor(table) === descriptor &&
-                (parameterCompletions === undefined ||
-                    parameterCompletions.startIndex <= commandConsumedLength);
-
-            if (addSubcommands) {
-                completions.push({
-                    name: "Subcommands",
-                    completions: Object.keys(table.commands),
-                });
-                separatorMode = mergeSeparatorMode(separatorMode, "space");
+            completions.push(...desc.completions);
+            if (desc.startIndex !== undefined) {
+                startIndex = desc.startIndex;
             }
-
-            if (parameterCompletions === undefined) {
-                // Descriptor has no parameters.  If subcommand
-                // alternatives were added above, they are the
-                // exhaustive set; otherwise the command is fully
-                // specified with nothing more to type.
-            } else {
-                completions.push(...parameterCompletions.completions);
-                startIndex = parameterCompletions.startIndex;
-                separatorMode = mergeSeparatorMode(
-                    separatorMode,
-                    parameterCompletions.separatorMode,
-                );
-                closedSet = parameterCompletions.closedSet;
-                if (parameterCompletions.commitMode === "eager") {
-                    commitMode = "eager";
-                }
+            separatorMode = mergeSeparatorMode(
+                separatorMode,
+                desc.separatorMode,
+            );
+            closedSet = desc.closedSet;
+            if (desc.commitMode === "eager") {
+                commitMode = "eager";
             }
         } else if (table !== undefined) {
             // descriptor is undefined: the suffix didn't resolve to any

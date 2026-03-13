@@ -114,6 +114,10 @@ export async function requestCompletion(
             matchedPrefixLength,
             separatorMode,
             closedSet,
+            // Grammar completions use eager commit: tokens can abut
+            // without an explicit delimiter (e.g. CJK characters),
+            // so the session should re-fetch immediately when a
+            // completion is uniquely satisfied.
             commitMode: "eager",
         };
     }
@@ -140,6 +144,7 @@ export async function requestCompletion(
         matchedPrefixLength,
         separatorMode,
         closedSet,
+        // Grammar completions use eager commit (see note above).
         commitMode: "eager",
     };
 }

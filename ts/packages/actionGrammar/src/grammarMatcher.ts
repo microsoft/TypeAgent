@@ -62,7 +62,7 @@ function isWordBoundaryScript(c: string): boolean {
     }
     return wordBoundaryScriptRe.test(c);
 }
-function needsSeparatorInAutoMode(a: string, b: string): boolean {
+export function needsSeparatorInAutoMode(a: string, b: string): boolean {
     if (digitRe.test(a) && digitRe.test(b)) {
         return true;
     }

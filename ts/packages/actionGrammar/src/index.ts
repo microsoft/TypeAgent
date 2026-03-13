@@ -26,6 +26,7 @@ export {
     GrammarMatchResult,
     matchGrammarCompletion,
     GrammarCompletionResult,
+    needsSeparatorInAutoMode,
 } from "./grammarMatcher.js";
 
 // Entity system

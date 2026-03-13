@@ -2,7 +2,11 @@
 // Licensed under the MIT License.
 
 import { CommandCompletionResult } from "agent-dispatcher";
-import { CommitMode, SeparatorMode } from "@typeagent/agent-sdk";
+import {
+    CommitMode,
+    CompletionGroup,
+    SeparatorMode,
+} from "@typeagent/agent-sdk";
 import {
     SearchMenuItem,
     SearchMenuPosition,
@@ -347,27 +351,7 @@ export class PartialCompletionSession {
                 this.closedSet = result.closedSet;
                 this.commitMode = result.commitMode ?? "explicit";
 
-                // Build completions preserving backend group order.
-                const completions: SearchMenuItem[] = [];
-                let currentIndex = 0;
-                for (const group of result.completions) {
-                    const items = group.sorted
-                        ? group.completions
-                        : [...group.completions].sort();
-                    for (const choice of items) {
-                        completions.push({
-                            matchText: choice,
-                            selectedText: choice,
-                            sortIndex: currentIndex++,
-                            ...(group.needQuotes !== undefined
-                                ? { needQuotes: group.needQuotes }
-                                : {}),
-                            ...(group.emojiChar !== undefined
-                                ? { emojiChar: group.emojiChar }
-                                : {}),
-                        });
-                    }
-                }
+                const completions = toMenuItems(result.completions);
 
                 if (completions.length === 0) {
                     debug(
@@ -427,4 +411,30 @@ function stripLeadingSeparator(rawPrefix: string, mode: SeparatorMode): string {
     return mode === "space"
         ? rawPrefix.trimStart()
         : rawPrefix.replace(/^[\s\p{P}]+/u, "");
+}
+
+// Convert backend CompletionGroups into flat SearchMenuItems,
+// preserving group order and sorting within each group.
+function toMenuItems(groups: CompletionGroup[]): SearchMenuItem[] {
+    const items: SearchMenuItem[] = [];
+    let sortIndex = 0;
+    for (const group of groups) {
+        const sorted = group.sorted
+            ? group.completions
+            : [...group.completions].sort();
+        for (const choice of sorted) {
+            items.push({
+                matchText: choice,
+                selectedText: choice,
+                sortIndex: sortIndex++,
+                ...(group.needQuotes !== undefined
+                    ? { needQuotes: group.needQuotes }
+                    : {}),
+                ...(group.emojiChar !== undefined
+                    ? { emojiChar: group.emojiChar }
+                    : {}),
+            });
+        }
+    }
+    return items;
 }
