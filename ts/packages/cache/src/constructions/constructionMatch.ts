@@ -168,6 +168,29 @@ function finishMatchParts(
             }
 
             if (config.partial) {
+                // If this is a wildcard-enabled part and there is
+                // non-separator text remaining, try to advance past
+                // the wildcard by looking for the next literal part.
+                // This mirrors the grammar matcher's behaviour where
+                // wildcards consume text and the following literal
+                // part is offered as a completion.
+                if (
+                    isWildcardEnabled(config, part.wildcardMode) &&
+                    state.matchedCurrent < request.length &&
+                    !isSpaceOrPunctuationRange(
+                        request,
+                        state.matchedCurrent,
+                        request.length,
+                    )
+                ) {
+                    state.matchedStart.push(state.matchedCurrent);
+                    state.pendingWildcard = findPendingWildcard(
+                        request,
+                        state.matchedCurrent,
+                    );
+                    continue;
+                }
+
                 // For partial, act as if we have matched all the parts, and breaking out of the loop to finish the match.
                 break;
             }
@@ -227,11 +250,12 @@ function finishMatchParts(
     const wildcardMatch = wildcardRegex.exec(wildcardRange);
     if (wildcardMatch !== null) {
         // Update the state in case we need to backtrack because value translation failed.
+        const wildcardPart = parts[state.matchedStart.length - 1];
         if (
             !captureWildcardMatch(
                 state,
                 wildcardMatch[1],
-                config.rejectReferences,
+                isRejectReference(config, wildcardPart.wildcardMode),
             )
         ) {
             return false;

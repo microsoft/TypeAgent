@@ -550,4 +550,232 @@ describe("ConstructionCache.completion()", () => {
             expect(result!.completions.sort()).toEqual(["play", "stop"]);
         });
     });
+
+    describe("wildcard completions", () => {
+        describe("entity wildcard after literal", () => {
+            it("returns property completion for entity wildcard", () => {
+                const verbPart = createMatchPart(["play"], "verb");
+                const entityPart = createEntityPart("entity", "songName");
+                const c = Construction.create(
+                    [verbPart, entityPart],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion("play", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.properties).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("songName");
+                expect(result!.closedSet).toBe(false);
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+
+            it("returns property completion with trailing space", () => {
+                const verbPart = createMatchPart(["play"], "verb");
+                const entityPart = createEntityPart("entity", "songName");
+                const c = Construction.create(
+                    [verbPart, entityPart],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion("play ", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("songName");
+            });
+
+            it("consumes trailing wildcard text as exact match", () => {
+                const verbPart = createMatchPart(["play"], "verb");
+                const entityPart = createEntityPart("entity", "songName");
+                const c = Construction.create(
+                    [verbPart, entityPart],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion("play my song", defaultOptions);
+                expect(result).toBeDefined();
+                // Wildcard consumes "my song" → exact match, no completions.
+                expect(result!.completions).toEqual([]);
+                expect(result!.matchedPrefixLength).toBe(12);
+            });
+        });
+
+        describe("wildcard in middle of construction", () => {
+            // Mirrors the grammar test:
+            //   play $(trackName:wildcard) by $(artist:wildcard)
+            let cache: ConstructionCache;
+            beforeEach(() => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createEntityPart("track", "trackName"),
+                        createMatchPart(["by"], "prep"),
+                        createEntityPart("artist", "artist"),
+                    ],
+                    new Map(),
+                );
+                cache = makeCache([c]);
+            });
+
+            it("after prefix, returns property completion for first wildcard", () => {
+                const result = cache.completion("play", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("trackName");
+                expect(result!.closedSet).toBe(false);
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+
+            it("after prefix with space, returns property for wildcard", () => {
+                const result = cache.completion("play ", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("trackName");
+            });
+
+            it("after wildcard text, returns next literal as completion", () => {
+                // Grammar behavior: after "play some song", the
+                // wildcard consumed "some song" and "by" is the next
+                // completion.
+                const result = cache.completion(
+                    "play some song",
+                    defaultOptions,
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("by");
+                expect(result!.matchedPrefixLength).toBe(14);
+            });
+
+            it("after wildcard text and literal, returns property for second wildcard", () => {
+                const result = cache.completion(
+                    "play some song by",
+                    defaultOptions,
+                );
+                expect(result).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("artist");
+                expect(result!.closedSet).toBe(false);
+            });
+
+            it("complete input is an exact match", () => {
+                const result = cache.completion(
+                    "play some song by john",
+                    defaultOptions,
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toEqual([]);
+                expect(result!.matchedPrefixLength).toBe(22);
+            });
+
+            it("multi-word wildcard text is consumed", () => {
+                const result = cache.completion(
+                    "play a really long track name by",
+                    defaultOptions,
+                );
+                expect(result).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("artist");
+            });
+        });
+
+        describe("wildcard-enabled with matches in middle", () => {
+            it("advances past wildcard-enabled part when literal matches", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createWildcardEnabledPartWithMatches(
+                            ["rock", "pop"],
+                            "genre",
+                            "genreName",
+                        ),
+                        createMatchPart(["music"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                // "rock" matches the wildcard-enabled part literally,
+                // so the matcher advances past it to offer "music".
+                const result = cache.completion("play rock ", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("music");
+            });
+
+            it("offers wildcard-enabled part completions when literal doesn't match", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createWildcardEnabledPartWithMatches(
+                            ["rock", "pop"],
+                            "genre",
+                            "genreName",
+                        ),
+                        createMatchPart(["music"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                // "play " — second part (wildcard-enabled) offers its
+                // literal matches and property names.
+                const result = cache.completion("play ", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.completions.sort()).toEqual(["pop", "rock"]);
+                expect(result!.closedSet).toBe(false);
+            });
+
+            it("advances past wildcard-enabled part with non-matching text to offer next literal", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createWildcardEnabledPartWithMatches(
+                            ["rock", "pop"],
+                            "genre",
+                            "genreName",
+                        ),
+                        createMatchPart(["music"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                // "jazz" doesn't match "rock"/"pop" literally, but
+                // the wildcard-enabled part can consume it as wildcard
+                // text. The next literal "music" is offered.
+                const result = cache.completion("play jazz ", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("music");
+            });
+        });
+
+        describe("construction starting with wildcard", () => {
+            it("returns property completion for leading wildcard on empty prefix", () => {
+                const c = Construction.create(
+                    [
+                        createEntityPart("track", "trackName"),
+                        createMatchPart(["by"], "prep"),
+                        createEntityPart("artist", "artist"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion("", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("trackName");
+            });
+
+            it("after wildcard text, returns next literal as completion", () => {
+                const c = Construction.create(
+                    [
+                        createEntityPart("track", "trackName"),
+                        createMatchPart(["by"], "prep"),
+                        createEntityPart("artist", "artist"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion("some song", defaultOptions);
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("by");
+            });
+        });
+    });
 });
