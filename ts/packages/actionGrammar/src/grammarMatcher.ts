@@ -14,9 +14,11 @@ import {
     VarStringPart,
 } from "./grammarTypes.js";
 
-// Separator mode for completion results.  Identical to SeparatorMode
-// from @typeagent/agent-sdk; independently defined here so
-// actionGrammar does not depend on agentSdk.
+// Separator mode for completion results.  Structurally identical to
+// SeparatorMode from @typeagent/agent-sdk; independently defined here so
+// actionGrammar does not depend on agentSdk.  The grammar matcher only
+// produces "spacePunctuation", "optional", and "none" — never "space"
+// (which is strictly command/flag-level).
 type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
@@ -108,7 +110,7 @@ function candidateSeparatorMode(
 
 // Merge a new candidate's separator mode into the running aggregate.
 // The mode requiring the strongest separator wins (i.e. the mode that
-// demands the most from the user): spacePunctuation > optional > none.
+// demands the most from the user): space > spacePunctuation > optional > none.
 function mergeSeparatorMode(
     current: SeparatorMode | undefined,
     needsSep: boolean,
@@ -118,7 +120,11 @@ function mergeSeparatorMode(
     if (current === undefined) {
         return candidateMode;
     }
-    // "spacePunctuation" requires a separator — strongest requirement.
+    // "space" requires strict whitespace — strongest requirement.
+    if (current === "space" || candidateMode === "space") {
+        return "space";
+    }
+    // "spacePunctuation" requires a separator — next strongest.
     if (
         current === "spacePunctuation" ||
         candidateMode === "spacePunctuation"

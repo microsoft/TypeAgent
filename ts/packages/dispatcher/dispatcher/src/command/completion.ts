@@ -135,9 +135,10 @@ function collectFlags(
 // Internal result from parameter-level completion.
 //
 // `closedSet` uses a conservative heuristic:
-//  - false when the agent's getCommandCompletion was invoked (agents
-//    cannot yet signal whether their set is closed).
-//  - false when a pending non-boolean flag accepts free-form input.
+//  - When the agent's getCommandCompletion was invoked, closedSet
+//    comes from the agent's response (defaults to false when the
+//    agent omits it).
+//  - false when editing a free-form parameter value with no agent.
 //  - true  when all positional args are filled and only enumerable
 //    flag names remain (a finite, known set).
 type ParameterCompletionResult = {
@@ -501,7 +502,7 @@ async function getCommandParameterCompletion(
 //                reports how many characters of the token content it
 //                consumed, which is relative to the token start.
 //
-//   completions  Array of CompletionGroups from up to three sources:
+//   completions  Array of CompletionGroup items from up to three sources:
 //                (a) built-in command / subcommand / agent-name lists,
 //                (b) flag names from the descriptor's ParameterDefinitions,
 //                (c) agent-provided groups via the agent's

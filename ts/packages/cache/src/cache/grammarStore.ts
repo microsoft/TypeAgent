@@ -351,7 +351,7 @@ export class GrammarStoreImpl implements GrammarStore {
                 // simple grammar-based completions
                 const partial = matchGrammarCompletion(
                     entry.grammar,
-                    requestPrefix ?? "",
+                    requestPrefix,
                     matchedPrefixLength,
                 );
                 const partialPrefixLength = partial.matchedPrefixLength ?? 0;
