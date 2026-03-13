@@ -82,21 +82,15 @@ describe("remainderLength", () => {
         });
 
         it("two arguments consumed", () => {
-            expect(
-                parseParams("hello world", twoArgs).remainderLength,
-            ).toBe(0);
+            expect(parseParams("hello world", twoArgs).remainderLength).toBe(0);
         });
 
         it("multiple arguments consumed", () => {
-            expect(parseParams("a b c", multipleArg).remainderLength).toBe(
-                0,
-            );
+            expect(parseParams("a b c", multipleArg).remainderLength).toBe(0);
         });
 
         it("flag with string value consumed", () => {
-            expect(
-                parseParams("--str value", strFlag).remainderLength,
-            ).toBe(0);
+            expect(parseParams("--str value", strFlag).remainderLength).toBe(0);
         });
 
         it("boolean flag consumed", () => {
@@ -104,9 +98,9 @@ describe("remainderLength", () => {
         });
 
         it("boolean flag with explicit true consumed", () => {
-            expect(
-                parseParams("--bool true", boolFlag).remainderLength,
-            ).toBe(0);
+            expect(parseParams("--bool true", boolFlag).remainderLength).toBe(
+                0,
+            );
         });
 
         it("flags and args consumed", () => {
@@ -122,9 +116,7 @@ describe("remainderLength", () => {
         });
 
         it("whitespace-padded input trimmed and consumed", () => {
-            expect(
-                parseParams("  hello  ", singleArg).remainderLength,
-            ).toBe(0);
+            expect(parseParams("  hello  ", singleArg).remainderLength).toBe(0);
         });
 
         it("implicit quote argument consumes rest of line", () => {
@@ -154,15 +146,13 @@ describe("remainderLength", () => {
 
     describe("partial - fully consumed", () => {
         it("empty input", () => {
-            expect(parseParams("", optionalArg, true).remainderLength).toBe(
-                0,
-            );
+            expect(parseParams("", optionalArg, true).remainderLength).toBe(0);
         });
 
         it("single argument", () => {
-            expect(
-                parseParams("hello", singleArg, true).remainderLength,
-            ).toBe(0);
+            expect(parseParams("hello", singleArg, true).remainderLength).toBe(
+                0,
+            );
         });
 
         it("flag with value", () => {
@@ -172,15 +162,15 @@ describe("remainderLength", () => {
         });
 
         it("boolean flag without value", () => {
-            expect(
-                parseParams("--bool", boolFlag, true).remainderLength,
-            ).toBe(0);
+            expect(parseParams("--bool", boolFlag, true).remainderLength).toBe(
+                0,
+            );
         });
 
         it("trailing whitespace after completed arg", () => {
-            expect(
-                parseParams("hello ", singleArg, true).remainderLength,
-            ).toBe(0);
+            expect(parseParams("hello ", singleArg, true).remainderLength).toBe(
+                0,
+            );
         });
 
         it("multiple arguments", () => {
@@ -191,8 +181,7 @@ describe("remainderLength", () => {
 
         it("flags and args", () => {
             expect(
-                parseParams("--bool hello", flagsAndArgs, true)
-                    .remainderLength,
+                parseParams("--bool hello", flagsAndArgs, true).remainderLength,
             ).toBe(0);
         });
     });
@@ -247,11 +236,7 @@ describe("remainderLength", () => {
         });
 
         it("valid flag+value then invalid flag", () => {
-            const result = parseParams(
-                "--str hello --unknown",
-                strFlag,
-                true,
-            );
+            const result = parseParams("--str hello --unknown", strFlag, true);
             expect(result.remainderLength).toBe("--unknown".length);
         });
 
