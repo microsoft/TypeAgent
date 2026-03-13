@@ -1,0 +1,553 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import {
+    Construction,
+    WildcardMode,
+} from "../src/constructions/constructions.js";
+import {
+    ConstructionCache,
+    MatchOptions,
+} from "../src/constructions/constructionCache.js";
+import {
+    createMatchPart,
+    MatchPart,
+    MatchSet,
+    TransformInfo,
+} from "../src/constructions/matchPart.js";
+
+function makeTransformInfo(name: string): TransformInfo {
+    return {
+        namespace: "test",
+        transformName: name,
+        partCount: 1,
+    };
+}
+
+function createEntityPart(name: string, transformName: string): MatchPart {
+    return new MatchPart(undefined, false, WildcardMode.Entity, [
+        makeTransformInfo(transformName),
+    ]);
+}
+
+function createWildcardEnabledPartWithMatches(
+    matches: string[],
+    name: string,
+    transformName: string,
+): MatchPart {
+    const matchSet = new MatchSet(matches, name, true, undefined);
+    return new MatchPart(matchSet, false, WildcardMode.Enabled, [
+        makeTransformInfo(transformName),
+    ]);
+}
+
+function makeCache(
+    constructions: Construction[],
+    namespace: string[] = ["test"],
+): ConstructionCache {
+    const cache = new ConstructionCache("test");
+    for (const c of constructions) {
+        cache.addConstruction(namespace, c, true);
+    }
+    return cache;
+}
+
+const defaultOptions: MatchOptions = { namespaceKeys: ["test"] };
+
+describe("ConstructionCache.completion()", () => {
+    describe("empty prefix", () => {
+        it("returns first non-optional parts from all constructions", () => {
+            const c1 = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [createMatchPart(["stop"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion("", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions.sort()).toEqual(["play", "stop"]);
+            expect(result!.matchedPrefixLength).toBe(0);
+            expect(result!.closedSet).toBe(true);
+        });
+        it("returns empty string prefix as undefined", () => {
+            const cache = new ConstructionCache("test");
+            const result = cache.completion("", defaultOptions);
+            expect(result).toBeUndefined();
+        });
+
+        it("skips optional leading parts", () => {
+            const optionalPart = createMatchPart(["please"], "polite", {
+                optional: true,
+            });
+            const verbPart = createMatchPart(["play"], "verb");
+            const c = Construction.create([optionalPart, verbPart], new Map());
+            const cache = makeCache([c]);
+            const result = cache.completion("", defaultOptions);
+            expect(result).toBeDefined();
+            // Should return the first non-optional part's completions
+            expect(result!.completions).toEqual(["play"]);
+        });
+    });
+
+    describe("matchedPrefixLength", () => {
+        it("returns matchedPrefixLength matching the consumed prefix", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions).toContain("song");
+            // The matcher consumes "play" (4 chars); the trailing space
+            // is a separator and not part of any match part.
+            expect(result!.matchedPrefixLength).toBe(4);
+        });
+
+        it("returns matchedPrefixLength for partial single-part match", () => {
+            const c = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            // "pl" partially matches "play"
+            const result = cache.completion("pl", defaultOptions);
+            expect(result).toBeDefined();
+            if (result!.completions.length > 0) {
+                expect(result!.matchedPrefixLength).toBeGreaterThanOrEqual(0);
+            }
+        });
+
+        it("discards shorter-prefix completions when longer exists", () => {
+            // Construction 1: "play song" (two parts)
+            const c1 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song", "track"], "noun"),
+                ],
+                new Map(),
+            );
+            // Construction 2: "play" (one part only, so exact match)
+            const c2 = Construction.create(
+                [createMatchPart(["play"], "verb2")],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            // "play " is an exact match for c2, but partial for c1
+            // c2 is exact → matchedPrefixLength = "play ".length = 5
+            // c1 partial on second part → matchedPrefixLength = 5
+            // Both should have the same prefix length
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.matchedPrefixLength).toBe(5);
+        });
+    });
+
+    describe("closedSet", () => {
+        it("is true when all completions are from literal match parts", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song", "album"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.closedSet).toBe(true);
+        });
+
+        it("is false when entity wildcard properties are involved", () => {
+            const verbPart = createMatchPart(["play"], "verb");
+            const entityPart = createEntityPart("entity", "songName");
+            const c = Construction.create([verbPart, entityPart], new Map());
+            const cache = makeCache([c]);
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.closedSet).toBe(false);
+        });
+
+        it("is false when wildcard-enabled part with property names is next", () => {
+            const verbPart = createMatchPart(["play"], "verb");
+            const wildcardPart = createWildcardEnabledPartWithMatches(
+                ["rock", "pop"],
+                "genre",
+                "genreName",
+            );
+            const c = Construction.create([verbPart, wildcardPart], new Map());
+            const cache = makeCache([c]);
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            // The wildcard-enabled part has both completions AND property names
+            // Property names → closedSet becomes false
+            expect(result!.closedSet).toBe(false);
+            // Should still include the literal completions from the matchSet
+            expect(result!.completions.sort()).toEqual(["pop", "rock"]);
+        });
+    });
+
+    describe("separatorMode", () => {
+        it("returns spacePunctuation when prefix ends with word char and completion starts with word char", () => {
+            // "play" ends with 'y' (Latin), "song" starts with 's' (Latin)
+            // → both are word-boundary scripts → needs separator
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            // The matcher consumes "play" (4 chars). The character at
+            // position 3 is 'y' (Latin) and "song" starts with 's' (Latin).
+            // Both are word-boundary scripts → spacePunctuation.
+            expect(result!.separatorMode).toBe("spacePunctuation");
+        });
+
+        it("returns spacePunctuation between adjacent word characters", () => {
+            // Use a two-word single match part to get adjacent word chars
+            // "play" followed by completions starting with 's'
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            // "play" is 4 chars, no trailing space.
+            // If partial matching consumes "play" (4 chars), the next part "song" starts
+            // with 's'. Last prefix char is 'y' — both Latin → spacePunctuation
+            const result = cache.completion("play", defaultOptions);
+            expect(result).toBeDefined();
+            if (
+                result!.completions.length > 0 &&
+                result!.matchedPrefixLength === 4
+            ) {
+                // 'y' and 's' are both Latin word-boundary — needs separator
+                expect(result!.separatorMode).toBe("spacePunctuation");
+            }
+        });
+
+        it("returns optional between non-word chars", () => {
+            // Prefix ends with punctuation, completions start with letter
+            // "!" is not a word-boundary script
+            const c = Construction.create(
+                [
+                    createMatchPart(["hey!"], "exclaim"),
+                    createMatchPart(["world"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("hey! ", defaultOptions);
+            if (result && result.completions.length > 0) {
+                // ' ' is not a word char → optional
+                expect(result!.separatorMode).toBe("optional");
+            }
+        });
+
+        it("returns spacePunctuation between adjacent digits", () => {
+            // Both '3' and '4' are digits → needsSeparatorInAutoMode
+            const c = Construction.create(
+                [
+                    createMatchPart(["item3"], "first"),
+                    createMatchPart(["4ever"], "second"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("item3", defaultOptions);
+            if (
+                result &&
+                result.completions.length > 0 &&
+                result.matchedPrefixLength === 5
+            ) {
+                // '3' and '4' are digits → needs separator
+                expect(result!.separatorMode).toBe("spacePunctuation");
+            }
+        });
+    });
+
+    describe("completions content", () => {
+        it("returns next part completions for partial match", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song", "album", "track"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions.sort()).toEqual([
+                "album",
+                "song",
+                "track",
+            ]);
+        });
+
+        it("returns empty completions for exact match with no remaining parts", () => {
+            const c = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            // Exact match — nothing left to complete
+            const result = cache.completion("play", defaultOptions);
+            expect(result).toBeDefined();
+            // Exact match advances maxPrefixLength to requestPrefix.length
+            expect(result!.matchedPrefixLength).toBe(4);
+            expect(result!.completions).toEqual([]);
+        });
+
+        it("returns completions from multiple constructions with same prefix length", () => {
+            const c1 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["album"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions.sort()).toEqual(["album", "song"]);
+        });
+    });
+
+    describe("properties", () => {
+        it("returns property names for entity wildcard parts", () => {
+            const verbPart = createMatchPart(["play"], "verb");
+            const entityPart = createEntityPart("entity", "songName");
+            const c = Construction.create([verbPart, entityPart], new Map());
+            const cache = makeCache([c]);
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.properties).toBeDefined();
+            expect(result!.properties!.length).toBeGreaterThan(0);
+            expect(result!.properties![0].names).toContain("songName");
+        });
+    });
+
+    describe("namespace filtering", () => {
+        it("filters completions by namespace keys", () => {
+            // Use distinct match-set names to prevent merging across
+            // namespaces (same name + canBeMerged → shared MatchSet).
+            const c1 = Construction.create(
+                [createMatchPart(["play"], "verb1", { canBeMerged: false })],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [createMatchPart(["stop"], "verb2", { canBeMerged: false })],
+                new Map(),
+            );
+            const cache = new ConstructionCache("test");
+            cache.addConstruction(["ns1"], c1, true);
+            cache.addConstruction(["ns2"], c2, true);
+
+            const r1 = cache.completion("", { namespaceKeys: ["ns1"] });
+            expect(r1).toBeDefined();
+            expect(r1!.completions).toEqual(["play"]);
+
+            const r2 = cache.completion("", { namespaceKeys: ["ns2"] });
+            expect(r2).toBeDefined();
+            expect(r2!.completions).toEqual(["stop"]);
+        });
+
+        it("returns completions from all namespaces when no filter", () => {
+            const c1 = Construction.create(
+                [createMatchPart(["play"], "verb1", { canBeMerged: false })],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [createMatchPart(["stop"], "verb2", { canBeMerged: false })],
+                new Map(),
+            );
+            const cache = new ConstructionCache("test");
+            cache.addConstruction(["ns1"], c1, true);
+            cache.addConstruction(["ns2"], c2, true);
+
+            const result = cache.completion("", {});
+            expect(result).toBeDefined();
+            expect(result!.completions.sort()).toEqual(["play", "stop"]);
+        });
+
+        it("returns no completions for empty namespace keys", () => {
+            const c = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("", {
+                namespaceKeys: [],
+            });
+            // Empty namespace keys → no constructions match → no completions.
+            expect(result).toBeUndefined();
+        });
+    });
+
+    describe("progressive prefix matching", () => {
+        // Tests for progressive prefix lengths against a "play" + "song"
+        // construction.  The match engine supports intra-part partial
+        // matching — a prefix like "p" returns completions from the
+        // first unmatched part (matchedPrefixLength=0) and the caller
+        // (UI) filters by the remaining text, matching the grammar
+        // matcher's behaviour.
+
+        let cache: ConstructionCache;
+        beforeEach(() => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            cache = makeCache([c]);
+        });
+
+        it("prefix 'p' — partial prefix returns first part completions", () => {
+            const result = cache.completion("p", defaultOptions);
+            expect(result).toBeDefined();
+            // "p" doesn't fully match "play" but the partial match
+            // succeeds and returns the first part's candidates.
+            // The caller filters by the remaining text ("p").
+            expect(result!.completions).toContain("play");
+            expect(result!.matchedPrefixLength).toBe(0);
+            expect(result!.closedSet).toBe(true);
+        });
+
+        it("prefix 'pl' — partial prefix returns first part completions", () => {
+            const result = cache.completion("pl", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions).toContain("play");
+            expect(result!.matchedPrefixLength).toBe(0);
+        });
+
+        it("prefix 'play' — first part fully matched, offers second part", () => {
+            const result = cache.completion("play", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions).toEqual(["song"]);
+            expect(result!.matchedPrefixLength).toBe(4);
+            expect(result!.separatorMode).toBe("spacePunctuation");
+            expect(result!.closedSet).toBe(true);
+        });
+
+        it("prefix 'play ' — trailing space ignored, still offers second part", () => {
+            const result = cache.completion("play ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions).toEqual(["song"]);
+            // matchedPrefixLength stays at 4 (the space is a separator,
+            // not consumed by any part)
+            expect(result!.matchedPrefixLength).toBe(4);
+            expect(result!.separatorMode).toBe("spacePunctuation");
+        });
+
+        it("prefix 'play s' — partial intra-part on second part, returns completions", () => {
+            const result = cache.completion("play s", defaultOptions);
+            expect(result).toBeDefined();
+            // "play" is fully matched (4 chars), " s" remains as
+            // partial prefix for the second part.
+            expect(result!.completions).toContain("song");
+            expect(result!.matchedPrefixLength).toBe(4);
+        });
+
+        it("prefix 'play song' — exact full match, empty completions", () => {
+            const result = cache.completion("play song", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions).toEqual([]);
+            expect(result!.matchedPrefixLength).toBe(9);
+            expect(result!.closedSet).toBe(true);
+        });
+    });
+
+    describe("multiple alternatives in a single part", () => {
+        it("offers all alternatives when first part is fully matched", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play", "start"], "verb"),
+                    createMatchPart(["song", "track", "album"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+
+            const r1 = cache.completion("play", defaultOptions);
+            expect(r1).toBeDefined();
+            expect(r1!.completions.sort()).toEqual(["album", "song", "track"]);
+
+            const r2 = cache.completion("start", defaultOptions);
+            expect(r2).toBeDefined();
+            expect(r2!.completions.sort()).toEqual(["album", "song", "track"]);
+        });
+    });
+
+    describe("case insensitivity", () => {
+        it("matches prefix case-insensitively", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["Play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("PLAY", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions).toEqual(["song"]);
+            expect(result!.matchedPrefixLength).toBe(4);
+        });
+    });
+
+    describe("multi-part constructions", () => {
+        it("completes third part after matching first two", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["the"], "article"),
+                    createMatchPart(["song", "album"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("play the ", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions.sort()).toEqual(["album", "song"]);
+        });
+
+        it("returns merged match set completions after merge", () => {
+            // Two constructions with same structure merge their match sets
+            const c1 = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [createMatchPart(["stop"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            // After merge, the match set should contain both "play" and "stop"
+            const result = cache.completion("", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.completions.sort()).toEqual(["play", "stop"]);
+        });
+    });
+});

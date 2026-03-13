@@ -64,6 +64,7 @@ export function matchParts(
             if (values !== undefined) {
                 if (config.partial) {
                     values.partialPartCount = state.matchedStart.length;
+                    values.matchedCurrent = state.matchedCurrent;
                 }
                 return values;
             }
@@ -201,6 +202,15 @@ function finishMatchParts(
     }
 
     if (state.pendingWildcard === -1) {
+        if (config.partial && state.matchedStart.length < parts.length) {
+            // Partial mode broke out of the loop before matching all
+            // parts.  Accept the partial match even when the remaining
+            // text contains non-separator characters — the completion
+            // layer will return the next part's candidates and the
+            // caller (UI) filters by the remaining text, matching the
+            // grammar matcher's behaviour.
+            return true;
+        }
         // The tail should only be space or punctuation
         return (
             state.matchedCurrent === request.length ||
@@ -367,7 +377,7 @@ function backtrack(
         // Check if it is optional, backtrack to before the optional and resume the search
         if (backtrackPart.optional) {
             // REVIEW: the constructor enforced that parts before and after a wildcard can't be optional.
-            // Otherwise, we need to restor pendingWildcard state here.
+            // Otherwise, we need to restore pendingWildcard state here.
             state.matchedStart.push(-1);
             return true;
         }

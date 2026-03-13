@@ -589,6 +589,7 @@ export class AgentCache {
         // Otherwise use completion-based construction store
         debug(`match: Using completion-based construction store`);
         const store = this._constructionStore;
+        const grammarStore = this._grammarStore;
         if (store.isEnabled()) {
             const constructionMatches = store.match(request, options);
             if (constructionMatches.length > 0) {
@@ -598,18 +599,19 @@ export class AgentCache {
                     return rest;
                 });
             }
+            if (!grammarStore.isEnabled()) {
+                return [];
+            }
+        } else if (!grammarStore.isEnabled()) {
+            throw new Error("AgentCache is disabled");
         }
 
         // Fallback to grammar store if construction store has no matches
-        const grammarStore = this._grammarStore;
-        if (grammarStore.isEnabled()) {
-            return this._grammarStore.match(request, options);
-        }
-        throw new Error("AgentCache is disabled");
+        return grammarStore.match(request, options);
     }
 
     public completion(
-        requestPrefix: string | undefined,
+        requestPrefix: string,
         options?: MatchOptions,
     ): CompletionResult | undefined {
         // If NFA grammar system is configured, only use grammar store

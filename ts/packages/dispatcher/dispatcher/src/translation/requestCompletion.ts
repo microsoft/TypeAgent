@@ -75,7 +75,7 @@ function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
 }
 
 export async function requestCompletion(
-    requestPrefix: string | undefined,
+    requestPrefix: string,
     context: CommandHandlerContext,
 ): Promise<CompletionGroups> {
     debugCompletion(`Request completion for prefix: '${requestPrefix}'`);

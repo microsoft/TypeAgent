@@ -31,7 +31,7 @@ describe("mergeCompletionResults", () => {
             expect(result).toBe(second);
         });
 
-        it("takes max of matchedPrefixLength when both are defined", () => {
+        it("discards shorter-prefix completions when second is longer", () => {
             const first: CompletionResult = {
                 completions: ["a"],
                 matchedPrefixLength: 5,
@@ -42,10 +42,10 @@ describe("mergeCompletionResults", () => {
             };
             const result = mergeCompletionResults(first, second)!;
             expect(result.matchedPrefixLength).toBe(10);
-            expect(result.completions).toEqual(["a", "b"]);
+            expect(result.completions).toEqual(["b"]);
         });
 
-        it("takes max of matchedPrefixLength (first is larger)", () => {
+        it("discards shorter-prefix completions when first is longer", () => {
             const first: CompletionResult = {
                 completions: ["a"],
                 matchedPrefixLength: 12,
@@ -56,6 +56,21 @@ describe("mergeCompletionResults", () => {
             };
             const result = mergeCompletionResults(first, second)!;
             expect(result.matchedPrefixLength).toBe(12);
+            expect(result.completions).toEqual(["a"]);
+        });
+
+        it("merges completions when both have equal matchedPrefixLength", () => {
+            const first: CompletionResult = {
+                completions: ["a"],
+                matchedPrefixLength: 5,
+            };
+            const second: CompletionResult = {
+                completions: ["b"],
+                matchedPrefixLength: 5,
+            };
+            const result = mergeCompletionResults(first, second)!;
+            expect(result.matchedPrefixLength).toBe(5);
+            expect(result.completions).toEqual(["a", "b"]);
         });
 
         it("returns undefined matchedPrefixLength when both are missing", () => {
@@ -70,7 +85,7 @@ describe("mergeCompletionResults", () => {
             expect(result.completions).toEqual(["a", "b"]);
         });
 
-        it("uses the defined value when only first has matchedPrefixLength", () => {
+        it("discards second when only first has matchedPrefixLength", () => {
             const first: CompletionResult = {
                 completions: ["a"],
                 matchedPrefixLength: 7,
@@ -79,11 +94,11 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
             };
             const result = mergeCompletionResults(first, second)!;
-            // max(7, 0) = 7
             expect(result.matchedPrefixLength).toBe(7);
+            expect(result.completions).toEqual(["a"]);
         });
 
-        it("uses the defined value when only second has matchedPrefixLength", () => {
+        it("discards first when only second has matchedPrefixLength", () => {
             const first: CompletionResult = {
                 completions: [],
             };
@@ -92,8 +107,8 @@ describe("mergeCompletionResults", () => {
                 matchedPrefixLength: 4,
             };
             const result = mergeCompletionResults(first, second)!;
-            // max(0, 4) = 4
             expect(result.matchedPrefixLength).toBe(4);
+            expect(result.completions).toEqual(["b"]);
         });
     });
 

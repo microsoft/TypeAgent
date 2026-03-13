@@ -478,7 +478,7 @@ export class RequestCommandHandler implements CommandHandler {
         const result: CompletionGroups = { groups: [] };
         for (const name of names) {
             if (name === "request") {
-                const requestPrefix = params.args.request;
+                const requestPrefix = params.args.request ?? "";
                 const requestResult = await requestCompletion(
                     requestPrefix,
                     context.agentContext,

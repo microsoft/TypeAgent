@@ -550,17 +550,11 @@ export async function getCommandCompletion(
 
         // Collect completions and track separatorMode across all sources.
         const completions: CompletionGroup[] = [];
+        let commitMode: "explicit" | "eager" = "explicit";
         let separatorMode: SeparatorMode | undefined;
-        if (input.trim() === "") {
-            completions.push({
-                name: "Command Prefixes",
-                completions: ["@"],
-            });
-        }
+        let closedSet = true;
 
         const descriptor = result.descriptor;
-        let closedSet = true;
-        let commitMode: "explicit" | "eager" = "explicit";
 
         // When the last command token was exactly matched but the
         // user hasn't typed a trailing space, they haven't committed
@@ -683,6 +677,18 @@ export async function getCommandCompletion(
             separatorMode = mergeSeparatorMode(separatorMode, "optional");
         }
 
+        if (startIndex === 0) {
+            // It is the first token, add "@" for the command prefix
+            completions.push({
+                name: "Command Prefixes",
+                completions: ["@"],
+            });
+
+            // The first token doesn't require separator before it (separatorMode to optional)
+            // and it doesn't require space after it (commitMode to eager)
+            separatorMode = "optional";
+            commitMode = "eager";
+        }
         const completionResult: CommandCompletionResult = {
             startIndex,
             completions,

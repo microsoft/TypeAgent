@@ -262,7 +262,7 @@ export class GrammarStoreImpl implements GrammarStore {
     }
 
     public completion(
-        requestPrefix: string | undefined,
+        requestPrefix: string,
         options?: MatchOptions,
     ): CompletionResult | undefined {
         if (!this.enabled) {
@@ -285,11 +285,10 @@ export class GrammarStoreImpl implements GrammarStore {
             if (this.useDFA && entry.dfa) {
                 // DFA-based completions
                 const tokens = requestPrefix
-                    ? requestPrefix
-                          .trim()
-                          .split(/\s+/)
-                          .filter((t) => t.length > 0)
-                    : [];
+                    .trim()
+                    .split(/\s+/)
+                    .filter((t) => t.length > 0);
+
                 const dfaCompResult = getDFACompletions(entry.dfa, tokens);
                 if (
                     dfaCompResult.completions &&
@@ -318,11 +317,10 @@ export class GrammarStoreImpl implements GrammarStore {
             } else if (this.useNFA && entry.nfa) {
                 // NFA-based completions: tokenize into complete whole tokens
                 const tokens = requestPrefix
-                    ? requestPrefix
-                          .trim()
-                          .split(/\s+/)
-                          .filter((t) => t.length > 0)
-                    : [];
+                    .trim()
+                    .split(/\s+/)
+                    .filter((t) => t.length > 0);
+
                 const nfaResult = computeNFACompletions(entry.nfa, tokens);
                 if (nfaResult.completions.length > 0) {
                     completions.push(...nfaResult.completions);
