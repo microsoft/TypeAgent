@@ -3,7 +3,6 @@
 
 import { SeparatorMode } from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
-import { needsSeparatorInAutoMode } from "action-grammar";
 import {
     ExecutableAction,
     HistoryContext,
@@ -26,7 +25,10 @@ import {
     ConstructionCacheJSON,
     constructionCacheJSONVersion,
 } from "./constructionJSONTypes.js";
-import { getLanguageTools } from "../utils/language.js";
+import {
+    getLanguageTools,
+    needsSeparatorInAutoMode,
+} from "../utils/language.js";
 const debugConst = registerDebug("typeagent:const");
 const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 const debugCompletion = registerDebug("typeagent:const:completion");
