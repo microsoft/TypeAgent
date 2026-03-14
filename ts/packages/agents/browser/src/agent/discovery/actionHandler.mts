@@ -45,6 +45,12 @@ import {
 import { MacroConverter } from "./yamlMacro/converter.mjs";
 import { ArtifactsStorage } from "./yamlMacro/artifactsStorage.mjs";
 import { MacroToWebFlowConverter } from "../webFlows/macroToWebFlowConverter.mjs";
+import { WebFlowStore } from "../webFlows/store/webFlowStore.mjs";
+import {
+    normalizeRecording,
+    RecordingData,
+} from "../webFlows/recordingNormalizer.mjs";
+import { generateWebFlowFromTrace } from "../webFlows/scriptGenerator.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
 
@@ -158,7 +164,10 @@ async function handleFindUserActions(
 
     const actionNames = [...new Set(uniqueItems.keys())];
 
-    const { schema, typeDefinitions } = await getDynamicSchema(actionNames);
+    const { schema, typeDefinitions } = await getDynamicSchema(
+        actionNames,
+        ctx.sessionContext,
+    );
     message += `\n =========== \n Discovered actions schema: \n ${schema} `;
 
     const url = await getBrowserControl(
@@ -349,7 +358,108 @@ async function handleFindUserActions(
     };
 }
 
-async function getDynamicSchema(actionNames: string[]) {
+function capitalize(name: string): string {
+    return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+async function buildDynamicSchemaFromWebFlows(
+    store: WebFlowStore,
+    currentDomain: string,
+    actionNames: string[],
+): Promise<{
+    schema: string;
+    actionNames: string[];
+    typeDefinitions: Record<string, ActionSchemaTypeDefinition>;
+}> {
+    const eligibleNames = await store.listForDomain(currentDomain);
+    // Include all eligible webFlows (detected + user-authored), not just LLM-detected
+    const relevantNames = [...new Set([...actionNames.filter((n) => eligibleNames.includes(n)), ...eligibleNames])];
+
+    const schemaActionNames: string[] = [];
+    const typeDefinitions = new Map<string, ActionSchemaTypeDefinition>();
+
+    for (const name of relevantNames) {
+        const flow = await store.get(name);
+        if (!flow) continue;
+
+        schemaActionNames.push(flow.name);
+
+        const paramEntries = Object.entries(flow.parameters);
+        const typeName = capitalize(flow.name);
+
+        const paramFields: Map<string, any> = new Map<string, any>();
+        for (const [k, v] of paramEntries) {
+            let paramType: ActionParamType = sc.string();
+            if (v.type === "number") paramType = sc.number();
+            if (v.type === "boolean") paramType = sc.number();
+
+            if (v.required) {
+                paramFields.set(k, sc.field(paramType, v.description));
+            } else {
+                paramFields.set(k, sc.optional(paramType, v.description));
+            }
+        }
+
+        const obj: ActionSchemaObject = sc.obj({
+            actionName: sc.string(flow.name),
+            parameters: sc.obj(Object.fromEntries(paramFields)),
+        } as const);
+
+        const typeDef = sc.type(
+            typeName,
+            obj,
+            flow.description,
+            true,
+        );
+        typeDefinitions.set(flow.name, typeDef);
+    }
+
+    // Also include any actionNames not covered by webFlows (fallback to hardcoded)
+    const uncoveredNames = actionNames.filter(
+        (n) => !schemaActionNames.includes(n),
+    );
+    if (uncoveredNames.length > 0) {
+        try {
+            const fallback = await getDynamicSchemaFromFile(uncoveredNames);
+            for (const [name, def] of Object.entries(
+                fallback.typeDefinitions,
+            )) {
+                if (!typeDefinitions.has(name)) {
+                    typeDefinitions.set(
+                        name,
+                        def as ActionSchemaTypeDefinition,
+                    );
+                    schemaActionNames.push(name);
+                }
+            }
+        } catch {
+            debug("Fallback to hardcoded schema failed for uncovered names");
+        }
+    }
+
+    // Generate unified schema
+    const union = sc.union(
+        Array.from(typeDefinitions.values()).map((definition) =>
+            sc.ref(definition),
+        ),
+    );
+    const entry = sc.type("DynamicUserPageActions", union);
+    entry.exported = true;
+    const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
+    const order = new Map<string, number>();
+    const schema = await generateActionSchema(
+        { entry, actionSchemas, order },
+        { exact: true },
+    );
+
+    return {
+        schema,
+        actionNames: schemaActionNames,
+        typeDefinitions: Object.fromEntries(typeDefinitions),
+    };
+}
+
+async function getDynamicSchemaFromFile(actionNames: string[]) {
     const packageRoot = path.join("..", "..", "..");
 
     const userActionsPoolSchema = await fs.promises.readFile(
@@ -392,6 +502,119 @@ async function getDynamicSchema(actionNames: string[]) {
     );
 
     return { schema, typeDefinitions: Object.fromEntries(typeDefinitions) };
+}
+
+async function getDynamicSchema(
+    actionNames: string[],
+    sessionContext?: SessionContext<BrowserActionContext>,
+) {
+    // Try dynamic schema from webFlows first
+    const webFlowStore = sessionContext?.agentContext?.webFlowStore;
+    if (webFlowStore) {
+        try {
+            const url = await getBrowserControl(
+                sessionContext!.agentContext,
+            ).getPageUrl();
+            const domain = new URL(url!).hostname;
+            return await buildDynamicSchemaFromWebFlows(
+                webFlowStore,
+                domain,
+                actionNames,
+            );
+        } catch (error) {
+            debug("Dynamic schema from webFlows failed, falling back:", error);
+        }
+    }
+
+    // Fallback to hardcoded schema
+    return await getDynamicSchemaFromFile(actionNames);
+}
+
+async function refreshDynamicAgentSchema(
+    ctx: DiscoveryActionHandlerContext,
+): Promise<void> {
+    try {
+        const url = await getBrowserControl(
+            ctx.sessionContext.agentContext,
+        ).getPageUrl();
+        const hostName = new URL(url!).hostname.replace(/\./g, "_");
+        const agentName = `temp_${hostName}`;
+
+        // Build schema from all available webFlows + macros for this domain
+        const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+        if (!webFlowStore) return;
+
+        const domain = new URL(url!).hostname;
+        const eligibleFlows = await webFlowStore.listForDomain(domain);
+
+        // Also include actions from MacroStore
+        const macroNames: string[] = [];
+        if (ctx.sessionContext.agentContext.macrosStore) {
+            const macros =
+                await ctx.sessionContext.agentContext.macrosStore.getMacrosForUrl(
+                    url!,
+                );
+            for (const m of macros) {
+                macroNames.push(m.name);
+            }
+        }
+
+        const allNames = [...new Set([...eligibleFlows, ...macroNames])];
+        if (allNames.length === 0) return;
+
+        const { schema } = await getDynamicSchema(
+            allNames,
+            ctx.sessionContext,
+        );
+
+        const schemaDescription = `A schema that enables interactions with the ${hostName} page`;
+        const manifest: AppAgentManifest = {
+            emojiChar: "🚧",
+            description: schemaDescription,
+            schema: {
+                description: schemaDescription,
+                schemaType: "DynamicUserPageActions",
+                schemaFile: { content: schema, format: "ts" },
+            },
+        };
+
+        // Re-register after a short delay to avoid deadlock
+        setTimeout(async () => {
+            try {
+                await ctx.sessionContext.removeDynamicAgent(agentName);
+            } catch {
+                try {
+                    await ctx.sessionContext.forceCleanupDynamicAgent(
+                        agentName,
+                    );
+                } catch {
+                    // May not exist yet
+                }
+            }
+
+            try {
+                await ctx.sessionContext.addDynamicAgent(
+                    agentName,
+                    manifest,
+                    createTempAgentForSchema(
+                        ctx.browser,
+                        ctx.agent,
+                        ctx.sessionContext,
+                    ),
+                );
+                debug(
+                    `Refreshed dynamic agent schema for ${agentName} with ${allNames.length} actions`,
+                );
+            } catch (error) {
+                debug(
+                    `Failed to refresh dynamic agent schema:`,
+                    error,
+                );
+            }
+        }, 500);
+    } catch (error) {
+        debug("Failed to refresh dynamic agent schema:", error);
+    }
 }
 
 async function handleGetPageSummary(
@@ -556,8 +779,8 @@ async function handleRegisterSiteSchema(
     const urlActions =
         await ctx.sessionContext.agentContext.macrosStore.getMacrosForUrl(url!);
 
-    const detectedActions = new Map<string, any>();
-    const authoredActions = new Map<string, any>();
+    const detectedActions = new Map<string, ActionSchemaTypeDefinition>();
+    const authoredActions = new Map<string, ActionSchemaTypeDefinition>();
 
     for (const storedMacro of urlActions) {
         if (storedMacro.definition.macroDefinition) {
@@ -565,6 +788,62 @@ async function handleRegisterSiteSchema(
                 storedMacro.name,
                 storedMacro.definition.macroDefinition,
             );
+        }
+
+        // Include user-authored actions via their intentJson schema
+        if (
+            storedMacro.author === "user" &&
+            storedMacro.definition.intentJson &&
+            !detectedActions.has(storedMacro.name)
+        ) {
+            try {
+                const { typeDefinition } = await getIntentSchemaFromJSON(
+                    storedMacro.definition.intentJson as UserIntent,
+                    storedMacro.description,
+                );
+                authoredActions.set(storedMacro.name, typeDefinition);
+            } catch (error) {
+                debug(
+                    `Failed to build schema for authored action "${storedMacro.name}":`,
+                    error,
+                );
+            }
+        }
+    }
+
+    // Also include webFlows for this domain (sample flows + user-authored webFlows)
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    if (webFlowStore) {
+        const domain = new URL(url!).hostname;
+        const eligibleFlows = await webFlowStore.listForDomain(domain);
+        for (const flowName of eligibleFlows) {
+            if (detectedActions.has(flowName) || authoredActions.has(flowName))
+                continue;
+            const flow = await webFlowStore.get(flowName);
+            if (!flow) continue;
+
+            const paramFields: Map<string, any> = new Map();
+            for (const [k, v] of Object.entries(flow.parameters)) {
+                let paramType: ActionParamType = sc.string();
+                if (v.type === "number") paramType = sc.number();
+                if (v.type === "boolean") paramType = sc.number();
+                if (v.required) {
+                    paramFields.set(k, sc.field(paramType, v.description));
+                } else {
+                    paramFields.set(k, sc.optional(paramType, v.description));
+                }
+            }
+            const obj: ActionSchemaObject = sc.obj({
+                actionName: sc.string(flow.name),
+                parameters: sc.obj(Object.fromEntries(paramFields)),
+            } as const);
+            const typeDef = sc.type(
+                capitalize(flow.name),
+                obj,
+                flow.description,
+                true,
+            );
+            authoredActions.set(flowName, typeDef);
         }
     }
 
@@ -609,23 +888,20 @@ async function handleRegisterSiteSchema(
 
     // register agent after request is processed to avoid a deadlock
     setTimeout(async () => {
+        let cleanupFailed = false;
         try {
             await ctx.sessionContext.removeDynamicAgent(agentName);
             debug(`Successfully removed existing agent: ${agentName}`);
-        } catch (error) {
-            console.warn(
-                `Normal removal failed for ${agentName}, attempting force cleanup:`,
-                error,
-            );
-
+        } catch {
+            // Agent may not exist yet — this is expected on first registration.
+            // Track the failure so we can report it if addDynamicAgent also fails.
+            cleanupFailed = true;
             try {
                 await ctx.sessionContext.forceCleanupDynamicAgent(agentName);
                 debug(`Force cleanup successful for: ${agentName}`);
-            } catch (forceError) {
-                console.error(
-                    `Force cleanup also failed for ${agentName}:`,
-                    forceError,
-                );
+                cleanupFailed = false;
+            } catch {
+                // Will be logged below only if registration fails
             }
         }
 
@@ -641,8 +917,17 @@ async function handleRegisterSiteSchema(
             );
             debug(`Successfully registered agent: ${agentName}`);
         } catch (error) {
-            console.error("Failed to register dynamic agent:", error);
-            // Don't throw - this setTimeout runs async and shouldn't break the main flow
+            if (cleanupFailed) {
+                console.error(
+                    `Failed to register dynamic agent '${agentName}' (prior cleanup also failed):`,
+                    error,
+                );
+            } else {
+                console.error(
+                    `Failed to register dynamic agent '${agentName}':`,
+                    error,
+                );
+            }
         }
     }, 1000);
 
@@ -885,30 +1170,77 @@ async function handleGetIntentFromReccording(
                     `Auto-saved authored action: ${action.parameters.recordedActionName} (ID: ${actionId})`,
                 );
 
-                // Also save as webFlow if WebFlowStore is available
+                // Save as webFlow using the reasoning pipeline for robust scripts
                 if (ctx.sessionContext.agentContext.webFlowStore) {
                     try {
-                        const webFlowConverter =
-                            new MacroToWebFlowConverter();
-                        const savedMacro =
-                            await ctx.sessionContext.agentContext.macrosStore.getMacro(
-                                macroId,
+                        const rawSteps = JSON.parse(
+                            recordedSteps || "[]",
+                        );
+                        debug(
+                            `WebFlow generation: ${rawSteps.length} raw recorded steps`,
+                        );
+                        const recordingForNorm: RecordingData = {
+                            actions: rawSteps,
+                            startUrl: url,
+                            description:
+                                action.parameters
+                                    .recordedActionDescription ||
+                                `User action: ${intentData.actionName}`,
+                        };
+
+                        const trace =
+                            normalizeRecording(recordingForNorm);
+                        debug(
+                            `WebFlow generation: normalized to ${trace.steps.length} trace steps`,
+                        );
+
+                        let flow =
+                            await generateWebFlowFromTrace(trace, {
+                                suggestedName:
+                                    intentData.actionName,
+                                description:
+                                    action.parameters
+                                        .recordedActionDescription,
+                            });
+                        debug(
+                            `WebFlow generation: LLM result = ${flow ? "success" : "null"}`,
+                        );
+
+                        // Fallback to MacroToWebFlowConverter if LLM generation fails
+                        if (!flow) {
+                            debug(
+                                "LLM script generation failed, falling back to MacroToWebFlowConverter",
                             );
-                        if (savedMacro) {
-                            const flow =
-                                webFlowConverter.convert(savedMacro);
-                            if (flow) {
-                                flow.source = {
-                                    type: "recording",
-                                    timestamp: new Date().toISOString(),
-                                };
-                                await ctx.sessionContext.agentContext.webFlowStore.save(
-                                    flow,
+                            const savedMacro =
+                                await ctx.sessionContext.agentContext.macrosStore.getMacro(
+                                    macroId,
                                 );
-                                debug(
-                                    `Also saved as webFlow: ${flow.name}`,
+                            if (savedMacro) {
+                                const converter =
+                                    new MacroToWebFlowConverter();
+                                flow = converter.convert(
+                                    savedMacro,
                                 );
                             }
+                        }
+
+                        if (flow) {
+                            flow.source = {
+                                type: "recording",
+                                timestamp:
+                                    new Date().toISOString(),
+                            };
+                            await ctx.sessionContext.agentContext.webFlowStore.save(
+                                flow,
+                            );
+                            debug(
+                                `Saved as webFlow: ${flow.name}`,
+                            );
+
+                            // Auto-refresh the temp agent schema so the action is immediately available
+                            await refreshDynamicAgentSchema(
+                                ctx,
+                            );
                         }
                     } catch (webFlowError) {
                         debug(

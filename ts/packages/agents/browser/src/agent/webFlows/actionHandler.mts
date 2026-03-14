@@ -7,7 +7,10 @@ import { WebFlowStore } from "./store/webFlowStore.mjs";
 import { WebFlowActions } from "./schema/webFlowActions.mjs";
 import { validateWebFlowScript } from "./scriptValidator.mjs";
 import { executeWebFlowScript } from "./scriptExecutor.mjs";
-import { createFrozenBrowserApi } from "./webFlowBrowserApi.mjs";
+import {
+    createFrozenBrowserApi,
+    ExtractComponentFn,
+} from "./webFlowBrowserApi.mjs";
 import { WebFlowBrowserAPIImpl } from "./webFlowBrowserApi.mjs";
 import { BrowserReasoningAgent } from "./reasoning/browserReasoningAgent.mjs";
 import { BrowserReasoningTrace } from "./reasoning/browserReasoningTypes.mjs";
@@ -17,9 +20,12 @@ import {
     RecordingData,
 } from "./recordingNormalizer.mjs";
 import { MacroToWebFlowConverter } from "./macroToWebFlowConverter.mjs";
+import { loadSampleFlows } from "./sampleFlowLoader.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:webflows:handler");
+
+let sampleFlowsRegistered = false;
 
 export interface WebFlowActionResult {
     displayText: string;
@@ -38,6 +44,84 @@ async function getStore(
     context.agentContext.webFlowStore = store;
     debug("WebFlowStore initialized on-demand");
     return store;
+}
+
+async function ensureSampleFlowsRegistered(
+    store: WebFlowStore,
+): Promise<void> {
+    if (sampleFlowsRegistered) return;
+    sampleFlowsRegistered = true;
+
+    try {
+        const samples = loadSampleFlows();
+        const existingNames = await store.getFlowNames();
+        let registered = 0;
+
+        for (const sample of samples) {
+            if (!existingNames.includes(sample.name)) {
+                await store.save(sample);
+                registered++;
+            }
+        }
+
+        if (registered > 0) {
+            debug(`Registered ${registered} sample webFlows`);
+        }
+    } catch (error) {
+        debug("Failed to register sample flows:", error);
+    }
+}
+
+function withTimeout<T>(
+    promise: Promise<T>,
+    ms: number,
+    fallback: T,
+): Promise<T> {
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([
+        promise,
+        new Promise<T>((resolve) => {
+            timer = setTimeout(() => resolve(fallback), ms);
+        }),
+    ]).finally(() => clearTimeout(timer));
+}
+
+function createExtractComponentFn(
+    context: SessionContext<BrowserActionContext>,
+): ExtractComponentFn | undefined {
+    return async (componentDef, userRequest) => {
+        const { createDiscoveryPageTranslator } = await import(
+            "../discovery/translator.mjs"
+        );
+        const agent = await createDiscoveryPageTranslator("GPT_5_2");
+        const browser = getBrowserControl(context.agentContext);
+        const htmlFragments = await browser.getHtmlFragments();
+
+        const screenshot = await withTimeout(
+            browser.captureScreenshot().catch(() => ""),
+            1_000,
+            "",
+        );
+        debug(
+            `extractComponent: screenshot ${screenshot ? "captured" : "skipped (timeout or error)"}`,
+        );
+
+        const screenshots = screenshot ? [screenshot] : [];
+        const response = await agent.getPageComponentSchema(
+            componentDef.typeName,
+            userRequest,
+            htmlFragments,
+            screenshots,
+        );
+
+        if (!response.success) {
+            throw new Error(
+                `Failed to extract component ${componentDef.typeName}: ${response.message}`,
+            );
+        }
+
+        return response.data;
+    };
 }
 
 async function handleListWebFlows(
@@ -193,7 +277,8 @@ async function handleDynamicFlowExecution(
 
     debug(`Executing WebFlow "${actionName}" with params:`, resolvedParams);
 
-    const browserApi = createFrozenBrowserApi(browser, flow.scope);
+    const extractFn = createExtractComponentFn(context);
+    const browserApi = createFrozenBrowserApi(browser, flow.scope, extractFn);
     const result = await executeWebFlowScript(
         flow.script,
         browserApi,
@@ -451,6 +536,9 @@ export async function handleWebFlowAction(
     action: { actionName: string; parameters?: Record<string, unknown> },
     context: SessionContext<BrowserActionContext>,
 ): Promise<WebFlowActionResult> {
+    const store = await getStore(context);
+    await ensureSampleFlowsRegistered(store);
+
     switch (action.actionName) {
         case "listWebFlows":
             return handleListWebFlows(

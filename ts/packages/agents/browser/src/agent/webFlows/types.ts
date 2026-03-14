@@ -55,23 +55,6 @@ export interface WebFlowResult {
     error?: string;
 }
 
-export interface ElementQuery {
-    cssSelector?: string;
-    role?: string;
-    text?: string;
-    textContains?: string;
-    label?: string;
-    placeholder?: string;
-    index?: number;
-}
-
-export interface ElementHandle {
-    selector: string;
-    tagName: string;
-    text?: string;
-    attributes?: Record<string, string>;
-}
-
 export interface ValidationResult {
     valid: boolean;
     errors: ValidationError[];

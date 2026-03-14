@@ -1,0 +1,26 @@
+{
+    "name": "searchForProduct",
+    "description": "Search for a product on an e-commerce website",
+    "version": 1,
+    "parameters": {
+        "productName": {
+            "type": "string",
+            "required": true,
+            "description": "The product to search for"
+        },
+        "selectionCriteria": {
+            "type": "string",
+            "required": false,
+            "description": "Optional criteria like price range or brand"
+        }
+    },
+    "script": "async function execute(browser, params) {\n    const searchInput = await browser.extractComponent(\n        { typeName: 'SearchInput', schema: '{ cssSelector: string; submitButtonCssSelector: string; }' },\n        params.selectionCriteria ? params.productName + ' ' + params.selectionCriteria : params.productName\n    );\n    if (!searchInput || !searchInput.cssSelector) {\n        throw new Error('Could not find search input on this page');\n    }\n    await browser.clearAndType(searchInput.cssSelector, params.productName);\n    if (searchInput.submitButtonCssSelector) {\n        await browser.click(searchInput.submitButtonCssSelector);\n    } else {\n        await browser.pressKey('Enter');\n    }\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Searched for ' + params.productName };\n}",
+    "grammarPatterns": [
+        "search for $(productName:wildcard)",
+        "find $(productName:wildcard)",
+        "look for $(productName:wildcard)",
+        "search $(productName:wildcard)"
+    ],
+    "scope": { "type": "global" },
+    "source": { "type": "manual", "timestamp": "2026-03-13T00:00:00.000Z" }
+}

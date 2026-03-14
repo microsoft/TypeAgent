@@ -9,7 +9,6 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod/v4";
 import { WebFlowBrowserAPI } from "../webFlowBrowserApi.mjs";
-import { ElementQuery } from "../types.js";
 import {
     BrowserReasoningConfig,
     BrowserReasoningTrace,
@@ -211,45 +210,13 @@ export class BrowserReasoningAgent {
                 },
             ),
             this.createTool(
-                "findElement",
-                "Find an element on the page using semantic queries (role, text, label, placeholder, or CSS selector)",
-                {
-                    cssSelector: z.string().optional().describe("CSS selector"),
-                    role: z.string().optional().describe("ARIA role"),
-                    text: z.string().optional().describe("Visible text content"),
-                    label: z.string().optional().describe("ARIA label"),
-                    placeholder: z.string().optional().describe("Placeholder text"),
-                    index: z.number().optional().describe("Element index if multiple matches"),
-                },
-                async (args) => {
-                    const element = await this.browserApi.findElement(
-                        args as ElementQuery,
-                    );
-                    recordStep("findElement", args, {
-                        success: true,
-                        data: element,
-                    });
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: JSON.stringify(element),
-                            },
-                        ],
-                    };
-                },
-            ),
-            this.createTool(
                 "click",
-                "Click on an element identified by its selector",
+                "Click on an element identified by its CSS selector",
                 {
                     selector: z.string().describe("CSS selector of the element"),
                 },
                 async (args) => {
-                    await this.browserApi.click({
-                        selector: args.selector as string,
-                        tagName: "unknown",
-                    });
+                    await this.browserApi.click(args.selector as string);
                     await this.browserApi.awaitPageInteraction();
                     const pageUrl = await this.browserApi.getCurrentUrl();
                     recordStep("click", args, { success: true, pageUrl });
@@ -265,10 +232,7 @@ export class BrowserReasoningAgent {
                 },
                 async (args) => {
                     await this.browserApi.enterText(
-                        {
-                            selector: args.selector as string,
-                            tagName: "input",
-                        },
+                        args.selector as string,
                         args.text as string,
                     );
                     recordStep("enterText", args, { success: true });
@@ -303,10 +267,7 @@ export class BrowserReasoningAgent {
                 },
                 async (args) => {
                     await this.browserApi.selectOption(
-                        {
-                            selector: args.selector as string,
-                            tagName: "select",
-                        },
+                        args.selector as string,
                         args.value as string,
                     );
                     recordStep("selectOption", args, { success: true });
@@ -316,33 +277,6 @@ export class BrowserReasoningAgent {
                                 type: "text",
                                 text: `Selected "${args.value}" in ${args.selector}`,
                             },
-                        ],
-                    };
-                },
-            ),
-            this.createTool(
-                "waitForElement",
-                "Wait for an element to appear on the page",
-                {
-                    cssSelector: z.string().optional().describe("CSS selector"),
-                    role: z.string().optional().describe("ARIA role"),
-                    text: z.string().optional().describe("Visible text"),
-                    label: z.string().optional().describe("ARIA label"),
-                    timeout: z.number().optional().describe("Timeout in ms (default 10000)"),
-                },
-                async (args) => {
-                    const { timeout, ...query } = args;
-                    const element = await this.browserApi.waitForElement(
-                        query as ElementQuery,
-                        timeout as number | undefined,
-                    );
-                    recordStep("waitForElement", args, {
-                        success: true,
-                        data: element,
-                    });
-                    return {
-                        content: [
-                            { type: "text", text: JSON.stringify(element) },
                         ],
                     };
                 },
@@ -406,20 +340,17 @@ export class BrowserReasoningAgent {
             "- goBack: Go back to previous page",
             "- getCurrentUrl: Get current page URL",
             "- getPageText: Read page text content",
-            "- findElement: Find elements by role, text, label, placeholder, or CSS selector",
-            "- click: Click on an element",
-            "- enterText: Type text into an input",
+            "- click: Click on an element by CSS selector",
+            "- enterText: Type text into an input by CSS selector",
             "- pressKey: Press a keyboard key",
-            "- selectOption: Select from a dropdown",
-            "- waitForElement: Wait for an element to appear",
+            "- selectOption: Select from a dropdown by CSS selector",
             "- captureScreenshot: Take a page screenshot",
             "",
             "Strategy:",
             "1. Start by understanding the current page (getPageText or captureScreenshot)",
-            "2. Find relevant elements using semantic queries",
-            "3. Interact with elements to achieve the goal",
-            "4. Verify results after each action",
-            "5. When the goal is achieved, report success with a summary",
+            "2. Interact with elements to achieve the goal",
+            "3. Verify results after each action",
+            "4. When the goal is achieved, report success with a summary",
             "",
             "Be methodical. If an action fails, try alternative approaches.",
             "Always verify the page state after navigation or form submission.",

@@ -1,20 +1,68 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { createJsonTranslator, TypeChatLanguageModel } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import { openai as ai } from "aiclient";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "node:url";
 import { WebFlowDefinition } from "./types.js";
 import { BrowserReasoningTrace } from "./reasoning/browserReasoningTypes.mjs";
 import { validateWebFlowScript } from "./scriptValidator.mjs";
+import { WebFlowGenerationResult } from "./schema/webFlowGeneration.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:webflows:scriptgen");
 
-const SCRIPT_GEN_MODEL = "claude-sonnet-4-5-20250929";
+const SCRIPT_GEN_MODEL = "GPT_5_2";
 
 export interface ScriptGenerationOptions {
     description?: string;
     suggestedName?: string;
     model?: string;
+}
+
+async function getSchemaFileContents(fileName: string): Promise<string> {
+    const packageRoot = path.join("..", "..", "..");
+    return await fs.promises.readFile(
+        fileURLToPath(
+            new URL(
+                path.join(
+                    packageRoot,
+                    "./src/agent/webFlows/schema",
+                    fileName,
+                ),
+                import.meta.url,
+            ),
+        ),
+        "utf8",
+    );
+}
+
+let cachedSchemas: {
+    generationSchema: string;
+    browserApiSchema: string;
+} | null = null;
+
+async function getSchemas() {
+    if (!cachedSchemas) {
+        const [generationSchema, browserApiSchema] = await Promise.all([
+            getSchemaFileContents("webFlowGeneration.mts"),
+            getSchemaFileContents("browserApi.mts"),
+        ]);
+        cachedSchemas = { generationSchema, browserApiSchema };
+    }
+    return cachedSchemas;
+}
+
+function createModel(modelName?: string): TypeChatLanguageModel {
+    const apiSettings = ai.azureApiSettingsFromEnv(
+        ai.ModelType.Chat,
+        undefined,
+        modelName ?? SCRIPT_GEN_MODEL,
+    );
+    return ai.createChatModel(apiSettings);
 }
 
 /**
@@ -26,22 +74,37 @@ export async function generateWebFlowFromTrace(
     trace: BrowserReasoningTrace,
     options: ScriptGenerationOptions = {},
 ): Promise<WebFlowDefinition | null> {
-    const prompt = buildScriptGenerationPrompt(trace, options);
-
     try {
-        const result = await callLLM(prompt, options.model);
-        if (!result) {
-            debug("LLM returned no result");
+        const schemas = await getSchemas();
+        const prompt = buildScriptGenerationPrompt(
+            trace,
+            options,
+            schemas.browserApiSchema,
+            schemas.generationSchema,
+        );
+
+        const model = createModel(options.model);
+        const validator =
+            createTypeScriptJsonValidator<WebFlowGenerationResult>(
+                schemas.generationSchema,
+                "WebFlowGenerationResult",
+            );
+        const translator = createJsonTranslator(model, validator);
+        translator.createRequestPrompt = () => prompt;
+
+        debug(
+            `Calling TypeChat with ${trace.steps.length} trace steps, model: ${options.model ?? SCRIPT_GEN_MODEL}`,
+        );
+        const response = await translator.translate("");
+        if (!response.success) {
+            debug("TypeChat translation failed:", response.message);
             return null;
         }
+        debug("TypeChat translation succeeded");
 
-        const parsed = parseGeneratedFlow(result);
-        if (!parsed) {
-            debug("Failed to parse LLM output");
-            return null;
-        }
+        const parsed = toWebFlowDefinition(response.data);
 
-        // Validate the generated script
+        // Validate the generated script content
         const validation = validateWebFlowScript(
             parsed.script,
             Object.keys(parsed.parameters),
@@ -51,21 +114,23 @@ export async function generateWebFlowFromTrace(
                 .filter((e) => e.severity === "error")
                 .map((e) => e.message);
             debug("Generated script failed validation:", errors);
-            // Try once more with validation feedback
-            const retryResult = await callLLM(
-                buildRetryPrompt(prompt, parsed.script, errors),
-                options.model,
+
+            // Retry with validation feedback
+            const retryPrompt = buildRetryPrompt(
+                prompt,
+                parsed.script,
+                errors,
             );
-            if (retryResult) {
-                const retryParsed = parseGeneratedFlow(retryResult);
-                if (retryParsed) {
-                    const retryValidation = validateWebFlowScript(
-                        retryParsed.script,
-                        Object.keys(retryParsed.parameters),
-                    );
-                    if (retryValidation.valid) {
-                        return retryParsed;
-                    }
+            translator.createRequestPrompt = () => retryPrompt;
+            const retryResponse = await translator.translate("");
+            if (retryResponse.success) {
+                const retryParsed = toWebFlowDefinition(retryResponse.data);
+                const retryValidation = validateWebFlowScript(
+                    retryParsed.script,
+                    Object.keys(retryParsed.parameters),
+                );
+                if (retryValidation.valid) {
+                    return retryParsed;
                 }
             }
             debug("Retry also failed validation");
@@ -79,9 +144,29 @@ export async function generateWebFlowFromTrace(
     }
 }
 
+function toWebFlowDefinition(
+    result: WebFlowGenerationResult,
+): WebFlowDefinition {
+    return {
+        name: result.name,
+        description: result.description,
+        version: result.version,
+        parameters: result.parameters,
+        script: result.script,
+        grammarPatterns: result.grammarPatterns ?? [],
+        scope: result.scope ?? { type: "global" },
+        source: result.source ?? {
+            type: "goal-driven",
+            timestamp: new Date().toISOString(),
+        },
+    };
+}
+
 function buildScriptGenerationPrompt(
     trace: BrowserReasoningTrace,
     options: ScriptGenerationOptions,
+    browserApiSchema: string,
+    generationSchema: string,
 ): string {
     const stepsDescription = trace.steps
         .map((step) => {
@@ -109,77 +194,38 @@ RESULT: ${trace.result.success ? "SUCCESS" : "FAILED"} - ${trace.result.summary}
 EXECUTION TRACE:
 ${stepsDescription}
 
-Generate a WebFlowDefinition JSON object that turns this trace into a reusable, parameterized script.
+Generate a WebFlowGenerationResult that turns this trace into a reusable, parameterized script.
 
-REQUIREMENTS:
-1. PARAMETERIZATION: Identify concrete values that should become parameters.
-   - Search terms, product names, prices → string/number parameters
-   - URLs with variable parts → parameterized URLs
-   - Fixed UI element names (button text, labels) should NOT be parameters
+The script's \`browser\` parameter implements the following TypeScript interface. Use ONLY these methods in the generated script:
 
-2. GENERALIZATION: Remove exploratory or corrective steps. Keep only the essential path.
+\`\`\`typescript
+${browserApiSchema}
+\`\`\`
 
-3. ROBUSTNESS: The script should:
-   - Use browser.waitForElement() before interacting with elements
-   - Use semantic queries (role, label, text) over CSS selectors when possible
-   - Include try/catch for graceful error handling
-   - Call browser.awaitPageLoad() after navigation
+SCRIPT GENERATION RULES:
+1. Remove exploratory or corrective steps. Keep only the essential path.
+2. Use browser.extractComponent() to find elements. It returns objects with cssSelector fields that you pass directly to click, enterText, selectOption, etc.
+3. Include try/catch for graceful error handling.
+4. Prefer clickAndWait/followLink over raw click + awaitPageLoad.
+5. IMPORTANT: Do NOT include browser.navigateTo() with the start URL at the beginning of the script. The script runs on whatever page the user is currently on. Only use navigateTo() if the flow's purpose is navigation itself.
+6. For extractComponent, the schema field must use TypeScript-style type syntax (e.g., "{ title: string; cssSelector: string; }"), NOT JSON Schema format.
+7. Action methods (click, enterText, selectOption, clickAndWait, followLink) take a CSS selector string directly. Do NOT use findElement or waitForElement — they do not exist.
 
-4. GRAMMAR PATTERNS: Generate 3-5 natural language patterns using:
-   - $(paramName:wildcard) for string captures
-   - $(paramName:number) for number captures
-   - (optional word)? for optional words
-   - word1 | word2 for alternatives
+IMPORTANT patterns for the script:
+- To click a link: use extractComponent({typeName: 'NavigationLink', schema: '{ title: string; linkSelector: string; }'}, 'link text') then browser.followLink(link.linkSelector)
+- To click a button/element: use extractComponent({typeName: 'Element', schema: '{ title: string; cssSelector: string; }'}, 'element text') then browser.clickAndWait(el.cssSelector)
+- To enter text: use extractComponent({typeName: 'TextInput', schema: '{ title: string; cssSelector: string; placeholderText?: string; }'}, 'input label') then browser.enterText(input.cssSelector, value)
+- To select from dropdown: use extractComponent({typeName: 'DropdownControl', schema: '{ title: string; cssSelector: string; values: { text: string; value: string; }[] }'}, 'dropdown label') then match the value against dropdown.values, then browser.selectOption(dropdown.cssSelector, matchedValue.text)
 
-5. SCOPE: Determine if this is site-specific or global based on the actions.
+Generate a response conforming to this TypeScript schema:
 
-The script must be an async function with signature: async function execute(browser, params)
-It can ONLY use browser.* methods and params.* values. No other globals.
+\`\`\`typescript
+${generationSchema}
+\`\`\`
 
-Available browser methods:
-- browser.navigateTo(url)
-- browser.goBack()
-- browser.awaitPageLoad(timeout?)
-- browser.awaitPageInteraction(timeout?)
-- browser.getCurrentUrl()
-- browser.findElement({cssSelector?, role?, text?, label?, placeholder?, index?})
-- browser.findElements(query)
-- browser.click(element)
-- browser.enterText(element, text)
-- browser.clearAndType(element, text)
-- browser.pressKey(key)
-- browser.selectOption(element, value)
-- browser.getText(element)
-- browser.getAttribute(element, attr)
-- browser.getPageText()
-- browser.captureScreenshot()
-- browser.waitForElement(query, timeout?)
-- browser.waitForNavigation(timeout?)
+The source.timestamp should be "${new Date().toISOString()}".
 
-Return ONLY a JSON object with this structure (no markdown, no explanation):
-{
-  "name": "camelCaseName",
-  "description": "what this flow does",
-  "version": 1,
-  "parameters": {
-    "paramName": {
-      "type": "string|number|boolean",
-      "required": true|false,
-      "description": "what this param is for",
-      "default": optionalDefault
-    }
-  },
-  "script": "async function execute(browser, params) { ... }",
-  "grammarPatterns": ["pattern with $(param:wildcard) captures"],
-  "scope": {
-    "type": "site|global",
-    "domains": ["domain.com"]
-  },
-  "source": {
-    "type": "goal-driven",
-    "timestamp": "${new Date().toISOString()}"
-  }
-}`;
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`;
 }
 
 function buildRetryPrompt(
@@ -189,78 +235,15 @@ function buildRetryPrompt(
 ): string {
     return `${originalPrompt}
 
-PREVIOUS ATTEMPT FAILED VALIDATION. Fix these errors:
+PREVIOUS ATTEMPT FAILED SCRIPT VALIDATION. Fix these errors in the script field:
 ${errors.map((e) => `- ${e}`).join("\n")}
 
 Failed script:
 ${failedScript}
 
-Generate a corrected version. Return ONLY the JSON object.`;
-}
+Generate a corrected version.
 
-async function callLLM(prompt: string, model?: string): Promise<string | null> {
-    let result = "";
-
-    const queryInstance = query({
-        prompt,
-        options: {
-            model: model ?? SCRIPT_GEN_MODEL,
-            maxTurns: 1,
-        },
-    });
-
-    for await (const message of queryInstance) {
-        if (message.type === "result" && message.subtype === "success") {
-            result = message.result;
-        }
-    }
-
-    return result || null;
-}
-
-function parseGeneratedFlow(llmOutput: string): WebFlowDefinition | null {
-    // Extract JSON from response (may be wrapped in markdown)
-    const jsonMatch =
-        llmOutput.match(/```json\s*([\s\S]*?)\s*```/) ||
-        llmOutput.match(/```\s*([\s\S]*?)\s*```/) ||
-        llmOutput.match(/(\{[\s\S]*\})/);
-
-    if (!jsonMatch) {
-        debug("Could not extract JSON from LLM response");
-        return null;
-    }
-
-    try {
-        const parsed = JSON.parse(jsonMatch[1]);
-
-        if (!parsed.name || !parsed.script || !parsed.parameters) {
-            debug("Missing required fields in generated flow");
-            return null;
-        }
-
-        // Ensure source has required fields
-        if (!parsed.source) {
-            parsed.source = {
-                type: "goal-driven",
-                timestamp: new Date().toISOString(),
-            };
-        }
-
-        // Ensure grammarPatterns is an array
-        if (!Array.isArray(parsed.grammarPatterns)) {
-            parsed.grammarPatterns = [];
-        }
-
-        // Ensure scope has required fields
-        if (!parsed.scope) {
-            parsed.scope = { type: "global" };
-        }
-
-        return parsed as WebFlowDefinition;
-    } catch (error) {
-        debug("Failed to parse generated flow JSON:", error);
-        return null;
-    }
+The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`;
 }
 
 function extractDomain(url: string): string {

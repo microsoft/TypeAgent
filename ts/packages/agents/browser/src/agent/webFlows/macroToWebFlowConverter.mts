@@ -166,7 +166,7 @@ export class MacroToWebFlowConverter {
 
         for (let i = 0; i < steps.length; i++) {
             const step = steps[i];
-            const stepLine = this.convertStep(step, params, intent);
+            const stepLine = this.convertStep(step, i, params, intent);
             if (stepLine) {
                 lines.push(`  ${stepLine}`);
             }
@@ -181,14 +181,21 @@ export class MacroToWebFlowConverter {
 
     private convertStep(
         step: NonNullable<ConvertibleMacro["definition"]["macroSteps"]>[number],
+        stepIndex: number,
         params: Record<string, WebFlowParameter>,
         intent?: ConvertibleMacro["definition"]["intentJson"],
     ): string | null {
-        switch (step.type) {
+        // YAML macro steps use `action` field; legacy steps use `type`
+        const stepType = step.type ?? (step as any).action;
+        const stepParams = (step as any).parameters as
+            | Record<string, any>
+            | undefined;
+
+        switch (stepType) {
             case "click":
                 if (step.target) {
                     const selector = escapeString(step.target);
-                    return `await browser.click(await browser.findElement({ cssSelector: "${selector}" }));`;
+                    return `await browser.click("${selector}");`;
                 }
                 return null;
 
@@ -198,8 +205,21 @@ export class MacroToWebFlowConverter {
                 const selector = step.target
                     ? escapeString(step.target)
                     : "";
-                const value = this.resolveValue(step.value, params, intent);
-                return `await browser.enterText(await browser.findElement({ cssSelector: "${selector}" }), ${value});`;
+                const value = this.resolveValue(
+                    stepParams?.textParameter ?? step.value,
+                    params,
+                    intent,
+                );
+                return `await browser.enterText("${selector}", ${value});`;
+            }
+
+            case "enterTextAtPageScope": {
+                const value = this.resolveValue(
+                    stepParams?.textParameter ?? step.value,
+                    params,
+                    intent,
+                );
+                return `await browser.enterTextOnPage(${value});`;
             }
 
             case "selectValueFromDropdown":
@@ -207,8 +227,21 @@ export class MacroToWebFlowConverter {
                 const selector = step.target
                     ? escapeString(step.target)
                     : "";
-                const value = this.resolveValue(step.value, params, intent);
-                return `await browser.selectOption(await browser.findElement({ cssSelector: "${selector}" }), ${value});`;
+                const value = this.resolveValue(
+                    stepParams?.valueTextParameter ?? step.value,
+                    params,
+                    intent,
+                );
+                if (selector) {
+                    return `await browser.selectOption("${selector}", ${value});`;
+                }
+                const dd = `dropdown${stepIndex}`;
+                const mv = `matchedVal${stepIndex}`;
+                return (
+                    `const ${dd} = await browser.extractComponent({ typeName: "DropdownControl", schema: "{ title: string; cssSelector: string; values: { text: string; value: string; }[] }" }, ${value});\n` +
+                    `  const ${mv} = ${dd}.values.find(v => v.text.toLowerCase().includes(String(${value}).toLowerCase()));\n` +
+                    `  await browser.selectOption(${dd}.cssSelector, ${mv} ? ${mv}.text : ${value});`
+                );
             }
 
             case "navigate":
@@ -219,24 +252,54 @@ export class MacroToWebFlowConverter {
                 return null;
 
             case "clickOnButton":
-            case "clickOnElement":
-                if (step.value && typeof step.value === "string") {
-                    return `await browser.click(await browser.findElement({ text: "${escapeString(step.value)}" }));`;
+            case "clickOnElement": {
+                const text =
+                    stepParams?.elementText ??
+                    stepParams?.buttonText ??
+                    step.value;
+                if (text && typeof text === "string") {
+                    const el = `el${stepIndex}`;
+                    return (
+                        `const ${el} = await browser.extractComponent({ typeName: "Element", schema: "{ title: string; cssSelector: string; }" }, "${escapeString(text)}");\n` +
+                        `  await browser.clickAndWait(${el}.cssSelector);`
+                    );
                 }
                 return null;
+            }
 
-            case "clickOnLink":
+            case "ClickOnLink":
+            case "clickOnLink": {
+                const value = this.resolveValue(
+                    stepParams?.linkTextParameter ?? step.value,
+                    params,
+                    intent,
+                );
+                const lnk = `link${stepIndex}`;
+                return (
+                    `const ${lnk} = await browser.extractComponent({ typeName: "NavigationLink", schema: "{ title: string; linkSelector: string; }" }, ${value});\n` +
+                    `  await browser.followLink(${lnk}.linkSelector);`
+                );
+            }
+
             case "selectElementByText": {
-                const value = this.resolveValue(step.value, params, intent);
-                return `await browser.click(await browser.findElement({ text: ${value} }));`;
+                const value = this.resolveValue(
+                    stepParams?.text ?? step.value,
+                    params,
+                    intent,
+                );
+                const el = `el${stepIndex}`;
+                return (
+                    `const ${el} = await browser.extractComponent({ typeName: "Element", schema: "{ title: string; cssSelector: string; }" }, ${value});\n` +
+                    `  await browser.clickAndWait(${el}.cssSelector);`
+                );
             }
 
             case "wait":
                 return "await browser.awaitPageLoad();";
 
             default:
-                debug(`Unknown step type: ${step.type}`);
-                return `// Unknown step: ${step.type}`;
+                debug(`Unknown step type: ${stepType}`);
+                return `// Unknown step: ${stepType}`;
         }
     }
 

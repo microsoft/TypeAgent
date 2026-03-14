@@ -1,0 +1,20 @@
+{
+    "name": "navigateToProductPage",
+    "description": "Navigate to a product details page from a listing or search results",
+    "version": 1,
+    "parameters": {
+        "productName": {
+            "type": "string",
+            "required": true,
+            "description": "The name of the product to view"
+        }
+    },
+    "script": "async function execute(browser, params) {\n    const productTile = await browser.extractComponent(\n        {\n            typeName: 'ProductTile',\n            schema: '{ name: string; price: string; detailsLinkSelector: string; }'\n        },\n        params.productName\n    );\n    if (!productTile || !productTile.detailsLinkSelector) {\n        throw new Error('Could not find product: ' + params.productName);\n    }\n    await browser.click(productTile.detailsLinkSelector);\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Navigated to ' + productTile.name };\n}",
+    "grammarPatterns": [
+        "view $(productName:wildcard) details",
+        "go to $(productName:wildcard) product page",
+        "open $(productName:wildcard)"
+    ],
+    "scope": { "type": "global" },
+    "source": { "type": "manual", "timestamp": "2026-03-13T00:00:00.000Z" }
+}

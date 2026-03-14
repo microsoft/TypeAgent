@@ -14,7 +14,11 @@ export {
     createFrozenBrowserApi,
     WebFlowBrowserAPIImpl,
 } from "./webFlowBrowserApi.mjs";
-export type { WebFlowBrowserAPI } from "./webFlowBrowserApi.mjs";
+export type {
+    WebFlowBrowserAPI,
+    ComponentDefinition,
+    ExtractComponentFn,
+} from "./webFlowBrowserApi.mjs";
 export type {
     WebFlowDefinition,
     WebFlowParameter,
@@ -23,8 +27,6 @@ export type {
     WebFlowResult,
     WebFlowIndex,
     WebFlowIndexEntry,
-    ElementQuery,
-    ElementHandle,
     ValidationResult,
     ValidationError,
 } from "./types.js";
@@ -40,3 +42,4 @@ export type {
 } from "./reasoning/browserReasoningTypes.mjs";
 export { MacroToWebFlowConverter } from "./macroToWebFlowConverter.mjs";
 export type { ConvertibleMacro } from "./macroToWebFlowConverter.mjs";
+export { loadSampleFlows } from "./sampleFlowLoader.mjs";

@@ -9,7 +9,7 @@ export interface ScriptExecutionOptions {
 }
 
 const DEFAULT_OPTIONS: ScriptExecutionOptions = {
-    timeout: 60000,
+    timeout: 180000,
 };
 
 /**

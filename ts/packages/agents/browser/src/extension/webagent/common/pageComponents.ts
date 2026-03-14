@@ -119,6 +119,33 @@ export const StoreInfo: PageComponentDefinition = {
 }`,
 };
 
+// Generic clickable element (button, link, icon, etc.) found by visible text
+export const Element: PageComponentDefinition = {
+    typeName: "Element",
+    schema: `{
+    title: string;
+    // CSS selector for the element
+    cssSelector: string;
+}`,
+};
+
+// Dropdown/select control with its available options
+export const DropdownControl: PageComponentDefinition = {
+    typeName: "DropdownControl",
+    schema: `{
+    title: string;
+    // CSS selector for the select/dropdown element
+    cssSelector: string;
+    // The available options in the dropdown
+    values: {
+        // The visible text of the option
+        text: string;
+        // The value attribute of the option
+        value: string;
+    }[];
+}`,
+};
+
 // List of nearby stores
 export const NearbyStoresList: PageComponentDefinition = {
     typeName: "NearbyStoresList",
@@ -141,6 +168,8 @@ export const COMMON_COMPONENTS: Record<string, PageComponentDefinition> = {
     NavigationLink,
     Button,
     TextInput,
+    Element,
+    DropdownControl,
     StoreInfo,
     NearbyStoresList,
 };
@@ -215,6 +244,20 @@ export interface StoreInfoType {
     subtitle?: string;
     linkSelector?: string;
     zipCode?: string;
+}
+
+export interface ElementType {
+    title: string;
+    cssSelector: string;
+}
+
+export interface DropdownControlType {
+    title: string;
+    cssSelector: string;
+    values: {
+        text: string;
+        value: string;
+    }[];
 }
 
 export interface NearbyStoresListType {
