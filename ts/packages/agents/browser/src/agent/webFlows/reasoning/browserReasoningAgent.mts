@@ -122,8 +122,7 @@ export class BrowserReasoningAgent {
                 }
             }
         } catch (error) {
-            summary =
-                error instanceof Error ? error.message : String(error);
+            summary = error instanceof Error ? error.message : String(error);
         }
 
         return {
@@ -169,7 +168,11 @@ export class BrowserReasoningAgent {
                         success: true,
                         pageUrl,
                     });
-                    return { content: [{ type: "text", text: `Navigated to ${pageUrl}` }] };
+                    return {
+                        content: [
+                            { type: "text", text: `Navigated to ${pageUrl}` },
+                        ],
+                    };
                 },
             ),
             this.createTool(
@@ -180,7 +183,11 @@ export class BrowserReasoningAgent {
                     await this.browserApi.goBack();
                     const pageUrl = await this.browserApi.getCurrentUrl();
                     recordStep("goBack", args, { success: true, pageUrl });
-                    return { content: [{ type: "text", text: `Went back to ${pageUrl}` }] };
+                    return {
+                        content: [
+                            { type: "text", text: `Went back to ${pageUrl}` },
+                        ],
+                    };
                 },
             ),
             this.createTool(
@@ -213,14 +220,23 @@ export class BrowserReasoningAgent {
                 "click",
                 "Click on an element identified by its CSS selector",
                 {
-                    selector: z.string().describe("CSS selector of the element"),
+                    selector: z
+                        .string()
+                        .describe("CSS selector of the element"),
                 },
                 async (args) => {
                     await this.browserApi.click(args.selector as string);
                     await this.browserApi.awaitPageInteraction();
                     const pageUrl = await this.browserApi.getCurrentUrl();
                     recordStep("click", args, { success: true, pageUrl });
-                    return { content: [{ type: "text", text: `Clicked element: ${args.selector}` }] };
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: `Clicked element: ${args.selector}`,
+                            },
+                        ],
+                    };
                 },
             ),
             this.createTool(
@@ -255,14 +271,20 @@ export class BrowserReasoningAgent {
                 async (args) => {
                     await this.browserApi.pressKey(args.key as string);
                     recordStep("pressKey", args, { success: true });
-                    return { content: [{ type: "text", text: `Pressed key: ${args.key}` }] };
+                    return {
+                        content: [
+                            { type: "text", text: `Pressed key: ${args.key}` },
+                        ],
+                    };
                 },
             ),
             this.createTool(
                 "selectOption",
                 "Select an option from a dropdown/select element",
                 {
-                    selector: z.string().describe("CSS selector of the select element"),
+                    selector: z
+                        .string()
+                        .describe("CSS selector of the select element"),
                     value: z.string().describe("Value to select"),
                 },
                 async (args) => {
@@ -294,7 +316,10 @@ export class BrowserReasoningAgent {
                     });
                     return {
                         content: [
-                            { type: "text", text: `Screenshot captured (${screenshot.length} chars base64)` },
+                            {
+                                type: "text",
+                                text: `Screenshot captured (${screenshot.length} chars base64)`,
+                            },
                         ],
                     };
                 },
@@ -319,11 +344,11 @@ export class BrowserReasoningAgent {
                     return await handler(args);
                 } catch (error) {
                     const msg =
-                        error instanceof Error
-                            ? error.message
-                            : String(error);
+                        error instanceof Error ? error.message : String(error);
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }

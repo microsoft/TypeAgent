@@ -1,15 +1,15 @@
 {
-    "name": "findNearbyStore",
-    "description": "Find nearby physical store locations",
-    "version": 1,
-    "parameters": {},
-    "script": "async function execute(browser, params) {\n    const storeInfo = await browser.extractComponent(\n        {\n            typeName: 'StoreInfo',\n            schema: '{ name: string; subtitle?: string; linkSelector?: string; zipCode?: string; }'\n        },\n        'store locator'\n    );\n    if (storeInfo && storeInfo.linkSelector) {\n        await browser.click(storeInfo.linkSelector);\n        await browser.awaitPageLoad();\n    }\n    const storesList = await browser.extractComponent(\n        {\n            typeName: 'NearbyStoresList',\n            schema: '{ stores: { name: string; subtitle?: string; linkSelector: string; }[]; }'\n        }\n    );\n    if (storesList && storesList.stores && storesList.stores.length > 0) {\n        return { success: true, message: 'Found ' + storesList.stores.length + ' nearby stores', data: storesList };\n    }\n    return { success: true, message: 'Store locator opened', data: storeInfo };\n}",
-    "grammarPatterns": [
-        "find nearby store",
-        "find (a)? store near me",
-        "store locator",
-        "find (the)? nearest store"
-    ],
-    "scope": { "type": "global" },
-    "source": { "type": "manual", "timestamp": "2026-03-13T00:00:00.000Z" }
+  "name": "findNearbyStore",
+  "description": "Find nearby physical store locations",
+  "version": 1,
+  "parameters": {},
+  "script": "async function execute(browser, params) {\n    const storeInfo = await browser.extractComponent(\n        {\n            typeName: 'StoreInfo',\n            schema: '{ name: string; subtitle?: string; linkSelector?: string; zipCode?: string; }'\n        },\n        'store locator'\n    );\n    if (storeInfo && storeInfo.linkSelector) {\n        await browser.click(storeInfo.linkSelector);\n        await browser.awaitPageLoad();\n    }\n    const storesList = await browser.extractComponent(\n        {\n            typeName: 'NearbyStoresList',\n            schema: '{ stores: { name: string; subtitle?: string; linkSelector: string; }[]; }'\n        }\n    );\n    if (storesList && storesList.stores && storesList.stores.length > 0) {\n        return { success: true, message: 'Found ' + storesList.stores.length + ' nearby stores', data: storesList };\n    }\n    return { success: true, message: 'Store locator opened', data: storeInfo };\n}",
+  "grammarPatterns": [
+    "find nearby store",
+    "find (a)? store near me",
+    "store locator",
+    "find (the)? nearest store"
+  ],
+  "scope": { "type": "global" },
+  "source": { "type": "manual", "timestamp": "2026-03-13T00:00:00.000Z" }
 }

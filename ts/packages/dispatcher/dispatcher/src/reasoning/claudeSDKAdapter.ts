@@ -28,11 +28,11 @@ const MCP_SERVER_NAME = "reasoning-tools";
  * Claude-specific message types into ReasoningEvent.
  */
 export class ClaudeSDKAdapter implements ReasoningSDKAdapter {
-    constructor(
-        private baseOptions: Partial<Options> = {},
-    ) {}
+    constructor(private baseOptions: Partial<Options> = {}) {}
 
-    async createSession(config: ReasoningLoopConfig): Promise<ReasoningSession> {
+    async createSession(
+        config: ReasoningLoopConfig,
+    ): Promise<ReasoningSession> {
         return new ClaudeReasoningSession(config, this.baseOptions);
     }
 }
@@ -120,8 +120,7 @@ class ClaudeReasoningSession implements ReasoningSession {
                         type: "done",
                         result: {
                             success: false,
-                            error:
-                                errors?.join(", ") ?? "Unknown error",
+                            error: errors?.join(", ") ?? "Unknown error",
                         },
                     };
                 }
@@ -163,7 +162,9 @@ class ClaudeReasoningSession implements ReasoningSession {
     private toMcpToolDefinition(
         tool: (typeof this.config.tools)[number],
     ): SdkMcpToolDefinition<any> {
-        const zodSchema = this.objectToZod(tool.inputSchema as Record<string, unknown>);
+        const zodSchema = this.objectToZod(
+            tool.inputSchema as Record<string, unknown>,
+        );
         return {
             name: tool.name,
             description: tool.description,

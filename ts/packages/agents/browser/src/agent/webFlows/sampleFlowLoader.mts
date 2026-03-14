@@ -12,7 +12,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // (dist/agent/webFlows/), we go up to the package root then into src/.
 // Also try the source-relative path for dev scenarios.
 const CANDIDATE_DIRS = [
-    path.resolve(__dirname, "..", "..", "..", "src", "agent", "webFlows", "samples"),
+    path.resolve(
+        __dirname,
+        "..",
+        "..",
+        "..",
+        "src",
+        "agent",
+        "webFlows",
+        "samples",
+    ),
     path.resolve(__dirname, "samples"),
 ];
 

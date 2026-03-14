@@ -323,9 +323,7 @@ async function handleSaveCurrentWebPlan(
             lines.push(`  // ${step}`);
         }
     }
-    lines.push(
-        '  return { success: true, message: "Plan executed" };',
-    );
+    lines.push('  return { success: true, message: "Plan executed" };');
     lines.push("}");
 
     const flow: WebFlowDefinition = {
@@ -417,10 +415,7 @@ export function createSchemaAuthoringAgent(
                     );
                     return runResult;
                 case "saveCurrentWebPlan":
-                    return await handleSaveCurrentWebPlan(
-                        ctx,
-                        actionContext,
-                    );
+                    return await handleSaveCurrentWebPlan(ctx, actionContext);
                 default:
                     break;
             }

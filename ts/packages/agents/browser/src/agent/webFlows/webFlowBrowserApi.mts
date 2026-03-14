@@ -90,10 +90,7 @@ export class WebFlowBrowserAPIImpl implements WebFlowBrowserAPI {
         await this.browser.clickOn(cssSelector);
     }
 
-    async clickAndWait(
-        cssSelector: string,
-        timeout?: number,
-    ): Promise<void> {
+    async clickAndWait(cssSelector: string, timeout?: number): Promise<void> {
         await this.browser.clickOn(cssSelector);
         await this.browser.awaitPageInteraction(timeout);
         await this.browser.awaitPageLoad(timeout);
@@ -107,10 +104,7 @@ export class WebFlowBrowserAPIImpl implements WebFlowBrowserAPI {
         await this.browser.enterTextIn(text, cssSelector, false);
     }
 
-    async enterTextOnPage(
-        text: string,
-        submitForm?: boolean,
-    ): Promise<void> {
+    async enterTextOnPage(text: string, submitForm?: boolean): Promise<void> {
         await this.browser.enterTextIn(text, undefined, submitForm);
     }
 
@@ -149,10 +143,7 @@ export class WebFlowBrowserAPIImpl implements WebFlowBrowserAPI {
                 "extractComponent is not available: no extraction function was provided",
             );
         }
-        const result = await this.extractComponentFn(
-            componentDef,
-            userRequest,
-        );
+        const result = await this.extractComponentFn(componentDef, userRequest);
         return result as T;
     }
 }

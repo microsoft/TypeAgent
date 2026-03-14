@@ -15,10 +15,7 @@ import { WebFlowBrowserAPIImpl } from "./webFlowBrowserApi.mjs";
 import { BrowserReasoningAgent } from "./reasoning/browserReasoningAgent.mjs";
 import { BrowserReasoningTrace } from "./reasoning/browserReasoningTypes.mjs";
 import { generateWebFlowFromTrace } from "./scriptGenerator.mjs";
-import {
-    normalizeRecording,
-    RecordingData,
-} from "./recordingNormalizer.mjs";
+import { normalizeRecording, RecordingData } from "./recordingNormalizer.mjs";
 import { MacroToWebFlowConverter } from "./macroToWebFlowConverter.mjs";
 import { loadSampleFlows } from "./sampleFlowLoader.mjs";
 import registerDebug from "debug";
@@ -46,9 +43,7 @@ async function getStore(
     return store;
 }
 
-async function ensureSampleFlowsRegistered(
-    store: WebFlowStore,
-): Promise<void> {
+async function ensureSampleFlowsRegistered(store: WebFlowStore): Promise<void> {
     if (sampleFlowsRegistered) return;
     sampleFlowsRegistered = true;
 
@@ -137,9 +132,10 @@ async function handleListWebFlows(
         const domain = new URL(url).hostname;
         const names = await store.listForDomain(domain);
         return {
-            displayText: names.length > 0
-                ? `WebFlows for ${domain}:\n${names.map((n) => `  - ${n}`).join("\n")}`
-                : `No WebFlows found for ${domain}`,
+            displayText:
+                names.length > 0
+                    ? `WebFlows for ${domain}:\n${names.map((n) => `  - ${n}`).join("\n")}`
+                    : `No WebFlows found for ${domain}`,
             data: { flows: names, domain },
         };
     }
@@ -148,17 +144,19 @@ async function handleListWebFlows(
     if (scope === "global") {
         const global = entries.filter((e) => e.scope.type === "global");
         return {
-            displayText: global.length > 0
-                ? `Global WebFlows:\n${global.map((e) => `  - ${e.description}`).join("\n")}`
-                : "No global WebFlows found",
+            displayText:
+                global.length > 0
+                    ? `Global WebFlows:\n${global.map((e) => `  - ${e.description}`).join("\n")}`
+                    : "No global WebFlows found",
             data: { flows: global },
         };
     }
 
     return {
-        displayText: entries.length > 0
-            ? `All WebFlows (${entries.length}):\n${entries.map((e) => `  - ${e.description} [${e.scope.type}]`).join("\n")}`
-            : "No WebFlows found",
+        displayText:
+            entries.length > 0
+                ? `All WebFlows (${entries.length}):\n${entries.map((e) => `  - ${e.description} [${e.scope.type}]`).join("\n")}`
+                : "No WebFlows found",
         data: { flows: entries },
     };
 }
@@ -287,7 +285,7 @@ async function handleDynamicFlowExecution(
 
     return {
         displayText: result.success
-            ? result.message ?? `WebFlow "${actionName}" completed`
+            ? (result.message ?? `WebFlow "${actionName}" completed`)
             : `WebFlow "${actionName}" failed: ${result.error}`,
         data: result,
     };
@@ -372,7 +370,9 @@ async function handleGenerateWebFlow(
         };
     }
 
-    debug(`Generating WebFlow from trace "${traceId}" (${trace.steps.length} steps)`);
+    debug(
+        `Generating WebFlow from trace "${traceId}" (${trace.steps.length} steps)`,
+    );
 
     const flow = await generateWebFlowFromTrace(trace, {
         ...(name && { suggestedName: name }),
@@ -381,7 +381,8 @@ async function handleGenerateWebFlow(
 
     if (!flow) {
         return {
-            displayText: "Failed to generate WebFlow from trace. The LLM could not produce a valid script.",
+            displayText:
+                "Failed to generate WebFlow from trace. The LLM could not produce a valid script.",
             data: { success: false, error: "generation_failed" },
         };
     }
@@ -429,7 +430,8 @@ async function handleGenerateWebFlowFromRecording(
         };
     } catch {
         return {
-            displayText: "No recording data found. Record a user interaction first.",
+            displayText:
+                "No recording data found. Record a user interaction first.",
             data: { success: false, error: "no_recording" },
         };
     }
@@ -458,7 +460,9 @@ async function handleGenerateWebFlowFromRecording(
         }
     }
 
-    debug(`Generating WebFlow from recording (${trace.steps.length} normalized steps)`);
+    debug(
+        `Generating WebFlow from recording (${trace.steps.length} normalized steps)`,
+    );
     const flow = await generateWebFlowFromTrace(trace, {
         ...(name && { suggestedName: name }),
         description,
@@ -466,7 +470,8 @@ async function handleGenerateWebFlowFromRecording(
 
     if (!flow) {
         return {
-            displayText: "Failed to generate WebFlow from recording. The LLM could not produce a valid script.",
+            displayText:
+                "Failed to generate WebFlow from recording. The LLM could not produce a valid script.",
             data: { success: false, error: "generation_failed", traceId },
         };
     }
@@ -528,7 +533,11 @@ async function handleConvertMacrosToWebFlows(
 
     return {
         displayText: `Converted ${savedCount} macros to webFlows${domain ? ` for ${domain}` : ""} (${discoveredMacros.length} discovered macros found)`,
-        data: { success: true, converted: savedCount, total: discoveredMacros.length },
+        data: {
+            success: true,
+            converted: savedCount,
+            total: discoveredMacros.length,
+        },
     };
 }
 

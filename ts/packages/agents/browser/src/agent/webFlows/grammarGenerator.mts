@@ -73,8 +73,6 @@ export function generateAgrText(flows: WebFlowDefinition[]): string {
  * Generates an .agr rule for a single flow being added incrementally.
  * The caller is responsible for updating the <Start> rule separately.
  */
-export function generateIncrementalAgrRule(
-    flow: WebFlowDefinition,
-): string {
+export function generateIncrementalAgrRule(flow: WebFlowDefinition): string {
     return generateAgrRule(flow.name, flow.parameters, flow.grammarPatterns);
 }

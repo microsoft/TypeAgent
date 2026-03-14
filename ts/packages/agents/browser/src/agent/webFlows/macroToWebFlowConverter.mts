@@ -1,11 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    WebFlowDefinition,
-    WebFlowParameter,
-    WebFlowScope,
-} from "./types.js";
+import { WebFlowDefinition, WebFlowParameter, WebFlowScope } from "./types.js";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:webflows:converter");
@@ -78,7 +74,8 @@ export class MacroToWebFlowConverter {
 
             return {
                 name,
-                description: macro.description || `Converted from macro: ${macro.name}`,
+                description:
+                    macro.description || `Converted from macro: ${macro.name}`,
                 version: 1,
                 parameters: params,
                 script,
@@ -106,7 +103,9 @@ export class MacroToWebFlowConverter {
                 results.push(flow);
             }
         }
-        debug(`Converted ${results.length}/${macros.length} macros to webFlows`);
+        debug(
+            `Converted ${results.length}/${macros.length} macros to webFlows`,
+        );
         return results;
     }
 
@@ -160,9 +159,7 @@ export class MacroToWebFlowConverter {
         params: Record<string, WebFlowParameter>,
         intent?: ConvertibleMacro["definition"]["intentJson"],
     ): string {
-        const lines: string[] = [
-            "async function execute(browser, params) {",
-        ];
+        const lines: string[] = ["async function execute(browser, params) {"];
 
         for (let i = 0; i < steps.length; i++) {
             const step = steps[i];
@@ -172,9 +169,7 @@ export class MacroToWebFlowConverter {
             }
         }
 
-        lines.push(
-            '  return { success: true, message: "Flow completed" };',
-        );
+        lines.push('  return { success: true, message: "Flow completed" };');
         lines.push("}");
         return lines.join("\n");
     }
@@ -202,9 +197,7 @@ export class MacroToWebFlowConverter {
             case "type":
             case "input":
             case "enterText": {
-                const selector = step.target
-                    ? escapeString(step.target)
-                    : "";
+                const selector = step.target ? escapeString(step.target) : "";
                 const value = this.resolveValue(
                     stepParams?.textParameter ?? step.value,
                     params,
@@ -224,9 +217,7 @@ export class MacroToWebFlowConverter {
 
             case "selectValueFromDropdown":
             case "select": {
-                const selector = step.target
-                    ? escapeString(step.target)
-                    : "";
+                const selector = step.target ? escapeString(step.target) : "";
                 const value = this.resolveValue(
                     stepParams?.valueTextParameter ?? step.value,
                     params,
@@ -443,12 +434,13 @@ function toCamelCase(str: string): string {
 }
 
 function escapeString(str: string): string {
-    return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+    return str
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, "\\n");
 }
 
-function normalizeParamType(
-    type: string,
-): "string" | "number" | "boolean" {
+function normalizeParamType(type: string): "string" | "number" | "boolean" {
     switch (type.toLowerCase()) {
         case "number":
         case "integer":

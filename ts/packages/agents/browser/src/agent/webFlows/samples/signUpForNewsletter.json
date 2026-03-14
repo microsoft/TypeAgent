@@ -1,20 +1,20 @@
 {
-    "name": "signUpForNewsletter",
-    "description": "Sign up for a newsletter with an email address",
-    "version": 1,
-    "parameters": {
-        "emailAddress": {
-            "type": "string",
-            "required": true,
-            "description": "The email address to sign up with"
-        }
-    },
-    "script": "async function execute(browser, params) {\n    const emailInput = await browser.extractComponent(\n        {\n            typeName: 'TextInput',\n            schema: '{ title: string; cssSelector: string; placeholderText?: string; }'\n        },\n        'email newsletter signup'\n    );\n    if (!emailInput || !emailInput.cssSelector) {\n        throw new Error('Could not find newsletter email input');\n    }\n    await browser.clearAndType(emailInput.cssSelector, params.emailAddress);\n    const submitBtn = await browser.extractComponent(\n        {\n            typeName: 'Button',\n            schema: '{ title: string; cssSelector: string; }'\n        },\n        'subscribe newsletter submit'\n    );\n    if (submitBtn && submitBtn.cssSelector) {\n        await browser.click(submitBtn.cssSelector);\n    } else {\n        await browser.pressKey('Enter');\n    }\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Signed up for newsletter with ' + params.emailAddress };\n}",
-    "grammarPatterns": [
-        "sign up for newsletter with $(emailAddress:wildcard)",
-        "subscribe to newsletter $(emailAddress:wildcard)",
-        "newsletter signup $(emailAddress:wildcard)"
-    ],
-    "scope": { "type": "global" },
-    "source": { "type": "manual", "timestamp": "2026-03-13T00:00:00.000Z" }
+  "name": "signUpForNewsletter",
+  "description": "Sign up for a newsletter with an email address",
+  "version": 1,
+  "parameters": {
+    "emailAddress": {
+      "type": "string",
+      "required": true,
+      "description": "The email address to sign up with"
+    }
+  },
+  "script": "async function execute(browser, params) {\n    const emailInput = await browser.extractComponent(\n        {\n            typeName: 'TextInput',\n            schema: '{ title: string; cssSelector: string; placeholderText?: string; }'\n        },\n        'email newsletter signup'\n    );\n    if (!emailInput || !emailInput.cssSelector) {\n        throw new Error('Could not find newsletter email input');\n    }\n    await browser.clearAndType(emailInput.cssSelector, params.emailAddress);\n    const submitBtn = await browser.extractComponent(\n        {\n            typeName: 'Button',\n            schema: '{ title: string; cssSelector: string; }'\n        },\n        'subscribe newsletter submit'\n    );\n    if (submitBtn && submitBtn.cssSelector) {\n        await browser.click(submitBtn.cssSelector);\n    } else {\n        await browser.pressKey('Enter');\n    }\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Signed up for newsletter with ' + params.emailAddress };\n}",
+  "grammarPatterns": [
+    "sign up for newsletter with $(emailAddress:wildcard)",
+    "subscribe to newsletter $(emailAddress:wildcard)",
+    "newsletter signup $(emailAddress:wildcard)"
+  ],
+  "scope": { "type": "global" },
+  "source": { "type": "manual", "timestamp": "2026-03-13T00:00:00.000Z" }
 }

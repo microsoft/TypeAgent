@@ -150,8 +150,7 @@ export function createTempAgentForSchema(
     return {
         async executeAction(action: any, tempContext: any): Promise<undefined> {
             // Try executing as a webFlow first
-            const webFlowStore =
-                ctx.sessionContext.agentContext.webFlowStore;
+            const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
             if (webFlowStore) {
                 try {
                     const flow = await webFlowStore.get(action.actionName);
@@ -166,9 +165,7 @@ export function createTempAgentForSchema(
                             },
                             ctx.sessionContext,
                         );
-                        debug(
-                            `WebFlow result: ${result.displayText}`,
-                        );
+                        debug(`WebFlow result: ${result.displayText}`);
                         return;
                     }
                 } catch (error) {

@@ -57,7 +57,13 @@ export type ReasoningEvent =
           args: Record<string, unknown>;
           id: string;
       }
-    | { type: "tool_result"; id: string; tool?: string; result: unknown; isError: boolean }
+    | {
+          type: "tool_result";
+          id: string;
+          tool?: string;
+          result: unknown;
+          isError: boolean;
+      }
     | { type: "text"; text: string }
     | {
           type: "done";
@@ -121,7 +127,8 @@ export function formatToolCallDisplay(
             return `**Tool:** discover_actions — schema: \`${inp.schemaName}\``;
         } else if (toolName === `${mcpPrefix}execute_action`) {
             const actionName =
-                (inp.action as Record<string, unknown>)?.actionName ?? "unknown";
+                (inp.action as Record<string, unknown>)?.actionName ??
+                "unknown";
             const params = formatParams(
                 (inp.action as Record<string, unknown>)?.parameters as
                     | Record<string, unknown>
@@ -180,7 +187,9 @@ export async function processReasoningSession(
         for await (const event of session.execute(userMessage)) {
             switch (event.type) {
                 case "thinking":
-                    config.traceCollector?.recordThinking({ content: [{ type: "text", text: event.text }] });
+                    config.traceCollector?.recordThinking({
+                        content: [{ type: "text", text: event.text }],
+                    });
                     config.onThinking?.(event.text);
                     display.appendHtml(formatThinkingDisplay(event.text));
                     break;
@@ -191,7 +200,10 @@ export async function processReasoningSession(
                     break;
 
                 case "tool_call":
-                    config.traceCollector?.recordToolCall(event.tool, event.args);
+                    config.traceCollector?.recordToolCall(
+                        event.tool,
+                        event.args,
+                    );
                     config.onToolCall?.(event.tool, event.args);
                     display.appendInfo(
                         formatToolCallDisplay(event.tool, event.args),
@@ -208,7 +220,11 @@ export async function processReasoningSession(
                         typeof event.result === "string"
                             ? event.result
                             : JSON.stringify(event.result);
-                    config.onToolResult?.(event.tool ?? event.id, event.result, isError);
+                    config.onToolResult?.(
+                        event.tool ?? event.id,
+                        event.result,
+                        isError,
+                    );
                     display.appendInfo(
                         formatToolResultDisplay(content, isError),
                         isError ? "warning" : "info",
@@ -224,7 +240,9 @@ export async function processReasoningSession(
                         config.traceCollector?.markFailed(
                             event.result.error ?? "Unknown error",
                         );
-                        throw new Error(event.result.error ?? "Reasoning failed");
+                        throw new Error(
+                            event.result.error ?? "Reasoning failed",
+                        );
                     }
                     break;
             }

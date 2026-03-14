@@ -28,11 +28,7 @@ async function getSchemaFileContents(fileName: string): Promise<string> {
     return await fs.promises.readFile(
         fileURLToPath(
             new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/webFlows/schema",
-                    fileName,
-                ),
+                path.join(packageRoot, "./src/agent/webFlows/schema", fileName),
                 import.meta.url,
             ),
         ),
@@ -116,11 +112,7 @@ export async function generateWebFlowFromTrace(
             debug("Generated script failed validation:", errors);
 
             // Retry with validation feedback
-            const retryPrompt = buildRetryPrompt(
-                prompt,
-                parsed.script,
-                errors,
-            );
+            const retryPrompt = buildRetryPrompt(prompt, parsed.script, errors);
             translator.createRequestPrompt = () => retryPrompt;
             const retryResponse = await translator.translate("");
             if (retryResponse.success) {

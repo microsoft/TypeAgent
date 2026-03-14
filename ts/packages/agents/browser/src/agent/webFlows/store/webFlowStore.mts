@@ -130,14 +130,10 @@ export class WebFlowStore {
         await this.ensureInitialized();
         const matches: string[] = [];
 
-        for (const [name, entry] of Object.entries(
-            this.index?.flows ?? {},
-        )) {
+        for (const [name, entry] of Object.entries(this.index?.flows ?? {})) {
             if (entry.scope.type === "global") {
                 matches.push(name);
-            } else if (
-                entry.scope.domains?.some((d) => domain.endsWith(d))
-            ) {
+            } else if (entry.scope.domains?.some((d) => domain.endsWith(d))) {
                 matches.push(name);
             }
         }
@@ -197,4 +193,3 @@ function createEmptyIndex(): WebFlowIndex {
         flows: {},
     };
 }
-

@@ -74,7 +74,11 @@ export function validateWebFlowScript(
     const errors: ValidationError[] = [];
 
     // Check for execute function signature
-    if (!/async\s+function\s+execute\s*\(\s*browser\s*,\s*params\s*\)/.test(source)) {
+    if (
+        !/async\s+function\s+execute\s*\(\s*browser\s*,\s*params\s*\)/.test(
+            source,
+        )
+    ) {
         errors.push({
             line: 1,
             column: 0,

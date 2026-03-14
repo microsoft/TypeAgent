@@ -373,7 +373,12 @@ async function buildDynamicSchemaFromWebFlows(
 }> {
     const eligibleNames = await store.listForDomain(currentDomain);
     // Include all eligible webFlows (detected + user-authored), not just LLM-detected
-    const relevantNames = [...new Set([...actionNames.filter((n) => eligibleNames.includes(n)), ...eligibleNames])];
+    const relevantNames = [
+        ...new Set([
+            ...actionNames.filter((n) => eligibleNames.includes(n)),
+            ...eligibleNames,
+        ]),
+    ];
 
     const schemaActionNames: string[] = [];
     const typeDefinitions = new Map<string, ActionSchemaTypeDefinition>();
@@ -405,12 +410,7 @@ async function buildDynamicSchemaFromWebFlows(
             parameters: sc.obj(Object.fromEntries(paramFields)),
         } as const);
 
-        const typeDef = sc.type(
-            typeName,
-            obj,
-            flow.description,
-            true,
-        );
+        const typeDef = sc.type(typeName, obj, flow.description, true);
         typeDefinitions.set(flow.name, typeDef);
     }
 
@@ -562,10 +562,7 @@ async function refreshDynamicAgentSchema(
         const allNames = [...new Set([...eligibleFlows, ...macroNames])];
         if (allNames.length === 0) return;
 
-        const { schema } = await getDynamicSchema(
-            allNames,
-            ctx.sessionContext,
-        );
+        const { schema } = await getDynamicSchema(allNames, ctx.sessionContext);
 
         const schemaDescription = `A schema that enables interactions with the ${hostName} page`;
         const manifest: AppAgentManifest = {
@@ -606,10 +603,7 @@ async function refreshDynamicAgentSchema(
                     `Refreshed dynamic agent schema for ${agentName} with ${allNames.length} actions`,
                 );
             } catch (error) {
-                debug(
-                    `Failed to refresh dynamic agent schema:`,
-                    error,
-                );
+                debug(`Failed to refresh dynamic agent schema:`, error);
             }
         }, 500);
     } catch (error) {
@@ -1173,9 +1167,7 @@ async function handleGetIntentFromReccording(
                 // Save as webFlow using the reasoning pipeline for robust scripts
                 if (ctx.sessionContext.agentContext.webFlowStore) {
                     try {
-                        const rawSteps = JSON.parse(
-                            recordedSteps || "[]",
-                        );
+                        const rawSteps = JSON.parse(recordedSteps || "[]");
                         debug(
                             `WebFlow generation: ${rawSteps.length} raw recorded steps`,
                         );
@@ -1183,25 +1175,20 @@ async function handleGetIntentFromReccording(
                             actions: rawSteps,
                             startUrl: url,
                             description:
-                                action.parameters
-                                    .recordedActionDescription ||
+                                action.parameters.recordedActionDescription ||
                                 `User action: ${intentData.actionName}`,
                         };
 
-                        const trace =
-                            normalizeRecording(recordingForNorm);
+                        const trace = normalizeRecording(recordingForNorm);
                         debug(
                             `WebFlow generation: normalized to ${trace.steps.length} trace steps`,
                         );
 
-                        let flow =
-                            await generateWebFlowFromTrace(trace, {
-                                suggestedName:
-                                    intentData.actionName,
-                                description:
-                                    action.parameters
-                                        .recordedActionDescription,
-                            });
+                        let flow = await generateWebFlowFromTrace(trace, {
+                            suggestedName: intentData.actionName,
+                            description:
+                                action.parameters.recordedActionDescription,
+                        });
                         debug(
                             `WebFlow generation: LLM result = ${flow ? "success" : "null"}`,
                         );
@@ -1216,37 +1203,26 @@ async function handleGetIntentFromReccording(
                                     macroId,
                                 );
                             if (savedMacro) {
-                                const converter =
-                                    new MacroToWebFlowConverter();
-                                flow = converter.convert(
-                                    savedMacro,
-                                );
+                                const converter = new MacroToWebFlowConverter();
+                                flow = converter.convert(savedMacro);
                             }
                         }
 
                         if (flow) {
                             flow.source = {
                                 type: "recording",
-                                timestamp:
-                                    new Date().toISOString(),
+                                timestamp: new Date().toISOString(),
                             };
                             await ctx.sessionContext.agentContext.webFlowStore.save(
                                 flow,
                             );
-                            debug(
-                                `Saved as webFlow: ${flow.name}`,
-                            );
+                            debug(`Saved as webFlow: ${flow.name}`);
 
                             // Auto-refresh the temp agent schema so the action is immediately available
-                            await refreshDynamicAgentSchema(
-                                ctx,
-                            );
+                            await refreshDynamicAgentSchema(ctx);
                         }
                     } catch (webFlowError) {
-                        debug(
-                            "Failed to save as webFlow:",
-                            webFlowError,
-                        );
+                        debug("Failed to save as webFlow:", webFlowError);
                     }
                 }
             }

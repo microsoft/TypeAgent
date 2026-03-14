@@ -47,9 +47,7 @@ export interface RecordingData {
  * 3. Merges consecutive text inputs into single enterText steps
  * 4. Adds element context (tag, text, selector) to each step
  */
-export function normalizeRecording(
-    data: RecordingData,
-): BrowserReasoningTrace {
+export function normalizeRecording(data: RecordingData): BrowserReasoningTrace {
     const steps: BrowserTraceStep[] = [];
     const filtered = filterActions(data.actions);
 
@@ -62,7 +60,9 @@ export function normalizeRecording(
         }
     }
 
-    debug(`Normalized ${data.actions.length} raw actions → ${steps.length} steps`);
+    debug(
+        `Normalized ${data.actions.length} raw actions → ${steps.length} steps`,
+    );
 
     return {
         goal: data.description ?? "Recorded user interaction",
@@ -72,9 +72,10 @@ export function normalizeRecording(
             success: steps.length > 0,
             summary: `Recorded ${steps.length} steps`,
         },
-        duration: steps.length > 0
-            ? steps[steps.length - 1].timestamp - steps[0].timestamp
-            : 0,
+        duration:
+            steps.length > 0
+                ? steps[steps.length - 1].timestamp - steps[0].timestamp
+                : 0,
     };
 }
 
