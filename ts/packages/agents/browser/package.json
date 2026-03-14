@@ -53,9 +53,9 @@
     "vite:views:client": "vite build"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@mozilla/readability": "^0.6.0",
     "@popperjs/core": "^2.11.8",
-    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
