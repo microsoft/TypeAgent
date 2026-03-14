@@ -50,6 +50,15 @@
         "schemaFile": "./discovery/schema/discoveryActions.mts",
         "schemaType": "SchemaDiscoveryActions"
       }
+    },
+    "webFlows": {
+      "defaultEnabled": false,
+      "transient": true,
+      "schema": {
+        "description": "Manage and execute reusable browser automation flows. List, delete, and edit scope of saved WebFlows.",
+        "schemaFile": "./webFlows/schema/webFlowActions.mts",
+        "schemaType": "WebFlowActions"
+      }
     }
   }
 }

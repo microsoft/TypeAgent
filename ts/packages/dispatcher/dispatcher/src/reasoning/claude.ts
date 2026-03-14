@@ -30,6 +30,11 @@ import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
+import {
+    formatParams as sharedFormatParams,
+    formatToolResultDisplay as sharedFormatToolResultDisplay,
+    formatThinkingDisplay as sharedFormatThinkingDisplay,
+} from "./reasoningLoopBase.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 
 const model = "claude-sonnet-4-5-20250929";
@@ -120,35 +125,8 @@ function buildPromptWithContext(
     return originalRequest;
 }
 
-/**
- * Render tool input parameters as a compact inline string.
- * Omits undefined/null values; truncates long strings.
- */
-function formatParams(params: Record<string, any> | undefined): string {
-    if (!params || Object.keys(params).length === 0) return "";
-    const MAX_VALUE_LEN = 60;
-    const pairs = Object.entries(params)
-        .filter(([, v]) => v !== undefined && v !== null)
-        .map(([k, v]) => {
-            let s: string;
-            if (typeof v === "string") {
-                s =
-                    v.length > MAX_VALUE_LEN
-                        ? `"${v.slice(0, MAX_VALUE_LEN)}…"`
-                        : `"${v}"`;
-            } else if (typeof v === "object") {
-                const j = JSON.stringify(v);
-                s =
-                    j.length > MAX_VALUE_LEN
-                        ? `${j.slice(0, MAX_VALUE_LEN)}…`
-                        : j;
-            } else {
-                s = String(v);
-            }
-            return `${k}: ${s}`;
-        });
-    return pairs.length > 0 ? ` \`{ ${pairs.join(", ")} }\`` : "";
-}
+// Delegate to shared formatting utilities from reasoningLoopBase
+const formatParams = sharedFormatParams;
 
 /**
  * Format a tool call as a persistent display line.
@@ -170,35 +148,8 @@ function formatToolCallDisplay(toolName: string, input: any): string {
     return `**Tool:** ${toolName}${params}`;
 }
 
-/**
- * Format a tool result for display. Truncates long results and strips noise.
- */
-function formatToolResultDisplay(content: string, isError: boolean): string {
-    const MAX_LEN = 120;
-    let preview = content.trim().replace(/\n+/g, " ");
-    if (preview.length > MAX_LEN) {
-        preview = preview.slice(0, MAX_LEN) + "…";
-    }
-    const label = isError ? "**Error:**" : "**↳**";
-    return `${label} \`${preview || "(empty)"}\``;
-}
-
-/**
- * Render thinking content as a collapsible HTML details/summary block.
- */
-function formatThinkingDisplay(thinkingText: string): string {
-    // Escape HTML entities in thinking text for safe embedding
-    const escaped = thinkingText
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    return [
-        `<details class="reasoning-thinking">`,
-        `<summary>Thinking</summary>`,
-        `<pre>${escaped}</pre>`,
-        `</details>`,
-    ].join("");
-}
+const formatToolResultDisplay = sharedFormatToolResultDisplay;
+const formatThinkingDisplay = sharedFormatThinkingDisplay;
 
 function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,

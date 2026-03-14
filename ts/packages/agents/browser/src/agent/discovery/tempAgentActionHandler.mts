@@ -18,6 +18,7 @@ import {
     getSessionBrowserControl,
 } from "../browserActions.mjs";
 import { UserIntent as StoredUserIntent } from "../storage/types.mjs";
+import { handleWebFlowAction } from "../webFlows/actionHandler.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug(
@@ -148,20 +149,40 @@ export function createTempAgentForSchema(
 
     return {
         async executeAction(action: any, tempContext: any): Promise<undefined> {
+            // Try executing as a webFlow first
+            const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+            if (webFlowStore) {
+                try {
+                    const flow = await webFlowStore.get(action.actionName);
+                    if (flow) {
+                        debug(
+                            `Delegating ${action.actionName} to webFlow executor`,
+                        );
+                        const result = await handleWebFlowAction(
+                            {
+                                actionName: action.actionName,
+                                parameters: action.parameters,
+                            },
+                            ctx.sessionContext,
+                        );
+                        debug(`WebFlow result: ${result.displayText}`);
+                        return;
+                    }
+                } catch (error) {
+                    debug(
+                        `WebFlow execution failed for ${action.actionName}, falling back:`,
+                        error,
+                    );
+                }
+            }
+
+            // Fallback to existing handlers
             switch (action.actionName) {
                 case "browseProductCategories":
                     await handleBrowseProductCategory(action, ctx);
                     break;
-                case "filterProducts":
-                    break;
                 case "navigateToPage":
                     await handleNavigateToPage(action, ctx);
-                    break;
-                case "navigateToProductPage":
-                    break;
-                case "removeFromCart":
-                    break;
-                case "signUpForNewsletter":
                     break;
                 default:
                     await handleUserDefinedAction(action, ctx);
