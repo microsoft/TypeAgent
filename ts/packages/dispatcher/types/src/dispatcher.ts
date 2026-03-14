@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import {
+    CommitMode,
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
+    SeparatorMode,
     TemplateSchema,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
@@ -72,8 +74,28 @@ export type CommandResult = {
 };
 
 export type CommandCompletionResult = {
-    startIndex: number; // index of first character of the filter text (after the last space)
+    // Index into the input where the resolved prefix ends and the
+    // filter/completion region begins.  input[0..startIndex) is fully
+    // resolved; completions describe what can follow after that prefix.
+    startIndex: number;
     completions: CompletionGroup[]; // completions available at the current position
+    // What kind of separator is required between the matched prefix and
+    // the completion text.  When omitted, defaults to "space".
+    // See SeparatorMode in @typeagent/agent-sdk.
+    separatorMode?: SeparatorMode | undefined;
+    // True when the completions form a closed set — if the user types
+    // something not in the list, no further completions can exist
+    // beyond it.  When true and the user types something that doesn't
+    // prefix-match any completion, the caller can skip refetching since
+    // no other valid input exists.
+    closedSet: boolean;
+    // Controls when a uniquely-satisfied completion triggers a re-fetch
+    // for the next hierarchical level.
+    //   "explicit" — user must type a delimiter to commit; suppresses
+    //                 eager re-fetch on unique match.
+    //   "eager"    — re-fetch immediately on unique satisfaction.
+    // When omitted, defaults to "explicit".
+    commitMode?: CommitMode;
 };
 
 export type AppAgentStatus = {
@@ -178,9 +200,7 @@ export interface Dispatcher {
     ): Promise<string[] | undefined>;
 
     // APIs to get command completion for intellisense like functionality.
-    getCommandCompletion(
-        prefix: string,
-    ): Promise<CommandCompletionResult | undefined>;
+    getCommandCompletion(prefix: string): Promise<CommandCompletionResult>;
 
     // Check if a request can be handled by cache without executing
     checkCache(request: string): Promise<CommandResult | undefined>;

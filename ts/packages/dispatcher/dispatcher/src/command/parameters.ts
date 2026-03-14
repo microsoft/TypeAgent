@@ -136,11 +136,44 @@ function parseValueToken(
     }
 }
 
+// Extension of ParsedCommandParams that also reports how much of the
+// parameter string was *not* consumed by the parser.  Used internally by
+// the completion layer to compute startIndex from parse position rather
+// than by reverse-engineering filter text from token lengths.
+//
+// NOTE: remainderLength measures only the unconsumed *token* text — it
+// does NOT include any inter-token whitespace that the tokenizer
+// stripped between the last consumed token and the unconsumed portion.
+// For example, parsing "hello extra" with a single-arg definition
+// yields remainderLength = 5 ("extra"), not 6 (" extra").  The
+// completion layer in completion.ts accounts for this by backing
+// startIndex over any preceding whitespace after the initial
+// computation.
+export type ParseParamsResult<T extends ParameterDefinitions> =
+    ParsedCommandParams<T> & {
+        // Information for partial command completion.
+        tokens: string[]; // The list of tokens parsed from the command.
+        lastCompletableParam: string | undefined; // The last parameter that was parsed that can be completed.
+        lastParamImplicitQuotes: boolean; // If the last parameter is implicitly quoted.
+        nextArgs: string[]; // A list of potential arguments next.
+
+        /** Length of the (trimmed) parameter text left unconsumed.
+         *  Excludes inter-token whitespace between the last consumed
+         *  token and the start of the unconsumed remainder. */
+        remainderLength: number;
+    };
+
+// Tokenizes and parses a parameter string into typed flags and positional
+// arguments according to the given parameter definitions.  Supports quoted
+// values, boolean/number/string/json types, multi-value flags and arguments,
+// implicit-quote (rest-of-line) arguments, and a `--` separator.  When
+// `partial` is true, parsing errors are silently ignored so the function can
+// be used for live completions on incomplete input.
 export function parseParams<T extends ParameterDefinitions>(
     parameters: string,
     paramDefs: T,
     partial: boolean = false,
-): ParsedCommandParams<T> {
+): ParseParamsResult<T> {
     // Use trimStart (not trim) so trailing whitespace is preserved for
     // completion: a trailing space signals that the last token is complete.
     let curr = partial ? parameters.trimStart() : parameters.trim();
@@ -192,6 +225,11 @@ export function parseParams<T extends ParameterDefinitions>(
     let lastCompletableParam: string | undefined = undefined;
     let lastParamImplicitQuotes: boolean = false;
     let advanceMultiple = false;
+    // Track how far the parser successfully consumed.  Updated after
+    // each fully-resolved entity (flag name, flag+value, argument).
+    // On error in partial mode the value stays at the last-good
+    // position, giving the completion layer an accurate remainder.
+    let lastGoodCurrLength = curr.length;
     while (true) {
         try {
             // Save the rest for implicit quote arguments;
@@ -210,6 +248,7 @@ export function parseParams<T extends ParameterDefinitions>(
                 }
                 const [name, flag] = flagInfo;
                 const valueType = getFlagType(flag);
+                lastGoodCurrLength = curr.length; // flag name consumed
                 let value: FlagValueTypes;
                 const rollback = curr;
                 const valueToken = nextToken();
@@ -250,6 +289,7 @@ export function parseParams<T extends ParameterDefinitions>(
                     }
                     parsedFlags[name] = value;
                 }
+                lastGoodCurrLength = curr.length; // flag+value consumed
                 if (valueType === "string") {
                     lastCompletableParam = `--${name}`;
                     lastParamImplicitQuotes = false;
@@ -307,6 +347,7 @@ export function parseParams<T extends ParameterDefinitions>(
                         parsedArgs[name].push(argValue);
                     }
                 }
+                lastGoodCurrLength = curr.length; // argument consumed
                 if (argType === "string") {
                     lastCompletableParam = name;
                     lastParamImplicitQuotes = argDef.implicitQuotes ?? false;
@@ -367,5 +408,6 @@ export function parseParams<T extends ParameterDefinitions>(
         lastCompletableParam,
         lastParamImplicitQuotes,
         nextArgs,
+        remainderLength: lastGoodCurrLength,
     };
 }

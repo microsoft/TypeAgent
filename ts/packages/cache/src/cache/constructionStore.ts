@@ -395,10 +395,7 @@ export class ConstructionStoreImpl implements ConstructionStore {
         return sortedMatches;
     }
 
-    public completion(
-        requestPrefix: string | undefined,
-        options?: MatchOptions,
-    ) {
+    public completion(requestPrefix: string, options?: MatchOptions) {
         const cacheCompletion = this.cache?.completion(requestPrefix, options);
         const builtInCompletion = this.builtInCache?.completion(
             requestPrefix,

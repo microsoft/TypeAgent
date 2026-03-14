@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { SeparatorMode } from "@typeagent/agent-sdk";
+import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     ExecutableAction,
     HistoryContext,
@@ -23,9 +25,14 @@ import {
     ConstructionCacheJSON,
     constructionCacheJSONVersion,
 } from "./constructionJSONTypes.js";
+import {
+    getLanguageTools,
+    needsSeparatorInAutoMode,
+} from "../utils/language.js";
 const debugConst = registerDebug("typeagent:const");
 const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 const debugCompletion = registerDebug("typeagent:const:completion");
+
 // Agent Cache define the namespace policy.  At the cache, it just combine the keys into a string for lookup.
 function getConstructionNamespace(namespaceKeys: string[]) {
     // Combine the namespace keys into a string using | as the separator.  Use to filter easily when
@@ -73,6 +80,16 @@ export type CompletionProperty = {
 export type CompletionResult = {
     completions: string[];
     properties?: CompletionProperty[] | undefined;
+    // Characters consumed by the grammar before the completion point.
+    matchedPrefixLength?: number | undefined;
+    // What kind of separator is required between the already-typed prefix
+    // and the completion text.  See SeparatorMode in @typeagent/agent-sdk.
+    separatorMode?: SeparatorMode | undefined;
+    // True when the completions form a closed set — if the user types
+    // something not in the list, no further completions can exist
+    // beyond it.  False or undefined means the parser can continue
+    // past unrecognized input and find more completions.
+    closedSet?: boolean | undefined;
 };
 
 export function mergeCompletionResults(
@@ -85,6 +102,23 @@ export function mergeCompletionResults(
     if (second === undefined) {
         return first;
     }
+    // Eagerly discard shorter-prefix completions — consistent with the
+    // grammar matcher's approach.  Only the source(s) with the longest
+    // matchedPrefixLength contribute completions.
+    const firstLen = first.matchedPrefixLength ?? 0;
+    const secondLen = second.matchedPrefixLength ?? 0;
+    if (firstLen > secondLen) {
+        return first;
+    }
+    if (secondLen > firstLen) {
+        return second;
+    }
+    // Same prefix length — merge completions from both sources.
+    const matchedPrefixLength =
+        first.matchedPrefixLength !== undefined ||
+        second.matchedPrefixLength !== undefined
+            ? firstLen
+            : undefined;
     return {
         completions: [...first.completions, ...second.completions],
         properties: first.properties
@@ -92,8 +126,19 @@ export function mergeCompletionResults(
                 ? [...first.properties, ...second.properties]
                 : first.properties
             : second.properties,
+        matchedPrefixLength,
+        separatorMode: mergeSeparatorMode(
+            first.separatorMode,
+            second.separatorMode,
+        ),
+        // Closed set only when both sources are closed sets.
+        closedSet:
+            first.closedSet !== undefined || second.closedSet !== undefined
+                ? (first.closedSet ?? false) && (second.closedSet ?? false)
+                : undefined,
     };
 }
+
 export class ConstructionCache {
     private readonly matchSetsByUid = new Map<string, MatchSet>();
 
@@ -285,40 +330,6 @@ export class ConstructionCache {
         return count;
     }
 
-    // For completion
-    private getPrefix(namespaceKeys?: string[]): string[] {
-        if (namespaceKeys?.length === 0) {
-            return [];
-        }
-        const prefix = new Set<string>();
-        const filter = namespaceKeys ? new Set(namespaceKeys) : undefined;
-        for (const [
-            name,
-            constructionNamespace,
-        ] of this.constructionNamespaces.entries()) {
-            const keys = getNamespaceKeys(name);
-            if (filter && keys.some((key) => !filter.has(key))) {
-                continue;
-            }
-
-            for (const construction of constructionNamespace.constructions) {
-                for (const part of construction.parts) {
-                    if (part.optional) {
-                        continue;
-                    }
-                    if (isMatchPart(part) && part.matchSet) {
-                        // For match parts, we can use the match set name as the prefix
-                        for (const match of part.matchSet.matches.values()) {
-                            prefix.add(match);
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-        return [...prefix.values()];
-    }
-
     // For matching
     public match(
         request: string,
@@ -361,21 +372,12 @@ export class ConstructionCache {
     }
 
     public completion(
-        requestPrefix: string | undefined,
+        requestPrefix: string,
         options?: MatchOptions,
     ): CompletionResult | undefined {
         debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
         const namespaceKeys = options?.namespaceKeys;
         debugCompletion(`Request completion namespace keys`, namespaceKeys);
-        if (!requestPrefix) {
-            const completions = this.getPrefix(namespaceKeys);
-
-            return completions.length > 0
-                ? {
-                      completions,
-                  }
-                : undefined;
-        }
 
         const results = this.match(requestPrefix, options, true);
 
@@ -383,10 +385,37 @@ export class ConstructionCache {
             `Request completion construction match: ${results.length}`,
         );
 
+        if (results.length === 0) {
+            return undefined;
+        }
+
+        // Track the furthest character position consumed across all
+        // matching constructions.  When a longer match is found, all
+        // previously accumulated completions from shorter matches are
+        // discarded — mirroring the grammar matcher's approach.
+        let maxPrefixLength = 0;
         const completionProperty: CompletionProperty[] = [];
         const requestText: string[] = [];
+        let separatorMode: SeparatorMode | undefined;
+        // Whether the accumulated completions form a closed set.
+        // Starts true; set to false when property/wildcard completions
+        // are added (entity values are external).  Reset to true when
+        // maxPrefixLength advances (old candidates discarded).
+        let closedSet: boolean = true;
+
+        function updateMaxPrefixLength(prefixLength: number): void {
+            if (prefixLength > maxPrefixLength) {
+                maxPrefixLength = prefixLength;
+                requestText.length = 0;
+                completionProperty.length = 0;
+                separatorMode = undefined;
+                closedSet = true;
+            }
+        }
+
         for (const result of results) {
-            const { construction, partialPartCount } = result;
+            const { construction, partialPartCount, partialMatchedCurrent } =
+                result;
             if (partialPartCount === undefined) {
                 throw new Error(
                     "Internal Error: Partial part count is undefined",
@@ -394,7 +423,17 @@ export class ConstructionCache {
             }
 
             if (partialPartCount === construction.parts.length) {
-                continue; // No more parts to complete
+                // Exact match — all parts matched.  Nothing to complete,
+                // but advance maxPrefixLength so shorter candidates are
+                // discarded.
+                updateMaxPrefixLength(requestPrefix.length);
+                continue;
+            }
+
+            const candidatePrefixLength = partialMatchedCurrent ?? 0;
+            updateMaxPrefixLength(candidatePrefixLength);
+            if (candidatePrefixLength !== maxPrefixLength) {
+                continue; // Shorter than the best match — skip
             }
 
             const nextPart = construction.parts[partialPartCount];
@@ -402,7 +441,33 @@ export class ConstructionCache {
             if (nextPart.wildcardMode <= WildcardMode.Enabled) {
                 const partCompletions = nextPart.getCompletion();
                 if (partCompletions) {
-                    requestText.push(...partCompletions);
+                    const langTools = getLanguageTools("en");
+                    const rejectReferences = options?.rejectReferences ?? true;
+                    for (const completionText of partCompletions) {
+                        // We would have rejected the value if this part is captured.
+                        if (
+                            nextPart.capture &&
+                            rejectReferences &&
+                            langTools?.possibleReferentialPhrase(completionText)
+                        ) {
+                            continue;
+                        }
+                        requestText.push(completionText);
+                        // Determine separator mode for this candidate.
+                        if (
+                            candidatePrefixLength > 0 &&
+                            completionText.length > 0
+                        ) {
+                            const needsSep = needsSeparatorInAutoMode(
+                                requestPrefix[candidatePrefixLength - 1],
+                                completionText[0],
+                            );
+                            separatorMode = mergeSeparatorMode(
+                                separatorMode,
+                                needsSep ? "spacePunctuation" : "optional",
+                            );
+                        }
+                    }
                 }
             }
 
@@ -435,12 +500,31 @@ export class ConstructionCache {
                     actions: result.match.actions,
                     names: queryPropertyNames,
                 });
+                // Determine separator mode for the property/entity slot.
+                // Use "a" as a representative word character since the
+                // actual entity value is unknown.
+                if (candidatePrefixLength > 0) {
+                    const needsSep = needsSeparatorInAutoMode(
+                        requestPrefix[candidatePrefixLength - 1],
+                        "a",
+                    );
+                    separatorMode = mergeSeparatorMode(
+                        separatorMode,
+                        needsSep ? "spacePunctuation" : "optional",
+                    );
+                }
+                // Property/wildcard completions are not a closed set —
+                // entity values are external.
+                closedSet = false;
             }
         }
 
         return {
             completions: requestText,
             properties: completionProperty,
+            matchedPrefixLength: maxPrefixLength,
+            separatorMode,
+            closedSet,
         };
     }
 

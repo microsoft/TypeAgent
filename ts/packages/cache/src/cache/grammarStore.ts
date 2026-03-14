@@ -18,6 +18,8 @@ import {
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
+import { SeparatorMode } from "@typeagent/agent-sdk";
+import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     CompletionProperty,
     CompletionResult,
@@ -185,12 +187,12 @@ export class GrammarStoreImpl implements GrammarStore {
                     ? "DFA"
                     : this.useNFA && entry.nfa
                       ? "NFA"
-                      : "legacy";
+                      : "simple";
             debug(
                 `Matching "${request}" against ${schemaName} (${matchMode}) - NFA states: ${entry.nfa?.states.length || 0}, DFA states: ${entry.dfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
             );
 
-            // Choose matcher: DFA > NFA > legacy
+            // Choose matcher: DFA > NFA > simple
             let grammarMatches;
             if (this.useDFA && entry.dfa) {
                 const tokens = tokenizeRequest(request);
@@ -260,7 +262,7 @@ export class GrammarStoreImpl implements GrammarStore {
     }
 
     public completion(
-        requestPrefix: string | undefined,
+        requestPrefix: string,
         options?: MatchOptions,
     ): CompletionResult | undefined {
         if (!this.enabled) {
@@ -272,6 +274,9 @@ export class GrammarStoreImpl implements GrammarStore {
         }
         const completions: string[] = [];
         const properties: CompletionProperty[] = [];
+        let matchedPrefixLength = 0;
+        let separatorMode: SeparatorMode | undefined;
+        let closedSet: boolean | undefined;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -280,11 +285,10 @@ export class GrammarStoreImpl implements GrammarStore {
             if (this.useDFA && entry.dfa) {
                 // DFA-based completions
                 const tokens = requestPrefix
-                    ? requestPrefix
-                          .trim()
-                          .split(/\s+/)
-                          .filter((t) => t.length > 0)
-                    : [];
+                    .trim()
+                    .split(/\s+/)
+                    .filter((t) => t.length > 0);
+
                 const dfaCompResult = getDFACompletions(entry.dfa, tokens);
                 if (
                     dfaCompResult.completions &&
@@ -313,11 +317,10 @@ export class GrammarStoreImpl implements GrammarStore {
             } else if (this.useNFA && entry.nfa) {
                 // NFA-based completions: tokenize into complete whole tokens
                 const tokens = requestPrefix
-                    ? requestPrefix
-                          .trim()
-                          .split(/\s+/)
-                          .filter((t) => t.length > 0)
-                    : [];
+                    .trim()
+                    .split(/\s+/)
+                    .filter((t) => t.length > 0);
+
                 const nfaResult = computeNFACompletions(entry.nfa, tokens);
                 if (nfaResult.completions.length > 0) {
                     completions.push(...nfaResult.completions);
@@ -345,31 +348,55 @@ export class GrammarStoreImpl implements GrammarStore {
                     }
                 }
             } else {
-                // Legacy grammar-based completions
+                // simple grammar-based completions
                 const partial = matchGrammarCompletion(
                     entry.grammar,
-                    requestPrefix ?? "",
+                    requestPrefix,
+                    matchedPrefixLength,
                 );
-                if (partial.completions.length > 0) {
-                    completions.push(...partial.completions);
+                const partialPrefixLength = partial.matchedPrefixLength ?? 0;
+                if (partialPrefixLength > matchedPrefixLength) {
+                    // Longer prefix — discard shorter-match results.
+                    matchedPrefixLength = partialPrefixLength;
+                    completions.length = 0;
+                    properties.length = 0;
+                    separatorMode = undefined;
+                    closedSet = undefined;
                 }
-                if (
-                    partial.properties !== undefined &&
-                    partial.properties.length > 0
-                ) {
-                    const { schemaName } = splitSchemaNamespaceKey(name);
-                    for (const p of partial.properties) {
-                        const action: any = p.match;
-                        properties.push({
-                            actions: [
-                                createExecutableAction(
-                                    schemaName,
-                                    action.actionName,
-                                    action.parameters,
-                                ),
-                            ],
-                            names: p.propertyNames,
-                        });
+                if (partialPrefixLength === matchedPrefixLength) {
+                    completions.push(...partial.completions);
+                    if (partial.separatorMode !== undefined) {
+                        separatorMode = mergeSeparatorMode(
+                            separatorMode,
+                            partial.separatorMode,
+                        );
+                    }
+                    // AND-merge: closed set only when all grammar
+                    // results at this prefix length are closed sets.
+                    if (partial.closedSet !== undefined) {
+                        closedSet =
+                            closedSet === undefined
+                                ? partial.closedSet
+                                : closedSet && partial.closedSet;
+                    }
+                    if (
+                        partial.properties !== undefined &&
+                        partial.properties.length > 0
+                    ) {
+                        const { schemaName } = splitSchemaNamespaceKey(name);
+                        for (const p of partial.properties) {
+                            const action: any = p.match;
+                            properties.push({
+                                actions: [
+                                    createExecutableAction(
+                                        schemaName,
+                                        action.actionName,
+                                        action.parameters,
+                                    ),
+                                ],
+                                names: p.propertyNames,
+                            });
+                        }
                     }
                 }
             }
@@ -378,6 +405,9 @@ export class GrammarStoreImpl implements GrammarStore {
         return {
             completions,
             properties,
+            matchedPrefixLength,
+            separatorMode,
+            closedSet,
         };
     }
 }

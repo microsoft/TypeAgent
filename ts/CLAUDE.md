@@ -7,8 +7,11 @@ This is a **pnpm monorepo** rooted at `ts/`. All commands run from the `ts/` dir
 ```bash
 # Install & build
 pnpm i
-pnpm run build              # Uses fluid-build to build all packages
+pnpm run build               # Uses fluid-build to build all packages
 pnpm run build:shell         # Build only the shell app and its dependencies
+
+# Clean
+pnpm run clean               # works at the root and per package
 
 # Test
 pnpm run test:local          # All unit tests (*.spec.ts) across packages
@@ -41,6 +44,8 @@ TypeAgent is a **personal agent** that routes natural language requests to speci
 ```
 User input → Grammar matcher → Typed action → Dispatcher → Agent handler → ActionResult
 ```
+
+Detail architecture descriptions are located in the **`docs/architecture`** directory.
 
 ### Key packages
 

@@ -41,9 +41,7 @@ export type DispatcherInvokeFunctions = {
         propertyName: string,
     ): Promise<string[] | undefined>;
 
-    getCommandCompletion(
-        prefix: string,
-    ): Promise<CommandCompletionResult | undefined>;
+    getCommandCompletion(prefix: string): Promise<CommandCompletionResult>;
 
     checkCache(request: string): Promise<CommandResult | undefined>;
 
