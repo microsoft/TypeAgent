@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 import {
-    getMacrosForUrl,
-    deleteMacro,
     refreshSchema as refreshSchemaRpc,
     startRecording,
     stopRecording,
     captureHtmlFragments,
     registerTempSchema as registerTempSchemaRpc,
-    getIntentFromRecording,
+    createWebFlowFromRecording,
+    getWebFlowsForDomain,
+    deleteWebFlow,
     checkConnection,
     showNotification,
     showLoadingState,
@@ -18,6 +18,7 @@ import {
     showConfirmationDialog,
     escapeHtml,
     createButton,
+    getDomainFromUrl,
 } from "./macroUtilities";
 
 let recording = false;
@@ -258,20 +259,18 @@ class ActionDiscoveryPanel {
         refreshButton.disabled = true;
 
         try {
-            // Get current discovered actions from ActionsStore
             let currentActions: any[] = [];
-            if (!forceRefresh) {
-                currentActions = await getMacrosForUrl(launchUrl!, {
-                    includeGlobal: false,
-                    author: "discovered",
-                });
+            if (!forceRefresh && launchUrl) {
+                const domain = getDomainFromUrl(launchUrl);
+                if (domain) {
+                    currentActions = (
+                        await getWebFlowsForDomain(domain)
+                    ).filter((a: any) => a.source?.type === "discovery");
+                }
             }
 
             if (currentActions.length === 0 || forceRefresh) {
-                // Discovery now auto-saves actions to ActionsStore
                 const response = await refreshSchemaRpc();
-
-                // Actions are now automatically saved
                 this.renderSchemaResults(response.schema ?? []);
 
                 if (response.schema && response.schema.length > 0) {
@@ -280,10 +279,10 @@ class ActionDiscoveryPanel {
                     );
                 }
             } else {
-                const legacySchema = currentActions.map((action) => ({
+                const legacySchema = currentActions.map((action: any) => ({
                     actionName: action.name,
                     description: action.description,
-                    parameters: action.definition?.intentJson?.parameters || {},
+                    parameters: action.parameters || {},
                 }));
                 this.renderSchemaResults(legacySchema);
             }
@@ -611,38 +610,35 @@ class ActionDiscoveryPanel {
                 }
             }
 
-            // Get existing macro names from MacrosStore to avoid duplicates
-            const allMacros = await getMacrosForUrl(launchUrl!, {
-                includeGlobal: true,
-            });
-
-            const existingMacroNames: string[] = allMacros.map(
-                (macro) => macro.name,
+            // Get existing webFlow names to avoid duplicates
+            const domain = getDomainFromUrl(launchUrl!);
+            const existingFlows = domain
+                ? await getWebFlowsForDomain(domain)
+                : [];
+            const existingActionNames: string[] = existingFlows.map(
+                (f: any) => f.name,
             );
 
-            // Create and auto-save action in one step
-            const response = await getIntentFromRecording({
+            // Create webFlow directly from recording (single LLM call)
+            const response = await createWebFlowFromRecording({
                 actionName: macroName,
                 actionDescription: stepsDescription,
                 steps: JSON.stringify(steps),
-                existingActionNames: existingMacroNames,
+                existingActionNames,
+                startUrl: launchUrl!,
+                screenshots: screenshot,
                 html: html.map((str: string) => ({ content: str, frameId: 0 })),
-                screenshot,
             });
 
-            // Action is automatically saved during processing
-            if (response.actionId) {
+            if (response.success) {
                 showNotification(
-                    "Macro created and saved successfully!",
+                    "Action created and saved successfully!",
                     "success",
                 );
             } else {
-                console.warn(
-                    "[saveModalAction] Action creation completed but no actionId returned",
-                );
                 showNotification(
-                    "Macro created but save status unknown",
-                    "info",
+                    "Failed to create action from recording",
+                    "error",
                 );
             }
 
@@ -676,16 +672,12 @@ class ActionDiscoveryPanel {
         }
 
         try {
-            // Get all user actions and delete them individually from ActionsStore
-            const userActions = await getMacrosForUrl(launchUrl!, {
-                includeGlobal: false,
-                author: "user",
-            });
+            const domain = getDomainFromUrl(launchUrl!);
+            const flows = domain ? await getWebFlowsForDomain(domain) : [];
 
-            // Delete each user action
             let deletedCount = 0;
-            for (const action of userActions) {
-                const result = await deleteMacro(action.id);
+            for (const flow of flows) {
+                const result = await deleteWebFlow(flow.name);
                 if (result?.success) {
                     deletedCount++;
                 }
@@ -713,11 +705,12 @@ class ActionDiscoveryPanel {
         ) as HTMLElement;
 
         try {
-            // Get user-authored actions from the new ActionsStore
-            const actions = await getMacrosForUrl(launchUrl!, {
-                includeGlobal: false,
-                author: "user",
-            });
+            // Get user-authored and discovered actions (exclude built-in samples)
+            const domain = getDomainFromUrl(launchUrl!);
+            const allActions = domain ? await getWebFlowsForDomain(domain) : [];
+            const actions = allActions.filter(
+                (a: any) => a.source?.type !== "manual",
+            );
 
             countBadge.textContent = actions.length.toString();
 
@@ -757,41 +750,6 @@ class ActionDiscoveryPanel {
         const actionElement = document.createElement("div");
         actionElement.className = "macro-item mb-3";
 
-        console.log(
-            "[renderUserAction] Rendering action:",
-            action.id || action.name,
-        );
-        console.log(
-            "[renderUserAction] action.definition?.steps:",
-            action.definition?.steps?.length || 0,
-        );
-        console.log(
-            "[renderUserAction] action.steps:",
-            action.steps?.length || 0,
-        );
-
-        if (!action.intentSchema) {
-            action.intentSchema = action.definition?.intentSchema;
-        }
-
-        if (!action.actionsJson) {
-            action.actionsJson = action.definition?.actionsJson;
-        }
-
-        let steps = action.definition?.steps || action.steps;
-        if (typeof steps === "string") {
-            steps = JSON.parse(steps);
-        }
-
-        if (!action.steps) {
-            action.steps = steps;
-        }
-
-        console.log(
-            "[renderUserAction] Final steps count:",
-            action.steps?.length || 0,
-        );
-
         actionElement.innerHTML = this.createUserActionCard(action, index);
 
         const viewButton = actionElement.querySelector('[data-action="view"]');
@@ -810,29 +768,10 @@ class ActionDiscoveryPanel {
         });
 
         deleteButton?.addEventListener("click", () => {
-            // Use action ID, fallback to name for compatibility
-            const actionId = action.id || action.name;
-            this.deleteMacro(actionId);
+            this.deleteAction(action.name);
         });
 
         userActionsContainer.appendChild(actionElement);
-
-        // Handle both old and new StoredAction formats
-        const screenshots = action.definition?.screenshot || action.screenshot;
-        const htmlFragments = action.definition?.htmlFragments || action.html;
-
-        if (steps) {
-            const stepsContent = actionElement.querySelector(
-                `#stepsContent${index}`,
-            ) as HTMLElement;
-            this.renderTimelineSteps(
-                steps,
-                stepsContent,
-                screenshots,
-                htmlFragments,
-                action.name,
-            );
-        }
     }
 
     private renderTimelineSteps(
@@ -877,8 +816,8 @@ class ActionDiscoveryPanel {
         if (deleteBtn) {
             deleteBtn.addEventListener("click", () => {
                 const action = deleteBtn.getAttribute("data-action");
-                if (action && typeof this.deleteMacro === "function") {
-                    this.deleteMacro(action);
+                if (action && typeof this.deleteAction === "function") {
+                    this.deleteAction(action);
                 }
             });
         }
@@ -893,7 +832,7 @@ class ActionDiscoveryPanel {
         return filteredStep;
     }
 
-    private async deleteMacro(macroId: string) {
+    private async deleteAction(actionName: string) {
         const confirmed = await showConfirmationDialog(
             "Are you sure you want to delete this action?",
         );
@@ -902,7 +841,7 @@ class ActionDiscoveryPanel {
         }
 
         try {
-            const result = await deleteMacro(macroId);
+            const result = await deleteWebFlow(actionName);
 
             if (result.success) {
                 await this.updateUserActionsUI();
@@ -1086,14 +1025,16 @@ class ActionDiscoveryPanel {
     }
 
     private createUserActionHeader(action: any): string {
+        const paramCount = Object.keys(action.parameters || {}).length;
+        const sourceLabel = action.source?.type || "unknown";
         return `
             <div class="d-flex justify-content-between align-items-start">
                 <div class="flex-grow-1">
                     <div class="d-flex align-items-center mb-2">
-                        <span class="fw-semibold">${action.name}</span>
+                        <span class="fw-semibold">${escapeHtml(action.name)}</span>
                     </div>
-                    <p class="mb-2 text-muted">${action.description || ""}</p>
-                    <small class="text-muted">${action.steps?.length || 0} recorded steps</small>
+                    <p class="mb-2 text-muted">${escapeHtml(action.description || "")}</p>
+                    <small class="text-muted">${paramCount} parameter${paramCount !== 1 ? "s" : ""} &middot; ${sourceLabel}</small>
                 </div>
                 <div class="btn-group-vertical btn-group-sm">
                     ${createButton(
@@ -1112,23 +1053,24 @@ class ActionDiscoveryPanel {
     }
 
     private createUserActionDetails(action: any, index: number): string {
-        const tabs = [
-            { id: `recording${index}`, label: "Recording", active: true },
-            { id: `macro${index}`, label: "Macro" },
-        ];
+        const tabs = [{ id: `script${index}`, label: "Script", active: true }];
 
-        const yamlContent =
-            action.rawYAML || "# Error: YAML content not available";
+        const scriptContent = action.script || "// No script available";
+        const paramSummary = Object.entries(action.parameters || {})
+            .map(
+                ([name, p]: [string, any]) =>
+                    `  ${name}: ${p.type}${p.required ? "" : "?"}  // ${p.description || ""}`,
+            )
+            .join("\n");
+        const displayContent = paramSummary
+            ? `// Parameters:\n${paramSummary}\n\n${scriptContent}`
+            : scriptContent;
 
         const panes = [
             {
-                id: `recording${index}`,
-                content: `<div id="stepsContent${index}"></div>`,
+                id: `script${index}`,
+                content: `<pre><code class="language-javascript">${escapeHtml(displayContent)}</code></pre>`,
                 active: true,
-            },
-            {
-                id: `macro${index}`,
-                content: `<pre><code class="language-yaml">${escapeHtml(yamlContent)}</code></pre>`,
             },
         ];
 

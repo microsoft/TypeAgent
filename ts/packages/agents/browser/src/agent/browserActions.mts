@@ -8,7 +8,6 @@ import { TabTitleIndex } from "./tabTitleIndex.mjs";
 import { TextEmbeddingModel } from "aiclient";
 import type { WebsiteCollection, IndexData } from "website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
-import { MacroStore } from "./storage/index.mjs";
 import { WebFlowStore } from "./webFlows/store/webFlowStore.mjs";
 import { WebAgentChannels } from "./webTypeAgent.mjs";
 import {
@@ -36,7 +35,6 @@ export type BrowserActionContext = {
     index: IndexData | undefined;
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
-    macrosStore?: MacroStore | undefined;
     webFlowStore?: WebFlowStore | undefined;
     currentWebSearchResults?: Map<string, any[]> | undefined; // Store search results for follow-up actions
     resolverSettings: {

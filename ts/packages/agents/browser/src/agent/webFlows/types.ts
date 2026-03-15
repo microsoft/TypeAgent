@@ -17,6 +17,9 @@ export interface WebFlowParameter {
     required: boolean;
     description: string;
     default?: unknown;
+    // Known valid values for this parameter (e.g., dropdown options, radio button choices).
+    // When present, the runtime should match user input against these values case-insensitively.
+    valueOptions?: string[];
 }
 
 export interface WebFlowScope {

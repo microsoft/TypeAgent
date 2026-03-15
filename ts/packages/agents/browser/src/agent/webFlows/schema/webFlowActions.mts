@@ -61,20 +61,10 @@ export type GenerateWebFlowFromRecording = {
     };
 };
 
-// Bulk-convert existing macros from MacroStore into webFlows
-export type ConvertMacrosToWebFlows = {
-    actionName: "convertMacrosToWebFlows";
-    parameters?: {
-        // Only convert macros for a specific domain (default: all)
-        domain?: string;
-    };
-};
-
 export type WebFlowActions =
     | ListWebFlows
     | DeleteWebFlow
     | EditWebFlowScope
     | StartGoalDrivenTask
     | GenerateWebFlow
-    | GenerateWebFlowFromRecording
-    | ConvertMacrosToWebFlows;
+    | GenerateWebFlowFromRecording;
