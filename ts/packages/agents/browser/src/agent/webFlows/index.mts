@@ -40,6 +40,4 @@ export type {
     BrowserReasoningTrace,
     BrowserTraceStep,
 } from "./reasoning/browserReasoningTypes.mjs";
-export { MacroToWebFlowConverter } from "./macroToWebFlowConverter.mjs";
-export type { ConvertibleMacro } from "./macroToWebFlowConverter.mjs";
 export { loadSampleFlows } from "./sampleFlowLoader.mjs";

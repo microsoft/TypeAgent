@@ -295,7 +295,6 @@ async function initializeBrowserContext(
             clientBrowserControl === undefined ? "extension" : "electron",
         index: undefined,
         localHostPort,
-        macrosStore: undefined,
         resolverSettings: {
             searchResolver: true,
             keywordResolver: true,
@@ -320,21 +319,6 @@ async function updateBrowserContext(
         await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
-        }
-
-        // Initialize MacroStore
-        if (!context.agentContext.macrosStore && context.sessionStorage) {
-            try {
-                const { MacroStore } = await import("./storage/index.mjs");
-                context.agentContext.macrosStore = new MacroStore(
-                    context.sessionStorage,
-                );
-                await context.agentContext.macrosStore.initialize();
-                debug("ActionsStore initialized successfully");
-            } catch (error) {
-                debug("Failed to initialize ActionsStore:", error);
-                // Continue without ActionsStore - will fall back to legacy storage
-            }
         }
 
         // Initialize WebFlowStore (uses instance storage for cross-session persistence)
@@ -1860,17 +1844,16 @@ async function handleGetActionRequest(
             throw new Error("Invalid actionId format");
         }
 
-        debug(`Handling macro request for ID: ${actionId}`);
+        debug(`Handling action request for: ${actionId}`);
 
-        // Get the macros store from context
-        const macrosStore = context.agentContext.macrosStore;
-        if (!macrosStore) {
-            throw new Error("MacroStore not available");
+        const webFlowStore = context.agentContext.webFlowStore;
+        if (!webFlowStore) {
+            throw new Error("WebFlowStore not available");
         }
 
-        const macro = await macrosStore.getMacro(actionId);
+        const action = await webFlowStore.get(actionId);
 
-        if (!macro) {
+        if (!action) {
             viewServiceProcess.send({
                 type: "getActionResponse",
                 requestId,
@@ -1885,7 +1868,7 @@ async function handleGetActionRequest(
             type: "getActionResponse",
             requestId,
             success: true,
-            action: macro,
+            action: action,
             timestamp: Date.now(),
         });
 

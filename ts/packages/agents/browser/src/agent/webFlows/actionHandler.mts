@@ -4,6 +4,7 @@
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
 import { WebFlowStore } from "./store/webFlowStore.mjs";
+import { WebFlowDefinition } from "./types.js";
 import { WebFlowActions } from "./schema/webFlowActions.mjs";
 import { validateWebFlowScript } from "./scriptValidator.mjs";
 import { executeWebFlowScript } from "./scriptExecutor.mjs";
@@ -16,7 +17,6 @@ import { BrowserReasoningAgent } from "./reasoning/browserReasoningAgent.mjs";
 import { BrowserReasoningTrace } from "./reasoning/browserReasoningTypes.mjs";
 import { generateWebFlowFromTrace } from "./scriptGenerator.mjs";
 import { normalizeRecording, RecordingData } from "./recordingNormalizer.mjs";
-import { MacroToWebFlowConverter } from "./macroToWebFlowConverter.mjs";
 import { loadSampleFlows } from "./sampleFlowLoader.mjs";
 import registerDebug from "debug";
 
@@ -43,24 +43,42 @@ async function getStore(
     return store;
 }
 
-async function ensureSampleFlowsRegistered(store: WebFlowStore): Promise<void> {
+export async function ensureSampleFlowsRegistered(
+    store: WebFlowStore,
+): Promise<void> {
     if (sampleFlowsRegistered) return;
     sampleFlowsRegistered = true;
 
     try {
         const samples = loadSampleFlows();
-        const existingNames = await store.getFlowNames();
         let registered = 0;
+        let upgraded = 0;
 
         for (const sample of samples) {
-            if (!existingNames.includes(sample.name)) {
+            const existing = await store.get(sample.name);
+            if (!existing) {
                 await store.save(sample);
                 registered++;
+            } else if (existing.source?.type === "discovered") {
+                // Discovered flows have placeholder scripts — replace with
+                // the real sample script while preserving any domain scope
+                // the discovery added.
+                const merged: WebFlowDefinition = {
+                    ...sample,
+                    scope:
+                        existing.scope.type === "site"
+                            ? existing.scope
+                            : sample.scope,
+                };
+                await store.save(merged);
+                upgraded++;
             }
         }
 
-        if (registered > 0) {
-            debug(`Registered ${registered} sample webFlows`);
+        if (registered > 0 || upgraded > 0) {
+            debug(
+                `Sample webFlows: ${registered} registered, ${upgraded} upgraded from discovered placeholders`,
+            );
         }
     } catch (error) {
         debug("Failed to register sample flows:", error);
@@ -493,54 +511,6 @@ async function handleGenerateWebFlowFromRecording(
     };
 }
 
-async function handleConvertMacrosToWebFlows(
-    action: WebFlowActions & { actionName: "convertMacrosToWebFlows" },
-    context: SessionContext<BrowserActionContext>,
-): Promise<WebFlowActionResult> {
-    const macrosStore = context.agentContext.macrosStore;
-    if (!macrosStore) {
-        return {
-            displayText: "MacroStore not available",
-            data: { success: false },
-        };
-    }
-
-    const store = await getStore(context);
-    const converter = new MacroToWebFlowConverter();
-    const domain = action.parameters?.domain;
-
-    let macros: any[];
-    if (domain) {
-        macros = await macrosStore.getMacrosForUrl(`https://${domain}/`);
-    } else {
-        macros = await macrosStore.getAllMacros();
-    }
-
-    const discoveredMacros = macros.filter(
-        (m: any) => m.author === "discovered",
-    );
-    const flows = converter.convertMany(discoveredMacros);
-
-    let savedCount = 0;
-    for (const flow of flows) {
-        await store.save(flow);
-        savedCount++;
-    }
-
-    debug(
-        `Bulk converted ${savedCount} macros to webFlows${domain ? ` for ${domain}` : ""}`,
-    );
-
-    return {
-        displayText: `Converted ${savedCount} macros to webFlows${domain ? ` for ${domain}` : ""} (${discoveredMacros.length} discovered macros found)`,
-        data: {
-            success: true,
-            converted: savedCount,
-            total: discoveredMacros.length,
-        },
-    };
-}
-
 export async function handleWebFlowAction(
     action: { actionName: string; parameters?: Record<string, unknown> },
     context: SessionContext<BrowserActionContext>,
@@ -582,13 +552,6 @@ export async function handleWebFlowAction(
             return handleGenerateWebFlowFromRecording(
                 action as WebFlowActions & {
                     actionName: "generateWebFlowFromRecording";
-                },
-                context,
-            );
-        case "convertMacrosToWebFlows":
-            return handleConvertMacrosToWebFlows(
-                action as WebFlowActions & {
-                    actionName: "convertMacrosToWebFlows";
                 },
                 context,
             );

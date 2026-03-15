@@ -2,11 +2,6 @@
 // Licensed under the MIT License.
 
 import {
-    getMacrosForUrl,
-    getAllMacros,
-    getMacroDomains,
-    deleteMacro,
-    deleteMultipleMacros,
     showNotification,
     showLoadingState,
     showEmptyState,
@@ -14,10 +9,11 @@ import {
     showConfirmationDialog,
     extractDomain,
     categorizeMacro,
-    formatRelativeDate,
     escapeHtml,
     extractCategories,
     filterMacros,
+    deleteWebFlow,
+    getAllWebFlows,
 } from "./macroUtilities";
 import { extensionService } from "./knowledgeUtilities";
 
@@ -194,8 +190,7 @@ class MacroIndexApp {
         showLoadingState(container, "Loading Macros");
 
         try {
-            // Get all macros across all URLs
-            const macros = await getAllMacros();
+            const macros = await getAllWebFlows();
             this.state.allMacros = macros;
 
             // Populate filter dropdowns
@@ -375,14 +370,21 @@ class MacroIndexApp {
         deleteButton.disabled = true;
 
         try {
-            const result = await deleteMultipleMacros(
-                this.state.selectedMacros,
-            );
+            let successCount = 0;
+            let errorCount = 0;
+            for (const name of this.state.selectedMacros) {
+                const result = await deleteWebFlow(name);
+                if (result.success) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                }
+            }
 
-            if (result.successCount > 0) {
+            if (successCount > 0) {
                 showNotification(
-                    `Successfully deleted ${result.successCount} macro(s)${result.errorCount > 0 ? `, ${result.errorCount} failed` : ""}`,
-                    result.errorCount > 0 ? "warning" : "success",
+                    `Successfully deleted ${successCount} action(s)${errorCount > 0 ? `, ${errorCount} failed` : ""}`,
+                    errorCount > 0 ? "warning" : "success",
                 );
                 this.state.selectedMacros = [];
                 await this.loadAllMacros();
@@ -547,7 +549,7 @@ class MacroIndexApp {
         });
 
         deleteBtn?.addEventListener("click", () => {
-            this.deleteMacro(macro.id || macro.name, macro.name);
+            this.deleteAction(macro.name);
         });
     }
 
@@ -678,22 +680,22 @@ class MacroIndexApp {
         showNotification("Macro editing coming soon!", "info");
     }
 
-    private async deleteMacro(macroId: string, macroName: string) {
+    private async deleteAction(actionName: string) {
         const confirmed = await showConfirmationDialog(
-            `Are you sure you want to delete the macro "${macroName}"? This cannot be undone.`,
+            `Are you sure you want to delete "${actionName}"? This cannot be undone.`,
         );
         if (!confirmed) return;
 
         try {
-            const result = await deleteMacro(macroId);
+            const result = await deleteWebFlow(actionName);
             if (result.success) {
                 showNotification(
-                    `Macro "${macroName}" deleted successfully!`,
+                    `"${actionName}" deleted successfully!`,
                     "success",
                 );
                 await this.loadAllMacros();
             } else {
-                throw new Error(result.error || "Failed to delete macro");
+                throw new Error(result.error || "Failed to delete action");
             }
         } catch (error) {
             console.error("Error deleting action:", error);

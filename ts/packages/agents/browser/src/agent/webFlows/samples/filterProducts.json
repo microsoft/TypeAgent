@@ -1,0 +1,20 @@
+{
+  "name": "filterProducts",
+  "description": "Filter products based on criteria such as price, size, or shipping options",
+  "version": 1,
+  "parameters": {
+    "filterCriteria": {
+      "type": "string",
+      "required": true,
+      "description": "The filter criteria to apply (e.g., price range, brand, size)"
+    }
+  },
+  "script": "async function execute(browser, params) {\n    const filterControl = await browser.extractComponent(\n        {\n            typeName: 'FilterControl',\n            schema: '{ label: string; cssSelector: string; type: string; }'\n        },\n        params.filterCriteria\n    );\n    if (!filterControl || !filterControl.cssSelector) {\n        throw new Error('Could not find filter for: ' + params.filterCriteria);\n    }\n    await browser.click(filterControl.cssSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Applied filter: ' + params.filterCriteria };\n}",
+  "grammarPatterns": [
+    "filter by $(filterCriteria:wildcard)",
+    "filter products by $(filterCriteria:wildcard)",
+    "show only $(filterCriteria:wildcard)"
+  ],
+  "scope": { "type": "global" },
+  "source": { "type": "manual", "timestamp": "2026-03-15T00:00:00.000Z" }
+}

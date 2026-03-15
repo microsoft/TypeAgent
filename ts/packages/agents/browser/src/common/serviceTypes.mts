@@ -227,26 +227,21 @@ export type BrowserAgentInvokeFunctions = {
 
     registerPageDynamicAgent(params: { agentName: string }): Promise<any>;
 
-    getIntentFromRecording(params: {
-        recordedActionName: string;
-        recordedActionDescription: string;
-        recordedActionSteps: any[];
+    createWebFlowFromRecording(params: {
+        actionName: string;
+        actionDescription: string;
+        recordedSteps: string;
         existingActionNames?: string[];
-        fragments?: any;
-        screenshots?: any;
+        startUrl: string;
+        screenshots?: string[];
+        fragments?: any[];
     }): Promise<any>;
 
-    getMacrosForUrl(params: {
-        url: string;
-        includeGlobal?: boolean;
-        author?: string;
-    }): Promise<any>;
+    getWebFlowsForDomain(params: { domain: string }): Promise<any>;
 
-    getAllMacros(params: { includeGlobal?: boolean }): Promise<any>;
+    getAllWebFlows(params: {}): Promise<any>;
 
-    getActionDomains(params: {}): Promise<any>;
-
-    deleteMacro(params: { macroId: string }): Promise<any>;
+    deleteWebFlow(params: { name: string }): Promise<any>;
 
     // Search/analytics
     getRecentKnowledgeItems(params: {
@@ -407,8 +402,6 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         getLibraryStats(params?: any): Promise<any>;
         refreshSchema(): Promise<any>;
         registerTempSchema(params: { agentName: string }): Promise<any>;
-        getIntentFromRecording(params: any): Promise<any>;
-        getMacrosForUrl(params: any): Promise<any>;
         extractPageKnowledge(params?: any): Promise<any>;
         extractPageKnowledgeStreaming(params?: any): Promise<any>;
         queryKnowledge(params: any): Promise<any>;
@@ -441,10 +434,10 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         importHtmlFolder(params: any): Promise<any>;
         getFileImportProgress(params: { importId: string }): Promise<any>;
         cancelFileImport(params: { importId: string }): Promise<any>;
-        deleteMacro(params: { macroId: string }): Promise<any>;
-        getAllMacros(): Promise<any>;
-        getActionDomains(): Promise<any>;
-        getMacroDomains(): Promise<any>;
+        createWebFlowFromRecording(params: any): Promise<any>;
+        getWebFlowsForDomain(params: any): Promise<any>;
+        getAllWebFlows(): Promise<any>;
+        deleteWebFlow(params: any): Promise<any>;
         checkAIModelAvailability(params: any): Promise<any>;
         getPageQualityMetrics(params: any): Promise<any>;
         getRecentKnowledgeItems(params: any): Promise<any>;

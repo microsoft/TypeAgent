@@ -21,6 +21,9 @@ export interface ScriptGenerationOptions {
     description?: string;
     suggestedName?: string;
     model?: string;
+    // HTML fragments from the page at recording time. Used to extract dropdown
+    // options, radio button values, and other fixed-choice element data.
+    pageHtml?: string[];
 }
 
 async function getSchemaFileContents(fileName: string): Promise<string> {
@@ -174,6 +177,10 @@ function buildScriptGenerationPrompt(
 
     const domain = extractDomain(trace.startUrl);
 
+    const pageHtmlSection = options.pageHtml?.length
+        ? `\nPAGE HTML CONTEXT (use this to extract dropdown/select options, radio button values, and other fixed-choice element data for valueOptions):\n${options.pageHtml.map((h) => h.slice(0, 15000)).join("\n---\n")}\n`
+        : "";
+
     return `You are generating a reusable browser automation script from an execution trace.
 
 GOAL: "${trace.goal}"
@@ -185,6 +192,7 @@ RESULT: ${trace.result.success ? "SUCCESS" : "FAILED"} - ${trace.result.summary}
 
 EXECUTION TRACE:
 ${stepsDescription}
+${pageHtmlSection}
 
 Generate a WebFlowGenerationResult that turns this trace into a reusable, parameterized script.
 
@@ -202,6 +210,8 @@ SCRIPT GENERATION RULES:
 5. IMPORTANT: Do NOT include browser.navigateTo() with the start URL at the beginning of the script. The script runs on whatever page the user is currently on. Only use navigateTo() if the flow's purpose is navigation itself.
 6. For extractComponent, the schema field must use TypeScript-style type syntax (e.g., "{ title: string; cssSelector: string; }"), NOT JSON Schema format.
 7. Action methods (click, enterText, selectOption, clickAndWait, followLink) take a CSS selector string directly. Do NOT use findElement or waitForElement — they do not exist.
+8. IMPORTANT — valueOptions for fixed-choice parameters: When the trace shows interaction with a dropdown, radio button group, segmented toggle, or any control with a fixed set of choices, populate the parameter's valueOptions array with ALL available option texts (not just the one selected in the recording). Extract these from the recorded step data (e.g., select element option lists, button group labels). Also include these options in the parameter description. The script should match params against valueOptions case-insensitively before passing to selectOption/click.
+9. IMPORTANT — skip empty parameters: When a parameter value is falsy (empty string, null, undefined), the script should skip that parameter's action gracefully and continue with the remaining steps. Only throw an error if ALL parameters are empty. A partially-filled request should apply the values that were provided and leave the rest unchanged.
 
 IMPORTANT patterns for the script:
 - To click a link: use extractComponent({typeName: 'NavigationLink', schema: '{ title: string; linkSelector: string; }'}, 'link text') then browser.followLink(link.linkSelector)

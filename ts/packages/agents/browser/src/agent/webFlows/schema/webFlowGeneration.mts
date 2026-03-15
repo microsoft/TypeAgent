@@ -30,8 +30,16 @@ export type WebFlowGenerationResult = {
 export type WebFlowParameterDef = {
     type: "string" | "number" | "boolean";
     required: boolean;
+    // Always include the list of allowed values in the description when the parameter
+    // maps to a fixed-choice control (dropdown, radio buttons, toggle group).
+    // Example: "Foam level to select. Options: No Foam, Light Foam, Extra Foam"
     description: string;
     default?: string | number | boolean;
+    // The exact display-text values accepted by this parameter. Populate this whenever
+    // the recorded steps interact with a fixed-choice control (dropdown, radio buttons,
+    // segmented toggle, etc.). Include ALL available options, not just the one selected
+    // during the recording. The runtime uses this list for case-insensitive fuzzy matching.
+    valueOptions?: string[];
 };
 
 export type WebFlowScopeDef = {

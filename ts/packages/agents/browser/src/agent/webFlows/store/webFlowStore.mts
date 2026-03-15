@@ -141,6 +141,28 @@ export class WebFlowStore {
         return matches;
     }
 
+    async listForDomainWithDetails(
+        domain: string,
+    ): Promise<WebFlowDefinition[]> {
+        const names = await this.listForDomain(domain);
+        const flows: WebFlowDefinition[] = [];
+        for (const name of names) {
+            const flow = await this.get(name);
+            if (flow) flows.push(flow);
+        }
+        return flows;
+    }
+
+    async listAllWithDetails(): Promise<WebFlowDefinition[]> {
+        const names = await this.getFlowNames();
+        const flows: WebFlowDefinition[] = [];
+        for (const name of names) {
+            const flow = await this.get(name);
+            if (flow) flows.push(flow);
+        }
+        return flows;
+    }
+
     async getFlowNames(): Promise<string[]> {
         await this.ensureInitialized();
         return Object.keys(this.index?.flows ?? {});
