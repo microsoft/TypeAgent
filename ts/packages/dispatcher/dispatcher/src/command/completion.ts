@@ -434,10 +434,20 @@ async function getCommandParameterCompletion(
 
         // Allow grammar-reported matchedPrefixLength to override
         // the parse-derived startIndex.  This handles CJK and other
-        // non-space-delimited scripts where the grammar matcher is
-        // the authoritative source for how far into the input it
+        // non-space-delimited scripts where the grammar matcher is        // the authoritative source for how far into the input it
         // consumed.  matchedPrefixLength is relative to the token
         // content start, so add it to tokenStartIndex.
+        //
+        // IMPORTANT: Do NOT apply tokenBoundary() or any whitespace
+        // normalization to groupPrefixLength.  The agent owns the
+        // boundary.  Grammars with escaped literal spaces (e.g.
+        // `hello\ ` where the space is part of the token) will
+        // include that whitespace in matchedPrefixLength, yielding
+        // a startIndex that already sits past a separator.  When
+        // paired with separatorMode="spacePunctuation", this means
+        // the grammar requires a *second* separator — the shell's
+        // A3 separator check handles this correctly.
+
         const groupPrefixLength = agentResult.matchedPrefixLength;
         if (groupPrefixLength !== undefined && groupPrefixLength !== 0) {
             startIndex = target.tokenStartIndex + groupPrefixLength;

@@ -230,6 +230,16 @@ export class PartialCompletionSession {
         //   "x…"      — non-separator typed right after anchor: RE-FETCH (the
         //               separator constraint can never be satisfied without
         //               backtracking, so treat this as a new input)
+        //
+        // NOTE: The anchor (derived from startIndex) may already
+        // include whitespace when the grammar consumed it (e.g.
+        // an escaped literal space like `hello\ ` in a grammar
+        // rule, where the space is part of the token itself).
+        // In that case separatorMode may still require a separator
+        // — this is intentional and means the grammar expects a
+        // *second* separator after the anchor.  Do not "fix" this
+        // by trimming the anchor or adjusting startIndex; the
+        // agent is the authority on where it stopped parsing.
         const rawPrefix = input.substring(anchor.length);
         const needsSep = requiresSeparator(sepMode);
         if (needsSep) {

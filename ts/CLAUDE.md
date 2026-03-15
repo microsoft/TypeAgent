@@ -8,6 +8,8 @@ This is a **pnpm monorepo** rooted at `ts/`. All commands run from the `ts/` dir
 # Install & build
 pnpm i
 pnpm run build               # Uses fluid-build to build all packages
+pnpm run build <directory>   # Uses fluid-build to build directory (and dependencies)
+pnpm run build <package name regexp>   # Uses fluid-build to build a package which name matches the regexp (and dependencies)
 pnpm run build:shell         # Build only the shell app and its dependencies
 
 # Clean
