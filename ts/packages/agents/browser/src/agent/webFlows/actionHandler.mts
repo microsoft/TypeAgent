@@ -18,6 +18,7 @@ import { BrowserReasoningTrace } from "./reasoning/browserReasoningTypes.mjs";
 import { generateWebFlowFromTrace } from "./scriptGenerator.mjs";
 import { normalizeRecording, RecordingData } from "./recordingNormalizer.mjs";
 import { loadSampleFlows } from "./sampleFlowLoader.mjs";
+import { sendWebFlowRefreshToClient } from "../browserActionHandler.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:webflows:handler");
@@ -189,6 +190,7 @@ async function handleDeleteWebFlow(
 
     if (deleted) {
         debug(`Deleted WebFlow: ${name}`);
+        sendWebFlowRefreshToClient(context);
         return {
             displayText: `WebFlow "${name}" deleted`,
             data: { success: true, name },
@@ -223,6 +225,8 @@ async function handleEditWebFlowScope(
     await store.save(flow);
 
     debug(`Updated scope for WebFlow "${name}" to ${scopeType}`);
+    sendWebFlowRefreshToClient(context);
+
     return {
         displayText: `WebFlow "${name}" scope updated to ${scopeType}${domains ? ` (${domains.join(", ")})` : ""}`,
         data: { success: true, name, scope: flow.scope },
@@ -410,6 +414,8 @@ async function handleGenerateWebFlow(
     await store.save(flow);
     debug(`Saved generated WebFlow: ${flow.name}`);
 
+    sendWebFlowRefreshToClient(context);
+
     return {
         displayText: `WebFlow "${flow.name}" generated and saved.\n  Parameters: ${Object.keys(flow.parameters).join(", ") || "none"}\n  Scope: ${flow.scope.type}${flow.scope.domains ? ` (${flow.scope.domains.join(", ")})` : ""}\n  Grammar patterns: ${flow.grammarPatterns.length}`,
         data: { success: true, flow },
@@ -504,6 +510,8 @@ async function handleGenerateWebFlowFromRecording(
     const store = await getStore(context);
     await store.save(flow);
     debug(`Saved WebFlow from recording: ${flow.name}`);
+
+    sendWebFlowRefreshToClient(context);
 
     return {
         displayText: `WebFlow "${flow.name}" generated from recording and saved.\n  Parameters: ${Object.keys(flow.parameters).join(", ") || "none"}\n  Scope: ${flow.scope.type}${flow.scope.domains ? ` (${flow.scope.domains.join(", ")})` : ""}\n  Grammar patterns: ${flow.grammarPatterns.length}`,

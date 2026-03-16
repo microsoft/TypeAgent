@@ -99,3 +99,19 @@ export function isBuiltInWebAgentRpcResponse(
         message?.type === "builtInRpcResponse"
     );
 }
+
+// Server → browser push notification to refresh WebFlowAgent.
+// Sent when the server modifies WebFlowStore (discovery, recording, deletion).
+export type WebFlowRefreshMessage = {
+    source: "dispatcher";
+    method: "webAgent/message";
+    type: "webFlowRefresh";
+};
+
+export function isWebFlowRefreshMessage(
+    message: any,
+): message is WebFlowRefreshMessage {
+    return (
+        message?.source === "dispatcher" && message?.type === "webFlowRefresh"
+    );
+}

@@ -101,7 +101,7 @@ export async function generateWebFlowFromTrace(
         }
         debug("TypeChat translation succeeded");
 
-        const parsed = toWebFlowDefinition(response.data);
+        const parsed = toWebFlowDefinition(response.data, trace.startUrl);
 
         // Validate the generated script content
         const validation = validateWebFlowScript(
@@ -119,7 +119,10 @@ export async function generateWebFlowFromTrace(
             translator.createRequestPrompt = () => retryPrompt;
             const retryResponse = await translator.translate("");
             if (retryResponse.success) {
-                const retryParsed = toWebFlowDefinition(retryResponse.data);
+                const retryParsed = toWebFlowDefinition(
+                    retryResponse.data,
+                    trace.startUrl,
+                );
                 const retryValidation = validateWebFlowScript(
                     retryParsed.script,
                     Object.keys(retryParsed.parameters),
@@ -141,7 +144,12 @@ export async function generateWebFlowFromTrace(
 
 function toWebFlowDefinition(
     result: WebFlowGenerationResult,
+    startUrl?: string,
 ): WebFlowDefinition {
+    const defaultScope = startUrl
+        ? { type: "site" as const, domains: [extractDomain(startUrl)] }
+        : { type: "global" as const };
+
     return {
         name: result.name,
         description: result.description,
@@ -149,7 +157,7 @@ function toWebFlowDefinition(
         parameters: result.parameters,
         script: result.script,
         grammarPatterns: result.grammarPatterns ?? [],
-        scope: result.scope ?? { type: "global" },
+        scope: result.scope ?? defaultScope,
         source: result.source ?? {
             type: "goal-driven",
             timestamp: new Date().toISOString(),

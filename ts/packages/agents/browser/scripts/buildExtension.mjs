@@ -72,6 +72,7 @@ const sharedScripts = {
     "sites/commerce": "sites/commerce.ts",
     "sites/instacart": "sites/instacart.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
+    "sites/webflow": "sites/webflow.ts",
     "offscreen/contentProcessor": "offscreen/contentProcessor.ts",
     "offscreen/screenshotCapture": "offscreen/screenshotCapture.ts",
 };

@@ -20,7 +20,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { UserActionsList } from "./schema/userActionsPool.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
-import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
 import {
     SchemaDiscoveryActions,
     CreateWebFlowFromRecording,
@@ -41,6 +40,8 @@ import {
     ScriptGenerationOptions,
 } from "../webFlows/scriptGenerator.mjs";
 import { ensureSampleFlowsRegistered } from "../webFlows/actionHandler.mjs";
+import { sendWebFlowRefreshToClient } from "../browserActionHandler.mjs";
+import { addAllowDynamicAgentDomains } from "../webTypeAgent.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
 
@@ -163,37 +164,6 @@ async function handleFindUserActions(
     const url = await getBrowserControl(
         ctx.sessionContext.agentContext,
     ).getPageUrl();
-    const hostName = new URL(url!).hostname.replace(/\./g, "_");
-    const agentName = `temp_${hostName}`;
-
-    if (action.parameters?.registerAgent) {
-        const manifest: AppAgentManifest = {
-            emojiChar: "🚧",
-            description: schemaDescription,
-            schema: {
-                description: schemaDescription,
-                schemaType: "DynamicUserPageActions",
-                schemaFile: { content: schema, format: "ts" },
-            },
-        };
-
-        // register agent after request is processed to avoid a deadlock
-        setTimeout(async () => {
-            try {
-                await ctx.sessionContext.removeDynamicAgent(agentName);
-            } catch {}
-
-            await ctx.sessionContext.addDynamicAgent(
-                agentName,
-                manifest,
-                createTempAgentForSchema(
-                    ctx.browser,
-                    ctx.agent,
-                    ctx.sessionContext,
-                ),
-            );
-        }, 1000);
-    }
 
     // AUTO-SAVE: Save discovered actions directly to WebFlowStore
     if (uniqueItems.size > 0 && ctx.sessionContext.agentContext.webFlowStore) {
@@ -266,6 +236,20 @@ async function handleFindUserActions(
             debug("Failed to auto-save discovered actions:", error);
         }
     }
+
+    // Auto-approve this domain for webAgent registration so the
+    // WebFlowAgent can register a temp_ agent without a user prompt.
+    if (url) {
+        try {
+            const hostname = new URL(url).hostname;
+            await addAllowDynamicAgentDomains(hostname, ctx.sessionContext);
+        } catch {
+            // Invalid URL — skip
+        }
+    }
+
+    // Tell the browser-side WebFlowAgent to re-fetch flows and update schema
+    sendWebFlowRefreshToClient(ctx.sessionContext);
 
     return {
         displayText: message,
@@ -450,70 +434,8 @@ async function getDynamicSchema(
     );
 }
 
-async function refreshDynamicAgentSchema(
-    ctx: DiscoveryActionHandlerContext,
-): Promise<void> {
-    try {
-        const url = await getBrowserControl(
-            ctx.sessionContext.agentContext,
-        ).getPageUrl();
-        const hostName = new URL(url!).hostname.replace(/\./g, "_");
-        const agentName = `temp_${hostName}`;
-
-        const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
-        if (!webFlowStore) return;
-
-        const domain = new URL(url!).hostname;
-        const allNames = await webFlowStore.listForDomain(domain);
-        if (allNames.length === 0) return;
-
-        const { schema } = await getDynamicSchema(allNames, ctx.sessionContext);
-
-        const schemaDescription = `A schema that enables interactions with the ${hostName} page`;
-        const manifest: AppAgentManifest = {
-            emojiChar: "🚧",
-            description: schemaDescription,
-            schema: {
-                description: schemaDescription,
-                schemaType: "DynamicUserPageActions",
-                schemaFile: { content: schema, format: "ts" },
-            },
-        };
-
-        // Re-register after a short delay to avoid deadlock
-        setTimeout(async () => {
-            try {
-                await ctx.sessionContext.removeDynamicAgent(agentName);
-            } catch {
-                try {
-                    await ctx.sessionContext.forceCleanupDynamicAgent(
-                        agentName,
-                    );
-                } catch {
-                    // May not exist yet
-                }
-            }
-
-            try {
-                await ctx.sessionContext.addDynamicAgent(
-                    agentName,
-                    manifest,
-                    createTempAgentForSchema(
-                        ctx.browser,
-                        ctx.agent,
-                        ctx.sessionContext,
-                    ),
-                );
-                debug(
-                    `Refreshed dynamic agent schema for ${agentName} with ${allNames.length} actions`,
-                );
-            } catch (error) {
-                debug(`Failed to refresh dynamic agent schema:`, error);
-            }
-        }, 500);
-    } catch (error) {
-        debug("Failed to refresh dynamic agent schema:", error);
-    }
+function refreshDynamicAgentSchema(ctx: DiscoveryActionHandlerContext): void {
+    sendWebFlowRefreshToClient(ctx.sessionContext);
 }
 
 async function handleGetPageSummary(
@@ -680,64 +602,8 @@ async function handleRegisterSiteSchema(
         { exact: true },
     );
 
-    const hostName = new URL(url!).hostname.replace(/\./g, "_");
-    const agentName = `temp_${hostName}`;
-    const schemaDescription = `A schema that enables interactions with the ${hostName} page`;
-
-    const manifest: AppAgentManifest = {
-        emojiChar: "🚧",
-        description: schemaDescription,
-        schema: {
-            description: schemaDescription,
-            schemaType: "DynamicUserPageActions",
-            schemaFile: { content: schema, format: "ts" },
-        },
-    };
-
-    // register agent after request is processed to avoid a deadlock
-    setTimeout(async () => {
-        let cleanupFailed = false;
-        try {
-            await ctx.sessionContext.removeDynamicAgent(agentName);
-            debug(`Successfully removed existing agent: ${agentName}`);
-        } catch {
-            // Agent may not exist yet — this is expected on first registration.
-            // Track the failure so we can report it if addDynamicAgent also fails.
-            cleanupFailed = true;
-            try {
-                await ctx.sessionContext.forceCleanupDynamicAgent(agentName);
-                debug(`Force cleanup successful for: ${agentName}`);
-                cleanupFailed = false;
-            } catch {
-                // Will be logged below only if registration fails
-            }
-        }
-
-        try {
-            await ctx.sessionContext.addDynamicAgent(
-                agentName,
-                manifest,
-                createTempAgentForSchema(
-                    ctx.browser,
-                    ctx.agent,
-                    ctx.sessionContext,
-                ),
-            );
-            debug(`Successfully registered agent: ${agentName}`);
-        } catch (error) {
-            if (cleanupFailed) {
-                console.error(
-                    `Failed to register dynamic agent '${agentName}' (prior cleanup also failed):`,
-                    error,
-                );
-            } else {
-                console.error(
-                    `Failed to register dynamic agent '${agentName}':`,
-                    error,
-                );
-            }
-        }
-    }, 1000);
+    // Tell the browser-side WebFlowAgent to re-fetch and register
+    sendWebFlowRefreshToClient(ctx.sessionContext);
 
     return {
         displayText: "Schema registered successfully",
