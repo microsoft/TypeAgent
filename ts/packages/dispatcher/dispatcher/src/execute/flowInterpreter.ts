@@ -21,16 +21,29 @@ export type FlowParameterDef = {
     description?: string;
 };
 
-export type FlowStepDef = {
-    // Step identifier — used to reference this step's output in later steps
+export type ActionStepDef = {
     id: string;
-    // Target agent schema name (e.g. "utility", "player")
+    type?: undefined; // absent or undefined for action steps
     schemaName: string;
-    // Target action name (e.g. "webSearch", "createPlaylist")
     actionName: string;
-    // Parameter map — values may contain ${paramName} or ${stepId.text|data} references
     parameters: Record<string, unknown>;
 };
+
+export type ScriptStepDef = {
+    id: string;
+    type: "script";
+    language: "powershell";
+    body: string;
+    parameters: Record<string, unknown>;
+    sandbox: {
+        allowedCmdlets: string[];
+        allowedPaths: string[];
+        maxExecutionTime: number;
+        networkAccess: boolean;
+    };
+};
+
+export type FlowStepDef = ActionStepDef | ScriptStepDef;
 
 export type FlowDefinition = {
     // Matches the actionName in userActions.mts (used as the dispatch key)
@@ -160,6 +173,83 @@ function resolveParams(
     );
 }
 
+// ── Script step execution ────────────────────────────────────────────────
+
+async function executeScriptStep(
+    step: ScriptStepDef,
+    resolvedParams: Record<string, unknown>,
+): Promise<ActionResult> {
+    if (process.platform !== "win32") {
+        return createActionResultFromError(
+            "Script execution is only supported on Windows",
+        );
+    }
+
+    try {
+        const { spawn } = await import("child_process");
+
+        // Inject parameters as PowerShell variable assignments (safe: values are single-quoted and escaped)
+        const paramAssignments = Object.entries(resolvedParams)
+            .map(
+                ([k, v]) =>
+                    `$${k} = '${String(v ?? "").replace(/'/g, "''")}'`,
+            )
+            .join("; ");
+        const fullScript = paramAssignments
+            ? `${paramAssignments}; ${step.body}`
+            : step.body;
+
+        const result = await new Promise<{
+            success: boolean;
+            stdout: string;
+            stderr: string;
+        }>((resolve) => {
+            const child = spawn(
+                "powershell",
+                ["-NoProfile", "-Command", fullScript],
+                { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+            );
+
+            let stdout = "";
+            let stderr = "";
+
+            child.stdout.on("data", (d: Buffer) => {
+                stdout += d.toString();
+            });
+            child.stderr.on("data", (d: Buffer) => {
+                stderr += d.toString();
+            });
+
+            const timeout = setTimeout(() => {
+                child.kill();
+                resolve({ success: false, stdout, stderr: `Timed out after ${step.sandbox.maxExecutionTime}s` });
+            }, step.sandbox.maxExecutionTime * 1000);
+
+            child.on("close", (code) => {
+                clearTimeout(timeout);
+                resolve({ success: code === 0, stdout, stderr });
+            });
+
+            child.on("error", (err) => {
+                clearTimeout(timeout);
+                resolve({ success: false, stdout, stderr: err.message });
+            });
+        });
+
+        if (result.success) {
+            return createActionResultFromTextDisplay(result.stdout.trim());
+        } else {
+            return createActionResultFromError(
+                result.stderr || "Script execution failed",
+            );
+        }
+    } catch (error) {
+        return createActionResultFromError(
+            `Script execution error: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+}
+
 // ── processFlow ──────────────────────────────────────────────────────────────
 
 /**
@@ -193,23 +283,36 @@ export async function processFlow(
     for (const step of flowDef.steps) {
         const params = resolveParams(step.parameters, flowParams, stepResults);
 
-        displayStatus(
-            `[flow:${flowDef.name}] ${step.id}: ${step.schemaName}.${step.actionName}`,
-            context,
-        );
+        let result: ActionResult;
 
-        const action: FullAction = {
-            schemaName: step.schemaName,
-            actionName: step.actionName,
-            parameters: params as ParamObjectType,
-        };
+        if (step.type === "script") {
+            // Script step — execute via PowerShell runner
+            displayStatus(
+                `[flow:${flowDef.name}] ${step.id}: powershell script`,
+                context,
+            );
 
-        const [executableAction] = toExecutableActions([action]);
-        const result = await executeAction(
-            executableAction,
-            context,
-            stepIndex,
-        );
+            result = await executeScriptStep(step, params);
+        } else {
+            // Action step — delegate to agent action execution
+            displayStatus(
+                `[flow:${flowDef.name}] ${step.id}: ${step.schemaName}.${step.actionName}`,
+                context,
+            );
+
+            const action: FullAction = {
+                schemaName: step.schemaName,
+                actionName: step.actionName,
+                parameters: params as ParamObjectType,
+            };
+
+            const [executableAction] = toExecutableActions([action]);
+            result = await executeAction(
+                executableAction,
+                context,
+                stepIndex,
+            );
+        }
 
         const text = extractText(result);
         const data = tryParseJson(text) ?? text;

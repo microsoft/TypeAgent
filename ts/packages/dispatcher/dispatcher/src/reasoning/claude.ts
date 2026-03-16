@@ -30,6 +30,7 @@ import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
+import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 
 const model = "claude-sonnet-4-5-20250929";
@@ -204,6 +205,7 @@ function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
 ): Options {
     const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
     const activeSchemas = systemContext.agents.getActiveSchemas();
     const schemaDescriptions: string[] = [];
     const validators = new Map<string, TypeAgentJsonValidator<AppAction>>();
@@ -478,6 +480,28 @@ function getClaudeOptions(
                 "- For query steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
                 "- mkdir -p packages/agents/taskflow/pending packages/agents/taskflow/pending/suggestions",
+                ...(config.execution.scriptReuse === "enabled" &&
+                process.platform === "win32"
+                    ? [
+                          "",
+                          "# PowerShell Script Generation Guidelines (Windows)",
+                          "",
+                          "You are running on Windows. When the task involves file system operations, process",
+                          "management, text search, system queries, or similar operations that PowerShell handles",
+                          "natively:",
+                          "",
+                          "1. **Prefer PowerShell scripts** over other approaches when the task is a good fit for shell scripting.",
+                          "2. **Parameterize scripts for reuse.** Instead of hardcoding paths, filenames, or search terms, use PowerShell parameters:",
+                          "   ```powershell",
+                          "   param([string]$Path = '.', [string]$Filter = '*')",
+                          "   Get-ChildItem -Path $Path -Filter $Filter",
+                          "   ```",
+                          "3. **Use standard PowerShell cmdlets** (Get-ChildItem, Get-Content, Select-String, Get-Process, Test-Path, etc.) rather than .NET calls or COM objects.",
+                          "4. **Structure multi-step scripts as functions** with clear param() blocks for extractability.",
+                          "5. **Output structured data** when possible (objects, not formatted strings).",
+                          '6. Execute scripts via Bash tool: `powershell -NoProfile -Command "& { <script> }"`',
+                      ]
+                    : []),
             ].join("\n"),
         },
         mcpServers: {
@@ -776,6 +800,55 @@ async function executeReasoningWithTracing(
             } catch (error) {
                 debug("Failed to generate recipe from trace:", error);
             }
+
+            // Auto-generate script recipes from PowerShell scripts in trace
+            const scriptReuseEnabled =
+                systemContext.session.getConfig().execution.scriptReuse ===
+                "enabled";
+            if (scriptReuseEnabled && process.platform === "win32") {
+                try {
+                    const scriptGen = new ScriptRecipeGenerator();
+                    const scriptRecipes = await scriptGen.generate(
+                        tracer.getTrace(),
+                    );
+
+                    // Save to scriptflow agent's instance storage
+                    const scriptflowStorage =
+                        systemContext.persistDir &&
+                        systemContext.storageProvider
+                            ? systemContext.storageProvider.getStorage(
+                                  "scriptflow",
+                                  systemContext.persistDir,
+                              )
+                            : undefined;
+
+                    for (const scriptRecipe of scriptRecipes) {
+                        if (scriptflowStorage) {
+                            const pendingPath = `pending/${scriptRecipe.actionName}_${Date.now().toString(36)}.recipe.json`;
+                            await scriptflowStorage.write(
+                                pendingPath,
+                                JSON.stringify(scriptRecipe, null, 2),
+                            );
+                            debug(
+                                `Script recipe saved to instance storage: ${pendingPath}`,
+                            );
+                        } else {
+                            debug(
+                                "No instance storage available for scriptflow, skipping save",
+                            );
+                        }
+                        context.actionIO.appendDisplay({
+                            type: "text",
+                            content: `\n✓ Script recipe captured: ${scriptRecipe.actionName}`,
+                        });
+                    }
+                } catch (error) {
+                    debug(
+                        "Failed to generate script recipe from trace:",
+                        error,
+                    );
+                }
+            }
         }
 
         return finalResult
@@ -808,11 +881,12 @@ export async function executeReasoningAction(
     const request = action.parameters.originalRequest;
     debug(`Received reasoning request: ${request}`);
 
-    // Check if plan reuse is enabled
+    // Check if plan reuse or script reuse is enabled (either triggers tracing)
     const planReuseEnabled = config.execution.planReuse === "enabled";
+    const scriptReuseEnabled = config.execution.scriptReuse === "enabled";
 
     return executeReasoning(request, context, {
-        planReuseEnabled,
+        planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
     });
 }
