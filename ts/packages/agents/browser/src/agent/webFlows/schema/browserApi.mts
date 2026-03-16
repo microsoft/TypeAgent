@@ -28,7 +28,6 @@ export interface WebFlowBrowserMethods {
     selectOption(cssSelector: string, value: string): Promise<void>;
 
     getPageText(): Promise<string>;
-    captureScreenshot(): Promise<string>;
 
     waitForNavigation(timeout?: number): Promise<void>;
 

@@ -85,6 +85,7 @@ import {
 import {
     isBuiltInWebAgentRpcRequest,
     BuiltInWebAgentRpcResponse,
+    WebFlowRefreshMessage,
 } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import { handleWebFlowAction } from "./webFlows/actionHandler.mjs";
@@ -623,6 +624,66 @@ async function handleWebAgentRpc(
             }
         }
 
+        case "getWebFlowsForDomain": {
+            try {
+                const { domain, ifModifiedSince } = params;
+                if (!domain) {
+                    return {
+                        success: false,
+                        error: "domain parameter is required",
+                    };
+                }
+
+                const webFlowStore = context.agentContext.webFlowStore;
+                if (!webFlowStore) {
+                    return {
+                        success: true,
+                        data: { flows: [], lastUpdated: "" },
+                    };
+                }
+
+                const index = webFlowStore.getIndex();
+                const lastUpdated = index.lastUpdated;
+
+                if (ifModifiedSince && lastUpdated === ifModifiedSince) {
+                    return {
+                        success: true,
+                        data: {
+                            flows: [],
+                            lastUpdated,
+                            notModified: true,
+                        },
+                    };
+                }
+
+                const flows =
+                    await webFlowStore.listForDomainWithDetails(domain);
+                // Only include site-scoped flows in the per-site
+                // WebFlowAgent schema. Global sample flows are already
+                // available through the browser.webFlows agent.
+                const siteFlows = flows.filter((f) => f.scope.type === "site");
+                const transportFlows = siteFlows.map((f) => ({
+                    name: f.name,
+                    description: f.description,
+                    parameters: f.parameters,
+                    script: f.script,
+                }));
+
+                return {
+                    success: true,
+                    data: { flows: transportFlows, lastUpdated },
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to get webFlows for domain",
+                };
+            }
+        }
+
         case "notify": {
             const { message, notificationId } = params;
             const id = notificationId || `webagent-${Date.now()}`;
@@ -642,6 +703,34 @@ async function handleWebAgentRpc(
                 success: false,
                 error: `Unknown webAgentRpc method: ${method}`,
             };
+    }
+}
+
+/**
+ * Send a refresh notification to the browser-side WebFlowAgent.
+ * This tells the agent to re-fetch flows from the server and
+ * re-register its TypeAgent with updated schema.
+ */
+export function sendWebFlowRefreshToClient(
+    context: SessionContext<BrowserActionContext>,
+): void {
+    const wsServer = context.agentContext.agentWebSocketServer;
+    if (!wsServer) return;
+
+    const client = wsServer.getActiveClient();
+    if (!client) return;
+
+    const message: WebFlowRefreshMessage = {
+        source: "dispatcher",
+        method: "webAgent/message",
+        type: "webFlowRefresh",
+    };
+
+    try {
+        client.socket.send(JSON.stringify(message));
+        debug("Sent webFlowRefresh to active client");
+    } catch (error) {
+        debug("Failed to send webFlowRefresh:", error);
     }
 }
 
