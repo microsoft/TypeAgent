@@ -53,6 +53,7 @@
     "vite:views:client": "vite build"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@mozilla/readability": "^0.6.0",
     "@popperjs/core": "^2.11.8",
     "@typeagent/action-schema": "workspace:*",
@@ -103,7 +104,8 @@
     "websocket-utils": "workspace:*",
     "ws": "^8.17.1",
     "xss": "^1.0.15",
-    "yaml": "^2.3.4"
+    "yaml": "^2.3.4",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",

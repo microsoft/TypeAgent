@@ -1,0 +1,20 @@
+{
+  "name": "removeFromCart",
+  "description": "Remove a product from the shopping cart",
+  "version": 1,
+  "parameters": {
+    "productName": {
+      "type": "string",
+      "required": true,
+      "description": "The name of the product to remove"
+    }
+  },
+  "script": "async function execute(browser, params) {\n    const cartItem = await browser.extractComponent(\n        {\n            typeName: 'CartItem',\n            schema: '{ name: string; removeButtonSelector: string; }'\n        },\n        params.productName\n    );\n    if (!cartItem || !cartItem.removeButtonSelector) {\n        throw new Error('Could not find product \"' + params.productName + '\" in the cart');\n    }\n    await browser.click(cartItem.removeButtonSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Removed ' + params.productName + ' from cart' };\n}",
+  "grammarPatterns": [
+    "remove $(productName:wildcard) from cart",
+    "remove $(productName:wildcard) from my cart",
+    "delete $(productName:wildcard) from cart"
+  ],
+  "scope": { "type": "global" },
+  "source": { "type": "manual", "timestamp": "2026-03-15T00:00:00.000Z" }
+}

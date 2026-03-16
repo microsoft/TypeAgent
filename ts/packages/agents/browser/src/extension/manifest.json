@@ -96,6 +96,12 @@
       "js": ["sites/paleobiodb.js"],
       "run_at": "document_start",
       "world": "MAIN"
+    },
+    {
+      "matches": ["https://*/*"],
+      "js": ["sites/webflow.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "web_accessible_resources": [

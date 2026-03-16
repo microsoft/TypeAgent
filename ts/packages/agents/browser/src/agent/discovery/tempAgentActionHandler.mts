@@ -8,16 +8,9 @@ import {
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
 import { NavigationLink } from "./schema/pageComponents.mjs";
-import {
-    PageActionsPlan,
-    UserIntent as RecordedUserIntent,
-} from "./schema/recordedActions.mjs";
 import { setupAuthoringActions } from "./authoringUtilities.mjs";
-import {
-    BrowserActionContext,
-    getSessionBrowserControl,
-} from "../browserActions.mjs";
-import { UserIntent as StoredUserIntent } from "../storage/types.mjs";
+import { BrowserActionContext } from "../browserActions.mjs";
+import { handleWebFlowAction } from "../webFlows/actionHandler.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug(
@@ -61,78 +54,6 @@ async function handleBrowseProductCategory(
     await ctx.actionUtils.followLink(link?.linkCssSelector);
 }
 
-async function handleUserDefinedAction(
-    action: any,
-    ctx: TempAgentActionHandlerContext,
-): Promise<void> {
-    const url = await getSessionBrowserControl(ctx.sessionContext).getPageUrl();
-    const agentContext = ctx.sessionContext.agentContext;
-
-    if (!agentContext.macrosStore) {
-        throw new Error("ActionsStore not available for temp agent");
-    }
-
-    const allActions = await agentContext.macrosStore.getMacrosForUrl(url!);
-
-    // Filter for user-authored actions only
-    const userActions = allActions.filter(
-        (action: any) => action.author === "user",
-    );
-
-    const intentJson = new Map<string, RecordedUserIntent>();
-    const actionsJson = new Map<string, PageActionsPlan>();
-
-    for (const storedMacro of userActions) {
-        if (storedMacro.definition.intentJson) {
-            // Convert from StoredUserIntent to RecordedUserIntent
-            const storedIntent = storedMacro.definition
-                .intentJson as StoredUserIntent;
-            const recordedIntent: RecordedUserIntent = {
-                actionName: storedIntent.actionName,
-                parameters: storedIntent.parameters.map((param) => ({
-                    shortName: param.shortName,
-                    name: param.description, // Use description as name
-                    type: param.type,
-                    defaultValue: param.defaultValue,
-                    valueOptions: [], // Not available in stored format
-                    description: param.description,
-                    required: param.required,
-                })),
-            };
-            intentJson.set(storedMacro.name, recordedIntent);
-        }
-        if (storedMacro.definition.steps) {
-            // Convert MacroStep[] to PageActionsPlan format
-            const actionPlan: PageActionsPlan = {
-                planName: storedMacro.name,
-                description: storedMacro.description,
-                intentSchemaName: storedMacro.name,
-                steps: storedMacro.definition.steps as any, // Type conversion needed here
-            };
-            actionsJson.set(storedMacro.name, actionPlan);
-        }
-    }
-
-    if (
-        !intentJson.has(action.actionName) ||
-        !actionsJson.has(action.actionName)
-    ) {
-        debug(
-            `Action ${action.actionName} was not found on the list of user-defined actions`,
-        );
-        return;
-    }
-
-    const targetIntent = intentJson.get(
-        action.actionName,
-    ) as RecordedUserIntent;
-    const targetPlan = actionsJson.get(action.actionName) as PageActionsPlan;
-
-    const paramsMap = new Map(Object.entries(action.parameters || {}));
-
-    await ctx.actionUtils.runDynamicAction(targetIntent, targetPlan, paramsMap);
-}
-
 export function createTempAgentForSchema(
     browser: BrowserControl,
     agent: any,
@@ -148,23 +69,36 @@ export function createTempAgentForSchema(
 
     return {
         async executeAction(action: any, tempContext: any): Promise<undefined> {
+            // Execute as a webFlow
+            const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+            if (webFlowStore) {
+                const flow = await webFlowStore.get(action.actionName);
+                if (flow) {
+                    debug(
+                        `Delegating ${action.actionName} to webFlow executor`,
+                    );
+                    const result = await handleWebFlowAction(
+                        {
+                            actionName: action.actionName,
+                            parameters: action.parameters,
+                        },
+                        ctx.sessionContext,
+                    );
+                    debug(`WebFlow result: ${result.displayText}`);
+                    return;
+                }
+            }
+
+            // Hardcoded handlers for built-in actions
             switch (action.actionName) {
                 case "browseProductCategories":
                     await handleBrowseProductCategory(action, ctx);
                     break;
-                case "filterProducts":
-                    break;
                 case "navigateToPage":
                     await handleNavigateToPage(action, ctx);
                     break;
-                case "navigateToProductPage":
-                    break;
-                case "removeFromCart":
-                    break;
-                case "signUpForNewsletter":
-                    break;
                 default:
-                    await handleUserDefinedAction(action, ctx);
+                    debug(`No webFlow found for action: ${action.actionName}`);
                     break;
             }
         },

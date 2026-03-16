@@ -4,7 +4,11 @@
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { ExecutableAction, getPropertyInfo, MatchOptions } from "agent-cache";
-import { CompletionGroup, TypeAgentAction } from "@typeagent/agent-sdk";
+import {
+    CompletionGroup,
+    CompletionGroups,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
 import {
     ActionParamType,
@@ -71,9 +75,9 @@ function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
 }
 
 export async function requestCompletion(
-    requestPrefix: string | undefined,
+    requestPrefix: string,
     context: CommandHandlerContext,
-): Promise<CompletionGroup[]> {
+): Promise<CompletionGroups> {
     debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
     const namespaceKeys = getCompletionNamespaceKeys(context);
     debugCompletion(`Request completion namespace keys`, namespaceKeys);
@@ -88,9 +92,12 @@ export async function requestCompletion(
     const results = context.agentCache.completion(requestPrefix, options);
 
     if (results === undefined) {
-        return [];
+        return { groups: [] };
     }
 
+    const matchedPrefixLength = results.matchedPrefixLength;
+    const separatorMode = results.separatorMode;
+    const closedSet = results.closedSet;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -102,7 +109,17 @@ export async function requestCompletion(
     }
 
     if (results.properties === undefined) {
-        return completions;
+        return {
+            groups: completions,
+            matchedPrefixLength,
+            separatorMode,
+            closedSet,
+            // Grammar completions use eager commit: tokens can abut
+            // without an explicit delimiter (e.g. CJK characters),
+            // so the session should re-fetch immediately when a
+            // completion is uniquely satisfied.
+            commitMode: "eager",
+        };
     }
 
     const propertyCompletions = new Map<string, CompletionGroup>();
@@ -122,7 +139,14 @@ export async function requestCompletion(
     }
 
     completions.push(...propertyCompletions.values());
-    return completions;
+    return {
+        groups: completions,
+        matchedPrefixLength,
+        separatorMode,
+        closedSet,
+        // Grammar completions use eager commit (see note above).
+        commitMode: "eager",
+    };
 }
 
 async function collectActionCompletions(

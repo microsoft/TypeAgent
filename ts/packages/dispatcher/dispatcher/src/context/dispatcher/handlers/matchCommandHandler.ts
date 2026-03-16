@@ -4,7 +4,7 @@
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import {
     ActionContext,
-    CompletionGroup,
+    CompletionGroups,
     ParsedCommandParams,
     SessionContext,
 } from "@typeagent/agent-sdk";
@@ -51,19 +51,22 @@ export class MatchCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<CompletionGroup[]> {
-        const completions: CompletionGroup[] = [];
+    ): Promise<CompletionGroups> {
+        const result: CompletionGroups = { groups: [] };
         for (const name of names) {
             if (name === "request") {
-                const requestPrefix = params.args.request;
-                completions.push(
-                    ...(await requestCompletion(
-                        requestPrefix,
-                        context.agentContext,
-                    )),
+                const requestPrefix = params.args.request ?? "";
+                const requestResult = await requestCompletion(
+                    requestPrefix,
+                    context.agentContext,
                 );
+                result.groups.push(...requestResult.groups);
+                result.matchedPrefixLength = requestResult.matchedPrefixLength;
+                result.separatorMode = requestResult.separatorMode;
+                result.closedSet = requestResult.closedSet;
+                result.commitMode = requestResult.commitMode;
             }
         }
-        return completions;
+        return result;
     }
 }

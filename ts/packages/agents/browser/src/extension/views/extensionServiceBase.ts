@@ -3,11 +3,6 @@
 
 import type { AnswerEnhancement } from "../../agent/search/schema/answerEnhancement.mjs";
 import type {
-    StoredMacro,
-    MacroQueryOptions,
-    DeleteMacroResult,
-} from "./macroUtilities";
-import type {
     ImportOptions,
     ImportResult,
     ProgressCallback,
@@ -716,47 +711,90 @@ export abstract class ExtensionServiceBase {
         this.onExtractionProgressImpl(extractionId, callback);
     }
 
-    // Macro methods
-    async getMacrosForUrl(
-        url: string,
-        options: MacroQueryOptions = {},
-    ): Promise<StoredMacro[]> {
-        const response = await this.sendMessage<{ actions?: StoredMacro[] }>({
-            type: "getMacrosForUrl",
-            url: url,
-            includeGlobal: options.includeGlobal ?? true,
-            author: options.author,
+    async refreshSchema(): Promise<{
+        schema?: any[];
+        actionDefinitions?: any;
+    }> {
+        const response = await this.sendMessage<{
+            schema?: any[];
+            actionDefinitions?: any;
+        }>({
+            type: "refreshSchema",
+        });
+        return response || {};
+    }
+
+    async startRecording(): Promise<void> {
+        await this.sendMessage({ type: "startRecording" });
+    }
+
+    async stopRecording(): Promise<any> {
+        return await this.sendMessage({ type: "stopRecording" });
+    }
+
+    async captureHtmlFragments(): Promise<any[]> {
+        const response = await this.sendMessage<any[]>({
+            type: "captureHtmlFragments",
+        });
+        return response || [];
+    }
+
+    async registerTempSchema(): Promise<void> {
+        await this.sendMessage({ type: "registerTempSchema" });
+    }
+
+    async createWebFlowFromRecording(params: {
+        actionName: string;
+        actionDescription: string;
+        steps: string;
+        existingActionNames: string[];
+        startUrl: string;
+        screenshots: string[];
+        html: any[];
+    }): Promise<any> {
+        return await this.sendMessage({
+            type: "createWebFlowFromRecording",
+            ...params,
+        });
+    }
+
+    async getAllWebFlows(): Promise<any[]> {
+        const response = await this.sendMessage<{ actions?: any[] }>({
+            type: "getAllWebFlows",
         });
         return response?.actions || [];
     }
 
-    async getAllMacros(): Promise<StoredMacro[]> {
-        const response = await this.sendMessage<{ actions?: StoredMacro[] }>({
-            type: "getAllMacros",
+    async getWebFlowsForDomain(domain: string): Promise<any[]> {
+        const response = await this.sendMessage<{ actions?: any[] }>({
+            type: "getWebFlowsForDomain",
+            domain,
         });
         return response?.actions || [];
     }
 
-    async getMacroDomains(): Promise<string[]> {
-        const response = await this.sendMessage<{ domains?: string[] }>({
-            type: "getMacroDomains",
-        });
-        return response?.domains || [];
-    }
-
-    async deleteMacro(macroId: string): Promise<DeleteMacroResult> {
+    async deleteWebFlow(name: string): Promise<{
+        success: boolean;
+        error?: string;
+    }> {
         const response = await this.sendMessage<{
             success?: boolean;
             error?: string;
         }>({
-            type: "deleteMacro",
-            macroId: macroId,
+            type: "deleteWebFlow",
+            name,
         });
         return {
             success: response?.success || false,
             error: response?.error,
-            macroId: macroId,
         };
+    }
+
+    async settingsUpdated(settings: any): Promise<void> {
+        await this.sendMessage({
+            type: "settingsUpdated",
+            settings,
+        });
     }
 
     // ===================================================================

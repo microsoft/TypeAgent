@@ -37,6 +37,7 @@ export type MatchedValues = {
     matchedCount: number;
     wildcardCharCount: number;
     partialPartCount?: number; // Only used for partial match
+    matchedCurrent?: number; // Character offset where matching stopped (partial only)
 };
 
 export function matchedValues(

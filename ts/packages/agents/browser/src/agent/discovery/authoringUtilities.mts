@@ -48,11 +48,15 @@ export function setupAuthoringActions(
                 screenshot = "";
             }
         }
+
+        // Only include screenshot if it's not empty
+        const screenshots = screenshot ? [screenshot] : [];
+
         const response = await agent.getPageComponentSchema(
             componentType,
             selectionCondition,
             htmlFragments,
-            screenshot,
+            screenshots,
         );
 
         if (!response.success) {
@@ -86,12 +90,16 @@ export function setupAuthoringActions(
                 (error as Error)?.message,
             );
         }
+
+        // Only include screenshot if it's not empty
+        const screenshots = screenshot ? [screenshot] : [];
+
         let recordedSteps = "";
         const descriptionResponse = await agent.getDetailedStepsFromDescription(
             actionName,
             description,
             htmlFragments,
-            screenshot,
+            screenshots,
         );
         if (descriptionResponse.success) {
             debug(descriptionResponse.data);

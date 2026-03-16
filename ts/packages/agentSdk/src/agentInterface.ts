@@ -262,6 +262,7 @@ export interface ActionContext<T = void> {
     readonly activityContext: ActivityContext | undefined;
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
+    readonly abortSignal?: AbortSignal | undefined;
 
     // queue up toggle transient agent to be executed at the end of the commands
     queueToggleTransientAgent(

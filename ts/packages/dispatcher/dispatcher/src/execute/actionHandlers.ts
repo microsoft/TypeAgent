@@ -179,6 +179,9 @@ export async function executeAction(
                 );
         }
     } catch (e: any) {
+        if (e.name === "AbortError") {
+            throw e;
+        }
         result = createActionResultFromError(e.message);
     }
     actionContext.profiler?.stop();
@@ -329,6 +332,7 @@ export async function executeActions(
     debugActions(`Executing actions: ${JSON.stringify(actions, undefined, 2)}`);
     let actionIndex = 0;
     while (actionQueue.length !== 0) {
+        systemContext.currentAbortSignal?.throwIfAborted();
         const pending = actionQueue.shift()!;
         const executableAction = pending.executableAction;
 
@@ -600,6 +604,9 @@ export async function executeCommand(
                 attachments,
             );
         } catch (e: any) {
+            if (e.name === "AbortError") {
+                throw e;
+            }
             displayError(`ERROR: ${e.message}`, actionContext);
             debugCommandExecError(e.stack);
         }

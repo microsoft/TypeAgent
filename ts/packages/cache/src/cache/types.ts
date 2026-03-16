@@ -13,6 +13,7 @@ export type MatchResult = {
     entityWildcardPropertyNames: string[];
     conflictValues?: [string, ParamValueType[]][] | undefined;
     partialPartCount?: number | undefined; // Only used for partial match
+    partialMatchedCurrent?: number | undefined; // Character offset where partial matching stopped
 };
 
 export interface GrammarStore {

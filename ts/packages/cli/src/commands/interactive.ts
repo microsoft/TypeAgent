@@ -26,6 +26,7 @@ import {
     processCommandsEnhanced,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
+import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import { createInterface } from "readline/promises";
@@ -52,29 +53,22 @@ async function getCompletionsData(
     dispatcher: Dispatcher,
 ): Promise<CompletionData | null> {
     try {
-        // Token-boundary logic: for non-@ input, only send complete tokens
-        // to the backend. The NFA can only match whole tokens, so sending a
-        // partial word like "p" fails. Instead, send up to the last token
-        // boundary and let the CLI filter locally by the partial word.
-        let queryLine = line;
-        const trimmed = line.trimStart();
-        if (
-            trimmed.length > 0 &&
-            !trimmed.startsWith("@") &&
-            !/\s$/.test(line)
-        ) {
-            const lastSpace = line.lastIndexOf(" ");
-            if (lastSpace === -1) {
-                // First word being typed: send empty to get start-state completions
-                queryLine = "";
-            } else {
-                // Mid-word after spaces: send up to last token boundary
-                queryLine = line.substring(0, lastSpace + 1);
-            }
+        // Handle slash command completions
+        if (isSlashCommand(line)) {
+            const completions = getSlashCompletions(line);
+            if (completions.length === 0) return null;
+            return {
+                allCompletions: completions,
+                filterStartIndex: 0,
+                prefix: "",
+            };
         }
-
-        const result = await dispatcher.getCommandCompletion(queryLine);
-        if (!result || !result.completions || result.completions.length === 0) {
+        // Send the full input to the backend.  The grammar matcher reports
+        // how much of the input it consumed (matchedPrefixLength →
+        // startIndex), so we no longer need space-based token-boundary
+        // heuristics here.
+        const result = await dispatcher.getCommandCompletion(line);
+        if (result.completions.length === 0) {
             return null;
         }
 
@@ -86,19 +80,22 @@ async function getCompletionsData(
             }
         }
 
-        // When we truncated the query, compute filter position from original input
-        const filterStartIndex =
-            queryLine !== line
-                ? line.lastIndexOf(" ") === -1
-                    ? 0
-                    : line.lastIndexOf(" ") + 1
-                : result.startIndex;
+        const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
+
+        // When the result reports a separator-requiring mode between the
+        // typed prefix and the completion text, prepend a space so the
+        // readline display doesn't produce "playmusic" for "play" + "music".
+        const separator =
+            result.separatorMode === "space" ||
+            result.separatorMode === "spacePunctuation"
+                ? " "
+                : "";
 
         return {
             allCompletions,
             filterStartIndex,
-            prefix,
+            prefix: prefix + separator,
         };
     } catch (e) {
         return null;
@@ -140,6 +137,11 @@ export default class Interactive extends Command {
                 "Enable enhanced terminal UI with spinners and visual prompts",
             default: false,
         }),
+        verbose: Flags.string({
+            description:
+                "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
+            required: false,
+        }),
     };
     static args = {
         input: Args.file({
@@ -153,6 +155,18 @@ export default class Interactive extends Command {
 
         if (flags.debug) {
             inspector.open(undefined, undefined, true);
+        }
+
+        if (flags.verbose !== undefined) {
+            const { default: registerDebug } = await import("debug");
+            const namespaces = flags.verbose || "typeagent:*";
+            registerDebug.enable(namespaces);
+            process.env.DEBUG = namespaces;
+            // Also set internal verbose state for prompt indicator
+            const { enableVerboseFromFlag } = await import(
+                "../slashCommands.js"
+            );
+            enableVerboseFromFlag(namespaces);
         }
 
         // Choose between standard and enhanced UI
@@ -221,6 +235,7 @@ export default class Interactive extends Command {
                     flags.testUI
                         ? (line: string) => getCompletionsData(line, dispatcher)
                         : undefined,
+                    flags.testUI ? dispatcher : undefined,
                 );
             } finally {
                 await dispatcher.close();

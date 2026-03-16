@@ -41,9 +41,7 @@ export type DispatcherInvokeFunctions = {
         propertyName: string,
     ): Promise<string[] | undefined>;
 
-    getCommandCompletion(
-        prefix: string,
-    ): Promise<CommandCompletionResult | undefined>;
+    getCommandCompletion(prefix: string): Promise<CommandCompletionResult>;
 
     checkCache(request: string): Promise<CommandResult | undefined>;
 
@@ -59,4 +57,8 @@ export type DispatcherInvokeFunctions = {
     ): Promise<CommandResult | undefined>;
 
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
+};
+
+export type DispatcherCallFunctions = {
+    cancelCommand(requestId: string): void;
 };

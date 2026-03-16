@@ -1,9 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandCompletionResult, Dispatcher } from "agent-dispatcher";
+import { Dispatcher } from "agent-dispatcher";
 import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
+import {
+    ICompletionDispatcher,
+    ISearchMenu,
+    PartialCompletionSession,
+} from "./partialCompletionSession";
 
 import registerDebug from "debug";
 import { ExpandableTextArea } from "./chat/expandableTextArea";
@@ -45,18 +50,14 @@ function getLeafNode(node: Node, offset: number) {
 
 export class PartialCompletion {
     private readonly searchMenu: SearchMenu;
-    private current: string | undefined = undefined;
-    private noCompletion: boolean = false;
-    private completionP:
-        | Promise<CommandCompletionResult | undefined>
-        | undefined;
+    private readonly session: PartialCompletionSession;
     public closed: boolean = false;
 
     private readonly cleanupEventListeners: () => void;
     constructor(
         private readonly container: HTMLDivElement,
         private readonly input: ExpandableTextArea,
-        private readonly dispatcher: Dispatcher,
+        dispatcher: Dispatcher,
         private readonly inline: boolean = true,
     ) {
         this.searchMenu = new SearchMenu(
@@ -66,6 +67,17 @@ export class PartialCompletion {
             this.inline,
             this.input.getTextEntry(),
         );
+
+        // Wrap SearchMenu to implement ISearchMenu (same shape, just typed).
+        const menuAdapter: ISearchMenu = this.searchMenu;
+        // Wrap Dispatcher to implement ICompletionDispatcher.
+        const dispatcherAdapter: ICompletionDispatcher = dispatcher;
+
+        this.session = new PartialCompletionSession(
+            menuAdapter,
+            dispatcherAdapter,
+        );
+
         const selectionChangeHandler = () => {
             debug("Partial completion update on selection changed");
             this.update(false);
@@ -93,88 +105,27 @@ export class PartialCompletion {
             this.input.getTextEntry().normalize();
         }
         if (!this.isSelectionAtEnd(contentChanged)) {
-            this.cancelCompletionMenu();
+            this.session.hide();
             return;
         }
         const input = this.getCurrentInputForCompletion();
         debug(`Partial completion input: '${input}'`);
 
-        // @ commands: use existing command completion path.
-        // Same token-boundary logic as grammar completions: only re-fetch
-        // at word boundaries so partial words (e.g. "@config c") don't hit
-        // the backend, which would fail to resolve "c" and poison noCompletion.
-        if (input.trimStart().startsWith("@")) {
-            if (this.reuseSearchMenu(input)) {
-                return;
-            }
-            // Re-fetch at the last word boundary so the backend sees only
-            // complete command tokens and returns proper subcommand completions.
-            const lastSpaceIdx = input.lastIndexOf(" ");
-            if (/\s$/.test(input)) {
-                this.updatePartialCompletion(input);
-            } else if (lastSpaceIdx >= 0) {
-                this.updatePartialCompletion(
-                    input.substring(0, lastSpaceIdx + 1),
-                );
-            } else {
-                this.updatePartialCompletion(input);
-            }
-            return;
-        }
-
-        // Empty input: hide any open menu and stop — don't show completions on
-        // an empty box (e.g. after backspacing all the way). This check must
-        // come before reuseSearchMenu() because reuseSearchMenu("") would
-        // match current="" and show all items for the start-state request.
-        const trimmed = input.trimStart();
-        if (trimmed.length === 0) {
-            this.cancelCompletionMenu();
-            return;
-        }
-
-        // Request completions: only request at token boundaries.
-        // Between boundaries, filter the existing menu locally.
-        if (this.reuseSearchMenu(input)) {
-            return;
-        }
-
-        // Determine whether this is a token boundary:
-        // 1. Trailing space → complete tokens available, request with them
-        // 2. Non-empty with no spaces → first typing, request start state (tokens=[])
-        // 3. Otherwise (mid-word after spaces, no menu) → wait for next space
-        const hasTrailingSpace = /\s$/.test(input);
-        const hasSpaces = /\s/.test(trimmed);
-
-        if (hasTrailingSpace) {
-            // Token boundary: send full input (all tokens are complete)
-            this.updatePartialCompletion(input);
-        } else if (!hasSpaces) {
-            // Start state: request with "" so backend returns all initial completions.
-            // The typed characters (e.g. "p") become the local filter via current="".
-            this.updatePartialCompletion("");
-        } else {
-            // Mid-word with spaces and no active menu (e.g. backspace removed
-            // a trailing space). Request at the last token boundary so the
-            // menu reappears with the partial word as the local filter.
-            const lastSpaceIdx = input.lastIndexOf(" ");
-            if (lastSpaceIdx >= 0) {
-                this.updatePartialCompletion(
-                    input.substring(0, lastSpaceIdx + 1),
-                );
-            }
-        }
+        this.session.update(input, (prefix) =>
+            this.getSearchMenuPosition(prefix),
+        );
     }
 
     public hide() {
-        this.completionP = undefined;
-        this.cancelCompletionMenu();
+        this.session.hide();
     }
 
     public close() {
         this.closed = true;
-        this.hide();
+        this.session.hide();
         this.cleanupEventListeners();
     }
+
     private getCurrentInput() {
         // Strip inline ghost text if present
         const textEntry = this.input.getTextEntry();
@@ -186,6 +137,7 @@ export class PartialCompletion {
         }
         return textEntry.textContent ?? "";
     }
+
     private getCurrentInputForCompletion() {
         return this.getCurrentInput().trimStart();
     }
@@ -258,136 +210,7 @@ export class PartialCompletion {
         return true;
     }
 
-    private getCompletionPrefix(input: string) {
-        const current = this.current;
-        if (current === undefined) {
-            return undefined;
-        }
-        if (!input.startsWith(current)) {
-            return undefined;
-        }
-        return input.substring(current.length);
-    }
-
-    // Determine if the current search menu can still be reused, or if we need to update the completions.
-    // Returns true to reuse (skip re-fetch), false to trigger a new completion request.
-    private reuseSearchMenu(input: string) {
-        const current = this.current;
-        if (current === undefined) {
-            return false;
-        }
-
-        if (this.completionP !== undefined) {
-            debug(`Partial completion pending: ${current}`);
-            return true;
-        }
-
-        if (!input.startsWith(current)) {
-            // Input diverged (e.g. backspace past the anchor point).
-            return false;
-        }
-
-        if (this.noCompletion) {
-            debug(
-                `Partial completion skipped: No completions for '${current}'`,
-            );
-            return true;
-        }
-
-        const prefix = this.getCompletionPrefix(input);
-        if (prefix === undefined) {
-            return false;
-        }
-
-        const position = this.getSearchMenuPosition(prefix);
-        if (position !== undefined) {
-            debug(
-                `Partial completion update: '${prefix}' @ ${JSON.stringify(position)}`,
-            );
-            this.searchMenu.updatePrefix(prefix, position);
-        } else {
-            this.searchMenu.hide();
-        }
-
-        // Reuse while menu has matches; re-fetch when all items are filtered out.
-        return this.searchMenu.isActive();
-    }
-
-    // Updating completions information with input
-    private updatePartialCompletion(input: string) {
-        debug(`Partial completion start: '${input}'`);
-        this.cancelCompletionMenu();
-        this.current = input;
-        this.noCompletion = false;
-        // Clear the choices
-        this.searchMenu.setChoices([]);
-        const completionP = this.dispatcher.getCommandCompletion(input);
-        this.completionP = completionP;
-        completionP
-            .then((result) => {
-                if (this.completionP !== completionP) {
-                    debug(`Partial completion canceled: '${input}'`);
-                    return;
-                }
-
-                this.completionP = undefined;
-                debug(`Partial completion result: `, result);
-                if (result === undefined) {
-                    debug(
-                        `Partial completion skipped: No completions for '${input}'`,
-                    );
-                    this.noCompletion = true;
-                    return;
-                }
-
-                const partial =
-                    result.startIndex >= 0 && result.startIndex <= input.length
-                        ? input.substring(0, result.startIndex)
-                        : input;
-                this.current = partial;
-
-                // Build completions preserving backend group order so that
-                // grammar completions (e.g. "by") appear before entity
-                // completions (e.g. song titles), matching CLI behavior.
-                const completions: SearchMenuItem[] = [];
-                let currentIndex = 0;
-                for (const group of result.completions) {
-                    const items = group.sorted
-                        ? group.completions
-                        : [...group.completions].sort();
-                    for (const choice of items) {
-                        completions.push({
-                            matchText: choice,
-                            selectedText: choice,
-                            sortIndex: currentIndex++,
-                            needQuotes: group.needQuotes,
-                            emojiChar: group.emojiChar,
-                        });
-                    }
-                }
-
-                if (completions.length === 0) {
-                    debug(
-                        `Partial completion skipped: No current completions for '${partial}'`,
-                    );
-                    return;
-                }
-
-                this.searchMenu.setChoices(completions);
-
-                debug(
-                    `Partial completion selection updated: '${partial}' with ${completions.length} items`,
-                );
-                this.update(false);
-            })
-            .catch((e) => {
-                debugError(`Partial completion error: '${input}' ${e}`);
-                this.completionP = undefined;
-            });
-    }
-
     private getSearchMenuPosition(prefix: string) {
-        // The menu is not active or completion prefix is empty (i.e. need to move the menu).
         const textEntry = this.input.getTextEntry();
         let x: number;
         if (textEntry.childNodes.length === 0) {
@@ -416,27 +239,25 @@ export class PartialCompletion {
         return { left: x, bottom: window.innerHeight - top };
     }
 
-    private cancelCompletionMenu() {
-        this.searchMenu.hide();
-    }
-
     private handleSelect(item: SearchMenuItem) {
         debug(`Partial completion selected: ${item.selectedText}`);
-        this.cancelCompletionMenu();
-        const prefix = this.getCompletionPrefix(
-            this.getCurrentInputForCompletion(),
-        );
-        if (prefix === undefined) {
-            // This should not happen.
+        this.searchMenu.hide();
+
+        // Compute the filter prefix relative to the current anchor.
+        // Must be read before resetToIdle() clears the session's anchor.
+        const currentInput = this.getCurrentInputForCompletion();
+        const completionPrefix = this.session.getCompletionPrefix(currentInput);
+        if (completionPrefix === undefined) {
             debugError(`Partial completion abort select: prefix not found`);
             return;
         }
+
         const replaceText =
             item.needQuotes !== false && /\s/.test(item.selectedText)
                 ? `"${item.selectedText.replaceAll('"', '\\"')}"`
                 : item.selectedText;
 
-        const offset = this.getCurrentInput().length - prefix.length;
+        const offset = this.getCurrentInput().length - completionPrefix.length;
         const leafNode = getLeafNode(this.input.getTextEntry(), offset);
         if (leafNode === undefined) {
             debugError(
@@ -446,7 +267,7 @@ export class PartialCompletion {
         }
         const endLeafNode = getLeafNode(
             this.input.getTextEntry(),
-            offset + prefix.length,
+            offset + completionPrefix.length,
         );
         if (endLeafNode === undefined) {
             debugError(
@@ -462,21 +283,34 @@ export class PartialCompletion {
         r.deleteContents();
         r.insertNode(newNode);
 
-        r.collapse(false);
+        // Normalize merges adjacent text nodes so getSelectionEndNode()
+        // returns a single text node.  Then place the cursor at its end
+        // so isSelectionAtEnd() passes.  Without this, r.collapse(false)
+        // leaves endContainer pointing at the parent element, which does
+        // not match the deepest-last-child that isSelectionAtEnd() expects.
+        const textEntry = this.input.getTextEntry();
+        textEntry.normalize();
+        const endNode = this.input.getSelectionEndNode();
+        const cursorRange = document.createRange();
+        cursorRange.setStart(endNode, endNode.textContent?.length ?? 0);
+        cursorRange.collapse(true);
         const s = document.getSelection();
         if (s) {
             s.removeAllRanges();
-            s.addRange(r);
+            s.addRange(cursorRange);
         }
 
         // Make sure the text entry remains focused after replacement.
-        this.input.getTextEntry().focus();
+        textEntry.focus();
 
-        // Reset completion state so the next update requests fresh
-        // completions from the backend instead of reusing stale trie data.
-        this.current = undefined;
+        // Reset completion state so the next update requests fresh completions.
+        this.session.resetToIdle();
 
         debug(`Partial completion replaced: ${replaceText}`);
+
+        // Explicitly trigger a completion update.  The selectionchange event
+        // alone is unreliable after programmatic DOM manipulation.
+        this.update(false);
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {
@@ -484,7 +318,7 @@ export class PartialCompletion {
             return false;
         }
         if (event.key === "Escape") {
-            this.cancelCompletionMenu();
+            this.searchMenu.hide();
             event.preventDefault();
             return true;
         }

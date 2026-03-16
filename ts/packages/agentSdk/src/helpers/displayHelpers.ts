@@ -6,8 +6,32 @@ import {
     DisplayAppendMode,
     DisplayContent,
     DisplayMessageKind,
+    DisplayType,
     MessageContent,
+    TypedDisplayContent,
 } from "../display.js";
+
+/**
+ * Given a TypedDisplayContent, find the content for a preferred type.
+ * Checks alternates first, then falls back to the primary content if it matches.
+ * Returns undefined if the preferred type is not available.
+ */
+export function getContentForType(
+    content: TypedDisplayContent,
+    preferredType: DisplayType,
+): MessageContent | undefined {
+    if (content.alternates) {
+        for (const alt of content.alternates) {
+            if (alt.type === preferredType) {
+                return alt.content;
+            }
+        }
+    }
+    if (content.type === preferredType) {
+        return content.content;
+    }
+    return undefined;
+}
 
 function gatherMessages(callback: (log: (message?: string) => void) => void) {
     const messages: (string | undefined)[] = [];

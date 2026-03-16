@@ -1,0 +1,15 @@
+{
+  "name": "viewShoppingCart",
+  "description": "View the shopping cart contents",
+  "version": 1,
+  "parameters": {},
+  "script": "async function execute(browser, params) {\n    const cartButton = await browser.extractComponent(\n        {\n            typeName: 'ShoppingCartButton',\n            schema: '{ label: string; detailsLinkSelector: string; }'\n        }\n    );\n    if (!cartButton || !cartButton.detailsLinkSelector) {\n        throw new Error('Could not find shopping cart button on this page');\n    }\n    await browser.click(cartButton.detailsLinkSelector);\n    await browser.awaitPageLoad();\n    const cartDetails = await browser.extractComponent(\n        {\n            typeName: 'ShoppingCartDetails',\n            schema: '{ storeName: string; totalAmount: string; productsInCart?: { name: string; price: string; quantity?: string; }[]; }'\n        }\n    );\n    return { success: true, message: 'Viewing shopping cart', data: cartDetails };\n}",
+  "grammarPatterns": [
+    "view (my)? (shopping)? cart",
+    "show (my)? cart",
+    "open (shopping)? cart",
+    "go to (my)? cart"
+  ],
+  "scope": { "type": "global" },
+  "source": { "type": "manual", "timestamp": "2026-03-13T00:00:00.000Z" }
+}

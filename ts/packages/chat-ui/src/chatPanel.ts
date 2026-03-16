@@ -22,6 +22,8 @@ export interface ChatPanelOptions {
     settingsView?: ChatSettingsView;
     /** Callback when user sends a message. */
     onSend?: (text: string) => void;
+    /** Callback when user clicks stop or presses Escape during processing. */
+    onCancel?: (requestId: string) => void;
 }
 
 /**
@@ -37,12 +39,15 @@ export class ChatPanel {
     private readonly platformAdapter: PlatformAdapter;
     private readonly settingsView: ChatSettingsView;
 
+    private readonly stopButton: HTMLButtonElement;
     private currentAgentContainer: AgentMessageContainer | undefined;
     private statusContainer: AgentMessageContainer | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
+    private activeRequestId?: string;
 
     public onSend?: (text: string) => void;
+    public onCancel?: (requestId: string) => void;
 
     constructor(
         private readonly rootElement: HTMLElement,
@@ -51,6 +56,7 @@ export class ChatPanel {
         this.platformAdapter = options.platformAdapter;
         this.settingsView = options.settingsView ?? defaultChatSettings;
         this.onSend = options.onSend;
+        this.onCancel = options.onCancel;
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -84,8 +90,19 @@ export class ChatPanel {
         this.sendButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 2048 2048"><path d="M2048 960q0 19-10 34t-27 24L91 1914q-12 6-27 6-28 0-46-18t-18-47v-9q0-4 2-8l251-878L2 82q-2-4-2-8t0-9q0-28 18-46T64 0q15 0 27 6l1920 896q37 17 37 58zM164 1739l1669-779L164 181l205 715h847q26 0 45 19t19 45q0 26-19 45t-45 19H369l-205 715z"/></svg>`;
         this.sendButton.disabled = true;
 
+        this.stopButton = document.createElement("button");
+        this.stopButton.className = "chat-input-button chat-stop-button";
+        this.stopButton.innerHTML = "■";
+        this.stopButton.style.display = "none";
+        this.stopButton.addEventListener("click", () => {
+            if (this.activeRequestId) {
+                this.onCancel?.(this.activeRequestId);
+            }
+        });
+
         this.inputArea.appendChild(this.textInput);
         this.inputArea.appendChild(this.sendButton);
+        this.inputArea.appendChild(this.stopButton);
 
         wrapper.appendChild(this.inputArea);
         rootElement.appendChild(wrapper);
@@ -99,6 +116,10 @@ export class ChatPanel {
                 e.preventDefault();
                 this.send();
             } else if (e.key === "Escape") {
+                if (this.activeRequestId) {
+                    this.onCancel?.(this.activeRequestId);
+                    return;
+                }
                 this.textInput.textContent = "";
                 this.sendButton.disabled = true;
             } else if (e.key === "ArrowUp" && !this.textInput.textContent) {
@@ -142,6 +163,20 @@ export class ChatPanel {
 
         this.addUserMessage(text);
         this.onSend?.(text);
+    }
+
+    /** Set the active request ID and show the stop button. */
+    public setProcessing(requestId: string) {
+        this.activeRequestId = requestId;
+        this.sendButton.style.display = "none";
+        this.stopButton.style.display = "";
+    }
+
+    /** Clear the active request and restore the send button. */
+    public setIdle() {
+        this.activeRequestId = undefined;
+        this.stopButton.style.display = "none";
+        this.sendButton.style.display = "";
     }
 
     /** Display a user message bubble. */

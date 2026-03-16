@@ -487,28 +487,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         },
 
         async registerTempSchema(params: any) {
-            try {
-                const currentTab = await getActiveTab();
-                if (currentTab?.url) {
-                    const actionsResult = await forward("getMacrosForUrl", {
-                        url: currentTab.url,
-                        includeGlobal: true,
-                    });
-                    if (
-                        actionsResult.actions &&
-                        actionsResult.actions.length > 0
-                    ) {
-                        console.log(
-                            `Found ${actionsResult.actions.length} actions for schema registration from ActionsStore`,
-                        );
-                    }
-                }
-            } catch (error) {
-                console.warn(
-                    "Failed to get actions from ActionsStore for schema registration:",
-                    error,
-                );
-            }
             const schemaResult = await forward("registerPageDynamicAgent", {
                 agentName: params.agentName,
             });
@@ -520,60 +498,14 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 registerAgent: false,
             });
             return {
-                schema: discoveryResult.schema,
-                actionDefinitions: discoveryResult.typeDefinitions,
+                schema: discoveryResult?.schema ?? [],
+                actionDefinitions: discoveryResult?.typeDefinitions,
             };
         },
 
         // =============================================================
         // Agent forwards with local transforms
         // =============================================================
-
-        async getIntentFromRecording(params: any) {
-            const schemaResult = await forward("getIntentFromRecording", {
-                recordedActionName: params.actionName,
-                recordedActionDescription: params.actionDescription,
-                recordedActionSteps: params.steps,
-                existingActionNames: params.existingActionNames,
-                fragments: params.html,
-                screenshots: params.screenshot,
-            });
-            if (schemaResult.actionId) {
-                broadcastEvent("macroAdded", {
-                    actionId: schemaResult.actionId,
-                });
-            }
-            return {
-                intent: schemaResult.intent,
-                intentJson: schemaResult.intentJson,
-                actions: schemaResult.actions,
-                intentTypeDefinition: schemaResult.intentTypeDefinition,
-                actionId: schemaResult.actionId,
-            };
-        },
-
-        async deleteMacro(params: any) {
-            try {
-                const result = await forward("deleteMacro", {
-                    macroId: params.macroId,
-                });
-                if (result.success) {
-                    broadcastEvent("macroDeleted", {
-                        macroId: params.macroId,
-                    });
-                }
-                return result;
-            } catch (error) {
-                console.error("Failed to delete macro:", error);
-                return {
-                    success: false,
-                    error:
-                        error instanceof Error
-                            ? error.message
-                            : "Unknown error",
-                };
-            }
-        },
 
         // =============================================================
         // Simple agent forwards
@@ -587,38 +519,54 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             return forward("getLibraryStats", {});
         },
 
-        async getMacrosForUrl(params: any) {
-            return forward("getMacrosForUrl", {
-                url: params.url,
-                includeGlobal: params.includeGlobal ?? true,
-                author: params.author,
+        async createWebFlowFromRecording(params: any) {
+            const result = await forward("createWebFlowFromRecording", {
+                actionName: params.actionName,
+                actionDescription: params.actionDescription,
+                recordedSteps: params.steps,
+                existingActionNames: params.existingActionNames,
+                startUrl: params.startUrl,
+                screenshots: params.screenshots,
+                fragments: params.html,
+            });
+            if (result.success && result.webFlowName) {
+                broadcastEvent("macroAdded", {
+                    webFlowName: result.webFlowName,
+                });
+            }
+            return result;
+        },
+
+        async getWebFlowsForDomain(params: any) {
+            return forward("getWebFlowsForDomain", {
+                domain: params.domain,
             });
         },
 
-        async getAllMacros() {
-            try {
-                return await forward("getAllMacros", { includeGlobal: true });
-            } catch (error) {
-                console.error("Error getting all actions:", error);
-                return { actions: [] };
-            }
+        async getAllWebFlows() {
+            return forward("getAllWebFlows", {});
         },
 
-        async getActionDomains() {
+        async deleteWebFlow(params: any) {
             try {
-                return await forward("getActionDomains", {});
+                const result = await forward("deleteWebFlow", {
+                    name: params.name,
+                });
+                if (result.success) {
+                    broadcastEvent("macroDeleted", {
+                        name: params.name,
+                    });
+                }
+                return result;
             } catch (error) {
-                console.error("Error getting action domains:", error);
-                return { domains: [] };
-            }
-        },
-
-        async getMacroDomains() {
-            try {
-                return await forward("getActionDomains", {});
-            } catch (error) {
-                console.error("Error getting macro domains:", error);
-                return { domains: [] };
+                console.error("Failed to delete webFlow:", error);
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Unknown error",
+                };
             }
         },
 

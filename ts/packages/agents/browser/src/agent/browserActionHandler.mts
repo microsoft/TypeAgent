@@ -85,8 +85,11 @@ import {
 import {
     isBuiltInWebAgentRpcRequest,
     BuiltInWebAgentRpcResponse,
+    WebFlowRefreshMessage,
 } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
+import { handleWebFlowAction } from "./webFlows/actionHandler.mjs";
+import { WebFlowActions } from "./webFlows/schema/webFlowActions.mjs";
 import {
     BrowserActions,
     OpenWebPage,
@@ -293,7 +296,6 @@ async function initializeBrowserContext(
             clientBrowserControl === undefined ? "extension" : "electron",
         index: undefined,
         localHostPort,
-        macrosStore: undefined,
         resolverSettings: {
             searchResolver: true,
             keywordResolver: true,
@@ -320,18 +322,19 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
-        // Initialize MacroStore
-        if (!context.agentContext.macrosStore && context.sessionStorage) {
+        // Initialize WebFlowStore (uses instance storage for cross-session persistence)
+        if (!context.agentContext.webFlowStore && context.instanceStorage) {
             try {
-                const { MacroStore } = await import("./storage/index.mjs");
-                context.agentContext.macrosStore = new MacroStore(
-                    context.sessionStorage,
+                const { WebFlowStore } = await import(
+                    "./webFlows/store/webFlowStore.mjs"
                 );
-                await context.agentContext.macrosStore.initialize();
-                debug("ActionsStore initialized successfully");
+                context.agentContext.webFlowStore = new WebFlowStore(
+                    context.instanceStorage,
+                );
+                await context.agentContext.webFlowStore.initialize();
+                debug("WebFlowStore initialized successfully");
             } catch (error) {
-                debug("Failed to initialize ActionsStore:", error);
-                // Continue without ActionsStore - will fall back to legacy storage
+                debug("Failed to initialize WebFlowStore:", error);
             }
         }
 
@@ -621,6 +624,66 @@ async function handleWebAgentRpc(
             }
         }
 
+        case "getWebFlowsForDomain": {
+            try {
+                const { domain, ifModifiedSince } = params;
+                if (!domain) {
+                    return {
+                        success: false,
+                        error: "domain parameter is required",
+                    };
+                }
+
+                const webFlowStore = context.agentContext.webFlowStore;
+                if (!webFlowStore) {
+                    return {
+                        success: true,
+                        data: { flows: [], lastUpdated: "" },
+                    };
+                }
+
+                const index = webFlowStore.getIndex();
+                const lastUpdated = index.lastUpdated;
+
+                if (ifModifiedSince && lastUpdated === ifModifiedSince) {
+                    return {
+                        success: true,
+                        data: {
+                            flows: [],
+                            lastUpdated,
+                            notModified: true,
+                        },
+                    };
+                }
+
+                const flows =
+                    await webFlowStore.listForDomainWithDetails(domain);
+                // Only include site-scoped flows in the per-site
+                // WebFlowAgent schema. Global sample flows are already
+                // available through the browser.webFlows agent.
+                const siteFlows = flows.filter((f) => f.scope.type === "site");
+                const transportFlows = siteFlows.map((f) => ({
+                    name: f.name,
+                    description: f.description,
+                    parameters: f.parameters,
+                    script: f.script,
+                }));
+
+                return {
+                    success: true,
+                    data: { flows: transportFlows, lastUpdated },
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to get webFlows for domain",
+                };
+            }
+        }
+
         case "notify": {
             const { message, notificationId } = params;
             const id = notificationId || `webagent-${Date.now()}`;
@@ -640,6 +703,34 @@ async function handleWebAgentRpc(
                 success: false,
                 error: `Unknown webAgentRpc method: ${method}`,
             };
+    }
+}
+
+/**
+ * Send a refresh notification to the browser-side WebFlowAgent.
+ * This tells the agent to re-fetch flows from the server and
+ * re-register its TypeAgent with updated schema.
+ */
+export function sendWebFlowRefreshToClient(
+    context: SessionContext<BrowserActionContext>,
+): void {
+    const wsServer = context.agentContext.agentWebSocketServer;
+    if (!wsServer) return;
+
+    const client = wsServer.getActiveClient();
+    if (!client) return;
+
+    const message: WebFlowRefreshMessage = {
+        source: "dispatcher",
+        method: "webAgent/message",
+        type: "webFlowRefresh",
+    };
+
+    try {
+        client.socket.send(JSON.stringify(message));
+        debug("Sent webFlowRefresh to active client");
+    } catch (error) {
+        debug("Failed to send webFlowRefresh:", error);
     }
 }
 
@@ -1384,10 +1475,6 @@ async function changeSearchProvider(
         const params: ParsedCommandParams<any> = {
             args: { provider: `${action.parameters.name}` },
             flags: {},
-            tokens: [],
-            lastCompletableParam: undefined,
-            lastParamImplicitQuotes: false,
-            nextArgs: [],
         };
 
         await cmd.run(context, params);
@@ -1407,7 +1494,8 @@ async function executeBrowserAction(
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
-        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
+        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">
+        | TypeAgentAction<WebFlowActions, "browser.webFlows">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1634,6 +1722,15 @@ async function executeBrowserAction(
                 return createActionResult(discoveryResult.displayText);
             }
 
+            if (action.schemaName === "browser.webFlows") {
+                const webFlowResult = await handleWebFlowAction(
+                    action,
+                    context.sessionContext,
+                );
+
+                return createActionResult(webFlowResult.displayText);
+            }
+
             await browserCtrl.runBrowserAction(
                 action.actionName,
                 action.parameters,
@@ -1836,17 +1933,16 @@ async function handleGetActionRequest(
             throw new Error("Invalid actionId format");
         }
 
-        debug(`Handling macro request for ID: ${actionId}`);
+        debug(`Handling action request for: ${actionId}`);
 
-        // Get the macros store from context
-        const macrosStore = context.agentContext.macrosStore;
-        if (!macrosStore) {
-            throw new Error("MacroStore not available");
+        const webFlowStore = context.agentContext.webFlowStore;
+        if (!webFlowStore) {
+            throw new Error("WebFlowStore not available");
         }
 
-        const macro = await macrosStore.getMacro(actionId);
+        const action = await webFlowStore.get(actionId);
 
-        if (!macro) {
+        if (!action) {
             viewServiceProcess.send({
                 type: "getActionResponse",
                 requestId,
@@ -1861,7 +1957,7 @@ async function handleGetActionRequest(
             type: "getActionResponse",
             requestId,
             success: true,
-            action: macro,
+            action: action,
             timestamp: Date.now(),
         });
 

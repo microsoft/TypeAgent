@@ -133,14 +133,14 @@ export function createAgentInvokeHandlers(
             discoveryHandler("detectPageActions", params),
         registerPageDynamicAgent: (params: any) =>
             discoveryHandler("registerPageDynamicAgent", params),
-        getIntentFromRecording: (params: any) =>
-            discoveryHandler("getIntentFromRecording", params),
-        getMacrosForUrl: (params: any) =>
-            discoveryHandler("getMacrosForUrl", params),
-        getAllMacros: (params: any) => discoveryHandler("getAllMacros", params),
-        getActionDomains: (params: any) =>
-            discoveryHandler("getActionDomains", params),
-        deleteMacro: (params: any) => discoveryHandler("deleteMacro", params),
+        createWebFlowFromRecording: (params: any) =>
+            discoveryHandler("createWebFlowFromRecording", params),
+        getWebFlowsForDomain: (params: any) =>
+            discoveryHandler("getWebFlowsForDomain", params),
+        getAllWebFlows: (params: any) =>
+            discoveryHandler("getAllWebFlows", params),
+        deleteWebFlow: (params: any) =>
+            discoveryHandler("deleteWebFlow", params),
 
         // Search/analytics
         getRecentKnowledgeItems: (params: any) =>

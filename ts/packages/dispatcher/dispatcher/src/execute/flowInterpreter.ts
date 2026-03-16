@@ -281,6 +281,8 @@ export async function processFlow(
     let stepIndex = actionIndex + 1;
 
     for (const step of flowDef.steps) {
+        const systemContext = context.sessionContext.agentContext;
+        systemContext.currentAbortSignal?.throwIfAborted();
         const params = resolveParams(step.parameters, flowParams, stepResults);
 
         let result: ActionResult;

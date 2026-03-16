@@ -14,6 +14,7 @@ import {
 import {
     isWebAgentMessageFromDispatcher,
     isBuiltInWebAgentRpcResponse,
+    isWebFlowRefreshMessage,
     WebAgentRegisterMessage,
     WebAgentRpcMessage,
 } from "../common/webAgentMessageTypes.mjs";
@@ -115,6 +116,12 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
             // Built-in RPC responses use a different schema and are handled
             // by listeners in webAgentRpc.ts, not the channel provider
             if (isBuiltInWebAgentRpcResponse(data)) {
+                return;
+            }
+
+            // WebFlow refresh notifications are handled by
+            // WebFlowAgent's window message listener
+            if (isWebFlowRefreshMessage(data)) {
                 return;
             }
 

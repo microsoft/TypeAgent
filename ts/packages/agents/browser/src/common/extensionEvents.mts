@@ -8,7 +8,7 @@ export type ExtensionEventMap = {
         extractionId: string;
         progress: any;
     };
-    macroAdded: { actionId: string };
-    macroDeleted: { macroId: string };
+    macroAdded: { actionId?: string; webFlowName?: string };
+    macroDeleted: { macroId?: string; name?: string };
     settingsUpdated: { settings: any };
 };

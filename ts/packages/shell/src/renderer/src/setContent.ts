@@ -8,8 +8,8 @@ import {
     DisplayType,
     DisplayMessageKind,
     MessageContent,
-    getContentForType,
 } from "@typeagent/agent-sdk";
+import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
 import DOMPurify from "dompurify";
 import { SettingsView } from "./settingsView";
 import MarkdownIt from "markdown-it";
