@@ -55,6 +55,9 @@ setSpinnerAccessor(() => currentSpinner);
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
 
+// Active custom prompt renderer (set by questionWithCompletion)
+let activePromptRenderer: PromptRenderer | null = null;
+
 // Track the active request for cancellation support
 let currentRequestId: string | undefined;
 let isProcessing = false;
@@ -290,6 +293,28 @@ export function createEnhancedClientIO(
                 currentSpinner.flushStream();
                 currentSpinner.writeAbove(displayText);
             }
+        } else if (activePromptRenderer) {
+            // Custom prompt (questionWithCompletion) is active.
+            // Clear the prompt rows, write content above, then re-render.
+            const rows = activePromptRenderer.rows();
+            for (let i = 0; i < rows; i++) {
+                process.stdout.write("\x1b[1A\x1b[2K");
+            }
+            if (appendMode !== "inline") {
+                if (lastAppendMode === "inline") {
+                    process.stdout.write("\n");
+                }
+                process.stdout.write(displayText);
+                process.stdout.write("\n");
+            } else {
+                process.stdout.write(displayText);
+            }
+            // Also re-render any collapsed debug panel summary
+            const dp = getDebugPanel();
+            if (dp && dp.lineCount > 0) {
+                dp.renderStaticSummary();
+            }
+            activePromptRenderer.redraw();
         } else if (rl) {
             // Readline is active - write above the prompt
             // Clear current line, write content, then let readline redraw prompt
@@ -979,14 +1004,22 @@ async function questionWithCompletion(
         // Initial render
         render();
 
-        // Register prompt renderer so debug panel can render above the input
-        const PROMPT_ROWS = 3; // input line + bottom rule + hint
+        // Register prompt renderer so debug panel and displayContent
+        // can render above the input.
+        // PROMPT_ROWS = separator + input line + bottom rule + hint
+        const PROMPT_ROWS = 4;
         const panel = getDebugPanel();
+        const renderWithSeparator = () => {
+            const w = process.stdout.columns || 80;
+            stdout.write(ANSI.dim + "─".repeat(w) + ANSI.reset + "\n");
+            render();
+        };
         const promptRenderer: PromptRenderer = {
             rows: () => PROMPT_ROWS,
-            redraw: () => render(),
+            redraw: () => renderWithSeparator(),
         };
         panel?.setPromptRenderer(promptRenderer);
+        activePromptRenderer = promptRenderer;
 
         // Handle keypresses
         const onData = async (chunk: Buffer) => {
@@ -1075,12 +1108,12 @@ async function questionWithCompletion(
                 // Ctrl+D — dump debug buffer above the prompt
                 const dp = getDebugPanel();
                 if (dp && dp.lineCount > 0) {
-                    // Clear prompt lines, dump buffer, re-render prompt
+                    // Clear prompt lines (including separator), dump buffer, re-render
                     for (let i = 0; i < PROMPT_ROWS; i++) {
                         stdout.write("\x1b[1A\x1b[2K");
                     }
                     dp.dumpBuffer();
-                    render();
+                    renderWithSeparator();
                 }
                 return;
             } else if (code === 13) {
@@ -1186,6 +1219,7 @@ async function questionWithCompletion(
 
         const cleanup = () => {
             panel?.setPromptRenderer(null);
+            activePromptRenderer = null;
             stdin.removeListener("data", onData);
             if (stdin.isTTY) {
                 stdin.setRawMode(wasRaw || false);
