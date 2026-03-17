@@ -55,6 +55,9 @@ setSpinnerAccessor(() => currentSpinner);
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
 
+// Active custom prompt renderer (set by questionWithCompletion)
+let activePromptRenderer: PromptRenderer | null = null;
+
 // Track the active request for cancellation support
 let currentRequestId: string | undefined;
 let isProcessing = false;
@@ -290,6 +293,28 @@ export function createEnhancedClientIO(
                 currentSpinner.flushStream();
                 currentSpinner.writeAbove(displayText);
             }
+        } else if (activePromptRenderer) {
+            // Custom prompt (questionWithCompletion) is active.
+            // Clear the prompt rows, write content above, then re-render.
+            const rows = activePromptRenderer.rows();
+            for (let i = 0; i < rows; i++) {
+                process.stdout.write("\x1b[1A\x1b[2K");
+            }
+            if (appendMode !== "inline") {
+                if (lastAppendMode === "inline") {
+                    process.stdout.write("\n");
+                }
+                process.stdout.write(displayText);
+                process.stdout.write("\n");
+            } else {
+                process.stdout.write(displayText);
+            }
+            // Also re-render any collapsed debug panel summary
+            const dp = getDebugPanel();
+            if (dp && dp.lineCount > 0) {
+                dp.renderStaticSummary();
+            }
+            activePromptRenderer.redraw();
         } else if (rl) {
             // Readline is active - write above the prompt
             // Clear current line, write content, then let readline redraw prompt
@@ -979,14 +1004,22 @@ async function questionWithCompletion(
         // Initial render
         render();
 
-        // Register prompt renderer so debug panel can render above the input
-        const PROMPT_ROWS = 3; // input line + bottom rule + hint
+        // Register prompt renderer so debug panel and displayContent
+        // can render above the input.
+        // PROMPT_ROWS = separator + input line + bottom rule + hint
+        const PROMPT_ROWS = 4;
         const panel = getDebugPanel();
+        const renderWithSeparator = () => {
+            const w = process.stdout.columns || 80;
+            stdout.write(ANSI.dim + "─".repeat(w) + ANSI.reset + "\n");
+            render();
+        };
         const promptRenderer: PromptRenderer = {
             rows: () => PROMPT_ROWS,
-            redraw: () => render(),
+            redraw: () => renderWithSeparator(),
         };
         panel?.setPromptRenderer(promptRenderer);
+        activePromptRenderer = promptRenderer;
 
         // Handle keypresses
         const onData = async (chunk: Buffer) => {
@@ -1075,12 +1108,12 @@ async function questionWithCompletion(
                 // Ctrl+D — dump debug buffer above the prompt
                 const dp = getDebugPanel();
                 if (dp && dp.lineCount > 0) {
-                    // Clear prompt lines, dump buffer, re-render prompt
+                    // Clear prompt lines (including separator), dump buffer, re-render
                     for (let i = 0; i < PROMPT_ROWS; i++) {
                         stdout.write("\x1b[1A\x1b[2K");
                     }
                     dp.dumpBuffer();
-                    render();
+                    renderWithSeparator();
                 }
                 return;
             } else if (code === 13) {
@@ -1186,6 +1219,7 @@ async function questionWithCompletion(
 
         const cleanup = () => {
             panel?.setPromptRenderer(null);
+            activePromptRenderer = null;
             stdin.removeListener("data", onData);
             if (stdin.isTTY) {
                 stdin.setRawMode(wasRaw || false);
@@ -1254,6 +1288,80 @@ function initializeEnhancedConsole(
 
 let usingEnhancedConsole = false;
 
+// ── Startup Banner ──────────────────────────────────────────────────────
+
+// Logo mark — hexagonal badge with floating "T" (4 lines tall, 12 chars wide)
+const LOGO_LINES = [
+    "  ╱▔▔▔▔▔╲   ",
+    " ╱ ▀▀█▀▀ ╲  ",
+    " ╲   █   ╱  ",
+    "  ╲▁▁▁▁▁╱   ",
+];
+const LOGO_WIDTH = 12;
+
+function renderStartupBanner(): void {
+    const width = process.stdout.columns || 80;
+    const innerWidth = width - 4; // "│  " + "  │"
+    const version = "0.0.1";
+
+    // Content lines to render alongside the logo
+    const contentLines = [
+        chalk.cyan.bold("TypeAgent") + chalk.dim(` v${version}`),
+        chalk.dim("Your personal AI assistant"),
+        "",
+        chalk.dim("Type a request or use /help to see commands."),
+    ];
+
+    const hintLine =
+        "  " +
+        chalk.dim(
+            "/help commands · /verbose debug · ctrl+d debug · ctrl+c exit",
+        );
+
+    // Build the box
+    const top = chalk.dim("╭" + "─".repeat(width - 2) + "╮");
+    const bottom = chalk.dim("╰" + "─".repeat(width - 2) + "╯");
+
+    const lines: string[] = [];
+    lines.push(top);
+
+    // Render logo + content side by side
+    const totalRows = Math.max(LOGO_LINES.length, contentLines.length);
+    for (let i = 0; i < totalRows; i++) {
+        const logo =
+            i < LOGO_LINES.length ? LOGO_LINES[i] : " ".repeat(LOGO_WIDTH);
+        const coloredLogo = chalk.cyan(logo);
+        const content = i < contentLines.length ? contentLines[i] : "";
+        const contentVisible = content.replace(
+            // eslint-disable-next-line no-control-regex
+            /\x1b\[[0-9;]*m/g,
+            "",
+        );
+        const padding = Math.max(
+            0,
+            innerWidth - LOGO_WIDTH - contentVisible.length,
+        );
+        lines.push(
+            chalk.dim("│") +
+                "  " +
+                coloredLogo +
+                content +
+                " ".repeat(padding) +
+                chalk.dim("│"),
+        );
+    }
+
+    // Empty line before close
+    lines.push(chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│"));
+    lines.push(bottom);
+    lines.push(hintLine);
+    lines.push("");
+
+    for (const line of lines) {
+        process.stdout.write(line + "\n");
+    }
+}
+
 /**
  * Wrapper for using enhanced console ClientIO
  */
@@ -1273,15 +1381,8 @@ export async function withEnhancedConsoleClientIO(
         const dispatcherRef: { current?: Dispatcher } = {};
         initializeEnhancedConsole(rl, dispatcherRef);
 
-        // Show welcome header
-        const width = process.stdout.columns || 80;
-        console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
-        console.log(
-            chalk.bold(" TypeAgent Interactive Mode ") +
-                chalk.dim("(Enhanced UI)"),
-        );
-        console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
-        console.log("");
+        // Show welcome banner
+        renderStartupBanner();
         await callback(
             createEnhancedClientIO(rl, dispatcherRef),
             (d: Dispatcher) => {
