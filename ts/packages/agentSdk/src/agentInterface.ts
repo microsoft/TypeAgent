@@ -63,9 +63,9 @@ export type GrammarContent = { format: GrammarFormat; content: string };
 export type SchemaManifest = {
     description: string;
     schemaType: string | SchemaTypeNames; // string if there are only action schemas
-    schemaFile: string | SchemaContent;
-    compiledSchemaFile?: string; // path to .pas.json file for grammar generation metadata extraction
-    grammarFile?: string | GrammarContent;
+    schemaFile: string | SchemaContent; // path relative to the manifest file (resolved to absolute at load time)
+    originalSchemaFile?: string; // path to the original .ts schema source for code paths not yet converted to use .pas format (relative to the manifest file)
+    grammarFile?: string | GrammarContent; // path relative to the manifest file (resolved to absolute at load time)
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];

@@ -697,25 +697,15 @@ export class CommandServer {
                     `Action '${request.actionName}' not found in agent '${agent.name}'.\n\nAvailable actions: ${allActions}`,
                 );
             }
-            if (!subSchema.schemaFilePath) {
+            if (!subSchema.schemaText) {
                 return toolResult(
-                    `TypeScript source not available for action '${request.actionName}'.`,
+                    `TypeScript schema not available for action '${request.actionName}'.`,
                 );
             }
-            try {
-                const source = fs.readFileSync(
-                    subSchema.schemaFilePath,
-                    "utf-8",
-                );
-                return toolResult(
-                    `TypeScript schema for **${subSchema.schemaName}** (action: ${request.actionName}):\n\n` +
-                        `\`\`\`typescript\n${source}\n\`\`\``,
-                );
-            } catch {
-                return toolResult(
-                    `Could not read schema file: ${subSchema.schemaFilePath}`,
-                );
-            }
+            return toolResult(
+                `TypeScript schema for **${subSchema.schemaName}** (action: ${request.actionName}):\n\n` +
+                    `\`\`\`typescript\n${subSchema.schemaText}\n\`\`\``,
+            );
         }
 
         // Level 2 — sub-schema groups with schemaName + action names+descriptions

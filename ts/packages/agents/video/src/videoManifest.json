@@ -3,8 +3,8 @@
   "description": "Agent to create AI videos",
   "schema": {
     "description": "Video agent that creates videos using AI text to video modes.",
-    "schemaFile": "./videoActionSchema.ts",
-    "compiledSchemaFile": "agents/video/dist/videoSchema.pas.json",
+    "originalSchemaFile": "./videoActionSchema.ts",
+    "schemaFile": "../dist/videoSchema.pas.json",
     "schemaType": "VideoAction"
   }
 }
