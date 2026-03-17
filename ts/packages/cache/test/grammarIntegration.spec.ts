@@ -22,6 +22,10 @@ import {
     compileGrammarToNFA,
     loadGrammarRules,
 } from "action-grammar";
+import {
+    fromJSONParsedActionSchema,
+    ParsedActionSchemaJSON,
+} from "@typeagent/action-schema";
 import { describeIf, hasTestKeys } from "test-lib";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -873,12 +877,18 @@ describe("Grammar Integration", () => {
 
                 console.log(`Using player schema: ${playerSchemaPath};`);
 
-                // Configure with schema path getter
+                // Load the parsed action schema from the .pas.json file
+                const pasJson: ParsedActionSchemaJSON = JSON.parse(
+                    fs.readFileSync(playerSchemaPath, "utf8"),
+                );
+                const parsedSchema = fromJSONParsedActionSchema(pasJson);
+
+                // Configure with parsed schema getter
                 cache.configureGrammarGeneration(
                     agentGrammarRegistry,
                     persistedStore,
                     true,
-                    (schemaName: string) => playerSchemaPath,
+                    (schemaName: string) => parsedSchema,
                 );
 
                 const namespaceKeys = cache.getNamespaceKeys(
@@ -904,7 +914,7 @@ describe("Grammar Integration", () => {
                             actionName: "pause",
                             parameters: {},
                         },
-                        schemaPath: playerSchemaPath,
+                        parsedSchema,
                     });
 
                     console.log("populateCache result:", genResult);

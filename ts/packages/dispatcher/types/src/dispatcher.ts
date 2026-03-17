@@ -125,8 +125,8 @@ export type AgentSubSchemaInfo = {
     /** Exact schemaName to supply to @action dispatch, e.g. "desktop.desktop-taskbar" */
     schemaName: string;
     description: string;
-    /** Absolute path to the TypeScript source file for this sub-schema, if available. */
-    schemaFilePath: string | undefined;
+    /** Generated TypeScript schema text for this sub-schema, if available. */
+    schemaText: string | undefined;
     actions: ActionInfo[];
 };
 
