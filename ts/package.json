@@ -93,11 +93,11 @@
       ]
     },
     "overrides": {
-      "node-gyp": "^12.2.0",
-      "serialize-javascript": ">=7.0.0",
+      "hono": ">=4.12.8",
       "http-proxy-agent": ">=7.0.0",
       "lodash-es": ">=4.17.22",
-      "hono": ">=4.12.8"
+      "node-gyp": "^12.2.0",
+      "serialize-javascript": ">=7.0.0"
     },
     "ignoredBuiltDependencies": [
       "leveldown"
