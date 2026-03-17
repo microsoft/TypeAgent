@@ -3,7 +3,7 @@
 
 import { CommandCompletionResult } from "agent-dispatcher";
 import {
-    CommitMode,
+    CompletionDirection,
     CompletionGroup,
     SeparatorMode,
 } from "@typeagent/agent-sdk";
@@ -28,7 +28,10 @@ export interface ISearchMenu {
 }
 
 export interface ICompletionDispatcher {
-    getCommandCompletion(input: string): Promise<CommandCompletionResult>;
+    getCommandCompletion(
+        input: string,
+        direction: CompletionDirection,
+    ): Promise<CommandCompletionResult>;
 }
 
 // PartialCompletionSession manages the state machine for command completion.
@@ -50,16 +53,9 @@ export interface ICompletionDispatcher {
 //          result's constraints aren't satisfied yet (separator not typed,
 //          or no completions exist).  A re-fetch would return the same result.
 //       4. Uniquely satisfied — the user has exactly typed one completion
-//          entry (and it is not a prefix of any other).  Gated by
-//          `commitMode`:
-//            commitMode="eager"    → re-fetch immediately for the NEXT
-//              level's completions (e.g. variable-space grammar where
-//              tokens can abut without whitespace).
-//            commitMode="explicit" → suppress; the user hasn't committed
-//              yet (must type an explicit delimiter).  B5 handles the
-//              separator arrival.
-//          `closedSet` is irrelevant here because it describes THIS
-//          level, not the next's.
+//          entry (and it is not a prefix of any other).  Always re-fetches
+//          for the NEXT level's completions — the direction to use for the
+//          re-fetch is determined by the caller.
 //   - The `closedSet` flag controls the no-match fallthrough: when the trie
 //     has zero matches for the typed prefix:
 //       closedSet=true  → reuse (closed set, nothing else exists)
@@ -79,7 +75,6 @@ export class PartialCompletionSession {
     // Saved as-is from the last completion result.
     private separatorMode: SeparatorMode = "space";
     private closedSet: boolean = false;
-    private commitMode: CommitMode = "explicit";
 
     // The in-flight completion request, or undefined when settled.
     private completionP: Promise<CommandCompletionResult> | undefined;
@@ -91,17 +86,19 @@ export class PartialCompletionSession {
 
     // Main entry point.  Called by PartialCompletion.update() after DOM checks pass.
     //   input:       trimmed input text (ghost text stripped, leading whitespace stripped)
+    //   direction:   host-provided signal: \"forward\" (user is moving ahead) or\n    //                \"backward\" (user is reconsidering, e.g. backspaced)
     //   getPosition: DOM callback that computes the menu anchor position; returns
     //                undefined when position cannot be determined (hides menu).
     public update(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection = "forward",
     ): void {
         if (this.reuseSession(input, getPosition)) {
             return;
         }
 
-        this.startNewSession(input, getPosition);
+        this.startNewSession(input, getPosition, direction);
     }
 
     // Hide the menu and cancel any in-flight fetch, but preserve session
@@ -151,8 +148,6 @@ export class PartialCompletionSession {
     //                (return true).
     //   UNIQUE     — prefix exactly matches one entry and is not a prefix of
     //                any other; re-fetch for the NEXT level (return false).
-    //                Gated by commitMode: "eager" re-fetches immediately;
-    //                "explicit" defers to B5 (committed-past-boundary).
     //   SHOW       — constraints satisfied; update the menu.  The final
     //                return is `this.closedSet || this.menu.isActive()`:
     //                reuse when the trie still has matches, or when the set
@@ -172,14 +167,10 @@ export class PartialCompletionSession {
     //                         never be satisfied, so treat as new input.
     //
     // B. Hierarchical navigation — user completed this level; re-fetch for
-    //    the NEXT level's completions.  closedSet describes THIS level,
-    //    not the next.
+    //    the NEXT level's completions.
     //   4. Uniquely satisfied — typed prefix exactly matches one completion and
-    //                         is not a prefix of any other. Re-fetch for the
-    //                         NEXT level (e.g. agent name → subcommands).
-    //                         Gated by commitMode: when "explicit", this is
-    //                         suppressed (B5 handles it once the user types a
-    //                         separator).  When "eager", fires immediately.
+    //                         is not a prefix of any other. Always re-fetch
+    //                         for the NEXT level.
     //   5. Committed past boundary — prefix contains a separator after a valid
     //                         completion match (e.g. "set " where "set" matches
     //                         but so does "setWindowState"). The user committed
@@ -208,7 +199,7 @@ export class PartialCompletionSession {
         }
 
         // ACTIVE from here.
-        const { anchor, separatorMode: sepMode, closedSet, commitMode } = this;
+        const { anchor, separatorMode: sepMode, closedSet } = this;
 
         // [A2] RE-FETCH — input moved past the anchor (e.g. backspace, new word).
         if (!input.startsWith(anchor)) {
@@ -280,20 +271,13 @@ export class PartialCompletionSession {
 
             // [B4] The user has typed text that exactly matches one
             // completion and is not a prefix of any other.
-            // Only re-fetch when commitMode="eager" (tokens can abut
-            // without whitespace).  When "explicit", B5 handles it
-            // once the user types a separator.
+            // Always re-fetch for the next level — the direction
+            // for the re-fetch comes from the caller.
             if (uniquelySatisfied) {
-                if (commitMode === "eager") {
-                    debug(
-                        `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied (eager commit)`,
-                    );
-                    return false; // RE-FETCH (hierarchical navigation)
-                }
                 debug(
-                    `Partial completion: '${completionPrefix}' uniquely satisfied but commitMode='${commitMode}', deferring to separator`,
+                    `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied`,
                 );
-                return true; // REUSE — wait for explicit separator before re-fetching
+                return false; // RE-FETCH (hierarchical navigation)
             }
 
             // [B5] Committed-past-boundary: the prefix contains whitespace
@@ -337,15 +321,18 @@ export class PartialCompletionSession {
     private startNewSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection,
     ): void {
-        debug(`Partial completion start: '${input}'`);
+        debug(`Partial completion start: '${input}' direction=${direction}`);
         this.menu.hide();
         this.menu.setChoices([]);
         this.anchor = input;
         this.separatorMode = "space";
         this.closedSet = false;
-        this.commitMode = "explicit";
-        const completionP = this.dispatcher.getCommandCompletion(input);
+        const completionP = this.dispatcher.getCommandCompletion(
+            input,
+            direction,
+        );
         this.completionP = completionP;
         completionP
             .then((result) => {
@@ -359,7 +346,6 @@ export class PartialCompletionSession {
 
                 this.separatorMode = result.separatorMode ?? "space";
                 this.closedSet = result.closedSet;
-                this.commitMode = result.commitMode ?? "explicit";
 
                 const completions = toMenuItems(result.completions);
 

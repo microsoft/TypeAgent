@@ -18,7 +18,7 @@ import {
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
-import { SeparatorMode } from "@typeagent/agent-sdk";
+import { CompletionDirection, SeparatorMode } from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     CompletionProperty,
@@ -264,6 +264,7 @@ export class GrammarStoreImpl implements GrammarStore {
     public completion(
         requestPrefix: string,
         options?: MatchOptions,
+        direction?: CompletionDirection,
     ): CompletionResult | undefined {
         if (!this.enabled) {
             return undefined;
@@ -353,6 +354,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     entry.grammar,
                     requestPrefix,
                     matchedPrefixLength,
+                    direction,
                 );
                 const partialPrefixLength = partial.matchedPrefixLength ?? 0;
                 if (partialPrefixLength > matchedPrefixLength) {

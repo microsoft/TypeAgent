@@ -9,29 +9,15 @@ import {
     getPos,
 } from "./helpers.js";
 
-// ── commitMode ────────────────────────────────────────────────────────────────
+// ── direction-based completion ────────────────────────────────────────────────
+//
+// The direction parameter ("forward" or "backward") resolves structural
+// ambiguity when the input is valid.  "forward" means the user is moving
+// ahead; "backward" means they're reconsidering.  B4 (uniquely satisfied)
+// always triggers a re-fetch regardless of direction.
 
-describe("PartialCompletionSession — commitMode", () => {
-    test("commitMode=explicit (default): uniquely satisfied does NOT re-fetch", async () => {
-        const menu = makeMenu();
-        // Default commitMode (omitted → "explicit")
-        const result = makeCompletionResult(["song"], 4, {
-            separatorMode: "space",
-            closedSet: true,
-        });
-        const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
-
-        session.update("play ", getPos);
-        await Promise.resolve(); // → ACTIVE, anchor = "play"
-
-        session.update("play song", getPos);
-
-        // "song" uniquely matched, but commitMode="explicit" — B4 suppressed
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-    });
-
-    test("commitMode=explicit: uniquely satisfied + trailing space triggers re-fetch via B5", async () => {
+describe("PartialCompletionSession — direction-based completion", () => {
+    test("uniquely satisfied always triggers re-fetch", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["song"], 4, {
             separatorMode: "space",
@@ -43,40 +29,33 @@ describe("PartialCompletionSession — commitMode", () => {
         session.update("play ", getPos);
         await Promise.resolve(); // → ACTIVE, anchor = "play"
 
-        // First: "play song" — uniquely satisfied but suppressed (no trailing space)
-        session.update("play song", getPos);
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-
-        // Second: "play song " — user typed space → B5 fires (committed past boundary)
-        session.update("play song ", getPos);
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
-        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
-            "play song ",
-        );
-    });
-
-    test("commitMode=eager: uniquely satisfied triggers immediate re-fetch", async () => {
-        const menu = makeMenu();
-        const result = makeCompletionResult(["song"], 4, {
-            separatorMode: "space",
-            commitMode: "eager",
-        });
-        const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
-
-        session.update("play ", getPos);
-        await Promise.resolve(); // → ACTIVE, anchor = "play"
-
         session.update("play song", getPos);
 
-        // commitMode="eager" — B4 fires immediately
+        // "song" uniquely matched — B4 fires immediately
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "play song",
+            "forward",
         );
     });
 
-    test("commitMode=explicit: B5 committed-past-boundary still fires", async () => {
+    test("direction parameter is forwarded to dispatcher", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song"], 4, {
+            separatorMode: "space",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
+            "play ",
+            "forward",
+        );
+    });
+
+    test("B5 committed-past-boundary still fires", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["set", "setWindowState"], 4, {
             separatorMode: "space",
@@ -93,10 +72,11 @@ describe("PartialCompletionSession — commitMode", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "play set ",
+            "forward",
         );
     });
 
-    test("commitMode=explicit: open-set no-matches still triggers re-fetch (C6 unaffected)", async () => {
+    test("open-set no-matches still triggers re-fetch (C6 unaffected)", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["song"], 4, {
             separatorMode: "space",
@@ -114,9 +94,21 @@ describe("PartialCompletionSession — commitMode", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
 
-    test("commitMode defaults to explicit when omitted from result", async () => {
+    test("backward direction is forwarded to dispatcher on new session", () => {
         const menu = makeMenu();
-        // No commitMode in result — defaults to "explicit"
+        const dispatcher = makeDispatcher();
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
+            "play",
+            "backward",
+        );
+    });
+
+    test("backward direction is forwarded on re-fetch after unique match", async () => {
+        const menu = makeMenu();
         const result = makeCompletionResult(["song"], 4, {
             separatorMode: "space",
             closedSet: true,
@@ -125,34 +117,63 @@ describe("PartialCompletionSession — commitMode", () => {
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("play ", getPos);
-        await Promise.resolve();
+        await Promise.resolve(); // → ACTIVE, anchor = "play"
 
-        session.update("play song", getPos);
+        // Uniquely satisfied → re-fetch; backward direction forwarded
+        session.update("play song", getPos, "backward");
 
-        // Default commitMode="explicit" — B4 suppressed
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "play song",
+            "backward",
+        );
     });
 
-    test("commitMode=explicit + closedSet=false: uniquely satisfied does NOT re-fetch", async () => {
+    test("backward direction is forwarded on anchor-divergence re-fetch", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["song"], 4, {
             separatorMode: "space",
-            closedSet: false,
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
         session.update("play ", getPos);
-        await Promise.resolve();
+        await Promise.resolve(); // → ACTIVE, anchor = "play"
 
-        // "song" uniquely matches — commitMode="explicit" must suppress re-fetch
-        // even though closedSet=false (closedSet describes THIS level, not next)
-        session.update("play song", getPos);
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+        // Backspace past anchor — anchor diverged, triggers new session
+        session.update("pla", getPos, "backward");
 
-        // Only after typing a separator should B5 trigger a re-fetch
-        session.update("play song ", getPos);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "pla",
+            "backward",
+        );
+    });
+
+    test("backward on IDLE starts new session with backward", () => {
+        const menu = makeMenu();
+        const dispatcher = makeDispatcher();
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play music", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
+            "play music",
+            "backward",
+        );
+    });
+
+    test("default direction is forward when omitted", () => {
+        const menu = makeMenu();
+        const dispatcher = makeDispatcher();
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
+            "play",
+            "forward",
+        );
     });
 });
 
@@ -179,6 +200,7 @@ describe("PartialCompletionSession — committed-past-boundary re-fetch", () => 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "play set ",
+            "forward",
         );
     });
 

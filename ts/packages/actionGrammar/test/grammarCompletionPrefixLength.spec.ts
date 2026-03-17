@@ -354,4 +354,254 @@ describe("Grammar Completion - matchedPrefixLength", () => {
             expect(result.separatorMode).toBe("spacePunctuation");
         });
     });
+
+    describe("backward direction", () => {
+        describe("all-literal single string part", () => {
+            const g = `<Start> = play music -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("exact match backward offers last literal word", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play music",
+                    undefined,
+                    "backward",
+                );
+                // Backward backs up to the last matched word "music"
+                // and re-offers it as a completion.
+                expect(result.completions).toEqual(["music"]);
+                expect(result.matchedPrefixLength).toBe(4);
+            });
+
+            it("forward exact match still returns empty completions", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play music",
+                    undefined,
+                    "forward",
+                );
+                expect(result.completions).toHaveLength(0);
+                expect(result.matchedPrefixLength).toBe(10);
+            });
+        });
+
+        describe("three-word single string part", () => {
+            const g = `<Start> = play music now -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("partial match backward offers last matched word", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play music",
+                    undefined,
+                    "backward",
+                );
+                // Backward: "play" and "music" matched, so it backs
+                // up to offer "music" (the last matched word).
+                expect(result.completions).toEqual(["music"]);
+                expect(result.matchedPrefixLength).toBe(4);
+            });
+
+            it("partial match forward offers next unmatched word", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play music",
+                    undefined,
+                    "forward",
+                );
+                expect(result.completions).toEqual(["now"]);
+                expect(result.matchedPrefixLength).toBe(10);
+            });
+        });
+
+        describe("multi-part via nested rule", () => {
+            const g = [
+                `<Start> = $(v:<Verb>) music now -> true;`,
+                `<Verb> = play -> true;`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward backs up to last matched literal", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play music",
+                    undefined,
+                    "backward",
+                );
+                // "play" matched the verb rule, "music" matched the
+                // second word. Backward backs up to "music".
+                expect(result.completions).toEqual(["music"]);
+                expect(result.matchedPrefixLength).toBe(4);
+            });
+
+            it("forward offers next unmatched word", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play music",
+                    undefined,
+                    "forward",
+                );
+                expect(result.completions).toEqual(["now"]);
+                expect(result.matchedPrefixLength).toBe(10);
+            });
+        });
+
+        describe("wildcard at end", () => {
+            const g = [
+                `entity TrackName;`,
+                `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward on exact match backs up to wildcard start with property", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play hello",
+                    undefined,
+                    "backward",
+                );
+                // Backward: backs up to wildcard start (after "play" = 4)
+                // and offers entity property completions.
+                expect(result.properties?.length).toBeGreaterThan(0);
+                expect(result.matchedPrefixLength).toBe(4);
+                expect(result.closedSet).toBe(false);
+            });
+
+            it("forward on exact match returns empty completions", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play hello",
+                    undefined,
+                    "forward",
+                );
+                expect(result.completions).toHaveLength(0);
+                expect(result.matchedPrefixLength).toBe(10);
+            });
+        });
+
+        describe("wildcard in middle", () => {
+            const g = [
+                `entity TrackName;`,
+                `<Start> = play $(name:TrackName) now -> { actionName: "play", parameters: { name } };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward on exact match backs up to last literal 'now'", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play hello now",
+                    undefined,
+                    "backward",
+                );
+                // Backward: the wildcard was captured mid-match when
+                // "now" matched, so "now" is the last matched part.
+                // Backward backs up to offer "now" (not the wildcard).
+                expect(result.completions).toEqual(["now"]);
+                expect(result.matchedPrefixLength).toBe(10);
+            });
+
+            it("forward offers 'now' (greedy wildcard alternative)", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play hello now",
+                    undefined,
+                    "forward",
+                );
+                // The wildcard greedily consumed "hello now", so the
+                // "now" string part is still unmatched — it appears
+                // as a completion at the same prefix length.
+                expect(result.completions).toEqual(["now"]);
+                expect(result.matchedPrefixLength).toBe(14);
+            });
+        });
+
+        describe("wildcard followed by multiple literals", () => {
+            const g = [
+                `entity TrackName;`,
+                `<Start> = play $(name:TrackName) right now -> { actionName: "play", parameters: { name } };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward backs up to last literal 'now', not to wildcard", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play hello right now",
+                    undefined,
+                    "backward",
+                );
+                // "play" at 0, wildcard "hello" captured at 4-10,
+                // "right" at 10, "now" at 16.
+                // Backward should back up to the LAST literal "now".
+                expect(result.completions).toEqual(["now"]);
+                expect(result.matchedPrefixLength).toBe(16);
+            });
+
+            it("forward on exact match offers greedy wildcard alternative", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play hello right now",
+                    undefined,
+                    "forward",
+                );
+                // Greedy wildcard consumed "hello right now", so
+                // "right" is still unmatched as an alternative.
+                expect(result.completions).toEqual(["right"]);
+                expect(result.matchedPrefixLength).toBe(20);
+            });
+        });
+
+        describe("backward on partial input backs up to first word", () => {
+            const g = `<Start> = play music -> true;`;
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward on 'play ' backs up to 'play'", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play ",
+                    undefined,
+                    "backward",
+                );
+                // Only "play" matched.  Backward backs up to offer
+                // "play" at position 0 (reconsider the first word).
+                expect(result.completions).toEqual(["play"]);
+                expect(result.matchedPrefixLength).toBe(0);
+            });
+
+            it("forward on 'play ' offers next word", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play ",
+                    undefined,
+                    "forward",
+                );
+                expect(result.completions).toEqual(["music"]);
+                expect(result.matchedPrefixLength).toBe(4);
+            });
+        });
+
+        describe("multi-rule with shared prefix and wildcard", () => {
+            const g = [
+                `entity TrackName;`,
+                `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
+                `<Start> = play music -> "play_music";`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward on 'play music' offers both literal and property at same position", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play music",
+                    undefined,
+                    "backward",
+                );
+                // Both rules back up to position 4: the all-literal
+                // rule offers "music", the wildcard rule offers a
+                // property completion.
+                expect(result.completions).toEqual(["music"]);
+                expect(result.properties?.length).toBeGreaterThan(0);
+                expect(result.matchedPrefixLength).toBe(4);
+                expect(result.closedSet).toBe(false);
+            });
+        });
+    });
 });

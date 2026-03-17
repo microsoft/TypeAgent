@@ -496,6 +496,7 @@ describe("Command Completion - startIndex", () => {
         it("returns startIndex at suffix boundary for '@comptest run '", async () => {
             const result = await getCommandCompletion(
                 "@comptest run ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -513,14 +514,15 @@ describe("Command Completion - startIndex", () => {
         it("returns startIndex accounting for partial param for '@comptest run bu'", async () => {
             const result = await getCommandCompletion(
                 "@comptest run bu",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
             // "@comptest run bu" (16 chars)
-            // No trailing space → hasTrailingSpace=false.
+            // No trailing space → direction="forward".
             // suffix is "bu", parameter parsing fully consumes "bu".
             // lastCompletableParam="task", bare unquoted token,
-            // !hasTrailingSpace → exclusive path fires: backs up
+            // no trailing space → exclusive path fires: backs up
             // startIndex to the start of "bu" → 13.
             expect(result!.startIndex).toBe(13);
             // Agent IS invoked ("task" in agentCommandCompletions).
@@ -531,6 +533,7 @@ describe("Command Completion - startIndex", () => {
         it("returns startIndex for nested command '@comptest nested sub '", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -546,6 +549,7 @@ describe("Command Completion - startIndex", () => {
         it("returns startIndex for partial flag '@comptest nested sub --ver'", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub --ver",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -561,7 +565,7 @@ describe("Command Completion - startIndex", () => {
 
     describe("empty and minimal input", () => {
         it("returns completions for empty input", async () => {
-            const result = await getCommandCompletion("", context);
+            const result = await getCommandCompletion("", "forward", context);
             expect(result).toBeDefined();
             expect(result!.completions.length).toBeGreaterThan(0);
             // completions should include "@"
@@ -576,13 +580,13 @@ describe("Command Completion - startIndex", () => {
         });
 
         it("returns startIndex 0 for empty input", async () => {
-            const result = await getCommandCompletion("", context);
+            const result = await getCommandCompletion("", "forward", context);
             expect(result).toBeDefined();
             expect(result!.startIndex).toBe(0);
         });
 
         it("returns startIndex at end for whitespace-only input", async () => {
-            const result = await getCommandCompletion("  ", context);
+            const result = await getCommandCompletion("  ", "forward", context);
             expect(result).toBeDefined();
             // "  " normalizes to a command prefix with no suffix;
             // startIndex = input.length - suffix.length = 2, then
@@ -593,7 +597,11 @@ describe("Command Completion - startIndex", () => {
 
     describe("agent name level", () => {
         it("returns subcommands at agent boundary '@comptest '", async () => {
-            const result = await getCommandCompletion("@comptest ", context);
+            const result = await getCommandCompletion(
+                "@comptest ",
+                "forward",
+                context,
+            );
             expect(result).toBeDefined();
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
@@ -611,7 +619,11 @@ describe("Command Completion - startIndex", () => {
         });
 
         it("returns matching agent names for partial prefix '@com'", async () => {
-            const result = await getCommandCompletion("@com", context);
+            const result = await getCommandCompletion(
+                "@com",
+                "forward",
+                context,
+            );
             // "@com" → normalizeCommand strips '@' → "com"
             // resolveCommand: "com" isn't an agent name → system agent,
             // system has no defaultSubCommand → descriptor=undefined,
@@ -633,6 +645,7 @@ describe("Command Completion - startIndex", () => {
         it("returns completions for unknown agent with startIndex at '@'", async () => {
             const result = await getCommandCompletion(
                 "@unknownagent ",
+                "forward",
                 context,
             );
             // "@unknownagent " → longest valid prefix is "@"
@@ -655,6 +668,7 @@ describe("Command Completion - startIndex", () => {
         it("startIndex at token boundary with trailing space", async () => {
             const result = await getCommandCompletion(
                 "@comptest run build ",
+                "forward",
                 context,
             );
             // "@comptest run build " (20 chars)
@@ -672,6 +686,7 @@ describe("Command Completion - startIndex", () => {
         it("startIndex backs over whitespace before unconsumed remainder", async () => {
             const result = await getCommandCompletion(
                 "@comptest run hello --unknown",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -686,6 +701,7 @@ describe("Command Completion - startIndex", () => {
         it("startIndex backs over multiple spaces before unconsumed remainder", async () => {
             const result = await getCommandCompletion(
                 "@comptest run hello   --unknown",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -700,7 +716,11 @@ describe("Command Completion - startIndex", () => {
 
     describe("separatorMode for command completions", () => {
         it("returns separatorMode for subcommand completions at agent boundary", async () => {
-            const result = await getCommandCompletion("@comptest ", context);
+            const result = await getCommandCompletion(
+                "@comptest ",
+                "forward",
+                context,
+            );
             expect(result).toBeDefined();
             // "run" is the default subcommand, so subcommand alternatives
             // are included and the group has separatorMode: "space".
@@ -712,7 +732,11 @@ describe("Command Completion - startIndex", () => {
         });
 
         it("returns separatorMode for resolved agent without trailing space", async () => {
-            const result = await getCommandCompletion("@comptest", context);
+            const result = await getCommandCompletion(
+                "@comptest",
+                "forward",
+                context,
+            );
             expect(result).toBeDefined();
             expect(result!.separatorMode).toBe("space");
             // No trailing whitespace to trim — startIndex stays at end
@@ -722,7 +746,7 @@ describe("Command Completion - startIndex", () => {
         });
 
         it("does not set separatorMode at top level (@)", async () => {
-            const result = await getCommandCompletion("@", context);
+            const result = await getCommandCompletion("@", "forward", context);
             expect(result).toBeDefined();
             // Top-level completions (agent names, system subcommands)
             // follow '@' — space is accepted but not required.
@@ -742,6 +766,7 @@ describe("Command Completion - startIndex", () => {
         it("does not set separatorMode for parameter completions only", async () => {
             const result = await getCommandCompletion(
                 "@comptest run bu",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -751,7 +776,11 @@ describe("Command Completion - startIndex", () => {
         });
 
         it("returns no separatorMode for partial unmatched token consumed as param", async () => {
-            const result = await getCommandCompletion("@comptest ne", context);
+            const result = await getCommandCompletion(
+                "@comptest ne",
+                "forward",
+                context,
+            );
             expect(result).toBeDefined();
             // "ne" is fully consumed as the "task" arg by parameter
             // parsing.  No trailing space → backs up to the start
@@ -771,6 +800,7 @@ describe("Command Completion - startIndex", () => {
         it("returns empty completions for command with no parameters", async () => {
             const result = await getCommandCompletion(
                 "@comptest noop ",
+                "forward",
                 context,
             );
             // "noop" has no parameters at all → nothing more to type.
@@ -784,6 +814,7 @@ describe("Command Completion - startIndex", () => {
         it("closedSet=true for flags-only command with no args unfilled", async () => {
             const result = await getCommandCompletion(
                 "@comptest flagsonly ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -801,6 +832,7 @@ describe("Command Completion - startIndex", () => {
         it("closedSet=true for boolean flag pending", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub --verbose ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -813,6 +845,7 @@ describe("Command Completion - startIndex", () => {
         it("closedSet=false when agent completions are invoked without closedSet flag", async () => {
             const result = await getCommandCompletion(
                 "@comptest run ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -824,6 +857,7 @@ describe("Command Completion - startIndex", () => {
         it("closedSet=true when agent returns closedSet=true", async () => {
             const result = await getCommandCompletion(
                 "@comptest exhaustive ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -839,6 +873,7 @@ describe("Command Completion - startIndex", () => {
         it("closedSet=false when agent returns closedSet=false", async () => {
             const result = await getCommandCompletion(
                 "@comptest nonexhaustive ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -853,6 +888,7 @@ describe("Command Completion - startIndex", () => {
         it("closedSet=false when agent does not set closedSet field", async () => {
             const result = await getCommandCompletion(
                 "@comptest nocompletefield ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -867,6 +903,7 @@ describe("Command Completion - startIndex", () => {
         it("closedSet=false for unfilled positional args without agent", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -878,6 +915,7 @@ describe("Command Completion - startIndex", () => {
         it("closedSet=true for flags-only after one flag is set", async () => {
             const result = await getCommandCompletion(
                 "@comptest flagsonly --debug true ",
+                "forward",
                 context,
             );
             expect(result).toBeDefined();
@@ -888,12 +926,13 @@ describe("Command Completion - startIndex", () => {
         it("returns flag names for non-boolean flag without trailing space", async () => {
             const result = await getCommandCompletion(
                 "@comptest flagsonly --level",
+                "backward",
                 context,
             );
-            // "--level" is a recognized number flag, but no trailing
-            // space → user hasn't committed.  Offer flag names at the
-            // tokenBoundary before "--level" (position 19, end of
-            // "flagsonly") instead of flag values.
+            // "--level" is a recognized number flag.  With
+            // direction="backward" (user reconsidering), offer flag
+            // names at tokenBoundary before "--level" (position 19,
+            // end of "flagsonly") instead of flag values.
             expect(result.startIndex).toBe(19);
             const flags = result.completions.find(
                 (g) => g.name === "Command Flags",
@@ -906,6 +945,7 @@ describe("Command Completion - startIndex", () => {
         it("treats unrecognized flag prefix as filter text", async () => {
             const result = await getCommandCompletion(
                 "@comptest flagsonly --lev",
+                "forward",
                 context,
             );
             // "--lev" doesn't resolve (exact match only), so parseParams
@@ -925,7 +965,11 @@ describe("Command Completion - startIndex", () => {
 
     describe("flat descriptor (no subcommand table)", () => {
         it("returns parameter completions for flat agent", async () => {
-            const result = await getCommandCompletion("@flattest ", context);
+            const result = await getCommandCompletion(
+                "@flattest ",
+                "forward",
+                context,
+            );
             // flattest has no subcommand table (table===undefined),
             // but its descriptor has parameters (args + flags).
             // Should return flag completions.
@@ -941,6 +985,7 @@ describe("Command Completion - startIndex", () => {
         it("returns correct startIndex for flat agent with partial token", async () => {
             const result = await getCommandCompletion(
                 "@flattest --rel",
+                "forward",
                 context,
             );
             // "@flattest --rel" (15 chars)
@@ -951,7 +996,11 @@ describe("Command Completion - startIndex", () => {
         });
 
         it("falls back to system for agent with no commands", async () => {
-            const result = await getCommandCompletion("@nocmdtest ", context);
+            const result = await getCommandCompletion(
+                "@nocmdtest ",
+                "forward",
+                context,
+            );
             // nocmdtest has no getCommands → not command-enabled →
             // resolveCommand falls back to system agent.  System has
             // a subcommand table, so we get system subcommands.
@@ -974,6 +1023,7 @@ describe("Command Completion - startIndex", () => {
         it("drops subcommands when default command parameter is filled", async () => {
             const result = await getCommandCompletion(
                 "@comptest build ",
+                "forward",
                 context,
             );
             // "@comptest build " (16 chars)
@@ -993,7 +1043,11 @@ describe("Command Completion - startIndex", () => {
         });
 
         it("keeps subcommands when at the command boundary", async () => {
-            const result = await getCommandCompletion("@comptest ", context);
+            const result = await getCommandCompletion(
+                "@comptest ",
+                "forward",
+                context,
+            );
             // "@comptest " (10 chars)
             // Resolves to default "run" — suffix is empty, parameter
             // startIndex equals commandBoundary → subcommands included.
@@ -1006,7 +1060,11 @@ describe("Command Completion - startIndex", () => {
         });
 
         it("includes subcommands when no trailing space at default command", async () => {
-            const result = await getCommandCompletion("@comptest ne", context);
+            const result = await getCommandCompletion(
+                "@comptest ne",
+                "forward",
+                context,
+            );
             // "@comptest ne" — suffix is "ne", parameter parsing
             // fully consumes it as the "task" arg.  No trailing space
             // backs up startIndex to 9, which is ≤ commandBoundary
@@ -1023,6 +1081,7 @@ describe("Command Completion - startIndex", () => {
         it("backs startIndex to open-quote token start for '@comptest run \"bu'", async () => {
             const result = await getCommandCompletion(
                 '@comptest run "bu',
+                "forward",
                 context,
             );
             // '@comptest run "bu' (17 chars)
@@ -1044,6 +1103,7 @@ describe("Command Completion - startIndex", () => {
         it("backs startIndex for multi-arg open quote '@comptest twoarg \"partial'", async () => {
             const result = await getCommandCompletion(
                 '@comptest twoarg "partial',
+                "forward",
                 context,
             );
             // '@comptest twoarg "partial' (25 chars)
@@ -1060,6 +1120,7 @@ describe("Command Completion - startIndex", () => {
         it("backs startIndex for implicitQuotes '@comptest search hello world'", async () => {
             const result = await getCommandCompletion(
                 "@comptest search hello world",
+                "forward",
                 context,
             );
             // "@comptest search hello world" (28 chars)
@@ -1075,6 +1136,7 @@ describe("Command Completion - startIndex", () => {
         it("does not adjust startIndex for fully-quoted token", async () => {
             const result = await getCommandCompletion(
                 '@comptest run "build"',
+                "forward",
                 context,
             );
             // '@comptest run "build"' (21 chars)
@@ -1089,6 +1151,7 @@ describe("Command Completion - startIndex", () => {
         it("adjusts startIndex for bare unquoted token without trailing space", async () => {
             const result = await getCommandCompletion(
                 "@comptest run bu",
+                "forward",
                 context,
             );
             // "bu" is not quoted → isFullyQuoted returns undefined.
@@ -1104,6 +1167,7 @@ describe("Command Completion - startIndex", () => {
         it("open-quote CJK advances startIndex by matchedPrefixLength", async () => {
             const result = await getCommandCompletion(
                 '@comptest grammar "東京タ',
+                "forward",
                 context,
             );
             // '@comptest grammar "東京タ' (22 chars)
@@ -1130,6 +1194,7 @@ describe("Command Completion - startIndex", () => {
         it("implicitQuotes CJK advances startIndex by matchedPrefixLength", async () => {
             const result = await getCommandCompletion(
                 "@comptest grammariq 東京タ",
+                "forward",
                 context,
             );
             // "@comptest grammariq 東京タ" (23 chars)
@@ -1156,6 +1221,7 @@ describe("Command Completion - startIndex", () => {
         it("fully-quoted token does not invoke grammar", async () => {
             const result = await getCommandCompletion(
                 '@comptest grammar "東京タ"',
+                "forward",
                 context,
             );
             // Token '"東京タ"' is fully quoted → isFullyQuoted = true.
@@ -1174,11 +1240,12 @@ describe("Command Completion - startIndex", () => {
         it("bare unquoted token invokes grammar without trailing space", async () => {
             const result = await getCommandCompletion(
                 "@comptest grammar 東京タ",
+                "forward",
                 context,
             );
             // "東京タ" has no quotes and no trailing space.
             // lastCompletableParam exclusive path fires
-            // (!hasTrailingSpace && pendingFlag === undefined).
+            // (no trailing space && pendingFlag === undefined).
             // Agent is invoked with grammar mock → matches "東京" →
             // returns matchedPrefixLength=2.  tokenStartIndex = 21-3 = 18,
             // startIndex = 18 + 2 = 20.
@@ -1195,6 +1262,7 @@ describe("Command Completion - startIndex", () => {
         it("trailing space without text offers initial completions", async () => {
             const result = await getCommandCompletion(
                 "@comptest grammar ",
+                "forward",
                 context,
             );
             // "@comptest grammar " (18 chars)
@@ -1216,6 +1284,7 @@ describe("Command Completion - startIndex", () => {
         it("clears earlier completions when matchedPrefixLength is set", async () => {
             const result = await getCommandCompletion(
                 '@comptest grammar "東京タ',
+                "forward",
                 context,
             );
             // When groupPrefixLength fires, parameter/flag
@@ -1231,6 +1300,7 @@ describe("Command Completion - startIndex", () => {
             // No trailing space → backs up to start of "bu".
             const result = await getCommandCompletion(
                 "@comptest run bu",
+                "forward",
                 context,
             );
             expect(result.startIndex).toBe(13);
@@ -1239,6 +1309,7 @@ describe("Command Completion - startIndex", () => {
         it("English prefix with space separator", async () => {
             const result = await getCommandCompletion(
                 "@comptest grammariq Tokyo T",
+                "forward",
                 context,
             );
             // "@comptest grammariq Tokyo T" (27 chars)
@@ -1265,6 +1336,7 @@ describe("Command Completion - startIndex", () => {
         it("completed CJK match returns no completions", async () => {
             const result = await getCommandCompletion(
                 "@comptest grammariq 東京タワー",
+                "forward",
                 context,
             );
             // Token = "東京タワー" (5 chars).  Mock matches "東京"
@@ -1282,6 +1354,7 @@ describe("Command Completion - startIndex", () => {
         it("no-text offers initial completions via grammariq", async () => {
             const result = await getCommandCompletion(
                 "@comptest grammariq ",
+                "forward",
                 context,
             );
             // "@comptest grammariq " (20 chars)
@@ -1311,6 +1384,7 @@ describe("Command Completion - startIndex", () => {
         it("startIndex at tokenBoundary for '@comptest nested sub val' (no agent getCommandCompletion)", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub val",
+                "forward",
                 context,
             );
             // "@comptest nested sub val" (24 chars)
@@ -1319,7 +1393,7 @@ describe("Command Completion - startIndex", () => {
             // "nested sub" has no getCommandCompletion, so the
             // exclusive path inside `if (agent.getCommandCompletion)`
             // is skipped.  The fallback back-up fires because
-            // !hasTrailingSpace, remainderLength=0, tokens=["val"].
+            // no trailing space, remainderLength=0, tokens=["val"].
             // It should apply tokenBoundary to land at 20 (end of
             // "sub"), not 21 (raw token start of "val").
             expect(result.startIndex).toBe(20);
@@ -1328,6 +1402,7 @@ describe("Command Completion - startIndex", () => {
         it("startIndex at tokenBoundary for '@comptest nested sub --verbose val' (no agent getCommandCompletion)", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub --verbose val",
+                "forward",
                 context,
             );
             // "@comptest nested sub --verbose val" (33 chars)
@@ -1351,6 +1426,7 @@ describe("Command Completion - startIndex", () => {
         it("does not back up over number arg for '@numstrtest numstr 42' (no trailing space)", async () => {
             const result = await getCommandCompletion(
                 "@numstrtest numstr 42",
+                "forward",
                 context,
             );
             // "@numstrtest numstr 42" (21 chars)
@@ -1374,10 +1450,11 @@ describe("Command Completion - startIndex", () => {
         it("baseline: '@numstrtest numstr 42 ' with trailing space works correctly", async () => {
             const result = await getCommandCompletion(
                 "@numstrtest numstr 42 ",
+                "forward",
                 context,
             );
             // "@numstrtest numstr 42 " (22 chars)
-            // Trailing space → hasTrailingSpace=true, fallback never
+            // Trailing space → direction="forward", fallback never
             // fires.  startIndex = tokenBoundary(input, 22) = 21
             // (rewinds over trailing space to end of "42").
             // Agent invoked for "name" completions.
@@ -1392,12 +1469,13 @@ describe("Command Completion - startIndex", () => {
         it("does not back up over number arg for '@numstrtest numstr 42 al' (partial second arg)", async () => {
             const result = await getCommandCompletion(
                 "@numstrtest numstr 42 al",
+                "forward",
                 context,
             );
             // "@numstrtest numstr 42 al" (24 chars)
             // suffix = "42 al", parseParams: 42 → count, "al" → name.
             // lastCompletableParam = "name" (string), no trailing space.
-            // Exclusive path fires (bare token, !hasTrailingSpace):
+            // Exclusive path fires (bare token, no trailing space):
             //   backs up to before "al" → tokenBoundary(input, 22) = 21.
             // Agent invoked for "name".
             expect(result.startIndex).toBe(21);
@@ -1406,6 +1484,118 @@ describe("Command Completion - startIndex", () => {
             expect(names!.completions).toContain("alice");
             expect(names!.completions).toContain("bob");
             expect(result.closedSet).toBe(false);
+        });
+    });
+
+    describe("backward direction", () => {
+        it("backs up to subcommand alternatives for '@comptest run' backward", async () => {
+            // "run" is a valid subcommand of @comptest; with backward
+            // direction the user is reconsidering the subcommand choice.
+            const result = await getCommandCompletion(
+                "@comptest run",
+                "backward",
+                context,
+            );
+            // startIndex backs up to the start of "run" in the
+            // input (position 10, after "@comptest ").
+            expect(result.startIndex).toBe(10);
+            const subcommands = result.completions.find(
+                (g) => g.name === "Subcommands",
+            );
+            expect(subcommands).toBeDefined();
+            expect(subcommands!.completions).toContain("run");
+            expect(subcommands!.completions).toContain("nested");
+            expect(subcommands!.completions).toContain("noop");
+            // Subcommand names are exhaustive.
+            expect(result.closedSet).toBe(true);
+        });
+
+        it("does not back up with trailing space '@comptest run ' backward", async () => {
+            // Trailing space means the user already committed "run",
+            // so backward doesn't trigger uncommittedCommand; parameter
+            // completions are offered instead.
+            const result = await getCommandCompletion(
+                "@comptest run ",
+                "backward",
+                context,
+            );
+            // startIndex should be at the parameter boundary (13,
+            // end of "run"), not backed up to subcommand level.
+            expect(result.startIndex).toBe(13);
+            const subcommands = result.completions.find(
+                (g) => g.name === "Subcommands",
+            );
+            expect(subcommands).toBeUndefined();
+        });
+
+        it("backs up to nested subcommand alternatives for '@comptest nested sub' backward", async () => {
+            const result = await getCommandCompletion(
+                "@comptest nested sub",
+                "backward",
+                context,
+            );
+            // "sub" is a valid subcommand of "nested"; backward
+            // should back up to the start of "sub" (position 17,
+            // after "@comptest nested ").
+            expect(result.startIndex).toBe(17);
+            const subcommands = result.completions.find(
+                (g) => g.name === "Subcommands",
+            );
+            expect(subcommands).toBeDefined();
+            expect(subcommands!.completions).toContain("sub");
+        });
+
+        it("boolean flag '@comptest flagsonly --debug' backward does not back up (boolean consumed)", async () => {
+            const result = await getCommandCompletion(
+                "@comptest flagsonly --debug",
+                "backward",
+                context,
+            );
+            // "--debug" is a boolean flag — it has no pending value,
+            // so the backward flag-backtrack path (pendingFlag) is
+            // not triggered.  startIndex is at the end of the input.
+            expect(result.startIndex).toBe(27);
+        });
+
+        it("backs up to flag alternatives for non-boolean flag '@comptest flagsonly --level' backward", async () => {
+            const result = await getCommandCompletion(
+                "@comptest flagsonly --level",
+                "backward",
+                context,
+            );
+            // "--level" is a non-boolean flag (its value is pending).
+            // Backward backs up to the flag token start.
+            const flags = result.completions.find(
+                (g) => g.name === "Command Flags",
+            );
+            expect(flags).toBeDefined();
+            expect(flags!.completions).toContain("--debug");
+            expect(flags!.completions).toContain("--level");
+        });
+
+        it("forward on '@comptest run' offers parameter completions", async () => {
+            // Contrast with the backward test above: forward on a
+            // resolved subcommand without trailing space should still
+            // offer parameters (task completions from the agent).
+            const result = await getCommandCompletion(
+                "@comptest run",
+                "forward",
+                context,
+            );
+            // With forward, startIndex is at end of "run" (13) and
+            // parameter/agent completions are offered.
+            expect(result.startIndex).toBe(13);
+            // Forward still includes subcommand alternatives since
+            // the default subcommand was resolved.
+            expect(result.closedSet).toBe(false);
+        });
+
+        it("empty input backward does not backtrack", async () => {
+            // Empty input with backward shouldn't crash; normalizeCommand
+            // generates implicit tokens that are "normalizedCommitted".
+            const result = await getCommandCompletion("", "backward", context);
+            expect(result).toBeDefined();
+            expect(result.completions.length).toBeGreaterThan(0);
         });
     });
 });

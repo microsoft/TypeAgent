@@ -7,6 +7,7 @@ import {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
+    CompletionDirection,
     CompletionGroups,
     SeparatorMode,
 } from "../command.js";
@@ -61,6 +62,7 @@ export type CommandHandler = CommandDescriptor & {
         context: SessionContext<unknown>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
+        direction?: CompletionDirection,
     ): Promise<CompletionGroups>;
 };
 
@@ -188,10 +190,11 @@ export function getCommandInterface(
             params: ParsedCommandParams<ParameterDefinitions>,
             names: string[],
             context: SessionContext<unknown>,
+            direction?: CompletionDirection,
         ) => {
             const handler = getCommandHandler(handlers, commands);
             return (
-                handler.getCompletion?.(context, params, names) ?? {
+                handler.getCompletion?.(context, params, names, direction) ?? {
                     groups: [],
                 }
             );

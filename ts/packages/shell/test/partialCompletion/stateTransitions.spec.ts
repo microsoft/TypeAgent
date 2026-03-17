@@ -22,7 +22,10 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("play", getPos);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith("play");
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
+            "play",
+            "forward",
+        );
     });
 
     test("PENDING: second update while promise is in-flight does not re-fetch", () => {
@@ -85,7 +88,10 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("pla", getPos);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
-        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith("pla");
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "pla",
+            "forward",
+        );
     });
 
     test("ACTIVE → hide+keep: closedSet=true, trie has no matches — no re-fetch", async () => {
@@ -123,6 +129,7 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "play xyz",
+            "forward",
         );
     });
 
@@ -180,6 +187,7 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "stop",
+            "forward",
         );
     });
 
@@ -221,7 +229,10 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("", getPos);
         await Promise.resolve();
 
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith("");
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
+            "",
+            "forward",
+        );
         expect(menu.setChoices).toHaveBeenCalledWith(
             expect.arrayContaining([
                 expect.objectContaining({ selectedText: "@" }),
@@ -245,11 +256,10 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("empty input: unique match triggers re-fetch (commitMode=eager)", async () => {
+    test("empty input: unique match triggers re-fetch", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["@"], 0, {
             separatorMode: "none",
-            commitMode: "eager",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -261,17 +271,19 @@ describe("PartialCompletionSession — state transitions", () => {
 
         // "@" uniquely matches the only completion — triggers re-fetch
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
-        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith("@");
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "@",
+            "forward",
+        );
     });
 
-    test("empty input: unique match triggers re-fetch even when closedSet=true (commitMode=eager)", async () => {
+    test("empty input: unique match triggers re-fetch even when closedSet=true", async () => {
         const menu = makeMenu();
         // closedSet=true means exhaustive at THIS level, but uniquelySatisfied
         // means the user needs NEXT level completions — always re-fetch.
         const result = makeCompletionResult(["@"], 0, {
             closedSet: true,
             separatorMode: "none",
-            commitMode: "eager",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -282,7 +294,10 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("@", getPos);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
-        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith("@");
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "@",
+            "forward",
+        );
     });
 
     test("empty input: ambiguous prefix does not re-fetch", async () => {

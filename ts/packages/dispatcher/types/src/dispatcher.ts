@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    CommitMode,
+    CompletionDirection,
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
@@ -89,13 +89,6 @@ export type CommandCompletionResult = {
     // prefix-match any completion, the caller can skip refetching since
     // no other valid input exists.
     closedSet: boolean;
-    // Controls when a uniquely-satisfied completion triggers a re-fetch
-    // for the next hierarchical level.
-    //   "explicit" — user must type a delimiter to commit; suppresses
-    //                 eager re-fetch on unique match.
-    //   "eager"    — re-fetch immediately on unique satisfaction.
-    // When omitted, defaults to "explicit".
-    commitMode?: CommitMode;
 };
 
 export type AppAgentStatus = {
@@ -200,7 +193,10 @@ export interface Dispatcher {
     ): Promise<string[] | undefined>;
 
     // APIs to get command completion for intellisense like functionality.
-    getCommandCompletion(prefix: string): Promise<CommandCompletionResult>;
+    getCommandCompletion(
+        prefix: string,
+        direction: CompletionDirection,
+    ): Promise<CommandCompletionResult>;
 
     // Check if a request can be handled by cache without executing
     checkCache(request: string): Promise<CommandResult | undefined>;

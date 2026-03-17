@@ -778,4 +778,270 @@ describe("ConstructionCache.completion()", () => {
             });
         });
     });
+
+    describe("backward direction", () => {
+        describe("literal-only construction", () => {
+            it("backs up to last part start on exact match", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Backs up to last part start ("play" consumed 4
+                // chars; the space is a separator, not part of any
+                // match part).
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+
+            it("backs up to last part start for single-part construction", () => {
+                const c = Construction.create(
+                    [createMatchPart(["play"], "verb")],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Single part — backs up to 0 (the start of the only part).
+                expect(result!.completions).toContain("play");
+                expect(result!.matchedPrefixLength).toBe(0);
+            });
+
+            it("forward exact match still returns empty completions", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "forward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toEqual([]);
+                expect(result!.matchedPrefixLength).toBe(9);
+            });
+        });
+
+        describe("multi-alternative last part", () => {
+            it("offers all alternatives from last part on backward", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song", "track", "album"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions.sort()).toEqual([
+                    "album",
+                    "song",
+                    "track",
+                ]);
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+        });
+
+        describe("entity wildcard at end", () => {
+            it("backward on exact match offers property completions", () => {
+                const verbPart = createMatchPart(["play"], "verb");
+                const entityPart = createEntityPart("entity", "songName");
+                const c = Construction.create(
+                    [verbPart, entityPart],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play my song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Backward backs up to last part start and offers
+                // property completions for the entity wildcard.
+                expect(result!.properties).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("songName");
+                expect(result!.closedSet).toBe(false);
+            });
+
+            it("forward on exact match with wildcard returns empty", () => {
+                const verbPart = createMatchPart(["play"], "verb");
+                const entityPart = createEntityPart("entity", "songName");
+                const c = Construction.create(
+                    [verbPart, entityPart],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play my song",
+                    defaultOptions,
+                    "forward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toEqual([]);
+                expect(result!.matchedPrefixLength).toBe(12);
+            });
+        });
+
+        describe("wildcard in middle", () => {
+            it("backward on full match backs up to last wildcard part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createEntityPart("track", "trackName"),
+                        createMatchPart(["by"], "prep"),
+                        createEntityPart("artist", "artist"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play some song by john",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Last part is the artist entity — backward offers
+                // property completions for it.
+                expect(result!.properties).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("artist");
+                expect(result!.closedSet).toBe(false);
+            });
+        });
+
+        describe("partial match backs up to previous part", () => {
+            it("backward on 'play ' backs up to 'play'", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play ",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // "play" was the last matched part.  Backward backs
+                // up to offer "play" at position 0.
+                expect(result!.completions).toContain("play");
+                expect(result!.matchedPrefixLength).toBe(0);
+            });
+
+            it("forward on 'play ' offers next part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play ",
+                    defaultOptions,
+                    "forward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+        });
+
+        describe("partial match with three parts", () => {
+            it("backward on 'play song' (2 of 3 parts matched) backs up to 'song'", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                        createMatchPart(["now"], "adv"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+
+            it("forward on 'play song' (2 of 3 parts matched) offers 'now'", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                        createMatchPart(["now"], "adv"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "forward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("now");
+                expect(result!.matchedPrefixLength).toBe(9);
+            });
+        });
+
+        describe("trailing optional skipped", () => {
+            it("backward skips trailing optional and backs up to last real part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                        createMatchPart(["now"], "adv", { optional: true }),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                // "play song" matches parts 0 and 1; part 2 is
+                // optional and skipped (matchedStarts[2] = -1).
+                // Backward should skip the optional and back up to
+                // "song" (the last real match), not to -1.
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+        });
+    });
 });

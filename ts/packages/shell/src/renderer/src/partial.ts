@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { Dispatcher } from "agent-dispatcher";
+import { CompletionDirection } from "@typeagent/agent-sdk";
 import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 import {
@@ -52,6 +53,9 @@ export class PartialCompletion {
     private readonly searchMenu: SearchMenu;
     private readonly session: PartialCompletionSession;
     public closed: boolean = false;
+    // Track previous input to determine direction: shorter = backspace
+    // ("backward"), longer/same = forward action.
+    private previousInput: string = "";
 
     private readonly cleanupEventListeners: () => void;
     constructor(
@@ -111,8 +115,19 @@ export class PartialCompletion {
         const input = this.getCurrentInputForCompletion();
         debug(`Partial completion input: '${input}'`);
 
-        this.session.update(input, (prefix) =>
-            this.getSearchMenuPosition(prefix),
+        // Only use "backward" when the user is genuinely backspacing:
+        // the new input must be a strict prefix of the previous input.
+        const direction: CompletionDirection =
+            input.length < this.previousInput.length &&
+            this.previousInput.startsWith(input)
+                ? "backward"
+                : "forward";
+        this.previousInput = input;
+
+        this.session.update(
+            input,
+            (prefix) => this.getSearchMenuPosition(prefix),
+            direction,
         );
     }
 
@@ -308,8 +323,9 @@ export class PartialCompletion {
 
         debug(`Partial completion replaced: ${replaceText}`);
 
-        // Explicitly trigger a completion update.  The selectionchange event
-        // alone is unreliable after programmatic DOM manipulation.
+        // Clear previousInput so auto-detection picks "forward" for the
+        // post-selection update (the new input won't be a prefix of "").
+        this.previousInput = "";
         this.update(false);
     }
 

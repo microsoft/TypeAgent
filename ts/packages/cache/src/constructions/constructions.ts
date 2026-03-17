@@ -161,6 +161,7 @@ export class Construction {
                 implicitParameterCount: this.implicitParameterCount,
                 partialPartCount: matchedValues.partialPartCount,
                 partialMatchedCurrent: matchedValues.matchedCurrent,
+                matchedStarts: matchedValues.matchedStarts,
             },
         ];
     }

@@ -132,6 +132,7 @@ describe("PartialCompletionSession — @command routing", () => {
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
             "@config ",
+            "forward",
         );
     });
 
@@ -146,6 +147,7 @@ describe("PartialCompletionSession — @command routing", () => {
         // correct startIndex; no word-boundary truncation needed.
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
             "@config c",
+            "forward",
         );
     });
 
@@ -156,7 +158,10 @@ describe("PartialCompletionSession — @command routing", () => {
 
         session.update("@config", getPos);
 
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith("@config");
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
+            "@config",
+            "forward",
+        );
     });
 
     test("@ command in PENDING state does not re-fetch", () => {
@@ -250,6 +255,7 @@ describe("PartialCompletionSession — @command routing", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "@unknow",
+            "forward",
         );
     });
 });

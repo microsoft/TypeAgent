@@ -131,6 +131,7 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "playx",
+            "forward",
         );
     });
 
@@ -229,6 +230,7 @@ describe("PartialCompletionSession — separatorMode edge cases", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "play2",
+            "forward",
         );
     });
 
