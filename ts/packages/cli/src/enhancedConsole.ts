@@ -40,9 +40,17 @@ import {
     handleSlashCommand,
     getVerboseIndicator,
 } from "./slashCommands.js";
+import {
+    setSpinnerAccessor,
+    getDebugPanel,
+    PromptRenderer,
+} from "./debugInterceptor.js";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
+
+// Wire up the debug interceptor's spinner access
+setSpinnerAccessor(() => currentSpinner);
 
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
@@ -278,6 +286,8 @@ export function createEnhancedClientIO(
             if (appendMode === "inline") {
                 currentSpinner.appendStream(displayText);
             } else {
+                // Flush any inline stream content before writing block content
+                currentSpinner.flushStream();
                 currentSpinner.writeAbove(displayText);
             }
         } else if (rl) {
@@ -301,6 +311,9 @@ export function createEnhancedClientIO(
                 if (lastAppendMode === "inline") {
                     process.stdout.write("\n");
                 }
+                // Ensure content starts on a fresh line (cursor may be
+                // mid-line after a spinner was cleared without a newline)
+                process.stdout.write("\r\x1b[2K");
                 process.stdout.write(displayText);
                 process.stdout.write("\n");
             } else {
@@ -966,6 +979,15 @@ async function questionWithCompletion(
         // Initial render
         render();
 
+        // Register prompt renderer so debug panel can render above the input
+        const PROMPT_ROWS = 3; // input line + bottom rule + hint
+        const panel = getDebugPanel();
+        const promptRenderer: PromptRenderer = {
+            rows: () => PROMPT_ROWS,
+            redraw: () => render(),
+        };
+        panel?.setPromptRenderer(promptRenderer);
+
         // Handle keypresses
         const onData = async (chunk: Buffer) => {
             const data = chunk.toString();
@@ -1049,6 +1071,18 @@ async function questionWithCompletion(
                 stdout.write("\n\n\x1b[K\n");
                 cleanup();
                 process.exit(0);
+            } else if (code === 4) {
+                // Ctrl+D — dump debug buffer above the prompt
+                const dp = getDebugPanel();
+                if (dp && dp.lineCount > 0) {
+                    // Clear prompt lines, dump buffer, re-render prompt
+                    for (let i = 0; i < PROMPT_ROWS; i++) {
+                        stdout.write("\x1b[1A\x1b[2K");
+                    }
+                    dp.dumpBuffer();
+                    render();
+                }
+                return;
             } else if (code === 13) {
                 // Enter - accept completion (if any) AND submit
                 if (
@@ -1151,6 +1185,7 @@ async function questionWithCompletion(
         };
 
         const cleanup = () => {
+            panel?.setPromptRenderer(null);
             stdin.removeListener("data", onData);
             if (stdin.isTTY) {
                 stdin.setRawMode(wasRaw || false);
@@ -1281,6 +1316,12 @@ function startExecutionKeyListener(
         if (data.length === 1 && code === 0x1b && currentRequestId) {
             // Escape key — cancel current command
             dispatcher.cancelCommand(currentRequestId);
+        } else if (data.length === 1 && code === 4) {
+            // Ctrl+D — toggle debug panel expand/collapse
+            const panel = getDebugPanel();
+            if (panel && panel.lineCount > 0) {
+                panel.toggle();
+            }
         } else if (data.length === 1 && code === 3 && currentRequestId) {
             // Ctrl+C during raw mode — cancel or double-press exit
             const now = Date.now();
@@ -1409,11 +1450,16 @@ export async function processCommandsEnhanced<T>(
         }
 
         try {
+            // Reset debug panel for this command
+            const panel = getDebugPanel();
+            panel?.reset();
+
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
             // Show execution hint below spinner
+            const debugHint = panel ? " · ctrl+d debug" : "";
             const execHint = chalk.dim(
-                "  esc cancel · ctrl+c cancel (2× exit)",
+                `  esc cancel · ctrl+c cancel (2× exit)${debugHint}`,
             );
             process.stdout.write("\n" + execHint + "\x1b[K\x1b[1A\r");
 
@@ -1429,7 +1475,8 @@ export async function processCommandsEnhanced<T>(
                 isProcessing = false;
             }
 
-            // Clear execution hint line before stopping spinner
+            // Stop live panel rendering but keep the buffer for post-command review
+            panel?.stopRendering();
             process.stdout.write("\n\x1b[K\x1b[1A");
 
             // Wait for any pending choice prompt to complete
@@ -1442,13 +1489,18 @@ export async function processCommandsEnhanced<T>(
             if (result?.cancelled) {
                 stopSpinner("warn", "Cancelled");
             } else {
-                // Stop spinner on success (no-op if choice already cleared it)
                 stopSpinner("success", "Complete");
+            }
+
+            // Show static collapsed debug summary after spinner result
+            if (panel && panel.lineCount > 0) {
+                panel.renderStaticSummary();
             }
 
             history.push(request);
         } catch (error) {
             isProcessing = false;
+            getDebugPanel()?.stopRendering();
             stopSpinner("fail", "Error");
             console.log(chalk.red("### ERROR:"));
             console.log(error);
