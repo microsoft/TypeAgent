@@ -5,11 +5,10 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  hono: '>=4.12.8'
+  http-proxy-agent: '>=7.0.0'
   node-gyp: ^12.2.0
   serialize-javascript: '>=7.0.0'
-  http-proxy-agent: '>=7.0.0'
-  lodash-es: '>=4.17.22'
-  hono: '>=4.12.8'
 
 importers:
 
@@ -1090,13 +1089,13 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.12
-        version: 0.2.12(zod@3.25.76)
+        version: 0.2.12(zod@4.3.6)
       '@anthropic-ai/sdk':
         specifier: ^0.35.0
         version: 0.35.0(encoding@0.1.13)
       '@modelcontextprotocol/sdk':
         specifier: ^1.26.0
-        version: 1.26.0(zod@3.25.76)
+        version: 1.26.0(zod@4.3.6)
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -1129,10 +1128,10 @@ importers:
         version: 3.3.2
       openai:
         specifier: ^4.73.0
-        version: 4.103.0(encoding@0.1.13)(ws@8.19.0)(zod@3.25.76)
+        version: 4.103.0(encoding@0.1.13)(ws@8.19.0)(zod@4.3.6)
       zod:
-        specifier: ^3.25.0
-        version: 3.25.76
+        specifier: ^4.1.13
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^18.19.3
@@ -11235,6 +11234,9 @@ packages:
     resolution: {integrity: sha512-gvVijfZvn7R+2qyPX8mAuKcFGDf6Nc61GdvGafQsHL0sBIxfKzA+usWn4GFC/bk+QdwPUD4kWFJLhElipq+0VA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
+  lodash-es@4.17.21:
+    resolution: {integrity: sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw==}
+
   lodash-es@4.17.23:
     resolution: {integrity: sha512-kVI48u3PZr38HdYz98UmfPnXl2DXrpdctLrFLCd3kOx1xUkOmpFPx7gCWWM5MPkL/fD8zb+Ph0QzjGFs4+hHWg==}
 
@@ -14453,19 +14455,6 @@ snapshots:
 
   '@antfu/utils@8.1.1': {}
 
-  '@anthropic-ai/claude-agent-sdk@0.2.12(zod@3.25.76)':
-    dependencies:
-      zod: 3.25.76
-    optionalDependencies:
-      '@img/sharp-darwin-arm64': 0.33.5
-      '@img/sharp-darwin-x64': 0.33.5
-      '@img/sharp-linux-arm': 0.33.5
-      '@img/sharp-linux-arm64': 0.33.5
-      '@img/sharp-linux-x64': 0.33.5
-      '@img/sharp-linuxmusl-arm64': 0.33.5
-      '@img/sharp-linuxmusl-x64': 0.33.5
-      '@img/sharp-win32-x64': 0.33.5
-
   '@anthropic-ai/claude-agent-sdk@0.2.12(zod@4.1.13)':
     dependencies:
       zod: 4.1.13
@@ -15619,12 +15608,12 @@ snapshots:
     dependencies:
       '@chevrotain/gast': 11.0.3
       '@chevrotain/types': 11.0.3
-      lodash-es: 4.17.23
+      lodash-es: 4.17.21
 
   '@chevrotain/gast@11.0.3':
     dependencies:
       '@chevrotain/types': 11.0.3
-      lodash-es: 4.17.23
+      lodash-es: 4.17.21
 
   '@chevrotain/regexp-to-ast@11.0.3': {}
 
@@ -17356,28 +17345,6 @@ snapshots:
       '@milkdown/transformer': 7.13.1
       nanoid: 5.1.5
       tslib: 2.8.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@modelcontextprotocol/sdk@1.26.0(zod@3.25.76)':
-    dependencies:
-      '@hono/node-server': 1.19.11(hono@4.12.8)
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.6
-      express: 5.2.1
-      express-rate-limit: 8.3.1(express@5.2.1)
-      hono: 4.12.8
-      jose: 6.1.3
-      json-schema-typed: 8.0.2
-      pkce-challenge: 5.0.1
-      raw-body: 3.0.2
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
 
@@ -20000,7 +19967,7 @@ snapshots:
       '@chevrotain/regexp-to-ast': 11.0.3
       '@chevrotain/types': 11.0.3
       '@chevrotain/utils': 11.0.3
-      lodash-es: 4.17.23
+      lodash-es: 4.17.21
 
   chokidar@3.6.0:
     dependencies:
@@ -23627,6 +23594,8 @@ snapshots:
     dependencies:
       p-locate: 6.0.0
 
+  lodash-es@4.17.21: {}
+
   lodash-es@4.17.23: {}
 
   lodash.camelcase@4.3.0: {}
@@ -24602,7 +24571,7 @@ snapshots:
       is-inside-container: 1.0.0
       is-wsl: 3.1.0
 
-  openai@4.103.0(encoding@0.1.13)(ws@8.19.0)(zod@3.25.76):
+  openai@4.103.0(encoding@0.1.13)(ws@8.19.0)(zod@4.3.6):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.12
@@ -24613,7 +24582,7 @@ snapshots:
       node-fetch: 2.7.0(encoding@0.1.13)
     optionalDependencies:
       ws: 8.19.0
-      zod: 3.25.76
+      zod: 4.3.6
     transitivePeerDependencies:
       - encoding
 
@@ -27486,10 +27455,6 @@ snapshots:
   zod-to-json-schema@3.24.5(zod@4.1.13):
     dependencies:
       zod: 4.1.13
-
-  zod-to-json-schema@3.25.1(zod@3.25.76):
-    dependencies:
-      zod: 3.25.76
 
   zod-to-json-schema@3.25.1(zod@4.1.13):
     dependencies:

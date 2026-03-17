@@ -95,7 +95,6 @@
     "overrides": {
       "hono": ">=4.12.8",
       "http-proxy-agent": ">=7.0.0",
-      "lodash-es": ">=4.17.22",
       "node-gyp": "^12.2.0",
       "serialize-javascript": ">=7.0.0"
     },
@@ -105,7 +104,8 @@
   },
   "peerDependencyRules": {
     "ignoreMissing": [
-      "eslint"
+      "eslint",
+      "zod"
     ],
     "allowedVersions": {
       "zod": "*",
