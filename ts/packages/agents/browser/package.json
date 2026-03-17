@@ -147,6 +147,7 @@
       "build": {
         "dependsOn": [
           "^build",
+          "asc",
           "build:extension",
           "build:views",
           "tsc:agent",
