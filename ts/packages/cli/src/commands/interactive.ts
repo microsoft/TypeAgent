@@ -169,6 +169,16 @@ export default class Interactive extends Command {
             enableVerboseFromFlag(namespaces);
         }
 
+        // Install debug interceptor for enhanced UI so all stderr debug
+        // output (whether from /verbose, --verbose, or DEBUG env var)
+        // renders in the indented panel.
+        if (flags.testUI) {
+            const { installDebugInterceptor } = await import(
+                "../debugInterceptor.js"
+            );
+            installDebugInterceptor();
+        }
+
         // Choose between standard and enhanced UI
         const withClientIO = flags.testUI
             ? withEnhancedConsoleClientIO
