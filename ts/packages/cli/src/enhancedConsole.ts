@@ -1254,6 +1254,74 @@ function initializeEnhancedConsole(
 
 let usingEnhancedConsole = false;
 
+// ── Startup Banner ──────────────────────────────────────────────────────
+
+// Logo mark — hexagonal badge with floating "T" (4 lines tall, 12 chars wide)
+const LOGO_LINES = [
+    "  ╱▔▔▔▔▔╲   ",
+    " ╱ ▀▀█▀▀ ╲  ",
+    " ╲   █   ╱  ",
+    "  ╲▁▁▁▁▁╱   ",
+];
+const LOGO_WIDTH = 12;
+
+function renderStartupBanner(): void {
+    const width = process.stdout.columns || 80;
+    const innerWidth = width - 4; // "│  " + "  │"
+    const version = "0.0.1";
+
+    // Content lines to render alongside the logo
+    const contentLines = [
+        chalk.cyan.bold("TypeAgent") + chalk.dim(` v${version}`),
+        chalk.dim("Your personal AI assistant"),
+        "",
+        chalk.dim("Type a request or use /help to see commands."),
+    ];
+
+    const hintLine =
+        "  " +
+        chalk.dim("/help commands · /verbose debug · ctrl+d debug · ctrl+c exit");
+
+    // Build the box
+    const top = chalk.dim("╭" + "─".repeat(width - 2) + "╮");
+    const bottom = chalk.dim("╰" + "─".repeat(width - 2) + "╯");
+
+    const lines: string[] = [];
+    lines.push(top);
+
+    // Render logo + content side by side
+    const totalRows = Math.max(LOGO_LINES.length, contentLines.length);
+    for (let i = 0; i < totalRows; i++) {
+        const logo = i < LOGO_LINES.length ? LOGO_LINES[i] : " ".repeat(LOGO_WIDTH);
+        const coloredLogo = chalk.cyan(logo);
+        const content = i < contentLines.length ? contentLines[i] : "";
+        const contentVisible = content.replace(
+            // eslint-disable-next-line no-control-regex
+            /\x1b\[[0-9;]*m/g,
+            "",
+        );
+        const padding = Math.max(0, innerWidth - LOGO_WIDTH - contentVisible.length);
+        lines.push(
+            chalk.dim("│") +
+                "  " +
+                coloredLogo +
+                content +
+                " ".repeat(padding) +
+                chalk.dim("│"),
+        );
+    }
+
+    // Empty line before close
+    lines.push(chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│"));
+    lines.push(bottom);
+    lines.push(hintLine);
+    lines.push("");
+
+    for (const line of lines) {
+        process.stdout.write(line + "\n");
+    }
+}
+
 /**
  * Wrapper for using enhanced console ClientIO
  */
@@ -1273,15 +1341,8 @@ export async function withEnhancedConsoleClientIO(
         const dispatcherRef: { current?: Dispatcher } = {};
         initializeEnhancedConsole(rl, dispatcherRef);
 
-        // Show welcome header
-        const width = process.stdout.columns || 80;
-        console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
-        console.log(
-            chalk.bold(" TypeAgent Interactive Mode ") +
-                chalk.dim("(Enhanced UI)"),
-        );
-        console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
-        console.log("");
+        // Show welcome banner
+        renderStartupBanner();
         await callback(
             createEnhancedClientIO(rl, dispatcherRef),
             (d: Dispatcher) => {
