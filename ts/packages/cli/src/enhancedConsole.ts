@@ -1314,7 +1314,9 @@ function renderStartupBanner(): void {
 
     const hintLine =
         "  " +
-        chalk.dim("/help commands · /verbose debug · ctrl+d debug · ctrl+c exit");
+        chalk.dim(
+            "/help commands · /verbose debug · ctrl+d debug · ctrl+c exit",
+        );
 
     // Build the box
     const top = chalk.dim("╭" + "─".repeat(width - 2) + "╮");
@@ -1326,7 +1328,8 @@ function renderStartupBanner(): void {
     // Render logo + content side by side
     const totalRows = Math.max(LOGO_LINES.length, contentLines.length);
     for (let i = 0; i < totalRows; i++) {
-        const logo = i < LOGO_LINES.length ? LOGO_LINES[i] : " ".repeat(LOGO_WIDTH);
+        const logo =
+            i < LOGO_LINES.length ? LOGO_LINES[i] : " ".repeat(LOGO_WIDTH);
         const coloredLogo = chalk.cyan(logo);
         const content = i < contentLines.length ? contentLines[i] : "";
         const contentVisible = content.replace(
@@ -1334,7 +1337,10 @@ function renderStartupBanner(): void {
             /\x1b\[[0-9;]*m/g,
             "",
         );
-        const padding = Math.max(0, innerWidth - LOGO_WIDTH - contentVisible.length);
+        const padding = Math.max(
+            0,
+            innerWidth - LOGO_WIDTH - contentVisible.length,
+        );
         lines.push(
             chalk.dim("│") +
                 "  " +
