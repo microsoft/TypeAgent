@@ -106,8 +106,8 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             expect(result!.completions).toContain("song");
             // The matcher consumes "play" (4 chars); the trailing space
-            // is a separator and not part of any match part.
-            expect(result!.matchedPrefixLength).toBe(4);
+            // is consumed as a trailing separator → matchedPrefixLength=5.
+            expect(result!.matchedPrefixLength).toBe(5);
         });
 
         it("returns matchedPrefixLength for partial single-part match", () => {
@@ -207,10 +207,9 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
-            // The matcher consumes "play" (4 chars). The character at
-            // position 3 is 'y' (Latin) and "song" starts with 's' (Latin).
-            // Both are word-boundary scripts → spacePunctuation.
-            expect(result!.separatorMode).toBe("spacePunctuation");
+            // The matcher consumes "play" (4 chars). Trailing space
+            // is consumed, so separatorMode is demoted to "optional".
+            expect(result!.separatorMode).toBe("optional");
         });
 
         it("returns spacePunctuation between adjacent word characters", () => {
@@ -451,14 +450,14 @@ describe("ConstructionCache.completion()", () => {
             expect(result!.closedSet).toBe(true);
         });
 
-        it("prefix 'play ' — trailing space ignored, still offers second part", () => {
+        it("prefix 'play ' — trailing space consumed, still offers second part", () => {
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
             expect(result!.completions).toEqual(["song"]);
-            // matchedPrefixLength stays at 4 (the space is a separator,
-            // not consumed by any part)
-            expect(result!.matchedPrefixLength).toBe(4);
-            expect(result!.separatorMode).toBe("spacePunctuation");
+            // Trailing space consumed → matchedPrefixLength advances to 5,
+            // separatorMode demoted to "optional".
+            expect(result!.matchedPrefixLength).toBe(5);
+            expect(result!.separatorMode).toBe("optional");
         });
 
         it("prefix 'play s' — partial intra-part on second part, returns completions", () => {
@@ -935,7 +934,28 @@ describe("ConstructionCache.completion()", () => {
         });
 
         describe("partial match backs up to previous part", () => {
-            it("backward on 'play ' backs up to 'play'", () => {
+            it("backward on 'play' (no trailing space) backs up to 'play'", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // No trailing space — backward backs up to offer
+                // "play" at position 0.
+                expect(result!.completions).toContain("play");
+                expect(result!.matchedPrefixLength).toBe(0);
+            });
+
+            it("trailing space commits — backward on 'play ' offers next part (same as forward)", () => {
                 const c = Construction.create(
                     [
                         createMatchPart(["play"], "verb"),
@@ -950,10 +970,10 @@ describe("ConstructionCache.completion()", () => {
                     "backward",
                 );
                 expect(result).toBeDefined();
-                // "play" was the last matched part.  Backward backs
-                // up to offer "play" at position 0.
-                expect(result!.completions).toContain("play");
-                expect(result!.matchedPrefixLength).toBe(0);
+                // Trailing space is a commit signal — direction no
+                // longer matters.  Should offer "song" same as forward.
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(5);
             });
 
             it("forward on 'play ' offers next part", () => {
@@ -972,7 +992,7 @@ describe("ConstructionCache.completion()", () => {
                 );
                 expect(result).toBeDefined();
                 expect(result!.completions).toContain("song");
-                expect(result!.matchedPrefixLength).toBe(4);
+                expect(result!.matchedPrefixLength).toBe(5);
             });
         });
 
@@ -1041,6 +1061,91 @@ describe("ConstructionCache.completion()", () => {
                 expect(result).toBeDefined();
                 expect(result!.completions).toContain("song");
                 expect(result!.matchedPrefixLength).toBe(4);
+            });
+        });
+
+        describe("trailing separator commits token", () => {
+            // The cache uses /[\s\p{P}]$/u to detect trailing
+            // separators — both whitespace and punctuation commit.
+
+            it("trailing punctuation commits — backward on 'play,' offers next part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play,",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Trailing comma is a separator — commits "play".
+                // Should offer "song" same as forward.
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(5);
+            });
+
+            it("trailing period commits — backward on 'play.' offers next part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play.",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(5);
+            });
+
+            it("no trailing separator — backward on 'play' backs up", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("play");
+                expect(result!.matchedPrefixLength).toBe(0);
+            });
+
+            it("mid-input trailing separator — backward on 'play song,' offers next part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                        createMatchPart(["now"], "adv"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song,",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Trailing comma after second word commits "song".
+                expect(result!.completions).toContain("now");
+                expect(result!.matchedPrefixLength).toBe(10);
             });
         });
     });

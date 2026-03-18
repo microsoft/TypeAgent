@@ -238,11 +238,20 @@ type MatchState = {
           }
         | undefined;
 
-    // Completion support: start index and part reference for the last
-    // matched string part.  Used by backward completion to back up to
-    // the last literal word.
-    lastStringPartInfo?:
-        | { readonly start: number; readonly part: StringPart }
+    // Completion support: tracks the last matched non-wildcard part
+    // (string or number).  Used by backward completion to back up to
+    // the most recently matched item.
+    lastMatchedPartInfo?:
+        | {
+              readonly type: "string";
+              readonly start: number;
+              readonly part: StringPart;
+          }
+        | {
+              readonly type: "number";
+              readonly start: number;
+              readonly valueId: number;
+          }
         | undefined;
 };
 
@@ -566,6 +575,24 @@ function nextNonSeparatorIndex(request: string, index: number) {
     return match === null ? index : index + match[0].length;
 }
 
+// When `index` is followed only by separator characters (whitespace /
+// punctuation) until end-of-string, return `text.length` so that the
+// trailing separators are included in the consumed prefix.  Otherwise
+// return `index` unchanged.
+//
+// This makes completion trailing-space-sensitive: "play music " reports
+// matchedPrefixLength=11 (including the space) instead of 10.  The
+// dispatcher no longer strips trailing whitespace, so the grammar must
+// include it when the user has already typed it.
+function consumeTrailingSeparators(text: string, index: number): number {
+    if (index >= text.length) {
+        return index;
+    }
+    return nextNonSeparatorIndex(text, index) >= text.length
+        ? text.length
+        : index;
+}
+
 // Finalize the state to capture the last wildcard if any
 // and make sure to reject any trailing un-matched non-separator characters.
 function finalizeState(state: MatchState, request: string) {
@@ -738,7 +765,11 @@ function matchStringPartWithWildcard(
         }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex, pending)) {
-            state.lastStringPartInfo = { start: wildcardEnd, part };
+            state.lastMatchedPartInfo = {
+                type: "string",
+                start: wildcardEnd,
+                part,
+            };
             debugMatch(
                 state,
                 `Matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
@@ -784,7 +815,7 @@ function matchStringPartWithoutWildcard(
         // default string part value
         addValue(state, undefined, part.value.join(" "));
     }
-    state.lastStringPartInfo = { start: curr, part };
+    state.lastMatchedPartInfo = { type: "string", start: curr, part };
     state.index = newIndex;
     return true;
 }
@@ -882,7 +913,15 @@ function matchVarNumberPartWithWildcard(
                 `Matched number at ${wildcardEnd} to ${newIndex}`,
             );
 
-            addValue(state, part.variable, n);
+            const valueId = addValueId(state, part.variable);
+            if (valueId !== undefined) {
+                addValueWithId(state, valueId, n, false);
+                state.lastMatchedPartInfo = {
+                    type: "number",
+                    start: wildcardEnd,
+                    valueId,
+                };
+            }
             return true;
         }
         debugMatch(
@@ -926,7 +965,15 @@ function matchVarNumberPartWithoutWildcard(
 
     debugMatch(state, `Matched number to ${newIndex}`);
 
-    addValue(state, part.variable, n);
+    const valueId = addValueId(state, part.variable);
+    if (valueId !== undefined) {
+        addValueWithId(state, valueId, n, false);
+        state.lastMatchedPartInfo = {
+            type: "number",
+            start: curr,
+            valueId,
+        };
+    }
     state.index = newIndex;
     return true;
 }
@@ -1227,19 +1274,24 @@ function tryPartialStringMatch(
         matchedWords++;
     }
 
-    if (direction === "backward") {
-        // Back up to the last matched word.  If no words matched
-        // there is nothing to back up to.
-        if (matchedWords === 0) {
-            return undefined;
-        }
+    if (
+        direction === "backward" &&
+        matchedWords > 0 &&
+        // Back up only when no trailing separator commits the
+        // last matched word.  In "none" mode there are no
+        // separators.  Otherwise, if separator characters exist
+        // beyond the match (nextNonSeparatorIndex > index), the
+        // separator commits the word — fall through to forward.
+        (spacingMode === "none" ||
+            nextNonSeparatorIndex(prefix, index) === index)
+    ) {
         return {
             consumedLength: prevIndex,
             remainingText: words[matchedWords - 1],
         };
     }
-
-    // Forward (default): offer the next unmatched word.
+    // Forward (default), or backward with no words fully matched
+    // (nothing to reconsider — e.g. input "pl" still offers "play").
     // Return undefined when all words matched (exact match).
     if (matchedWords >= words.length) {
         return undefined;
@@ -1311,7 +1363,9 @@ export function matchGrammarCompletion(
     minPrefixLength?: number,
     direction?: "forward" | "backward",
 ): GrammarCompletionResult {
-    debugCompletion(`Start completion for prefix: "${prefix}"`);
+    debugCompletion(
+        `Start completion for prefix ${direction ?? "forward"}: "${prefix}"`,
+    );
 
     // Seed the work-list with one MatchState per top-level grammar rule.
     // matchState may push additional states (for nested rules, optional
@@ -1353,6 +1407,123 @@ export function matchGrammarCompletion(
         }
     }
 
+    // Helper: emit a wildcard/entity property completion at a given
+    // prefix position.  Updates maxPrefixLength, separatorMode, and
+    // closedSet.
+    function emitPropertyCompletion(
+        state: MatchState,
+        valueId: number,
+        prefixPosition: number,
+    ): void {
+        const completionProperty = getGrammarCompletionProperty(state, valueId);
+        if (completionProperty === undefined) return;
+        updateMaxPrefixLength(prefixPosition);
+        if (prefixPosition !== maxPrefixLength) return;
+        properties.push(completionProperty);
+        closedSet = false;
+        let candidateNeedsSep = false;
+        if (prefixPosition > 0 && state.spacingMode !== "none") {
+            candidateNeedsSep = requiresSeparator(
+                prefix[prefixPosition - 1],
+                "a",
+                state.spacingMode,
+            );
+        }
+        separatorMode = mergeSeparatorMode(
+            separatorMode,
+            candidateNeedsSep,
+            state.spacingMode,
+        );
+    }
+
+    // Helper: emit a literal string completion at a given prefix
+    // position.  Updates maxPrefixLength and separatorMode.
+    function emitStringCompletion(
+        state: MatchState,
+        candidatePrefixLength: number,
+        completionText: string,
+    ): void {
+        updateMaxPrefixLength(candidatePrefixLength);
+        if (candidatePrefixLength !== maxPrefixLength) return;
+        let candidateNeedsSep = false;
+        if (
+            candidatePrefixLength > 0 &&
+            completionText.length > 0 &&
+            state.spacingMode !== "none"
+        ) {
+            candidateNeedsSep = requiresSeparator(
+                prefix[candidatePrefixLength - 1],
+                completionText[0],
+                state.spacingMode,
+            );
+        }
+        completions.push(completionText);
+        separatorMode = mergeSeparatorMode(
+            separatorMode,
+            candidateNeedsSep,
+            state.spacingMode,
+        );
+    }
+
+    // Helper: backward completion — back up to the last matched item
+    // (wildcard, literal word, or number).  If a wildcard was captured
+    // after the last matched part, prefer it; otherwise back up to
+    // the last matched part via tryPartialStringMatch (for strings)
+    // or emitPropertyCompletion (for numbers).
+    function emitBackwardCompletion(
+        state: MatchState,
+        savedWildcard: typeof savedPendingWildcard,
+    ): boolean {
+        const wildcardStart = savedWildcard?.start;
+        const partStart = state.lastMatchedPartInfo?.start;
+        if (
+            savedWildcard !== undefined &&
+            savedWildcard.valueId !== undefined &&
+            (partStart === undefined ||
+                (wildcardStart !== undefined && wildcardStart >= partStart))
+        ) {
+            emitPropertyCompletion(
+                state,
+                savedWildcard.valueId,
+                savedWildcard.start,
+            );
+            return true;
+        } else if (state.lastMatchedPartInfo !== undefined) {
+            const info = state.lastMatchedPartInfo;
+            if (info.type === "string") {
+                const backResult = tryPartialStringMatch(
+                    info.part,
+                    prefix,
+                    info.start,
+                    state.spacingMode,
+                    "backward",
+                );
+                if (backResult !== undefined) {
+                    emitStringCompletion(
+                        state,
+                        backResult.consumedLength,
+                        backResult.remainingText,
+                    );
+                } else {
+                    updateMaxPrefixLength(state.index);
+                }
+            } else {
+                // Number part — offer property completion for the
+                // number slot so the user can re-enter a value.
+                emitPropertyCompletion(state, info.valueId, info.start);
+            }
+            return true;
+        }
+        // Nothing to back up to — caller should fall through to
+        // forward behavior.
+        return false;
+    }
+
+    // Keep savedPendingWildcard type available for the helper above.
+    let savedPendingWildcard:
+        | { readonly start: number; readonly valueId: number | undefined }
+        | undefined;
+
     // --- Main loop: process every pending state ---
     while (pending.length > 0) {
         const state = pending.pop()!;
@@ -1368,7 +1539,7 @@ export function matchGrammarCompletion(
 
         // Save the pending wildcard before finalizeState clears it.
         // Needed for backward completion of wildcards at the end of a rule.
-        const savedPendingWildcard = state.pendingWildcard;
+        savedPendingWildcard = state.pendingWildcard;
 
         // finalizeState does two things:
         //   1. If a wildcard is pending at the end, attempt to capture
@@ -1381,104 +1552,13 @@ export function matchGrammarCompletion(
             // --- Category 1: Exact match ---
             // All parts matched AND prefix was fully consumed.
             if (matched) {
-                if (direction === "backward") {
-                    // The user is backing up — offer alternatives for
-                    // the last wildcard instead of advancing.  Use
-                    // savedPendingWildcard only — it is set when the
-                    // wildcard is at the very end (resolved by
-                    // finalizeState).  When the wildcard was resolved
-                    // mid-match (a subsequent literal matched), the
-                    // last literal is the more recent part and
-                    // lastStringPartInfo handles it below.
-                    const wildcard = savedPendingWildcard;
-                    if (
-                        wildcard !== undefined &&
-                        wildcard.valueId !== undefined
-                    ) {
-                        debugCompletion(
-                            "Backward exact match: offering wildcard alternatives.",
-                        );
-                        const completionProperty = getGrammarCompletionProperty(
-                            state,
-                            wildcard.valueId,
-                        );
-                        if (completionProperty !== undefined) {
-                            updateMaxPrefixLength(wildcard.start);
-                            if (wildcard.start === maxPrefixLength) {
-                                properties.push(completionProperty);
-                                closedSet = false;
-                                // Determine separator mode for the
-                                // property/entity slot (same logic
-                                // as Category 3a).
-                                let candidateNeedsSep = false;
-                                if (
-                                    wildcard.start > 0 &&
-                                    state.spacingMode !== "none"
-                                ) {
-                                    candidateNeedsSep = requiresSeparator(
-                                        prefix[wildcard.start - 1],
-                                        "a",
-                                        state.spacingMode,
-                                    );
-                                }
-                                separatorMode = mergeSeparatorMode(
-                                    separatorMode,
-                                    candidateNeedsSep,
-                                    state.spacingMode,
-                                );
-                            }
-                        }
-                    } else if (state.lastStringPartInfo !== undefined) {
-                        // No wildcard — back up to the last matched
-                        // literal word so the user can reconsider it.
-                        const { start, part: lastPart } =
-                            state.lastStringPartInfo;
-                        const backResult = tryPartialStringMatch(
-                            lastPart,
-                            prefix,
-                            start,
-                            state.spacingMode,
-                            "backward",
-                        );
-                        if (backResult !== undefined) {
-                            debugCompletion(
-                                `Backward exact match: offering last literal word "${backResult.remainingText}".`,
-                            );
-                            updateMaxPrefixLength(backResult.consumedLength);
-                            if (backResult.consumedLength === maxPrefixLength) {
-                                completions.push(backResult.remainingText);
-                                let candidateNeedsSep = false;
-                                if (
-                                    backResult.consumedLength > 0 &&
-                                    backResult.remainingText.length > 0 &&
-                                    state.spacingMode !== "none"
-                                ) {
-                                    candidateNeedsSep = requiresSeparator(
-                                        prefix[backResult.consumedLength - 1],
-                                        backResult.remainingText[0],
-                                        state.spacingMode,
-                                    );
-                                }
-                                separatorMode = mergeSeparatorMode(
-                                    separatorMode,
-                                    candidateNeedsSep,
-                                    state.spacingMode,
-                                );
-                            }
-                        } else {
-                            updateMaxPrefixLength(state.index);
-                        }
-                    } else {
-                        // No wildcard and no string parts — shouldn't
-                        // normally happen but advance maxPrefixLength
-                        // so shorter candidates are discarded.
-                        updateMaxPrefixLength(state.index);
-                    }
+                if (
+                    direction === "backward" &&
+                    state.index >= prefix.length &&
+                    emitBackwardCompletion(state, savedPendingWildcard)
+                ) {
+                    // Backward emitted a completion — done with this state.
                 } else {
-                    // Forward (default): nothing to complete after a
-                    // full match.  Record how far we got so that
-                    // completion candidates from shorter partial
-                    // matches are eagerly discarded.
                     debugCompletion("Matched. Nothing to complete.");
                     updateMaxPrefixLength(state.index);
                 }
@@ -1493,53 +1573,15 @@ export function matchGrammarCompletion(
 
             if (
                 direction === "backward" &&
-                state.lastStringPartInfo !== undefined
+                state.index >= prefix.length &&
+                emitBackwardCompletion(state, savedPendingWildcard)
             ) {
-                // Backward: back up to the last matched literal word
-                // instead of offering the next unmatched part.
-                const { start, part: lastPart } = state.lastStringPartInfo;
-                const backResult = tryPartialStringMatch(
-                    lastPart,
-                    prefix,
-                    start,
-                    state.spacingMode,
-                    "backward",
-                );
-                if (backResult !== undefined) {
-                    const candidatePrefixLength = backResult.consumedLength;
-                    const completionText = backResult.remainingText;
-                    updateMaxPrefixLength(candidatePrefixLength);
-                    if (candidatePrefixLength === maxPrefixLength) {
-                        debugCompletion(
-                            `Backward Category 2: offering "${completionText}" (consumed ${candidatePrefixLength} chars)`,
-                        );
-                        let candidateNeedsSep = false;
-                        if (
-                            candidatePrefixLength > 0 &&
-                            completionText.length > 0 &&
-                            state.spacingMode !== "none"
-                        ) {
-                            candidateNeedsSep = requiresSeparator(
-                                prefix[candidatePrefixLength - 1],
-                                completionText[0],
-                                state.spacingMode,
-                            );
-                        }
-                        completions.push(completionText);
-                        separatorMode = mergeSeparatorMode(
-                            separatorMode,
-                            candidateNeedsSep,
-                            state.spacingMode,
-                        );
-                    }
-                }
+                // Backward emitted a completion — done with this state.
             } else {
                 debugCompletion(
                     `Completing ${nextPart.type} part ${state.name}`,
                 );
                 if (nextPart.type === "string") {
-                    // Use tryPartialStringMatch for one-word-at-a-time
-                    // progression through string parts.
                     const partial = tryPartialStringMatch(
                         nextPart,
                         prefix,
@@ -1547,39 +1589,11 @@ export function matchGrammarCompletion(
                         state.spacingMode,
                     );
                     if (partial !== undefined) {
-                        const candidatePrefixLength = partial.consumedLength;
-                        const completionText = partial.remainingText;
-                        updateMaxPrefixLength(candidatePrefixLength);
-                        if (candidatePrefixLength === maxPrefixLength) {
-                            debugCompletion(
-                                `Adding completion text: "${completionText}" (consumed ${candidatePrefixLength} chars, spacing=${state.spacingMode ?? "auto"})`,
-                            );
-
-                            // Determine whether a separator (e.g. space) is needed
-                            // between the content at matchedPrefixLength and the
-                            // completion text.  Check the boundary between the last
-                            // consumed character and the first character of the
-                            // completion.
-                            let candidateNeedsSep = false;
-                            if (
-                                candidatePrefixLength > 0 &&
-                                completionText.length > 0 &&
-                                state.spacingMode !== "none"
-                            ) {
-                                candidateNeedsSep = requiresSeparator(
-                                    prefix[candidatePrefixLength - 1],
-                                    completionText[0],
-                                    state.spacingMode,
-                                );
-                            }
-
-                            completions.push(completionText);
-                            separatorMode = mergeSeparatorMode(
-                                separatorMode,
-                                candidateNeedsSep,
-                                state.spacingMode,
-                            );
-                        }
+                        emitStringCompletion(
+                            state,
+                            partial.consumedLength,
+                            partial.remainingText,
+                        );
                     }
                 }
             }
@@ -1607,47 +1621,11 @@ export function matchGrammarCompletion(
                 // property completion describing the wildcard's type so
                 // the caller can provide entity-specific suggestions.
                 debugCompletion("Completing wildcard part");
-                const completionProperty = getGrammarCompletionProperty(
+                emitPropertyCompletion(
                     state,
                     pendingWildcard.valueId,
+                    pendingWildcard.start,
                 );
-                if (completionProperty !== undefined) {
-                    const candidatePrefixLength = pendingWildcard.start;
-                    updateMaxPrefixLength(candidatePrefixLength);
-                    if (candidatePrefixLength === maxPrefixLength) {
-                        debugCompletion(
-                            `Adding completion property: ${JSON.stringify(completionProperty)}`,
-                        );
-                        // Determine whether a separator is needed between
-                        // the content at matchedPrefixLength and the
-                        // completion (the wildcard entity value).  Check
-                        // the boundary between the last consumed character
-                        // before the wildcard and the first character of the
-                        // entity value.  We use "a" as a representative word
-                        // character since the actual value is unknown.
-                        let candidateNeedsSep = false;
-                        if (
-                            pendingWildcard.start > 0 &&
-                            state.spacingMode !== "none"
-                        ) {
-                            candidateNeedsSep = requiresSeparator(
-                                prefix[pendingWildcard.start - 1],
-                                "a",
-                                state.spacingMode,
-                            );
-                        }
-
-                        properties.push(completionProperty);
-                        separatorMode = mergeSeparatorMode(
-                            separatorMode,
-                            candidateNeedsSep,
-                            state.spacingMode,
-                        );
-                        // Property/wildcard completions are not a closed
-                        // set — entity values are external to the grammar.
-                        closedSet = false;
-                    }
-                }
             } else if (!matched) {
                 // --- Category 3b: Completion after consumed prefix ---
                 // The grammar stopped at a string part it could not
@@ -1664,14 +1642,6 @@ export function matchGrammarCompletion(
                     currentPart !== undefined &&
                     currentPart.type === "string"
                 ) {
-                    // For multi-word string parts (e.g. ["play", "shuffle"]),
-                    // the all-at-once regex may have failed even though some
-                    // leading words DO match the prefix.  Try word-by-word
-                    // to recover the partial match and offer only the next
-                    // unmatched word as the completion (one word at a time).
-                    //
-                    // For backward direction, offer the last matched word
-                    // instead of the next unmatched word.
                     const partial = tryPartialStringMatch(
                         currentPart,
                         prefix,
@@ -1679,45 +1649,30 @@ export function matchGrammarCompletion(
                         state.spacingMode,
                         direction,
                     );
-                    if (partial === undefined) {
-                        continue;
-                    }
-                    const candidatePrefixLength = partial.consumedLength;
-                    const completionText = partial.remainingText;
-
-                    updateMaxPrefixLength(candidatePrefixLength);
-                    if (candidatePrefixLength === maxPrefixLength) {
-                        debugCompletion(
-                            `Adding completion: "${completionText}" (consumed ${candidatePrefixLength} chars)`,
-                        );
-
-                        // Determine whether a separator is needed between
-                        // the matched prefix and the completion text.  Check
-                        // the boundary between the last consumed character
-                        // and the first character of the completion.
-                        let candidateNeedsSep = false;
-                        if (
-                            candidatePrefixLength > 0 &&
-                            completionText.length > 0 &&
-                            state.spacingMode !== "none"
-                        ) {
-                            candidateNeedsSep = requiresSeparator(
-                                prefix[candidatePrefixLength - 1],
-                                completionText[0],
-                                state.spacingMode,
-                            );
-                        }
-
-                        completions.push(completionText);
-                        separatorMode = mergeSeparatorMode(
-                            separatorMode,
-                            candidateNeedsSep,
-                            state.spacingMode,
+                    if (partial !== undefined) {
+                        emitStringCompletion(
+                            state,
+                            partial.consumedLength,
+                            partial.remainingText,
                         );
                     }
                 }
             }
         }
+    }
+
+    // Advance past trailing separators so the reported prefix length
+    // includes any trailing whitespace the user typed.  This makes
+    // completion trailing-space-sensitive: "play music " reports
+    // matchedPrefixLength=11 (with the space) rather than 10.
+    //
+    // When advancing, demote separatorMode to "optional" — the
+    // trailing space is already consumed, so no additional separator
+    // is required between the anchor and the completion text.
+    const advanced = consumeTrailingSeparators(prefix, maxPrefixLength);
+    if (advanced > maxPrefixLength) {
+        maxPrefixLength = advanced;
+        separatorMode = "optional";
     }
 
     const result: GrammarCompletionResult = {

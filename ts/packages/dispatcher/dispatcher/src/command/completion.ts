@@ -74,27 +74,13 @@ function detectPendingFlag(
     };
 }
 
-// Rewind index past any trailing whitespace in `text` so it sits
-// at the end of the preceding token.  Returns `index` unchanged
-// when the character before it is already non-whitespace.
-//
-// Every production site for startIndex — resolveCommand consumed
-// length, parseParams remainder, and the lastCompletableParam
-// adjustment — calls this function so that startIndex always lands
-// on a token boundary, never on separator whitespace.  Consumers
-// treat input[startIndex..] as a "rawPrefix" that starts with a
-// separator (per separatorMode, defaulting to "space") and strip
-// the leading separator before trie filtering.
-//
-// The grammar-reported matchedPrefixLength override is added to
-// tokenStartIndex (before the separator space), not to the result
-// of this function — the grammar reports how many characters of the
-// token *content* it consumed, which is relative to the token start.
-function tokenBoundary(text: string, index: number): number {
-    while (index > 0 && /\s/.test(text[index - 1])) {
-        index--;
-    }
-    return index;
+// True when text[0..index) ends with whitespace — i.e., the user
+// has typed a trailing space after the last token.  This serves as
+// a commit signal: the token before the space is committed and the
+// space itself is consumed, so startIndex should include it and
+// separatorMode should be "optional" (no additional separator needed).
+function hasTrailingSpace(text: string, index: number): boolean {
+    return index > 0 && /\s/.test(text[index - 1]);
 }
 
 // True if surrounded by quotes at both ends (matching single or double quotes).
@@ -188,11 +174,8 @@ type ParameterCompletionResult = CommandCompletionResult;
 //   completionNames  — parameter/flag names to ask the agent about.
 //   startIndex       — index into `input` where the completion region
 //                       begins (before any grammar matchedPrefixLength
-//                       override).
-//   tokenStartIndex  — raw position of the last token's first character,
-//                       used by the caller to apply matchedPrefixLength
-//                       arithmetic.  Equal to startIndex when no token is
-//                       being edited (next-param / remainder modes).
+//                       override).  Also used by the caller to apply
+//                       matchedPrefixLength arithmetic.
 //   isPartialValue   — true when the user is mid-edit on a free-form
 //                       parameter value (string arg or string flag value).
 //                       When true and no agent is invoked, closedSet is
@@ -203,13 +186,17 @@ type ParameterCompletionResult = CommandCompletionResult;
 //                       completions via collectFlags.
 //   booleanFlagName  — when non-undefined, the caller should add
 //                       ["true","false"] completions for this flag.
+//   separatorMode    — when set, the caller should use this as the
+//                       base separator mode (before merging with
+//                       agent-reported modes).  "optional" when
+//                       trailing whitespace was consumed by startIndex.
 type CompletionTarget = {
     completionNames: string[];
     startIndex: number;
-    tokenStartIndex: number;
     isPartialValue: boolean;
     includeFlags: boolean;
     booleanFlagName: string | undefined;
+    separatorMode: SeparatorMode | undefined;
 };
 
 function resolveCompletionTarget(
@@ -227,14 +214,15 @@ function resolveCompletionTarget(
     // Parsing stopped partway.  Offer what can follow the longest
     // valid prefix.
     if (params.remainderLength > 0) {
-        const startIndex = tokenBoundary(input, remainderIndex);
         return {
             completionNames: [...params.nextArgs],
-            startIndex,
-            tokenStartIndex: startIndex,
+            startIndex: remainderIndex,
             isPartialValue: false,
             includeFlags: true,
             booleanFlagName,
+            separatorMode: hasTrailingSpace(input, remainderIndex)
+                ? "optional"
+                : undefined,
         };
     }
 
@@ -257,15 +245,16 @@ function resolveCompletionTarget(
                 pendingFlag,
             )
         ) {
-            const tokenStartIndex = remainderIndex - valueToken.length;
-            const startIndex = tokenBoundary(input, tokenStartIndex);
+            const startIndex = remainderIndex - valueToken.length;
             return {
                 completionNames: [lastCompletableParam],
                 startIndex,
-                tokenStartIndex,
                 isPartialValue: true,
                 includeFlags: false,
                 booleanFlagName: undefined,
+                separatorMode: hasTrailingSpace(input, startIndex)
+                    ? "optional"
+                    : undefined,
             };
         }
     }
@@ -276,40 +265,54 @@ function resolveCompletionTarget(
     // "--debug").  Back up to the flag token's start and offer flag
     // names.  isPartialValue is false: flag names are an enumerable
     // set.
-    if (pendingFlag !== undefined && direction === "backward") {
+    //
+    // Trailing space commits the flag — direction no longer matters.
+    // When the user typed "--level " (with space), they've moved on;
+    // fall through to 3b for value completions regardless of direction.
+    const trailingSpace = hasTrailingSpace(input, remainderIndex);
+    if (
+        pendingFlag !== undefined &&
+        direction === "backward" &&
+        !trailingSpace
+    ) {
         const flagToken = tokens[tokens.length - 1];
         const flagTokenStart = remainderIndex - flagToken.length;
-        const startIndex = tokenBoundary(input, flagTokenStart);
         return {
             completionNames: [],
-            startIndex,
-            tokenStartIndex: startIndex,
+            startIndex: flagTokenStart,
             isPartialValue: false,
             includeFlags: true,
             booleanFlagName,
+            separatorMode: hasTrailingSpace(input, flagTokenStart)
+                ? "optional"
+                : undefined,
         };
     }
 
     // ── Spec case 3b: last token committed, complete next ───────
-    const startIndex = tokenBoundary(input, remainderIndex);
-    if (pendingFlag !== undefined && direction === "forward") {
-        // Flag awaiting a value and the user moved forward.
+    // startIndex is the raw position — includes any trailing
+    // whitespace that the user typed.  When trailing whitespace is
+    // present, separatorMode becomes "optional" because the space
+    // is already consumed.
+    if (pendingFlag !== undefined) {
+        // Flag awaiting a value — either the user moved forward or
+        // trailing space committed the flag (direction doesn't matter).
         return {
             completionNames: [pendingFlag],
-            startIndex,
-            tokenStartIndex: startIndex,
+            startIndex: remainderIndex,
             isPartialValue: false,
             includeFlags: false,
             booleanFlagName: undefined,
+            separatorMode: trailingSpace ? "optional" : undefined,
         };
     }
     return {
         completionNames: [...params.nextArgs],
-        startIndex,
-        tokenStartIndex: startIndex,
+        startIndex: remainderIndex,
         isPartialValue: false,
         includeFlags: true,
         booleanFlagName,
+        separatorMode: trailingSpace ? "optional" : undefined,
     };
 }
 
@@ -344,8 +347,10 @@ function resolveCompletionTarget(
 //
 //    b. Otherwise — the last token is complete (direction="forward",
 //       fully quoted, or trailing whitespace).  Return startIndex
-//       at the *end* of the last token (excluding trailing space)
-//       and offer completions for the next parameters.
+//       at the *end* of the consumed input (including any trailing
+//       space) and offer completions for the next parameters.  When
+//       trailing whitespace is present, separatorMode is "optional"
+//       because the space is already consumed.
 //
 // ── Exceptions to case 3a ────────────────────────────────────────────────
 //
@@ -425,7 +430,7 @@ async function getCommandParameterCompletion(
     // full list of names to complete.
     let agentInvoked = false;
     let agentClosedSet: boolean | undefined;
-    let separatorMode: SeparatorMode | undefined;
+    let separatorMode: SeparatorMode | undefined = target.separatorMode;
 
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion && target.completionNames.length > 0) {
@@ -444,31 +449,24 @@ async function getCommandParameterCompletion(
 
         // Allow grammar-reported matchedPrefixLength to override
         // the parse-derived startIndex.  This handles CJK and other
-        // non-space-delimited scripts where the grammar matcher is        // the authoritative source for how far into the input it
+        // non-space-delimited scripts where the grammar matcher is
+        // the authoritative source for how far into the input it
         // consumed.  matchedPrefixLength is relative to the token
-        // content start, so add it to tokenStartIndex.
-        //
-        // IMPORTANT: Do NOT apply tokenBoundary() or any whitespace
-        // normalization to groupPrefixLength.  The agent owns the
-        // boundary.  Grammars with escaped literal spaces (e.g.
-        // `hello\ ` where the space is part of the token) will
-        // include that whitespace in matchedPrefixLength, yielding
-        // a startIndex that already sits past a separator.  When
-        // paired with separatorMode="spacePunctuation", this means
-        // the grammar requires a *second* separator — the shell's
-        // A3 separator check handles this correctly.
+        // content start, so add it to target.startIndex.
 
         const groupPrefixLength = agentResult.matchedPrefixLength;
         if (groupPrefixLength !== undefined && groupPrefixLength !== 0) {
-            startIndex = target.tokenStartIndex + groupPrefixLength;
+            startIndex = target.startIndex + groupPrefixLength;
             completions.length = 0; // grammar overrides built-in completions
+            // The agent advanced the prefix — it is authoritative for
+            // the separator at this position.
+            separatorMode = agentResult.separatorMode;
         }
         completions.push(...agentResult.groups);
-        separatorMode = agentResult.separatorMode;
         agentInvoked = true;
         agentClosedSet = agentResult.closedSet;
         debug(
-            `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}, tokenStartIndex=${target.tokenStartIndex}`,
+            `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}`,
         );
     }
 
@@ -625,7 +623,7 @@ export async function getCommandCompletion(
     context: CommandHandlerContext,
 ): Promise<CommandCompletionResult> {
     try {
-        debug(`Command completion start: '${input}'`);
+        debug(`Command completion start ${direction}: '${input}'`);
 
         // Always send the full input so the backend sees all typed text.
         const partialCommand = normalizeCommand(input, context);
@@ -642,11 +640,20 @@ export async function getCommandCompletion(
         debug(
             `Command completion command consumed length: ${commandConsumedLength}, suffix: '${result.suffix}'`,
         );
-        let startIndex = tokenBoundary(input, commandConsumedLength);
+        let startIndex = commandConsumedLength;
 
         // Collect completions and track separatorMode across all sources.
+        // When trailing whitespace was consumed *and* nothing follows
+        // (suffix is empty), separatorMode starts at "optional" — the
+        // space is already part of the anchor so no additional separator
+        // is needed.  When a suffix exists (e.g. "--off"), the space
+        // before it is structural, not trailing.
         const completions: CompletionGroup[] = [];
-        let separatorMode: SeparatorMode | undefined;
+        let separatorMode: SeparatorMode | undefined =
+            result.suffix.length === 0 &&
+            hasTrailingSpace(input, commandConsumedLength)
+                ? "optional"
+                : undefined;
         let closedSet = true;
 
         const descriptor = result.descriptor;
@@ -674,8 +681,7 @@ export async function getCommandCompletion(
 
         if (uncommittedCommand) {
             const lastCmd = result.commands[result.commands.length - 1];
-            startIndex =
-                tokenBoundary(input, commandConsumedLength) - lastCmd.length;
+            startIndex = commandConsumedLength - lastCmd.length;
             completions.push({
                 name: "Subcommands",
                 completions: Object.keys(table!.commands),

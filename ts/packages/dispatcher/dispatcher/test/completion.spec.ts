@@ -503,9 +503,8 @@ describe("Command Completion - startIndex", () => {
             // "@comptest run " → suffix is "" after command resolution,
             // "run" is explicitly matched so no Subcommands group.
             // parameter parsing has no tokens so
-            // startIndex = inputLength - 0 = 14, then unconditional
-            // whitespace backing rewinds over trailing space → 13.
-            expect(result!.startIndex).toBe(13);
+            // startIndex = inputLength - 0 = 14 (includes trailing space).
+            expect(result!.startIndex).toBe(14);
             // Agent getCompletion is invoked for the "task" arg →
             // completions are not exhaustive.
             expect(result!.closedSet).toBe(false);
@@ -523,8 +522,8 @@ describe("Command Completion - startIndex", () => {
             // suffix is "bu", parameter parsing fully consumes "bu".
             // lastCompletableParam="task", bare unquoted token,
             // no trailing space → exclusive path fires: backs up
-            // startIndex to the start of "bu" → 13.
-            expect(result!.startIndex).toBe(13);
+            // startIndex to the start of "bu" → 14.
+            expect(result!.startIndex).toBe(14);
             // Agent IS invoked ("task" in agentCommandCompletions).
             // Agent does not set closedSet → defaults to false.
             expect(result!.closedSet).toBe(false);
@@ -539,9 +538,9 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // "@comptest nested sub " (21 chars)
             // suffix is "" after command resolution;
-            // parameter parsing has no tokens; startIndex = 21 - 0 = 21,
-            // then unconditional whitespace backing → 20.
-            expect(result!.startIndex).toBe(20);
+            // parameter parsing has no tokens; startIndex = 21 - 0 = 21
+            // (includes trailing space).
+            expect(result!.startIndex).toBe(21);
             // Unfilled "value" arg (free-form) → not exhaustive.
             expect(result!.closedSet).toBe(false);
         });
@@ -555,9 +554,8 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // "@comptest nested sub --ver" (26 chars)
             // suffix is "--ver", parameter parsing sees token "--ver" (5 chars)
-            // startIndex = 26 - 5 = 21, then unconditional whitespace
-            // backing rewinds over the space before "--ver" → 20.
-            expect(result!.startIndex).toBe(20);
+            // startIndex = 26 - 5 = 21.
+            expect(result!.startIndex).toBe(21);
             // Unfilled "value" arg → not exhaustive.
             expect(result!.closedSet).toBe(false);
         });
@@ -589,9 +587,9 @@ describe("Command Completion - startIndex", () => {
             const result = await getCommandCompletion("  ", "forward", context);
             expect(result).toBeDefined();
             // "  " normalizes to a command prefix with no suffix;
-            // startIndex = input.length - suffix.length = 2, then
-            // unconditional whitespace backing rewinds to 0.
-            expect(result!.startIndex).toBe(0);
+            // startIndex = input.length - suffix.length = 2.
+            // Trailing whitespace is preserved (no tokenBoundary rewind).
+            expect(result!.startIndex).toBe(2);
         });
     });
 
@@ -673,10 +671,10 @@ describe("Command Completion - startIndex", () => {
             );
             // "@comptest run build " (20 chars)
             // suffix is "build ", token "build" is fully consumed,
-            // remainderLength = 0 → startIndex = 20, then unconditional
-            // whitespace backing rewinds over trailing space → 19.
+            // remainderLength = 0 → startIndex = 20 (includes
+            // trailing space, no rewind).
             expect(result).toBeDefined();
-            expect(result!.startIndex).toBe(19);
+            expect(result!.startIndex).toBe(20);
             // All positional args filled ("task" consumed "build"),
             // no flags, agent not invoked (agentCommandCompletions
             // is empty) → exhaustive.
@@ -693,9 +691,9 @@ describe("Command Completion - startIndex", () => {
             // "@comptest run hello --unknown" (29 chars)
             // suffix is "hello --unknown", "hello" fills the "task" arg,
             // "--unknown" is not a defined flag → remainderLength = 9.
-            // startIndex = 29 - 9 = 20, then unconditional whitespace
-            // backing rewinds over the space → 19.
-            expect(result!.startIndex).toBe(19);
+            // startIndex = 29 - 9 = 20 (includes trailing space
+            // between "hello" and "--unknown").
+            expect(result!.startIndex).toBe(20);
         });
 
         it("startIndex backs over multiple spaces before unconsumed remainder", async () => {
@@ -708,9 +706,8 @@ describe("Command Completion - startIndex", () => {
             // "@comptest run hello   --unknown" (31 chars)
             // suffix is "hello   --unknown", "hello" fills "task",
             // "--unknown" unconsumed → remainderLength = 9.
-            // startIndex = 31 - 9 = 22, then unconditional whitespace
-            // backing rewinds over three spaces → 19.
-            expect(result!.startIndex).toBe(19);
+            // startIndex = 31 - 9 = 22 (includes trailing spaces).
+            expect(result!.startIndex).toBe(22);
         });
     });
 
@@ -724,11 +721,10 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // "run" is the default subcommand, so subcommand alternatives
             // are included and the group has separatorMode: "space".
+            // Subcommand completions at the boundary retain "space".
             expect(result!.separatorMode).toBe("space");
-            // startIndex excludes trailing whitespace (matching grammar
-            // matcher behaviour where matchedPrefixLength doesn't include the
-            // separator).
-            expect(result!.startIndex).toBe(9);
+            // startIndex includes trailing whitespace.
+            expect(result!.startIndex).toBe(10);
         });
 
         it("returns separatorMode for resolved agent without trailing space", async () => {
@@ -771,8 +767,9 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // Partial parameter token — only parameter completions returned,
-            // no subcommand group, so separatorMode is not set.
-            expect(result!.separatorMode).toBeUndefined();
+            // no subcommand group.  separatorMode set to "optional"
+            // due to trailing space advancement.
+            expect(result!.separatorMode).toBe("optional");
         });
 
         it("returns no separatorMode for partial unmatched token consumed as param", async () => {
@@ -783,16 +780,16 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "ne" is fully consumed as the "task" arg by parameter
-            // parsing.  No trailing space → backs up to the start
-            // of "ne" → parameterCompletions.startIndex = 9.  Since
-            // startIndex (9) ≤ commandConsumedLength (10), sibling
-            // subcommands are included with separatorMode="space".
+            // parsing.  No trailing space.  startIndex = 10
+            // (after "@comptest "), which is ≤ commandConsumedLength
+            // (10), so sibling subcommands are included with
+            // separatorMode="space".
             expect(result!.separatorMode).toBe("space");
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
             );
             expect(subcommands).toBeDefined();
-            expect(result!.startIndex).toBe(9);
+            expect(result!.startIndex).toBe(10);
         });
     });
 
@@ -931,9 +928,9 @@ describe("Command Completion - startIndex", () => {
             );
             // "--level" is a recognized number flag.  With
             // direction="backward" (user reconsidering), offer flag
-            // names at tokenBoundary before "--level" (position 19,
-            // end of "flagsonly") instead of flag values.
-            expect(result.startIndex).toBe(19);
+            // names at the start of "--level" (position 20,
+            // after space) instead of flag values.
+            expect(result.startIndex).toBe(20);
             const flags = result.completions.find(
                 (g) => g.name === "Command Flags",
             );
@@ -951,9 +948,9 @@ describe("Command Completion - startIndex", () => {
             // "--lev" doesn't resolve (exact match only), so parseParams
             // leaves it unconsumed.  startIndex points to where "--lev"
             // starts — it is the filter text.
-            // "@comptest flagsonly " = 20 chars consumed, then
-            // unconditional whitespace backing → 19.
-            expect(result.startIndex).toBe(19);
+            // "@comptest flagsonly " = 20 chars consumed, remainderLength=5,
+            // startIndex = 25 - 5 = 20.
+            expect(result.startIndex).toBe(20);
             const flags = result.completions.find(
                 (g) => g.name === "Command Flags",
             );
@@ -989,9 +986,8 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             // "@flattest --rel" (15 chars)
-            // startIndex = 15 - 5 ("--rel") = 10, then unconditional
-            // whitespace backing rewinds over space → 9.
-            expect(result.startIndex).toBe(9);
+            // startIndex = 15 - 5 ("--rel") = 10 (after space).
+            expect(result.startIndex).toBe(10);
             expect(result.closedSet).toBe(false);
         });
 
@@ -1029,15 +1025,15 @@ describe("Command Completion - startIndex", () => {
             // "@comptest build " (16 chars)
             // Resolves to default "run" (not explicit match).
             // "build" fills the "task" arg, trailing space present.
-            // remainderLength = 0 → startIndex = 16, then unconditional
-            // whitespace backing → 15, past the command boundary (10).
+            // remainderLength = 0 → startIndex = 16 (includes
+            // trailing space).
             // Subcommand names are no longer relevant at this
             // position; only parameter completions remain.
             const subcommands = result.completions.find(
                 (g) => g.name === "Subcommands",
             );
             expect(subcommands).toBeUndefined();
-            expect(result.startIndex).toBe(15);
+            expect(result.startIndex).toBe(16);
             // All positional args filled, no flags → exhaustive.
             expect(result.closedSet).toBe(true);
         });
@@ -1088,9 +1084,9 @@ describe("Command Completion - startIndex", () => {
             // suffix is '"bu', parseParams consumes the open-quoted
             // token through EOF → remainderLength = 0.
             // lastCompletableParam = "task", quoted = false (open quote).
-            // Exclusive path: startIndex = 17 - 3 = 14, then unconditional
-            // whitespace backing rewinds over the space before '"bu' → 13.
-            expect(result.startIndex).toBe(13);
+            // Exclusive path: tokenStartIndex = 17 - 3 = 14.
+            // startIndex = 14 (no rewind).
+            expect(result.startIndex).toBe(14);
             // Agent was invoked → not exhaustive.
             expect(result.closedSet).toBe(false);
             // Flag groups and nextArgs completions should be cleared.
@@ -1110,10 +1106,10 @@ describe("Command Completion - startIndex", () => {
             // suffix is '"partial', parseParams consumes open quote
             // through EOF → remainderLength = 0.
             // lastCompletableParam = "first", quoted = false.
-            // Exclusive path: startIndex = 25 - 8 = 17, then unconditional
-            // whitespace backing rewinds over the space → 16.
+            // Exclusive path: tokenStartIndex = 25 - 8 = 17.
+            // startIndex = 17 (no rewind).
             // "second" from nextArgs should NOT be in agentCommandCompletions.
-            expect(result.startIndex).toBe(16);
+            expect(result.startIndex).toBe(17);
             expect(result.closedSet).toBe(false);
         });
 
@@ -1127,9 +1123,9 @@ describe("Command Completion - startIndex", () => {
             // suffix is "hello world", implicitQuotes consumes rest
             // of line → remainderLength = 0, token = "hello world".
             // lastCompletableParam = "query", lastParamImplicitQuotes = true.
-            // Exclusive path: startIndex = 28 - 11 = 17, then unconditional
-            // whitespace backing rewinds over the space → 16.
-            expect(result.startIndex).toBe(16);
+            // Exclusive path: tokenStartIndex = 28 - 11 = 17.
+            // startIndex = 17 (no rewind).
+            expect(result.startIndex).toBe(17);
             expect(result.closedSet).toBe(false);
         });
 
@@ -1156,9 +1152,9 @@ describe("Command Completion - startIndex", () => {
             );
             // "bu" is not quoted → isFullyQuoted returns undefined.
             // No trailing space → lastCompletableParam exclusive path
-            // fires: backs up startIndex to the start of "bu" → 13.
+            // fires: backs up startIndex to the start of "bu" → 14.
             // Agent IS invoked for "task" completions.
-            expect(result.startIndex).toBe(13);
+            expect(result.startIndex).toBe(14);
             expect(result.closedSet).toBe(false);
         });
     });
@@ -1270,8 +1266,8 @@ describe("Command Completion - startIndex", () => {
             // Agent called, mock sees empty token list → returns
             // completions ["東京"] with no matchedPrefixLength.
             // groupPrefixLength path does not fire.
-            // startIndex = tokenBoundary(input, 18) = 17.
-            expect(result.startIndex).toBe(17);
+            // startIndex = 18 (includes trailing space).
+            expect(result.startIndex).toBe(18);
             expect(result.closedSet).toBe(false);
             const grammar = result.completions.find(
                 (g) => g.name === "Grammar",
@@ -1303,7 +1299,7 @@ describe("Command Completion - startIndex", () => {
                 "forward",
                 context,
             );
-            expect(result.startIndex).toBe(13);
+            expect(result.startIndex).toBe(14);
         });
 
         it("English prefix with space separator", async () => {
@@ -1363,8 +1359,8 @@ describe("Command Completion - startIndex", () => {
             // branch → completions: ["Tokyo ", "東京"],
             // matchedPrefixLength: 0, separatorMode: "space".
             // groupPrefixLength = 0 → condition false → skip.
-            // startIndex = tokenBoundary(input, 20) = 19.
-            expect(result.startIndex).toBe(19);
+            // startIndex = 20 (includes trailing space).
+            expect(result.startIndex).toBe(20);
             const grammar = result.completions.find(
                 (g) => g.name === "Grammar",
             );
@@ -1375,13 +1371,11 @@ describe("Command Completion - startIndex", () => {
         });
     });
 
-    describe("Bug 1: fallback startIndex uses tokenBoundary", () => {
+    describe("Bug 1: fallback startIndex", () => {
         // When the agent has no getCommandCompletion, the fallback
-        // back-up path handles no-trailing-space.  It must apply
-        // tokenBoundary() so startIndex lands at the end of the
-        // preceding token (before separator whitespace), matching
-        // the convention every other code path follows.
-        it("startIndex at tokenBoundary for '@comptest nested sub val' (no agent getCommandCompletion)", async () => {
+        // path handles no-trailing-space.  startIndex lands at the
+        // raw token start position.
+        it("startIndex for '@comptest nested sub val' (no agent getCommandCompletion)", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub val",
                 "forward",
@@ -1392,14 +1386,13 @@ describe("Command Completion - startIndex", () => {
             //   17-19: sub  20: sp  21-23: val
             // "nested sub" has no getCommandCompletion, so the
             // exclusive path inside `if (agent.getCommandCompletion)`
-            // is skipped.  The fallback back-up fires because
+            // is skipped.  The fallback fires because
             // no trailing space, remainderLength=0, tokens=["val"].
-            // It should apply tokenBoundary to land at 20 (end of
-            // "sub"), not 21 (raw token start of "val").
-            expect(result.startIndex).toBe(20);
+            // It should land at 21 (raw token start of "val").
+            expect(result.startIndex).toBe(21);
         });
 
-        it("startIndex at tokenBoundary for '@comptest nested sub --verbose val' (no agent getCommandCompletion)", async () => {
+        it("startIndex for '@comptest nested sub --verbose val' (no agent getCommandCompletion)", async () => {
             const result = await getCommandCompletion(
                 "@comptest nested sub --verbose val",
                 "forward",
@@ -1411,9 +1404,8 @@ describe("Command Completion - startIndex", () => {
             //   31-33: val
             // --verbose is parsed as boolean flag (defaults true),
             // then "val" fills the "value" arg.  No trailing space.
-            // Fallback should land at tokenBoundary before "val" → 30
-            // (end of "--verbose"), not 31.
-            expect(result.startIndex).toBe(30);
+            // startIndex at raw token start of "val" → 31.
+            expect(result.startIndex).toBe(31);
         });
     });
 
@@ -1454,11 +1446,10 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             // "@numstrtest numstr 42 " (22 chars)
-            // Trailing space → direction="forward", fallback never
-            // fires.  startIndex = tokenBoundary(input, 22) = 21
-            // (rewinds over trailing space to end of "42").
+            // Trailing space → startIndex = 22 (includes trailing
+            // space).
             // Agent invoked for "name" completions.
-            expect(result.startIndex).toBe(21);
+            expect(result.startIndex).toBe(22);
             const names = result.completions.find((g) => g.name === "Names");
             expect(names).toBeDefined();
             expect(names!.completions).toContain("alice");
@@ -1476,9 +1467,9 @@ describe("Command Completion - startIndex", () => {
             // suffix = "42 al", parseParams: 42 → count, "al" → name.
             // lastCompletableParam = "name" (string), no trailing space.
             // Exclusive path fires (bare token, no trailing space):
-            //   backs up to before "al" → tokenBoundary(input, 22) = 21.
+            //   tokenStartIndex = before "al" → 22.
             // Agent invoked for "name".
-            expect(result.startIndex).toBe(21);
+            expect(result.startIndex).toBe(22);
             const names = result.completions.find((g) => g.name === "Names");
             expect(names).toBeDefined();
             expect(names!.completions).toContain("alice");
@@ -1519,9 +1510,9 @@ describe("Command Completion - startIndex", () => {
                 "backward",
                 context,
             );
-            // startIndex should be at the parameter boundary (13,
-            // end of "run"), not backed up to subcommand level.
-            expect(result.startIndex).toBe(13);
+            // startIndex should be at the parameter boundary (14,
+            // after trailing space), not backed up to subcommand level.
+            expect(result.startIndex).toBe(14);
             const subcommands = result.completions.find(
                 (g) => g.name === "Subcommands",
             );
@@ -1571,6 +1562,24 @@ describe("Command Completion - startIndex", () => {
             expect(flags).toBeDefined();
             expect(flags!.completions).toContain("--debug");
             expect(flags!.completions).toContain("--level");
+        });
+
+        it("trailing space commits flag — '@comptest flagsonly --level ' backward offers value completions", async () => {
+            const result = await getCommandCompletion(
+                "@comptest flagsonly --level ",
+                "backward",
+                context,
+            );
+            // Trailing space is a commit signal.  Even though
+            // direction is "backward", the flag is committed and
+            // value completions should be offered (same as forward).
+            // Should NOT back up to flag alternatives.
+            const flags = result.completions.find(
+                (g) => g.name === "Command Flags",
+            );
+            expect(flags).toBeUndefined();
+            // startIndex includes the trailing space.
+            expect(result.startIndex).toBe(28);
         });
 
         it("forward on '@comptest run' offers parameter completions", async () => {

@@ -383,7 +383,12 @@ export class ConstructionCache {
         const namespaceKeys = options?.namespaceKeys;
         debugCompletion(`Request completion namespace keys`, namespaceKeys);
 
-        const backward = direction === "backward";
+        // Trailing separator (whitespace or punctuation) is a commit
+        // signal: the token before it is committed and direction no
+        // longer matters.  Neutralize backward so the matcher doesn't
+        // back up.
+        const backward =
+            direction === "backward" && !/[\s\p{P}]$/u.test(requestPrefix);
         const results = this.match(requestPrefix, options, true, backward);
 
         debugCompletion(
@@ -542,6 +547,18 @@ export class ConstructionCache {
                         closedSet = false;
                     }
                 }
+            }
+        }
+
+        // Advance past trailing separators so that the reported prefix
+        // length includes any trailing whitespace the user typed.
+        // When advancing, demote separatorMode to "optional" — the
+        // trailing space is already consumed.
+        if (maxPrefixLength < requestPrefix.length) {
+            const trailing = requestPrefix.substring(maxPrefixLength);
+            if (/^[\s\p{P}]+$/u.test(trailing)) {
+                maxPrefixLength = requestPrefix.length;
+                separatorMode = "optional";
             }
         }
 
