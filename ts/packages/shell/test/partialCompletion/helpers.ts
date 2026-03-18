@@ -64,6 +64,7 @@ export function makeDispatcher(
         completions: [],
         separatorMode: undefined,
         closedSet: true,
+        directionSensitive: false,
     },
 ): MockDispatcher {
     return {
@@ -86,6 +87,7 @@ export function makeCompletionResult(
         startIndex,
         completions: [group],
         closedSet: false,
+        directionSensitive: false,
         ...opts,
     };
 }

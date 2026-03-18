@@ -75,6 +75,10 @@ export class PartialCompletionSession {
     // Saved as-is from the last completion result.
     private separatorMode: SeparatorMode = "space";
     private closedSet: boolean = false;
+    // True when completions differ between forward and backward.
+    private directionSensitive: boolean = false;
+    // Direction used for the last fetch.
+    private lastDirection: CompletionDirection = "forward";
 
     // The in-flight completion request, or undefined when settled.
     private completionP: Promise<CommandCompletionResult> | undefined;
@@ -94,7 +98,7 @@ export class PartialCompletionSession {
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
         direction: CompletionDirection = "forward",
     ): void {
-        if (this.reuseSession(input, getPosition)) {
+        if (this.reuseSession(input, getPosition, direction)) {
             return;
         }
 
@@ -182,9 +186,16 @@ export class PartialCompletionSession {
     //   6. Open set, no matches — trie has zero matches for the typed prefix
     //                         AND closedSet is false. The backend may know about
     //                         completions not yet loaded.
+    //   7. Direction changed — the user switched between forward and backward
+    //                         AND the last result was direction-sensitive
+    //                         AND the input is at the exact anchor (no text
+    //                         typed past it).  Once the user types past the
+    //                         anchor, the direction-sensitive boundary has been
+    //                         passed and the loaded completions are still valid.
     private reuseSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection = "forward",
     ): boolean {
         // [A1] No session — IDLE state, must fetch.
         if (this.anchor === undefined) {
@@ -200,6 +211,30 @@ export class PartialCompletionSession {
 
         // ACTIVE from here.
         const { anchor, separatorMode: sepMode, closedSet } = this;
+
+        // [A7] Direction changed on a direction-sensitive result.
+        // The loaded completions were computed for the opposite direction
+        // and would differ — but only at the anchor boundary itself.
+        // Once the user has typed past the anchor (rawPrefix is
+        // non-empty), the direction-sensitive point has been passed:
+        // the trailing text acts as a commit signal, and backward is
+        // neutralized by the content after the anchor.  The loaded
+        // completions are still valid for trie filtering.
+        //
+        // If input is shorter than anchor, A2 (anchor diverged) will
+        // catch it.  If input is longer but the separator isn't
+        // satisfied, A3 will catch it.  So this check only needs to
+        // handle the exact-anchor case.
+        if (
+            direction !== this.lastDirection &&
+            this.directionSensitive &&
+            input === anchor
+        ) {
+            debug(
+                `Partial completion re-fetch: direction changed (${this.lastDirection} → ${direction}), directionSensitive`,
+            );
+            return false;
+        }
 
         // [A2] RE-FETCH — input moved past the anchor (e.g. backspace, new word).
         if (!input.startsWith(anchor)) {
@@ -346,6 +381,8 @@ export class PartialCompletionSession {
 
                 this.separatorMode = result.separatorMode ?? "space";
                 this.closedSet = result.closedSet;
+                this.directionSensitive = result.directionSensitive;
+                this.lastDirection = direction;
 
                 const completions = toMenuItems(result.completions);
 

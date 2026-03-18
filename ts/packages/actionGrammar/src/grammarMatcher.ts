@@ -1169,6 +1169,10 @@ export type GrammarCompletionResult = {
     // past unrecognized input and find more completions (e.g.
     // wildcard/entity slots whose values are external to the grammar).
     closedSet?: boolean | undefined;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.
+    directionSensitive: boolean;
 };
 
 function getGrammarCompletionProperty(
@@ -1247,7 +1251,13 @@ function tryPartialStringMatch(
     startIndex: number,
     spacingMode: CompiledSpacingMode,
     direction?: "forward" | "backward",
-): { consumedLength: number; remainingText: string } | undefined {
+):
+    | {
+          consumedLength: number;
+          remainingText: string;
+          directionSensitive: boolean;
+      }
+    | undefined {
     const words = part.value;
     let index = startIndex;
     let matchedWords = 0;
@@ -1274,20 +1284,18 @@ function tryPartialStringMatch(
         matchedWords++;
     }
 
-    if (
-        direction === "backward" &&
+    // Direction matters when at least one word fully matched and no
+    // trailing separator commits the last matched word.
+    const couldBackUp =
         matchedWords > 0 &&
-        // Back up only when no trailing separator commits the
-        // last matched word.  In "none" mode there are no
-        // separators.  Otherwise, if separator characters exist
-        // beyond the match (nextNonSeparatorIndex > index), the
-        // separator commits the word — fall through to forward.
         (spacingMode === "none" ||
-            nextNonSeparatorIndex(prefix, index) === index)
-    ) {
+            nextNonSeparatorIndex(prefix, index) === index);
+
+    if (direction === "backward" && couldBackUp) {
         return {
             consumedLength: prevIndex,
             remainingText: words[matchedWords - 1],
+            directionSensitive: true,
         };
     }
     // Forward (default), or backward with no words fully matched
@@ -1300,6 +1308,7 @@ function tryPartialStringMatch(
     return {
         consumedLength: index,
         remainingText: words[matchedWords],
+        directionSensitive: couldBackUp,
     };
 }
 
@@ -1394,6 +1403,10 @@ export function matchGrammarCompletion(
     // whitespace (which breaks for CJK and other non-space scripts).
     let maxPrefixLength = minPrefixLength ?? 0;
 
+    // Whether direction influenced the accumulated results.  Reset
+    // whenever maxPrefixLength advances (old candidates discarded).
+    let directionSensitive = false;
+
     // Helper: update maxPrefixLength.  When it increases, all previously
     // accumulated completions from shorter matches are irrelevant
     // — clear them.
@@ -1404,6 +1417,7 @@ export function matchGrammarCompletion(
             properties.length = 0;
             separatorMode = undefined;
             closedSet = true;
+            directionSensitive = false;
         }
     }
 
@@ -1549,18 +1563,29 @@ export function matchGrammarCompletion(
         // It returns true when the state is "clean" — all input was
         // consumed (or only trailing separators remain).
         if (finalizeState(state, prefix)) {
+            // Would backward produce different results than forward?
+            // True when the prefix was fully consumed and there is a
+            // matched part (string/number) or wildcard to back up to.
+            const canBackward =
+                state.index >= prefix.length &&
+                (savedPendingWildcard?.valueId !== undefined ||
+                    state.lastMatchedPartInfo !== undefined);
+
             // --- Category 1: Exact match ---
             // All parts matched AND prefix was fully consumed.
             if (matched) {
                 if (
                     direction === "backward" &&
-                    state.index >= prefix.length &&
+                    canBackward &&
                     emitBackwardCompletion(state, savedPendingWildcard)
                 ) {
                     // Backward emitted a completion — done with this state.
                 } else {
                     debugCompletion("Matched. Nothing to complete.");
                     updateMaxPrefixLength(state.index);
+                }
+                if (canBackward) {
+                    directionSensitive = true;
                 }
                 continue;
             }
@@ -1573,7 +1598,7 @@ export function matchGrammarCompletion(
 
             if (
                 direction === "backward" &&
-                state.index >= prefix.length &&
+                canBackward &&
                 emitBackwardCompletion(state, savedPendingWildcard)
             ) {
                 // Backward emitted a completion — done with this state.
@@ -1596,6 +1621,9 @@ export function matchGrammarCompletion(
                         );
                     }
                 }
+            }
+            if (canBackward) {
+                directionSensitive = true;
             }
             // Note: non-string next parts (wildcard, number, rules) in
             // Category 2 don't produce completions here — wildcards are
@@ -1655,6 +1683,9 @@ export function matchGrammarCompletion(
                             partial.consumedLength,
                             partial.remainingText,
                         );
+                        if (partial.directionSensitive) {
+                            directionSensitive = true;
+                        }
                     }
                 }
             }
@@ -1681,6 +1712,7 @@ export function matchGrammarCompletion(
         matchedPrefixLength: maxPrefixLength,
         separatorMode,
         closedSet,
+        directionSensitive,
     };
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
     return result;

@@ -175,6 +175,105 @@ describe("PartialCompletionSession — direction-based completion", () => {
             "forward",
         );
     });
+
+    test("direction change re-fetches when directionSensitive is true", async () => {
+        const menu = makeMenu();
+        // startIndex=5 so anchor = "play " (the full initial input).
+        const result = makeCompletionResult(["song", "track"], 5, {
+            separatorMode: "none",
+            directionSensitive: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos, "forward");
+        await Promise.resolve(); // → ACTIVE, anchor = "play "
+
+        // Same input, different direction, at exact anchor → re-fetch
+        session.update("play ", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "play ",
+            "backward",
+        );
+    });
+
+    test("direction change reuses when past anchor boundary", async () => {
+        const menu = makeMenu();
+        // startIndex=4 so anchor = "play"; "play " extends past anchor.
+        const result = makeCompletionResult(["song", "track"], 4, {
+            separatorMode: "space",
+            directionSensitive: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos, "forward");
+        await Promise.resolve(); // → ACTIVE, anchor = "play"
+
+        // Different direction but input extends past anchor — the
+        // direction-sensitive boundary has been passed; reuse.
+        session.update("play ", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("direction change reuses when directionSensitive is false", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song", "track"], 4, {
+            separatorMode: "space",
+            directionSensitive: false,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos, "forward");
+        await Promise.resolve(); // → ACTIVE
+
+        // Same input, different direction, but not sensitive → reuse
+        session.update("play ", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("same direction reuses even when directionSensitive is true", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song", "track"], 4, {
+            separatorMode: "space",
+            directionSensitive: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos, "forward");
+        await Promise.resolve(); // → ACTIVE
+
+        // Same direction → reuse, no re-fetch needed
+        session.update("play ", getPos, "forward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("direction change with extended input reuses (past anchor boundary)", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song", "track"], 4, {
+            separatorMode: "space",
+            directionSensitive: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play ", getPos, "forward");
+        await Promise.resolve(); // → ACTIVE, anchor = "play"
+
+        // User typed further past the anchor, then changed direction.
+        // The direction-sensitive boundary was at "play"; the user has
+        // committed past it, so the loaded completions are still valid.
+        session.update("play so", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
 });
 
 // ── committed-past-boundary (hasExactMatch) ───────────────────────────────────

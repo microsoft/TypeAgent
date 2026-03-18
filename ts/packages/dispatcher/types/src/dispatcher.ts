@@ -89,6 +89,10 @@ export type CommandCompletionResult = {
     // prefix-match any completion, the caller can skip refetching since
     // no other valid input exists.
     closedSet: boolean;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.
+    directionSensitive: boolean;
 };
 
 export type AppAgentStatus = {

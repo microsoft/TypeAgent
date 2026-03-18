@@ -104,6 +104,11 @@ export type CompletionGroups = {
     // False or undefined means the parser can continue past
     // unrecognized input and find more completions.
     closedSet?: boolean | undefined;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.  When omitted, the dispatcher will conservatively,
+    // assume true if matchedPrefixLength > 0 and false otherwise.
+    directionSensitive?: boolean | undefined;
 };
 
 export interface AppAgentCommandInterface {

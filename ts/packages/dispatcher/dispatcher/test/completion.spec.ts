@@ -1607,4 +1607,76 @@ describe("Command Completion - startIndex", () => {
             expect(result.completions.length).toBeGreaterThan(0);
         });
     });
+
+    describe("directionSensitive", () => {
+        it("is true for '@comptest run' (exact subcommand match)", async () => {
+            const result = await getCommandCompletion(
+                "@comptest run",
+                "forward",
+                context,
+            );
+            // "run" exactly matches a subcommand — backward would
+            // reconsider, so the result is direction-sensitive.
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("is true for '@comptest run' backward", async () => {
+            const result = await getCommandCompletion(
+                "@comptest run",
+                "backward",
+                context,
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("is false for '@comptest run ' with trailing space (committed)", async () => {
+            const result = await getCommandCompletion(
+                "@comptest run ",
+                "forward",
+                context,
+            );
+            // Trailing space commits the subcommand — direction no
+            // longer matters at the command level.
+            expect(result.directionSensitive).toBeFalsy();
+        });
+
+        it("is true for '@comptest flagsonly --level' (pending flag, no trailing space)", async () => {
+            const result = await getCommandCompletion(
+                "@comptest flagsonly --level",
+                "forward",
+                context,
+            );
+            // "--level" is a non-boolean flag without trailing space.
+            // Backward would back up to flag alternatives.
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("is false for '@comptest flagsonly --level ' (trailing space commits flag)", async () => {
+            const result = await getCommandCompletion(
+                "@comptest flagsonly --level ",
+                "forward",
+                context,
+            );
+            // Trailing space commits the flag — direction doesn't matter.
+            expect(result.directionSensitive).toBeFalsy();
+        });
+
+        it("is false for empty input", async () => {
+            const result = await getCommandCompletion("", "forward", context);
+            // Empty input: normalizeCommand inserts implicit tokens
+            // that are inherently committed.
+            expect(result.directionSensitive).toBeFalsy();
+        });
+
+        it("is false for '@comptest flagsonly --debug' (boolean flag, no pending value)", async () => {
+            const result = await getCommandCompletion(
+                "@comptest flagsonly --debug",
+                "forward",
+                context,
+            );
+            // "--debug" is boolean — fully consumed, no pending flag.
+            // No direction-sensitive branch applies.
+            expect(result.directionSensitive).toBeFalsy();
+        });
+    });
 });

@@ -91,6 +91,10 @@ export type CompletionResult = {
     // beyond it.  False or undefined means the parser can continue
     // past unrecognized input and find more completions.
     closedSet?: boolean | undefined;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.
+    directionSensitive?: boolean | undefined;
 };
 
 export function mergeCompletionResults(
@@ -136,6 +140,13 @@ export function mergeCompletionResults(
         closedSet:
             first.closedSet !== undefined || second.closedSet !== undefined
                 ? (first.closedSet ?? false) && (second.closedSet ?? false)
+                : undefined,
+        // Direction-sensitive if either source is.
+        directionSensitive:
+            first.directionSensitive !== undefined ||
+            second.directionSensitive !== undefined
+                ? (first.directionSensitive ?? false) ||
+                  (second.directionSensitive ?? false)
                 : undefined,
     };
 }
@@ -412,6 +423,12 @@ export class ConstructionCache {
         // are added (entity values are external).  Reset to true when
         // maxPrefixLength advances (old candidates discarded).
         let closedSet: boolean = true;
+        // Direction-sensitive when the opposite direction would produce
+        // different completions.  True when at least one construction
+        // at maxPrefixLength has matched parts to back up to and the
+        // prefix doesn't end with a commit signal (separator).
+        const noTrailingSeparator = !/[\s\p{P}]$/u.test(requestPrefix);
+        let directionSensitive = false;
         const rejectReferences = options?.rejectReferences ?? true;
         const langTools = getLanguageTools("en");
 
@@ -422,6 +439,7 @@ export class ConstructionCache {
                 completionProperty.length = 0;
                 separatorMode = undefined;
                 closedSet = true;
+                directionSensitive = false;
             }
         }
 
@@ -460,6 +478,9 @@ export class ConstructionCache {
                 // Forward: exact match means nothing to complete.
                 if (partialPartCount === construction.parts.length) {
                     updateMaxPrefixLength(requestPrefix.length);
+                    if (noTrailingSeparator && partialPartCount >= 1) {
+                        directionSensitive = true;
+                    }
                     continue;
                 }
                 completionPart = construction.parts[partialPartCount];
@@ -470,6 +491,12 @@ export class ConstructionCache {
             updateMaxPrefixLength(candidatePrefixLength);
             if (candidatePrefixLength !== maxPrefixLength) {
                 continue; // Shorter than the best match — skip
+            }
+
+            // Direction-sensitive when a matched part exists to back
+            // up to and the prefix has no trailing commit signal.
+            if (noTrailingSeparator && partialPartCount >= 1) {
+                directionSensitive = true;
             }
 
             // --- Step 3: Offer literal completions from the part ---
@@ -568,6 +595,7 @@ export class ConstructionCache {
             matchedPrefixLength: maxPrefixLength,
             separatorMode,
             closedSet,
+            directionSensitive,
         };
     }
 

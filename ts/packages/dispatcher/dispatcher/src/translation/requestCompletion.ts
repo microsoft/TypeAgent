@@ -104,6 +104,7 @@ export async function requestCompletion(
     const matchedPrefixLength = results.matchedPrefixLength;
     const separatorMode = results.separatorMode;
     const closedSet = results.closedSet;
+    const directionSensitive = results.directionSensitive;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -120,6 +121,7 @@ export async function requestCompletion(
             matchedPrefixLength,
             separatorMode,
             closedSet,
+            directionSensitive,
         };
     }
 
@@ -145,6 +147,7 @@ export async function requestCompletion(
         matchedPrefixLength,
         separatorMode,
         closedSet,
+        directionSensitive,
     };
 }
 

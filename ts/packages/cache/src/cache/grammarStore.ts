@@ -278,6 +278,7 @@ export class GrammarStoreImpl implements GrammarStore {
         let matchedPrefixLength = 0;
         let separatorMode: SeparatorMode | undefined;
         let closedSet: boolean | undefined;
+        let directionSensitive: boolean = false;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -364,6 +365,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     properties.length = 0;
                     separatorMode = undefined;
                     closedSet = undefined;
+                    directionSensitive = false;
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);
@@ -381,6 +383,10 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ? partial.closedSet
                                 : closedSet && partial.closedSet;
                     }
+                    // OR-merge: direction-sensitive if any grammar
+                    // result at this prefix length is sensitive.
+                    directionSensitive =
+                        directionSensitive || partial.directionSensitive;
                     if (
                         partial.properties !== undefined &&
                         partial.properties.length > 0
@@ -410,6 +416,7 @@ export class GrammarStoreImpl implements GrammarStore {
             matchedPrefixLength,
             separatorMode,
             closedSet,
+            directionSensitive,
         };
     }
 }

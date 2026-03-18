@@ -197,6 +197,7 @@ type CompletionTarget = {
     includeFlags: boolean;
     booleanFlagName: string | undefined;
     separatorMode: SeparatorMode | undefined;
+    directionSensitive: boolean;
 };
 
 function resolveCompletionTarget(
@@ -223,6 +224,7 @@ function resolveCompletionTarget(
             separatorMode: hasTrailingSpace(input, remainderIndex)
                 ? "optional"
                 : undefined,
+            directionSensitive: false,
         };
     }
 
@@ -255,6 +257,7 @@ function resolveCompletionTarget(
                 separatorMode: hasTrailingSpace(input, startIndex)
                     ? "optional"
                     : undefined,
+                directionSensitive: false,
             };
         }
     }
@@ -286,6 +289,7 @@ function resolveCompletionTarget(
             separatorMode: hasTrailingSpace(input, flagTokenStart)
                 ? "optional"
                 : undefined,
+            directionSensitive: true,
         };
     }
 
@@ -304,6 +308,7 @@ function resolveCompletionTarget(
             includeFlags: false,
             booleanFlagName: undefined,
             separatorMode: trailingSpace ? "optional" : undefined,
+            directionSensitive: !trailingSpace,
         };
     }
     return {
@@ -313,6 +318,7 @@ function resolveCompletionTarget(
         includeFlags: true,
         booleanFlagName,
         separatorMode: trailingSpace ? "optional" : undefined,
+        directionSensitive: false,
     };
 }
 
@@ -431,6 +437,7 @@ async function getCommandParameterCompletion(
     let agentInvoked = false;
     let agentClosedSet: boolean | undefined;
     let separatorMode: SeparatorMode | undefined = target.separatorMode;
+    let directionSensitive = false;
 
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion && target.completionNames.length > 0) {
@@ -465,6 +472,11 @@ async function getCommandParameterCompletion(
         completions.push(...agentResult.groups);
         agentInvoked = true;
         agentClosedSet = agentResult.closedSet;
+        // Default: direction-sensitive when agent consumed input
+        // (matchedPrefixLength > 0), not sensitive otherwise.
+        directionSensitive =
+            agentResult.directionSensitive ??
+            (groupPrefixLength !== undefined && groupPrefixLength > 0);
         debug(
             `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}`,
         );
@@ -480,6 +492,7 @@ async function getCommandParameterCompletion(
             target.isPartialValue,
             params.nextArgs.length > 0,
         ),
+        directionSensitive: target.directionSensitive || directionSensitive,
     };
 }
 
@@ -497,6 +510,7 @@ async function completeDescriptor(
     startIndex: number | undefined;
     separatorMode: SeparatorMode | undefined;
     closedSet: boolean;
+    directionSensitive: boolean;
 }> {
     const completions: CompletionGroup[] = [];
     let separatorMode: SeparatorMode | undefined;
@@ -537,6 +551,7 @@ async function completeDescriptor(
             startIndex: undefined,
             separatorMode,
             closedSet: true,
+            directionSensitive: false,
         };
     }
 
@@ -549,6 +564,7 @@ async function completeDescriptor(
             parameterCompletions.separatorMode,
         ),
         closedSet: parameterCompletions.closedSet,
+        directionSensitive: parameterCompletions.directionSensitive,
     };
 }
 
@@ -655,6 +671,9 @@ export async function getCommandCompletion(
                 ? "optional"
                 : undefined;
         let closedSet = true;
+        // Track whether direction influenced the result.  When false,
+        // the caller can skip re-fetching on direction change.
+        let directionSensitive = false;
 
         const descriptor = result.descriptor;
 
@@ -671,13 +690,17 @@ export async function getCommandCompletion(
         // the normalized command ends with whitespace, which indicates
         // the resolver already considers the last token committed.
         const normalizedCommitted = /\s$/.test(partialCommand);
-        const uncommittedCommand =
+        // Direction matters at the command level when the command is
+        // exactly matched and could be either "committed to" (forward)
+        // or "reconsidered" (backward).
+        const directionSensitiveCommand =
             descriptor !== undefined &&
             result.matched &&
-            direction === "backward" &&
             !normalizedCommitted &&
             result.suffix === "" &&
             table !== undefined;
+        const uncommittedCommand =
+            directionSensitiveCommand && direction === "backward";
 
         if (uncommittedCommand) {
             const lastCmd = result.commands[result.commands.length - 1];
@@ -687,6 +710,7 @@ export async function getCommandCompletion(
                 completions: Object.keys(table!.commands),
             });
             separatorMode = mergeSeparatorMode(separatorMode, "none");
+            directionSensitive = true;
             // closedSet stays true: subcommand names are exhaustive.
         } else if (descriptor !== undefined) {
             const desc = await completeDescriptor(
@@ -706,6 +730,11 @@ export async function getCommandCompletion(
                 desc.separatorMode,
             );
             closedSet = desc.closedSet;
+            // Direction-sensitive if the command level is (would have
+            // taken the uncommittedCommand branch with opposite
+            // direction) or if the agent/parameter level is.
+            directionSensitive =
+                directionSensitiveCommand || desc.directionSensitive;
         } else if (table !== undefined) {
             // descriptor is undefined: the suffix didn't resolve to any
             // known command or subcommand.  startIndex already points to
@@ -770,6 +799,7 @@ export async function getCommandCompletion(
             completions,
             separatorMode,
             closedSet,
+            directionSensitive,
         };
 
         debug(`Command completion result:`, completionResult);
@@ -783,6 +813,7 @@ export async function getCommandCompletion(
             completions: [],
             separatorMode: undefined,
             closedSet: false,
+            directionSensitive: false,
         };
     }
 }
