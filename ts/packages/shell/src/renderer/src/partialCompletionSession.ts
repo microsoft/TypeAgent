@@ -34,6 +34,29 @@ export interface ICompletionDispatcher {
     ): Promise<CommandCompletionResult>;
 }
 
+// Describes what the shell should do when the local trie has no matches
+// for the user's typed prefix.  Computed once from the backend's
+// descriptive fields (closedSet, openWildcard) when a result arrives,
+// then used in reuseSession() decisions.
+//
+//   "accept"  — the completion set is exhaustive; no re-fetch can help.
+//               (Derived from closedSet=true, openWildcard=false.)
+//   "refetch" — the set is open-ended; the backend may know more.
+//               (Derived from closedSet=false, openWildcard=false.)
+//   "slide"   — the anchor sits at a sliding wildcard boundary; slide
+//               it forward instead of re-fetching or giving up.
+//               (Derived from openWildcard=true, any closedSet.)
+type NoMatchPolicy = "accept" | "refetch" | "slide";
+
+function computeNoMatchPolicy(
+    closedSet: boolean,
+    openWildcard: boolean,
+): NoMatchPolicy {
+    if (openWildcard) return "slide";
+    if (closedSet) return "accept";
+    return "refetch";
+}
+
 // PartialCompletionSession manages the state machine for command completion.
 //
 // States:
@@ -42,7 +65,7 @@ export interface ICompletionDispatcher {
 //   ACTIVE      anchor !== undefined && completionP === undefined
 //
 // Design principles:
-//   - Completion result fields (separatorMode, closedSet) are stored as-is
+//   - Completion result fields (separatorMode, etc.) are stored as-is
 //     from the backend response and never mutated as the user keeps typing.
 //     reuseSession() reads them to decide whether to show, hide, or re-fetch.
 //   - reuseSession() makes exactly four kinds of decisions:
@@ -56,11 +79,13 @@ export interface ICompletionDispatcher {
 //          entry (and it is not a prefix of any other).  Always re-fetches
 //          for the NEXT level's completions — the direction to use for the
 //          re-fetch is determined by the caller.
-//   - The `closedSet` flag controls the no-match fallthrough: when the trie
+//   - The `noMatchPolicy` controls the no-match fallthrough: when the trie
 //     has zero matches for the typed prefix:
-//       closedSet=true  → reuse (closed set, nothing else exists)
-//       closedSet=false → re-fetch (set is open, backend may know more)
-//   - The anchor is never advanced after a result is received.
+//       "accept"  → nothing else exists, stay quiet
+//       "refetch" → backend may know more, re-fetch
+//       "slide"   → wildcard boundary, slide anchor forward
+//   - The anchor is never advanced after a result is received (except
+//     when noMatchPolicy is "slide", which slides the anchor forward).
 //     When `separatorMode` requires a separator, the separator is stripped
 //     from the raw prefix before being passed to the menu, so the trie
 //     still matches.
@@ -75,14 +100,11 @@ export class PartialCompletionSession {
 
     // Saved as-is from the last completion result.
     private separatorMode: SeparatorMode = "space";
-    private closedSet: boolean = false;
+    // Computed from the backend's closedSet + openWildcard fields.
+    // Controls what happens when the local trie has no matches.
+    private noMatchPolicy: NoMatchPolicy = "refetch";
     // True when completions differ between forward and backward.
     private directionSensitive: boolean = false;
-    // True when the completions are offered at a sliding wildcard
-    // boundary.  When set, the shell slides the anchor forward on
-    // further input instead of re-fetching or giving up, and
-    // re-shows the menu at every word boundary.
-    private openWildcard: boolean = false;
     // Direction used for the last fetch.
     private lastDirection: CompletionDirection = "forward";
 
@@ -160,10 +182,10 @@ export class PartialCompletionSession {
     //   UNIQUE     — prefix exactly matches one entry and is not a prefix of
     //                any other; re-fetch for the NEXT level (return false).
     //   SHOW       — constraints satisfied; update the menu.  The final
-    //                return is `this.closedSet || this.menu.isActive()`:
-    //                reuse when the trie still has matches, or when the set
-    //                is closed (nothing new to fetch).  Re-fetch only
-    //                when the trie is empty AND the set is open.
+    //                decision uses `noMatchPolicy`:
+    //                reuse when the trie still has matches.  When the trie
+    //                is empty: "accept" → reuse, "refetch" → re-fetch,
+    //                "slide" → slide anchor forward.
     //
     // Re-fetch triggers (returns false → startNewSession):
     //
@@ -196,9 +218,9 @@ export class PartialCompletionSession {
     // C. Open-set discovery — trie has zero matches and the set is not
     //    exhaustive; the backend may know about completions not yet loaded.
     //    Gated by closedSet === false.
-    //   6. Open set, no matches — trie has zero matches for the typed prefix
-    //                         AND closedSet is false. The backend may know about
-    //                         completions not yet loaded.
+    //   6. No matches + open set — trie has zero matches for the typed prefix
+    //                         AND noMatchPolicy is "refetch". The backend may
+    //                         know about completions not yet loaded.
     private reuseSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
@@ -217,7 +239,7 @@ export class PartialCompletionSession {
         }
 
         // ACTIVE from here.
-        const { anchor, separatorMode: sepMode, closedSet } = this;
+        const { anchor, separatorMode: sepMode, noMatchPolicy } = this;
 
         // [A7] Direction changed on a direction-sensitive result.
         // The loaded completions were computed for the opposite direction
@@ -284,21 +306,23 @@ export class PartialCompletionSession {
                 return true; // HIDE+KEEP
             }
             if (!separatorRegex(sepMode).test(rawPrefix)) {
-                // [A3] closedSet is not consulted here: it describes whether
-                // the completion *entries* are exhaustive, not whether
-                // the anchor token can extend.  The grammar may parse
-                // the longer input on a completely different path.
+                // [A3] noMatchPolicy is not consulted for "accept" vs
+                // "refetch" here: it describes whether the completion
+                // *entries* are exhaustive, not whether the anchor
+                // token can extend.  The grammar may parse the longer
+                // input on a completely different path.
                 //
-                // However, when openWildcard is set, the anchor sits at
-                // a sliding wildcard boundary — the user is still typing
-                // within the wildcard, and re-fetching would produce the
-                // same result at a shifted position.  Instead, slide the
-                // anchor forward to the current input: the trie and
-                // metadata stay intact, so the menu will re-appear at
-                // the next word boundary when the user types a separator.
-                if (this.openWildcard) {
+                // However, when noMatchPolicy is "slide", the anchor
+                // sits at a sliding wildcard boundary — the user is
+                // still typing within the wildcard, and re-fetching
+                // would produce the same result at a shifted position.
+                // Instead, slide the anchor forward to the current
+                // input: the trie and metadata stay intact, so the menu
+                // will re-appear at the next word boundary when the
+                // user types a separator.
+                if (noMatchPolicy === "slide") {
                     debug(
-                        `Partial completion anchor slide (A3): '${anchor}' → '${input}' (openWildcard)`,
+                        `Partial completion anchor slide (A3): '${anchor}' → '${input}' (slide)`,
                     );
                     this.anchor = input;
                     this.menu.hide();
@@ -361,32 +385,41 @@ export class PartialCompletionSession {
 
         // [C6] When the menu is still active (trie has matches) we always
         // reuse — the loaded completions are still useful.  When there are
-        // NO matches, the decision depends on `closedSet`:
-        //   closedSet=true  → the set is closed; the user typed past all
-        //                     valid continuations, so re-fetching won't help.
-        //   closedSet=false → the set is NOT closed; the user may have
-        //                     typed something valid that wasn't loaded, so
-        //                     re-fetch with the longer input (open-set discovery).
-        //
-        // Special case: when openWildcard is set and the trie is empty,
-        // the user is still typing within the wildcard.  Slide the anchor
-        // forward instead of re-fetching (wasteful, same result) or
-        // giving up (stuck).  The trie stays intact so the menu will
-        // re-appear at the next word boundary.
+        // NO matches, the decision depends on `noMatchPolicy`:
+        //   "accept"  → the set is exhaustive; the user typed past all
+        //               valid continuations, so re-fetching won't help.
+        //   "refetch" → the set is open-ended; the user may have typed
+        //               something valid that wasn't loaded, so re-fetch
+        //               with the longer input (open-set discovery).
+        //   "slide"   → the anchor sits at a sliding wildcard boundary;
+        //               slide forward instead of re-fetching (wasteful,
+        //               same result) or giving up (stuck).  The trie
+        //               stays intact so the menu will re-appear at the
+        //               next word boundary.
         const active = this.menu.isActive();
-        if (!active && this.openWildcard) {
-            debug(
-                `Partial completion anchor slide (C6): '${anchor}' → '${input}' (openWildcard)`,
-            );
-            this.anchor = input;
-            this.menu.hide();
-            return true;
+        if (!active) {
+            switch (noMatchPolicy) {
+                case "slide":
+                    debug(
+                        `Partial completion anchor slide (C6): '${anchor}' → '${input}' (slide)`,
+                    );
+                    this.anchor = input;
+                    this.menu.hide();
+                    return true;
+                case "accept":
+                    debug(
+                        `Partial completion reuse: noMatchPolicy=accept, menuActive=false`,
+                    );
+                    return true;
+                case "refetch":
+                    debug(
+                        `Partial completion re-fetch: noMatchPolicy=refetch, menuActive=false`,
+                    );
+                    return false;
+            }
         }
-        const reuse = closedSet || active;
-        debug(
-            `Partial completion ${reuse ? "reuse" : "re-fetch"}: closedSet=${closedSet}, menuActive=${active}`,
-        );
-        return reuse;
+        debug(`Partial completion reuse: menuActive=true`);
+        return true;
     }
 
     // Start a new completion session: issue backend request and process result.
@@ -400,7 +433,7 @@ export class PartialCompletionSession {
         this.menu.setChoices([]);
         this.anchor = input;
         this.separatorMode = "space";
-        this.closedSet = false;
+        this.noMatchPolicy = "refetch";
         const completionP = this.dispatcher.getCommandCompletion(
             input,
             direction,
@@ -417,9 +450,11 @@ export class PartialCompletionSession {
                 debug(`Partial completion result: `, result);
 
                 this.separatorMode = result.separatorMode ?? "space";
-                this.closedSet = result.closedSet;
+                this.noMatchPolicy = computeNoMatchPolicy(
+                    result.closedSet,
+                    result.openWildcard,
+                );
                 this.directionSensitive = result.directionSensitive;
-                this.openWildcard = result.openWildcard;
                 this.lastDirection = direction;
 
                 const completions = toMenuItems(result.completions);
@@ -430,9 +465,9 @@ export class PartialCompletionSession {
                     );
                     // Keep anchor at the full input so the anchor
                     // covers the entire typed text.  The menu stays empty,
-                    // so reuseSession()'s SHOW path will use `closedSet` to
-                    // decide: closedSet=true → reuse (nothing more exists);
-                    // closedSet=false → re-fetch when new input arrives.
+                    // so reuseSession()'s SHOW path will use noMatchPolicy
+                    // to decide: "accept" → reuse (nothing more exists);
+                    // "refetch" → re-fetch when new input arrives.
                     //
                     // Override separatorMode: with no completions, there is
                     // nothing to separate from, so the separator check in
