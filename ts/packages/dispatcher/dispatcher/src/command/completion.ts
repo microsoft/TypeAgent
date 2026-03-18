@@ -75,10 +75,11 @@ function detectPendingFlag(
 }
 
 // True when text[0..index) ends with whitespace — i.e., the user
-// has typed a trailing space after the last token.  This serves as
-// a commit signal: the token before the space is committed and the
-// space itself is consumed, so startIndex should include it and
-// separatorMode should be "optional" (no additional separator needed).
+// has typed a trailing separator after the last token.  A trailing
+// separator acts as a commit signal: the token before it is
+// considered committed and the separator itself is consumed, so
+// startIndex should include it and separatorMode should be
+// "optional" (no additional separator needed).
 function hasTrailingSpace(text: string, index: number): boolean {
     return index > 0 && /\s/.test(text[index - 1]);
 }
@@ -243,7 +244,7 @@ function resolveCompletionTarget(
             isEditingFreeFormValue(
                 quoted,
                 lastParamImplicitQuotes,
-                !/\s$/.test(input),
+                !/\s$/.test(input), // true when input ends mid-token (no trailing space)
                 pendingFlag,
             )
         ) {
@@ -699,10 +700,10 @@ export async function getCommandCompletion(
             !normalizedCommitted &&
             result.suffix === "" &&
             table !== undefined;
-        const uncommittedCommand =
+        const reconsideringCommand =
             directionSensitiveCommand && direction === "backward";
 
-        if (uncommittedCommand) {
+        if (reconsideringCommand) {
             const lastCmd = result.commands[result.commands.length - 1];
             startIndex = commandConsumedLength - lastCmd.length;
             completions.push({
@@ -731,7 +732,7 @@ export async function getCommandCompletion(
             );
             closedSet = desc.closedSet;
             // Direction-sensitive if the command level is (would have
-            // taken the uncommittedCommand branch with opposite
+            // taken the reconsideringCommand branch with opposite
             // direction) or if the agent/parameter level is.
             directionSensitive =
                 directionSensitiveCommand || desc.directionSensitive;

@@ -90,7 +90,8 @@ export class PartialCompletionSession {
 
     // Main entry point.  Called by PartialCompletion.update() after DOM checks pass.
     //   input:       trimmed input text (ghost text stripped, leading whitespace stripped)
-    //   direction:   host-provided signal: \"forward\" (user is moving ahead) or\n    //                \"backward\" (user is reconsidering, e.g. backspaced)
+    //   direction:   host-provided signal: "forward" (user is moving ahead) or
+    //                "backward" (user is reconsidering, e.g. backspaced)
     //   getPosition: DOM callback that computes the menu anchor position; returns
     //                undefined when position cannot be determined (hides menu).
     public update(
@@ -169,6 +170,12 @@ export class PartialCompletionSession {
     //                         immediately after anchor, but a non-separator
     //                         character was typed instead. The constraint can
     //                         never be satisfied, so treat as new input.
+    //   7. Direction changed — the user switched between forward and backward
+    //                         AND the last result was direction-sensitive
+    //                         AND the input is at the exact anchor (no text
+    //                         typed past it).  Once the user types past the
+    //                         anchor, the direction-sensitive boundary has been
+    //                         passed and the loaded completions are still valid.
     //
     // B. Hierarchical navigation — user completed this level; re-fetch for
     //    the NEXT level's completions.
@@ -186,16 +193,10 @@ export class PartialCompletionSession {
     //   6. Open set, no matches — trie has zero matches for the typed prefix
     //                         AND closedSet is false. The backend may know about
     //                         completions not yet loaded.
-    //   7. Direction changed — the user switched between forward and backward
-    //                         AND the last result was direction-sensitive
-    //                         AND the input is at the exact anchor (no text
-    //                         typed past it).  Once the user types past the
-    //                         anchor, the direction-sensitive boundary has been
-    //                         passed and the loaded completions are still valid.
     private reuseSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
-        direction: CompletionDirection = "forward",
+        direction: CompletionDirection,
     ): boolean {
         // [A1] No session — IDLE state, must fetch.
         if (this.anchor === undefined) {
@@ -415,7 +416,7 @@ export class PartialCompletionSession {
 
                 // Re-run update with captured input to show the menu (or defer
                 // if the separator has not been typed yet).
-                this.reuseSession(input, getPosition);
+                this.reuseSession(input, getPosition, direction);
             })
             .catch((e) => {
                 debugError(`Partial completion error: '${input}' ${e}`);

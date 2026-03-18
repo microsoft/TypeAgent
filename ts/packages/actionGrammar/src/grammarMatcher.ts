@@ -1566,7 +1566,7 @@ export function matchGrammarCompletion(
             // Would backward produce different results than forward?
             // True when the prefix was fully consumed and there is a
             // matched part (string/number) or wildcard to back up to.
-            const canBackward =
+            const couldBackUp =
                 state.index >= prefix.length &&
                 (savedPendingWildcard?.valueId !== undefined ||
                     state.lastMatchedPartInfo !== undefined);
@@ -1576,7 +1576,7 @@ export function matchGrammarCompletion(
             if (matched) {
                 if (
                     direction === "backward" &&
-                    canBackward &&
+                    couldBackUp &&
                     emitBackwardCompletion(state, savedPendingWildcard)
                 ) {
                     // Backward emitted a completion — done with this state.
@@ -1584,7 +1584,7 @@ export function matchGrammarCompletion(
                     debugCompletion("Matched. Nothing to complete.");
                     updateMaxPrefixLength(state.index);
                 }
-                if (canBackward) {
+                if (couldBackUp) {
                     directionSensitive = true;
                 }
                 continue;
@@ -1598,7 +1598,7 @@ export function matchGrammarCompletion(
 
             if (
                 direction === "backward" &&
-                canBackward &&
+                couldBackUp &&
                 emitBackwardCompletion(state, savedPendingWildcard)
             ) {
                 // Backward emitted a completion — done with this state.
@@ -1622,7 +1622,7 @@ export function matchGrammarCompletion(
                     }
                 }
             }
-            if (canBackward) {
+            if (couldBackUp) {
                 directionSensitive = true;
             }
             // Note: non-string next parts (wildcard, number, rules) in

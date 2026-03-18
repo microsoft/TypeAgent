@@ -76,6 +76,7 @@ The return path carries `CommandCompletionResult`:
   completions: CompletionGroup[];
   separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
   closedSet: boolean;           // true → list is exhaustive
+  directionSensitive: boolean;  // true → opposite direction would produce different results
 }
 ```
 
@@ -99,12 +100,12 @@ grammar rules.
 3. When `maxPrefixLength` advances, discard all shorter-prefix completions.
 4. Categorize each state's outcome:
 
-| Category           | Condition                                   | Completion source              |
-| ------------------ | ------------------------------------------- | ------------------------------ |
-| 1 — Exact          | Rule fully matched, prefix fully consumed   | None (rule satisfied)          |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts   | Next part of rule              |
-| 3a — Dirty partial | Trailing text matches start of current part | Current part (prefix-filtered) |
-| 3b — Dirty partial | Trailing text doesn't match                 | Offer current part             |
+| Category           | Condition                                   | Completion source                                     |
+| ------------------ | ------------------------------------------- | ----------------------------------------------------- |
+| 1 — Exact          | Rule fully matched, prefix fully consumed   | None (forward); last matched word/wildcard (backward) |
+| 2 — Clean partial  | Prefix consumed, rule has remaining parts   | Next part (forward); last matched part (backward)     |
+| 3a — Dirty partial | Trailing text matches start of current part | Current part (prefix-filtered)                        |
+| 3b — Dirty partial | Trailing text doesn't match                 | Current part (forward); last matched part (backward)  |
 
 5. Multi-word string parts use `tryPartialStringMatch()` to offer one word
    at a time instead of the entire phrase.
@@ -200,7 +201,7 @@ input
   → normalizeCommand() → resolveCommand()
   → ResolveCommandResult { descriptor, suffix, table, matched }
   → three-way branch:
-      ├─ uncommitted command → sibling subcommands (separatorMode="none")
+      ├─ reconsidering command → sibling subcommands (separatorMode="none")
       ├─ resolved descriptor → completeDescriptor()
       │    ├─ parseParams(suffix, partial=true) → ParseParamsResult
       │    ├─ resolveCompletionTarget() → CompletionTarget
@@ -264,6 +265,7 @@ lifecycle of a completion interaction.
 | A1   | No active session                                | Invalidation | Re-fetch            |
 | A2   | Input no longer extends anchor                   | Invalidation | Re-fetch            |
 | A3   | Non-separator char typed when separator required | Invalidation | Re-fetch            |
+| A7   | Direction changed on direction-sensitive result  | Invalidation | Re-fetch            |
 | B4   | Unique match (always fires)                      | Navigation   | Re-fetch next level |
 | B5   | Separator typed after exact match                | Navigation   | Re-fetch next level |
 | C6   | No trie matches + open set                       | Discovery    | Re-fetch            |

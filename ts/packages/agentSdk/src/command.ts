@@ -67,12 +67,12 @@ export type CommandDescriptors =
 export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 
 // Indicates the user's editing direction, provided by the host.
-//   "current" — the user is still editing the last token (e.g. appending
-//               characters, or just deleted/backspaced).  The backend should
-//               offer completions that replace/extend the current token.
-//   "next"    — the user has committed the last token (e.g. typed a
-//               separator, selected a menu item).  The backend should offer
-//               completions for the next position.
+//   "forward"  — the user is moving ahead (appending characters,
+//                typed a separator, selected a menu item).  The backend
+//                should offer completions for what follows.
+//   "backward" — the user is reconsidering (e.g. backspaced).  The
+//                backend should offer alternatives for the current
+//                position.
 export type CompletionDirection = "forward" | "backward";
 
 export type CompletionGroup = {
@@ -106,7 +106,7 @@ export type CompletionGroups = {
     closedSet?: boolean | undefined;
     // True when the result would differ if queried with the opposite
     // direction.  When false, the caller can skip re-fetching on
-    // direction change.  When omitted, the dispatcher will conservatively,
+    // direction change.  When omitted, the dispatcher will conservatively
     // assume true if matchedPrefixLength > 0 and false otherwise.
     directionSensitive?: boolean | undefined;
 };
