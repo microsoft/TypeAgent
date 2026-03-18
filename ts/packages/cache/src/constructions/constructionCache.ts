@@ -97,6 +97,7 @@ export type CompletionResult = {
     directionSensitive?: boolean | undefined;
 };
 
+// Architecture: docs/architecture/completion.md — §2 Cache Layer
 export function mergeCompletionResults(
     first: CompletionResult | undefined,
     second: CompletionResult | undefined,
@@ -388,16 +389,14 @@ export class ConstructionCache {
     public completion(
         requestPrefix: string,
         options?: MatchOptions,
-        direction?: CompletionDirection,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
         debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
         const namespaceKeys = options?.namespaceKeys;
         debugCompletion(`Request completion namespace keys`, namespaceKeys);
 
-        // Trailing separator (whitespace or punctuation) is a commit
-        // signal: the token before it is committed and direction no
-        // longer matters.  Neutralize backward so the matcher doesn't
-        // back up.
+        // Resolve direction to a boolean: true when the user is actively
+        // backing up and no trailing separator has committed the last token.
         const backward =
             direction === "backward" && !/[\s\p{P}]$/u.test(requestPrefix);
         const results = this.match(requestPrefix, options, true, backward);

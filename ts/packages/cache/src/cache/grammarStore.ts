@@ -261,10 +261,11 @@ export class GrammarStoreImpl implements GrammarStore {
         return sortMatches(matches);
     }
 
+    // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
         requestPrefix: string,
         options?: MatchOptions,
-        direction?: CompletionDirection,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
         if (!this.enabled) {
             return undefined;
@@ -383,8 +384,8 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ? partial.closedSet
                                 : closedSet && partial.closedSet;
                     }
-                    // OR-merge: direction-sensitive if any grammar
-                    // result at this prefix length is sensitive.
+                    // True if any grammar result at this prefix
+                    // length is direction-sensitive.
                     directionSensitive =
                         directionSensitive || partial.directionSensitive;
                     if (

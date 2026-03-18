@@ -1503,7 +1503,7 @@ describe("Command Completion - startIndex", () => {
 
         it("does not back up with trailing space '@comptest run ' backward", async () => {
             // Trailing space means the user already committed "run",
-            // so backward doesn't trigger uncommittedCommand; parameter
+            // so backward doesn't trigger reconsideringCommand; parameter
             // completions are offered instead.
             const result = await getCommandCompletion(
                 "@comptest run ",
@@ -1601,7 +1601,7 @@ describe("Command Completion - startIndex", () => {
 
         it("empty input backward does not backtrack", async () => {
             // Empty input with backward shouldn't crash; normalizeCommand
-            // generates implicit tokens that are "normalizedCommitted".
+            // generates implicit tokens that are implicitly committed.
             const result = await getCommandCompletion("", "backward", context);
             expect(result).toBeDefined();
             expect(result.completions.length).toBeGreaterThan(0);

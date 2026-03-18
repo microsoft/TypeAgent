@@ -49,6 +49,7 @@ function getLeafNode(node: Node, offset: number) {
     return undefined;
 }
 
+// Architecture: docs/architecture/completion.md — §6 Shell — DOM Adapter
 export class PartialCompletion {
     private readonly searchMenu: SearchMenu;
     private readonly session: PartialCompletionSession;

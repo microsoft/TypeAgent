@@ -15,6 +15,7 @@ import {
 // Merge two SeparatorMode values — the mode requiring the strongest
 // separator wins (i.e. the mode that demands the most from the user).
 // Priority: "space" > "spacePunctuation" > "optional" > "none" > undefined.
+// Architecture: docs/architecture/completion.md — §3 Agent SDK
 export function mergeSeparatorMode(
     a: SeparatorMode | undefined,
     b: SeparatorMode | undefined,

@@ -48,6 +48,7 @@ type CompletionData = {
     prefix: string; // Fixed prefix before completions
 };
 
+// Architecture: docs/architecture/completion.md — §CLI integration
 async function getCompletionsData(
     line: string,
     dispatcher: Dispatcher,

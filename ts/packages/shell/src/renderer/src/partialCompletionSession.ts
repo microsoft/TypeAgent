@@ -65,6 +65,7 @@ export interface ICompletionDispatcher {
 //     from the raw prefix before being passed to the menu, so the trie
 //     still matches.
 //
+// Architecture: docs/architecture/completion.md — §5 Shell — Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
 export class PartialCompletionSession {
     // The "anchor" prefix for the current session.  Set to the full input

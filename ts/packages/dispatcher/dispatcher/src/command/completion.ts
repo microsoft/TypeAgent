@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Architecture: docs/architecture/completion.md — §4 Dispatcher
+
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 
 import {
@@ -75,12 +77,12 @@ function detectPendingFlag(
 }
 
 // True when text[0..index) ends with whitespace — i.e., the user
-// has typed a trailing separator after the last token.  A trailing
-// separator acts as a commit signal: the token before it is
-// considered committed and the separator itself is consumed, so
+// has typed trailing whitespace after the last token.  Trailing
+// whitespace acts as a commit signal: the token before it is
+// considered committed and the whitespace itself is consumed, so
 // startIndex should include it and separatorMode should be
 // "optional" (no additional separator needed).
-function hasTrailingSpace(text: string, index: number): boolean {
+function hasWhitespaceBefore(text: string, index: number): boolean {
     return index > 0 && /\s/.test(text[index - 1]);
 }
 
@@ -222,7 +224,7 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: true,
             booleanFlagName,
-            separatorMode: hasTrailingSpace(input, remainderIndex)
+            separatorMode: hasWhitespaceBefore(input, remainderIndex)
                 ? "optional"
                 : undefined,
             directionSensitive: false,
@@ -244,7 +246,7 @@ function resolveCompletionTarget(
             isEditingFreeFormValue(
                 quoted,
                 lastParamImplicitQuotes,
-                !/\s$/.test(input), // true when input ends mid-token (no trailing space)
+                !/\s$/.test(input), // true when input ends mid-token (no trailing whitespace)
                 pendingFlag,
             )
         ) {
@@ -255,7 +257,7 @@ function resolveCompletionTarget(
                 isPartialValue: true,
                 includeFlags: false,
                 booleanFlagName: undefined,
-                separatorMode: hasTrailingSpace(input, startIndex)
+                separatorMode: hasWhitespaceBefore(input, startIndex)
                     ? "optional"
                     : undefined,
                 directionSensitive: false,
@@ -270,14 +272,14 @@ function resolveCompletionTarget(
     // names.  isPartialValue is false: flag names are an enumerable
     // set.
     //
-    // Trailing space commits the flag — direction no longer matters.
-    // When the user typed "--level " (with space), they've moved on;
+    // Trailing whitespace commits the flag — direction no longer matters.
+    // When the user typed "--level " (with whitespace), they've moved on;
     // fall through to 3b for value completions regardless of direction.
-    const trailingSpace = hasTrailingSpace(input, remainderIndex);
+    const trailingWhitespace = hasWhitespaceBefore(input, remainderIndex);
     if (
         pendingFlag !== undefined &&
         direction === "backward" &&
-        !trailingSpace
+        !trailingWhitespace
     ) {
         const flagToken = tokens[tokens.length - 1];
         const flagTokenStart = remainderIndex - flagToken.length;
@@ -287,7 +289,7 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: true,
             booleanFlagName,
-            separatorMode: hasTrailingSpace(input, flagTokenStart)
+            separatorMode: hasWhitespaceBefore(input, flagTokenStart)
                 ? "optional"
                 : undefined,
             directionSensitive: true,
@@ -297,19 +299,19 @@ function resolveCompletionTarget(
     // ── Spec case 3b: last token committed, complete next ───────
     // startIndex is the raw position — includes any trailing
     // whitespace that the user typed.  When trailing whitespace is
-    // present, separatorMode becomes "optional" because the space
-    // is already consumed.
+    // present, separatorMode becomes "optional" because the
+    // whitespace is already consumed.
     if (pendingFlag !== undefined) {
         // Flag awaiting a value — either the user moved forward or
-        // trailing space committed the flag (direction doesn't matter).
+        // trailing whitespace committed the flag (direction doesn't matter).
         return {
             completionNames: [pendingFlag],
             startIndex: remainderIndex,
             isPartialValue: false,
             includeFlags: false,
             booleanFlagName: undefined,
-            separatorMode: trailingSpace ? "optional" : undefined,
-            directionSensitive: !trailingSpace,
+            separatorMode: trailingWhitespace ? "optional" : undefined,
+            directionSensitive: !trailingWhitespace,
         };
     }
     return {
@@ -318,7 +320,7 @@ function resolveCompletionTarget(
         isPartialValue: false,
         includeFlags: true,
         booleanFlagName,
-        separatorMode: trailingSpace ? "optional" : undefined,
+        separatorMode: trailingWhitespace ? "optional" : undefined,
         directionSensitive: false,
     };
 }
@@ -355,9 +357,9 @@ function resolveCompletionTarget(
 //    b. Otherwise — the last token is complete (direction="forward",
 //       fully quoted, or trailing whitespace).  Return startIndex
 //       at the *end* of the consumed input (including any trailing
-//       space) and offer completions for the next parameters.  When
-//       trailing whitespace is present, separatorMode is "optional"
-//       because the space is already consumed.
+//       whitespace) and offer completions for the next parameters.
+//       When trailing whitespace is present, separatorMode is
+//       "optional" because the whitespace is already consumed.
 //
 // ── Exceptions to case 3a ────────────────────────────────────────────────
 //
@@ -589,7 +591,7 @@ async function completeDescriptor(
 // the input is valid but could mean either "stay at this level" or
 // "advance to the next level".  For free-form parameter values,
 // the input's trailing whitespace is used instead (no ambiguity to
-// resolve; trailing space means the token is complete).
+// resolve; trailing whitespace means the token is complete).
 //
 // Always returns a result — every input has a longest valid prefix
 // (at minimum the empty string, startIndex=0).  An empty completions
@@ -668,7 +670,7 @@ export async function getCommandCompletion(
         const completions: CompletionGroup[] = [];
         let separatorMode: SeparatorMode | undefined =
             result.suffix.length === 0 &&
-            hasTrailingSpace(input, commandConsumedLength)
+            hasWhitespaceBefore(input, commandConsumedLength)
                 ? "optional"
                 : undefined;
         let closedSet = true;
@@ -690,14 +692,14 @@ export async function getCommandCompletion(
         // the user never typed them.  Detect this by checking whether
         // the normalized command ends with whitespace, which indicates
         // the resolver already considers the last token committed.
-        const normalizedCommitted = /\s$/.test(partialCommand);
+        const implicitlyCommitted = /\s$/.test(partialCommand);
         // Direction matters at the command level when the command is
         // exactly matched and could be either "committed to" (forward)
         // or "reconsidered" (backward).
         const directionSensitiveCommand =
             descriptor !== undefined &&
             result.matched &&
-            !normalizedCommitted &&
+            !implicitlyCommitted &&
             result.suffix === "" &&
             table !== undefined;
         const reconsideringCommand =

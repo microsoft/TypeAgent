@@ -211,6 +211,14 @@ type ParentMatchState = {
     repeatPartIndex?: number | undefined; // defined for ()* / )+ — holds the part index to loop back to
     spacingMode: CompiledSpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
 };
+
+// A wildcard slot awaiting its capture value.  Used on MatchState.pendingWildcard
+// and saved across finalizeState calls for backward completion.
+type PendingWildcard = {
+    readonly start: number;
+    readonly valueId: number | undefined;
+};
+
 type MatchState = {
     // Current context
     name: string; // For debugging
@@ -231,12 +239,7 @@ type MatchState = {
     spacingMode: CompiledSpacingMode; // active spacing mode for this rule
 
     index: number;
-    pendingWildcard?:
-        | {
-              readonly start: number;
-              readonly valueId: number | undefined;
-          }
-        | undefined;
+    pendingWildcard?: PendingWildcard | undefined;
 
     // Completion support: tracks the last matched non-wildcard part
     // (string or number).  Used by backward completion to back up to
@@ -1365,6 +1368,8 @@ function tryPartialStringMatch(
  * completion text.  It is determined by the spacing rules (the per-rule
  * {@link CompiledSpacingMode}) between the last character of the matched
  * prefix and the first character of the completion.
+ *
+ * Architecture: docs/architecture/completion.md — §1 Grammar Matcher
  */
 export function matchGrammarCompletion(
     grammar: Grammar,
@@ -1486,7 +1491,7 @@ export function matchGrammarCompletion(
     // or emitPropertyCompletion (for numbers).
     function emitBackwardCompletion(
         state: MatchState,
-        savedWildcard: typeof savedPendingWildcard,
+        savedWildcard: PendingWildcard | undefined,
     ): boolean {
         const wildcardStart = savedWildcard?.start;
         const partStart = state.lastMatchedPartInfo?.start;
@@ -1533,11 +1538,6 @@ export function matchGrammarCompletion(
         return false;
     }
 
-    // Keep savedPendingWildcard type available for the helper above.
-    let savedPendingWildcard:
-        | { readonly start: number; readonly valueId: number | undefined }
-        | undefined;
-
     // --- Main loop: process every pending state ---
     while (pending.length > 0) {
         const state = pending.pop()!;
@@ -1553,7 +1553,8 @@ export function matchGrammarCompletion(
 
         // Save the pending wildcard before finalizeState clears it.
         // Needed for backward completion of wildcards at the end of a rule.
-        savedPendingWildcard = state.pendingWildcard;
+        const savedPendingWildcard: PendingWildcard | undefined =
+            state.pendingWildcard;
 
         // finalizeState does two things:
         //   1. If a wildcard is pending at the end, attempt to capture
@@ -1566,7 +1567,7 @@ export function matchGrammarCompletion(
             // Would backward produce different results than forward?
             // True when the prefix was fully consumed and there is a
             // matched part (string/number) or wildcard to back up to.
-            const couldBackUp =
+            const hasPartToReconsider =
                 state.index >= prefix.length &&
                 (savedPendingWildcard?.valueId !== undefined ||
                     state.lastMatchedPartInfo !== undefined);
@@ -1576,7 +1577,7 @@ export function matchGrammarCompletion(
             if (matched) {
                 if (
                     direction === "backward" &&
-                    couldBackUp &&
+                    hasPartToReconsider &&
                     emitBackwardCompletion(state, savedPendingWildcard)
                 ) {
                     // Backward emitted a completion — done with this state.
@@ -1584,7 +1585,7 @@ export function matchGrammarCompletion(
                     debugCompletion("Matched. Nothing to complete.");
                     updateMaxPrefixLength(state.index);
                 }
-                if (couldBackUp) {
+                if (hasPartToReconsider) {
                     directionSensitive = true;
                 }
                 continue;
@@ -1598,7 +1599,7 @@ export function matchGrammarCompletion(
 
             if (
                 direction === "backward" &&
-                couldBackUp &&
+                hasPartToReconsider &&
                 emitBackwardCompletion(state, savedPendingWildcard)
             ) {
                 // Backward emitted a completion — done with this state.
@@ -1622,7 +1623,7 @@ export function matchGrammarCompletion(
                     }
                 }
             }
-            if (couldBackUp) {
+            if (hasPartToReconsider) {
                 directionSensitive = true;
             }
             // Note: non-string next parts (wildcard, number, rules) in

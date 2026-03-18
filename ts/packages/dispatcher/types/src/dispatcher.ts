@@ -73,6 +73,7 @@ export type CommandResult = {
     tokenUsage?: CompletionUsageStats;
 };
 
+// Architecture: docs/architecture/completion.md — Data flow / Key types
 export type CommandCompletionResult = {
     // Index into the input where the resolved prefix ends and the
     // filter/completion region begins.  input[0..startIndex) is fully

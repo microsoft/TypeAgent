@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Completion types (SeparatorMode, CompletionDirection, CompletionGroups,
+// getCommandCompletion): docs/architecture/completion.md — §3 Agent SDK
+
 import { ActionContext, SessionContext } from "./agentInterface.js";
 import { ParameterDefinitions, ParsedCommandParams } from "./parameters.js";
 

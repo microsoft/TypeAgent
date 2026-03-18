@@ -611,10 +611,11 @@ export class AgentCache {
         return grammarStore.match(request, options);
     }
 
+    // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
         requestPrefix: string,
         options?: MatchOptions,
-        direction?: CompletionDirection,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
         // If NFA grammar system is configured, only use grammar store
         if (this._useNFAGrammar) {

@@ -100,12 +100,12 @@ grammar rules.
 3. When `maxPrefixLength` advances, discard all shorter-prefix completions.
 4. Categorize each state's outcome:
 
-| Category           | Condition                                   | Completion source                                     |
-| ------------------ | ------------------------------------------- | ----------------------------------------------------- |
-| 1 — Exact          | Rule fully matched, prefix fully consumed   | None (forward); last matched word/wildcard (backward) |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts   | Next part (forward); last matched part (backward)     |
-| 3a — Dirty partial | Trailing text matches start of current part | Current part (prefix-filtered)                        |
-| 3b — Dirty partial | Trailing text doesn't match                 | Current part (forward); last matched part (backward)  |
+| Category           | Condition                                   | Forward completion source      | Backward completion source     |
+| ------------------ | ------------------------------------------- | ------------------------------ | ------------------------------ |
+| 1 — Exact          | Rule fully matched, prefix fully consumed   | None                           | Last matched word/wildcard     |
+| 2 — Clean partial  | Prefix consumed, rule has remaining parts   | Next part of rule              | Last matched part              |
+| 3a — Dirty partial | Trailing text matches start of current part | Current part (prefix-filtered) | Current part (prefix-filtered) |
+| 3b — Dirty partial | Trailing text doesn't match                 | Current part                   | Last matched part              |
 
 5. Multi-word string parts use `tryPartialStringMatch()` to offer one word
    at a time instead of the entire phrase.
