@@ -48,6 +48,7 @@ type CompletionData = {
     prefix: string; // Fixed prefix before completions
 };
 
+// Architecture: docs/architecture/completion.md — §CLI integration
 async function getCompletionsData(
     line: string,
     dispatcher: Dispatcher,
@@ -67,7 +68,9 @@ async function getCompletionsData(
         // how much of the input it consumed (matchedPrefixLength →
         // startIndex), so we no longer need space-based token-boundary
         // heuristics here.
-        const result = await dispatcher.getCommandCompletion(line);
+        // CLI tab-completion is always a forward action.
+        const direction = "forward" as const;
+        const result = await dispatcher.getCommandCompletion(line, direction);
         if (result.completions.length === 0) {
             return null;
         }

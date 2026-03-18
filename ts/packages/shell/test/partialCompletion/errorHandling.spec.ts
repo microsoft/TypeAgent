@@ -34,6 +34,7 @@ describe("PartialCompletionSession — backend error handling", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "stop",
+            "forward",
         );
     });
 

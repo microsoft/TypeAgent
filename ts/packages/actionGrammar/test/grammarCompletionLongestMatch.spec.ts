@@ -30,7 +30,7 @@ describe("Grammar Completion - longest match property", () => {
         it("completes second part after first matched with space", () => {
             const result = matchGrammarCompletion(grammar, "first ");
             expect(result.completions).toContain("second");
-            expect(result.matchedPrefixLength).toBe(5);
+            expect(result.matchedPrefixLength).toBe(6);
         });
 
         it("completes third part after first two matched", () => {
@@ -42,7 +42,7 @@ describe("Grammar Completion - longest match property", () => {
         it("completes third part after first two matched with space", () => {
             const result = matchGrammarCompletion(grammar, "first second ");
             expect(result.completions).toContain("third");
-            expect(result.matchedPrefixLength).toBe(12);
+            expect(result.matchedPrefixLength).toBe(13);
         });
 
         it("no completion for exact full match", () => {
@@ -194,7 +194,7 @@ describe("Grammar Completion - longest match property", () => {
         it("completes 'percent' after number with space", () => {
             const result = matchGrammarCompletion(grammar, "set volume 50 ");
             expect(result.completions).toContain("percent");
-            expect(result.matchedPrefixLength).toBe(13);
+            expect(result.matchedPrefixLength).toBe(14);
         });
 
         it("no completion for exact match", () => {
@@ -467,14 +467,15 @@ describe("Grammar Completion - longest match property", () => {
             expect(r1.completions).toContain("two");
         });
 
-        it("matchedPrefixLength is stable regardless of trailing spaces", () => {
+        it("matchedPrefixLength includes trailing whitespace", () => {
             const r1 = matchGrammarCompletion(grammar, "one");
             const r2 = matchGrammarCompletion(grammar, "one ");
             const r3 = matchGrammarCompletion(grammar, "one  ");
-            // All should report the same matchedPrefixLength (end of
-            // consumed prefix, which is the "one" portion)
-            expect(r1.matchedPrefixLength).toBe(r2.matchedPrefixLength);
-            expect(r2.matchedPrefixLength).toBe(r3.matchedPrefixLength);
+            // Each includes the trailing whitespace in
+            // matchedPrefixLength: "one"=3, "one "=4, "one  "=5.
+            expect(r1.matchedPrefixLength).toBe(3);
+            expect(r2.matchedPrefixLength).toBe(4);
+            expect(r3.matchedPrefixLength).toBe(5);
         });
     });
 

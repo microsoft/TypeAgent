@@ -44,6 +44,7 @@ describe("PartialCompletionSession — result processing", () => {
             startIndex: 4,
             completions: [group1, group2],
             closedSet: false,
+            directionSensitive: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -75,6 +76,7 @@ describe("PartialCompletionSession — result processing", () => {
             startIndex: 4,
             completions: [group],
             closedSet: false,
+            directionSensitive: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -103,6 +105,7 @@ describe("PartialCompletionSession — result processing", () => {
             startIndex: 0,
             completions: [group],
             closedSet: false,
+            directionSensitive: false,
             separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
@@ -123,6 +126,7 @@ describe("PartialCompletionSession — result processing", () => {
             startIndex: 0,
             completions: [{ name: "empty", completions: [] }],
             closedSet: false,
+            directionSensitive: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -147,6 +151,7 @@ describe("PartialCompletionSession — result processing", () => {
             startIndex: 0,
             completions: [group],
             closedSet: false,
+            directionSensitive: false,
             separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
@@ -180,6 +185,7 @@ describe("PartialCompletionSession — result processing", () => {
             startIndex: 0,
             completions: [group],
             closedSet: false,
+            directionSensitive: false,
             separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
@@ -209,6 +215,7 @@ describe("PartialCompletionSession — result processing", () => {
             startIndex: 0,
             completions: [sortedGroup, unsortedGroup],
             closedSet: false,
+            directionSensitive: false,
             separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);

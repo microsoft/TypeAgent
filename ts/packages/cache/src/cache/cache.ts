@@ -30,6 +30,7 @@ import {
     mergeCompletionResults,
     NamespaceKeyFilter,
 } from "../constructions/constructionCache.js";
+import { CompletionDirection } from "@typeagent/agent-sdk";
 import {
     ExplainWorkQueue,
     ExplanationOptions,
@@ -612,23 +613,30 @@ export class AgentCache {
         return grammarStore.match(request, options);
     }
 
+    // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
         requestPrefix: string,
         options?: MatchOptions,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
         // If NFA grammar system is configured, only use grammar store
         if (this._useNFAGrammar) {
             const grammarStore = this._grammarStore;
-            return grammarStore.completion(requestPrefix, options);
+            return grammarStore.completion(requestPrefix, options, direction);
         }
 
         // Otherwise use completion-based construction store (with grammar store fallback)
         const store = this._constructionStore;
-        const storeCompletion = store.completion(requestPrefix, options);
+        const storeCompletion = store.completion(
+            requestPrefix,
+            options,
+            direction,
+        );
         const grammarStore = this._grammarStore;
         const grammarCompletion = grammarStore.completion(
             requestPrefix,
             options,
+            direction,
         );
         return mergeCompletionResults(storeCompletion, grammarCompletion);
     }

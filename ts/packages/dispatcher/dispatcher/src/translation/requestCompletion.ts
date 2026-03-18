@@ -5,6 +5,7 @@ import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { ExecutableAction, getPropertyInfo, MatchOptions } from "agent-cache";
 import {
+    CompletionDirection,
     CompletionGroup,
     CompletionGroups,
     TypeAgentAction,
@@ -77,6 +78,7 @@ function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
 export async function requestCompletion(
     requestPrefix: string,
     context: CommandHandlerContext,
+    direction?: CompletionDirection, // defaults to forward-like behavior when omitted
 ): Promise<CompletionGroups> {
     debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
     const namespaceKeys = getCompletionNamespaceKeys(context);
@@ -89,7 +91,11 @@ export async function requestCompletion(
         namespaceKeys,
         history: getHistoryContext(context),
     };
-    const results = context.agentCache.completion(requestPrefix, options);
+    const results = context.agentCache.completion(
+        requestPrefix,
+        options,
+        direction,
+    );
 
     if (results === undefined) {
         return { groups: [] };
@@ -98,6 +104,7 @@ export async function requestCompletion(
     const matchedPrefixLength = results.matchedPrefixLength;
     const separatorMode = results.separatorMode;
     const closedSet = results.closedSet;
+    const directionSensitive = results.directionSensitive;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -114,11 +121,7 @@ export async function requestCompletion(
             matchedPrefixLength,
             separatorMode,
             closedSet,
-            // Grammar completions use eager commit: tokens can abut
-            // without an explicit delimiter (e.g. CJK characters),
-            // so the session should re-fetch immediately when a
-            // completion is uniquely satisfied.
-            commitMode: "eager",
+            directionSensitive,
         };
     }
 
@@ -144,8 +147,7 @@ export async function requestCompletion(
         matchedPrefixLength,
         separatorMode,
         closedSet,
-        // Grammar completions use eager commit (see note above).
-        commitMode: "eager",
+        directionSensitive,
     };
 }
 

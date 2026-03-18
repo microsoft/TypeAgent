@@ -67,6 +67,7 @@ function makeSequentialDispatcher(
         startIndex: 0,
         completions: [],
         closedSet: true,
+        directionSensitive: false,
     });
     return { getCommandCompletion: fn };
 }
@@ -84,7 +85,6 @@ describe("Pattern A — startIndex before separator (separatorMode=spacePunctuat
     const result = makeCompletionResult(["Rock", "Jazz", "Blues"], 4, {
         separatorMode: "spacePunctuation",
         closedSet: false,
-        commitMode: "eager",
     });
 
     test("space after anchor satisfies separator — shows all completions", async () => {
@@ -179,7 +179,6 @@ describe("Pattern B — startIndex past separator (separatorMode=none)", () => {
     const result = makeCompletionResult(["Rock", "Jazz", "Blues"], 5, {
         separatorMode: "none",
         closedSet: false,
-        commitMode: "eager",
     });
 
     test("letter after anchor goes straight to trie (no separator needed)", async () => {
@@ -238,7 +237,6 @@ describe("Pattern B variant — startIndex past separator (separatorMode=optiona
     const result = makeCompletionResult(["Rock", "Jazz", "Blues"], 5, {
         separatorMode: "optional",
         closedSet: false,
-        commitMode: "eager",
     });
 
     test("letter after anchor filters via trie (no separator needed)", async () => {
@@ -276,7 +274,6 @@ describe("Double separator — startIndex past separator + separatorMode requiri
     const doubleSepResult = makeCompletionResult(["Rock", "Jazz", "Blues"], 5, {
         separatorMode: "spacePunctuation",
         closedSet: false,
-        commitMode: "eager",
     });
 
     test("double space satisfies the separator — trie filters correctly", async () => {

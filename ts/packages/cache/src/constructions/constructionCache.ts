@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SeparatorMode } from "@typeagent/agent-sdk";
+import { CompletionDirection, SeparatorMode } from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     ExecutableAction,
@@ -10,6 +10,7 @@ import {
 import {
     Construction,
     ConstructionMatchResult,
+    ConstructionPart,
     WildcardMode,
 } from "./constructions.js";
 import { MatchPart, MatchSet, isMatchPart } from "./matchPart.js";
@@ -90,8 +91,13 @@ export type CompletionResult = {
     // beyond it.  False or undefined means the parser can continue
     // past unrecognized input and find more completions.
     closedSet?: boolean | undefined;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.
+    directionSensitive?: boolean | undefined;
 };
 
+// Architecture: docs/architecture/completion.md — §2 Cache Layer
 export function mergeCompletionResults(
     first: CompletionResult | undefined,
     second: CompletionResult | undefined,
@@ -135,6 +141,13 @@ export function mergeCompletionResults(
         closedSet:
             first.closedSet !== undefined || second.closedSet !== undefined
                 ? (first.closedSet ?? false) && (second.closedSet ?? false)
+                : undefined,
+        // Direction-sensitive if either source is.
+        directionSensitive:
+            first.directionSensitive !== undefined ||
+            second.directionSensitive !== undefined
+                ? (first.directionSensitive ?? false) ||
+                  (second.directionSensitive ?? false)
                 : undefined,
     };
 }
@@ -335,6 +348,7 @@ export class ConstructionCache {
         request: string,
         options?: MatchOptions,
         partial?: boolean,
+        needMatchedStarts?: boolean,
     ): ConstructionMatchResult[] {
         const namespaceKeys = options?.namespaceKeys;
         if (namespaceKeys?.length === 0) {
@@ -348,6 +362,7 @@ export class ConstructionCache {
             conflicts: options?.conflicts,
             matchPartsCache: createMatchPartsCache(request),
             partial: partial ?? false, // default to false.
+            needMatchedStarts: needMatchedStarts ?? false,
         };
 
         // If the useTranslators is undefined use all the translators
@@ -374,12 +389,17 @@ export class ConstructionCache {
     public completion(
         requestPrefix: string,
         options?: MatchOptions,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
         debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
         const namespaceKeys = options?.namespaceKeys;
         debugCompletion(`Request completion namespace keys`, namespaceKeys);
 
-        const results = this.match(requestPrefix, options, true);
+        // Resolve direction to a boolean: true when the user is actively
+        // backing up and no trailing separator has committed the last token.
+        const backward =
+            direction === "backward" && !/[\s\p{P}]$/u.test(requestPrefix);
+        const results = this.match(requestPrefix, options, true, backward);
 
         debugCompletion(
             `Request completion construction match: ${results.length}`,
@@ -402,6 +422,14 @@ export class ConstructionCache {
         // are added (entity values are external).  Reset to true when
         // maxPrefixLength advances (old candidates discarded).
         let closedSet: boolean = true;
+        // Direction-sensitive when the opposite direction would produce
+        // different completions.  True when at least one construction
+        // at maxPrefixLength has matched parts to back up to and the
+        // prefix doesn't end with a commit signal (separator).
+        const noTrailingSeparator = !/[\s\p{P}]$/u.test(requestPrefix);
+        let directionSensitive = false;
+        const rejectReferences = options?.rejectReferences ?? true;
+        const langTools = getLanguageTools("en");
 
         function updateMaxPrefixLength(prefixLength: number): void {
             if (prefixLength > maxPrefixLength) {
@@ -410,6 +438,7 @@ export class ConstructionCache {
                 completionProperty.length = 0;
                 separatorMode = undefined;
                 closedSet = true;
+                directionSensitive = false;
             }
         }
 
@@ -422,38 +451,69 @@ export class ConstructionCache {
                 );
             }
 
-            if (partialPartCount === construction.parts.length) {
-                // Exact match — all parts matched.  Nothing to complete,
-                // but advance maxPrefixLength so shorter candidates are
-                // discarded.
-                updateMaxPrefixLength(requestPrefix.length);
-                continue;
+            // --- Step 1: Determine which part to complete and the
+            //     prefix length up to that point. ---
+            let completionPart: ConstructionPart | undefined;
+            let candidatePrefixLength: number;
+
+            if (backward) {
+                // Walk matchedStarts backwards to find the last part
+                // that actually matched (skip optional parts = -1).
+                const matchedStarts = result.matchedStarts;
+                candidatePrefixLength = -1;
+                if (matchedStarts !== undefined && partialPartCount > 0) {
+                    for (let i = partialPartCount - 1; i >= 0; i--) {
+                        if (matchedStarts[i] >= 0) {
+                            completionPart = construction.parts[i];
+                            candidatePrefixLength = matchedStarts[i];
+                            break;
+                        }
+                    }
+                }
+                if (candidatePrefixLength < 0) {
+                    continue; // Nothing matched to back up to
+                }
+            } else {
+                // Forward: exact match means nothing to complete.
+                if (partialPartCount === construction.parts.length) {
+                    updateMaxPrefixLength(requestPrefix.length);
+                    if (noTrailingSeparator && partialPartCount >= 1) {
+                        directionSensitive = true;
+                    }
+                    continue;
+                }
+                completionPart = construction.parts[partialPartCount];
+                candidatePrefixLength = partialMatchedCurrent ?? 0;
             }
 
-            const candidatePrefixLength = partialMatchedCurrent ?? 0;
+            // --- Step 2: Check against maxPrefixLength ---
             updateMaxPrefixLength(candidatePrefixLength);
             if (candidatePrefixLength !== maxPrefixLength) {
                 continue; // Shorter than the best match — skip
             }
 
-            const nextPart = construction.parts[partialPartCount];
-            // Only include part completion if it is not a checked or entity wildcard.
-            if (nextPart.wildcardMode <= WildcardMode.Enabled) {
-                const partCompletions = nextPart.getCompletion();
+            // Direction-sensitive when a matched part exists to back
+            // up to and the prefix has no trailing commit signal.
+            if (noTrailingSeparator && partialPartCount >= 1) {
+                directionSensitive = true;
+            }
+
+            // --- Step 3: Offer literal completions from the part ---
+            if (
+                completionPart !== undefined &&
+                completionPart.wildcardMode <= WildcardMode.Enabled
+            ) {
+                const partCompletions = completionPart.getCompletion();
                 if (partCompletions) {
-                    const langTools = getLanguageTools("en");
-                    const rejectReferences = options?.rejectReferences ?? true;
                     for (const completionText of partCompletions) {
-                        // We would have rejected the value if this part is captured.
                         if (
-                            nextPart.capture &&
+                            completionPart.capture &&
                             rejectReferences &&
                             langTools?.possibleReferentialPhrase(completionText)
                         ) {
                             continue;
                         }
                         requestText.push(completionText);
-                        // Determine separator mode for this candidate.
                         if (
                             candidatePrefixLength > 0 &&
                             completionText.length > 0
@@ -471,51 +531,60 @@ export class ConstructionCache {
                 }
             }
 
-            // TODO: assuming the partial action doesn't change the possible values.
-            const nextPartPropertyNames = nextPart.getPropertyNames();
-            if (
-                nextPartPropertyNames !== undefined &&
-                nextPartPropertyNames.length > 0
-            ) {
-                // Detect multi-part properties
-                const allPropertyNames = new Map<string, number>();
-                for (const part of construction.parts) {
-                    const names = part.getPropertyNames();
-                    if (names === undefined) {
-                        continue; // No property names for this part
+            // --- Step 4: Offer property completions for entity parts ---
+            if (completionPart !== undefined) {
+                const partPropertyNames = completionPart.getPropertyNames();
+                if (
+                    partPropertyNames !== undefined &&
+                    partPropertyNames.length > 0
+                ) {
+                    // Filter out properties that appear in multiple parts
+                    // so we only offer single-part properties.
+                    const allPropertyNames = new Map<string, number>();
+                    for (const part of construction.parts) {
+                        const names = part.getPropertyNames();
+                        if (names === undefined) {
+                            continue;
+                        }
+                        for (const name of names) {
+                            const count = allPropertyNames.get(name) ?? 0;
+                            allPropertyNames.set(name, count + 1);
+                        }
                     }
-                    for (const name of names) {
-                        const count = allPropertyNames.get(name) ?? 0;
-                        allPropertyNames.set(name, count + 1);
-                    }
-                }
 
-                const queryPropertyNames = nextPartPropertyNames.filter(
-                    (name) => allPropertyNames.get(name) === 1,
-                );
-                if (queryPropertyNames.length === 0) {
-                    continue; // No single-part properties to complete
-                }
-                completionProperty.push({
-                    actions: result.match.actions,
-                    names: queryPropertyNames,
-                });
-                // Determine separator mode for the property/entity slot.
-                // Use "a" as a representative word character since the
-                // actual entity value is unknown.
-                if (candidatePrefixLength > 0) {
-                    const needsSep = needsSeparatorInAutoMode(
-                        requestPrefix[candidatePrefixLength - 1],
-                        "a",
+                    const queryPropertyNames = partPropertyNames.filter(
+                        (name: string) => allPropertyNames.get(name) === 1,
                     );
-                    separatorMode = mergeSeparatorMode(
-                        separatorMode,
-                        needsSep ? "spacePunctuation" : "optional",
-                    );
+                    if (queryPropertyNames.length > 0) {
+                        completionProperty.push({
+                            actions: result.match.actions,
+                            names: queryPropertyNames,
+                        });
+                        if (candidatePrefixLength > 0) {
+                            const needsSep = needsSeparatorInAutoMode(
+                                requestPrefix[candidatePrefixLength - 1],
+                                "a",
+                            );
+                            separatorMode = mergeSeparatorMode(
+                                separatorMode,
+                                needsSep ? "spacePunctuation" : "optional",
+                            );
+                        }
+                        closedSet = false;
+                    }
                 }
-                // Property/wildcard completions are not a closed set —
-                // entity values are external.
-                closedSet = false;
+            }
+        }
+
+        // Advance past trailing separators so that the reported prefix
+        // length includes any trailing whitespace the user typed.
+        // When advancing, demote separatorMode to "optional" — the
+        // trailing space is already consumed.
+        if (maxPrefixLength < requestPrefix.length) {
+            const trailing = requestPrefix.substring(maxPrefixLength);
+            if (/^[\s\p{P}]+$/u.test(trailing)) {
+                maxPrefixLength = requestPrefix.length;
+                separatorMode = "optional";
             }
         }
 
@@ -525,6 +594,7 @@ export class ConstructionCache {
             matchedPrefixLength: maxPrefixLength,
             separatorMode,
             closedSet,
+            directionSensitive,
         };
     }
 
