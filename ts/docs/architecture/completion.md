@@ -77,6 +77,7 @@ The return path carries `CommandCompletionResult`:
   separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
   closedSet: boolean;           // true → list is exhaustive
   directionSensitive: boolean;  // true → opposite direction would produce different results
+  openWildcard: boolean;        // true → wildcard boundary is ambiguous; shell should slide anchor
 }
 ```
 
@@ -117,6 +118,10 @@ grammar rules.
   needed at the boundary (Latin vs CJK, `[spacing=none]` rules).
 - `closedSet` — `true` for pure keyword alternatives; `false` when
   property/wildcard completions are emitted (entity values are external).
+- `openWildcard` — `true` when a keyword completion is offered after a
+  wildcard that was finalized at end-of-input (Category 2 where the
+  preceding wildcard consumed the entire remaining input). Signals that
+  the wildcard boundary is ambiguous.
 
 ---
 
@@ -264,11 +269,11 @@ lifecycle of a completion interaction.
 | ---- | ------------------------------------------------ | ------------ | ------------------- |
 | A1   | No active session                                | Invalidation | Re-fetch            |
 | A2   | Input no longer extends anchor                   | Invalidation | Re-fetch            |
-| A3   | Non-separator char typed when separator required | Invalidation | Re-fetch            |
+| A3   | Non-separator char typed when separator required | Invalidation | Re-fetch (or slide) |
 | A7   | Direction changed on direction-sensitive result  | Invalidation | Re-fetch            |
 | B4   | Unique match (always fires)                      | Navigation   | Re-fetch next level |
 | B5   | Separator typed after exact match                | Navigation   | Re-fetch next level |
-| C6   | No trie matches + open set                       | Discovery    | Re-fetch            |
+| C6   | No trie matches + open set                       | Discovery    | Re-fetch (or slide) |
 | —    | Trie has matches                                 | —            | Reuse locally       |
 | —    | No matches + closed set                          | —            | Reuse (menu hidden) |
 
@@ -359,6 +364,38 @@ A boolean flowing through the entire pipeline:
   text). When the trie empties, the shell re-fetches to discover more.
 
 Merge rule: AND across sources (closed only if _all_ sources are closed).
+
+### `openWildcard`
+
+A boolean flowing through the entire pipeline, signaling that the completions
+are offered at a position where a wildcard was finalized at end-of-input.
+
+- **`true`** — the wildcard's extent is ambiguous (the user may still be
+  typing within it). The keyword following the wildcard (e.g. "by") is
+  offered as a completion, and `closedSet` correctly describes that keyword
+  set as exhaustive. However, the _position_ of that set is uncertain.
+
+  The shell handles this with **anchor sliding**: instead of re-fetching
+  (which would return the same keyword at a shifted position) or giving up
+  (stuck when `closedSet=true`), the shell slides the anchor forward to the
+  current input. The trie and metadata stay intact, so the menu re-appears
+  at the next word boundary when the user types a separator.
+
+  Recovery is automatic: when the user eventually types the keyword and it
+  uniquely matches in the trie (trigger B4), the session re-fetches for the
+  next grammar part.
+
+- **`false`** — no sliding wildcard boundary; normal `closedSet` semantics
+  apply.
+
+Merge rule: OR across sources (open wildcard if _any_ source has one).
+
+Affects triggers A3 and C6 in the re-fetch decision tree:
+
+- **A3** (non-separator after anchor): when `openWildcard=true`, the anchor
+  slides forward instead of triggering a re-fetch.
+- **C6** (trie empty, closed set): when `openWildcard=true`, the anchor
+  slides forward instead of staying permanently hidden.
 
 ---
 

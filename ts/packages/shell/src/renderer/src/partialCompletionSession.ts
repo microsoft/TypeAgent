@@ -78,6 +78,11 @@ export class PartialCompletionSession {
     private closedSet: boolean = false;
     // True when completions differ between forward and backward.
     private directionSensitive: boolean = false;
+    // True when the completions are offered at a sliding wildcard
+    // boundary.  When set, the shell slides the anchor forward on
+    // further input instead of re-fetching or giving up, and
+    // re-shows the menu at every word boundary.
+    private openWildcard: boolean = false;
     // Direction used for the last fetch.
     private lastDirection: CompletionDirection = "forward";
 
@@ -283,6 +288,22 @@ export class PartialCompletionSession {
                 // the completion *entries* are exhaustive, not whether
                 // the anchor token can extend.  The grammar may parse
                 // the longer input on a completely different path.
+                //
+                // However, when openWildcard is set, the anchor sits at
+                // a sliding wildcard boundary — the user is still typing
+                // within the wildcard, and re-fetching would produce the
+                // same result at a shifted position.  Instead, slide the
+                // anchor forward to the current input: the trie and
+                // metadata stay intact, so the menu will re-appear at
+                // the next word boundary when the user types a separator.
+                if (this.openWildcard) {
+                    debug(
+                        `Partial completion anchor slide (A3): '${anchor}' → '${input}' (openWildcard)`,
+                    );
+                    this.anchor = input;
+                    this.menu.hide();
+                    return true;
+                }
                 debug(
                     `Partial completion re-fetch: non-separator after anchor (mode='${sepMode}', rawPrefix='${rawPrefix}')`,
                 );
@@ -346,7 +367,21 @@ export class PartialCompletionSession {
         //   closedSet=false → the set is NOT closed; the user may have
         //                     typed something valid that wasn't loaded, so
         //                     re-fetch with the longer input (open-set discovery).
+        //
+        // Special case: when openWildcard is set and the trie is empty,
+        // the user is still typing within the wildcard.  Slide the anchor
+        // forward instead of re-fetching (wasteful, same result) or
+        // giving up (stuck).  The trie stays intact so the menu will
+        // re-appear at the next word boundary.
         const active = this.menu.isActive();
+        if (!active && this.openWildcard) {
+            debug(
+                `Partial completion anchor slide (C6): '${anchor}' → '${input}' (openWildcard)`,
+            );
+            this.anchor = input;
+            this.menu.hide();
+            return true;
+        }
         const reuse = closedSet || active;
         debug(
             `Partial completion ${reuse ? "reuse" : "re-fetch"}: closedSet=${closedSet}, menuActive=${active}`,
@@ -384,6 +419,7 @@ export class PartialCompletionSession {
                 this.separatorMode = result.separatorMode ?? "space";
                 this.closedSet = result.closedSet;
                 this.directionSensitive = result.directionSensitive;
+                this.openWildcard = result.openWildcard;
                 this.lastDirection = direction;
 
                 const completions = toMenuItems(result.completions);

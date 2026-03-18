@@ -112,6 +112,12 @@ export type CompletionGroups = {
     // direction change.  When omitted, the dispatcher will conservatively
     // assume true if matchedPrefixLength > 0 and false otherwise.
     directionSensitive?: boolean | undefined;
+    // True when the completions are offered at a position where a
+    // wildcard was finalized at end-of-input.  The wildcard's extent
+    // is ambiguous — the user may still be typing within it — so the
+    // caller should allow the anchor to slide forward on further input
+    // rather than re-fetching or giving up.
+    openWildcard?: boolean | undefined;
 };
 
 export interface AppAgentCommandInterface {

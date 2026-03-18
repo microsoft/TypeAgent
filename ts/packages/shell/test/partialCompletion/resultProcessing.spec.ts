@@ -45,6 +45,7 @@ describe("PartialCompletionSession — result processing", () => {
             completions: [group1, group2],
             closedSet: false,
             directionSensitive: false,
+            openWildcard: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -77,6 +78,7 @@ describe("PartialCompletionSession — result processing", () => {
             completions: [group],
             closedSet: false,
             directionSensitive: false,
+            openWildcard: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -106,6 +108,7 @@ describe("PartialCompletionSession — result processing", () => {
             completions: [group],
             closedSet: false,
             directionSensitive: false,
+            openWildcard: false,
             separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
@@ -127,6 +130,7 @@ describe("PartialCompletionSession — result processing", () => {
             completions: [{ name: "empty", completions: [] }],
             closedSet: false,
             directionSensitive: false,
+            openWildcard: false,
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -152,6 +156,7 @@ describe("PartialCompletionSession — result processing", () => {
             completions: [group],
             closedSet: false,
             directionSensitive: false,
+            openWildcard: false,
             separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
@@ -186,6 +191,7 @@ describe("PartialCompletionSession — result processing", () => {
             completions: [group],
             closedSet: false,
             directionSensitive: false,
+            openWildcard: false,
             separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
@@ -216,6 +222,7 @@ describe("PartialCompletionSession — result processing", () => {
             completions: [sortedGroup, unsortedGroup],
             closedSet: false,
             directionSensitive: false,
+            openWildcard: false,
             separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);

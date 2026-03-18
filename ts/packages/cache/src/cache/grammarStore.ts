@@ -280,6 +280,7 @@ export class GrammarStoreImpl implements GrammarStore {
         let separatorMode: SeparatorMode | undefined;
         let closedSet: boolean | undefined;
         let directionSensitive: boolean = false;
+        let openWildcard: boolean = false;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -367,6 +368,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     separatorMode = undefined;
                     closedSet = undefined;
                     directionSensitive = false;
+                    openWildcard = false;
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);
@@ -388,6 +390,9 @@ export class GrammarStoreImpl implements GrammarStore {
                     // length is direction-sensitive.
                     directionSensitive =
                         directionSensitive || partial.directionSensitive;
+                    // True if any grammar result at this prefix
+                    // length has an open wildcard.
+                    openWildcard = openWildcard || partial.openWildcard;
                     if (
                         partial.properties !== undefined &&
                         partial.properties.length > 0
@@ -418,6 +423,7 @@ export class GrammarStoreImpl implements GrammarStore {
             separatorMode,
             closedSet,
             directionSensitive,
+            openWildcard,
         };
     }
 }

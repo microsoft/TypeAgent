@@ -1176,6 +1176,12 @@ export type GrammarCompletionResult = {
     // direction.  When false, the caller can skip re-fetching on
     // direction change.
     directionSensitive: boolean;
+    // True when the completions are offered at a position where a
+    // wildcard was finalized at end-of-input.  The wildcard's extent
+    // is ambiguous — the user may still be typing within it — so the
+    // caller should allow the anchor to slide forward on further input
+    // rather than re-fetching or giving up.
+    openWildcard: boolean;
 };
 
 function getGrammarCompletionProperty(
@@ -1412,6 +1418,13 @@ export function matchGrammarCompletion(
     // whenever maxPrefixLength advances (old candidates discarded).
     let directionSensitive = false;
 
+    // Whether a wildcard was finalized at end-of-input and the
+    // following keyword was offered as a completion.  When true the
+    // wildcard boundary is ambiguous — the user may still be typing
+    // within the wildcard — so the caller should slide its anchor
+    // forward instead of re-fetching or giving up.
+    let openWildcard = false;
+
     // Helper: update maxPrefixLength.  When it increases, all previously
     // accumulated completions from shorter matches are irrelevant
     // — clear them.
@@ -1423,6 +1436,7 @@ export function matchGrammarCompletion(
             separatorMode = undefined;
             closedSet = true;
             directionSensitive = false;
+            openWildcard = false;
         }
     }
 
@@ -1626,6 +1640,15 @@ export function matchGrammarCompletion(
             if (hasPartToReconsider) {
                 directionSensitive = true;
             }
+            // When a wildcard was finalized at end-of-input and we
+            // offered the following keyword as a completion, the
+            // wildcard boundary is ambiguous — the user may still be
+            // typing within the wildcard.  Signal this so the shell
+            // can slide its anchor forward instead of re-fetching or
+            // giving up when the user keeps typing.
+            if (savedPendingWildcard?.valueId !== undefined) {
+                openWildcard = true;
+            }
             // Note: non-string next parts (wildcard, number, rules) in
             // Category 2 don't produce completions here — wildcards are
             // handled by Category 3a (pending wildcard) and nested rules
@@ -1714,6 +1737,7 @@ export function matchGrammarCompletion(
         separatorMode,
         closedSet,
         directionSensitive,
+        openWildcard,
     };
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
     return result;

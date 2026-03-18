@@ -95,6 +95,12 @@ export type CompletionResult = {
     // direction.  When false, the caller can skip re-fetching on
     // direction change.
     directionSensitive?: boolean | undefined;
+    // True when the completions are offered at a position where a
+    // wildcard was finalized at end-of-input.  The wildcard's extent
+    // is ambiguous — the user may still be typing within it — so the
+    // caller should allow the anchor to slide forward on further input
+    // rather than re-fetching or giving up.
+    openWildcard?: boolean | undefined;
 };
 
 // Architecture: docs/architecture/completion.md — §2 Cache Layer
@@ -148,6 +154,13 @@ export function mergeCompletionResults(
             second.directionSensitive !== undefined
                 ? (first.directionSensitive ?? false) ||
                   (second.directionSensitive ?? false)
+                : undefined,
+        // Open wildcard if either source has one.
+        openWildcard:
+            first.openWildcard !== undefined ||
+            second.openWildcard !== undefined
+                ? (first.openWildcard ?? false) ||
+                  (second.openWildcard ?? false)
                 : undefined,
     };
 }

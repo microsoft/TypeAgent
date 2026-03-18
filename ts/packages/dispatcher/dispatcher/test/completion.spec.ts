@@ -341,6 +341,39 @@ const handlers = {
                 };
             },
         },
+        wildcard: {
+            description: "Simulates grammar open-wildcard result",
+            parameters: {
+                args: {
+                    request: {
+                        description: "A request with wildcard",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("request")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "Keywords",
+                            completions: ["by", "from"],
+                        },
+                    ],
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                };
+            },
+        },
     },
 } as const;
 
@@ -1814,6 +1847,38 @@ describe("Command Completion - startIndex", () => {
             // Trailing space commits — no direction-sensitive boundary.
             // Flat agents have no subcommand to reconsider.
             expect(result.directionSensitive).toBeFalsy();
+        });
+    });
+
+    describe("openWildcard propagation", () => {
+        it("propagates openWildcard=true from agent result", async () => {
+            const result = await getCommandCompletion(
+                "@comptest wildcard hello",
+                "forward",
+                context,
+            );
+            expect(result).toBeDefined();
+            expect(result.openWildcard).toBe(true);
+        });
+
+        it("openWildcard defaults to false when agent does not set it", async () => {
+            const result = await getCommandCompletion(
+                "@comptest run ",
+                "forward",
+                context,
+            );
+            expect(result).toBeDefined();
+            expect(result.openWildcard).toBe(false);
+        });
+
+        it("openWildcard is false for commands with no agent completion", async () => {
+            const result = await getCommandCompletion(
+                "@comptest noop",
+                "forward",
+                context,
+            );
+            expect(result).toBeDefined();
+            expect(result.openWildcard).toBe(false);
         });
     });
 });
