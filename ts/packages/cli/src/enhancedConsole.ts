@@ -1324,6 +1324,8 @@ function renderStartupBanner(): void {
 
     const lines: string[] = [];
     lines.push(top);
+    // Empty line before logo
+    lines.push(chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│"));
 
     // Render logo + content side by side
     const totalRows = Math.max(LOGO_LINES.length, contentLines.length);
