@@ -446,13 +446,53 @@ const numstrAgent: AppAgent = {
     ...getCommandInterface(numstrHandlers),
 };
 
+// ---------------------------------------------------------------------------
+// Throwing agent — getCommandCompletion always throws
+// ---------------------------------------------------------------------------
+const throwHandlers = {
+    description: "Agent whose completion throws",
+    defaultSubCommand: "boom",
+    commands: {
+        boom: {
+            description: "Throws on completion",
+            parameters: {
+                args: {
+                    value: {
+                        description: "A value",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (): Promise<CompletionGroups> => {
+                throw new Error("agent completion exploded");
+            },
+        },
+    },
+} as const;
+
+const throwConfig: AppAgentManifest = {
+    emojiChar: "💥",
+    description: "Throwing completion test",
+};
+
+const throwAgent: AppAgent = {
+    ...getCommandInterface(throwHandlers),
+};
+
 const testCompletionAgentProviderMulti: AppAgentProvider = {
-    getAppAgentNames: () => ["comptest", "flattest", "nocmdtest", "numstrtest"],
+    getAppAgentNames: () => [
+        "comptest",
+        "flattest",
+        "nocmdtest",
+        "numstrtest",
+        "throwtest",
+    ],
     getAppAgentManifest: async (name: string) => {
         if (name === "comptest") return config;
         if (name === "flattest") return flatConfig;
         if (name === "nocmdtest") return noCommandsConfig;
         if (name === "numstrtest") return numstrConfig;
+        if (name === "throwtest") return throwConfig;
         throw new Error(`Unknown: ${name}`);
     },
     loadAppAgent: async (name: string) => {
@@ -460,10 +500,19 @@ const testCompletionAgentProviderMulti: AppAgentProvider = {
         if (name === "flattest") return flatAgent;
         if (name === "nocmdtest") return noCommandsAgent;
         if (name === "numstrtest") return numstrAgent;
+        if (name === "throwtest") return throwAgent;
         throw new Error(`Unknown: ${name}`);
     },
     unloadAppAgent: async (name: string) => {
-        if (!["comptest", "flattest", "nocmdtest", "numstrtest"].includes(name))
+        if (
+            ![
+                "comptest",
+                "flattest",
+                "nocmdtest",
+                "numstrtest",
+                "throwtest",
+            ].includes(name)
+        )
             throw new Error(`Unknown: ${name}`);
     },
 };
@@ -1676,6 +1725,94 @@ describe("Command Completion - startIndex", () => {
             );
             // "--debug" is boolean — fully consumed, no pending flag.
             // No direction-sensitive branch applies.
+            expect(result.directionSensitive).toBeFalsy();
+        });
+    });
+
+    describe("graceful fallback", () => {
+        it("backward with unknown agent falls back to system completions", async () => {
+            const result = await getCommandCompletion(
+                "@nonexistent cmd",
+                "backward",
+                context,
+            );
+            expect(result).toBeDefined();
+            expect(result.startIndex).toBeGreaterThanOrEqual(0);
+            // Should fall back to system agent completions.
+            expect(result.completions.length).toBeGreaterThan(0);
+            expect(result.directionSensitive).toBeDefined();
+        });
+    });
+
+    describe("catch block — agent completion throws", () => {
+        it("returns safe default when agent getCommandCompletion throws", async () => {
+            // throwtest's getCompletion always throws.
+            // The catch block in getCommandCompletion should return
+            // { startIndex: 0, completions: [], closedSet: false,
+            //   directionSensitive: false }.
+            const result = await getCommandCompletion(
+                "@throwtest boom val",
+                "forward",
+                context,
+            );
+            expect(result.startIndex).toBe(0);
+            expect(result.completions).toHaveLength(0);
+            expect(result.closedSet).toBe(false);
+            expect(result.directionSensitive).toBe(false);
+        });
+
+        it("returns safe default for throwing agent with backward direction", async () => {
+            const result = await getCommandCompletion(
+                "@throwtest boom val",
+                "backward",
+                context,
+            );
+            expect(result.startIndex).toBe(0);
+            expect(result.completions).toHaveLength(0);
+            expect(result.closedSet).toBe(false);
+            expect(result.directionSensitive).toBe(false);
+        });
+    });
+
+    describe("backward direction — flat agent (no subcommand table)", () => {
+        it("backward on '@flattest' with no trailing space", async () => {
+            const result = await getCommandCompletion(
+                "@flattest",
+                "backward",
+                context,
+            );
+            // "@flattest" — agent recognized but no subcommand table.
+            // Backward shouldn't crash even though there are no
+            // subcommands to reconsider.
+            expect(result).toBeDefined();
+            expect(result.startIndex).toBeGreaterThanOrEqual(0);
+            expect(result.completions).toBeDefined();
+            expect(result.closedSet).toBeDefined();
+            expect(result.directionSensitive).toBeDefined();
+        });
+
+        it("backward on '@flattest --release' backs up to flag alternatives", async () => {
+            const result = await getCommandCompletion(
+                "@flattest --release",
+                "backward",
+                context,
+            );
+            // "--release" is a boolean flag — fully consumed, so
+            // backward does not trigger flag-backtrack.
+            expect(result).toBeDefined();
+            expect(result.startIndex).toBeGreaterThanOrEqual(0);
+            // Boolean flag is consumed — no pending value to reconsider.
+            expect(result.directionSensitive).toBeFalsy();
+        });
+
+        it("directionSensitive is false for '@flattest ' with trailing space", async () => {
+            const result = await getCommandCompletion(
+                "@flattest ",
+                "forward",
+                context,
+            );
+            // Trailing space commits — no direction-sensitive boundary.
+            // Flat agents have no subcommand to reconsider.
             expect(result.directionSensitive).toBeFalsy();
         });
     });

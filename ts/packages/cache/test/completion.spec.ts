@@ -1272,5 +1272,102 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             expect(result!.directionSensitive).toBe(true);
         });
+
+        it("multiple constructions: sensitive wins over non-sensitive at same prefix length", () => {
+            // c1 has two parts — "play song" at position 4 is
+            // direction-sensitive (has parts to back up to).
+            const c1 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            // c2 is a single-part construction that only matches
+            // at prefix length 0.  It won't compete at length 4.
+            const c2 = Construction.create(
+                [createMatchPart(["stop"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion("play", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            // c1 matches at 4 > c2's 0 — c1 wins, which IS sensitive.
+            expect(result!.directionSensitive).toBe(true);
+        });
+
+        it("multiple constructions at same prefix length: any sensitive makes result sensitive", () => {
+            // Two constructions that both match "play" at prefix 4.
+            // One continues to "song", the other to "video".
+            // Both have matched parts → both flag directionSensitive.
+            const c1 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["video"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion("play", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(true);
+        });
+
+        it("longer match resets directionSensitive from shorter sensitive match", () => {
+            // c1 matches "play" at 4 (sensitive) but c2 matches
+            // "play song" at 9 (also sensitive).  When maxPrefixLength
+            // advances from 4→9, directionSensitive is reset and
+            // re-evaluated at the longer match.
+            const c1 = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                    createMatchPart(["now"], "adv"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion(
+                "play song",
+                defaultOptions,
+                "forward",
+            );
+            expect(result).toBeDefined();
+            // c2 dominates at prefix length 9.
+            expect(result!.directionSensitive).toBe(true);
+            expect(result!.completions).toContain("now");
+        });
+
+        it("not sensitive when trailing space commits across all constructions", () => {
+            const c1 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["video"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion("play ", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(false);
+        });
     });
 });

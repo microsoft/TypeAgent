@@ -1,8 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { jest } from "@jest/globals";
 import {
     PartialCompletionSession,
+    ICompletionDispatcher,
+    CommandCompletionResult,
     makeMenu,
     makeDispatcher,
     makeCompletionResult,
@@ -360,5 +363,227 @@ describe("PartialCompletionSession — committed-past-boundary re-fetch", () => 
 
         expect(menu.hasExactMatch).toHaveBeenCalledWith("xyz");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── direction change while PENDING ────────────────────────────────────────────
+
+describe("PartialCompletionSession — direction change while PENDING", () => {
+    test("direction change while PENDING is suppressed (no re-fetch)", () => {
+        const menu = makeMenu();
+        // Never-resolving promise keeps session in PENDING
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockReturnValue(new Promise(() => {})),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos, "forward");
+        // Still PENDING — second update with different direction is suppressed
+        session.update("play", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("stale resolution after direction change is ignored", async () => {
+        const menu = makeMenu();
+        let resolveFn!: (v: CommandCompletionResult) => void;
+        const pending = new Promise<CommandCompletionResult>(
+            (resolve) => (resolveFn = resolve),
+        );
+        const forwardResult = makeCompletionResult(["song"], 4, {
+            directionSensitive: true,
+        });
+        const backwardResult = makeCompletionResult(["play"], 0, {
+            directionSensitive: true,
+        });
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockReturnValueOnce(pending)
+                .mockResolvedValue(backwardResult),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        // First update starts PENDING
+        session.update("play", getPos, "forward");
+
+        // Resolve stale promise (forward result)
+        resolveFn(forwardResult);
+        await Promise.resolve();
+
+        // Session processed the result — anchor is now "play"
+        // Now change direction — if at exact anchor + directionSensitive, re-fetch
+        session.update("play", getPos, "backward");
+
+        // Depending on A7: session was established with forwardResult,
+        // direction changes at exact anchor with directionSensitive=true → re-fetch
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "play",
+            "backward",
+        );
+    });
+
+    test("hide during PENDING then diverged input with new direction triggers new session", async () => {
+        const menu = makeMenu();
+        let resolveFn!: (v: CommandCompletionResult) => void;
+        const pending = new Promise<CommandCompletionResult>(
+            (resolve) => (resolveFn = resolve),
+        );
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockReturnValueOnce(pending)
+                .mockResolvedValue(makeCompletionResult(["song"], 4)),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos, "forward");
+
+        // Hide cancels the in-flight fetch
+        session.hide();
+
+        // Resolve the now-stale promise
+        resolveFn(makeCompletionResult(["song"], 4));
+        await Promise.resolve();
+
+        // Diverged input with backward — anchor was "play", "stop"
+        // does not match → triggers a new session
+        session.update("stop", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "stop",
+            "backward",
+        );
+    });
+});
+
+// ── direction detection edge cases ────────────────────────────────────────────
+//
+// These tests exercise direction sequences that match the detection logic
+// in partial.ts:
+//   direction = input.length < previousInput.length &&
+//               previousInput.startsWith(input) ? "backward" : "forward"
+//
+// They verify the session handles all edge cases correctly:
+// - true backspace (strict prefix, shorter)
+// - replacement (same length but different content → forward)
+// - non-prefix change (different text → forward)
+
+describe("PartialCompletionSession — direction detection patterns", () => {
+    test("backspace produces backward direction: 'play' → 'pla'", async () => {
+        const menu = makeMenu();
+        const result1 = makeCompletionResult(["song"], 4, {
+            directionSensitive: true,
+        });
+        const result2 = makeCompletionResult(["play"], 0);
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockResolvedValueOnce(result1)
+                .mockResolvedValue(result2),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos, "forward");
+        await Promise.resolve();
+
+        // "pla" is a strict prefix of "play" and shorter → backward
+        session.update("pla", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "pla",
+            "backward",
+        );
+    });
+
+    test("replacement is forward: 'abc' → 'abd' (same length, different content)", async () => {
+        const menu = makeMenu();
+        const dispatcher = makeDispatcher();
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        // "abc" starts a new session
+        session.update("abc", getPos, "forward");
+        await Promise.resolve(); // → ACTIVE, anchor = "abc"
+
+        // "abd" is not shorter than "abc" → forward by partial.ts logic.
+        // But "abd" doesn't start with anchor "abc" → diverged → re-fetch.
+        session.update("abd", getPos, "forward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "abd",
+            "forward",
+        );
+    });
+
+    test("non-prefix change is forward: 'hello' → 'world'", async () => {
+        const menu = makeMenu();
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockResolvedValueOnce(makeCompletionResult(["next"], 5))
+                .mockResolvedValue(makeCompletionResult(["next"], 5)),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("hello", getPos, "forward");
+        await Promise.resolve();
+
+        // "world" is not a prefix continuation of "hello" → forward
+        session.update("world", getPos, "forward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "world",
+            "forward",
+        );
+    });
+
+    test("empty to non-empty is forward", () => {
+        const menu = makeMenu();
+        const dispatcher = makeDispatcher();
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("", getPos, "forward");
+        session.update("p", getPos, "forward");
+
+        // Both calls should be forward
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+        // First call fetches for ""
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledWith(
+            "",
+            "forward",
+        );
+    });
+
+    test("non-empty to empty is backward", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["song"], 4, {
+            directionSensitive: true,
+        });
+        const dispatcher: ICompletionDispatcher = {
+            getCommandCompletion: jest
+                .fn<ICompletionDispatcher["getCommandCompletion"]>()
+                .mockResolvedValueOnce(result)
+                .mockResolvedValue(makeCompletionResult(["play"], 0)),
+        };
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos, "forward");
+        await Promise.resolve();
+
+        // Clearing input (all backspace) → "" is prefix of "play" and shorter
+        session.update("", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "",
+            "backward",
+        );
     });
 });

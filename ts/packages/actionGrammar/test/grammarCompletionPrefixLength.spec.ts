@@ -1144,4 +1144,31 @@ describe("Grammar Completion - matchedPrefixLength", () => {
             });
         });
     });
+
+    describe("optional part ()? with backward", () => {
+        const g = `<Start> = play (shuffle)? music -> true;`;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        it("backward on 'play shuffle' backs up to 'shuffle'", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play shuffle",
+                undefined,
+                "backward",
+            );
+            expect(result.completions).toContain("shuffle");
+            expect(result.matchedPrefixLength).toBe(4);
+        });
+
+        it("forward on 'play shuffle' offers 'music'", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play shuffle",
+                undefined,
+                "forward",
+            );
+            expect(result.completions).toEqual(["music"]);
+            expect(result.matchedPrefixLength).toBe(12);
+        });
+    });
 });

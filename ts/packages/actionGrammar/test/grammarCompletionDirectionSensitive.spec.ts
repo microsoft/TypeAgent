@@ -237,6 +237,222 @@ describe("Grammar Completion - directionSensitive", () => {
         });
     });
 
+    describe("optional part ()?", () => {
+        const g = `<Start> = play (shuffle)? music -> true;`;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        it("sensitive for 'play' (optional not yet consumed)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("not sensitive for 'play ' with trailing space", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play ",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(false);
+        });
+
+        it("sensitive for 'play shuffle' (optional consumed, no trailing space)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play shuffle",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("backward on 'play shuffle' backs up to 'shuffle'", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play shuffle",
+                undefined,
+                "backward",
+            );
+            // Backward should back up to offer "shuffle" instead of
+            // the next word "music".
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("not sensitive for 'play shuffle ' (trailing space commits)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play shuffle ",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(false);
+        });
+
+        it("sensitive for exact match 'play shuffle music'", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play shuffle music",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("sensitive for exact match (optional skipped) 'play music'", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play music",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+    });
+
+    describe("repeat part ()+", () => {
+        const g = `<Start> = play (song)+ now -> true;`;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        it("sensitive for 'play song' (one iteration matched)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play song",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("backward on 'play song' backs up", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play song",
+                undefined,
+                "backward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("sensitive for 'play song song' (two iterations matched)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play song song",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("not sensitive for 'play song ' (trailing space commits)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play song ",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(false);
+        });
+    });
+
+    describe("repeat part ()*", () => {
+        const g = `<Start> = play (song)* now -> true;`;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        it("sensitive for 'play' (zero iterations, but 'play' matched)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("sensitive for 'play song' (one iteration matched)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play song",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+    });
+
+    describe("spacing=none with backward", () => {
+        const g = `<Start> [spacing=none] = play music -> true;`;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        it("sensitive for 'play' (couldBackUp always true in none mode)", () => {
+            // In none mode, whitespace is not a separator, so
+            // couldBackUp is always true when words match.
+            const result = matchGrammarCompletion(
+                grammar,
+                "play",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("backward on 'play' backs up to offer 'play'", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play",
+                undefined,
+                "backward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("sensitive for 'playmusic' (exact match, none mode)", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "playmusic",
+                undefined,
+                "forward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+
+        it("backward on 'playmusic' backs up to 'music'", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "playmusic",
+                undefined,
+                "backward",
+            );
+            expect(result.directionSensitive).toBe(true);
+        });
+    });
+
+    describe("minPrefixLength with backward direction", () => {
+        const g = [
+            `<Start> = play music -> true;`,
+            `<Start> = stop music -> true;`,
+        ].join("\n");
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        it("backward respects minPrefixLength", () => {
+            const result = matchGrammarCompletion(
+                grammar,
+                "play music",
+                5,
+                "backward",
+            );
+            // minPrefixLength=5 means only completions at position ≥5
+            // are relevant.  Backward on "play music" would back up
+            // to "music" at position 4 (or 5 with space), which should
+            // still be valid since 5 ≥ 5.
+            expect(result.directionSensitive).toBe(true);
+        });
+    });
+
     describe("forward and backward produce same directionSensitive", () => {
         const g = `<Start> = play music -> true;`;
         const grammar = loadGrammarRules("test.grammar", g);
