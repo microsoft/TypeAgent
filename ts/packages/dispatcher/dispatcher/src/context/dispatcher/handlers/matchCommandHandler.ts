@@ -67,6 +67,8 @@ export class MatchCommandHandler implements CommandHandler {
                 result.matchedPrefixLength = requestResult.matchedPrefixLength;
                 result.separatorMode = requestResult.separatorMode;
                 result.closedSet = requestResult.closedSet;
+                result.directionSensitive = requestResult.directionSensitive;
+                result.openWildcard = requestResult.openWildcard;
             }
         }
         return result;

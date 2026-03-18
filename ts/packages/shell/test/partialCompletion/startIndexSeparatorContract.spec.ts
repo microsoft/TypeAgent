@@ -68,6 +68,7 @@ function makeSequentialDispatcher(
         completions: [],
         closedSet: true,
         directionSensitive: false,
+        openWildcard: false,
     });
     return { getCommandCompletion: fn };
 }
