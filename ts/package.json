@@ -93,7 +93,10 @@
       ]
     },
     "overrides": {
-      "node-gyp": "^12.2.0"
+      "hono": ">=4.12.8",
+      "http-proxy-agent": ">=7.0.0",
+      "node-gyp": "^12.2.0",
+      "serialize-javascript": ">=7.0.0"
     },
     "ignoredBuiltDependencies": [
       "leveldown"
@@ -101,7 +104,8 @@
   },
   "peerDependencyRules": {
     "ignoreMissing": [
-      "eslint"
+      "eslint",
+      "zod"
     ],
     "allowedVersions": {
       "zod": "*",

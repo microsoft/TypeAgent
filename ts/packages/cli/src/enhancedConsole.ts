@@ -40,12 +40,23 @@ import {
     handleSlashCommand,
     getVerboseIndicator,
 } from "./slashCommands.js";
+import {
+    setSpinnerAccessor,
+    getDebugPanel,
+    PromptRenderer,
+} from "./debugInterceptor.js";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
 
+// Wire up the debug interceptor's spinner access
+setSpinnerAccessor(() => currentSpinner);
+
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
+
+// Active custom prompt renderer (set by questionWithCompletion)
+let activePromptRenderer: PromptRenderer | null = null;
 
 // Track the active request for cancellation support
 let currentRequestId: string | undefined;
@@ -278,8 +289,32 @@ export function createEnhancedClientIO(
             if (appendMode === "inline") {
                 currentSpinner.appendStream(displayText);
             } else {
+                // Flush any inline stream content before writing block content
+                currentSpinner.flushStream();
                 currentSpinner.writeAbove(displayText);
             }
+        } else if (activePromptRenderer) {
+            // Custom prompt (questionWithCompletion) is active.
+            // Clear the prompt rows, write content above, then re-render.
+            const rows = activePromptRenderer.rows();
+            for (let i = 0; i < rows; i++) {
+                process.stdout.write("\x1b[1A\x1b[2K");
+            }
+            if (appendMode !== "inline") {
+                if (lastAppendMode === "inline") {
+                    process.stdout.write("\n");
+                }
+                process.stdout.write(displayText);
+                process.stdout.write("\n");
+            } else {
+                process.stdout.write(displayText);
+            }
+            // Also re-render any collapsed debug panel summary
+            const dp = getDebugPanel();
+            if (dp && dp.lineCount > 0) {
+                dp.renderStaticSummary();
+            }
+            activePromptRenderer.redraw();
         } else if (rl) {
             // Readline is active - write above the prompt
             // Clear current line, write content, then let readline redraw prompt
@@ -301,6 +336,9 @@ export function createEnhancedClientIO(
                 if (lastAppendMode === "inline") {
                     process.stdout.write("\n");
                 }
+                // Ensure content starts on a fresh line (cursor may be
+                // mid-line after a spinner was cleared without a newline)
+                process.stdout.write("\r\x1b[2K");
                 process.stdout.write(displayText);
                 process.stdout.write("\n");
             } else {
@@ -966,6 +1004,23 @@ async function questionWithCompletion(
         // Initial render
         render();
 
+        // Register prompt renderer so debug panel and displayContent
+        // can render above the input.
+        // PROMPT_ROWS = separator + input line + bottom rule + hint
+        const PROMPT_ROWS = 4;
+        const panel = getDebugPanel();
+        const renderWithSeparator = () => {
+            const w = process.stdout.columns || 80;
+            stdout.write(ANSI.dim + "─".repeat(w) + ANSI.reset + "\n");
+            render();
+        };
+        const promptRenderer: PromptRenderer = {
+            rows: () => PROMPT_ROWS,
+            redraw: () => renderWithSeparator(),
+        };
+        panel?.setPromptRenderer(promptRenderer);
+        activePromptRenderer = promptRenderer;
+
         // Handle keypresses
         const onData = async (chunk: Buffer) => {
             const data = chunk.toString();
@@ -1049,6 +1104,18 @@ async function questionWithCompletion(
                 stdout.write("\n\n\x1b[K\n");
                 cleanup();
                 process.exit(0);
+            } else if (code === 4) {
+                // Ctrl+D — dump debug buffer above the prompt
+                const dp = getDebugPanel();
+                if (dp && dp.lineCount > 0) {
+                    // Clear prompt lines (including separator), dump buffer, re-render
+                    for (let i = 0; i < PROMPT_ROWS; i++) {
+                        stdout.write("\x1b[1A\x1b[2K");
+                    }
+                    dp.dumpBuffer();
+                    renderWithSeparator();
+                }
+                return;
             } else if (code === 13) {
                 // Enter - accept completion (if any) AND submit
                 if (
@@ -1151,6 +1218,8 @@ async function questionWithCompletion(
         };
 
         const cleanup = () => {
+            panel?.setPromptRenderer(null);
+            activePromptRenderer = null;
             stdin.removeListener("data", onData);
             if (stdin.isTTY) {
                 stdin.setRawMode(wasRaw || false);
@@ -1219,6 +1288,82 @@ function initializeEnhancedConsole(
 
 let usingEnhancedConsole = false;
 
+// ── Startup Banner ──────────────────────────────────────────────────────
+
+// Logo mark — hexagonal badge with floating "T" (4 lines tall, 12 chars wide)
+const LOGO_LINES = [
+    "  ╱▔▔▔▔▔╲   ",
+    " ╱ ▀▀█▀▀ ╲  ",
+    " ╲   █   ╱  ",
+    "  ╲▁▁▁▁▁╱   ",
+];
+const LOGO_WIDTH = 12;
+
+function renderStartupBanner(): void {
+    const width = process.stdout.columns || 80;
+    const innerWidth = width - 4; // "│  " + "  │"
+    const version = "0.0.1";
+
+    // Content lines to render alongside the logo
+    const contentLines = [
+        chalk.cyan.bold("TypeAgent") + chalk.dim(` v${version}`),
+        chalk.dim("Your personal AI assistant"),
+        "",
+        chalk.dim("Type a request or use /help to see commands."),
+    ];
+
+    const hintLine =
+        "  " +
+        chalk.dim(
+            "/help commands · /verbose debug · ctrl+d debug · ctrl+c exit",
+        );
+
+    // Build the box
+    const top = chalk.dim("╭" + "─".repeat(width - 2) + "╮");
+    const bottom = chalk.dim("╰" + "─".repeat(width - 2) + "╯");
+
+    const lines: string[] = [];
+    lines.push(top);
+    // Empty line before logo
+    lines.push(chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│"));
+
+    // Render logo + content side by side
+    const totalRows = Math.max(LOGO_LINES.length, contentLines.length);
+    for (let i = 0; i < totalRows; i++) {
+        const logo =
+            i < LOGO_LINES.length ? LOGO_LINES[i] : " ".repeat(LOGO_WIDTH);
+        const coloredLogo = chalk.cyan(logo);
+        const content = i < contentLines.length ? contentLines[i] : "";
+        const contentVisible = content.replace(
+            // eslint-disable-next-line no-control-regex
+            /\x1b\[[0-9;]*m/g,
+            "",
+        );
+        const padding = Math.max(
+            0,
+            innerWidth - LOGO_WIDTH - contentVisible.length,
+        );
+        lines.push(
+            chalk.dim("│") +
+                "  " +
+                coloredLogo +
+                content +
+                " ".repeat(padding) +
+                chalk.dim("│"),
+        );
+    }
+
+    // Empty line before close
+    lines.push(chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│"));
+    lines.push(bottom);
+    lines.push(hintLine);
+    lines.push("");
+
+    for (const line of lines) {
+        process.stdout.write(line + "\n");
+    }
+}
+
 /**
  * Wrapper for using enhanced console ClientIO
  */
@@ -1238,15 +1383,8 @@ export async function withEnhancedConsoleClientIO(
         const dispatcherRef: { current?: Dispatcher } = {};
         initializeEnhancedConsole(rl, dispatcherRef);
 
-        // Show welcome header
-        const width = process.stdout.columns || 80;
-        console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
-        console.log(
-            chalk.bold(" TypeAgent Interactive Mode ") +
-                chalk.dim("(Enhanced UI)"),
-        );
-        console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
-        console.log("");
+        // Show welcome banner
+        renderStartupBanner();
         await callback(
             createEnhancedClientIO(rl, dispatcherRef),
             (d: Dispatcher) => {
@@ -1281,6 +1419,12 @@ function startExecutionKeyListener(
         if (data.length === 1 && code === 0x1b && currentRequestId) {
             // Escape key — cancel current command
             dispatcher.cancelCommand(currentRequestId);
+        } else if (data.length === 1 && code === 4) {
+            // Ctrl+D — toggle debug panel expand/collapse
+            const panel = getDebugPanel();
+            if (panel && panel.lineCount > 0) {
+                panel.toggle();
+            }
         } else if (data.length === 1 && code === 3 && currentRequestId) {
             // Ctrl+C during raw mode — cancel or double-press exit
             const now = Date.now();
@@ -1409,11 +1553,16 @@ export async function processCommandsEnhanced<T>(
         }
 
         try {
+            // Reset debug panel for this command
+            const panel = getDebugPanel();
+            panel?.reset();
+
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
             // Show execution hint below spinner
+            const debugHint = panel ? " · ctrl+d debug" : "";
             const execHint = chalk.dim(
-                "  esc cancel · ctrl+c cancel (2× exit)",
+                `  esc cancel · ctrl+c cancel (2× exit)${debugHint}`,
             );
             process.stdout.write("\n" + execHint + "\x1b[K\x1b[1A\r");
 
@@ -1429,7 +1578,8 @@ export async function processCommandsEnhanced<T>(
                 isProcessing = false;
             }
 
-            // Clear execution hint line before stopping spinner
+            // Stop live panel rendering but keep the buffer for post-command review
+            panel?.stopRendering();
             process.stdout.write("\n\x1b[K\x1b[1A");
 
             // Wait for any pending choice prompt to complete
@@ -1442,13 +1592,18 @@ export async function processCommandsEnhanced<T>(
             if (result?.cancelled) {
                 stopSpinner("warn", "Cancelled");
             } else {
-                // Stop spinner on success (no-op if choice already cleared it)
                 stopSpinner("success", "Complete");
+            }
+
+            // Show static collapsed debug summary after spinner result
+            if (panel && panel.lineCount > 0) {
+                panel.renderStaticSummary();
             }
 
             history.push(request);
         } catch (error) {
             isProcessing = false;
+            getDebugPanel()?.stopRendering();
             stopSpinner("fail", "Error");
             console.log(chalk.red("### ERROR:"));
             console.log(error);

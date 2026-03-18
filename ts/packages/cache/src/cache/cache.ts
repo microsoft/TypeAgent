@@ -3,6 +3,7 @@
 
 import registerDebug from "debug";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
+import { ParsedActionSchema } from "@typeagent/action-schema";
 
 const debug = registerDebug("typeagent:cache");
 import * as Telemetry from "telemetry";
@@ -148,7 +149,7 @@ export class AgentCache {
     private _agentGrammarRegistry?: any; // AgentGrammarRegistry from action-grammar
     private _persistedGrammarStore?: any; // GrammarStore from action-grammar for persistence
     private _useNFAGrammar: boolean = false;
-    private _getSchemaFilePath?: (schemaName: string) => string;
+    private _getParsedActionSchema?: (schemaName: string) => ParsedActionSchema;
 
     /**
      * Configure grammar generation for the NFA/dynamic grammar system
@@ -158,7 +159,7 @@ export class AgentCache {
         agentGrammarRegistry: any,
         persistedGrammarStore: any,
         useNFA: boolean,
-        getSchemaFilePath?: (schemaName: string) => string,
+        getParsedActionSchema?: (schemaName: string) => ParsedActionSchema,
     ): void {
         this._agentGrammarRegistry = agentGrammarRegistry;
         this._persistedGrammarStore = persistedGrammarStore;
@@ -168,8 +169,8 @@ export class AgentCache {
         debug(
             `Grammar system configured: ${useNFA ? "NFA" : "completion-based"}`,
         );
-        if (getSchemaFilePath !== undefined) {
-            this._getSchemaFilePath = getSchemaFilePath;
+        if (getParsedActionSchema !== undefined) {
+            this._getParsedActionSchema = getParsedActionSchema;
         }
     }
 
@@ -378,25 +379,26 @@ export class AgentCache {
                         `Grammar gen starting for ${schemaName}.${actionName}`,
                     );
                     debug(
-                        `_getSchemaFilePath is ${this._getSchemaFilePath ? "configured" : "NOT configured"}`,
+                        `_getParsedActionSchema is ${this._getParsedActionSchema ? "configured" : "NOT configured"}`,
                     );
 
                     // Check if we have the required components
-                    if (!this._getSchemaFilePath) {
-                        debug(`Schema file path getter not configured`);
+                    if (!this._getParsedActionSchema) {
+                        debug(`Parsed action schema getter not configured`);
                         grammarResult = {
                             success: false,
-                            message: "Schema file path getter not configured",
+                            message:
+                                "Parsed action schema getter not configured",
                         };
                     } else {
                         try {
-                            // Get schema file path
+                            // Get parsed action schema
                             debug(
-                                `Calling getSchemaFilePath("${schemaName}")...`,
+                                `Calling getParsedActionSchema("${schemaName}")...`,
                             );
-                            const schemaPath =
-                                this._getSchemaFilePath(schemaName);
-                            debug(`Schema path: ${schemaPath}`);
+                            const parsedSchema =
+                                this._getParsedActionSchema(schemaName);
+                            debug(`Parsed schema loaded for ${schemaName}`);
 
                             // Import populateCache dynamically to avoid circular dependencies
                             debug(`Importing populateCache...`);
@@ -416,7 +418,7 @@ export class AgentCache {
                                     actionName,
                                     parameters,
                                 },
-                                schemaPath,
+                                parsedSchema,
                             });
                             if (genResult.success && genResult.generatedRule) {
                                 debug(

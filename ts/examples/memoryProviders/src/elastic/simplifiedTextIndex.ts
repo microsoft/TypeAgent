@@ -101,7 +101,7 @@ export async function createTextIndex<
         elasticClient
             .search<ElasticEntry>({
                 index: indexName,
-                body: query,
+                ...query,
             })
             .then((result) => {
                 hits.push(...result.hits.hits);
@@ -155,7 +155,7 @@ export async function createTextIndex<
     async function get(text: string): Promise<TSourceId[] | undefined> {
         const result = await elasticClient.search<ElasticEntry>({
             index: indexName,
-            body: { query: { match: { text } } },
+            query: { match: { text } },
         });
         if (result.hits.hits.length > 0) {
             const hit = result.hits.hits[0]._source;
@@ -169,7 +169,7 @@ export async function createTextIndex<
     async function getFrequency(text: string): Promise<number> {
         const result = await elasticClient.search<ElasticEntry>({
             index: indexName,
-            body: { query: { match: { text } } },
+            query: { match: { text } },
         });
         if (result.hits.hits.length > 0) {
             const hit = result.hits.hits[0]._source;
@@ -216,7 +216,7 @@ export async function createTextIndex<
     async function getId(text: string): Promise<TTexId | undefined> {
         const result = await elasticClient.search<ElasticEntry>({
             index: indexName,
-            body: { query: { match: { text } } },
+            query: { match: { text } },
         });
         // There will never be more then one because textId is the
         // unique id or the "key" in the index
@@ -299,7 +299,7 @@ export async function createTextIndex<
         }
 
         // Now 'bulkOps' is a flat array of objects.
-        await elasticClient.bulk({ body: bulkOps });
+        await elasticClient.bulk({ operations: bulkOps });
 
         return values.map((value) => value.value as TTexId);
     }
@@ -474,11 +474,9 @@ export async function createTextIndex<
         await elasticClient.update({
             index: indexName,
             id: textId as string,
-            body: {
-                script: {
-                    source: "ctx._source.sourceIds.removeAll(params.postings)",
-                    params: { postings },
-                },
+            script: {
+                source: "ctx._source.sourceIds.removeAll(params.postings)",
+                params: { postings },
             },
         });
     }

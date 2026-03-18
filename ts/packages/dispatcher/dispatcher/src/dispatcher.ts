@@ -11,6 +11,7 @@ import type {
     ActionInfo,
     AgentSchemaInfo,
     AgentSubSchemaInfo,
+    CommandResult,
 } from "@typeagent/dispatcher-types";
 import {
     ConnectionId,
@@ -28,8 +29,8 @@ import {
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
 import { randomUUID } from "node:crypto";
-import * as fs from "node:fs";
-import { getPackageFilePath } from "./utils/getPackageFilePath.js";
+import type { ActionSchemaTypeDefinition } from "@typeagent/action-schema";
+import { generateSchemaTypeDefinition } from "@typeagent/action-schema";
 
 async function getDynamicDisplay(
     context: CommandHandlerContext,
@@ -87,7 +88,7 @@ async function checkCache(
     request: string,
     context: CommandHandlerContext,
     requestId: RequestId,
-): Promise<import("@typeagent/dispatcher-types").CommandResult | undefined> {
+): Promise<CommandResult | undefined> {
     const agentCache = context.agentCache;
 
     // Check if cache is enabled
@@ -129,42 +130,21 @@ async function checkCache(
     return await processCommand(request, context, requestId);
 }
 
-/** Extract action names + descriptions from a compiled .pas.json file. */
-function extractActionsFromPas(compiledSchemaFilePath: string): ActionInfo[] {
-    try {
-        const fullPath = getPackageFilePath(compiledSchemaFilePath);
-        const pas = JSON.parse(fs.readFileSync(fullPath, "utf-8")) as Record<
-            string,
-            unknown
-        >;
-        const types = pas.types as
-            | Record<string, Record<string, unknown>>
-            | undefined;
-        const actions: ActionInfo[] = [];
-        for (const typeDef of Object.values(types ?? {})) {
-            const fields = (typeDef.type as Record<string, unknown> | undefined)
-                ?.fields as Record<string, unknown> | undefined;
-            if (!fields?.actionName) continue;
-            const actionNameEnum = (
-                (fields.actionName as Record<string, unknown>).type as
-                    | Record<string, unknown>
-                    | undefined
-            )?.typeEnum as string[] | undefined;
-            if (!actionNameEnum?.length) continue;
-            const name = actionNameEnum[0];
-            const comments = typeDef.comments as string[] | undefined;
-            const description =
-                (comments?.[0] ?? "").trim() ||
-                name
-                    .replace(/([A-Z])/g, " $1")
-                    .replace(/^./, (c) => c.toUpperCase())
-                    .trim();
-            actions.push({ name, description });
-        }
-        return actions;
-    } catch {
-        return [];
+/** Extract action names + descriptions from a parsed action schema. */
+function extractActions(
+    actionSchemas: Map<string, ActionSchemaTypeDefinition>,
+): ActionInfo[] {
+    const actions: ActionInfo[] = [];
+    for (const [name, actionDef] of actionSchemas) {
+        const description =
+            (actionDef.comments?.[0] ?? "").trim() ||
+            name
+                .replace(/([A-Z])/g, " $1")
+                .replace(/^./, (c) => c.toUpperCase())
+                .trim();
+        actions.push({ name, description });
     }
+    return actions;
 }
 
 function getAgentSchemas(
@@ -193,17 +173,22 @@ function getAgentSchemas(
 
         const subSchemas: AgentSubSchemaInfo[] = [];
         for (const config of sorted) {
-            const actions = config.compiledSchemaFilePath
-                ? extractActionsFromPas(config.compiledSchemaFilePath)
+            const schemaFile = context.agents.tryGetActionSchemaFile(
+                config.schemaName,
+            );
+            const actions = schemaFile
+                ? extractActions(schemaFile.parsedActionSchema.actionSchemas)
                 : [];
             if (actions.length === 0) continue;
-            const schemaFilePath = config.schemaFilePath
-                ? getPackageFilePath(config.schemaFilePath)
+            const schemaText = schemaFile?.parsedActionSchema.entry.action
+                ? generateSchemaTypeDefinition(
+                      schemaFile.parsedActionSchema.entry.action,
+                  )
                 : undefined;
             subSchemas.push({
                 schemaName: config.schemaName,
                 description: config.description,
-                schemaFilePath,
+                schemaText,
                 actions,
             });
         }
