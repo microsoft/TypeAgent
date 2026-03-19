@@ -784,6 +784,11 @@ export function writeGrammarRules(
 
 function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
     writeLeadingComments(result, def.leadingComments);
+    if (def.exported) {
+        result.write("export");
+        writeInlineComments(result, def.afterExportComments, true);
+        result.write(" ");
+    }
     writeBracketedName(result, def.definitionName);
     writeInlineComments(result, def.beforeAnnotationComments, true);
     if (def.spacingMode !== undefined) {

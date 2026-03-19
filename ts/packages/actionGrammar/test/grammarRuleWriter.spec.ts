@@ -1225,4 +1225,37 @@ describe("Comment preservation round-trips (structural positions)", () => {
     it("comments inside empty array value", () => {
         roundTrip(`<A> = x -> [ /* only comment */ ];\n`);
     });
+
+    // Export keyword round-trips
+    it("exported rule definition", () => {
+        roundTrip(`export <Rule1> = hello;
+`);
+    });
+
+    it("multiple rules with mixed export", () => {
+        roundTrip(`export <Rule1> = hello;
+<Rule2> = world;
+`);
+    });
+
+    it("export with leading comment", () => {
+        roundTrip(`// export comment
+export <Rule1> = hello;
+`);
+    });
+
+    it("export with trailing comment", () => {
+        roundTrip(`export <Rule1> = hello; // trailing
+`);
+    });
+
+    it("export with comment after export keyword", () => {
+        roundTrip(`export /* after-export */ <Rule1> = hello;
+`);
+    });
+
+    it("export with spacing annotation", () => {
+        roundTrip(`export <Rule1> [spacing=required] = hello;
+`);
+    });
 });

@@ -51,6 +51,7 @@ type CompileContext = {
     content: string;
     displayPath: string;
     ruleDefMap: DefinitionMap;
+    exportedNames: Set<string>; // Only rules with export keyword are importable
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     knownTypeNames: Set<string>; // Type names imported from .ts files
     importedTypeNames: Map<string, number | undefined>; // Explicitly named .ts type imports with positions (excludes entity names and wildcards)
@@ -113,6 +114,16 @@ function createCompileContext(
     }
     const importedTypeNames = new Map<string, number | undefined>();
     const usedImportedTypes = new Set<string>();
+
+    // Build exportedNames from definitions with exported: true
+    // Only rules explicitly marked with export are importable
+    const exportedNames = new Set<string>();
+    for (const def of definitions) {
+        if (def.exported) {
+            exportedNames.add(def.definitionName.name);
+        }
+    }
+
     // Create the context early and add to the map BEFORE processing anything
     // This prevents infinite recursion on circular dependencies
     const context: CompileContext = {
@@ -120,6 +131,7 @@ function createCompileContext(
         content,
         displayPath,
         ruleDefMap,
+        exportedNames,
         importedRuleMap,
         knownTypeNames,
         importedTypeNames,
@@ -171,6 +183,19 @@ function createCompileContext(
                         : importStmt.names.map((n) => n.name);
 
                 for (const ruleName of ruleNames) {
+                    // Check if the rule is exported from the source file
+                    if (!importContext.exportedNames.has(ruleName)) {
+                        // Rule is not exported from the source file
+                        if (importStmt.names !== "*") {
+                            // Only error for named imports; wildcard silently skips
+                            context.errors.push({
+                                message: `Rule '<${ruleName}>' is not exported from '${importStmt.source}'.`,
+                                definition: ruleName,
+                                pos: importStmt.pos,
+                            });
+                        }
+                        continue;
+                    }
                     // Check if we're trying to import a rule that's already defined locally
                     if (ruleDefMap.has(ruleName)) {
                         context.errors.push({
@@ -235,7 +260,10 @@ export function compileGrammar(
     }
 
     for (const [name, record] of context.ruleDefMap.entries()) {
-        if (record.grammarRules === undefined) {
+        if (
+            record.grammarRules === undefined &&
+            !context.exportedNames.has(name)
+        ) {
             context.warnings.push({
                 message: `Rule '<${name}>' is defined but never used.`,
                 pos: record.definitions[0]?.pos,

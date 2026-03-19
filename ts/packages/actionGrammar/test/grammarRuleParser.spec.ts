@@ -1599,6 +1599,89 @@ describe("Grammar Rule Parser", () => {
         });
     });
 
+    describe("Export Keyword on Rule Definitions", () => {
+        it("parse exported rule definition", () => {
+            const grammar = "export <Rule1> = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions).toHaveLength(1);
+            expect(result.definitions[0].exported).toBe(true);
+            expect(result.definitions[0].definitionName.name).toBe("Rule1");
+        });
+
+        it("non-exported rule has no exported flag", () => {
+            const grammar = "<Rule1> = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions).toHaveLength(1);
+            expect(result.definitions[0].exported).toBeUndefined();
+        });
+
+        it("parse multiple rules with mixed export", () => {
+            const grammar = `
+                export <Rule1> = hello;
+                <Rule2> = world;
+                export <Rule3> = foo;
+            `;
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions).toHaveLength(3);
+            expect(result.definitions[0].exported).toBe(true);
+            expect(result.definitions[0].definitionName.name).toBe("Rule1");
+            expect(result.definitions[1].exported).toBeUndefined();
+            expect(result.definitions[1].definitionName.name).toBe("Rule2");
+            expect(result.definitions[2].exported).toBe(true);
+            expect(result.definitions[2].definitionName.name).toBe("Rule3");
+        });
+
+        it("export with imports and rules", () => {
+            const grammar = `
+                import { BaseRule } from "base.agr";
+                export <Start> = <BaseRule> world;
+            `;
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.imports).toHaveLength(1);
+            expect(result.definitions).toHaveLength(1);
+            expect(result.definitions[0].exported).toBe(true);
+        });
+
+        it("preserves comment between export keyword and rule name", () => {
+            const grammar = "export /* after-export */ <Rule1> = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions[0].exported).toBe(true);
+            expect(result.definitions[0].afterExportComments).toEqual([
+                { style: "block", text: " after-export " },
+            ]);
+        });
+
+        it("preserves leading comment before export keyword", () => {
+            const grammar =
+                "<Rule0> = world;\n// leading\nexport <Rule1> = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions[1].exported).toBe(true);
+            expect(result.definitions[1].leadingComments).toEqual([
+                { style: "line", text: " leading" },
+            ]);
+        });
+
+        it("exported rule with spacing annotation", () => {
+            const grammar = "export <Rule1> [spacing=required] = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions[0].exported).toBe(true);
+            expect(result.definitions[0].spacingMode).toBe("required");
+        });
+
+        it("throws when export is not followed by rule definition", () => {
+            expect(() =>
+                parseGrammarRules("test.agr", "export hello;", false),
+            ).toThrow();
+        });
+    });
+
     describe("Comment preservation at structural positions", () => {
         it("preserves block comment inside rule name angle brackets", () => {
             const result = parseGrammarRules(
