@@ -155,7 +155,14 @@ export class PartialCompletion {
     }
 
     private getCurrentInputForCompletion() {
-        return this.getCurrentInput().trimStart();
+        // Normalize non-breaking spaces (U+00A0) that contenteditable
+        // inserts for trailing whitespace.  When the user types a
+        // character after a trailing \u00A0, Chromium may convert it
+        // back to a regular space — breaking the session's startsWith
+        // anchor check and causing unnecessary re-fetches.
+        return this.getCurrentInput()
+            .trimStart()
+            .replace(/\u00a0/g, " ");
     }
 
     private isSelectionAtEnd(trace: boolean = false) {
