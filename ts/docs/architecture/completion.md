@@ -273,9 +273,8 @@ lifecycle of a completion interaction.
 | A7   | Direction changed on direction-sensitive result  | Invalidation | Re-fetch            |
 | B4   | Unique match (always fires)                      | Navigation   | Re-fetch next level |
 | B5   | Separator typed after exact match                | Navigation   | Re-fetch next level |
-| C6   | No trie matches + open set                       | Discovery    | Re-fetch (or slide) |
+| C6   | No trie matches                                  | Discovery    | Per `noMatchPolicy` |
 | —    | Trie has matches                                 | —            | Reuse locally       |
-| —    | No matches + closed set                          | —            | Reuse (menu hidden) |
 
 **Key concepts:**
 
@@ -284,6 +283,10 @@ lifecycle of a completion interaction.
   filter the local trie.
 - **Separator stripping**: when `separatorMode` requires a separator, the
   leading separator character in the raw prefix is stripped before trie lookup.
+- **`noMatchPolicy`**: computed once from the backend's descriptive fields
+  (`closedSet`, `openWildcard`) when a result arrives (see `NoMatchPolicy`
+  below). Drives the A3 and C6 decisions as a simple `switch` instead of
+  checking two booleans independently.
 - **Session preservation**: `hide()` cancels in-flight fetches but preserves
   anchor and menu state for quick re-activation on re-focus.
 
@@ -356,18 +359,20 @@ satisfied.
 
 ### `closedSet`
 
-A boolean flowing through the entire pipeline:
+A boolean flowing through the backend pipeline (grammar → cache → dispatcher):
 
 - **`true`** — completions are exhaustive (finite enum, known subcommands).
-  When the trie empties, the shell does not re-fetch.
 - **`false`** — completions may be incomplete (entity values, open-ended
-  text). When the trie empties, the shell re-fetches to discover more.
+  text).
 
 Merge rule: AND across sources (closed only if _all_ sources are closed).
 
+The shell does not store `closedSet` directly; it is folded into
+`noMatchPolicy` (see below).
+
 ### `openWildcard`
 
-A boolean flowing through the entire pipeline, signaling that the completions
+A boolean flowing through the backend pipeline, signaling that the completions
 are offered at a position where a wildcard was finalized at end-of-input.
 
 - **`true`** — the wildcard's extent is ambiguous (the user may still be
@@ -375,27 +380,52 @@ are offered at a position where a wildcard was finalized at end-of-input.
   offered as a completion, and `closedSet` correctly describes that keyword
   set as exhaustive. However, the _position_ of that set is uncertain.
 
-  The shell handles this with **anchor sliding**: instead of re-fetching
-  (which would return the same keyword at a shifted position) or giving up
-  (stuck when `closedSet=true`), the shell slides the anchor forward to the
-  current input. The trie and metadata stay intact, so the menu re-appears
-  at the next word boundary when the user types a separator.
-
-  Recovery is automatic: when the user eventually types the keyword and it
-  uniquely matches in the trie (trigger B4), the session re-fetches for the
-  next grammar part.
-
-- **`false`** — no sliding wildcard boundary; normal `closedSet` semantics
-  apply.
+- **`false`** — no sliding wildcard boundary.
 
 Merge rule: OR across sources (open wildcard if _any_ source has one).
 
-Affects triggers A3 and C6 in the re-fetch decision tree:
+The shell does not store `openWildcard` directly; it is folded into
+`noMatchPolicy` (see below).
 
-- **A3** (non-separator after anchor): when `openWildcard=true`, the anchor
-  slides forward instead of triggering a re-fetch.
-- **C6** (trie empty, closed set): when `openWildcard=true`, the anchor
-  slides forward instead of staying permanently hidden.
+### `NoMatchPolicy` (shell-internal)
+
+Computed once from `closedSet` and `openWildcard` when a backend result
+arrives. Controls what the shell does when the local trie has no matches
+for the user's typed prefix.
+
+**Why derive a policy?** The backend returns _descriptive_ metadata —
+`closedSet` says whether the completion list is exhaustive, `openWildcard`
+says whether the anchor position is ambiguous. These are grammar-level
+facts that don't depend on the shell's UI. The shell translates them into
+a single actionable policy on arrival, keeping the decision points (A3
+and C6) simple: each is a `switch` on one enum rather than reasoning
+about two independent booleans.
+
+**Why `openWildcard` wins over `closedSet`:** When a wildcard is finalized
+at end-of-input, `closedSet` correctly describes the _keyword_ set (e.g.
+"by" is exhaustive), but the _position_ of that set is uncertain because
+the wildcard extent is ambiguous. Re-fetching would return the same
+keywords at a shifted position (wasteful), and `"accept"` would leave the
+user stuck (no menu, no re-fetch). Sliding is the only useful action, so
+`openWildcard=true` maps to `"slide"` regardless of `closedSet`.
+
+| Policy      | Derived from                            | Shell action at A3 / C6          |
+| ----------- | --------------------------------------- | -------------------------------- |
+| `"accept"`  | `closedSet=true`, `openWildcard=false`  | Reuse (menu hidden, no re-fetch) |
+| `"refetch"` | `closedSet=false`, `openWildcard=false` | Re-fetch (backend may know more) |
+| `"slide"`   | `openWildcard=true` (any `closedSet`)   | Slide anchor forward             |
+
+This replaces independent checks on two booleans with a single `switch`:
+
+- **A3** (non-separator after anchor): `"slide"` slides the anchor forward;
+  `"accept"` / `"refetch"` trigger a re-fetch.
+- **C6** (trie empty): `"slide"` slides the anchor forward; `"accept"`
+  reuses silently; `"refetch"` re-fetches.
+
+Anchor sliding preserves the trie and metadata so the menu re-appears at
+the next word boundary. Recovery is automatic: when the user eventually
+types the keyword and it uniquely matches (trigger B4), the session
+re-fetches for the next grammar part.
 
 ---
 
