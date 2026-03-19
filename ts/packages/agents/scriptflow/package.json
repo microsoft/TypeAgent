@@ -29,7 +29,6 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "action-grammar": "workspace:*",
     "debug": "^4.3.4"
   },
   "devDependencies": {

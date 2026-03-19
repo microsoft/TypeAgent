@@ -190,10 +190,7 @@ async function executeScriptStep(
 
         // Inject parameters as PowerShell variable assignments (safe: values are single-quoted and escaped)
         const paramAssignments = Object.entries(resolvedParams)
-            .map(
-                ([k, v]) =>
-                    `$${k} = '${String(v ?? "").replace(/'/g, "''")}'`,
-            )
+            .map(([k, v]) => `$${k} = '${String(v ?? "").replace(/'/g, "''")}'`)
             .join("; ");
         const fullScript = paramAssignments
             ? `${paramAssignments}; ${step.body}`
@@ -222,7 +219,11 @@ async function executeScriptStep(
 
             const timeout = setTimeout(() => {
                 child.kill();
-                resolve({ success: false, stdout, stderr: `Timed out after ${step.sandbox.maxExecutionTime}s` });
+                resolve({
+                    success: false,
+                    stdout,
+                    stderr: `Timed out after ${step.sandbox.maxExecutionTime}s`,
+                });
             }, step.sandbox.maxExecutionTime * 1000);
 
             child.on("close", (code) => {
@@ -309,11 +310,7 @@ export async function processFlow(
             };
 
             const [executableAction] = toExecutableActions([action]);
-            result = await executeAction(
-                executableAction,
-                context,
-                stepIndex,
-            );
+            result = await executeAction(executableAction, context, stepIndex);
         }
 
         const text = extractText(result);

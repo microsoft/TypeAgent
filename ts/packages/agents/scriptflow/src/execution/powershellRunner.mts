@@ -58,8 +58,8 @@ export async function executeScript(
     ];
 
     if (request.sandbox.allowedPaths.length > 0) {
-        args.push("-AllowedPaths");
-        args.push(...request.sandbox.allowedPaths);
+        args.push("-AllowedPathsJson");
+        args.push(JSON.stringify(request.sandbox.allowedPaths));
     }
 
     const startTime = Date.now();

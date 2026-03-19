@@ -454,11 +454,37 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
             if (!reasoningHandled) {
-                await executeActions(
+                const execResult = await executeActions(
                     requestAction.actions,
                     requestAction.history?.entities,
                     context,
                 );
+                if (
+                    execResult?.fallbackToReasoning &&
+                    !systemContext.noReasoning
+                ) {
+                    const failedAction = requestAction.actions[0]?.action;
+                    const failedParams = failedAction?.parameters as
+                        | Record<string, unknown>
+                        | undefined;
+                    try {
+                        await executeReasoning(request, context, {
+                            engine: "claude",
+                            fallbackContext: {
+                                failedAction: failedAction?.actionName,
+                                failedSchema: failedAction?.schemaName,
+                                failedFlowName: failedParams?.flowName as
+                                    | string
+                                    | undefined,
+                                error: execResult.error,
+                            },
+                        });
+                    } catch (e: any) {
+                        debugRequest(
+                            `Reasoning fallback after execution failure: ${e.message}`,
+                        );
+                    }
+                }
             }
 
             await requestExplain(

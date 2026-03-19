@@ -6,22 +6,26 @@ import {
     type SessionContext,
     type ActionContext,
     type ActionResult,
+    type SchemaContent,
+    type GrammarContent,
 } from "@typeagent/agent-sdk";
 import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
-import { readFileSync, readdirSync } from "fs";
-import { join, dirname } from "path";
+import { existsSync, readFileSync, readdirSync } from "fs";
+import { join, dirname, isAbsolute } from "path";
 import { fileURLToPath } from "url";
 import { ScriptFlowStore } from "./store/scriptFlowStore.mjs";
 import type { ScriptFlowDefinition } from "./store/scriptFlowStore.mjs";
-import type { ScriptRecipe } from "./types/scriptRecipe.js";
+import {
+    type ScriptRecipe,
+    type ScriptParameter,
+} from "./types/scriptRecipe.js";
 import {
     executeScript,
     type ScriptExecutionRequest,
 } from "./execution/powershellRunner.mjs";
-import { globalAgentGrammarRegistry } from "action-grammar";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:scriptflow:handler");
@@ -62,21 +66,6 @@ async function seedSampleFlows(store: ScriptFlowStore): Promise<number> {
     return seeded;
 }
 
-function registerAllGrammars(store: ScriptFlowStore): void {
-    const allRules = store.getAllGrammarRules();
-    if (!allRules) return;
-
-    const result = globalAgentGrammarRegistry.addGeneratedRules(
-        "scriptflow",
-        allRules,
-    );
-    if (result.success) {
-        debug("Registered scriptflow grammar rules");
-    } else {
-        debug("Failed to register grammar rules:", result.errors);
-    }
-}
-
 async function executeFlowScript(
     flow: ScriptFlowDefinition,
     script: string,
@@ -108,28 +97,85 @@ async function executeFlowScript(
         return createActionResultFromTextDisplay(output);
     }
 
-    const errorMsg = result.stderr || `Script exited with code ${result.exitCode}`;
-    return createActionResultFromError(errorMsg);
+    const errorMsg =
+        result.stderr || `Script exited with code ${result.exitCode}`;
+    return { error: errorMsg, fallbackToReasoning: true };
+}
+
+function mapParamsToFlowDefs(
+    provided: Record<string, unknown>,
+    paramDefs: ScriptParameter[],
+    out: Record<string, unknown>,
+): void {
+    const defsByLower = new Map(
+        paramDefs.map((d) => [d.name.toLowerCase(), d.name]),
+    );
+    for (const [key, value] of Object.entries(provided)) {
+        const actualName = defsByLower.get(key.toLowerCase());
+        if (actualName) {
+            out[actualName] = value;
+        } else {
+            // No matching param def — pass through as-is, the script may still accept it
+            out[key] = value;
+            debug(
+                `Parameter '${key}' not found in flow definition, passing through`,
+            );
+        }
+    }
+}
+
+function expandEnvVarsInParams(
+    params: Record<string, unknown>,
+    _paramDefs: ScriptParameter[],
+): void {
+    for (const key of Object.keys(params)) {
+        const val = params[key];
+        if (typeof val !== "string") continue;
+        if (!/\$env:/i.test(val)) continue;
+        params[key] = val.replace(/\$env:(\w+)/gi, (_match, varName) => {
+            return process.env[varName] ?? _match;
+        });
+    }
+}
+
+function validatePathParameters(
+    params: Record<string, unknown>,
+    paramDefs: ScriptParameter[],
+): string | undefined {
+    for (const def of paramDefs) {
+        if (def.type !== "path") continue;
+        const val = params[def.name];
+        if (val === undefined || val === "") continue;
+        if (typeof val !== "string") {
+            return `Parameter '${def.name}' must be a string path, got ${typeof val}`;
+        }
+        // Reject values that contain natural language (spaces + non-path words)
+        if (/\b(and|or|show|with|the|ones|that|filter|find)\b/i.test(val)) {
+            return `Parameter '${def.name}' contains non-path text: "${val}". Extract the path separately from the rest of the request.`;
+        }
+        // Check for obviously invalid path characters
+        if (/[<>"|?*]/.test(val.replace(/^[a-zA-Z]:\\/, ""))) {
+            return `Parameter '${def.name}' contains invalid path characters: "${val}"`;
+        }
+        // Warn if the path doesn't exist (for absolute paths)
+        if (isAbsolute(val) && !existsSync(val)) {
+            debug(`Path parameter '${def.name}' does not exist: ${val}`);
+        }
+    }
+    return undefined;
 }
 
 async function handleScriptFlowAction(
     action: { actionName: string; parameters?: Record<string, unknown> },
     context: ActionContext<ScriptFlowAgentContext>,
 ): Promise<ActionResult> {
-    const flowStore = (context as any).__store as
-        | ScriptFlowStore
-        | undefined;
+    const flowStore = (context as any).__store as ScriptFlowStore | undefined;
 
     switch (action.actionName) {
         case "listScriptFlows": {
             if (!flowStore) {
-                const manifestPath = join(__dirname, "..", "manifest.json");
-                const manifest = JSON.parse(
-                    readFileSync(manifestPath, "utf8"),
-                );
-                const flows = Object.keys(manifest.flows ?? {});
                 return createActionResultFromTextDisplay(
-                    `Script flows (from manifest):\n${flows.map((f) => `  - ${f}`).join("\n") || "  (none)"}`,
+                    "Script flow store not available.",
                 );
             }
             const entries = flowStore.listFlows();
@@ -165,18 +211,203 @@ async function handleScriptFlowAction(
                     `Script flow not found: ${name}`,
                 );
             }
-            // Re-register remaining grammars
-            const agent =
-                globalAgentGrammarRegistry.getAgent("scriptflow");
-            if (agent) agent.resetToBase();
-            registerAllGrammars(flowStore);
+            await context.sessionContext.reloadAgentSchema();
             return createActionResultFromTextDisplay(
                 `Deleted script flow: ${name}`,
             );
         }
 
+        case "createScriptFlow": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
+            }
+            const params = action.parameters as Record<string, unknown>;
+            const newActionName = params.actionName as string;
+            if (!newActionName) {
+                return createActionResultFromError(
+                    "Missing required parameter: actionName",
+                );
+            }
+            const scriptBody = params.script as string;
+            if (!scriptBody) {
+                return createActionResultFromError(
+                    "Missing required parameter: script",
+                );
+            }
+            const scriptParams = (params.scriptParameters as any[]) ?? [];
+            const grammarPats = (params.grammarPatterns as any[]) ?? [];
+            const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
+
+            const recipe: ScriptRecipe = {
+                version: 1,
+                actionName: newActionName,
+                description: (params.description as string) ?? "",
+                displayName: (params.displayName as string) ?? newActionName,
+                parameters: scriptParams.map((p: any) => ({
+                    name: p.name,
+                    type: p.type ?? "string",
+                    required: p.required ?? false,
+                    description: p.description ?? "",
+                    default: p.default,
+                })),
+                script: {
+                    language: "powershell",
+                    body: scriptBody,
+                    expectedOutputFormat: "text",
+                },
+                grammarPatterns: grammarPats.map((g: any) => ({
+                    pattern: g.pattern,
+                    isAlias: g.isAlias ?? false,
+                    examples: [],
+                })),
+                sandbox: {
+                    allowedCmdlets,
+                    allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
+                    allowedModules: ["Microsoft.PowerShell.Management"],
+                    maxExecutionTime: 30,
+                    networkAccess: false,
+                },
+                source: {
+                    type: "reasoning",
+                    timestamp: new Date().toISOString(),
+                },
+            };
+
+            await flowStore.saveFlow(recipe, "reasoning");
+            await context.sessionContext.reloadAgentSchema();
+            return createActionResultFromTextDisplay(
+                `Created script flow '${newActionName}': ${recipe.description}`,
+            );
+        }
+
+        case "editScriptFlow": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
+            }
+            const editFlowName = action.parameters?.flowName as
+                | string
+                | undefined;
+            if (!editFlowName) {
+                return createActionResultFromError(
+                    "Missing required parameter: flowName",
+                );
+            }
+            const existingFlow = await flowStore.getFlow(editFlowName);
+            if (!existingFlow) {
+                return createActionResultFromError(
+                    `Script flow not found: ${editFlowName}`,
+                );
+            }
+            const newScript = action.parameters?.script as string | undefined;
+            if (!newScript) {
+                return createActionResultFromError(
+                    "Missing required parameter: script",
+                );
+            }
+            const newCmdlets =
+                (action.parameters?.allowedCmdlets as string[]) ??
+                existingFlow.sandbox.allowedCmdlets;
+
+            // Update the script and sandbox policy while preserving everything else
+            await flowStore.updateFlowScript(
+                editFlowName,
+                newScript,
+                newCmdlets,
+            );
+            return createActionResultFromTextDisplay(
+                `Updated script flow '${editFlowName}'`,
+            );
+        }
+
+        case "executeScriptFlow": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
+            }
+            const flowName = action.parameters?.flowName as string | undefined;
+            if (!flowName) {
+                return createActionResultFromError(
+                    "Missing required parameter: flowName",
+                );
+            }
+
+            const flow = await flowStore.getFlow(flowName);
+            if (!flow) {
+                return {
+                    error: `Unknown script flow '${flowName}'. Use 'listScriptFlows' to see available flows.`,
+                    fallbackToReasoning: true,
+                };
+            }
+
+            const script = await flowStore.getScript(flowName);
+            if (!script) {
+                return createActionResultFromError(
+                    `Script not found for flow: ${flowName}`,
+                );
+            }
+
+            // Prefer named flowParametersJson over single flowArgs string
+            const flowParamsJson = action.parameters?.flowParametersJson as
+                | string
+                | undefined;
+            let namedParams: Record<string, unknown> | undefined;
+            if (flowParamsJson) {
+                try {
+                    namedParams = JSON.parse(flowParamsJson);
+                } catch {
+                    debug(
+                        `Failed to parse flowParametersJson: ${flowParamsJson}`,
+                    );
+                }
+            }
+            const flowParameters: Record<string, unknown> = {};
+            if (namedParams && Object.keys(namedParams).length > 0) {
+                // Map provided param names to actual flow param names (case-insensitive)
+                mapParamsToFlowDefs(
+                    namedParams,
+                    flow.parameters,
+                    flowParameters,
+                );
+            } else {
+                const flowArgs = action.parameters?.flowArgs as
+                    | string
+                    | undefined;
+                if (flowArgs && flow.parameters.length > 0) {
+                    flowParameters[flow.parameters[0].name] = flowArgs;
+                }
+            }
+
+            // Expand environment variable references in path parameters
+            expandEnvVarsInParams(flowParameters, flow.parameters);
+
+            // Validate path-type parameters before execution
+            const pathError = validatePathParameters(
+                flowParameters,
+                flow.parameters,
+            );
+            if (pathError) {
+                return { error: pathError, fallbackToReasoning: true };
+            }
+
+            const result = await executeFlowScript(
+                flow,
+                script,
+                flowParameters,
+            );
+            if (result.error !== undefined) {
+                return { ...result, fallbackToReasoning: true };
+            }
+
+            await flowStore.recordUsage(flowName);
+            return result;
+        }
+
         default: {
-            // Try to execute as a dynamic script flow
             if (!flowStore) {
                 return createActionResultFromError(
                     `Unknown action '${action.actionName}'`,
@@ -185,9 +416,10 @@ async function handleScriptFlowAction(
 
             const flow = await flowStore.getFlow(action.actionName);
             if (!flow) {
-                return createActionResultFromError(
-                    `Unknown script flow '${action.actionName}'. Use 'list script flows' to see available flows.`,
-                );
+                return {
+                    error: `Unknown script flow '${action.actionName}'. Use 'list script flows' to see available flows.`,
+                    fallbackToReasoning: true,
+                };
             }
 
             const script = await flowStore.getScript(action.actionName);
@@ -197,11 +429,20 @@ async function handleScriptFlowAction(
                 );
             }
 
-            const result = await executeFlowScript(
-                flow,
-                script,
-                action.parameters ?? {},
+            const directParams = { ...(action.parameters ?? {}) };
+            expandEnvVarsInParams(directParams, flow.parameters);
+            const pathError = validatePathParameters(
+                directParams,
+                flow.parameters,
             );
+            if (pathError) {
+                return { error: pathError, fallbackToReasoning: true };
+            }
+
+            const result = await executeFlowScript(flow, script, directParams);
+            if (result.error !== undefined) {
+                return { ...result, fallbackToReasoning: true };
+            }
 
             await flowStore.recordUsage(action.actionName);
             return result;
@@ -234,11 +475,13 @@ export function instantiate(): AppAgent {
             agentContext.store = store;
 
             await seedSampleFlows(store);
-            registerAllGrammars(store);
+            // Dynamic grammar rules are written to grammar/dynamic.agr by the store.
+            // The dispatcher reads this file after updateAgentContext completes
+            // and registers the rules in its own grammar system.
+            debug(`Store initialized with ${store.listFlows().length} flow(s)`);
         },
 
         executeAction(action, context: ActionContext<ScriptFlowAgentContext>) {
-            // Attach store to context for the handler
             (context as any).__store = agentContext.store;
             return handleScriptFlowAction(
                 action as {
@@ -247,6 +490,27 @@ export function instantiate(): AppAgent {
                 },
                 context,
             );
+        },
+
+        async getDynamicSchema(
+            _context: SessionContext,
+            _schemaName: string,
+        ): Promise<SchemaContent | undefined> {
+            if (!agentContext.store) return undefined;
+            return {
+                format: "ts",
+                content: agentContext.store.generateDynamicSchemaText(),
+            };
+        },
+
+        async getDynamicGrammar(
+            _context: SessionContext,
+            _schemaName: string,
+        ): Promise<GrammarContent | undefined> {
+            if (!agentContext.store) return undefined;
+            const text = agentContext.store.getDynamicGrammarText();
+            if (!text) return undefined;
+            return { format: "agr", content: text };
         },
     };
 }

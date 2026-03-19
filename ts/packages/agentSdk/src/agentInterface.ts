@@ -50,7 +50,7 @@ export type SchemaTypeNames = {
 };
 
 export type SchemaFormat = "ts" | "pas";
-export type GrammarFormat = "ag";
+export type GrammarFormat = "ag" | "agr";
 
 export type SchemaContent = {
     format: SchemaFormat;
@@ -161,6 +161,17 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         dynamicDisplayId: string,
         context: SessionContext,
     ): Promise<DynamicDisplay>;
+
+    // Dynamic schema/grammar — allows agents to modify their schema and grammar at runtime.
+    // Called by the dispatcher during updateAgentContext and when the agent calls reloadAgentSchema().
+    getDynamicSchema?(
+        context: SessionContext,
+        schemaName: string,
+    ): Promise<SchemaContent | undefined>;
+    getDynamicGrammar?(
+        context: SessionContext,
+        schemaName: string,
+    ): Promise<GrammarContent | undefined>;
 }
 
 //==============================================================================
@@ -208,6 +219,10 @@ export interface SessionContext<T = unknown> {
     removeDynamicAgent(agentName: string): Promise<void>;
 
     forceCleanupDynamicAgent(agentName: string): Promise<void>;
+
+    // Notify the dispatcher that this agent's schema and/or grammar has changed.
+    // The dispatcher will call getDynamicSchema/getDynamicGrammar to get the updated content.
+    reloadAgentSchema(): Promise<void>;
 
     // Experimental: get the shared local host port
     getSharedLocalHostPort(agentName: string): Promise<number>;

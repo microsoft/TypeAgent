@@ -86,7 +86,9 @@ export function extractPowerShellScript(bashCommand: string): string | null {
     if (match) return match[1].trim();
 
     // pwsh variants
-    match = bashCommand.match(/pwsh[^"]*-Command\s+"&?\s*\{?\s*([\s\S]*?)\s*\}?"/i);
+    match = bashCommand.match(
+        /pwsh[^"]*-Command\s+"&?\s*\{?\s*([\s\S]*?)\s*\}?"/i,
+    );
     if (match) return match[1].trim();
 
     // Inline cmdlets without explicit powershell prefix (when the command IS a cmdlet)
@@ -132,7 +134,10 @@ export function extractScriptsFromTrace(
             stepNumber: step.stepNumber,
             rawCommand: command,
             scriptBody,
-            output: typeof step.result.data === "string" ? step.result.data : JSON.stringify(step.result.data ?? ""),
+            output:
+                typeof step.result.data === "string"
+                    ? step.result.data
+                    : JSON.stringify(step.result.data ?? ""),
             exitCode: 0,
             originalRequest: trace.session.originalRequest,
         });
@@ -145,11 +150,11 @@ export function extractScriptsFromTrace(
  * Generates ScriptFlow recipes from PowerShell scripts found in reasoning traces.
  */
 export class ScriptRecipeGenerator {
-    async generate(
-        trace: ReasoningTrace,
-    ): Promise<ScriptRecipe[]> {
+    async generate(trace: ReasoningTrace): Promise<ScriptRecipe[]> {
         if (!trace.result.success) {
-            debug("Trace was not successful, skipping script recipe generation");
+            debug(
+                "Trace was not successful, skipping script recipe generation",
+            );
             return [];
         }
 
@@ -215,7 +220,9 @@ export class ScriptRecipeGenerator {
         try {
             const recipe = JSON.parse(jsonMatch[1]) as ScriptRecipe;
             if (!recipe.actionName || !recipe.script?.body) {
-                debug("Invalid script recipe: missing actionName or script.body");
+                debug(
+                    "Invalid script recipe: missing actionName or script.body",
+                );
                 return null;
             }
             recipe.version = 1;

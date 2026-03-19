@@ -32,14 +32,8 @@
           "Select-Object",
           "Sort-Object"
         ],
-        "allowedPaths": [
-          "$env:USERPROFILE",
-          "$PWD",
-          "$env:TEMP"
-        ],
-        "allowedModules": [
-          "Microsoft.PowerShell.Management"
-        ],
+        "allowedPaths": ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
+        "allowedModules": ["Microsoft.PowerShell.Management"],
         "maxExecutionTime": 30,
         "networkAccess": false
       }

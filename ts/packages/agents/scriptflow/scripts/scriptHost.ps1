@@ -14,7 +14,7 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$AllowedCmdletsJson,
 
-    [string[]]$AllowedPaths = @(),
+    [string]$AllowedPathsJson = '[]',
 
     [int]$TimeoutSeconds = 30
 )
@@ -24,25 +24,39 @@ $ErrorActionPreference = 'Stop'
 try {
     $allowedCmdlets = $AllowedCmdletsJson | ConvertFrom-Json
     $params = $ParametersJson | ConvertFrom-Json
+    $AllowedPaths = @($AllowedPathsJson | ConvertFrom-Json)
+
+    # Expand environment variable references in allowed paths
+    # (e.g. "$env:USERPROFILE" → "C:\Users\name")
+    # Done outside constrained runspace where method invocation is allowed.
+    $expandedAllowedPaths = @()
+    foreach ($ap in $AllowedPaths) {
+        try {
+            $expandedAllowedPaths += $ExecutionContext.InvokeCommand.ExpandString($ap)
+        } catch {
+            $expandedAllowedPaths += $ap
+        }
+    }
 
     # Validate path parameters against allowed paths
-    if ($AllowedPaths.Count -gt 0) {
+    if ($expandedAllowedPaths.Count -gt 0) {
         foreach ($prop in $params.PSObject.Properties) {
             $val = $prop.Value
-            if ($val -is [string] -and (Test-Path $val -IsValid)) {
-                $resolvedPath = $null
-                try { $resolvedPath = (Resolve-Path $val -ErrorAction SilentlyContinue).Path } catch {}
-                if ($resolvedPath) {
-                    $pathAllowed = $false
-                    foreach ($ap in $AllowedPaths) {
-                        $expandedAllowed = [Environment]::ExpandEnvironmentVariables($ap)
-                        if ($resolvedPath.StartsWith($expandedAllowed, [System.StringComparison]::OrdinalIgnoreCase)) {
-                            $pathAllowed = $true
-                            break
+            if ($val -is [string]) {
+                $isValidPath = $false
+                try { $isValidPath = Test-Path $val -IsValid } catch { }
+                if ($isValidPath) {
+                    $resolvedPath = $null
+                    try { $resolvedPath = (Resolve-Path $val -ErrorAction SilentlyContinue).Path } catch {}
+                    if ($resolvedPath) {
+                        $pathAllowed = $false
+                        foreach ($ap in $expandedAllowedPaths) {
+                            if ($resolvedPath -like "$ap*") {
+                                $pathAllowed = $true
+                                break
+                            }
                         }
                     }
-                    # Only block if path resolves to something clearly outside allowed paths
-                    # Skip validation for relative paths that haven't been resolved
                 }
             }
         }
@@ -73,12 +87,12 @@ try {
     $ps = [System.Management.Automation.PowerShell]::Create()
     $ps.Runspace = $runspace
 
-    # Inject parameters as PowerShell variables (safe — no string interpolation)
-    foreach ($prop in $params.PSObject.Properties) {
-        $ps.Runspace.SessionStateProxy.SetVariable($prop.Name, $prop.Value)
-    }
+    [void]$ps.AddScript($ScriptBody)
 
-    $ps.AddScript($ScriptBody)
+    # Pass parameters to the script's param() block
+    foreach ($prop in $params.PSObject.Properties) {
+        [void]$ps.AddParameter($prop.Name, $prop.Value)
+    }
 
     # Execute with timeout
     $asyncResult = $ps.BeginInvoke()
@@ -92,9 +106,9 @@ try {
 
     $output = $ps.EndInvoke($asyncResult)
 
-    # Output results
-    foreach ($item in $output) {
-        Write-Output $item.ToString()
+    # Render output — Out-String handles both plain objects and Format-* objects
+    if ($output.Count -gt 0) {
+        $output | Out-String -Width 200 | Write-Output
     }
 
     # Report errors
