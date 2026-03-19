@@ -1,0 +1,42 @@
+{
+  "name": "listFiles",
+  "description": "List files in a directory with optional filtering",
+  "parameters": {
+    "path": {
+      "type": "string",
+      "required": false,
+      "default": ".",
+      "description": "Directory to list"
+    },
+    "filter": {
+      "type": "string",
+      "required": false,
+      "default": "*",
+      "description": "File name filter (supports wildcards)"
+    }
+  },
+  "steps": [
+    {
+      "id": "execute",
+      "type": "script",
+      "language": "powershell",
+      "body": "param([string]$Path = '.', [string]$Filter = '*')\nGet-ChildItem -Path $Path -Filter $Filter | Format-Table Name, Length, LastWriteTime -AutoSize",
+      "parameters": {
+        "Path": "${path}",
+        "Filter": "${filter}"
+      },
+      "sandbox": {
+        "allowedCmdlets": [
+          "Get-ChildItem",
+          "Format-Table",
+          "Select-Object",
+          "Sort-Object"
+        ],
+        "allowedPaths": ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
+        "allowedModules": ["Microsoft.PowerShell.Management"],
+        "maxExecutionTime": 30,
+        "networkAccess": false
+      }
+    }
+  ]
+}
