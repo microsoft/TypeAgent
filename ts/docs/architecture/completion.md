@@ -101,12 +101,12 @@ grammar rules.
 3. When `maxPrefixLength` advances, discard all shorter-prefix completions.
 4. Categorize each state's outcome:
 
-| Category           | Condition                                   | Forward completion source      | Backward completion source     |
-| ------------------ | ------------------------------------------- | ------------------------------ | ------------------------------ |
-| 1 — Exact          | Rule fully matched, prefix fully consumed   | None                           | Last matched word/wildcard     |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts   | Next part of rule              | Last matched part              |
-| 3a — Dirty partial | Trailing text matches start of current part | Current part (prefix-filtered) | Current part (prefix-filtered) |
-| 3b — Dirty partial | Trailing text doesn't match                 | Current part                   | Last matched part              |
+| Category           | Condition                                 | Forward completion source      | Backward completion source           |
+| ------------------ | ----------------------------------------- | ------------------------------ | ------------------------------------ |
+| 1 — Exact          | Rule fully matched, prefix fully consumed | None                           | Last matched word/wildcard           |
+| 2 — Clean partial  | Prefix consumed, rule has remaining parts | Next part of rule              | Last matched part                    |
+| 3a — Pending wc    | Unfinalizable pending wildcard            | Wildcard property completion   | Last matched part (if afterWildcard) |
+| 3b — Dirty partial | Trailing text remains                     | Current part (prefix-filtered) | Current part (prefix-filtered)       |
 
 5. Multi-word string parts use `tryPartialStringMatch()` to offer one word
    at a time instead of the entire phrase.
@@ -118,10 +118,24 @@ grammar rules.
   needed at the boundary (Latin vs CJK, `[spacing=none]` rules).
 - `closedSet` — `true` for pure keyword alternatives; `false` when
   property/wildcard completions are emitted (entity values are external).
-- `openWildcard` — `true` when a keyword completion is offered after a
-  wildcard that was finalized at end-of-input (Category 2 where the
-  preceding wildcard consumed the entire remaining input). Signals that
-  the wildcard boundary is ambiguous.
+- `openWildcard` — `true` when the `matchedPrefixLength` position is
+  **ambiguous** — i.e., adjacent to a wildcard whose extent is not fully
+  determined. This happens in two cases:
+
+  - **Forward (Category 2):** a keyword completion follows a wildcard that
+    was finalized at end-of-input (`finalizeState`). The wildcard consumed
+    everything up to EOI, but the user may still be typing within it.
+  - **Backward (Category 2 or 3a):** completion backs up to a keyword that
+    was matched after a captured wildcard (`afterWildcard` on
+    `lastMatchedPartInfo`). The wildcard's end was pinned by this keyword,
+    but backing up un-pins it — the wildcard could extend to absorb the
+    keyword text.
+
+  By contrast, a position is **definite** when it is structurally pinned
+  by matched grammar tokens and cannot shift with more typing. Examples:
+  the start of a wildcard (pinned by the preceding keyword), or a keyword
+  matched without a preceding wildcard. Backward completion to a wildcard's
+  start position reports `openWildcard=false`.
 
 ---
 
@@ -372,15 +386,34 @@ The shell does not store `closedSet` directly; it is folded into
 
 ### `openWildcard`
 
-A boolean flowing through the backend pipeline, signaling that the completions
-are offered at a position where a wildcard was finalized at end-of-input.
+A boolean flowing through the backend pipeline, signaling that the
+`matchedPrefixLength` position is **ambiguous** — adjacent to a wildcard
+whose extent is not fully determined.
 
-- **`true`** — the wildcard's extent is ambiguous (the user may still be
-  typing within it). The keyword following the wildcard (e.g. "by") is
-  offered as a completion, and `closedSet` correctly describes that keyword
-  set as exhaustive. However, the _position_ of that set is uncertain.
+A position is **definite** when it is structurally pinned by matched
+grammar tokens: no amount of additional typing can change where it falls.
+Examples: the start of a wildcard (pinned by the preceding keyword), or a
+keyword matched without a preceding wildcard.
 
-- **`false`** — no sliding wildcard boundary.
+A position is **ambiguous** when it sits at the boundary of a wildcard
+that could absorb more text, moving the boundary forward. This happens
+in two cases:
+
+- **Forward:** a keyword completion follows a wildcard that was finalized
+  at end-of-input (via `finalizeState`). The wildcard consumed everything
+  up to EOI, but the user may still be typing within it.
+- **Backward:** completion backs up to a keyword that was matched after a
+  captured wildcard (`afterWildcard` on `lastMatchedPartInfo`). Backing up
+  un-pins the wildcard boundary — it could extend to absorb the keyword.
+
+Values:
+
+- **`true`** — the position is ambiguous. The keyword following the
+  wildcard (e.g. "by") is offered as a completion, and `closedSet`
+  correctly describes that keyword set as exhaustive. However, the
+  _position_ of that set is uncertain.
+
+- **`false`** — the position is definite; no sliding wildcard boundary.
 
 Merge rule: OR across sources (open wildcard if _any_ source has one).
 
@@ -401,10 +434,10 @@ a single actionable policy on arrival, keeping the decision points (A3
 and C6) simple: each is a `switch` on one enum rather than reasoning
 about two independent booleans.
 
-**Why `openWildcard` wins over `closedSet`:** When a wildcard is finalized
-at end-of-input, `closedSet` correctly describes the _keyword_ set (e.g.
+**Why `openWildcard` wins over `closedSet`:** When a wildcard boundary is
+ambiguous, `closedSet` correctly describes the _keyword_ set (e.g.
 "by" is exhaustive), but the _position_ of that set is uncertain because
-the wildcard extent is ambiguous. Re-fetching would return the same
+the wildcard extent could shift. Re-fetching would return the same
 keywords at a shifted position (wasteful), and `"accept"` would leave the
 user stuck (no menu, no re-fetch). Sliding is the only useful action, so
 `openWildcard=true` maps to `"slide"` regardless of `closedSet`.
