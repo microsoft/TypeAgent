@@ -7,12 +7,13 @@
 // Import syntax
 import { Cardinal, TrackName, ArtistName } from "./base.agr";
 import * from "./shared.agr";
+import { GreetAction, PlayAction, PauseAction } from "./schema.ts";
 
 // Simple rule definition
 <Start> = <Greeting> | <Command>;
 
-// Rule with captures and types
-<Greeting> =
+// Rule with captures and value type annotation
+<Greeting> : GreetAction =
     hello $(name:PersonName) -> {
         actionName: "greet",
         parameters: {
@@ -21,8 +22,8 @@ import * from "./shared.agr";
     }
   | hi there -> { actionName: "greet" };
 
-// Rule with optional elements
-<Command> =
+// Rule with optional elements (union value type)
+<Command> : PlayAction | PauseAction =
     play (the)? $(track:TrackName)
     by $(artist:ArtistName) -> {
         actionName: "playTrack",

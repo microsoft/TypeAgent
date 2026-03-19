@@ -33,7 +33,8 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) "from" <StringLiteral> ";"
  *   <ImportAll> ::= "*"
  *   <ImportNames> ::= "{" <Identifier> ("," <Identifier>)* "}"
- *   <RuleDefinition> ::= "export"? <RuleName> <RuleAnnotation>? "=" <Rules> ";"
+ *   <RuleDefinition> ::= "export"? <RuleName> <RuleAnnotation>? <ValueType>? "=" <Rules> ";"
+ *   <ValueType> ::= ":" <TypeName> ("|" <TypeName>)*
  *   <RuleAnnotation> ::= "[" <AnnotationKey> "=" <AnnotationValue> "]"
  *   // Currently the only supported annotation key is "spacing":
  *   //   [spacing=required], [spacing=optional], [spacing=auto], [spacing=none]
@@ -261,7 +262,9 @@ export type RuleDefinition = {
     annotationAfterKeyComments?: Comment[] | undefined; // after "spacing" keyword, before =
     annotationAfterEqualsComments?: Comment[] | undefined; // after =, before value
     annotationAfterValueComments?: Comment[] | undefined; // after value, before ]
-    beforeEqualsComments?: Comment[] | undefined; // comments between <Name>/[annotation] and =
+    valueType?: CommentedName[] | undefined; // type names after ":" (e.g. <Rule> : A | B = ...)
+    beforeValueTypeComments?: Comment[] | undefined; // comments before ":" in value type
+    beforeEqualsComments?: Comment[] | undefined; // comments between <Name>/[annotation]/valueType and =
     trailingComments?: Comment[] | undefined; // comments on same line as ";"
 };
 
@@ -1086,6 +1089,8 @@ class GrammarRuleParser {
         let annotationAfterKeyComments: Comment[] | undefined;
         let annotationAfterEqualsComments: Comment[] | undefined;
         let annotationAfterValueComments: Comment[] | undefined;
+        let valueType: CommentedName[] | undefined;
+        let beforeValueTypeComments: Comment[] | undefined;
         const maybePreComments = this.parseComments();
         if (this.isAt("[")) {
             beforeAnnotationComments = maybePreComments;
@@ -1098,6 +1103,32 @@ class GrammarRuleParser {
             beforeEqualsComments = this.parseComments();
         } else {
             beforeEqualsComments = maybePreComments;
+        }
+        // Parse optional value type: `: TypeName (| TypeName)*`
+        if (this.isAt(":")) {
+            beforeValueTypeComments = beforeEqualsComments;
+            this.skipWhitespace(1); // skip ":"
+            valueType = [];
+            const leadingComments = this.parseComments();
+            const firstName = this.parseId("value type name");
+            let trailingComments = this.parseComments();
+            valueType.push({
+                name: firstName,
+                leadingComments,
+                trailingComments,
+            });
+            while (this.isAt("|")) {
+                this.skipWhitespace(1); // skip "|"
+                const lc = this.parseComments();
+                const typeName = this.parseId("value type name");
+                trailingComments = this.parseComments();
+                valueType.push({
+                    name: typeName,
+                    leadingComments: lc,
+                    trailingComments,
+                });
+            }
+            beforeEqualsComments = this.parseComments();
         }
         if (!this.isAt("=")) {
             this.throwUnexpectedCharError(
@@ -1117,6 +1148,7 @@ class GrammarRuleParser {
             rules,
             exported,
             spacingMode,
+            valueType,
             pos,
             leadingComments,
             afterExportComments,
@@ -1125,6 +1157,7 @@ class GrammarRuleParser {
             annotationAfterKeyComments,
             annotationAfterEqualsComments,
             annotationAfterValueComments,
+            beforeValueTypeComments,
             beforeEqualsComments,
             trailingComments,
         };

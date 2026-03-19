@@ -802,6 +802,19 @@ function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
         writeInlineComments(result, def.annotationAfterValueComments);
         result.write("]");
     }
+    if (def.valueType !== undefined) {
+        writeInlineComments(result, def.beforeValueTypeComments, true);
+        result.write(" :");
+        for (let i = 0; i < def.valueType.length; i++) {
+            if (i > 0) {
+                result.write(" |");
+            }
+            const vt = def.valueType[i];
+            writeInlineComments(result, vt.leadingComments, true);
+            result.write(` ${vt.name}`);
+            writeInlineComments(result, vt.trailingComments);
+        }
+    }
     writeInlineComments(result, def.beforeEqualsComments, true);
     result.write(` = `);
     const col = result.column - 2;

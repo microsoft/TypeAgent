@@ -33,6 +33,7 @@ type DefinitionRecord = {
     hasValue: boolean;
     compiling: boolean; // true while grammarRules is being populated
     nullable?: boolean; // set after compilation; true if any alternative matches ε
+    valueType?: string[] | undefined; // declared return type names (e.g. <Rule> : A | B = ...)
 };
 
 type ResolvedDefinitionRecord = DefinitionRecord & {
@@ -152,6 +153,7 @@ function createCompileContext(
                 // Set this to true to allow recursion to assume that it has value.
                 hasValue: true,
                 compiling: false,
+                valueType: def.valueType?.map((vt) => vt.name),
             });
         } else {
             existing.definitions.push(def);
@@ -497,6 +499,13 @@ function createNamedGrammarRules(
         record.compiling = false;
         record.nullable = nullable;
         context.currentDefinition = prev;
+
+        // Track valueType entries as used imported types
+        if (record.valueType !== undefined) {
+            for (const typeName of record.valueType) {
+                context.usedImportedTypes.add(typeName);
+            }
+        }
     }
 
     if (referenceVariable !== undefined && !record.hasValue) {
