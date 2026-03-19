@@ -16,6 +16,7 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionResult,
+    ActionResultError,
     ActionContext,
     ParsedCommandParams,
     ParameterDefinitions,
@@ -193,7 +194,9 @@ export async function executeAction(
 
     // Display the action result.
     if (result.error !== undefined) {
-        displayError(result.error, actionContext);
+        if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
+            displayError(result.error, actionContext);
+        }
     } else {
         if (result.displayContent !== undefined) {
             actionContext.actionIO.appendDisplay(
@@ -311,7 +314,7 @@ export async function executeActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
-) {
+): Promise<ActionResultError | undefined> {
     const systemContext = context.sessionContext.agentContext;
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
@@ -391,7 +394,7 @@ export async function executeActions(
 
         if (result.error !== undefined) {
             // Stop executing further action on error.
-            return;
+            return result as ActionResultError;
         }
 
         const resultEntityId = executableAction.resultEntityId;
@@ -486,6 +489,7 @@ export async function executeActions(
         }
         actionIndex++;
     }
+    return undefined;
 }
 
 function getAdditionalExecutableActions(

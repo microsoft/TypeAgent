@@ -1458,6 +1458,35 @@ class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
+    public readonly description =
+        "Enable or disable PowerShell script reuse for reasoning actions";
+    public readonly parameters = {
+        args: {
+            mode: {
+                description:
+                    "Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning",
+                type: "string" as const,
+                enum: ["enabled", "disabled"],
+            },
+        },
+    } as const;
+
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const mode = params.args.mode as "enabled" | "disabled";
+
+        await changeContextConfig(
+            { execution: { scriptReuse: mode } },
+            context,
+        );
+
+        return displayResult(`Script reuse ${mode}`, context);
+    }
+}
+
 const configExecutionCommandHandlers: CommandHandlerTable = {
     description: "Execution configuration",
     commands: {
@@ -1472,6 +1501,7 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
         ),
         reasoning: new ConfigExecutionReasoningCommandHandler(),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
+        scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
     },
 };
 

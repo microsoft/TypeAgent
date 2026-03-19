@@ -3,7 +3,7 @@
 
 import { CommandCompletionResult } from "agent-dispatcher";
 import {
-    CommitMode,
+    CompletionDirection,
     CompletionGroup,
     SeparatorMode,
 } from "@typeagent/agent-sdk";
@@ -28,7 +28,33 @@ export interface ISearchMenu {
 }
 
 export interface ICompletionDispatcher {
-    getCommandCompletion(input: string): Promise<CommandCompletionResult>;
+    getCommandCompletion(
+        input: string,
+        direction: CompletionDirection,
+    ): Promise<CommandCompletionResult>;
+}
+
+// Describes what the shell should do when the local trie has no matches
+// for the user's typed prefix.  Computed once from the backend's
+// descriptive fields (closedSet, openWildcard) when a result arrives,
+// then used in reuseSession() decisions.
+//
+//   "accept"  — the completion set is exhaustive; no re-fetch can help.
+//               (Derived from closedSet=true, openWildcard=false.)
+//   "refetch" — the set is open-ended; the backend may know more.
+//               (Derived from closedSet=false, openWildcard=false.)
+//   "slide"   — the anchor sits at a sliding wildcard boundary; slide
+//               it forward instead of re-fetching or giving up.
+//               (Derived from openWildcard=true, any closedSet.)
+type NoMatchPolicy = "accept" | "refetch" | "slide";
+
+function computeNoMatchPolicy(
+    closedSet: boolean,
+    openWildcard: boolean,
+): NoMatchPolicy {
+    if (openWildcard) return "slide";
+    if (closedSet) return "accept";
+    return "refetch";
 }
 
 // PartialCompletionSession manages the state machine for command completion.
@@ -39,7 +65,7 @@ export interface ICompletionDispatcher {
 //   ACTIVE      anchor !== undefined && completionP === undefined
 //
 // Design principles:
-//   - Completion result fields (separatorMode, closedSet) are stored as-is
+//   - Completion result fields (separatorMode, etc.) are stored as-is
 //     from the backend response and never mutated as the user keeps typing.
 //     reuseSession() reads them to decide whether to show, hide, or re-fetch.
 //   - reuseSession() makes exactly four kinds of decisions:
@@ -50,25 +76,21 @@ export interface ICompletionDispatcher {
 //          result's constraints aren't satisfied yet (separator not typed,
 //          or no completions exist).  A re-fetch would return the same result.
 //       4. Uniquely satisfied — the user has exactly typed one completion
-//          entry (and it is not a prefix of any other).  Gated by
-//          `commitMode`:
-//            commitMode="eager"    → re-fetch immediately for the NEXT
-//              level's completions (e.g. variable-space grammar where
-//              tokens can abut without whitespace).
-//            commitMode="explicit" → suppress; the user hasn't committed
-//              yet (must type an explicit delimiter).  B5 handles the
-//              separator arrival.
-//          `closedSet` is irrelevant here because it describes THIS
-//          level, not the next's.
-//   - The `closedSet` flag controls the no-match fallthrough: when the trie
+//          entry (and it is not a prefix of any other).  Always re-fetches
+//          for the NEXT level's completions — the direction to use for the
+//          re-fetch is determined by the caller.
+//   - The `noMatchPolicy` controls the no-match fallthrough: when the trie
 //     has zero matches for the typed prefix:
-//       closedSet=true  → reuse (closed set, nothing else exists)
-//       closedSet=false → re-fetch (set is open, backend may know more)
-//   - The anchor is never advanced after a result is received.
+//       "accept"  → nothing else exists, stay quiet
+//       "refetch" → backend may know more, re-fetch
+//       "slide"   → wildcard boundary, slide anchor forward
+//   - The anchor is never advanced after a result is received (except
+//     when noMatchPolicy is "slide", which slides the anchor forward).
 //     When `separatorMode` requires a separator, the separator is stripped
 //     from the raw prefix before being passed to the menu, so the trie
 //     still matches.
 //
+// Architecture: docs/architecture/completion.md — §5 Shell — Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
 export class PartialCompletionSession {
     // The "anchor" prefix for the current session.  Set to the full input
@@ -78,8 +100,13 @@ export class PartialCompletionSession {
 
     // Saved as-is from the last completion result.
     private separatorMode: SeparatorMode = "space";
-    private closedSet: boolean = false;
-    private commitMode: CommitMode = "explicit";
+    // Computed from the backend's closedSet + openWildcard fields.
+    // Controls what happens when the local trie has no matches.
+    private noMatchPolicy: NoMatchPolicy = "refetch";
+    // True when completions differ between forward and backward.
+    private directionSensitive: boolean = false;
+    // Direction used for the last fetch.
+    private lastDirection: CompletionDirection = "forward";
 
     // The in-flight completion request, or undefined when settled.
     private completionP: Promise<CommandCompletionResult> | undefined;
@@ -91,17 +118,20 @@ export class PartialCompletionSession {
 
     // Main entry point.  Called by PartialCompletion.update() after DOM checks pass.
     //   input:       trimmed input text (ghost text stripped, leading whitespace stripped)
+    //   direction:   host-provided signal: "forward" (user is moving ahead) or
+    //                "backward" (user is reconsidering, e.g. backspaced)
     //   getPosition: DOM callback that computes the menu anchor position; returns
     //                undefined when position cannot be determined (hides menu).
     public update(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection = "forward",
     ): void {
-        if (this.reuseSession(input, getPosition)) {
+        if (this.reuseSession(input, getPosition, direction)) {
             return;
         }
 
-        this.startNewSession(input, getPosition);
+        this.startNewSession(input, getPosition, direction);
     }
 
     // Hide the menu and cancel any in-flight fetch, but preserve session
@@ -151,13 +181,11 @@ export class PartialCompletionSession {
     //                (return true).
     //   UNIQUE     — prefix exactly matches one entry and is not a prefix of
     //                any other; re-fetch for the NEXT level (return false).
-    //                Gated by commitMode: "eager" re-fetches immediately;
-    //                "explicit" defers to B5 (committed-past-boundary).
     //   SHOW       — constraints satisfied; update the menu.  The final
-    //                return is `this.closedSet || this.menu.isActive()`:
-    //                reuse when the trie still has matches, or when the set
-    //                is closed (nothing new to fetch).  Re-fetch only
-    //                when the trie is empty AND the set is open.
+    //                decision uses `noMatchPolicy`:
+    //                reuse when the trie still has matches.  When the trie
+    //                is empty: "accept" → reuse, "refetch" → re-fetch,
+    //                "slide" → slide anchor forward.
     //
     // Re-fetch triggers (returns false → startNewSession):
     //
@@ -170,16 +198,18 @@ export class PartialCompletionSession {
     //                         immediately after anchor, but a non-separator
     //                         character was typed instead. The constraint can
     //                         never be satisfied, so treat as new input.
+    //   7. Direction changed — the user switched between forward and backward
+    //                         AND the last result was direction-sensitive
+    //                         AND the input is at the exact anchor (no text
+    //                         typed past it).  Once the user types past the
+    //                         anchor, the direction-sensitive boundary has been
+    //                         passed and the loaded completions are still valid.
     //
     // B. Hierarchical navigation — user completed this level; re-fetch for
-    //    the NEXT level's completions.  closedSet describes THIS level,
-    //    not the next.
+    //    the NEXT level's completions.
     //   4. Uniquely satisfied — typed prefix exactly matches one completion and
-    //                         is not a prefix of any other. Re-fetch for the
-    //                         NEXT level (e.g. agent name → subcommands).
-    //                         Gated by commitMode: when "explicit", this is
-    //                         suppressed (B5 handles it once the user types a
-    //                         separator).  When "eager", fires immediately.
+    //                         is not a prefix of any other. Always re-fetch
+    //                         for the NEXT level.
     //   5. Committed past boundary — prefix contains a separator after a valid
     //                         completion match (e.g. "set " where "set" matches
     //                         but so does "setWindowState"). The user committed
@@ -188,12 +218,13 @@ export class PartialCompletionSession {
     // C. Open-set discovery — trie has zero matches and the set is not
     //    exhaustive; the backend may know about completions not yet loaded.
     //    Gated by closedSet === false.
-    //   6. Open set, no matches — trie has zero matches for the typed prefix
-    //                         AND closedSet is false. The backend may know about
-    //                         completions not yet loaded.
+    //   6. No matches + open set — trie has zero matches for the typed prefix
+    //                         AND noMatchPolicy is "refetch". The backend may
+    //                         know about completions not yet loaded.
     private reuseSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection,
     ): boolean {
         // [A1] No session — IDLE state, must fetch.
         if (this.anchor === undefined) {
@@ -208,7 +239,31 @@ export class PartialCompletionSession {
         }
 
         // ACTIVE from here.
-        const { anchor, separatorMode: sepMode, closedSet, commitMode } = this;
+        const { anchor, separatorMode: sepMode, noMatchPolicy } = this;
+
+        // [A7] Direction changed on a direction-sensitive result.
+        // The loaded completions were computed for the opposite direction
+        // and would differ — but only at the anchor boundary itself.
+        // Once the user has typed past the anchor (rawPrefix is
+        // non-empty), the direction-sensitive point has been passed:
+        // the trailing text acts as a commit signal, and backward is
+        // neutralized by the content after the anchor.  The loaded
+        // completions are still valid for trie filtering.
+        //
+        // If input is shorter than anchor, A2 (anchor diverged) will
+        // catch it.  If input is longer but the separator isn't
+        // satisfied, A3 will catch it.  So this check only needs to
+        // handle the exact-anchor case.
+        if (
+            direction !== this.lastDirection &&
+            this.directionSensitive &&
+            input === anchor
+        ) {
+            debug(
+                `Partial completion re-fetch: direction changed (${this.lastDirection} → ${direction}), directionSensitive`,
+            );
+            return false;
+        }
 
         // [A2] RE-FETCH — input moved past the anchor (e.g. backspace, new word).
         if (!input.startsWith(anchor)) {
@@ -251,10 +306,28 @@ export class PartialCompletionSession {
                 return true; // HIDE+KEEP
             }
             if (!separatorRegex(sepMode).test(rawPrefix)) {
-                // [A3] closedSet is not consulted here: it describes whether
-                // the completion *entries* are exhaustive, not whether
-                // the anchor token can extend.  The grammar may parse
-                // the longer input on a completely different path.
+                // [A3] noMatchPolicy is not consulted for "accept" vs
+                // "refetch" here: it describes whether the completion
+                // *entries* are exhaustive, not whether the anchor
+                // token can extend.  The grammar may parse the longer
+                // input on a completely different path.
+                //
+                // However, when noMatchPolicy is "slide", the anchor
+                // sits at a sliding wildcard boundary — the user is
+                // still typing within the wildcard, and re-fetching
+                // would produce the same result at a shifted position.
+                // Instead, slide the anchor forward to the current
+                // input: the trie and metadata stay intact, so the menu
+                // will re-appear at the next word boundary when the
+                // user types a separator.
+                if (noMatchPolicy === "slide") {
+                    debug(
+                        `Partial completion anchor slide (A3): '${anchor}' → '${input}' (slide)`,
+                    );
+                    this.anchor = input;
+                    this.menu.hide();
+                    return true;
+                }
                 debug(
                     `Partial completion re-fetch: non-separator after anchor (mode='${sepMode}', rawPrefix='${rawPrefix}')`,
                 );
@@ -280,20 +353,13 @@ export class PartialCompletionSession {
 
             // [B4] The user has typed text that exactly matches one
             // completion and is not a prefix of any other.
-            // Only re-fetch when commitMode="eager" (tokens can abut
-            // without whitespace).  When "explicit", B5 handles it
-            // once the user types a separator.
+            // Always re-fetch for the next level — the direction
+            // for the re-fetch comes from the caller.
             if (uniquelySatisfied) {
-                if (commitMode === "eager") {
-                    debug(
-                        `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied (eager commit)`,
-                    );
-                    return false; // RE-FETCH (hierarchical navigation)
-                }
                 debug(
-                    `Partial completion: '${completionPrefix}' uniquely satisfied but commitMode='${commitMode}', deferring to separator`,
+                    `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied`,
                 );
-                return true; // REUSE — wait for explicit separator before re-fetching
+                return false; // RE-FETCH (hierarchical navigation)
             }
 
             // [B5] Committed-past-boundary: the prefix contains whitespace
@@ -319,33 +385,59 @@ export class PartialCompletionSession {
 
         // [C6] When the menu is still active (trie has matches) we always
         // reuse — the loaded completions are still useful.  When there are
-        // NO matches, the decision depends on `closedSet`:
-        //   closedSet=true  → the set is closed; the user typed past all
-        //                     valid continuations, so re-fetching won't help.
-        //   closedSet=false → the set is NOT closed; the user may have
-        //                     typed something valid that wasn't loaded, so
-        //                     re-fetch with the longer input (open-set discovery).
+        // NO matches, the decision depends on `noMatchPolicy`:
+        //   "accept"  → the set is exhaustive; the user typed past all
+        //               valid continuations, so re-fetching won't help.
+        //   "refetch" → the set is open-ended; the user may have typed
+        //               something valid that wasn't loaded, so re-fetch
+        //               with the longer input (open-set discovery).
+        //   "slide"   → the anchor sits at a sliding wildcard boundary;
+        //               slide forward instead of re-fetching (wasteful,
+        //               same result) or giving up (stuck).  The trie
+        //               stays intact so the menu will re-appear at the
+        //               next word boundary.
         const active = this.menu.isActive();
-        const reuse = closedSet || active;
-        debug(
-            `Partial completion ${reuse ? "reuse" : "re-fetch"}: closedSet=${closedSet}, menuActive=${active}`,
-        );
-        return reuse;
+        if (!active) {
+            switch (noMatchPolicy) {
+                case "slide":
+                    debug(
+                        `Partial completion anchor slide (C6): '${anchor}' → '${input}' (slide)`,
+                    );
+                    this.anchor = input;
+                    this.menu.hide();
+                    return true;
+                case "accept":
+                    debug(
+                        `Partial completion reuse: noMatchPolicy=accept, menuActive=false`,
+                    );
+                    return true;
+                case "refetch":
+                    debug(
+                        `Partial completion re-fetch: noMatchPolicy=refetch, menuActive=false`,
+                    );
+                    return false;
+            }
+        }
+        debug(`Partial completion reuse: menuActive=true`);
+        return true;
     }
 
     // Start a new completion session: issue backend request and process result.
     private startNewSession(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection,
     ): void {
-        debug(`Partial completion start: '${input}'`);
+        debug(`Partial completion start: '${input}' direction=${direction}`);
         this.menu.hide();
         this.menu.setChoices([]);
         this.anchor = input;
         this.separatorMode = "space";
-        this.closedSet = false;
-        this.commitMode = "explicit";
-        const completionP = this.dispatcher.getCommandCompletion(input);
+        this.noMatchPolicy = "refetch";
+        const completionP = this.dispatcher.getCommandCompletion(
+            input,
+            direction,
+        );
         this.completionP = completionP;
         completionP
             .then((result) => {
@@ -358,8 +450,12 @@ export class PartialCompletionSession {
                 debug(`Partial completion result: `, result);
 
                 this.separatorMode = result.separatorMode ?? "space";
-                this.closedSet = result.closedSet;
-                this.commitMode = result.commitMode ?? "explicit";
+                this.noMatchPolicy = computeNoMatchPolicy(
+                    result.closedSet,
+                    result.openWildcard,
+                );
+                this.directionSensitive = result.directionSensitive;
+                this.lastDirection = direction;
 
                 const completions = toMenuItems(result.completions);
 
@@ -369,9 +465,9 @@ export class PartialCompletionSession {
                     );
                     // Keep anchor at the full input so the anchor
                     // covers the entire typed text.  The menu stays empty,
-                    // so reuseSession()'s SHOW path will use `closedSet` to
-                    // decide: closedSet=true → reuse (nothing more exists);
-                    // closedSet=false → re-fetch when new input arrives.
+                    // so reuseSession()'s SHOW path will use noMatchPolicy
+                    // to decide: "accept" → reuse (nothing more exists);
+                    // "refetch" → re-fetch when new input arrives.
                     //
                     // Override separatorMode: with no completions, there is
                     // nothing to separate from, so the separator check in
@@ -392,7 +488,7 @@ export class PartialCompletionSession {
 
                 // Re-run update with captured input to show the menu (or defer
                 // if the separator has not been typed yet).
-                this.reuseSession(input, getPosition);
+                this.reuseSession(input, getPosition, direction);
             })
             .catch((e) => {
                 debugError(`Partial completion error: '${input}' ${e}`);

@@ -30,6 +30,7 @@ import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
+import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
 import {
     formatParams as sharedFormatParams,
     formatToolResultDisplay as sharedFormatToolResultDisplay,
@@ -117,12 +118,60 @@ function getRecentChatContext(
 function buildPromptWithContext(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): string {
+    const parts: string[] = [];
     const chatContext = getRecentChatContext(context);
     if (chatContext) {
-        return `${chatContext}\n\n[Current request]\n${originalRequest}`;
+        parts.push(chatContext);
     }
-    return originalRequest;
+    if (fallbackContext) {
+        const lines = ["[Fallback context — a prior action failed]"];
+        if (fallbackContext.failedSchema && fallbackContext.failedAction) {
+            lines.push(
+                `Failed action: ${fallbackContext.failedSchema}.${fallbackContext.failedAction}`,
+            );
+        }
+        if (fallbackContext.failedFlowName) {
+            lines.push(`Failed flow: ${fallbackContext.failedFlowName}`);
+        }
+        if (fallbackContext.error) {
+            lines.push(`Error: ${fallbackContext.error}`);
+        }
+        lines.push(
+            "You MUST use scriptflow actions (discover_actions, listScriptFlows, executeScriptFlow, createScriptFlow, editScriptFlow, deleteScriptFlow) to handle this request. Do NOT use the Bash tool for operations that scriptflow can handle.",
+        );
+        if (fallbackContext.failedFlowName) {
+            lines.push(
+                `IMPORTANT: The flow '${fallbackContext.failedFlowName}' failed. Use editScriptFlow to fix its script rather than creating a duplicate flow. Only create a new flow if the existing one's parameters/grammar are fundamentally wrong.`,
+            );
+        }
+        parts.push(lines.join("\n"));
+    }
+
+    // Reinforce scriptflow usage for Windows even when not in fallback mode.
+    // Without this, reasoning often uses Bash + PowerShell directly and
+    // never creates a reusable scriptflow.
+    const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
+    if (
+        !fallbackContext &&
+        config.execution.scriptReuse === "enabled" &&
+        process.platform === "win32"
+    ) {
+        parts.push(
+            "[ScriptFlow reminder] For system operations (file listing, process management, text search), " +
+                "use scriptflow actions (discover_actions → listScriptFlows → executeScriptFlow/createScriptFlow) " +
+                "instead of the Bash tool. This creates reusable flows for future requests.",
+        );
+    }
+
+    parts.push(
+        parts.length > 0
+            ? `[Current request]\n${originalRequest}`
+            : originalRequest,
+    );
+    return parts.join("\n\n");
 }
 
 // Delegate to shared formatting utilities from reasoningLoopBase
@@ -155,22 +204,29 @@ function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
 ): Options {
     const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
     const activeSchemas = systemContext.agents.getActiveSchemas();
     const schemaDescriptions: string[] = [];
-    const validators = new Map<string, TypeAgentJsonValidator<AppAction>>();
+    const validatorSchemas = new Set<string>();
     for (const schemaName of activeSchemas) {
         const actionConfig = systemContext.agents.getActionConfig(schemaName);
         if (getActionSchemaTypeName(actionConfig.schemaType) === undefined) {
             continue;
         }
         schemaDescriptions.push(`- ${schemaName}: ${actionConfig.description}`);
-        validators.set(
-            schemaName,
-            createActionSchemaJsonValidator(
-                composeActionSchema([actionConfig], [], systemContext.agents, {
-                    activity: false,
-                }),
-            ),
+        validatorSchemas.add(schemaName);
+    }
+    // Build validators on demand so they always reflect the current schema
+    // (e.g., after reloadAgentSchema() updates actionConfig.schemaFile).
+    function getValidator(
+        schemaName: string,
+    ): TypeAgentJsonValidator<AppAction> | undefined {
+        if (!validatorSchemas.has(schemaName)) return undefined;
+        const actionConfig = systemContext.agents.getActionConfig(schemaName);
+        return createActionSchemaJsonValidator(
+            composeActionSchema([actionConfig], [], systemContext.agents, {
+                activity: false,
+            }),
         );
     }
 
@@ -187,7 +243,7 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: discoverSchema,
         handler: async (args) => {
-            const validator = validators.get(args.schemaName);
+            const validator = getValidator(args.schemaName);
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
             }
@@ -215,7 +271,7 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: executeSchema,
         handler: async (args) => {
-            const validator = validators.get(args.schemaName);
+            const validator = getValidator(args.schemaName);
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
             }
@@ -429,6 +485,56 @@ function getClaudeOptions(
                 "- For query steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
                 "- mkdir -p packages/agents/taskflow/pending packages/agents/taskflow/pending/suggestions",
+                ...(config.execution.scriptReuse === "enabled" &&
+                process.platform === "win32"
+                    ? [
+                          "",
+                          "# PowerShell Script Generation Guidelines (Windows)",
+                          "",
+                          "You are running on Windows. When the task involves file system operations, process",
+                          "management, text search, system queries, or similar operations that PowerShell handles",
+                          "natively:",
+                          "",
+                          "1. **Prefer PowerShell scripts** over other approaches when the task is a good fit for shell scripting.",
+                          "2. **Parameterize scripts for reuse.** Instead of hardcoding paths, filenames, or search terms, use PowerShell parameters:",
+                          "   ```powershell",
+                          "   param([string]$Path = '.', [string]$Filter = '*')",
+                          "   Get-ChildItem -Path $Path -Filter $Filter",
+                          "   ```",
+                          "3. **Use standard PowerShell cmdlets** (Get-ChildItem, Get-Content, Select-String, Get-Process, Test-Path, etc.) rather than .NET calls or COM objects.",
+                          "4. **Structure multi-step scripts as functions** with clear param() blocks for extractability.",
+                          "5. **Output structured data** when possible (objects, not formatted strings).",
+                          '6. Execute scripts via Bash tool: `powershell -NoProfile -Command "& { <script> }"`',
+                          "",
+                          "# ScriptFlow Integration (MANDATORY)",
+                          "",
+                          "**IMPORTANT: You MUST use scriptflow actions instead of Bash/PowerShell for file system operations,",
+                          "process management, text search, and system queries. Do NOT use the Bash tool for these tasks.**",
+                          "",
+                          "Required workflow:",
+                          "1. discover_actions('scriptflow') to see available actions",
+                          "2. execute_action scriptflow.listScriptFlows to see registered flows",
+                          "3. If an existing flow fits, use scriptflow.executeScriptFlow with named flowParameters",
+                          "4. If a flow exists but its script is broken, use scriptflow.editScriptFlow to fix it, then execute",
+                          "5. If no flow fits, create one with scriptflow.createScriptFlow then execute it",
+                          "6. Use scriptflow.deleteScriptFlow to remove obsolete or duplicate flows",
+                          "",
+                          "PARAMETER PASSING (CRITICAL):",
+                          "- Use flowParametersJson (JSON string of named params) instead of flowArgs when the flow has multiple parameters.",
+                          '  Example: { "flowName": "listFiles", "flowParametersJson": "{\\"path\\":\\"C:\\\\\\\\Users\\\\\\\\name\\\\\\\\Downloads\\",\\"filter\\":\\"*safenet*\\"}" }',
+                          "- Parameter names are CASE-INSENSITIVE but should match the flow's parameter names from listScriptFlows.",
+                          "  The listFiles flow has params: path (directory) and filter (wildcard pattern).",
+                          "  The listDownloadsWithFilter flow has param: FilterPattern (name filter).",
+                          "- Use real Windows paths (C:\\\\Users\\\\...), NOT PowerShell variables like $env:USERPROFILE.",
+                          "- Extract paths and filters from the user's request as separate parameters.",
+                          "  e.g. 'list files in downloads with safenet' → path: 'C:\\\\Users\\\\name\\\\Downloads', filter: '*safenet*'",
+                          "",
+                          "When invoked as a fallback from a failed scriptflow action, the [Fallback context] in your",
+                          "prompt tells you which action failed and why. Parse the original request to extract the correct",
+                          "parameters (path, filter, etc.) and re-invoke the scriptflow action with corrected parameters,",
+                          "or create a new scriptflow if the existing one doesn't support the request.",
+                      ]
+                    : []),
             ].join("\n"),
         },
         mcpServers: {
@@ -459,13 +565,18 @@ function generateRequestId(): string {
 async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): Promise<any> {
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
 
     // Create query to Claude Agent SDK with chat history context
     const queryInstance = query({
-        prompt: buildPromptWithContext(originalRequest, context),
+        prompt: buildPromptWithContext(
+            originalRequest,
+            context,
+            fallbackContext,
+        ),
         options: getClaudeOptions(context),
     });
 
@@ -567,6 +678,7 @@ async function executeReasoningWithoutPlanning(
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
@@ -595,11 +707,16 @@ async function executeReasoningWithTracing(
 
         // Create query to Claude Agent SDK with chat history context
         const queryInstance = query({
-            prompt: buildPromptWithContext(originalRequest, context),
+            prompt: buildPromptWithContext(
+                originalRequest,
+                context,
+                fallbackContext,
+            ),
             options: getClaudeOptions(context),
         });
 
         let finalResult: string | undefined = undefined;
+        const toolUseIdToName = new Map<string, string>();
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
@@ -621,6 +738,8 @@ async function executeReasoningWithTracing(
                             content: content.text,
                         });
                     } else if (content.type === "tool_use") {
+                        // Track tool_use_id → name for matching results
+                        toolUseIdToName.set(content.id, content.name);
                         // Record tool call for tracing
                         tracer.recordToolCall(content.name, content.input);
 
@@ -664,6 +783,17 @@ async function executeReasoningWithTracing(
                             } else if (typeof block.content === "string") {
                                 content = block.content;
                             }
+
+                            // Record tool result in trace for script extraction
+                            const toolName =
+                                toolUseIdToName.get(block.tool_use_id) ??
+                                "unknown";
+                            tracer.recordToolResult(
+                                toolName,
+                                content,
+                                isError ? content : undefined,
+                            );
+
                             context.actionIO.appendDisplay(
                                 {
                                     type: "markdown",
@@ -727,6 +857,51 @@ async function executeReasoningWithTracing(
             } catch (error) {
                 debug("Failed to generate recipe from trace:", error);
             }
+
+            // Auto-generate script recipes from PowerShell scripts in trace
+            // and register them as active scriptflows for immediate reuse.
+            const scriptReuseEnabled =
+                systemContext.session.getConfig().execution.scriptReuse ===
+                "enabled";
+            if (scriptReuseEnabled && process.platform === "win32") {
+                try {
+                    const scriptGen = new ScriptRecipeGenerator();
+                    const scriptRecipes = await scriptGen.generate(
+                        tracer.getTrace(),
+                    );
+
+                    if (scriptRecipes.length > 0) {
+                        const saved = await saveScriptRecipesAsActiveFlows(
+                            scriptRecipes,
+                            systemContext,
+                        );
+                        for (const name of saved) {
+                            context.actionIO.appendDisplay({
+                                type: "text",
+                                content: `\n✓ Script flow registered: ${name}`,
+                            });
+                        }
+                        if (saved.length > 0) {
+                            // Reload schema so the new flows are available
+                            try {
+                                await systemContext.agents.reloadAgentSchema(
+                                    "scriptflow",
+                                    systemContext,
+                                );
+                            } catch {
+                                debug(
+                                    "Failed to reload scriptflow schema after saving recipes",
+                                );
+                            }
+                        }
+                    }
+                } catch (error) {
+                    debug(
+                        "Failed to generate script recipe from trace:",
+                        error,
+                    );
+                }
+            }
         }
 
         return finalResult
@@ -759,13 +934,180 @@ export async function executeReasoningAction(
     const request = action.parameters.originalRequest;
     debug(`Received reasoning request: ${request}`);
 
-    // Check if plan reuse is enabled
+    // Check if plan reuse or script reuse is enabled (either triggers tracing)
     const planReuseEnabled = config.execution.planReuse === "enabled";
+    const scriptReuseEnabled = config.execution.scriptReuse === "enabled";
 
     return executeReasoning(request, context, {
-        planReuseEnabled,
+        planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
     });
+}
+
+import type { Storage } from "@typeagent/agent-sdk";
+import type { ScriptRecipe as CapturedScriptRecipe } from "./scriptRecipeGenerator.js";
+
+/**
+ * Save captured script recipes as active scriptflows by writing directly
+ * to the scriptflow agent's instance storage in the format its store expects.
+ * This avoids a dependency on the scriptflow package.
+ */
+async function saveScriptRecipesAsActiveFlows(
+    recipes: CapturedScriptRecipe[],
+    systemContext: CommandHandlerContext,
+): Promise<string[]> {
+    const storage =
+        systemContext.persistDir && systemContext.storageProvider
+            ? systemContext.storageProvider.getStorage(
+                  "scriptflow",
+                  systemContext.persistDir,
+              )
+            : undefined;
+    if (!storage) {
+        debug("No instance storage available for scriptflow");
+        return [];
+    }
+
+    // Read existing index
+    let index: {
+        version: 1;
+        flows: Record<string, unknown>;
+        deletedSamples: string[];
+        lastModified: string;
+    };
+    try {
+        const indexJson = await storage.read("index.json", "utf8");
+        index = JSON.parse(indexJson);
+    } catch {
+        index = {
+            version: 1,
+            flows: {},
+            deletedSamples: [],
+            lastModified: new Date().toISOString(),
+        };
+    }
+
+    const saved: string[] = [];
+    for (const recipe of recipes) {
+        const { actionName } = recipe;
+        // Skip if flow already exists
+        if (index.flows[actionName]) {
+            debug(`Flow '${actionName}' already exists, skipping`);
+            continue;
+        }
+
+        const flowPath = `flows/${actionName}.flow.json`;
+        const scriptPath = `scripts/${actionName}.ps1`;
+
+        // Write flow definition
+        const flowDef = {
+            version: 1,
+            actionName,
+            displayName: recipe.displayName,
+            description: recipe.description,
+            parameters: recipe.parameters,
+            scriptRef: scriptPath,
+            expectedOutputFormat: recipe.script.expectedOutputFormat,
+            grammarPatterns: recipe.grammarPatterns,
+            sandbox: recipe.sandbox,
+            source: recipe.source,
+        };
+        await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+        await storage.write(scriptPath, recipe.script.body);
+
+        // Generate grammar rule text
+        const grammarRuleText = generateGrammarRuleTextForRecipe(
+            actionName,
+            recipe.grammarPatterns,
+        );
+
+        const now = new Date().toISOString();
+        index.flows[actionName] = {
+            actionName,
+            displayName: recipe.displayName,
+            description: recipe.description,
+            flowPath,
+            scriptPath,
+            grammarRuleText,
+            created: now,
+            updated: now,
+            source: "reasoning",
+            usageCount: 0,
+            enabled: true,
+        };
+        index.lastModified = now;
+        saved.push(actionName);
+        debug(`Script flow registered as active: ${actionName}`);
+    }
+
+    if (saved.length > 0) {
+        await storage.write("index.json", JSON.stringify(index, null, 2));
+
+        // Regenerate grammar file
+        await writeDynamicGrammarForIndex(storage, index);
+    }
+
+    return saved;
+}
+
+function generateGrammarRuleTextForRecipe(
+    actionName: string,
+    patterns: { pattern: string; isAlias: boolean }[],
+): string {
+    const rules: string[] = [];
+    let aliasIndex = 0;
+    for (const pattern of patterns) {
+        const ruleName = pattern.isAlias
+            ? `${actionName}Alias${++aliasIndex}`
+            : actionName;
+        const rewritten = pattern.pattern.replace(
+            /\$\(\w+:wildcard\)/g,
+            "$(flowArgs:wildcard)",
+        );
+        const hasArgs = rewritten.includes("$(flowArgs:wildcard)");
+        const paramJson = hasArgs
+            ? `{ flowName: "${actionName}", flowArgs }`
+            : `{ flowName: "${actionName}" }`;
+        rules.push(
+            `<${ruleName}> [spacing=optional] = ${rewritten}` +
+                ` -> { actionName: "executeScriptFlow", parameters: ${paramJson} };`,
+        );
+    }
+    return rules.join("\n");
+}
+
+async function writeDynamicGrammarForIndex(
+    storage: Storage,
+    index: { flows: Record<string, any> },
+): Promise<void> {
+    const ruleNames: string[] = [];
+    const ruleTexts: string[] = [];
+    for (const entry of Object.values(index.flows)) {
+        if (!entry.enabled || !entry.grammarRuleText) continue;
+        ruleTexts.push(entry.grammarRuleText);
+        for (const line of (entry.grammarRuleText as string).split("\n")) {
+            const m = line.match(/^<(\w+)>/);
+            if (m && !ruleNames.includes(m[1])) {
+                ruleNames.push(m[1]);
+            }
+        }
+    }
+    if (ruleNames.length === 0) {
+        await storage.write("grammar/dynamic.agr", "");
+        return;
+    }
+    const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
+    await storage.write(
+        "grammar/dynamic.agr",
+        `${startRule}\n\n${ruleTexts.join("\n\n")}`,
+    );
+}
+
+export interface ReasoningFallbackContext {
+    failedAction?: string | undefined;
+    failedSchema?: string | undefined;
+    failedFlowName?: string | undefined;
+    error?: string | undefined;
 }
 
 export async function executeReasoning(
@@ -774,6 +1116,7 @@ export async function executeReasoning(
     options?: {
         planReuseEnabled?: boolean; // false by default
         engine?: "claude"; // default is "claude" for now
+        fallbackContext?: ReasoningFallbackContext;
     },
 ) {
     const engine = options?.engine ?? "claude";
@@ -781,10 +1124,15 @@ export async function executeReasoning(
         throw new Error(`Unsupported reasoning engine: ${engine}`);
     }
     const planReuseEnabled = options?.planReuseEnabled ?? false;
+    const fallbackContext = options?.fallbackContext;
     if (!planReuseEnabled) {
-        return executeReasoningWithoutPlanning(request, context);
+        return executeReasoningWithoutPlanning(
+            request,
+            context,
+            fallbackContext,
+        );
     }
 
     // Trace capture + auto recipe generation
-    return executeReasoningWithTracing(request, context);
+    return executeReasoningWithTracing(request, context, fallbackContext);
 }

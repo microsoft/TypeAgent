@@ -9,6 +9,7 @@ import {
     DisplayContent,
     DisplayAppendMode,
     CommandDescriptors,
+    CompletionDirection,
     ParsedCommandParams,
     ParameterDefinitions,
     ClientAction,
@@ -280,6 +281,10 @@ export async function createAgentRpcClient(
             const context = contextMap.get(param.contextId);
             return context.indexes(param.type as any);
         },
+        reloadAgentSchema: async (param: { contextId: number }) => {
+            const context = contextMap.get(param.contextId);
+            return context.reloadAgentSchema();
+        },
         storageRead: async (param: {
             contextId: number;
             session: boolean;
@@ -513,12 +518,14 @@ export async function createAgentRpcClient(
             params: ParsedCommandParams<ParameterDefinitions>,
             names: string[],
             context: SessionContext<ShimContext>,
+            direction?: CompletionDirection,
         ) {
             return rpc.invoke("getCommandCompletion", {
                 ...getContextParam(context),
                 commands,
                 params,
                 names,
+                ...(direction !== undefined ? { direction } : {}),
             });
         },
         executeCommand(
@@ -595,6 +602,24 @@ export async function createAgentRpcClient(
                     response,
                 }),
             );
+        },
+        getDynamicSchema(
+            context: SessionContext<ShimContext>,
+            schemaName: string,
+        ) {
+            return rpc.invoke("getDynamicSchema", {
+                ...getContextParam(context),
+                schemaName,
+            });
+        },
+        getDynamicGrammar(
+            context: SessionContext<ShimContext>,
+            schemaName: string,
+        ) {
+            return rpc.invoke("getDynamicGrammar", {
+                ...getContextParam(context),
+                schemaName,
+            });
         },
     };
 

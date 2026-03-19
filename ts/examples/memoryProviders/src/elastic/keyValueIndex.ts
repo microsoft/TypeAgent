@@ -50,9 +50,7 @@ export async function createKeyValueIndex<
     async function getMultiple(ids: TKeyId[]): Promise<TValueId[][]> {
         const response = await elasticClient.mget<ElasticEntry>({
             index: indexName,
-            body: {
-                ids: ids as string[],
-            },
+            ids: ids as string[],
         });
 
         const textIds = response.docs.map((doc) => doc._id);
@@ -78,7 +76,7 @@ export async function createKeyValueIndex<
         const putResponse = await elasticClient.index<ElasticEntry>({
             index: indexName,
             id: id as string,
-            body: entry,
+            document: entry,
         });
 
         return putResponse._id as TKeyId;

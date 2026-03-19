@@ -14,8 +14,9 @@ that eliminates client-side heuristics.
    beneath it) decides where completions start (`startIndex`), what separates
    them from the prefix (`separatorMode`), whether the list is exhaustive
    (`closedSet`), and when to advance to the next hierarchical level
-   (`commitMode`). Clients never split input on spaces or guess token
-   boundaries.
+   The host provides a `direction` signal ("forward" or "backward") to
+   resolve structural ambiguity when the input is valid.
+   Clients never split input on spaces or guess token boundaries.
 
 2. **Longest-match wins** — At every layer (grammar, construction cache,
    grammar store merge), only completions anchored at the longest matched
@@ -43,7 +44,7 @@ User keystroke
 │  State machine: IDLE → PENDING → ACTIVE                      │
 │  Decides: reuse local trie  OR  re-fetch from backend        │
 └────────────────────────┬─────────────────────────────────────┘
-                         │ dispatcher.getCommandCompletion(input)
+                         │ dispatcher.getCommandCompletion(input, direction)
                          ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  Dispatcher  getCommandCompletion()                          │
@@ -75,7 +76,8 @@ The return path carries `CommandCompletionResult`:
   completions: CompletionGroup[];
   separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
   closedSet: boolean;           // true → list is exhaustive
-  commitMode?: CommitMode;      // "explicit" | "eager"
+  directionSensitive: boolean;  // true → opposite direction would produce different results
+  openWildcard: boolean;        // true → wildcard boundary is ambiguous; shell should slide anchor
 }
 ```
 
@@ -99,12 +101,12 @@ grammar rules.
 3. When `maxPrefixLength` advances, discard all shorter-prefix completions.
 4. Categorize each state's outcome:
 
-| Category           | Condition                                   | Completion source              |
-| ------------------ | ------------------------------------------- | ------------------------------ |
-| 1 — Exact          | Rule fully matched, prefix fully consumed   | None (rule satisfied)          |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts   | Next part of rule              |
-| 3a — Dirty partial | Trailing text matches start of current part | Current part (prefix-filtered) |
-| 3b — Dirty partial | Trailing text doesn't match                 | Offer current part             |
+| Category           | Condition                                 | Forward completion source      | Backward completion source           |
+| ------------------ | ----------------------------------------- | ------------------------------ | ------------------------------------ |
+| 1 — Exact          | Rule fully matched, prefix fully consumed | None                           | Last matched word/wildcard           |
+| 2 — Clean partial  | Prefix consumed, rule has remaining parts | Next part of rule              | Last matched part                    |
+| 3a — Pending wc    | Unfinalizable pending wildcard            | Wildcard property completion   | Last matched part (if afterWildcard) |
+| 3b — Dirty partial | Trailing text remains                     | Current part (prefix-filtered) | Current part (prefix-filtered)       |
 
 5. Multi-word string parts use `tryPartialStringMatch()` to offer one word
    at a time instead of the entire phrase.
@@ -116,6 +118,24 @@ grammar rules.
   needed at the boundary (Latin vs CJK, `[spacing=none]` rules).
 - `closedSet` — `true` for pure keyword alternatives; `false` when
   property/wildcard completions are emitted (entity values are external).
+- `openWildcard` — `true` when the `matchedPrefixLength` position is
+  **ambiguous** — i.e., adjacent to a wildcard whose extent is not fully
+  determined. This happens in two cases:
+
+  - **Forward (Category 2):** a keyword completion follows a wildcard that
+    was finalized at end-of-input (`finalizeState`). The wildcard consumed
+    everything up to EOI, but the user may still be typing within it.
+  - **Backward (Category 2 or 3a):** completion backs up to a keyword that
+    was matched after a captured wildcard (`afterWildcard` on
+    `lastMatchedPartInfo`). The wildcard's end was pinned by this keyword,
+    but backing up un-pins it — the wildcard could extend to absorb the
+    keyword text.
+
+  By contrast, a position is **definite** when it is structurally pinned
+  by matched grammar tokens and cannot shift with more typing. Examples:
+  the start of a wildcard (pinned by the preceding keyword), or a keyword
+  matched without a preceding wildcard. Backward completion to a wildcard's
+  start position reports `openWildcard=false`.
 
 ---
 
@@ -158,7 +178,6 @@ type CompletionGroups = {
   matchedPrefixLength?: number; // grammar override for startIndex
   separatorMode?: SeparatorMode;
   closedSet?: boolean;
-  commitMode?: CommitMode;
 };
 ```
 
@@ -181,7 +200,15 @@ strongest requirement.
 ### 4. Dispatcher
 
 **Package:** `packages/dispatcher`
-**Entry point:** `getCommandCompletion(input, context)` → `CommandCompletionResult`
+**Entry point:** `getCommandCompletion(input, direction, context)` → `CommandCompletionResult`
+
+The `direction` parameter is a `CompletionDirection` (`"forward" | "backward"`) provided
+by the host. It resolves structural ambiguity when the full input is valid —
+for example, when a typed command name matches both a complete subcommand and
+a prefix of a longer one, direction tells the backend whether to proceed
+forward (show what follows) or reconsider backward (show alternatives).
+For free-form parameter values, the backend derives mid-token status from
+the input's trailing whitespace instead.
 
 Orchestrates command resolution, parameter parsing, agent invocation, and
 built-in completions.
@@ -193,7 +220,7 @@ input
   → normalizeCommand() → resolveCommand()
   → ResolveCommandResult { descriptor, suffix, table, matched }
   → three-way branch:
-      ├─ uncommitted command → sibling subcommands (separatorMode="none")
+      ├─ reconsidering command → sibling subcommands (separatorMode="none")
       ├─ resolved descriptor → completeDescriptor()
       │    ├─ parseParams(suffix, partial=true) → ParseParamsResult
       │    ├─ resolveCompletionTarget() → CompletionTarget
@@ -206,12 +233,12 @@ input
 
 **`resolveCompletionTarget`** — pure decision function:
 
-| Spec case | Condition                                    | Behavior                                             |
-| --------- | -------------------------------------------- | ---------------------------------------------------- |
-| 1         | `remainderLength > 0` (partial parse)        | Offer what follows longest valid prefix              |
-| 3a-i      | Full parse, no trailing space, string param  | Editing free-form value → invoke agent, prefix-match |
-| 3a-ii     | Full parse, no trailing space, flag name     | Uncommitted flag → offer flag alternatives           |
-| 3b        | Full parse, trailing space (or fully quoted) | Offer completions for next parameter/flag            |
+| Spec case | Condition                                         | Behavior                                             |
+| --------- | ------------------------------------------------- | ---------------------------------------------------- |
+| 1         | `remainderLength > 0` (partial parse)             | Offer what follows longest valid prefix              |
+| 3a-i      | Full parse, no trailing whitespace, string param  | Editing free-form value → invoke agent, prefix-match |
+| 3a-ii     | Full parse, direction="backward", flag name       | Reconsidering flag → offer flag alternatives         |
+| 3b        | Full parse, direction="forward" (or fully quoted) | Offer completions for next parameter/flag            |
 
 **`computeClosedSet`** heuristic:
 
@@ -256,12 +283,12 @@ lifecycle of a completion interaction.
 | ---- | ------------------------------------------------ | ------------ | ------------------- |
 | A1   | No active session                                | Invalidation | Re-fetch            |
 | A2   | Input no longer extends anchor                   | Invalidation | Re-fetch            |
-| A3   | Non-separator char typed when separator required | Invalidation | Re-fetch            |
-| B4   | Unique match + eager commit mode                 | Navigation   | Re-fetch next level |
+| A3   | Non-separator char typed when separator required | Invalidation | Re-fetch (or slide) |
+| A7   | Direction changed on direction-sensitive result  | Invalidation | Re-fetch            |
+| B4   | Unique match (always fires)                      | Navigation   | Re-fetch next level |
 | B5   | Separator typed after exact match                | Navigation   | Re-fetch next level |
-| C6   | No trie matches + open set                       | Discovery    | Re-fetch            |
+| C6   | No trie matches                                  | Discovery    | Per `noMatchPolicy` |
 | —    | Trie has matches                                 | —            | Reuse locally       |
-| —    | No matches + closed set                          | —            | Reuse (menu hidden) |
 
 **Key concepts:**
 
@@ -270,6 +297,10 @@ lifecycle of a completion interaction.
   filter the local trie.
 - **Separator stripping**: when `separatorMode` requires a separator, the
   leading separator character in the raw prefix is stripped before trie lookup.
+- **`noMatchPolicy`**: computed once from the backend's descriptive fields
+  (`closedSet`, `openWildcard`) when a result arrives (see `NoMatchPolicy`
+  below). Drives the A3 and C6 decisions as a simple `switch` instead of
+  checking two booleans independently.
 - **Session preservation**: `hide()` cancels in-flight fetches but preserves
   anchor and menu state for quick re-activation on re-focus.
 
@@ -320,26 +351,114 @@ text.
 | `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars      |
 | `"none"`             | No separator                        | `[spacing=none]` grammars        |
 
-### `CommitMode`
+### `CompletionDirection`
 
-Controls when a uniquely-satisfied completion triggers a re-fetch for the next
-hierarchical level.
+The host-provided signal that resolves structural ambiguity when the input
+is fully valid. Instead of the backend telling the client when to advance,
+the client tells the backend which direction to complete.
 
-| Value        | Meaning                              | Use case                        |
-| ------------ | ------------------------------------ | ------------------------------- |
-| `"explicit"` | User must type delimiter to commit   | Parameter completions (default) |
-| `"eager"`    | Re-fetch immediately on unique match | `@` command prefix              |
+| Value        | Meaning               | When the host sends it                                |
+| ------------ | --------------------- | ----------------------------------------------------- |
+| `"forward"`  | User is moving ahead  | Appending characters, typed separator, menu selection |
+| `"backward"` | User is reconsidering | Backspacing, deleting                                 |
+
+Direction is only consulted at structural ambiguity points (command-level
+and flag-level resolution). For free-form parameter values the backend
+uses the input's trailing whitespace to decide whether the last token is
+complete.
+
+Trigger B4 (unique match) always fires a re-fetch regardless of direction,
+since the session can determine locally that the completion is uniquely
+satisfied.
 
 ### `closedSet`
 
-A boolean flowing through the entire pipeline:
+A boolean flowing through the backend pipeline (grammar → cache → dispatcher):
 
 - **`true`** — completions are exhaustive (finite enum, known subcommands).
-  When the trie empties, the shell does not re-fetch.
 - **`false`** — completions may be incomplete (entity values, open-ended
-  text). When the trie empties, the shell re-fetches to discover more.
+  text).
 
 Merge rule: AND across sources (closed only if _all_ sources are closed).
+
+The shell does not store `closedSet` directly; it is folded into
+`noMatchPolicy` (see below).
+
+### `openWildcard`
+
+A boolean flowing through the backend pipeline, signaling that the
+`matchedPrefixLength` position is **ambiguous** — adjacent to a wildcard
+whose extent is not fully determined.
+
+A position is **definite** when it is structurally pinned by matched
+grammar tokens: no amount of additional typing can change where it falls.
+Examples: the start of a wildcard (pinned by the preceding keyword), or a
+keyword matched without a preceding wildcard.
+
+A position is **ambiguous** when it sits at the boundary of a wildcard
+that could absorb more text, moving the boundary forward. This happens
+in two cases:
+
+- **Forward:** a keyword completion follows a wildcard that was finalized
+  at end-of-input (via `finalizeState`). The wildcard consumed everything
+  up to EOI, but the user may still be typing within it.
+- **Backward:** completion backs up to a keyword that was matched after a
+  captured wildcard (`afterWildcard` on `lastMatchedPartInfo`). Backing up
+  un-pins the wildcard boundary — it could extend to absorb the keyword.
+
+Values:
+
+- **`true`** — the position is ambiguous. The keyword following the
+  wildcard (e.g. "by") is offered as a completion, and `closedSet`
+  correctly describes that keyword set as exhaustive. However, the
+  _position_ of that set is uncertain.
+
+- **`false`** — the position is definite; no sliding wildcard boundary.
+
+Merge rule: OR across sources (open wildcard if _any_ source has one).
+
+The shell does not store `openWildcard` directly; it is folded into
+`noMatchPolicy` (see below).
+
+### `NoMatchPolicy` (shell-internal)
+
+Computed once from `closedSet` and `openWildcard` when a backend result
+arrives. Controls what the shell does when the local trie has no matches
+for the user's typed prefix.
+
+**Why derive a policy?** The backend returns _descriptive_ metadata —
+`closedSet` says whether the completion list is exhaustive, `openWildcard`
+says whether the anchor position is ambiguous. These are grammar-level
+facts that don't depend on the shell's UI. The shell translates them into
+a single actionable policy on arrival, keeping the decision points (A3
+and C6) simple: each is a `switch` on one enum rather than reasoning
+about two independent booleans.
+
+**Why `openWildcard` wins over `closedSet`:** When a wildcard boundary is
+ambiguous, `closedSet` correctly describes the _keyword_ set (e.g.
+"by" is exhaustive), but the _position_ of that set is uncertain because
+the wildcard extent could shift. Re-fetching would return the same
+keywords at a shifted position (wasteful), and `"accept"` would leave the
+user stuck (no menu, no re-fetch). Sliding is the only useful action, so
+`openWildcard=true` maps to `"slide"` regardless of `closedSet`.
+
+| Policy      | Derived from                            | Shell action at A3 / C6          |
+| ----------- | --------------------------------------- | -------------------------------- |
+| `"accept"`  | `closedSet=true`, `openWildcard=false`  | Reuse (menu hidden, no re-fetch) |
+| `"refetch"` | `closedSet=false`, `openWildcard=false` | Re-fetch (backend may know more) |
+| `"slide"`   | `openWildcard=true` (any `closedSet`)   | Slide anchor forward             |
+
+This replaces independent checks on two booleans with a single `switch`:
+
+- **A3** (non-separator after anchor): `"slide"` slides the anchor forward;
+  `"accept"` / `"refetch"` trigger a re-fetch.
+- **C6** (trie empty): `"slide"` slides the anchor forward; `"accept"`
+  reuses silently; `"refetch"` re-fetches.
+
+Anchor sliding preserves the trie and metadata so the menu re-appears at
+the next word boundary. Recovery is automatic: when the user eventually
+types the keyword and it uniquely matches (trigger B4), the session
+re-fetches for the next grammar part.
 
 ---
 
@@ -348,7 +467,8 @@ Merge rule: AND across sources (closed only if _all_ sources are closed).
 The CLI (`packages/cli/src/commands/interactive.ts`) follows the same
 contract but with simpler plumbing:
 
-1. Sends full input to `dispatcher.getCommandCompletion(line)` (no
+1. Sends full input and a `direction` (always `"forward"` for tab-completion)
+   to `dispatcher.getCommandCompletion(line, direction)` (no
    token-boundary heuristics).
 2. Uses `result.startIndex` as the readline filter position.
 3. Prepends a space separator when `separatorMode` is `"space"` or

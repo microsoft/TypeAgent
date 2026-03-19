@@ -228,8 +228,8 @@ export function createDispatcherFromContext(
                 options,
             );
         },
-        getCommandCompletion(prefix) {
-            return getCommandCompletion(prefix, context);
+        getCommandCompletion(prefix, direction) {
+            return getCommandCompletion(prefix, direction, context);
         },
         checkCache(request) {
             return checkCache(request, context, {

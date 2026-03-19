@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Completion types (SeparatorMode, CompletionDirection, CompletionGroups,
+// getCommandCompletion): docs/architecture/completion.md — §3 Agent SDK
+
 import { ActionContext, SessionContext } from "./agentInterface.js";
 import { ParameterDefinitions, ParsedCommandParams } from "./parameters.js";
 
@@ -66,14 +69,14 @@ export type CommandDescriptors =
 //                        Used for [spacing=none] grammars.
 export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 
-// Controls when the session considers a typed completion "committed" and
-// triggers a re-fetch for the next hierarchical level.
-//   "explicit" — the user must type an explicit delimiter (e.g. space or
-//                punctuation) after the matched token to commit it.
-//                Suppresses eager re-fetch on unique match.
-//   "eager"    — commit as soon as the typed prefix uniquely satisfies a
-//                completion.  Re-fetches immediately for the next level.
-export type CommitMode = "explicit" | "eager";
+// Indicates the user's editing direction, provided by the host.
+//   "forward"  — the user is moving ahead (appending characters,
+//                typed a separator, selected a menu item).  The backend
+//                should offer completions for what follows.
+//   "backward" — the user is reconsidering (e.g. backspaced).  The
+//                backend should offer alternatives for the current
+//                position.
+export type CompletionDirection = "forward" | "backward";
 
 export type CompletionGroup = {
     name: string; // The group name for the completion
@@ -104,11 +107,17 @@ export type CompletionGroups = {
     // False or undefined means the parser can continue past
     // unrecognized input and find more completions.
     closedSet?: boolean | undefined;
-    // Controls when a uniquely-satisfied completion triggers a re-fetch
-    // for the next hierarchical level.  See CommitMode.
-    // When omitted, the dispatcher decides (typically "explicit" for
-    // command/parameter completions).
-    commitMode?: CommitMode | undefined;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.  When omitted, the dispatcher will conservatively
+    // assume true if matchedPrefixLength > 0 and false otherwise.
+    directionSensitive?: boolean | undefined;
+    // True when the completions are offered at a position where a
+    // wildcard was finalized at end-of-input.  The wildcard's extent
+    // is ambiguous — the user may still be typing within it — so the
+    // caller should allow the anchor to slide forward on further input
+    // rather than re-fetching or giving up.
+    openWildcard?: boolean | undefined;
 };
 
 export interface AppAgentCommandInterface {
@@ -121,6 +130,7 @@ export interface AppAgentCommandInterface {
         params: ParsedCommandParams<ParameterDefinitions> | undefined,
         names: string[], // array of <argName> or --<flagName> or --<jsonFlagName> for completion
         context: SessionContext<unknown>,
+        direction?: CompletionDirection,
     ): Promise<CompletionGroups>;
 
     // Execute a resolved command.  Exception from the execution are treated as errors and displayed to the user.

@@ -131,6 +131,7 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "playx",
+            "forward",
         );
     });
 
@@ -191,6 +192,55 @@ describe("PartialCompletionSession — separatorMode: optional", () => {
     });
 });
 
+// ── separatorMode + direction interactions ────────────────────────────────────
+
+describe("PartialCompletionSession — separatorMode + direction", () => {
+    test("spacePunctuation with backward direction: punctuation separator commits", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music", "movie"], 4, {
+            separatorMode: "spacePunctuation",
+            directionSensitive: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos, "forward");
+        await Promise.resolve(); // → ACTIVE, anchor = "play", deferred
+
+        // Type punctuation separator: menu should appear with the completions
+        session.update("play.", getPos, "backward");
+
+        // Separator satisfies spacePunctuation — menu should show
+        expect(menu.updatePrefix).toHaveBeenCalled();
+        // No re-fetch (separator typed after anchor, within same session)
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("spacePunctuation with backward direction re-fetches when directionSensitive at anchor", async () => {
+        const menu = makeMenu();
+        // startIndex=4 = anchor length, so anchor = "play", input = "play"
+        // directionSensitive=true at exact anchor → A7 applies
+        const result = makeCompletionResult(["song", "track"], 4, {
+            separatorMode: "spacePunctuation",
+            directionSensitive: true,
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos, "forward");
+        await Promise.resolve(); // → ACTIVE, anchor = "play"
+
+        // Same input, backward direction, at exact anchor + sensitive → A7
+        session.update("play", getPos, "backward");
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "play",
+            "backward",
+        );
+    });
+});
+
 // ── separatorMode edge cases ─────────────────────────────────────────────────
 
 describe("PartialCompletionSession — separatorMode edge cases", () => {
@@ -229,6 +279,7 @@ describe("PartialCompletionSession — separatorMode edge cases", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
         expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
             "play2",
+            "forward",
         );
     });
 
