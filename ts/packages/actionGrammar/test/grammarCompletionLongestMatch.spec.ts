@@ -575,42 +575,6 @@ describeForEachCompletion(
                     );
                     expect(result.completions).toContain("by");
                     expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(true);
-                });
-
-                it("openWildcard=true for multi-word wildcard before keyword", () => {
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "play my favorite song",
-                    );
-                    expect(result.completions).toContain("by");
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(true);
-                });
-
-                it("openWildcard=true for ambiguous keyword boundary", () => {
-                    // "play hello by" is ambiguous: "by" could be part of
-                    // the track name or the keyword delimiter.  The grammar
-                    // produces both interpretations at prefix length 13,
-                    // so openWildcard stays true.
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "play hello by",
-                    );
-                    expect(result.openWildcard).toBe(true);
-                });
-
-                it("openWildcard=true persists with trailing separator", () => {
-                    // "play hello by " — still ambiguous: "by " could be
-                    // part of the track name in one interpretation.
-                    // openWildcard stays true because the grammar considers
-                    // both parse paths.  The shell resolves this via B4
-                    // (unique match) when the user types "by" in the trie.
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "play hello by ",
-                    );
-                    expect(result.openWildcard).toBe(true);
                 });
             });
 
@@ -730,6 +694,131 @@ describeForEachCompletion(
                     expect(result.completions).toContain("middle");
                     expect(result.completions).toContain("finish");
                     expect(result.closedSet).toBe(true);
+                });
+            });
+        });
+
+        describe("openWildcard flag — ambiguous wildcard boundary", () => {
+            const g = [
+                `<Start> = play $(name) by $(artist) -> { name, artist };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            describe("forward: wildcard finalized at end-of-input", () => {
+                it("openWildcard=true for single-word wildcard before keyword", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play hello",
+                    );
+                    expect(result.completions).toContain("by");
+                    expect(result.openWildcard).toBe(true);
+                });
+
+                it("openWildcard=true for multi-word wildcard before keyword", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play my favorite song",
+                    );
+                    expect(result.completions).toContain("by");
+                    expect(result.openWildcard).toBe(true);
+                });
+
+                it("openWildcard=true for ambiguous keyword boundary", () => {
+                    // "play hello by" is ambiguous: "by" could be part of
+                    // the track name or the keyword delimiter.  The grammar
+                    // produces both interpretations at prefix length 13,
+                    // so openWildcard stays true.
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play hello by",
+                    );
+                    expect(result.openWildcard).toBe(true);
+                });
+
+                it("openWildcard=true persists with trailing separator", () => {
+                    // "play hello by " — still ambiguous: "by " could be
+                    // part of the track name in one interpretation.
+                    // openWildcard stays true because the grammar considers
+                    // both parse paths.  The shell resolves this via B4
+                    // (unique match) when the user types "by" in the trie.
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play hello by ",
+                    );
+                    expect(result.openWildcard).toBe(true);
+                });
+            });
+
+            describe("backward: wildcard start is definite", () => {
+                it("openWildcard=false for backward to wildcard start", () => {
+                    // Backward on "play hello" backs up to the wildcard
+                    // start (position 4) — that position is definite,
+                    // not ambiguous, so openWildcard must be false.
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play hello",
+                        undefined,
+                        "backward",
+                    );
+                    expect(result.openWildcard).toBe(false);
+                });
+
+                it("openWildcard=false for backward to wildcard start with multi-word", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play my favorite song",
+                        undefined,
+                        "backward",
+                    );
+                    expect(result.openWildcard).toBe(false);
+                });
+            });
+
+            describe("backward: keyword after captured wildcard is ambiguous", () => {
+                it("openWildcard=true for backward to keyword after captured wildcard", () => {
+                    // "play something by" backward: the $(artist) wildcard
+                    // is unfilled.  Backward should back up to "by" (the
+                    // last keyword), not offer $(artist).  Position is
+                    // ambiguous because the $(track) wildcard could absorb
+                    // more text, so openWildcard must be true.
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play something by",
+                        undefined,
+                        "backward",
+                    );
+                    expect(result.completions).toContain("by");
+                    expect(result.openWildcard).toBe(true);
+                    expect(result.closedSet).toBe(true);
+                    expect(result.directionSensitive).toBe(true);
+                });
+
+                it("forward offers property completion for unfilled wildcard after keyword", () => {
+                    // "play something by" forward: should offer property
+                    // completion for $(artist) at the end, not back up.
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play something by",
+                    );
+                    expect(result.properties).toBeDefined();
+                    expect(result.properties!.length).toBeGreaterThan(0);
+                    expect(result.closedSet).toBe(false);
+                    expect(result.directionSensitive).toBe(true);
+                });
+
+                it("openWildcard=true for backward after multi-word wildcard and keyword", () => {
+                    // "play my favorite song by" backward: backs up to
+                    // "by" at the boundary of "my favorite song".  The
+                    // wildcard could absorb "by" as part of the track name.
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play my favorite song by",
+                        undefined,
+                        "backward",
+                    );
+                    expect(result.completions).toContain("by");
+                    expect(result.openWildcard).toBe(true);
+                    expect(result.directionSensitive).toBe(true);
                 });
             });
         });

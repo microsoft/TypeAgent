@@ -244,16 +244,25 @@ type MatchState = {
     // Completion support: tracks the last matched non-wildcard part
     // (string or number).  Used by backward completion to back up to
     // the most recently matched item.
+    //
+    // `afterWildcard` indicates the part was matched via wildcard
+    // scanning (matchStringPartWithWildcard / matchVarNumberPartWithWildcard)
+    // — i.e., a wildcard preceded this part and the part's position
+    // was determined by scanning forward through the wildcard region.
+    // When backward backs up to such a part, the position is ambiguous
+    // (see openWildcard on GrammarCompletionResult).
     lastMatchedPartInfo?:
         | {
               readonly type: "string";
               readonly start: number;
               readonly part: StringPart;
+              readonly afterWildcard: boolean;
           }
         | {
               readonly type: "number";
               readonly start: number;
               readonly valueId: number;
+              readonly afterWildcard: boolean;
           }
         | undefined;
 };
@@ -772,6 +781,7 @@ function matchStringPartWithWildcard(
                 type: "string",
                 start: wildcardEnd,
                 part,
+                afterWildcard: true,
             };
             debugMatch(
                 state,
@@ -818,7 +828,12 @@ function matchStringPartWithoutWildcard(
         // default string part value
         addValue(state, undefined, part.value.join(" "));
     }
-    state.lastMatchedPartInfo = { type: "string", start: curr, part };
+    state.lastMatchedPartInfo = {
+        type: "string",
+        start: curr,
+        part,
+        afterWildcard: false,
+    };
     state.index = newIndex;
     return true;
 }
@@ -923,6 +938,7 @@ function matchVarNumberPartWithWildcard(
                     type: "number",
                     start: wildcardEnd,
                     valueId,
+                    afterWildcard: true,
                 };
             }
             return true;
@@ -975,6 +991,7 @@ function matchVarNumberPartWithoutWildcard(
             type: "number",
             start: curr,
             valueId,
+            afterWildcard: false,
         };
     }
     state.index = newIndex;
@@ -1176,11 +1193,31 @@ export type GrammarCompletionResult = {
     // direction.  When false, the caller can skip re-fetching on
     // direction change.
     directionSensitive: boolean;
-    // True when the completions are offered at a position where a
-    // wildcard was finalized at end-of-input.  The wildcard's extent
-    // is ambiguous — the user may still be typing within it — so the
-    // caller should allow the anchor to slide forward on further input
-    // rather than re-fetching or giving up.
+    // True when the completion's `matchedPrefixLength` position is
+    // *ambiguous* — it could shift forward as the user types more.
+    //
+    // A position is **definite** when it is structurally pinned by
+    // matched grammar tokens: no amount of additional typing can
+    // change where it falls.  Examples: the start of a wildcard
+    // (pinned by the preceding keyword), or a keyword matched
+    // without a preceding wildcard.
+    //
+    // A position is **ambiguous** when it sits at the boundary of a
+    // wildcard whose extent is not fully determined.  The wildcard
+    // could absorb more text, moving the boundary forward.  This
+    // happens in two cases:
+    //   - **Forward:** a keyword completion follows a wildcard that
+    //     was finalized at end-of-input (via `finalizeState`).  The
+    //     wildcard consumed everything up to EOI, but the user may
+    //     still be typing within it.
+    //   - **Backward:** completion backs up to a keyword that was
+    //     matched after a captured wildcard (`afterWildcard`).  The
+    //     wildcard's end was pinned by this keyword, but backing up
+    //     un-pins it — the wildcard could extend to absorb the
+    //     keyword text.
+    //
+    // When true, the caller should allow its anchor to slide forward
+    // (the "slide" policy) rather than re-fetching or giving up.
     openWildcard: boolean;
 };
 
@@ -1418,11 +1455,9 @@ export function matchGrammarCompletion(
     // whenever maxPrefixLength advances (old candidates discarded).
     let directionSensitive = false;
 
-    // Whether a wildcard was finalized at end-of-input and the
-    // following keyword was offered as a completion.  When true the
-    // wildcard boundary is ambiguous — the user may still be typing
-    // within the wildcard — so the caller should slide its anchor
-    // forward instead of re-fetching or giving up.
+    // Whether the matchedPrefixLength position is ambiguous — see
+    // the openWildcard comment on GrammarCompletionResult for the
+    // full definition of definite vs ambiguous positions.
     let openWildcard = false;
 
     // Helper: update maxPrefixLength.  When it increases, all previously
@@ -1503,6 +1538,10 @@ export function matchGrammarCompletion(
     // after the last matched part, prefer it; otherwise back up to
     // the last matched part via tryPartialStringMatch (for strings)
     // or emitPropertyCompletion (for numbers).
+    //
+    // Sets openWildcard=true when backing up to a part that was
+    // matched after a captured wildcard (afterWildcard) — that
+    // position is ambiguous because the wildcard could extend.
     function emitBackwardCompletion(
         state: MatchState,
         savedWildcard: PendingWildcard | undefined,
@@ -1537,6 +1576,9 @@ export function matchGrammarCompletion(
                         backResult.consumedLength,
                         backResult.remainingText,
                     );
+                    if (info.afterWildcard) {
+                        openWildcard = true;
+                    }
                 } else {
                     updateMaxPrefixLength(state.index);
                 }
@@ -1544,6 +1586,9 @@ export function matchGrammarCompletion(
                 // Number part — offer property completion for the
                 // number slot so the user can re-enter a value.
                 emitPropertyCompletion(state, info.valueId, info.start);
+                if (info.afterWildcard) {
+                    openWildcard = true;
+                }
             }
             return true;
         }
@@ -1616,7 +1661,9 @@ export function matchGrammarCompletion(
                 hasPartToReconsider &&
                 emitBackwardCompletion(state, savedPendingWildcard)
             ) {
-                // Backward emitted a completion — done with this state.
+                // Backward emitted a completion — openWildcard is
+                // set inside emitBackwardCompletion when the position
+                // is ambiguous (afterWildcard).
             } else {
                 debugCompletion(
                     `Completing ${nextPart.type} part ${state.name}`,
@@ -1636,18 +1683,15 @@ export function matchGrammarCompletion(
                         );
                     }
                 }
+                // A keyword completion at a position reached by
+                // finalizing a wildcard at end-of-input: the position
+                // is ambiguous (the wildcard could absorb more text).
+                if (savedPendingWildcard?.valueId !== undefined) {
+                    openWildcard = true;
+                }
             }
             if (hasPartToReconsider) {
                 directionSensitive = true;
-            }
-            // When a wildcard was finalized at end-of-input and we
-            // offered the following keyword as a completion, the
-            // wildcard boundary is ambiguous — the user may still be
-            // typing within the wildcard.  Signal this so the shell
-            // can slide its anchor forward instead of re-fetching or
-            // giving up when the user keeps typing.
-            if (savedPendingWildcard?.valueId !== undefined) {
-                openWildcard = true;
             }
             // Note: non-string next parts (wildcard, number, rules) in
             // Category 2 don't produce completions here — wildcards are
@@ -1668,16 +1712,36 @@ export function matchGrammarCompletion(
                 // The grammar reached a wildcard slot but its capture
                 // region is empty or separator-only (e.g. prefix="play "
                 // with wildcard starting at index 4 — the space is not
-                // valid wildcard content).  Instead of offering the
-                // *following* string part as a completion, we report a
-                // property completion describing the wildcard's type so
-                // the caller can provide entity-specific suggestions.
-                debugCompletion("Completing wildcard part");
-                emitPropertyCompletion(
-                    state,
-                    pendingWildcard.valueId,
-                    pendingWildcard.start,
-                );
+                // valid wildcard content).
+                if (
+                    direction === "backward" &&
+                    state.lastMatchedPartInfo !== undefined &&
+                    state.lastMatchedPartInfo.afterWildcard
+                ) {
+                    // Backward: the unfinalizable wildcard follows a
+                    // keyword that was matched after a captured
+                    // wildcard.  Back up to the keyword instead of
+                    // offering property completion for the unfilled
+                    // wildcard — the user hasn't started typing into
+                    // the unfilled slot yet.
+                    emitBackwardCompletion(state, undefined);
+                } else {
+                    // Forward (or backward with nothing to
+                    // reconsider): report a property completion
+                    // describing the wildcard's type so the caller can
+                    // provide entity-specific suggestions.
+                    debugCompletion("Completing wildcard part");
+                    emitPropertyCompletion(
+                        state,
+                        pendingWildcard.valueId,
+                        pendingWildcard.start,
+                    );
+                }
+                // Forward and backward produce different results when
+                // the last matched part followed a captured wildcard.
+                if (state.lastMatchedPartInfo?.afterWildcard) {
+                    directionSensitive = true;
+                }
             } else if (!matched) {
                 // --- Category 3b: Completion after consumed prefix ---
                 // The grammar stopped at a string part it could not
