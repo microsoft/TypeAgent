@@ -33,7 +33,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) "from" <StringLiteral> ";"
  *   <ImportAll> ::= "*"
  *   <ImportNames> ::= "{" <Identifier> ("," <Identifier>)* "}"
- *   <RuleDefinition> ::= <RuleName> <RuleAnnotation>? "=" <Rules> ";"
+ *   <RuleDefinition> ::= "export"? <RuleName> <RuleAnnotation>? "=" <Rules> ";"
  *   <RuleAnnotation> ::= "[" <AnnotationKey> "=" <AnnotationValue> "]"
  *   // Currently the only supported annotation key is "spacing":
  *   //   [spacing=required], [spacing=optional], [spacing=auto], [spacing=none]
@@ -251,9 +251,11 @@ export type Rule = {
 export type RuleDefinition = {
     definitionName: CommentedName;
     rules: Rule[];
+    exported?: boolean | undefined; // true when prefixed with "export" keyword
     spacingMode?: SpacingMode | undefined;
     pos?: number | undefined;
-    leadingComments?: Comment[] | undefined; // comments before <Name>
+    leadingComments?: Comment[] | undefined; // comments before "export" or <Name>
+    afterExportComments?: Comment[] | undefined; // comments between "export" keyword and <Name>
     beforeAnnotationComments?: Comment[] | undefined; // comments between <Name> and [annotation]
     annotationAfterBracketComments?: Comment[] | undefined; // after [
     annotationAfterKeyComments?: Comment[] | undefined; // after "spacing" keyword, before =
@@ -1070,7 +1072,11 @@ class GrammarRuleParser {
         };
     }
 
-    private parseRuleDefinition(leadingComments?: Comment[]): RuleDefinition {
+    private parseRuleDefinition(
+        leadingComments?: Comment[],
+        exported?: boolean,
+        afterExportComments?: Comment[],
+    ): RuleDefinition {
         const pos = this.pos;
         const rn = this.parseRuleName();
         let spacingMode: SpacingMode;
@@ -1109,9 +1115,11 @@ class GrammarRuleParser {
         return {
             definitionName: rn,
             rules,
+            exported,
             spacingMode,
             pos,
             leadingComments,
+            afterExportComments,
             beforeAnnotationComments,
             annotationAfterBracketComments,
             annotationAfterKeyComments,
@@ -1358,6 +1366,23 @@ class GrammarRuleParser {
             }
             if (this.isAt("import")) {
                 imports.push(this.parseImportStatement(constructLeading));
+                continue;
+            }
+            if (this.isAt("export")) {
+                this.skipWhitespace(6); // skip "export"
+                const afterExportComments = this.parseComments();
+                if (!this.isAt("<")) {
+                    this.throwUnexpectedCharError(
+                        "Expected rule definition after 'export'",
+                    );
+                }
+                definitions.push(
+                    this.parseRuleDefinition(
+                        constructLeading,
+                        true,
+                        afterExportComments,
+                    ),
+                );
                 continue;
             }
             if (this.isAt("entity")) {
