@@ -641,7 +641,12 @@ export class ChatView {
             return;
         }
 
-        agentMessage.setMessage(content, msg.source, options?.appendMode);
+        agentMessage.setMessage(
+            content,
+            msg.source,
+            options?.appendMode,
+            msg.sourceIcon,
+        );
 
         if (!scrollToMessage) {
             this.updateScroll();

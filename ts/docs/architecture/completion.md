@@ -14,8 +14,9 @@ that eliminates client-side heuristics.
    beneath it) decides where completions start (`startIndex`), what separates
    them from the prefix (`separatorMode`), whether the list is exhaustive
    (`closedSet`), and when to advance to the next hierarchical level
-   (`commitMode`). Clients never split input on spaces or guess token
-   boundaries.
+   The host provides a `direction` signal ("forward" or "backward") to
+   resolve structural ambiguity when the input is valid.
+   Clients never split input on spaces or guess token boundaries.
 
 2. **Longest-match wins** — At every layer (grammar, construction cache,
    grammar store merge), only completions anchored at the longest matched
@@ -43,7 +44,7 @@ User keystroke
 │  State machine: IDLE → PENDING → ACTIVE                      │
 │  Decides: reuse local trie  OR  re-fetch from backend        │
 └────────────────────────┬─────────────────────────────────────┘
-                         │ dispatcher.getCommandCompletion(input)
+                         │ dispatcher.getCommandCompletion(input, direction)
                          ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  Dispatcher  getCommandCompletion()                          │
@@ -75,7 +76,8 @@ The return path carries `CommandCompletionResult`:
   completions: CompletionGroup[];
   separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
   closedSet: boolean;           // true → list is exhaustive
-  commitMode?: CommitMode;      // "explicit" | "eager"
+  directionSensitive: boolean;  // true → opposite direction would produce different results
+  openWildcard: boolean;        // true → wildcard boundary is ambiguous; shell should slide anchor
 }
 ```
 
@@ -99,12 +101,12 @@ grammar rules.
 3. When `maxPrefixLength` advances, discard all shorter-prefix completions.
 4. Categorize each state's outcome:
 
-| Category           | Condition                                   | Completion source              |
-| ------------------ | ------------------------------------------- | ------------------------------ |
-| 1 — Exact          | Rule fully matched, prefix fully consumed   | None (rule satisfied)          |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts   | Next part of rule              |
-| 3a — Dirty partial | Trailing text matches start of current part | Current part (prefix-filtered) |
-| 3b — Dirty partial | Trailing text doesn't match                 | Offer current part             |
+| Category           | Condition                                   | Forward completion source      | Backward completion source     |
+| ------------------ | ------------------------------------------- | ------------------------------ | ------------------------------ |
+| 1 — Exact          | Rule fully matched, prefix fully consumed   | None                           | Last matched word/wildcard     |
+| 2 — Clean partial  | Prefix consumed, rule has remaining parts   | Next part of rule              | Last matched part              |
+| 3a — Dirty partial | Trailing text matches start of current part | Current part (prefix-filtered) | Current part (prefix-filtered) |
+| 3b — Dirty partial | Trailing text doesn't match                 | Current part                   | Last matched part              |
 
 5. Multi-word string parts use `tryPartialStringMatch()` to offer one word
    at a time instead of the entire phrase.
@@ -116,6 +118,10 @@ grammar rules.
   needed at the boundary (Latin vs CJK, `[spacing=none]` rules).
 - `closedSet` — `true` for pure keyword alternatives; `false` when
   property/wildcard completions are emitted (entity values are external).
+- `openWildcard` — `true` when a keyword completion is offered after a
+  wildcard that was finalized at end-of-input (Category 2 where the
+  preceding wildcard consumed the entire remaining input). Signals that
+  the wildcard boundary is ambiguous.
 
 ---
 
@@ -158,7 +164,6 @@ type CompletionGroups = {
   matchedPrefixLength?: number; // grammar override for startIndex
   separatorMode?: SeparatorMode;
   closedSet?: boolean;
-  commitMode?: CommitMode;
 };
 ```
 
@@ -181,7 +186,15 @@ strongest requirement.
 ### 4. Dispatcher
 
 **Package:** `packages/dispatcher`
-**Entry point:** `getCommandCompletion(input, context)` → `CommandCompletionResult`
+**Entry point:** `getCommandCompletion(input, direction, context)` → `CommandCompletionResult`
+
+The `direction` parameter is a `CompletionDirection` (`"forward" | "backward"`) provided
+by the host. It resolves structural ambiguity when the full input is valid —
+for example, when a typed command name matches both a complete subcommand and
+a prefix of a longer one, direction tells the backend whether to proceed
+forward (show what follows) or reconsider backward (show alternatives).
+For free-form parameter values, the backend derives mid-token status from
+the input's trailing whitespace instead.
 
 Orchestrates command resolution, parameter parsing, agent invocation, and
 built-in completions.
@@ -193,7 +206,7 @@ input
   → normalizeCommand() → resolveCommand()
   → ResolveCommandResult { descriptor, suffix, table, matched }
   → three-way branch:
-      ├─ uncommitted command → sibling subcommands (separatorMode="none")
+      ├─ reconsidering command → sibling subcommands (separatorMode="none")
       ├─ resolved descriptor → completeDescriptor()
       │    ├─ parseParams(suffix, partial=true) → ParseParamsResult
       │    ├─ resolveCompletionTarget() → CompletionTarget
@@ -206,12 +219,12 @@ input
 
 **`resolveCompletionTarget`** — pure decision function:
 
-| Spec case | Condition                                    | Behavior                                             |
-| --------- | -------------------------------------------- | ---------------------------------------------------- |
-| 1         | `remainderLength > 0` (partial parse)        | Offer what follows longest valid prefix              |
-| 3a-i      | Full parse, no trailing space, string param  | Editing free-form value → invoke agent, prefix-match |
-| 3a-ii     | Full parse, no trailing space, flag name     | Uncommitted flag → offer flag alternatives           |
-| 3b        | Full parse, trailing space (or fully quoted) | Offer completions for next parameter/flag            |
+| Spec case | Condition                                         | Behavior                                             |
+| --------- | ------------------------------------------------- | ---------------------------------------------------- |
+| 1         | `remainderLength > 0` (partial parse)             | Offer what follows longest valid prefix              |
+| 3a-i      | Full parse, no trailing whitespace, string param  | Editing free-form value → invoke agent, prefix-match |
+| 3a-ii     | Full parse, direction="backward", flag name       | Reconsidering flag → offer flag alternatives         |
+| 3b        | Full parse, direction="forward" (or fully quoted) | Offer completions for next parameter/flag            |
 
 **`computeClosedSet`** heuristic:
 
@@ -256,10 +269,11 @@ lifecycle of a completion interaction.
 | ---- | ------------------------------------------------ | ------------ | ------------------- |
 | A1   | No active session                                | Invalidation | Re-fetch            |
 | A2   | Input no longer extends anchor                   | Invalidation | Re-fetch            |
-| A3   | Non-separator char typed when separator required | Invalidation | Re-fetch            |
-| B4   | Unique match + eager commit mode                 | Navigation   | Re-fetch next level |
+| A3   | Non-separator char typed when separator required | Invalidation | Re-fetch (or slide) |
+| A7   | Direction changed on direction-sensitive result  | Invalidation | Re-fetch            |
+| B4   | Unique match (always fires)                      | Navigation   | Re-fetch next level |
 | B5   | Separator typed after exact match                | Navigation   | Re-fetch next level |
-| C6   | No trie matches + open set                       | Discovery    | Re-fetch            |
+| C6   | No trie matches + open set                       | Discovery    | Re-fetch (or slide) |
 | —    | Trie has matches                                 | —            | Reuse locally       |
 | —    | No matches + closed set                          | —            | Reuse (menu hidden) |
 
@@ -320,15 +334,25 @@ text.
 | `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars      |
 | `"none"`             | No separator                        | `[spacing=none]` grammars        |
 
-### `CommitMode`
+### `CompletionDirection`
 
-Controls when a uniquely-satisfied completion triggers a re-fetch for the next
-hierarchical level.
+The host-provided signal that resolves structural ambiguity when the input
+is fully valid. Instead of the backend telling the client when to advance,
+the client tells the backend which direction to complete.
 
-| Value        | Meaning                              | Use case                        |
-| ------------ | ------------------------------------ | ------------------------------- |
-| `"explicit"` | User must type delimiter to commit   | Parameter completions (default) |
-| `"eager"`    | Re-fetch immediately on unique match | `@` command prefix              |
+| Value        | Meaning               | When the host sends it                                |
+| ------------ | --------------------- | ----------------------------------------------------- |
+| `"forward"`  | User is moving ahead  | Appending characters, typed separator, menu selection |
+| `"backward"` | User is reconsidering | Backspacing, deleting                                 |
+
+Direction is only consulted at structural ambiguity points (command-level
+and flag-level resolution). For free-form parameter values the backend
+uses the input's trailing whitespace to decide whether the last token is
+complete.
+
+Trigger B4 (unique match) always fires a re-fetch regardless of direction,
+since the session can determine locally that the completion is uniquely
+satisfied.
 
 ### `closedSet`
 
@@ -341,6 +365,38 @@ A boolean flowing through the entire pipeline:
 
 Merge rule: AND across sources (closed only if _all_ sources are closed).
 
+### `openWildcard`
+
+A boolean flowing through the entire pipeline, signaling that the completions
+are offered at a position where a wildcard was finalized at end-of-input.
+
+- **`true`** — the wildcard's extent is ambiguous (the user may still be
+  typing within it). The keyword following the wildcard (e.g. "by") is
+  offered as a completion, and `closedSet` correctly describes that keyword
+  set as exhaustive. However, the _position_ of that set is uncertain.
+
+  The shell handles this with **anchor sliding**: instead of re-fetching
+  (which would return the same keyword at a shifted position) or giving up
+  (stuck when `closedSet=true`), the shell slides the anchor forward to the
+  current input. The trie and metadata stay intact, so the menu re-appears
+  at the next word boundary when the user types a separator.
+
+  Recovery is automatic: when the user eventually types the keyword and it
+  uniquely matches in the trie (trigger B4), the session re-fetches for the
+  next grammar part.
+
+- **`false`** — no sliding wildcard boundary; normal `closedSet` semantics
+  apply.
+
+Merge rule: OR across sources (open wildcard if _any_ source has one).
+
+Affects triggers A3 and C6 in the re-fetch decision tree:
+
+- **A3** (non-separator after anchor): when `openWildcard=true`, the anchor
+  slides forward instead of triggering a re-fetch.
+- **C6** (trie empty, closed set): when `openWildcard=true`, the anchor
+  slides forward instead of staying permanently hidden.
+
 ---
 
 ## CLI integration
@@ -348,7 +404,8 @@ Merge rule: AND across sources (closed only if _all_ sources are closed).
 The CLI (`packages/cli/src/commands/interactive.ts`) follows the same
 contract but with simpler plumbing:
 
-1. Sends full input to `dispatcher.getCommandCompletion(line)` (no
+1. Sends full input and a `direction` (always `"forward"` for tab-completion)
+   to `dispatcher.getCommandCompletion(line, direction)` (no
    token-boundary heuristics).
 2. Uses `result.startIndex` as the readline filter position.
 3. Prepends a space separator when `separatorMode` is `"space"` or

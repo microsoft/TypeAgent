@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import {
-    CommitMode,
+    CompletionDirection,
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
@@ -73,6 +73,7 @@ export type CommandResult = {
     tokenUsage?: CompletionUsageStats;
 };
 
+// Architecture: docs/architecture/completion.md — Data flow / Key types
 export type CommandCompletionResult = {
     // Index into the input where the resolved prefix ends and the
     // filter/completion region begins.  input[0..startIndex) is fully
@@ -89,13 +90,16 @@ export type CommandCompletionResult = {
     // prefix-match any completion, the caller can skip refetching since
     // no other valid input exists.
     closedSet: boolean;
-    // Controls when a uniquely-satisfied completion triggers a re-fetch
-    // for the next hierarchical level.
-    //   "explicit" — user must type a delimiter to commit; suppresses
-    //                 eager re-fetch on unique match.
-    //   "eager"    — re-fetch immediately on unique satisfaction.
-    // When omitted, defaults to "explicit".
-    commitMode?: CommitMode;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.
+    directionSensitive: boolean;
+    // True when the completions are offered at a position where a
+    // wildcard was finalized at end-of-input.  The wildcard's extent
+    // is ambiguous — the user may still be typing within it — so the
+    // caller should allow the anchor to slide forward on further input
+    // rather than re-fetching or giving up.
+    openWildcard: boolean;
 };
 
 export type AppAgentStatus = {
@@ -125,8 +129,8 @@ export type AgentSubSchemaInfo = {
     /** Exact schemaName to supply to @action dispatch, e.g. "desktop.desktop-taskbar" */
     schemaName: string;
     description: string;
-    /** Absolute path to the TypeScript source file for this sub-schema, if available. */
-    schemaFilePath: string | undefined;
+    /** Generated TypeScript schema text for this sub-schema, if available. */
+    schemaText: string | undefined;
     actions: ActionInfo[];
 };
 
@@ -200,7 +204,10 @@ export interface Dispatcher {
     ): Promise<string[] | undefined>;
 
     // APIs to get command completion for intellisense like functionality.
-    getCommandCompletion(prefix: string): Promise<CommandCompletionResult>;
+    getCommandCompletion(
+        prefix: string,
+        direction: CompletionDirection,
+    ): Promise<CommandCompletionResult>;
 
     // Check if a request can be handled by cache without executing
     checkCache(request: string): Promise<CommandResult | undefined>;

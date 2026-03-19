@@ -48,6 +48,7 @@ type CompletionData = {
     prefix: string; // Fixed prefix before completions
 };
 
+// Architecture: docs/architecture/completion.md — §CLI integration
 async function getCompletionsData(
     line: string,
     dispatcher: Dispatcher,
@@ -67,7 +68,9 @@ async function getCompletionsData(
         // how much of the input it consumed (matchedPrefixLength →
         // startIndex), so we no longer need space-based token-boundary
         // heuristics here.
-        const result = await dispatcher.getCommandCompletion(line);
+        // CLI tab-completion is always a forward action.
+        const direction = "forward" as const;
+        const result = await dispatcher.getCommandCompletion(line, direction);
         if (result.completions.length === 0) {
             return null;
         }
@@ -132,9 +135,9 @@ export default class Interactive extends Command {
             default: true,
             allowNo: true,
         }),
-        testUI: Flags.boolean({
+        classicUI: Flags.boolean({
             description:
-                "Enable enhanced terminal UI with spinners and visual prompts",
+                "Use classic terminal UI instead of enhanced UI with spinners and visual prompts",
             default: false,
         }),
         verbose: Flags.string({
@@ -169,19 +172,31 @@ export default class Interactive extends Command {
             enableVerboseFromFlag(namespaces);
         }
 
+        const enhancedUI = !flags.classicUI;
+
+        // Install debug interceptor for enhanced UI so all stderr debug
+        // output (whether from /verbose, --verbose, or DEBUG env var)
+        // renders in the indented panel.
+        if (enhancedUI) {
+            const { installDebugInterceptor } = await import(
+                "../debugInterceptor.js"
+            );
+            installDebugInterceptor();
+        }
+
         // Choose between standard and enhanced UI
-        const withClientIO = flags.testUI
+        const withClientIO = enhancedUI
             ? withEnhancedConsoleClientIO
             : withConsoleClientIO;
-        const processCommandsFn = flags.testUI
+        const processCommandsFn = enhancedUI
             ? processCommandsEnhanced
             : processCommands;
-        const getPromptFn = flags.testUI
+        const getPromptFn = enhancedUI
             ? getEnhancedConsolePrompt
             : getConsolePrompt;
 
         // Only create readline for standard console - enhanced console creates its own
-        const rl = flags.testUI
+        const rl = enhancedUI
             ? undefined
             : createInterface({
                   input: process.stdin,
@@ -232,10 +247,10 @@ export default class Interactive extends Command {
                         dispatcher.processCommand(command),
                     dispatcher,
                     undefined, // inputs
-                    flags.testUI
+                    enhancedUI
                         ? (line: string) => getCompletionsData(line, dispatcher)
                         : undefined,
-                    flags.testUI ? dispatcher : undefined,
+                    enhancedUI ? dispatcher : undefined,
                 );
             } finally {
                 await dispatcher.close();

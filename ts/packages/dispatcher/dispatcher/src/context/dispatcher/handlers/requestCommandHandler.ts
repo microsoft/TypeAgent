@@ -35,6 +35,7 @@ import {
     ActionContext,
     ParsedCommandParams,
     SessionContext,
+    CompletionDirection,
     CompletionGroups,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
@@ -500,6 +501,7 @@ export class RequestCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
         names: string[],
+        direction?: CompletionDirection,
     ): Promise<CompletionGroups> {
         const result: CompletionGroups = { groups: [] };
         for (const name of names) {
@@ -508,12 +510,14 @@ export class RequestCommandHandler implements CommandHandler {
                 const requestResult = await requestCompletion(
                     requestPrefix,
                     context.agentContext,
+                    direction,
                 );
                 result.groups.push(...requestResult.groups);
                 result.matchedPrefixLength = requestResult.matchedPrefixLength;
                 result.separatorMode = requestResult.separatorMode;
                 result.closedSet = requestResult.closedSet;
-                result.commitMode = requestResult.commitMode;
+                result.directionSensitive = requestResult.directionSensitive;
+                result.openWildcard = requestResult.openWildcard;
             }
         }
         return result;

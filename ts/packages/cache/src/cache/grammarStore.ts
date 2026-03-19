@@ -18,7 +18,7 @@ import {
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
-import { SeparatorMode } from "@typeagent/agent-sdk";
+import { CompletionDirection, SeparatorMode } from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     CompletionProperty,
@@ -261,9 +261,11 @@ export class GrammarStoreImpl implements GrammarStore {
         return sortMatches(matches);
     }
 
+    // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
         requestPrefix: string,
         options?: MatchOptions,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
         if (!this.enabled) {
             return undefined;
@@ -277,6 +279,8 @@ export class GrammarStoreImpl implements GrammarStore {
         let matchedPrefixLength = 0;
         let separatorMode: SeparatorMode | undefined;
         let closedSet: boolean | undefined;
+        let directionSensitive: boolean = false;
+        let openWildcard: boolean = false;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -353,6 +357,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     entry.grammar,
                     requestPrefix,
                     matchedPrefixLength,
+                    direction,
                 );
                 const partialPrefixLength = partial.matchedPrefixLength ?? 0;
                 if (partialPrefixLength > matchedPrefixLength) {
@@ -362,6 +367,8 @@ export class GrammarStoreImpl implements GrammarStore {
                     properties.length = 0;
                     separatorMode = undefined;
                     closedSet = undefined;
+                    directionSensitive = false;
+                    openWildcard = false;
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);
@@ -379,6 +386,13 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ? partial.closedSet
                                 : closedSet && partial.closedSet;
                     }
+                    // True if any grammar result at this prefix
+                    // length is direction-sensitive.
+                    directionSensitive =
+                        directionSensitive || partial.directionSensitive;
+                    // True if any grammar result at this prefix
+                    // length has an open wildcard.
+                    openWildcard = openWildcard || partial.openWildcard;
                     if (
                         partial.properties !== undefined &&
                         partial.properties.length > 0
@@ -408,6 +422,8 @@ export class GrammarStoreImpl implements GrammarStore {
             matchedPrefixLength,
             separatorMode,
             closedSet,
+            directionSensitive,
+            openWildcard,
         };
     }
 }

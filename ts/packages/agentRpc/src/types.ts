@@ -20,6 +20,7 @@ import {
     StorageListOptions,
     TemplateSchema,
     TypeAgentAction,
+    CompletionDirection,
     CompletionGroups,
     ResolveEntityResult,
     SchemaContent,
@@ -184,6 +185,7 @@ export type AgentInvokeFunctions = {
             commands: string[];
             params: ParsedCommandParams<ParameterDefinitions>;
             names: string[];
+            direction?: CompletionDirection;
         },
     ): Promise<CompletionGroups>;
     executeCommand(

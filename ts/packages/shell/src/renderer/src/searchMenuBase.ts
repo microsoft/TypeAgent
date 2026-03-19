@@ -16,6 +16,7 @@ export function normalizeMatchText(text: string): string {
         .toLowerCase();
 }
 
+// Architecture: docs/architecture/completion.md — §7 Shell — Search Menu
 export class SearchMenuBase {
     private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
     private prefix: string | undefined;

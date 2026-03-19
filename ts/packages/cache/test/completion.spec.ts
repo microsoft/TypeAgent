@@ -106,8 +106,8 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             expect(result!.completions).toContain("song");
             // The matcher consumes "play" (4 chars); the trailing space
-            // is a separator and not part of any match part.
-            expect(result!.matchedPrefixLength).toBe(4);
+            // is consumed as a trailing separator → matchedPrefixLength=5.
+            expect(result!.matchedPrefixLength).toBe(5);
         });
 
         it("returns matchedPrefixLength for partial single-part match", () => {
@@ -207,10 +207,9 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
-            // The matcher consumes "play" (4 chars). The character at
-            // position 3 is 'y' (Latin) and "song" starts with 's' (Latin).
-            // Both are word-boundary scripts → spacePunctuation.
-            expect(result!.separatorMode).toBe("spacePunctuation");
+            // The matcher consumes "play" (4 chars). Trailing space
+            // is consumed, so separatorMode is demoted to "optional".
+            expect(result!.separatorMode).toBe("optional");
         });
 
         it("returns spacePunctuation between adjacent word characters", () => {
@@ -451,14 +450,14 @@ describe("ConstructionCache.completion()", () => {
             expect(result!.closedSet).toBe(true);
         });
 
-        it("prefix 'play ' — trailing space ignored, still offers second part", () => {
+        it("prefix 'play ' — trailing space consumed, still offers second part", () => {
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
             expect(result!.completions).toEqual(["song"]);
-            // matchedPrefixLength stays at 4 (the space is a separator,
-            // not consumed by any part)
-            expect(result!.matchedPrefixLength).toBe(4);
-            expect(result!.separatorMode).toBe("spacePunctuation");
+            // Trailing space consumed → matchedPrefixLength advances to 5,
+            // separatorMode demoted to "optional".
+            expect(result!.matchedPrefixLength).toBe(5);
+            expect(result!.separatorMode).toBe("optional");
         });
 
         it("prefix 'play s' — partial intra-part on second part, returns completions", () => {
@@ -776,6 +775,599 @@ describe("ConstructionCache.completion()", () => {
                 expect(result).toBeDefined();
                 expect(result!.completions).toContain("by");
             });
+        });
+    });
+
+    describe("backward direction", () => {
+        describe("literal-only construction", () => {
+            it("backs up to last part start on exact match", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Backs up to last part start ("play" consumed 4
+                // chars; the space is a separator, not part of any
+                // match part).
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+
+            it("backs up to last part start for single-part construction", () => {
+                const c = Construction.create(
+                    [createMatchPart(["play"], "verb")],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Single part — backs up to 0 (the start of the only part).
+                expect(result!.completions).toContain("play");
+                expect(result!.matchedPrefixLength).toBe(0);
+            });
+
+            it("forward exact match still returns empty completions", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "forward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toEqual([]);
+                expect(result!.matchedPrefixLength).toBe(9);
+            });
+        });
+
+        describe("multi-alternative last part", () => {
+            it("offers all alternatives from last part on backward", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song", "track", "album"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions.sort()).toEqual([
+                    "album",
+                    "song",
+                    "track",
+                ]);
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+        });
+
+        describe("entity wildcard at end", () => {
+            it("backward on exact match offers property completions", () => {
+                const verbPart = createMatchPart(["play"], "verb");
+                const entityPart = createEntityPart("entity", "songName");
+                const c = Construction.create(
+                    [verbPart, entityPart],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play my song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Backward backs up to last part start and offers
+                // property completions for the entity wildcard.
+                expect(result!.properties).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("songName");
+                expect(result!.closedSet).toBe(false);
+            });
+
+            it("forward on exact match with wildcard returns empty", () => {
+                const verbPart = createMatchPart(["play"], "verb");
+                const entityPart = createEntityPart("entity", "songName");
+                const c = Construction.create(
+                    [verbPart, entityPart],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play my song",
+                    defaultOptions,
+                    "forward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toEqual([]);
+                expect(result!.matchedPrefixLength).toBe(12);
+            });
+        });
+
+        describe("wildcard in middle", () => {
+            it("backward on full match backs up to last wildcard part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createEntityPart("track", "trackName"),
+                        createMatchPart(["by"], "prep"),
+                        createEntityPart("artist", "artist"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play some song by john",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Last part is the artist entity — backward offers
+                // property completions for it.
+                expect(result!.properties).toBeDefined();
+                expect(result!.properties!.length).toBeGreaterThan(0);
+                expect(result!.properties![0].names).toContain("artist");
+                expect(result!.closedSet).toBe(false);
+            });
+        });
+
+        describe("partial match backs up to previous part", () => {
+            it("backward on 'play' (no trailing space) backs up to 'play'", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // No trailing space — backward backs up to offer
+                // "play" at position 0.
+                expect(result!.completions).toContain("play");
+                expect(result!.matchedPrefixLength).toBe(0);
+            });
+
+            it("trailing space commits — backward on 'play ' offers next part (same as forward)", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play ",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Trailing space is a commit signal — direction no
+                // longer matters.  Should offer "song" same as forward.
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(5);
+            });
+
+            it("forward on 'play ' offers next part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play ",
+                    defaultOptions,
+                    "forward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(5);
+            });
+        });
+
+        describe("partial match with three parts", () => {
+            it("backward on 'play song' (2 of 3 parts matched) backs up to 'song'", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                        createMatchPart(["now"], "adv"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+
+            it("forward on 'play song' (2 of 3 parts matched) offers 'now'", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                        createMatchPart(["now"], "adv"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "forward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("now");
+                expect(result!.matchedPrefixLength).toBe(9);
+            });
+        });
+
+        describe("trailing optional skipped", () => {
+            it("backward skips trailing optional and backs up to last real part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                        createMatchPart(["now"], "adv", { optional: true }),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                // "play song" matches parts 0 and 1; part 2 is
+                // optional and skipped (matchedStarts[2] = -1).
+                // Backward should skip the optional and back up to
+                // "song" (the last real match), not to -1.
+                const result = cache.completion(
+                    "play song",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(4);
+            });
+        });
+
+        describe("trailing separator commits token", () => {
+            // The cache uses /[\s\p{P}]$/u to detect trailing
+            // separators — both whitespace and punctuation commit.
+
+            it("trailing punctuation commits — backward on 'play,' offers next part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play,",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Trailing comma is a separator — commits "play".
+                // Should offer "song" same as forward.
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(5);
+            });
+
+            it("trailing period commits — backward on 'play.' offers next part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play.",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("song");
+                expect(result!.matchedPrefixLength).toBe(5);
+            });
+
+            it("no trailing separator — backward on 'play' backs up", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                expect(result!.completions).toContain("play");
+                expect(result!.matchedPrefixLength).toBe(0);
+            });
+
+            it("mid-input trailing separator — backward on 'play song,' offers next part", () => {
+                const c = Construction.create(
+                    [
+                        createMatchPart(["play"], "verb"),
+                        createMatchPart(["song"], "noun"),
+                        createMatchPart(["now"], "adv"),
+                    ],
+                    new Map(),
+                );
+                const cache = makeCache([c]);
+                const result = cache.completion(
+                    "play song,",
+                    defaultOptions,
+                    "backward",
+                );
+                expect(result).toBeDefined();
+                // Trailing comma after second word commits "song".
+                expect(result!.completions).toContain("now");
+                expect(result!.matchedPrefixLength).toBe(10);
+            });
+        });
+    });
+
+    describe("directionSensitive", () => {
+        it("false for empty prefix", () => {
+            const c = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("", defaultOptions);
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(false);
+        });
+
+        it("false for partial first word (no matched parts)", () => {
+            const c = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("pla", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(false);
+        });
+
+        it("true for fully matched first word without trailing space", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("play", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(true);
+        });
+
+        it("false when trailing space commits the word", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("play ", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(false);
+        });
+
+        it("true for exact multi-part match without trailing space", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion(
+                "play song",
+                defaultOptions,
+                "backward",
+            );
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(true);
+        });
+
+        it("false for exact multi-part match with trailing space", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion(
+                "play song ",
+                defaultOptions,
+                "backward",
+            );
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(false);
+        });
+
+        it("both directions agree on sensitivity", () => {
+            const c = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const fwd = cache.completion(
+                "play song",
+                defaultOptions,
+                "forward",
+            );
+            const bwd = cache.completion(
+                "play song",
+                defaultOptions,
+                "backward",
+            );
+            expect(fwd).toBeDefined();
+            expect(bwd).toBeDefined();
+            expect(fwd!.directionSensitive).toBe(true);
+            expect(bwd!.directionSensitive).toBe(true);
+        });
+
+        it("single-part construction is sensitive when fully matched", () => {
+            const c = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c]);
+            const result = cache.completion("play", defaultOptions, "backward");
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(true);
+        });
+
+        it("multiple constructions: sensitive wins over non-sensitive at same prefix length", () => {
+            // c1 has two parts — "play song" at position 4 is
+            // direction-sensitive (has parts to back up to).
+            const c1 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            // c2 is a single-part construction that only matches
+            // at prefix length 0.  It won't compete at length 4.
+            const c2 = Construction.create(
+                [createMatchPart(["stop"], "verb")],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion("play", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            // c1 matches at 4 > c2's 0 — c1 wins, which IS sensitive.
+            expect(result!.directionSensitive).toBe(true);
+        });
+
+        it("multiple constructions at same prefix length: any sensitive makes result sensitive", () => {
+            // Two constructions that both match "play" at prefix 4.
+            // One continues to "song", the other to "video".
+            // Both have matched parts → both flag directionSensitive.
+            const c1 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["video"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion("play", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(true);
+        });
+
+        it("longer match resets directionSensitive from shorter sensitive match", () => {
+            // c1 matches "play" at 4 (sensitive) but c2 matches
+            // "play song" at 9 (also sensitive).  When maxPrefixLength
+            // advances from 4→9, directionSensitive is reset and
+            // re-evaluated at the longer match.
+            const c1 = Construction.create(
+                [createMatchPart(["play"], "verb")],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                    createMatchPart(["now"], "adv"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion(
+                "play song",
+                defaultOptions,
+                "forward",
+            );
+            expect(result).toBeDefined();
+            // c2 dominates at prefix length 9.
+            expect(result!.directionSensitive).toBe(true);
+            expect(result!.completions).toContain("now");
+        });
+
+        it("not sensitive when trailing space commits across all constructions", () => {
+            const c1 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["song"], "noun"),
+                ],
+                new Map(),
+            );
+            const c2 = Construction.create(
+                [
+                    createMatchPart(["play"], "verb"),
+                    createMatchPart(["video"], "noun"),
+                ],
+                new Map(),
+            );
+            const cache = makeCache([c1, c2]);
+            const result = cache.completion("play ", defaultOptions, "forward");
+            expect(result).toBeDefined();
+            expect(result!.directionSensitive).toBe(false);
         });
     });
 });

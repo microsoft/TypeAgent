@@ -4,6 +4,7 @@
 import fs from "fs";
 import {
     fromJSONParsedActionSchema,
+    ParsedActionSchema,
     ParsedActionSchemaJSON,
     ActionSchemaTypeDefinition,
     ParamSpec,
@@ -58,6 +59,16 @@ export function loadSchemaInfo(pasJsonPath: string): SchemaInfo {
     // Extract schema name from path - use path.basename to avoid regex issues
     const fileName = pasJsonPath.split(/[/\\]/).pop() || "";
     const schemaName = fileName.replace(/\.pas\.json$/, "") || "unknown";
+    return getSchemaInfoFromParsedSchema(schemaName, parsedSchema);
+}
+
+/**
+ * Extract schema info from an already-loaded ParsedActionSchema
+ */
+export function getSchemaInfoFromParsedSchema(
+    schemaName: string,
+    parsedSchema: ParsedActionSchema,
+): SchemaInfo {
     const actions = new Map<string, ActionInfo>();
     const entityTypes = new Set<string>();
 

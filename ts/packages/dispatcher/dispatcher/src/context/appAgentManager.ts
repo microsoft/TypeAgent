@@ -20,7 +20,6 @@ import {
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/sessionContext.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import registerDebug from "debug";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
@@ -374,25 +373,14 @@ export class AppAgentManager implements ActionConfigProvider {
                         // Add to NFA grammar registry if using NFA system
                         if (useNFAGrammar && agentGrammarRegistry) {
                             try {
-                                // Enrich grammar with checked variables from .pas.json if available
-                                if (config.compiledSchemaFilePath) {
-                                    try {
-                                        const pasJsonPath = getPackageFilePath(
-                                            config.compiledSchemaFilePath,
-                                        );
-                                        enrichGrammarWithCheckedVariables(
-                                            g,
-                                            pasJsonPath,
-                                        );
-                                        debug(
-                                            `Enriched grammar with checked variables for schema: ${schemaName}`,
-                                        );
-                                    } catch (enrichError) {
-                                        debug(
-                                            `Could not enrich grammar with checked variables for ${schemaName}: ${enrichError}`,
-                                        );
-                                    }
-                                }
+                                // Enrich grammar with checked variables from the already-parsed action schema
+                                enrichGrammarWithCheckedVariables(
+                                    g,
+                                    actionSchemaFile.parsedActionSchema,
+                                );
+                                debug(
+                                    `Enriched grammar with checked variables for schema: ${schemaName}`,
+                                );
 
                                 const nfa = compileGrammarToNFA(g, schemaName);
                                 agentGrammarRegistry.registerAgent(

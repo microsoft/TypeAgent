@@ -9,6 +9,7 @@ import {
     DisplayContent,
     DisplayAppendMode,
     CommandDescriptors,
+    CompletionDirection,
     ParsedCommandParams,
     ParameterDefinitions,
     ClientAction,
@@ -517,12 +518,14 @@ export async function createAgentRpcClient(
             params: ParsedCommandParams<ParameterDefinitions>,
             names: string[],
             context: SessionContext<ShimContext>,
+            direction?: CompletionDirection,
         ) {
             return rpc.invoke("getCommandCompletion", {
                 ...getContextParam(context),
                 commands,
                 params,
                 names,
+                ...(direction !== undefined ? { direction } : {}),
             });
         },
         executeCommand(

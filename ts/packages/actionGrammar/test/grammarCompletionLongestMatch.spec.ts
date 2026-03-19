@@ -30,7 +30,7 @@ describe("Grammar Completion - longest match property", () => {
         it("completes second part after first matched with space", () => {
             const result = matchGrammarCompletion(grammar, "first ");
             expect(result.completions).toContain("second");
-            expect(result.matchedPrefixLength).toBe(5);
+            expect(result.matchedPrefixLength).toBe(6);
         });
 
         it("completes third part after first two matched", () => {
@@ -42,7 +42,7 @@ describe("Grammar Completion - longest match property", () => {
         it("completes third part after first two matched with space", () => {
             const result = matchGrammarCompletion(grammar, "first second ");
             expect(result.completions).toContain("third");
-            expect(result.matchedPrefixLength).toBe(12);
+            expect(result.matchedPrefixLength).toBe(13);
         });
 
         it("no completion for exact full match", () => {
@@ -194,7 +194,7 @@ describe("Grammar Completion - longest match property", () => {
         it("completes 'percent' after number with space", () => {
             const result = matchGrammarCompletion(grammar, "set volume 50 ");
             expect(result.completions).toContain("percent");
-            expect(result.matchedPrefixLength).toBe(13);
+            expect(result.matchedPrefixLength).toBe(14);
         });
 
         it("no completion for exact match", () => {
@@ -467,14 +467,15 @@ describe("Grammar Completion - longest match property", () => {
             expect(r1.completions).toContain("two");
         });
 
-        it("matchedPrefixLength is stable regardless of trailing spaces", () => {
+        it("matchedPrefixLength includes trailing whitespace", () => {
             const r1 = matchGrammarCompletion(grammar, "one");
             const r2 = matchGrammarCompletion(grammar, "one ");
             const r3 = matchGrammarCompletion(grammar, "one  ");
-            // All should report the same matchedPrefixLength (end of
-            // consumed prefix, which is the "one" portion)
-            expect(r1.matchedPrefixLength).toBe(r2.matchedPrefixLength);
-            expect(r2.matchedPrefixLength).toBe(r3.matchedPrefixLength);
+            // Each includes the trailing whitespace in
+            // matchedPrefixLength: "one"=3, "one "=4, "one  "=5.
+            expect(r1.matchedPrefixLength).toBe(3);
+            expect(r2.matchedPrefixLength).toBe(4);
+            expect(r3.matchedPrefixLength).toBe(5);
         });
     });
 
@@ -492,6 +493,7 @@ describe("Grammar Completion - longest match property", () => {
                 const result = matchGrammarCompletion(grammar, "");
                 expect(result.completions).toContain("play");
                 expect(result.closedSet).toBe(true);
+                expect(result.openWildcard).toBe(false);
             });
 
             it("closedSet=true for alternatives after prefix", () => {
@@ -500,12 +502,14 @@ describe("Grammar Completion - longest match property", () => {
                 expect(result.completions).toContain("pop");
                 expect(result.completions).toContain("jazz");
                 expect(result.closedSet).toBe(true);
+                expect(result.openWildcard).toBe(false);
             });
 
             it("closedSet=true for exact match (no completions)", () => {
                 const result = matchGrammarCompletion(grammar, "play rock");
                 expect(result.completions).toHaveLength(0);
                 expect(result.closedSet).toBe(true);
+                expect(result.openWildcard).toBe(false);
             });
         });
 
@@ -544,12 +548,46 @@ describe("Grammar Completion - longest match property", () => {
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
                 expect(result.closedSet).toBe(false);
+                expect(result.openWildcard).toBe(false);
             });
 
             it("closedSet=true for 'by' keyword after wildcard captured", () => {
                 const result = matchGrammarCompletion(grammar, "play hello");
                 expect(result.completions).toContain("by");
                 expect(result.closedSet).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("openWildcard=true for multi-word wildcard before keyword", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play my favorite song",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.closedSet).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("openWildcard=true for ambiguous keyword boundary", () => {
+                // "play hello by" is ambiguous: "by" could be part of
+                // the track name or the keyword delimiter.  The grammar
+                // produces both interpretations at prefix length 13,
+                // so openWildcard stays true.
+                const result = matchGrammarCompletion(grammar, "play hello by");
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("openWildcard=true persists with trailing separator", () => {
+                // "play hello by " — still ambiguous: "by " could be
+                // part of the track name in one interpretation.
+                // openWildcard stays true because the grammar considers
+                // both parse paths.  The shell resolves this via B4
+                // (unique match) when the user types "by" in the trie.
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play hello by ",
+                );
+                expect(result.openWildcard).toBe(true);
             });
         });
 

@@ -36,6 +36,7 @@ export type MatchConfig = {
     readonly history?: HistoryContext | undefined;
     readonly matchPartsCache?: MatchPartsCache | undefined;
     readonly conflicts?: boolean | undefined;
+    readonly needMatchedStarts?: boolean | undefined;
 };
 
 export function matchParts(
@@ -65,6 +66,9 @@ export function matchParts(
                 if (config.partial) {
                     values.partialPartCount = state.matchedStart.length;
                     values.matchedCurrent = state.matchedCurrent;
+                    if (config.needMatchedStarts) {
+                        values.matchedStarts = [...state.matchedStart];
+                    }
                 }
                 return values;
             }

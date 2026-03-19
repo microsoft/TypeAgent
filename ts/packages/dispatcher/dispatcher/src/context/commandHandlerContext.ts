@@ -811,53 +811,20 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     // Enable auto-save
     await grammarStore.setAutoSave(config.cache.autoSave);
 
-    // Import getPackageFilePath for resolving schema paths
-    const { getPackageFilePath } = await import(
-        "../utils/getPackageFilePath.js"
-    );
-
     // Configure agent cache with grammar generation support
     context.agentCache.configureGrammarGeneration(
         context.agentGrammarRegistry,
         grammarStore,
         true,
         (schemaName: string) => {
-            // Get compiled schema file path (.pas.json) from action config for grammar generation
-            const actionConfig = context.agents.tryGetActionConfig(schemaName);
-            if (!actionConfig) {
+            const actionSchemaFile =
+                context.agents.tryGetActionSchemaFile(schemaName);
+            if (!actionSchemaFile) {
                 throw new Error(
-                    `Action config not found for schema: ${schemaName}`,
+                    `Action schema file not found for schema: ${schemaName}`,
                 );
             }
-
-            // Prefer explicit compiledSchemaFile field
-            if (actionConfig.compiledSchemaFilePath) {
-                return getPackageFilePath(actionConfig.compiledSchemaFilePath);
-            }
-
-            // Fallback: try to derive .pas.json path from .ts schemaFilePath
-            if (
-                actionConfig.schemaFilePath &&
-                actionConfig.schemaFilePath.endsWith(".ts")
-            ) {
-                // Try common pattern: ./src/schema.ts -> ../dist/schema.pas.json
-                const derivedPath = actionConfig.schemaFilePath
-                    .replace(/^\.\/src\//, "../dist/")
-                    .replace(/\.ts$/, ".pas.json");
-                debug(
-                    `Attempting fallback .pas.json path for ${schemaName}: ${derivedPath}`,
-                );
-                try {
-                    return getPackageFilePath(derivedPath);
-                } catch {
-                    // Fallback path doesn't exist, continue to error
-                }
-            }
-
-            throw new Error(
-                `Compiled schema file path (.pas.json) not found for schema: ${schemaName}. ` +
-                    `Please add 'compiledSchemaFile' field to the manifest pointing to the .pas.json file.`,
-            );
+            return actionSchemaFile.parsedActionSchema;
         },
     );
 

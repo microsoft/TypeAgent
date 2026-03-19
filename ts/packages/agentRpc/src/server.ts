@@ -179,6 +179,7 @@ export function createAgentRpcServer(
                 param.params,
                 param.names,
                 getSessionContextShim(param),
+                param.direction,
             );
         },
         async executeCommand(param) {

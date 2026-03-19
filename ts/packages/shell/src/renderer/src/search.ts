@@ -10,6 +10,7 @@ import {
     SearchMenuUI,
 } from "./searchMenuUI/searchMenuUI";
 
+// Architecture: docs/architecture/completion.md — §7 Shell — Search Menu
 export class SearchMenu extends SearchMenuBase {
     private searchMenuUI: SearchMenuUI | undefined;
     constructor(
