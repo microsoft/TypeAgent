@@ -822,5 +822,199 @@ describeForEachCompletion(
                 });
             });
         });
+
+        describe("partial keyword after wildcard — 'play Never b'", () => {
+            const g = [
+                `<Start> = play $(name) by $(artist) -> { name, artist };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("forward: offers 'by' with openWildcard=true", () => {
+                const result = matchGrammarCompletion(grammar, "play Never b");
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(12);
+                expect(result.separatorMode).toBe("spacePunctuation");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("backward: offers 'by' (partial keyword wins over wildcard start)", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play Never b",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(11);
+                expect(result.separatorMode).toBe("optional");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("forward: partial keyword with multi-word wildcard", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play my favorite song b",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(23);
+                expect(result.separatorMode).toBe("spacePunctuation");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("backward: partial keyword with multi-word wildcard", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play my favorite song b",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(22);
+                expect(result.separatorMode).toBe("optional");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+        });
+
+        describe("partial multi-word keyword after wildcard — 'played by'", () => {
+            const g = [
+                `<Start> = play $(name) played by $(artist) -> { name, artist };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward: partial first keyword word offers 'played'", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play Never p",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("played");
+                expect(result.matchedPrefixLength).toBe(11);
+                expect(result.separatorMode).toBe("optional");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("backward: full first keyword word offers 'by'", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play Never played",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(17);
+                expect(result.separatorMode).toBe("spacePunctuation");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("backward: full first keyword word + partial second offers 'by'", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play Never played b",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(18);
+                expect(result.separatorMode).toBe("optional");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("backward: multi-word wildcard + full first keyword word + partial second", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play my song played b",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(20);
+                expect(result.separatorMode).toBe("optional");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("backward: multi-word wildcard + full first keyword word offers 'by'", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play my song played",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(19);
+                expect(result.separatorMode).toBe("spacePunctuation");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+        });
+
+        describe("partial keyword after wildcard — spacing=none", () => {
+            const g = [
+                `<Start> [spacing=none] = play $(name) playedby $(artist) -> { name, artist };`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward: partial keyword prefix in none mode", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "playNeverp",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("playedby");
+                expect(result.matchedPrefixLength).toBe(9);
+                expect(result.separatorMode).toBe("none");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("backward: longer partial keyword prefix in none mode", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "playNeverplayedb",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("playedby");
+                expect(result.matchedPrefixLength).toBe(9);
+                expect(result.separatorMode).toBe("none");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+
+            it("backward: multi-word wildcard with partial keyword in none mode", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "playMyFavSongplayedb",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("playedby");
+                expect(result.matchedPrefixLength).toBe(13);
+                expect(result.separatorMode).toBe("none");
+                expect(result.closedSet).toBe(true);
+                expect(result.directionSensitive).toBe(true);
+                expect(result.openWildcard).toBe(true);
+            });
+        });
     },
 );

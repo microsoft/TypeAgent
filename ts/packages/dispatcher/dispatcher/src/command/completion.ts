@@ -214,7 +214,7 @@ function resolveCompletionTarget(
     // ── Pending flag detection ───────────────────────────────────────
     const { pendingFlag, booleanFlagName } = detectPendingFlag(params, flags);
 
-    // ── Spec case 2: partial parse (remainderLength > 0) ────────────
+    // ── Spec case 1: partial parse (remainderLength > 0) ────────────
     // Parsing stopped partway.  Offer what can follow the longest
     // valid prefix.
     if (params.remainderLength > 0) {
@@ -231,12 +231,12 @@ function resolveCompletionTarget(
         };
     }
 
-    // ── Spec case 3: full parse (remainderLength === 0) ─────────────
+    // ── Spec case 2: full parse (remainderLength === 0) ─────────────
     const { tokens, lastCompletableParam, lastParamImplicitQuotes } = params;
 
-    // ── Spec case 3a: user is still editing the last token ──────
+    // ── Spec case 2a: user is still editing the last token ──────
 
-    // 3a-i: free-form parameter value.  lastCompletableParam is set
+    // 2a-i: free-form parameter value.  lastCompletableParam is set
     // only for string-type params — the only type whose partial text
     // is meaningful for prefix-match completion.
     if (lastCompletableParam !== undefined && tokens.length > 0) {
@@ -265,7 +265,7 @@ function resolveCompletionTarget(
         }
     }
 
-    // 3a-ii: reconsidering flag name.  A recognized flag was consumed
+    // 2a-ii: reconsidering flag name.  A recognized flag was consumed
     // but the user is backing up (direction="backward") — they
     // want to reconsider their choice (e.g. replace "--level" with
     // "--debug").  Back up to the flag token's start and offer flag
@@ -274,7 +274,7 @@ function resolveCompletionTarget(
     //
     // Trailing whitespace commits the flag — direction no longer matters.
     // When the user typed "--level " (with whitespace), they've moved on;
-    // fall through to 3b for value completions regardless of direction.
+    // fall through to 2b for value completions regardless of direction.
     const trailingWhitespace = hasWhitespaceBefore(input, remainderIndex);
     if (
         pendingFlag !== undefined &&
@@ -296,7 +296,7 @@ function resolveCompletionTarget(
         };
     }
 
-    // ── Spec case 3b: last token committed, complete next ───────
+    // ── Spec case 2b: last token committed, complete next ───────
     // startIndex is the raw position — includes any trailing
     // whitespace that the user typed.  When trailing whitespace is
     // present, separatorMode becomes "optional" because the
@@ -331,14 +331,12 @@ function resolveCompletionTarget(
 //
 // ── Spec ──────────────────────────────────────────────────────────────────
 //
-// 1. Parse parameters partially up to the longest valid index.
-//
-// 2. If parsing did NOT consume all input (remainderLength > 0):
+// 1. If parsing did NOT consume all input (remainderLength > 0):
 //    → startIndex = position after the longest valid prefix.
 //    → Offer completions for whatever can validly follow that prefix
 //      (next positional args, flag names).
 //
-// 3. If parsing consumed all input (remainderLength === 0):
+// 2. If parsing consumed all input (remainderLength === 0):
 //
 //    a. The user is still editing the last token — return startIndex
 //       at the *beginning* of that token:
@@ -361,12 +359,12 @@ function resolveCompletionTarget(
 //       When trailing whitespace is present, separatorMode is
 //       "optional" because the whitespace is already consumed.
 //
-// ── Exceptions to case 3a ────────────────────────────────────────────────
+// ── Exceptions to case 2a ────────────────────────────────────────────────
 //
-// Case 3a depends on lastCompletableParam (for 3a-i) and pendingFlag
-// (for 3a-ii).  parseParams only sets lastCompletableParam for
+// Case 2a depends on lastCompletableParam (for 2a-i) and pendingFlag
+// (for 2a-ii).  parseParams only sets lastCompletableParam for
 // *string*-type parameters: number, boolean, and json params leave it
-// undefined.  This means the following scenarios fall through to 3b
+// undefined.  This means the following scenarios fall through to 2b
 // even when direction="forward":
 //
 //   • A number arg being edited             (e.g. "cmd 42")

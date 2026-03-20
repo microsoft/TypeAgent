@@ -198,7 +198,7 @@ export class PartialCompletionSession {
     //                         immediately after anchor, but a non-separator
     //                         character was typed instead. The constraint can
     //                         never be satisfied, so treat as new input.
-    //   7. Direction changed — the user switched between forward and backward
+    //   4. Direction changed — the user switched between forward and backward
     //                         AND the last result was direction-sensitive
     //                         AND the input is at the exact anchor (no text
     //                         typed past it).  Once the user types past the
@@ -207,10 +207,10 @@ export class PartialCompletionSession {
     //
     // B. Hierarchical navigation — user completed this level; re-fetch for
     //    the NEXT level's completions.
-    //   4. Uniquely satisfied — typed prefix exactly matches one completion and
+    //   1. Uniquely satisfied — typed prefix exactly matches one completion and
     //                         is not a prefix of any other. Always re-fetch
     //                         for the NEXT level.
-    //   5. Committed past boundary — prefix contains a separator after a valid
+    //   2. Committed past boundary — prefix contains a separator after a valid
     //                         completion match (e.g. "set " where "set" matches
     //                         but so does "setWindowState"). The user committed
     //                         by typing a separator; re-fetch for next level.
@@ -218,7 +218,7 @@ export class PartialCompletionSession {
     // C. Open-set discovery — trie has zero matches and the set is not
     //    exhaustive; the backend may know about completions not yet loaded.
     //    Gated by closedSet === false.
-    //   6. No matches + open set — trie has zero matches for the typed prefix
+    //   1. No matches + open set — trie has zero matches for the typed prefix
     //                         AND noMatchPolicy is "refetch". The backend may
     //                         know about completions not yet loaded.
     private reuseSession(
@@ -241,7 +241,7 @@ export class PartialCompletionSession {
         // ACTIVE from here.
         const { anchor, separatorMode: sepMode, noMatchPolicy } = this;
 
-        // [A7] Direction changed on a direction-sensitive result.
+        // [A4] Direction changed on a direction-sensitive result.
         // The loaded completions were computed for the opposite direction
         // and would differ — but only at the anchor boundary itself.
         // Once the user has typed past the anchor (rawPrefix is
@@ -351,7 +351,7 @@ export class PartialCompletionSession {
                 position,
             );
 
-            // [B4] The user has typed text that exactly matches one
+            // [B1] The user has typed text that exactly matches one
             // completion and is not a prefix of any other.
             // Always re-fetch for the next level — the direction
             // for the re-fetch comes from the caller.
@@ -362,7 +362,7 @@ export class PartialCompletionSession {
                 return false; // RE-FETCH (hierarchical navigation)
             }
 
-            // [B5] Committed-past-boundary: the prefix contains whitespace
+            // [B2] Committed-past-boundary: the prefix contains whitespace
             // or punctuation, meaning the user typed past a completion entry.
             // If the text before the first separator exactly matches a
             // completion, re-fetch for the next level.  This handles the
@@ -383,7 +383,7 @@ export class PartialCompletionSession {
             this.menu.hide();
         }
 
-        // [C6] When the menu is still active (trie has matches) we always
+        // [C1] When the menu is still active (trie has matches) we always
         // reuse — the loaded completions are still useful.  When there are
         // NO matches, the decision depends on `noMatchPolicy`:
         //   "accept"  → the set is exhaustive; the user typed past all
@@ -401,7 +401,7 @@ export class PartialCompletionSession {
             switch (noMatchPolicy) {
                 case "slide":
                     debug(
-                        `Partial completion anchor slide (C6): '${anchor}' → '${input}' (slide)`,
+                        `Partial completion anchor slide (C1): '${anchor}' → '${input}' (slide)`,
                     );
                     this.anchor = input;
                     this.menu.hide();
