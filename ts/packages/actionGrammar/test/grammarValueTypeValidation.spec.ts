@@ -16,12 +16,16 @@ describe("Value type validation", () => {
             actionName: SchemaCreator.field(SchemaCreator.string("play")),
             trackName: SchemaCreator.field(SchemaCreator.string()),
         }),
+        undefined,
+        true,
     );
     const PauseActionDef = SchemaCreator.intf(
         "PauseAction",
         SchemaCreator.obj({
             actionName: SchemaCreator.field(SchemaCreator.string("pause")),
         }),
+        undefined,
+        true,
     );
     const typeRegistry = new Map<string, SchemaTypeDefinition>([
         ["PlayAction", PlayActionDef],
@@ -144,6 +148,28 @@ describe("Value type validation", () => {
         expect(errors[0]).toContain("schema.ts");
     });
 
+    it("non-exported type produces error", () => {
+        const PrivateTypeDef = SchemaCreator.intf(
+            "PrivateType",
+            SchemaCreator.obj({
+                actionName: SchemaCreator.field(SchemaCreator.string("test")),
+            }),
+        );
+        const loader: SchemaLoader = (typeName) =>
+            typeName === "PrivateType" ? PrivateTypeDef : undefined;
+        const grammarText = `
+            import { PrivateType } from "schema.ts";
+            <Start> : PrivateType = hello -> { actionName: "test" };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("not exported");
+        expect(errors[0]).toContain("PrivateType");
+    });
+
     it("number variable matches number field", () => {
         const NumActionDef = SchemaCreator.intf(
             "NumAction",
@@ -153,6 +179,8 @@ describe("Value type validation", () => {
                 ),
                 level: SchemaCreator.field(SchemaCreator.number()),
             }),
+            undefined,
+            true,
         );
         const loader: SchemaLoader = (typeName) =>
             typeName === "NumAction" ? NumActionDef : undefined;
@@ -177,6 +205,8 @@ describe("Value type validation", () => {
                 ),
                 level: SchemaCreator.field(SchemaCreator.number()),
             }),
+            undefined,
+            true,
         );
         const loader: SchemaLoader = (typeName) =>
             typeName === "NumAction" ? NumActionDef : undefined;
@@ -201,6 +231,8 @@ describe("Value type validation", () => {
                 actionName: SchemaCreator.field(SchemaCreator.string("test")),
                 extra: SchemaCreator.optional(SchemaCreator.string()),
             }),
+            undefined,
+            true,
         );
         const loader: SchemaLoader = (typeName) =>
             typeName === "OptAction" ? OptActionDef : undefined;
@@ -588,6 +620,8 @@ describe("Value type validation", () => {
                     ),
                     level: SchemaCreator.field(SchemaCreator.number()),
                 }),
+                undefined,
+                true,
             );
             const loader: SchemaLoader = (typeName) =>
                 typeName === "NumAction" ? NumActionDef : undefined;
@@ -681,6 +715,8 @@ describe("Value type validation", () => {
                     ),
                     level: SchemaCreator.field(SchemaCreator.number()),
                 }),
+                undefined,
+                true,
             );
             const loader: SchemaLoader = (typeName) =>
                 typeName === "NumAction" ? NumActionDef : undefined;
@@ -708,6 +744,8 @@ describe("Value type validation", () => {
                         SchemaCreator.string("simple"),
                     ),
                 }),
+                undefined,
+                true,
             );
             const loader: SchemaLoader = (typeName) =>
                 typeName === "SimpleAction" ? SimpleActionDef : undefined;
@@ -731,6 +769,8 @@ describe("Value type validation", () => {
                         SchemaCreator.string("simple"),
                     ),
                 }),
+                undefined,
+                true,
             );
             const loader: SchemaLoader = (typeName) =>
                 typeName === "SimpleAction" ? SimpleActionDef : undefined;
@@ -758,6 +798,8 @@ describe("Value type validation", () => {
                     ),
                     value: SchemaCreator.field(SchemaCreator.string()),
                 }),
+                undefined,
+                true,
             );
             const TypeB = SchemaCreator.intf(
                 "TypeB",
@@ -767,6 +809,8 @@ describe("Value type validation", () => {
                     ),
                     value: SchemaCreator.field(SchemaCreator.string()),
                 }),
+                undefined,
+                true,
             );
             const loader: SchemaLoader = (typeName) => {
                 if (typeName === "TypeA") return TypeA;
@@ -798,6 +842,8 @@ describe("Value type validation", () => {
                     ),
                     enabled: SchemaCreator.field(SchemaCreator.boolean()),
                 }),
+                undefined,
+                true,
             );
             const loader: SchemaLoader = (typeName) =>
                 typeName === "BoolAction" ? BoolActionDef : undefined;
@@ -826,6 +872,8 @@ describe("Value type validation", () => {
                         SchemaCreator.string("fast", "slow"),
                     ),
                 }),
+                undefined,
+                true,
             );
             const loader: SchemaLoader = (typeName) =>
                 typeName === "ModeAction" ? ModeActionDef : undefined;

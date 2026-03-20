@@ -258,6 +258,12 @@ function createCompileContext(
                                 : importStmt.source;
                             const def = schemaLoader(name, resolvedSource);
                             if (def !== undefined) {
+                                if (!def.exported) {
+                                    context.errors.push({
+                                        message: `Type '${name}' is not exported from '${importStmt.source}'`,
+                                        pos: importStmt.pos,
+                                    });
+                                }
                                 resolvedTypes.set(name, def);
                             } else {
                                 context.errors.push({
