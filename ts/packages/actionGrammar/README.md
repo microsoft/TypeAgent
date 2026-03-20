@@ -123,6 +123,43 @@ npm test
 
 # Run integration tests (requires API keys)
 npm run test:integration
+
+# Run a specific test suite
+pnpm run jest-esm --testPathPattern="grammarMatcherBasic"
+```
+
+Key test suites:
+
+- `grammarMatcherBasic.spec.ts` — Core recursive backtracking behavior
+- `grammarMatcherVariables.spec.ts` — Variable capture and value expressions
+- `grammarMatcherSpacingBasic.spec.ts` — Spacing mode handling
+- `nfa.spec.ts` — NFA builder and compilation
+- `nfaDfaParity.spec.ts` — NFA/DFA equivalence verification
+- `nfaPriority.spec.ts` — Match priority and ranking
+- `nfaRealGrammars.spec.ts` — End-to-end tests with production grammars
+- `dfa.spec.ts` — DFA compiler correctness
+- `dfaBenchmark.spec.ts` — Performance benchmarks
+
+## Downstream consumers
+
+| Package                 | Usage                                              |
+| ----------------------- | -------------------------------------------------- |
+| `dispatcher`            | Per-agent grammar matching; dynamic rule loading   |
+| `cache`                 | Serialized grammar storage; grammar store          |
+| `agentSdkWrapper`       | Schema-to-grammar generation bridge                |
+| `defaultAgentProvider`  | Grammar integration tests with real agent grammars |
+| `cli`                   | Grammar matching commands                          |
+| `actionGrammarCompiler` | Standalone compilation and formatting tools        |
+
+## Debugging
+
+Enable debug logging with environment variables:
+
+```bash
+DEBUG=typeagent:grammar:*        # Parsing and matching
+DEBUG=typeagent:nfa:*            # NFA execution
+DEBUG=typeagent:dfa:*            # DFA operations
+DEBUG=typeagent:actionGrammar:*  # Grammar generation
 ```
 
 ## Dependencies

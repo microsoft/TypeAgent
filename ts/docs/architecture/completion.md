@@ -4,16 +4,22 @@
 
 TypeAgent's completion system provides real-time, context-aware completions
 as the user types `@`-commands, subcommands, flags, and parameter values.
-The system spans five layers — from the grammar matcher at the bottom to
-the shell/CLI UI at the top — connected by a structured metadata contract
-that eliminates client-side heuristics.
+The system spans four backend layers — grammar matcher, cache, agent SDK,
+and dispatcher — plus a shell layer (with sub-components for session
+management, DOM integration, and the search menu) and a CLI adapter.
+These are connected by a structured metadata contract that eliminates
+client-side heuristics.
+
+For grammar concepts (`.agr` syntax, entities, compilation pipeline) and
+the full grammar matching algorithm (including completion categories and
+metadata production), see `actionGrammar.md`.
 
 ### Design principles
 
 1. **Backend-authoritative** — The dispatcher (and the grammar/cache layers
    beneath it) decides where completions start (`startIndex`), what separates
    them from the prefix (`separatorMode`), whether the list is exhaustive
-   (`closedSet`), and when to advance to the next hierarchical level
+   (`closedSet`), and when to advance to the next hierarchical level.
    The host provides a `direction` signal ("forward" or "backward") to
    resolve structural ambiguity when the input is valid.
    Clients never split input on spaces or guess token boundaries — doing
@@ -25,8 +31,9 @@ that eliminates client-side heuristics.
    prefix survive. Shorter matches are eagerly discarded.
 
 3. **Progressive disclosure** — Multi-word phrases are offered one word at a
-   time. Hierarchical commands (`@agent subcommand param`) re-fetch at each
-   level boundary.
+   time (e.g., for a grammar token `"played by"`, completion first offers
+   `"played"`, then on the next fetch offers `"by"`). Hierarchical commands
+   (`@agent subcommand param`) re-fetch at each level boundary.
 
 4. **Minimal re-fetch** — A client-side state machine categorizes every
    keystroke into one of six triggers and only contacts the backend when
@@ -102,9 +109,8 @@ Brief definitions here; see [Key types](#key-types) for full semantics.
   indicating whether the user is advancing (appending characters) or
   reconsidering (backspacing). Resolves structural ambiguity at command
   and flag boundaries.
-- **Anchor** — The prefix string up to `startIndex`. The shell uses it as
-  a stable reference point: everything the user types after the anchor is
-  matched against the local completion trie.
+- **Anchor** — The prefix string up to `startIndex`. See
+  [Anchor](#anchor) in Key types for full semantics.
 
 ---
 
@@ -142,8 +148,8 @@ The user types `play Never` (free-form, no `@` prefix).
 
 4. **Dispatcher**: Assembles `CommandCompletionResult` with `startIndex=5`
    (after `"play "`), `closedSet=false` (entity values are not
-   exhaustive), `openWildcard=false` (no keyword yet reached to create
-   an ambiguous boundary).
+   exhaustive), `openWildcard=false` (the `startIndex` position is
+   pinned by the keyword `"play "` — it cannot shift with more typing).
 
 5. **Shell**: Receives result. Sets anchor to `"play "` (the first 5
    characters). Completion prefix is `"Never"`. Populates trie with
@@ -157,24 +163,26 @@ The user types `play Never` (free-form, no `@` prefix).
 
 7. **Re-fetch** with `"play Nevermind"`: grammar now finalizes the
    `<song>` wildcard at end-of-input and offers keyword `"by"` as a
-   completion (category 2). Returns `closedSet=true`,
-   `openWildcard=true` (the wildcard boundary is ambiguous — the user
-   may still be typing within the song name). Shell sets
-   `noMatchPolicy="slide"`.
+   completion (category 2). This time, unlike step 4, the completions
+   are grammar keywords (not agent entity values), and the keyword
+   position sits at an end-of-input wildcard boundary — so
+   `closedSet=true` (keyword set is exhaustive) and `openWildcard=true`
+   (the wildcard boundary is ambiguous — the user may still be typing
+   within the song name). Shell sets `noMatchPolicy="slide"`.
 
 ### Scenario 2 — Grammar categories in action
 
 Using the same `play <song> by <artist>` rule, here is what category
 the grammar matcher assigns at different input states:
 
-| User input       | Category     | Why                                                                    |
-| ---------------- | ------------ | ---------------------------------------------------------------------- |
-| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)                   |
-| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                             |
-| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                            |
-| `play Never b`   | 2 — Clean    | Wildcard absorbs `"Never b"`; backward detects `"b"` as partial `"by"` |
-| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                           |
-| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                         |
+| User input       | Category     | Why                                                                                                                                                                                                                                                                                                       |
+| ---------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)                                                                                                                                                                                                                                                      |
+| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                                                                                                                                                                                                                                                                |
+| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                                                                                                                                                                                                                                                               |
+| `play Never b`   | 2 — Clean    | Backward direction only: wildcard absorbs `"Never b"`, then `findPartialKeywordInWildcard()` detects `"b"` as a prefix of keyword `"by"` and offers it as a completion at the partial keyword position (after `"Never "`). In the forward direction this would be category 3a (wildcard still consuming). |
+| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                                                                                                                                                                                                                                                              |
+| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                                                                                                                                                                                                                                                            |
 
 ---
 
@@ -186,50 +194,31 @@ the grammar matcher assigns at different input states:
 **Entry point:** `matchGrammarCompletion(grammar, prefix, minPrefixLength)`
 
 Computes the set of valid next-tokens for a partial input against compiled
-grammar rules.
+grammar rules. For the full algorithm, per-direction behavior, partial
+keyword detection, and spacing annotation semantics, see
+`actionGrammar.md`.
 
-**Algorithm:**
+**Completion categories** — The matcher categorizes each match state into
+one of four outcomes:
 
-1. Seed a work-list with one match state per top-level rule. Each state
-   tracks the current position in both the rule and the input prefix.
-2. Greedily advance each state through the prefix. Track the furthest
-   character position any rule consumed (`maxPrefixLength`).
-3. When `maxPrefixLength` advances, discard all shorter-prefix completions.
-4. Categorize each state's outcome:
-
-| Category           | Condition                                               | Example (`play <song> by <artist>`)     | Forward completion           | Backward completion                                |
-| ------------------ | ------------------------------------------------------- | --------------------------------------- | ---------------------------- | -------------------------------------------------- |
-| 1 — Exact          | Rule fully matched, prefix fully consumed               | `play Never by Nirvana`                 | None                         | Last matched word/wildcard                         |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts               | `play ` (wildcard next)                 | Next part of rule            | Last matched part (or partial keyword — see below) |
-| 3a — Pending wc    | Wildcard still consuming; no keyword yet finalizes it   | `play Never` (`<song>` still absorbing) | Wildcard property completion | Last matched part (if after wc)                    |
-| 3b — Dirty partial | Input extends beyond what the current rule part matched | `pla` (`"pla"` ≈ partial `play`)        | Current part (prefix-filter) | Current part (prefix-filter)                       |
-
-5. Multi-word string parts use `tryPartialStringMatch()` to offer one word
-   at a time instead of the entire phrase.
-6. **Partial keyword detection in wildcards** (Category 2 backward only):
-   When a wildcard absorbs all remaining input and the next grammar part
-   is a keyword, `findPartialKeywordInWildcard()` checks whether the
-   wildcard text ends with a prefix of that keyword. For example, with
-   `play <song> by <artist>` and input `"play Never b"`, the wildcard
-   absorbs `"Never b"` but `"b"` is a prefix of `"by"`. Backward
-   completion offers `"by"` at the partial keyword position (after
-   `"Never "`), with `openWildcard=true`, instead of backing up to the
-   wildcard start. This handles multi-word keywords as well: for
-   `play <song> played by <artist>` and input `"play Never played b"`,
-   the function recognizes `"played b"` as a full match of the first
-   keyword word plus a partial match of the second, and offers `"by"`.
-   The function honors `spacingMode` for inter-word separator matching.
+| Category           | Condition                                               | Result                                               |
+| ------------------ | ------------------------------------------------------- | ---------------------------------------------------- |
+| 1 — Exact          | Rule fully matched, prefix fully consumed               | No forward completions; backward re-offers last part |
+| 2 — Clean partial  | Prefix consumed, rule has remaining parts               | Next part of rule offered                            |
+| 3a — Pending wc    | Wildcard still consuming; no keyword finalizes it       | Wildcard property completion                         |
+| 3b — Dirty partial | Input extends beyond what the current rule part matched | All alternatives at matched prefix; caller filters   |
 
 **Metadata produced:**
 
-- `matchedPrefixLength` — characters consumed; becomes `startIndex` upstream.
-- `separatorMode`, `closedSet`, `openWildcard` — see [Key types](#key-types)
-  for definitions. The grammar matcher is the originating source of these
-  fields: `closedSet` is `true` when all completions are grammar keywords
-  (no entity/wildcard values); `openWildcard` is `true` when the matched
-  position sits at an ambiguous wildcard boundary (e.g., a wildcard
-  finalized at end-of-input in the forward direction, or a keyword that
-  had pinned a wildcard's end in the backward direction).
+- `matchedPrefixLength` — characters consumed; becomes `startIndex` upstream
+- `properties` — wildcard property slots needing entity completions from the agent
+- `separatorMode` — determined by the rule's `[spacing=...]` annotation
+- `closedSet` — `true` when all completions are grammar keywords
+- `directionSensitive` — `true` when backward completion would differ
+  (see [`directionSensitive`](#directionsensitive))
+- `openWildcard` — `true` at ambiguous wildcard boundaries
+
+See [Key types](#key-types) for full definitions of these fields.
 
 ---
 
@@ -248,9 +237,15 @@ Merges results from two sources:
 **Merge rules (`mergeCompletionResults`):**
 
 - Keep only completions from the longer `matchedPrefixLength`.
-- AND-merge `closedSet` (closed only if _both_ sources are closed).
+  When one source has a defined `matchedPrefixLength` and the other does
+  not, `undefined` is treated as `0` — defined wins unless both are `0`.
+  When both are `undefined`, the merged result preserves `undefined`.
+- AND-merge `closedSet` (closed only if _both_ sources are closed;
+  `undefined` is treated as `false`).
 - OR-merge `separatorMode` (strongest requirement wins;
   see [merge semantics](#closedset) and [`SeparatorMode`](#separatormode)).
+- OR-merge `directionSensitive` (sensitive if _any_ source is sensitive).
+- Merge `properties` arrays by concatenation.
 
 When NFA grammar matching is enabled, only the grammar store is consulted.
 
@@ -343,7 +338,14 @@ whether the user is still editing or has committed the last token.
 
 ---
 
-### 5. Shell — Completion Session
+### 5. Shell
+
+The shell layer comprises three sub-components: a completion session
+(state machine), a DOM adapter (input extraction and menu positioning),
+and a search menu (trie-backed filtering). Together they form the
+client-side half of the completion system.
+
+#### 5a. Completion Session
 
 **Package:** `packages/shell`
 **Class:** `PartialCompletionSession`
@@ -403,9 +405,7 @@ contiguous within each category.
 - **Session preservation**: `hide()` cancels in-flight fetches but preserves
   anchor and menu state for quick re-activation on re-focus.
 
----
-
-### 6. Shell — DOM Adapter
+#### 5b. DOM Adapter
 
 **Class:** `PartialCompletion`
 
@@ -417,9 +417,7 @@ Bridges the DOM text editor and the session state machine:
 - On user selection: computes replacement range from completion prefix,
   performs DOM text replacement, repositions cursor, triggers fresh completion
 
----
-
-### 7. Shell — Search Menu
+#### 5c. Search Menu
 
 **Classes:** `SearchMenuBase` (abstract), `SearchMenu` (concrete)
 
@@ -443,12 +441,49 @@ Trie-backed prefix filtering:
 Controls what character is required between the matched prefix and completion
 text.
 
-| Value                | Meaning                             | Use case                                                                                                                                                                                                                                                                         |
-| -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"space"`            | Whitespace required                 | Commands, flags, agent names                                                                                                                                                                                                                                                     |
-| `"spacePunctuation"` | Whitespace or Unicode punctuation   | Latin-script grammar completions                                                                                                                                                                                                                                                 |
-| `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars                                                                                                                                                                                                                                                      |
-| `"none"`             | No separator                        | `[spacing=none]` grammars; at top level, no leading or trailing whitespace is consumed. For nested rules, the nearest ancestor with a flex-space boundary controls surrounding spacing (or the top-level rule if no ancestor has one); the child controls only internal spacing. |
+| Value                | Meaning                             | Use case                                                                                                                                                                                                                                                                   |
+| -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"space"`            | Whitespace required                 | Commands, flags, agent names                                                                                                                                                                                                                                               |
+| `"spacePunctuation"` | Whitespace or Unicode punctuation   | Latin-script grammar completions                                                                                                                                                                                                                                           |
+| `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars                                                                                                                                                                                                                                                |
+| `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
+
+### `directionSensitive`
+
+A boolean flowing through the backend pipeline (grammar → cache →
+dispatcher), indicating that the result would differ if the opposite
+`direction` had been sent. The shell uses this for trigger A4: when
+the user changes direction (e.g., starts backspacing after typing),
+the session only re-fetches if the current result is
+`directionSensitive=true`. If `false`, the same completions apply
+regardless of direction, so no re-fetch is needed.
+
+**Origin:** The grammar matcher is the primary source. It sets
+`directionSensitive=true` when the matched state has a part the user
+could "back up" to — specifically, when at least one word has been
+fully matched **without** a trailing separator committing it. A
+trailing space (or punctuation, depending on `spacingMode`) "commits"
+the match position and clears direction sensitivity.
+
+Examples with rule `play <song> by <artist>`:
+
+| Input         | `directionSensitive` | Why                                               |
+| ------------- | -------------------- | ------------------------------------------------- |
+| `play`        | `true`               | `"play"` fully matched, no trailing space         |
+| `play `       | `false`              | Trailing space commits — backward same as forward |
+| `play music`  | `true`               | `"music"` fully matched, no trailing space        |
+| `play music ` | `false`              | Trailing space commits                            |
+| `pla`         | `false`              | Only partial match — nothing to back up to        |
+
+Exception: in `[spacing=none]` mode, whitespace is not a separator,
+so `directionSensitive` is always `true` when any word has been fully
+matched — trailing spaces do not commit.
+
+The dispatcher may additionally set `directionSensitive=true` at the
+command level — for example, when a subcommand name is both a valid
+complete command and a prefix of a longer one.
+
+Merge rule: OR across sources (sensitive if _any_ source is sensitive).
 
 ### `CompletionDirection`
 
@@ -510,6 +545,17 @@ in two cases:
   of a preceding wildcard. Backing up un-pins that boundary — the
   wildcard could extend to absorb the keyword text.
 
+**Persistence:** `openWildcard` remains `true` even after the user types
+the full keyword text (e.g., `"play hello by"` and `"play hello by "`)
+because the grammar matcher always forks two parse paths at a
+wildcard-keyword boundary: one where the keyword is consumed, and one
+where the wildcard absorbs the keyword text. Both paths produce
+completions at the same prefix length, so neither can eliminate the
+other. `openWildcard` only becomes `false` when the ambiguity is
+structurally resolved by further context (e.g., the user types enough
+after the keyword that the wildcard-absorbing path can no longer produce
+a match at the same prefix length).
+
 Values:
 
 - **`true`** — the position is ambiguous. The keyword following the
@@ -523,6 +569,34 @@ Merge rule: OR across sources (open wildcard if _any_ source has one).
 
 The shell does not store `openWildcard` directly; it is folded into
 `noMatchPolicy` (see below).
+
+### Anchor
+
+The prefix string from the start of the input up to `startIndex`. The
+shell captures this string when a backend result arrives and uses it as a
+stable reference point for the lifetime of the completion session.
+
+Everything the user types after the anchor is the **completion prefix** —
+the string filtered against the local trie. For example, if the input is
+`"play Never"` and `startIndex=5`, the anchor is `"play "` and the
+completion prefix is `"Never"`.
+
+The anchor serves three purposes:
+
+1. **Trie filtering** — only the text after the anchor is matched against
+   completion entries.
+2. **Invalidation** — if the user edits text within the anchor (trigger A2),
+   the session is invalidated and a re-fetch is required.
+3. **Sliding** — when `noMatchPolicy="slide"`, the anchor advances to
+   the full current input on each keystroke, preserving the trie and
+   metadata. The menu is hidden during sliding. When the user eventually
+   types a separator character, the raw prefix after the (now-advanced)
+   anchor is just the separator itself; stripping it yields an empty
+   completion prefix, which matches **all** entries in the preserved
+   trie — so the full completion list reappears without a re-fetch.
+   If the user then types the keyword (e.g., `"by"`), it uniquely
+   matches in the trie, triggering B1 (unique match) which re-fetches
+   for the next grammar part.
 
 ### `NoMatchPolicy` (shell-internal)
 
@@ -578,5 +652,26 @@ contract but with simpler plumbing:
 2. Uses `result.startIndex` as the readline filter position.
 3. Prepends a space separator when `separatorMode` is `"space"` or
    `"spacePunctuation"` to prevent fused display (e.g., `"playmusic"`).
+
+Because `direction` is always `"forward"`, the CLI cannot trigger
+backward-specific completions (e.g., reconsidering a flag name). In
+practice this is a minor limitation: readline tab-completion is
+inherently forward-looking, and users backspace-and-retype rather than
+expecting the completion menu to adapt to deletions.
+
+---
+
+## Edge cases
+
+- **Empty input:** The dispatcher returns the top-level command list
+  (agent names and built-in commands) with `closedSet=true`.
+- **No grammar match:** When no rule matches the input at all, the
+  grammar matcher returns an empty completion set with
+  `matchedPrefixLength=0`. The cache and dispatcher propagate this
+  upward; the shell receives an empty menu and takes no action.
+- **Concurrent requests:** The shell's `PENDING` state cancels any
+  in-flight fetch when a new fetch is triggered (e.g., rapid typing).
+  Only the most recent request's result is applied. The backend is
+  stateless, so stale responses are harmlessly discarded.
 
 ---
