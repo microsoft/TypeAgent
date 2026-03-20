@@ -1414,6 +1414,75 @@ describe("Grammar Rule Parser", () => {
         });
     });
 
+    describe("Value Type Annotation", () => {
+        it("parses value type", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `<Rule> : MyType = hello;`,
+            );
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["MyType"]);
+        });
+        it("parses value type with spacing annotation", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=required] : MyType = hello;`,
+            );
+            expect(defs[0].spacingMode).toBe("required");
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["MyType"]);
+        });
+        it("parses value type with export", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `export <Rule> : MyType = hello;`,
+            );
+            expect(defs[0].exported).toBe(true);
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["MyType"]);
+        });
+        it("parses export with spacing and value type", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `export <Rule> [spacing=required] : MyType = hello;`,
+            );
+            expect(defs[0].exported).toBe(true);
+            expect(defs[0].spacingMode).toBe("required");
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["MyType"]);
+        });
+        it("rule without value type has undefined valueType", () => {
+            const defs = testParamGrammarRules("test.agr", `<Rule> = hello;`);
+            expect(defs[0].valueType).toBeUndefined();
+        });
+        it("parses union value type", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `<Rule> : TypeA | TypeB = hello;`,
+            );
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual([
+                "TypeA",
+                "TypeB",
+            ]);
+        });
+        it("parses three-way union value type", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `<Rule> : A | B | C = hello;`,
+            );
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual([
+                "A",
+                "B",
+                "C",
+            ]);
+        });
+        it("parses union value type with spacing and export", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `export <Rule> [spacing=required] : A | B = hello;`,
+            );
+            expect(defs[0].exported).toBe(true);
+            expect(defs[0].spacingMode).toBe("required");
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["A", "B"]);
+        });
+    });
+
     describe("Complex Integration", () => {
         it("should handle deeply nested value structures", () => {
             const grammar = `

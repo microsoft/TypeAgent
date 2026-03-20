@@ -5,7 +5,9 @@
 
 entity Ordinal, Cardinal;
 
-<Start> = <Pause>
+import { LocalPlayerActions } from "./localPlayerSchema.ts";
+
+<Start> : LocalPlayerActions = <Pause>
           | <Resume>
           | <Stop>
           | <Next>

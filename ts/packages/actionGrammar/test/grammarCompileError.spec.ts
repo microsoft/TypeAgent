@@ -903,5 +903,43 @@ describe("Grammar Compiler", () => {
             expect(errors.length).toBe(0);
             expect(warnings.length).toBe(0);
         });
+
+        it("Value type annotation marks imported type as used", () => {
+            const grammarText = `
+            import { MyAction } from "schema.ts";
+
+            <Start> : MyAction = play music -> { actionName: "play" };
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(0);
+        });
+
+        it("Value type with unimported type produces error", () => {
+            const grammarText = `
+            <Start> : SomeType = play music -> { actionName: "play" };
+        `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("not imported");
+            expect(errors[0]).toContain("SomeType");
+        });
+
+        it("Union value type marks all imported types as used", () => {
+            const grammarText = `
+            import { PlayAction } from "schema.ts";
+            import { PauseAction } from "schema.ts";
+
+            <Start> : PlayAction | PauseAction = play music -> { actionName: "play" };
+        `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBe(0);
+        });
     });
 });

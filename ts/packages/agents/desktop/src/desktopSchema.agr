@@ -4,7 +4,9 @@
 // Desktop Agent Grammar - Core Actions
 // Window management, volume, theme, network, and basic display settings
 
-<Start> = <LaunchProgram>
+import { DesktopActions } from "./actionsSchema.ts";
+
+<Start> : DesktopActions = <LaunchProgram>
           | <CloseProgram>
           | <WindowManagement>
           | <VolumeControl>

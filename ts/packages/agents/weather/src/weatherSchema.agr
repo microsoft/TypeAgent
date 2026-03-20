@@ -3,7 +3,9 @@
 
 // Weather Action Grammar
 
-<Start> = <getCurrentConditions> | <getForecast> | <getAlerts>;
+import { WeatherAction } from "./weatherSchema.ts";
+
+<Start> : WeatherAction = <getCurrentConditions> | <getForecast> | <getAlerts>;
 
 // Action Rules
 <getCurrentConditions> = <Polite>? <CurrentWeatherPatterns> $(location:<LocationSpec>) $(units:<UnitsSpec>)? -> { actionName: "getCurrentConditions", parameters: { location, units } };

@@ -1,8 +1,10 @@
 // Copyright (c) 2024 Code Grammar
 // Natural language interface for code editor actions
 
+import { CodeActions } from "./codeActionsSchema.ts";
+
 // Start rule - all available actions
-<Start> = <changeColorScheme> | <splitEditor> | <changeEditorLayout> | <newFile> | <launchVSCode>;
+<Start> : CodeActions = <changeColorScheme> | <splitEditor> | <changeEditorLayout> | <newFile> | <launchVSCode>;
 
 // Main action rules
 <changeColorScheme> = <Polite> ('change' | 'switch' | 'set') ('to' | 'the')? $(theme:string) ('color scheme' | 'theme') -> { actionName: "changeColorScheme", parameters: { theme: theme } };

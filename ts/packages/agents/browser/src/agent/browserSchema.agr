@@ -4,7 +4,9 @@
 // Browser Agent Grammar - Core Actions
 // Covers the most common browser operations
 
-<Start> = <OpenPage>
+import { BrowserActions } from "./browserActionSchema.mts";
+
+<Start> : BrowserActions = <OpenPage>
           | <ClosePage>
           | <Navigation>
           | <Scrolling>
