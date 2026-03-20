@@ -402,5 +402,229 @@ describeForEachMatcher(
                 });
             });
         });
+
+        describe("leading separator uses parent's spacing mode", () => {
+            // The leading [\s\p{P}]*? prefix on the first part of a nested
+            // rule is governed by the parent's spacing mode, not the child's.
+            // This ensures the parent controls spacing *around* the nested
+            // rule while the child controls spacing *within* it.
+
+            describe("auto parent -> none child", () => {
+                const g = `
+                <None> [spacing=none] = hello -> true;
+                <Start> = <None>;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches exact", () => {
+                    expect(testMatchGrammar(grammar, "hello")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("matches with leading whitespace (parent auto allows it)", () => {
+                    expect(testMatchGrammar(grammar, "  hello")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("matches with trailing whitespace (parent auto allows it)", () => {
+                    expect(testMatchGrammar(grammar, "hello  ")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("matches with both leading and trailing whitespace", () => {
+                    expect(
+                        testMatchGrammar(grammar, "  hello  "),
+                    ).toStrictEqual([true]);
+                });
+            });
+
+            describe("auto parent: keyword + none child", () => {
+                const g = `
+                <None> [spacing=none] = world -> true;
+                <Start> = hello $(x:<None>) -> x;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with separator (auto requires space between Latin words)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "hello world"),
+                    ).toStrictEqual([true]);
+                });
+                it("does not match without separator (auto Latin-Latin boundary)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "helloworld"),
+                    ).toStrictEqual([]);
+                });
+            });
+
+            describe("none parent -> auto child", () => {
+                const g = `
+                <Auto> = hello world -> true;
+                <Start> [spacing=none] = <Auto>;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches when child's internal spacing is satisfied", () => {
+                    expect(
+                        testMatchGrammar(grammar, "hello world"),
+                    ).toStrictEqual([true]);
+                });
+                it("does not match without child's internal space", () => {
+                    expect(
+                        testMatchGrammar(grammar, "helloworld"),
+                    ).toStrictEqual([]);
+                });
+                it("does not match with leading whitespace (none parent forbids)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "  hello world"),
+                    ).toStrictEqual([]);
+                });
+                it("does not match with trailing whitespace (none parent forbids)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "hello world  "),
+                    ).toStrictEqual([]);
+                });
+            });
+
+            describe("none parent: keyword + auto child", () => {
+                const g = `
+                <Auto> = world -> true;
+                <Start> [spacing=none] = hello $(x:<Auto>) -> x;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches when tokens are directly adjacent (none parent)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "helloworld"),
+                    ).toStrictEqual([true]);
+                });
+                it("does not match with separator (none parent forbids)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "hello world"),
+                    ).toStrictEqual([]);
+                });
+            });
+
+            describe("required parent -> none child", () => {
+                const g = `
+                <None> [spacing=none] = hello -> true;
+                <Start> [spacing=required] = $(x:<None>) world -> x;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with leading whitespace (required allows it)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "  hello world"),
+                    ).toStrictEqual([true]);
+                });
+                it("does not match without separator after child (required parent)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "helloworld"),
+                    ).toStrictEqual([]);
+                });
+            });
+        });
+
+        describe("deeply nested: leading separator walks up parent chain", () => {
+            // The leading separator for the first part of a nested rule
+            // walks up the parent chain to find the nearest ancestor with
+            // a flex-space boundary.  If none, the top-level rule's mode
+            // determines leading/trailing behavior.
+
+            describe("auto -> none -> none (pass-through chain, no flex-space)", () => {
+                // No ancestor has a flex-space before the rule ref.
+                // Top-level Start (auto) allows leading/trailing whitespace.
+                const g = `
+                <Inner> [spacing=none] = hello -> true;
+                <Middle> [spacing=none] = <Inner>;
+                <Start> = <Middle>;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches exact", () => {
+                    expect(testMatchGrammar(grammar, "hello")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("matches with leading whitespace (top-level auto)", () => {
+                    expect(testMatchGrammar(grammar, "  hello")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("matches with trailing whitespace (top-level auto)", () => {
+                    expect(testMatchGrammar(grammar, "hello  ")).toStrictEqual([
+                        true,
+                    ]);
+                });
+            });
+
+            describe("none -> auto -> auto (pass-through chain, no flex-space)", () => {
+                // Top-level Start (none) forbids leading AND trailing.
+                const g = `
+                <Inner> = hello world -> true;
+                <Middle> = <Inner>;
+                <Start> [spacing=none] = <Middle>;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches when child's internal spacing is satisfied", () => {
+                    expect(
+                        testMatchGrammar(grammar, "hello world"),
+                    ).toStrictEqual([true]);
+                });
+                it("does not match with leading whitespace (top-level none)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "  hello world"),
+                    ).toStrictEqual([]);
+                });
+                it("does not match with trailing whitespace (top-level none)", () => {
+                    expect(
+                        testMatchGrammar(grammar, "hello world  "),
+                    ).toStrictEqual([]);
+                });
+            });
+
+            describe("auto -> none[foo <Inner>] -> none (flex-space in middle layer)", () => {
+                // Middle (none) has flex-space between "foo" and <Inner>.
+                // The separator between "foo" and "bar" uses Middle's none
+                // mode — no separator allowed.
+                const g = `
+                <Inner> [spacing=none] = bar -> true;
+                <Middle> [spacing=none] = foo $(x:<Inner>) -> x;
+                <Start> = <Middle>;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches when tokens are adjacent (none flex-space)", () => {
+                    expect(testMatchGrammar(grammar, "foobar")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("does not match with separator between foo and bar (none flex-space)", () => {
+                    expect(testMatchGrammar(grammar, "foo bar")).toStrictEqual(
+                        [],
+                    );
+                });
+                it("matches with leading whitespace (top-level auto)", () => {
+                    expect(testMatchGrammar(grammar, "  foobar")).toStrictEqual(
+                        [true],
+                    );
+                });
+            });
+
+            describe("auto[baz <Middle>] -> none -> none (flex-space at top level)", () => {
+                // Start (auto) has flex-space between "baz" and <Middle>.
+                // The separator uses Start's auto mode — Latin-Latin
+                // requires a separator.
+                const g = `
+                <Inner> [spacing=none] = bar -> true;
+                <Middle> [spacing=none] = <Inner>;
+                <Start> = baz $(x:<Middle>) -> x;
+            `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                it("matches with separator (auto Latin-Latin boundary)", () => {
+                    expect(testMatchGrammar(grammar, "baz bar")).toStrictEqual([
+                        true,
+                    ]);
+                });
+                it("does not match without separator (auto Latin-Latin boundary)", () => {
+                    expect(testMatchGrammar(grammar, "bazbar")).toStrictEqual(
+                        [],
+                    );
+                });
+            });
+        });
     },
 );

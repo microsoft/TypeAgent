@@ -468,9 +468,10 @@ describeForEachMatcher(
                     [],
                 );
             });
-            it("matches with trailing whitespace", () => {
+            it("does not match with trailing whitespace", () => {
+                // In none mode, no trailing separator is consumed either
                 expect(testMatchGrammar(grammar, "helloworld  ")).toStrictEqual(
-                    [true],
+                    [],
                 );
             });
             it("does not match with both leading and trailing whitespace", () => {
