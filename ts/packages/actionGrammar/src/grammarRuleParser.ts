@@ -144,6 +144,7 @@ export type Expr = StrExpr | VarDefExpr | RuleRefExpr | RulesExpr;
 type StrExpr = {
     type: "string";
     value: string[];
+    pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
 };
 
@@ -198,10 +199,12 @@ export type ValueNode =
 // leadingComments:  comments before the value (e.g. after ":" or "[").
 // trailingComments: comments after the value but before the trailing "," or "]"/"}" delimiter.
 type LiteralValueNode = CompiledLiteralValueNode & {
+    pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
 };
 type VariableValueNode = CompiledVariableValueNode & {
+    pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
 };
@@ -227,6 +230,7 @@ export type ArrayElement = {
 // hold recursive ValueNode/ArrayElement references (not just CompiledValueNode).
 type ObjectValueNode = Omit<CompiledObjectValueNode, "value"> & {
     value: ObjectProperty[];
+    pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
     // Comments after the last property's trailing ',' (or inside an empty object).
@@ -234,6 +238,7 @@ type ObjectValueNode = Omit<CompiledObjectValueNode, "value"> & {
 };
 type ArrayValueNode = Omit<CompiledArrayValueNode, "value"> & {
     value: ArrayElement[];
+    pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
     // Comments after the last element's trailing ',' (or inside an empty array).
@@ -599,6 +604,7 @@ class GrammarRuleParser {
     // semantically significant here (flex-space boundaries).  The caller
     // (parseExpression) manages whitespace skipping in its loop.
     private parseStrExpr(): StrExpr | undefined {
+        const pos = this.pos;
         const str: string[] = [];
         const word: string[] = [];
         while (!this.isAtEnd()) {
@@ -638,6 +644,7 @@ class GrammarRuleParser {
         return {
             type: "string",
             value: str,
+            pos,
         };
     }
 
@@ -974,7 +981,11 @@ class GrammarRuleParser {
         if (this.isAt("->")) {
             this.skipWhitespace(2);
             valueLeadingComments = this.parseComments();
+            const valuePos = this.pos; // position of value (first token after ->)
             value = this.parseValue();
+            if (valuePos !== undefined) {
+                value.pos = valuePos;
+            }
             // Comments after the value (before | or ;) belong to this rule.
             valueTrailingComments = this.parseComments();
         } else if (

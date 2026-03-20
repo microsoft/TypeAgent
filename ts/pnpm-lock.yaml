@@ -974,6 +974,9 @@ importers:
       '@oclif/plugin-help':
         specifier: ^6
         version: 6.2.26
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../actionSchema
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar

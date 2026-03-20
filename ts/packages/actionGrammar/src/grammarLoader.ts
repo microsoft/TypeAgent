@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 import { defaultFileLoader } from "./defaultFileLoader.js";
-import { compileGrammar, FileLoader } from "./grammarCompiler.js";
+import { compileGrammar, FileLoader, SchemaLoader } from "./grammarCompiler.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
 
 type LoadGrammarRulesOptions = {
     start?: string; // Optional start symbol (default: "Start")
     startValueRequired?: boolean; // Whether the start rule must produce a value (default: true)
+    schemaLoader?: SchemaLoader; // Optional loader for resolving .ts type imports
 };
 
 function parseAndCompileGrammar(
@@ -46,6 +47,7 @@ function parseAndCompileGrammar(
         warnings,
         parseResult.imports,
         parseResult.entities.length > 0 ? parseResult.entities : undefined,
+        options?.schemaLoader,
     );
     if (errors.length === 0) {
         // Add entity declarations to the grammar.

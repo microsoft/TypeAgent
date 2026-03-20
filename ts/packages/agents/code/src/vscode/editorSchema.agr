@@ -5,7 +5,9 @@
 
 // Editor Schema Grammar - Natural language interface for code editing actions
 
-<Start> = <createFunction> | <createCodeBlock> | <fixCodeProblem> | <moveCursorInFile> | <insertOrDeleteLines> | <insertComment> | <generateWithCopilot> | <createFile> | <saveCurrentFile> | <saveAllFiles>;
+import { EditorCodeActions } from "./editorCodeActionsSchema.ts";
+
+<Start> : EditorCodeActions = <createFunction> | <createCodeBlock> | <fixCodeProblem> | <moveCursorInFile> | <insertOrDeleteLines> | <insertComment> | <generateWithCopilot> | <createFile> | <saveCurrentFile> | <saveAllFiles>;
 
 // Common patterns and sub-rules
 <Polite> = ('can you'? | 'please'? | 'could you'?);

@@ -4,8 +4,10 @@
 export {
     ResolvedSchemaType as ActionResolvedParamType,
     SchemaType as ActionParamType,
+    SchemaType,
     SchemaTypeArray as ActionParamArray,
     SchemaTypeObject as ActionParamObject,
+    SchemaTypeDefinition,
     ActionSchemaTypeDefinition,
     ActionSchemaEntryTypeDefinition,
     ActionSchemaGroup,
@@ -13,10 +15,11 @@ export {
     ActionSchemaObject,
     ActionSchemaUnion,
     SchemaObjectFields,
+    SchemaObjectField,
     ActionSchemaEntityTypeDefinition,
 } from "./type.js";
 
-export { parseActionSchemaSource } from "./parser.js";
+export { parseActionSchemaSource, parseSchemaSource } from "./parser.js";
 export {
     GenerateSchemaOptions,
     generateActionSchema,

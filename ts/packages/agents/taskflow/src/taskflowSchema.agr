@@ -1,10 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-<Start> = <listTaskFlows> | <createTopSongsPlaylist> | <createTopSongsPlaylistClaude> | <weeklyEmailDigest> | <playPopularKpopSong> | <playPopularKpopSongClaude>;
+import { TaskFlowActions } from "./schema/userActions.mts";
+
+<Start> : TaskFlowActions = <listTaskFlows> | <createTopSongsPlaylist> | <createTopSongsPlaylistClaude> | <weeklyEmailDigest> | <playPopularKpopSong> | <playPopularKpopSongClaude>;
 
 // Action rules
-<listTaskFlows> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? (show me | list | display) (all)? (the)? (available)? task flows -> { actionName: "listTaskFlows", parameters: {} };
+<listTaskFlows> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? (show me | list | display) (all)? (the)? (available)? task flows -> { actionName: "listTaskFlows" };
 
 <createTopSongsPlaylist> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? create (a)? (top)? $(quantity:number) $(genre:wildcard) (songs)? playlist (for | from) (the)? $(timePeriod:wildcard) -> { actionName: "createTopSongsPlaylist", parameters: { genre, quantity, timePeriod } };
 

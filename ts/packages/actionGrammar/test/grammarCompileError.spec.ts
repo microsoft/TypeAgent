@@ -917,13 +917,15 @@ describe("Grammar Compiler", () => {
             expect(warnings.length).toBe(0);
         });
 
-        it("Value type compiles without errors when no type import", () => {
+        it("Value type with unimported type produces error", () => {
             const grammarText = `
             <Start> : SomeType = play music -> { actionName: "play" };
         `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow("test", grammarText, errors);
-            expect(errors.length).toBe(0);
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("not imported");
+            expect(errors[0]).toContain("SomeType");
         });
 
         it("Union value type marks all imported types as used", () => {
