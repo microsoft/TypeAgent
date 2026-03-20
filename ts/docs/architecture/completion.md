@@ -167,13 +167,14 @@ The user types `play Never` (free-form, no `@` prefix).
 Using the same `play <song> by <artist>` rule, here is what category
 the grammar matcher assigns at different input states:
 
-| User input       | Category     | Why                                                  |
-| ---------------- | ------------ | ---------------------------------------------------- |
-| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc) |
-| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next           |
-| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`          |
-| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard         |
-| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`       |
+| User input       | Category     | Why                                                                    |
+| ---------------- | ------------ | ---------------------------------------------------------------------- |
+| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)                   |
+| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                             |
+| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                            |
+| `play Never b`   | 2 — Clean    | Wildcard absorbs `"Never b"`; backward detects `"b"` as partial `"by"` |
+| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                           |
+| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                         |
 
 ---
 
@@ -196,15 +197,28 @@ grammar rules.
 3. When `maxPrefixLength` advances, discard all shorter-prefix completions.
 4. Categorize each state's outcome:
 
-| Category           | Condition                                               | Example (`play <song> by <artist>`)     | Forward completion           | Backward completion             |
-| ------------------ | ------------------------------------------------------- | --------------------------------------- | ---------------------------- | ------------------------------- |
-| 1 — Exact          | Rule fully matched, prefix fully consumed               | `play Never by Nirvana`                 | None                         | Last matched word/wildcard      |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts               | `play ` (wildcard next)                 | Next part of rule            | Last matched part               |
-| 3a — Pending wc    | Wildcard still consuming; no keyword yet finalizes it   | `play Never` (`<song>` still absorbing) | Wildcard property completion | Last matched part (if after wc) |
-| 3b — Dirty partial | Input extends beyond what the current rule part matched | `pla` (`"pla"` ≈ partial `play`)        | Current part (prefix-filter) | Current part (prefix-filter)    |
+| Category           | Condition                                               | Example (`play <song> by <artist>`)     | Forward completion           | Backward completion                                |
+| ------------------ | ------------------------------------------------------- | --------------------------------------- | ---------------------------- | -------------------------------------------------- |
+| 1 — Exact          | Rule fully matched, prefix fully consumed               | `play Never by Nirvana`                 | None                         | Last matched word/wildcard                         |
+| 2 — Clean partial  | Prefix consumed, rule has remaining parts               | `play ` (wildcard next)                 | Next part of rule            | Last matched part (or partial keyword — see below) |
+| 3a — Pending wc    | Wildcard still consuming; no keyword yet finalizes it   | `play Never` (`<song>` still absorbing) | Wildcard property completion | Last matched part (if after wc)                    |
+| 3b — Dirty partial | Input extends beyond what the current rule part matched | `pla` (`"pla"` ≈ partial `play`)        | Current part (prefix-filter) | Current part (prefix-filter)                       |
 
 5. Multi-word string parts use `tryPartialStringMatch()` to offer one word
    at a time instead of the entire phrase.
+6. **Partial keyword detection in wildcards** (Category 2 backward only):
+   When a wildcard absorbs all remaining input and the next grammar part
+   is a keyword, `findPartialKeywordInWildcard()` checks whether the
+   wildcard text ends with a prefix of that keyword. For example, with
+   `play <song> by <artist>` and input `"play Never b"`, the wildcard
+   absorbs `"Never b"` but `"b"` is a prefix of `"by"`. Backward
+   completion offers `"by"` at the partial keyword position (after
+   `"Never "`), with `openWildcard=true`, instead of backing up to the
+   wildcard start. This handles multi-word keywords as well: for
+   `play <song> played by <artist>` and input `"play Never played b"`,
+   the function recognizes `"played b"` as a full match of the first
+   keyword word plus a partial match of the second, and offers `"by"`.
+   The function honors `spacingMode` for inter-word separator matching.
 
 **Metadata produced:**
 
