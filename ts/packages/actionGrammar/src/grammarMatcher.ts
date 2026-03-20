@@ -159,11 +159,13 @@ function isBoundarySatisfied(
         case "optional":
         case "none":
             // In both "optional" and "none" modes there is no constraint on
-            // the outer boundary.  "none" enforces zero-width flex-space
-            // *between* tokens (handled by the regex builder in
-            // matchStringPart), but must not reject a match simply because a
-            // literal space from an escaped character (e.g. "\ ") happens to
-            // sit at the boundary.
+            // the outer boundary.  For top-level "none" rules, leading
+            // whitespace is rejected (via leadingSpacingMode) and trailing
+            // content is rejected (via finalizeState).  For nested rules,
+            // the nearest ancestor with a flex-space boundary — or the
+            // top-level rule if none — controls leading/trailing spacing
+            // around the nested match (see leadingSpacingMode).  The
+            // boundary check itself always passes.
             return true;
         case undefined: // auto: requires a separator only when BOTH characters
             // adjacent to the boundary belong to word-boundary scripts.  If
@@ -626,6 +628,19 @@ function finalizeState(state: MatchState, request: string) {
         }
     }
     if (state.index < request.length) {
+        // In "none" mode the match must be exact — no trailing content
+        // is tolerated.  This applies to the top-level rule's spacing
+        // mode (by the time finalizeState runs, nested rules have been
+        // unwound and the spacing mode has been restored to the
+        // top-level rule's mode).
+        if (state.spacingMode === "none") {
+            debugMatch(
+                state,
+                `Reject trailing content in none mode at ${state.index}: ${request.slice(state.index)}`,
+            );
+            return false;
+        }
+
         // Detect trailing separators
         const nonSepIndex = nextNonSeparatorIndex(request, state.index);
         if (nonSepIndex < request.length) {
@@ -1028,6 +1043,42 @@ function matchStringPartWithoutWildcard(
     return true;
 }
 
+// Determine the spacing mode that governs the leading separator prefix
+// ([\s\p{P}]*?) for a part at the current position.
+//
+// For subsequent parts within a rule (partIndex > 0), the rule's own
+// spacingMode applies — there is a flex-space boundary between the
+// previous part and this one.
+//
+// For the first part of a nested rule (partIndex === 0, parent exists),
+// we walk up the parent chain looking for the nearest ancestor that has
+// a flex-space boundary before the rule reference (parent.partIndex > 1
+// means the rule ref was not the first part).  That ancestor's spacing
+// mode controls the separator.  If no ancestor has a preceding
+// flex-space, we've reached the top-level rule — its spacing mode
+// determines the leading/trailing behavior (all modes except "none"
+// allow leading whitespace at the top level).
+function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
+    if (state.partIndex !== 0 || state.parent === undefined) {
+        return state.spacingMode;
+    }
+    let parent: ParentMatchState | undefined = state.parent;
+    while (parent !== undefined) {
+        if (parent.partIndex > 1) {
+            // The rule reference had a preceding part in this ancestor
+            // — use this ancestor's spacing mode for the flex-space.
+            return parent.spacingMode;
+        }
+        if (parent.parent === undefined) {
+            // Reached the top-level rule with no preceding flex-space.
+            return parent.spacingMode;
+        }
+        parent = parent.parent;
+    }
+    // Should not reach here (the loop terminates when parent.parent is undefined).
+    return state.spacingMode;
+}
+
 function matchStringPart(
     request: string,
     state: MatchState,
@@ -1065,11 +1116,13 @@ function matchStringPart(
         regexpSegments.push(sep, escaped[i]);
     }
     const joined = regexpSegments.join("");
-    // In "none" mode no leading separator is consumed; the match must start
-    // exactly at the current position (or, for wildcards, at whatever index
-    // the global scan finds the pattern text).
+    // Whether to add a leading separator prefix is determined by
+    // leadingSpacingMode: for the first part of a nested rule, the
+    // parent's spacing mode decides; otherwise the rule's own mode.
+    // In "none" mode no leading separator is consumed; the match must
+    // start exactly at the current position.
     const regExpStr =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? joined
             : `[${separatorRegExpStr}]*?${joined}`;
     return state.pendingWildcard !== undefined
@@ -1090,7 +1143,7 @@ function matchVarNumberPartWithWildcard(
 ) {
     const curr = state.index;
     const re =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? matchNumberPartWithWildcardNoSepRegExp
             : matchNumberPartWithWildcardRegExp;
     re.lastIndex = curr;
@@ -1152,7 +1205,7 @@ function matchVarNumberPartWithoutWildcard(
 ) {
     const curr = state.index;
     const re =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? matchNumberPartNoSepRegexp
             : matchNumberPartRegexp;
     re.lastIndex = curr;

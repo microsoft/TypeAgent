@@ -443,12 +443,12 @@ Trie-backed prefix filtering:
 Controls what character is required between the matched prefix and completion
 text.
 
-| Value                | Meaning                             | Use case                         |
-| -------------------- | ----------------------------------- | -------------------------------- |
-| `"space"`            | Whitespace required                 | Commands, flags, agent names     |
-| `"spacePunctuation"` | Whitespace or Unicode punctuation   | Latin-script grammar completions |
-| `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars      |
-| `"none"`             | No separator                        | `[spacing=none]` grammars        |
+| Value                | Meaning                             | Use case                                                                                                                                                                                                                                                                         |
+| -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"space"`            | Whitespace required                 | Commands, flags, agent names                                                                                                                                                                                                                                                     |
+| `"spacePunctuation"` | Whitespace or Unicode punctuation   | Latin-script grammar completions                                                                                                                                                                                                                                                 |
+| `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars                                                                                                                                                                                                                                                      |
+| `"none"`             | No separator                        | `[spacing=none]` grammars; at top level, no leading or trailing whitespace is consumed. For nested rules, the nearest ancestor with a flex-space boundary controls surrounding spacing (or the top-level rule if no ancestor has one); the child controls only internal spacing. |
 
 ### `CompletionDirection`
 
