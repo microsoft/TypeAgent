@@ -208,10 +208,34 @@ one of four outcomes:
 | 3a — Pending wc    | Wildcard still consuming; no keyword finalizes it       | Wildcard property completion                         |
 | 3b — Dirty partial | Input extends beyond what the current rule part matched | All alternatives at matched prefix; caller filters   |
 
+**`directionSensitive` by category:**
+
+- **Category 1 (Exact match):** `directionSensitive=true` when there
+  is a matched part to reconsider — i.e., when the rule contains a
+  wildcard or multi-part keyword that backward completion could back
+  up into (the `hasPartToReconsider` condition in the code). Forward
+  offers no completions; backward offers the last matched
+  word/wildcard. For keyword-only exact matches with no reconsidering
+  (e.g., grammar `hello` with input `"hello"`), `directionSensitive`
+  remains `false`.
+- **Categories 2/3a with entity wildcards:** `directionSensitive=false`
+  when the next rule part is an entity wildcard. Both forward and
+  backward offer the same wildcard property completions, so direction
+  does not affect the result.
+- **Categories 3a/3b with keyword completions:** `directionSensitive`
+  may be `true` when forward and backward produce different completion
+  sets (e.g., forward prefix-filters the current keyword while
+  backward reconsiders the previous part).
+
 **Metadata produced:**
 
 - `matchedPrefixLength` — characters consumed; becomes `startIndex` upstream
-- `properties` — wildcard property slots needing entity completions from the agent
+- `properties` — a `GrammarCompletionProperty[]` carrying entity/wildcard
+  property slot information (property names and match metadata) for the
+  completions. Although the TypeScript type is
+  `GrammarCompletionProperty[] | undefined`, the grammar matcher always
+  returns an array — it is `[]` (empty) for keyword-only completions and
+  populated when entity wildcards contribute completions.
 - `separatorMode` — determined by the rule's `[spacing=...]` annotation
 - `closedSet` — `true` when all completions are grammar keywords
 - `directionSensitive` — `true` when backward completion would differ
@@ -445,7 +469,7 @@ text.
 | -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `"space"`            | Whitespace required                 | Commands, flags, agent names                                                                                                                                                                                                                                               |
 | `"spacePunctuation"` | Whitespace or Unicode punctuation   | Latin-script grammar completions                                                                                                                                                                                                                                           |
-| `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars                                                                                                                                                                                                                                                |
+| `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars; also digit–Latin boundaries (digits are Unicode script "Common", not "Latin", so a transition like `"0"→"i"` is a script change that does not require a separator)                                                                            |
 | `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
 
 ### `directionSensitive`
