@@ -974,6 +974,9 @@ importers:
       '@oclif/plugin-help':
         specifier: ^6
         version: 6.2.26
+      '@typeagent/action-schema':
+        specifier: workspace:*
+        version: link:../actionSchema
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -1201,6 +1204,9 @@ importers:
       '@typeagent/agent-rpc':
         specifier: workspace:*
         version: link:../../agentRpc
+      '@typeagent/agent-server-client':
+        specifier: workspace:*
+        version: link:../client
       '@typeagent/agent-server-protocol':
         specifier: workspace:*
         version: link:../protocol
@@ -9779,8 +9785,8 @@ packages:
   fast-uri@3.1.0:
     resolution: {integrity: sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==}
 
-  fast-xml-builder@1.0.0:
-    resolution: {integrity: sha512-fpZuDogrAgnyt9oDDz+5DBz0zgPdPZz6D4IR7iESxRXElrlGTRkHJ9eEt+SACRJwT0FNFrt71DFQIUFBJfX/uQ==}
+  fast-xml-builder@1.1.4:
+    resolution: {integrity: sha512-f2jhpN4Eccy0/Uz9csxh3Nu6q4ErKxf0XIsasomfOihuSUa3/xw6w8dnOtCDgEItQFJG8KyXPzQXzcODDrrbOg==}
 
   fast-xml-builder@1.1.4:
     resolution: {integrity: sha512-f2jhpN4Eccy0/Uz9csxh3Nu6q4ErKxf0XIsasomfOihuSUa3/xw6w8dnOtCDgEItQFJG8KyXPzQXzcODDrrbOg==}
@@ -21473,7 +21479,9 @@ snapshots:
 
   fast-uri@3.1.0: {}
 
-  fast-xml-builder@1.0.0: {}
+  fast-xml-builder@1.1.4:
+    dependencies:
+      path-expression-matcher: 1.1.3
 
   fast-xml-builder@1.1.4:
     dependencies:
@@ -21485,7 +21493,13 @@ snapshots:
 
   fast-xml-parser@5.4.1:
     dependencies:
-      fast-xml-builder: 1.0.0
+      fast-xml-builder: 1.1.4
+      strnum: 2.2.0
+
+  fast-xml-parser@5.5.6:
+    dependencies:
+      fast-xml-builder: 1.1.4
+      path-expression-matcher: 1.1.3
       strnum: 2.2.0
 
   fast-xml-parser@5.5.6:

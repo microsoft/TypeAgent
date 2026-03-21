@@ -74,14 +74,12 @@ export type AddParticipantAction = {
 // Examples: "what do I have today", "show me today's schedule"
 export type FindTodaysEventsAction = {
     actionName: "findTodaysEvents";
-    parameters: {};
 };
 
 // Find all events happening this week
 // Examples: "what do I have this week", "show my week"
 export type FindThisWeeksEventsAction = {
     actionName: "findThisWeeksEvents";
-    parameters: {};
 };
 
 // Remove an event from the calendar

@@ -384,6 +384,37 @@ import { RuleX } from "grammarB";
         validateRoundTrip(`<rule1> [spacing=required] = hello world;
 <rule2> = hello world;`);
     });
+    it("with value type annotation", () => {
+        validateRoundTrip(`<test> : MyType = hello world;`);
+    });
+    it("with value type and spacing annotation", () => {
+        validateRoundTrip(`<test> [spacing=required] : MyType = hello world;`);
+    });
+    it("with value type and value expression", () => {
+        validateRoundTrip(
+            `<test> : MyType = hello $(x:number) -> { actionName: "greet", x };`,
+        );
+    });
+    it("with export and value type", () => {
+        validateRoundTrip(`export <test> : MyType = hello world;`);
+    });
+    it("with export, spacing, and value type", () => {
+        validateRoundTrip(
+            `export <test> [spacing=required] : MyType = hello world;`,
+        );
+    });
+    it("with union value type", () => {
+        validateRoundTrip(`<test> : TypeA | TypeB = hello world;`);
+    });
+    it("with three-way union value type", () => {
+        validateRoundTrip(`<test> : A | B | C = hello world;`);
+    });
+    it("with union value type and spacing", () => {
+        validateRoundTrip(`<test> [spacing=required] : A | B = hello world;`);
+    });
+    it("with export and union value type", () => {
+        validateRoundTrip(`export <test> : A | B | C = hello world;`);
+    });
 });
 
 // ─── Comment preservation round-trips ─────────────────────────────────────────

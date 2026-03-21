@@ -34,7 +34,7 @@ import { setPendingUpdateCallback } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { isProd } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
-import { connectDispatcher } from "@typeagent/agent-server-client";
+import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -127,16 +127,18 @@ async function initializeDispatcher(
         let newDispatcher: Dispatcher;
         if (connect !== undefined) {
             // Connect to remote dispatcher instead of creating one
-            newDispatcher = await connectDispatcher(
+            newDispatcher = await ensureAndConnectDispatcher(
                 clientIO,
-                `ws://localhost:${connect}`,
+                connect,
                 undefined,
                 () => {
-                    dialog.showErrorBox(
-                        "Disconnected",
-                        "The connection to the dispatcher was lost.",
-                    );
-                    app.quit();
+                    if (!quitting) {
+                        dialog.showErrorBox(
+                            "Disconnected",
+                            "The connection to the dispatcher was lost.",
+                        );
+                        app.quit();
+                    }
                 },
             );
             debugShellInit(

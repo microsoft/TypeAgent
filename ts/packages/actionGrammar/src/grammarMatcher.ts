@@ -159,11 +159,13 @@ function isBoundarySatisfied(
         case "optional":
         case "none":
             // In both "optional" and "none" modes there is no constraint on
-            // the outer boundary.  "none" enforces zero-width flex-space
-            // *between* tokens (handled by the regex builder in
-            // matchStringPart), but must not reject a match simply because a
-            // literal space from an escaped character (e.g. "\ ") happens to
-            // sit at the boundary.
+            // the outer boundary.  For top-level "none" rules, leading
+            // whitespace is rejected (via leadingSpacingMode) and trailing
+            // content is rejected (via finalizeState).  For nested rules,
+            // the nearest ancestor with a flex-space boundary — or the
+            // top-level rule if none — controls leading/trailing spacing
+            // around the nested match (see leadingSpacingMode).  The
+            // boundary check itself always passes.
             return true;
         case undefined: // auto: requires a separator only when BOTH characters
             // adjacent to the boundary belong to word-boundary scripts.  If
@@ -626,6 +628,19 @@ function finalizeState(state: MatchState, request: string) {
         }
     }
     if (state.index < request.length) {
+        // In "none" mode the match must be exact — no trailing content
+        // is tolerated.  This applies to the top-level rule's spacing
+        // mode (by the time finalizeState runs, nested rules have been
+        // unwound and the spacing mode has been restored to the
+        // top-level rule's mode).
+        if (state.spacingMode === "none") {
+            debugMatch(
+                state,
+                `Reject trailing content in none mode at ${state.index}: ${request.slice(state.index)}`,
+            );
+            return false;
+        }
+
         // Detect trailing separators
         const nonSepIndex = nextNonSeparatorIndex(request, state.index);
         if (nonSepIndex < request.length) {
@@ -796,6 +811,196 @@ function matchStringPartWithWildcard(
     }
 }
 
+// Greedily match keyword words against text starting at startIndex.
+// Returns the number of fully matched words and cursor positions.
+//
+// The first word allows an optional non-greedy leading separator
+// ([\s\p{P}]*?) so callers don't need to pre-skip whitespace.
+// Subsequent words use strict separators based on requiresSeparator.
+// isBoundarySatisfied is checked after every word — this is a no-op
+// at end-of-text and otherwise prevents partial-word matches
+// (e.g. "play" inside "playback").
+function matchWordsGreedily(
+    words: string[],
+    text: string,
+    startIndex: number,
+    spacingMode: CompiledSpacingMode,
+): { matchedWords: number; endIndex: number; prevEndIndex: number } {
+    let index = startIndex;
+    let prevIndex = startIndex;
+    let matchedWords = 0;
+
+    for (let k = 0; k < words.length; k++) {
+        const word = words[k];
+        const escaped = escapeMatch(word);
+
+        let regExpStr: string;
+        if (spacingMode === "none") {
+            regExpStr = escaped;
+        } else if (k === 0) {
+            regExpStr = `[${separatorRegExpStr}]*?${escaped}`;
+        } else {
+            const sep = requiresSeparator(
+                words[k - 1].at(-1)!,
+                word[0],
+                spacingMode,
+            )
+                ? `[${separatorRegExpStr}]+`
+                : `[${separatorRegExpStr}]*`;
+            regExpStr = sep + escaped;
+        }
+
+        const re = new RegExp(regExpStr, "iuy");
+        re.lastIndex = index;
+        const m = re.exec(text);
+        if (m === null) break;
+
+        const newIndex = m.index + m[0].length;
+        if (!isBoundarySatisfied(text, newIndex, spacingMode)) {
+            break;
+        }
+
+        prevIndex = index;
+        index = newIndex;
+        matchedWords++;
+    }
+
+    return { matchedWords, endIndex: index, prevEndIndex: prevIndex };
+}
+
+// Try matching keyword words forward from startIndex in prefix.
+// Returns the position and completion word if a partial match is found,
+// or undefined if no match or all words matched fully.
+function matchKeywordWordsFrom(
+    prefix: string,
+    startIndex: number,
+    words: string[],
+    spacingMode: CompiledSpacingMode,
+): { position: number; completionWord: string } | undefined {
+    const { matchedWords, endIndex } = matchWordsGreedily(
+        words,
+        prefix,
+        startIndex,
+        spacingMode,
+    );
+
+    // All words matched fully — not a partial match.
+    if (matchedWords >= words.length) return undefined;
+
+    // Consumed to end of prefix with more words remaining.
+    if (matchedWords > 0 && endIndex === prefix.length) {
+        return {
+            position: prefix.length,
+            completionWord: words[matchedWords],
+        };
+    }
+
+    // Check if remaining text is a partial prefix of the next word.
+    const word = words[matchedWords];
+    let textToCheck = prefix.slice(endIndex);
+    if (matchedWords > 0 && spacingMode !== "none") {
+        const sepMatch = textToCheck.match(
+            new RegExp(`^[${separatorRegExpStr}]+`, "u"),
+        );
+        if (sepMatch) {
+            textToCheck = textToCheck.slice(sepMatch[0].length);
+        } else if (
+            requiresSeparator(
+                words[matchedWords - 1].at(-1)!,
+                word[0],
+                spacingMode,
+            )
+        ) {
+            return undefined;
+        }
+    }
+
+    if (
+        textToCheck.length > 0 &&
+        textToCheck.length < word.length &&
+        word.toLowerCase().startsWith(textToCheck.toLowerCase())
+    ) {
+        return {
+            position: prefix.length - textToCheck.length,
+            completionWord: word,
+        };
+    }
+    return undefined;
+}
+
+// When a wildcard has absorbed all remaining input (via finalizeState),
+// check whether the absorbed text ends with a separator-delimited prefix
+// of the first word of the next keyword part.  Returns the position where
+// the partial keyword starts (i.e. the first non-separator character after
+// the last separator), or undefined if no partial keyword is found.
+//
+// Used in Category 2 backward to offer the keyword at the partial keyword
+// position instead of backing up to the wildcard start.
+//
+// Handles both single-word and multi-word keyword parts.  For a keyword
+// like ["played", "by"], the function recognizes:
+//   "p"        → partial of word 0 → completion = "played"
+//   "played"   → full word 0       → completion = "by"
+//   "played b" → full word 0 + partial of word 1 → completion = "by"
+//
+// Honors spacingMode between keyword words, using the same separator
+// logic as matchStringPart:
+//   "none"     → words are directly adjacent (no separators)
+//   "required" → [\s\p{P}]+ between words
+//   "optional" → [\s\p{P}]* between words
+//   auto       → + or * depending on requiresSeparator() for adjacent chars
+function findPartialKeywordInWildcard(
+    prefix: string,
+    wildcardStart: number,
+    part: StringPart,
+    spacingMode: CompiledSpacingMode,
+): { position: number; completionWord: string } | undefined {
+    const sepCharRe = /[\s\p{P}]/u;
+    const minStart = wildcardStart + 1;
+
+    // Scan candidate start positions from right to left.
+    for (
+        let candidateStart = prefix.length - 1;
+        candidateStart >= minStart;
+        candidateStart--
+    ) {
+        // In non-"none" modes, candidateStart must be preceded by a
+        // separator (to delimit wildcard content from the keyword
+        // fragment).  In "none" mode, no separator is needed.
+        if (
+            spacingMode !== "none" &&
+            !sepCharRe.test(prefix[candidateStart - 1])
+        ) {
+            continue;
+        }
+
+        const result = matchKeywordWordsFrom(
+            prefix,
+            candidateStart,
+            part.value,
+            spacingMode,
+        );
+        if (result === undefined) {
+            continue;
+        }
+
+        // Verify the wildcard content before the candidate is valid.
+        if (
+            getWildcardStr(
+                prefix,
+                wildcardStart,
+                candidateStart,
+                spacingMode,
+            ) === undefined
+        ) {
+            continue;
+        }
+
+        return result;
+    }
+    return undefined;
+}
+
 function matchStringPartWithoutWildcard(
     regExpStr: string,
     request: string,
@@ -838,6 +1043,42 @@ function matchStringPartWithoutWildcard(
     return true;
 }
 
+// Determine the spacing mode that governs the leading separator prefix
+// ([\s\p{P}]*?) for a part at the current position.
+//
+// For subsequent parts within a rule (partIndex > 0), the rule's own
+// spacingMode applies — there is a flex-space boundary between the
+// previous part and this one.
+//
+// For the first part of a nested rule (partIndex === 0, parent exists),
+// we walk up the parent chain looking for the nearest ancestor that has
+// a flex-space boundary before the rule reference (parent.partIndex > 1
+// means the rule ref was not the first part).  That ancestor's spacing
+// mode controls the separator.  If no ancestor has a preceding
+// flex-space, we've reached the top-level rule — its spacing mode
+// determines the leading/trailing behavior (all modes except "none"
+// allow leading whitespace at the top level).
+function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
+    if (state.partIndex !== 0 || state.parent === undefined) {
+        return state.spacingMode;
+    }
+    let parent: ParentMatchState | undefined = state.parent;
+    while (parent !== undefined) {
+        if (parent.partIndex > 1) {
+            // The rule reference had a preceding part in this ancestor
+            // — use this ancestor's spacing mode for the flex-space.
+            return parent.spacingMode;
+        }
+        if (parent.parent === undefined) {
+            // Reached the top-level rule with no preceding flex-space.
+            return parent.spacingMode;
+        }
+        parent = parent.parent;
+    }
+    // Should not reach here (the loop terminates when parent.parent is undefined).
+    return state.spacingMode;
+}
+
 function matchStringPart(
     request: string,
     state: MatchState,
@@ -875,11 +1116,13 @@ function matchStringPart(
         regexpSegments.push(sep, escaped[i]);
     }
     const joined = regexpSegments.join("");
-    // In "none" mode no leading separator is consumed; the match must start
-    // exactly at the current position (or, for wildcards, at whatever index
-    // the global scan finds the pattern text).
+    // Whether to add a leading separator prefix is determined by
+    // leadingSpacingMode: for the first part of a nested rule, the
+    // parent's spacing mode decides; otherwise the rule's own mode.
+    // In "none" mode no leading separator is consumed; the match must
+    // start exactly at the current position.
     const regExpStr =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? joined
             : `[${separatorRegExpStr}]*?${joined}`;
     return state.pendingWildcard !== undefined
@@ -900,7 +1143,7 @@ function matchVarNumberPartWithWildcard(
 ) {
     const curr = state.index;
     const re =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? matchNumberPartWithWildcardNoSepRegExp
             : matchNumberPartWithWildcardRegExp;
     re.lastIndex = curr;
@@ -962,7 +1205,7 @@ function matchVarNumberPartWithoutWildcard(
 ) {
     const curr = state.index;
     const re =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? matchNumberPartNoSepRegexp
             : matchNumberPartRegexp;
     re.lastIndex = curr;
@@ -1305,41 +1548,23 @@ function tryPartialStringMatch(
       }
     | undefined {
     const words = part.value;
-    let index = startIndex;
-    let matchedWords = 0;
-    let prevIndex = startIndex;
-
-    for (const word of words) {
-        const escaped = escapeMatch(word);
-        const regExpStr =
-            spacingMode === "none"
-                ? escaped
-                : `[${separatorRegExpStr}]*?${escaped}`;
-        const re = new RegExp(regExpStr, "iuy");
-        re.lastIndex = index;
-        const m = re.exec(prefix);
-        if (m === null) {
-            break;
-        }
-        const newIndex = m.index + m[0].length;
-        if (!isBoundarySatisfied(prefix, newIndex, spacingMode)) {
-            break;
-        }
-        prevIndex = index;
-        index = newIndex;
-        matchedWords++;
-    }
+    const { matchedWords, endIndex, prevEndIndex } = matchWordsGreedily(
+        words,
+        prefix,
+        startIndex,
+        spacingMode,
+    );
 
     // Direction matters when at least one word fully matched and no
     // trailing separator commits the last matched word.
     const couldBackUp =
         matchedWords > 0 &&
         (spacingMode === "none" ||
-            nextNonSeparatorIndex(prefix, index) === index);
+            nextNonSeparatorIndex(prefix, endIndex) === endIndex);
 
     if (direction === "backward" && couldBackUp) {
         return {
-            consumedLength: prevIndex,
+            consumedLength: prevEndIndex,
             remainingText: words[matchedWords - 1],
             directionSensitive: true,
         };
@@ -1352,7 +1577,7 @@ function tryPartialStringMatch(
     }
 
     return {
-        consumedLength: index,
+        consumedLength: endIndex,
         remainingText: words[matchedWords],
         directionSensitive: couldBackUp,
     };
@@ -1545,7 +1770,7 @@ export function matchGrammarCompletion(
     function emitBackwardCompletion(
         state: MatchState,
         savedWildcard: PendingWildcard | undefined,
-    ): boolean {
+    ): void {
         const wildcardStart = savedWildcard?.start;
         const partStart = state.lastMatchedPartInfo?.start;
         if (
@@ -1559,7 +1784,6 @@ export function matchGrammarCompletion(
                 savedWildcard.valueId,
                 savedWildcard.start,
             );
-            return true;
         } else if (state.lastMatchedPartInfo !== undefined) {
             const info = state.lastMatchedPartInfo;
             if (info.type === "string") {
@@ -1590,11 +1814,7 @@ export function matchGrammarCompletion(
                     openWildcard = true;
                 }
             }
-            return true;
         }
-        // Nothing to back up to — caller should fall through to
-        // forward behavior.
-        return false;
     }
 
     // --- Main loop: process every pending state ---
@@ -1634,12 +1854,8 @@ export function matchGrammarCompletion(
             // --- Category 1: Exact match ---
             // All parts matched AND prefix was fully consumed.
             if (matched) {
-                if (
-                    direction === "backward" &&
-                    hasPartToReconsider &&
-                    emitBackwardCompletion(state, savedPendingWildcard)
-                ) {
-                    // Backward emitted a completion — done with this state.
+                if (direction === "backward" && hasPartToReconsider) {
+                    emitBackwardCompletion(state, savedPendingWildcard);
                 } else {
                     debugCompletion("Matched. Nothing to complete.");
                     updateMaxPrefixLength(state.index);
@@ -1656,14 +1872,36 @@ export function matchGrammarCompletion(
             // That next part is what we offer as a completion.
             const nextPart = state.parts[state.partIndex];
 
-            if (
-                direction === "backward" &&
-                hasPartToReconsider &&
-                emitBackwardCompletion(state, savedPendingWildcard)
-            ) {
-                // Backward emitted a completion — openWildcard is
-                // set inside emitBackwardCompletion when the position
-                // is ambiguous (afterWildcard).
+            if (direction === "backward" && hasPartToReconsider) {
+                // When a wildcard absorbed text ending with a partial
+                // keyword prefix (e.g. "Never b" where "b" prefixes
+                // "by"), offer the keyword at the partial keyword
+                // position instead of backing up to the wildcard start.
+                // The partial keyword position has a higher
+                // matchedPrefixLength and is more useful to the user.
+                if (
+                    savedPendingWildcard?.valueId !== undefined &&
+                    nextPart.type === "string"
+                ) {
+                    const partialResult = findPartialKeywordInWildcard(
+                        prefix,
+                        savedPendingWildcard.start,
+                        nextPart,
+                        state.spacingMode,
+                    );
+                    if (partialResult !== undefined) {
+                        emitStringCompletion(
+                            state,
+                            partialResult.position,
+                            partialResult.completionWord,
+                        );
+                        openWildcard = true;
+                    } else {
+                        emitBackwardCompletion(state, savedPendingWildcard);
+                    }
+                } else {
+                    emitBackwardCompletion(state, savedPendingWildcard);
+                }
             } else {
                 debugCompletion(
                     `Completing ${nextPart.type} part ${state.name}`,
