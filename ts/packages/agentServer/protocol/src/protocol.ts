@@ -8,6 +8,7 @@ export type DispatcherConnectOptions = {
 
 export type AgentServerInvokeFunctions = {
     join: (options?: DispatcherConnectOptions) => Promise<string>;
+    shutdown: () => Promise<void>;
 };
 
 export const enum ChannelName {
