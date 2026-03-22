@@ -123,5 +123,6 @@ export const rules = [
         name: "invisible-unicode",
         match: SOURCE_FILE_PATTERN,
         check: (file) => checkInvisibleUnicode(file),
+        applyToDependencies: true,
     },
 ];
