@@ -67,3 +67,51 @@ export function isWebAgentMessageFromDispatcher(
             message.method === "webAgent/disconnect")
     );
 }
+
+// Built-in WebAgent RPC types (for crossword, commerce, etc.)
+export type BuiltInWebAgentRpcRequest = {
+    type: "builtInRpc";
+    id: string;
+    method: string;
+    params: any;
+};
+
+export type BuiltInWebAgentRpcResponse = {
+    source: "dispatcher";
+    type: "builtInRpcResponse";
+    method: string;
+    id: string;
+    result?: any;
+    error?: string;
+};
+
+export function isBuiltInWebAgentRpcRequest(
+    params: any,
+): params is BuiltInWebAgentRpcRequest {
+    return params?.type === "builtInRpc" && typeof params?.id === "string";
+}
+
+export function isBuiltInWebAgentRpcResponse(
+    message: any,
+): message is BuiltInWebAgentRpcResponse {
+    return (
+        message?.source === "dispatcher" &&
+        message?.type === "builtInRpcResponse"
+    );
+}
+
+// Server → browser push notification to refresh WebFlowAgent.
+// Sent when the server modifies WebFlowStore (discovery, recording, deletion).
+export type WebFlowRefreshMessage = {
+    source: "dispatcher";
+    method: "webAgent/message";
+    type: "webFlowRefresh";
+};
+
+export function isWebFlowRefreshMessage(
+    message: any,
+): message is WebFlowRefreshMessage {
+    return (
+        message?.source === "dispatcher" && message?.type === "webFlowRefresh"
+    );
+}

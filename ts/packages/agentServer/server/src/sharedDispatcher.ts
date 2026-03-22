@@ -91,6 +91,11 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.exit(requestId, ...args),
             ),
+        setUserRequest: (requestId, ...args) => {
+            broadcast("setUserRequest", requestId, (clientIO) =>
+                clientIO.setUserRequest(requestId, ...args),
+            );
+        },
         setDisplayInfo: (requestId, ...args) => {
             broadcast("setDisplayInfo", requestId, (clientIO) =>
                 clientIO.setDisplayInfo(requestId, ...args),

@@ -7,6 +7,8 @@ import {
     GrammarRule,
     RulesPart,
     StringPart,
+    CompiledSpacingMode,
+    CompiledValueNode,
 } from "./grammarTypes.js";
 import {
     Rule,
@@ -14,11 +16,18 @@ import {
     ImportStatement,
     parseGrammarRules,
     ValueNode,
-    SpacingMode,
 } from "./grammarRuleParser.js";
 import { getLineCol } from "./utils.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
+import type {
+    SchemaTypeDefinition,
+    SchemaType,
+} from "@typeagent/action-schema";
+import {
+    validateValueType,
+    buildVariableTypeMap,
+} from "./grammarValueTypeValidator.js";
 
 export type FileLoader = {
     resolvePath: (name: string, ref?: string) => string;
@@ -26,12 +35,26 @@ export type FileLoader = {
     readContent: (fullPath: string) => string;
 };
 
+/**
+ * Resolves a type name imported from a .ts file to its parsed schema definition.
+ * @param typeName - The type name to resolve (e.g., "PlayAction")
+ * @param source - The resolved absolute path to the source file. The compiler
+ *   resolves relative import paths (e.g., "./schema.ts") against the grammar
+ *   file's location before calling this function.
+ * @returns The resolved type definition, or undefined if not found
+ */
+export type SchemaLoader = (
+    typeName: string,
+    source: string,
+) => SchemaTypeDefinition | undefined;
+
 type DefinitionRecord = {
     definitions: RuleDefinition[];
     grammarRules?: GrammarRule[];
     hasValue: boolean;
     compiling: boolean; // true while grammarRules is being populated
     nullable?: boolean; // set after compilation; true if any alternative matches ε
+    valueType?: string[] | undefined; // declared return type names (e.g. <Rule> : A | B = ...)
 };
 
 type ResolvedDefinitionRecord = DefinitionRecord & {
@@ -50,12 +73,16 @@ type CompileContext = {
     content: string;
     displayPath: string;
     ruleDefMap: DefinitionMap;
+    exportedNames: Set<string>; // Only rules with export keyword are importable
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     knownTypeNames: Set<string>; // Type names imported from .ts files
     importedTypeNames: Map<string, number | undefined>; // Explicitly named .ts type imports with positions (excludes entity names and wildcards)
     usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
+    resolvedTypes: Map<string, SchemaTypeDefinition>; // Parsed schema types resolved via SchemaLoader
     hasStarImport: boolean; // Indicates if there's a star import
     currentDefinition?: string | undefined;
+    valuePositions: Map<CompiledValueNode, number>; // source positions of value nodes for error reporting (compile-time only)
+    derivedTypes: Map<GrammarRule[], SchemaType>; // cached derived output types for rule arrays (compile-time only)
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
 };
@@ -97,6 +124,7 @@ function createCompileContext(
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
     entityNames?: string[],
+    schemaLoader?: SchemaLoader,
 ): CompileContext {
     const ruleDefMap: DefinitionMap = new Map();
 
@@ -112,6 +140,17 @@ function createCompileContext(
     }
     const importedTypeNames = new Map<string, number | undefined>();
     const usedImportedTypes = new Set<string>();
+    const resolvedTypes = new Map<string, SchemaTypeDefinition>();
+
+    // Build exportedNames from definitions with exported: true
+    // Only rules explicitly marked with export are importable
+    const exportedNames = new Set<string>();
+    for (const def of definitions) {
+        if (def.exported) {
+            exportedNames.add(def.definitionName.name);
+        }
+    }
+
     // Create the context early and add to the map BEFORE processing anything
     // This prevents infinite recursion on circular dependencies
     const context: CompileContext = {
@@ -119,11 +158,15 @@ function createCompileContext(
         content,
         displayPath,
         ruleDefMap,
+        exportedNames,
         importedRuleMap,
         knownTypeNames,
         importedTypeNames,
         usedImportedTypes,
+        resolvedTypes,
         hasStarImport: false,
+        valuePositions: new Map(),
+        derivedTypes: new Map(),
         errors: [],
         warnings: [],
     };
@@ -132,13 +175,14 @@ function createCompileContext(
     // This allows circular imports to work since our definitions are available
     // when other files try to import from us
     for (const def of definitions) {
-        const existing = ruleDefMap.get(def.name);
+        const existing = ruleDefMap.get(def.definitionName.name);
         if (existing === undefined) {
-            ruleDefMap.set(def.name, {
+            ruleDefMap.set(def.definitionName.name, {
                 definitions: [def],
                 // Set this to true to allow recursion to assume that it has value.
                 hasValue: true,
                 compiling: false,
+                valueType: def.valueType?.map((vt) => vt.name),
             });
         } else {
             existing.definitions.push(def);
@@ -167,9 +211,22 @@ function createCompileContext(
                 const ruleNames =
                     importStmt.names === "*"
                         ? importContext.ruleDefMap.keys()
-                        : importStmt.names;
+                        : importStmt.names.map((n) => n.name);
 
                 for (const ruleName of ruleNames) {
+                    // Check if the rule is exported from the source file
+                    if (!importContext.exportedNames.has(ruleName)) {
+                        // Rule is not exported from the source file
+                        if (importStmt.names !== "*") {
+                            // Only error for named imports; wildcard silently skips
+                            context.errors.push({
+                                message: `Rule '<${ruleName}>' is not exported from '${importStmt.source}'.`,
+                                definition: ruleName,
+                                pos: importStmt.pos,
+                            });
+                        }
+                        continue;
+                    }
                     // Check if we're trying to import a rule that's already defined locally
                     if (ruleDefMap.has(ruleName)) {
                         context.errors.push({
@@ -188,8 +245,33 @@ function createCompileContext(
                     // Mark with a special sentinel to indicate wildcard import
                     context.hasStarImport = true;
                 } else {
-                    for (const name of importStmt.names) {
+                    for (const { name } of importStmt.names) {
                         importedTypeNames.set(name, importStmt.pos);
+                        // Resolve type via SchemaLoader if available
+                        if (schemaLoader) {
+                            // Resolve relative source path against the grammar file
+                            const resolvedSource = fileUtils
+                                ? fileUtils.resolvePath(
+                                      importStmt.source,
+                                      fullPath,
+                                  )
+                                : importStmt.source;
+                            const def = schemaLoader(name, resolvedSource);
+                            if (def !== undefined) {
+                                if (!def.exported) {
+                                    context.errors.push({
+                                        message: `Type '${name}' is not exported from '${importStmt.source}'`,
+                                        pos: importStmt.pos,
+                                    });
+                                }
+                                resolvedTypes.set(name, def);
+                            } else {
+                                context.errors.push({
+                                    message: `Cannot resolve type '${name}' from '${importStmt.source}'`,
+                                    pos: importStmt.pos,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -211,6 +293,7 @@ export function compileGrammar(
     warnings?: string[],
     imports?: ImportStatement[],
     entityNames?: string[],
+    schemaLoader?: SchemaLoader,
 ): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
@@ -222,6 +305,7 @@ export function compileGrammar(
         definitions,
         imports,
         entityNames,
+        schemaLoader,
     );
 
     const { grammarRules, hasValue } = createNamedGrammarRules(context, start);
@@ -234,7 +318,10 @@ export function compileGrammar(
     }
 
     for (const [name, record] of context.ruleDefMap.entries()) {
-        if (record.grammarRules === undefined) {
+        if (
+            record.grammarRules === undefined &&
+            !context.exportedNames.has(name)
+        ) {
             context.warnings.push({
                 message: `Rule '<${name}>' is defined but never used.`,
                 pos: record.definitions[0]?.pos,
@@ -298,6 +385,67 @@ function convertCompileError(
     });
 }
 
+/**
+ * Validate variable references in a ValueNode and compile it to a CompiledValueNode,
+ * stripping parser-only comment fields so the result is safe for serialization into .ag.json.
+ */
+function validateAndCompileValueNode(
+    context: CompileContext,
+    node: ValueNode,
+    availableVariables: Set<string>,
+): CompiledValueNode {
+    let result: CompiledValueNode;
+    switch (node.type) {
+        case "literal":
+            result = { type: "literal", value: node.value };
+            break;
+        case "variable":
+            validateVariableReference(context, node.name, availableVariables);
+            result = { type: "variable", name: node.name };
+            break;
+        case "object": {
+            const value: { [key: string]: CompiledValueNode | null } = {};
+            for (const prop of node.value) {
+                if (prop.value === null) {
+                    // Shorthand form: { key } means { key: key }
+                    // Validate that 'key' is an available variable
+                    validateVariableReference(
+                        context,
+                        prop.key,
+                        availableVariables,
+                    );
+                    value[prop.key] = null;
+                } else {
+                    value[prop.key] = validateAndCompileValueNode(
+                        context,
+                        prop.value,
+                        availableVariables,
+                    );
+                }
+            }
+            result = { type: "object", value };
+            break;
+        }
+        case "array":
+            result = {
+                type: "array",
+                value: node.value.map((elem) =>
+                    validateAndCompileValueNode(
+                        context,
+                        elem.value,
+                        availableVariables,
+                    ),
+                ),
+            };
+            break;
+    }
+    // Track source position of the top-level value node for error reporting
+    if (node.pos !== undefined) {
+        context.valuePositions.set(result, node.pos);
+    }
+    return result;
+}
+
 // Sentinel for missing rule definitions. Pre-populated grammarRules suppress
 // re-compilation; empty definitions yield undefined for any pos lookup.
 const emptyRecord: ResolvedDefinitionRecord = {
@@ -324,48 +472,6 @@ function validateVariableReference(
     }
 }
 
-/**
- * Validate variable references in a ValueNode while traversing the structure
- */
-function validateVariableReferences(
-    context: CompileContext,
-    valueNode: ValueNode,
-    availableVariables: Set<string>,
-): void {
-    switch (valueNode.type) {
-        case "variable":
-            validateVariableReference(
-                context,
-                valueNode.name,
-                availableVariables,
-            );
-            break;
-        case "object":
-            for (const key in valueNode.value) {
-                const val = valueNode.value[key];
-                if (val === null) {
-                    // Shorthand form: { key } means { key: key }
-                    // Validate that 'key' is an available variable
-                    validateVariableReference(context, key, availableVariables);
-                } else {
-                    validateVariableReferences(
-                        context,
-                        val,
-                        availableVariables,
-                    );
-                }
-            }
-            break;
-        case "array":
-            for (const item of valueNode.value) {
-                validateVariableReferences(context, item, availableVariables);
-            }
-            break;
-        case "literal":
-            // No variables in literals
-            break;
-    }
-}
 // ε-reachable cycle detection
 //
 // A grammar rule causes an infinite loop at match time when a named rule can
@@ -447,7 +553,9 @@ function createNamedGrammarRules(
                 context,
                 entry.rules,
                 eprWithSelf,
-                entry.spacingMode,
+                // Fold "auto" (explicit annotation) to undefined (runtime default) so
+                // the NFA compiler and matcher never see the parser-only "auto" value.
+                entry.spacingMode === "auto" ? undefined : entry.spacingMode,
                 record.grammarRules,
             );
             hasValue = hasValue && result.hasValue;
@@ -457,6 +565,68 @@ function createNamedGrammarRules(
         record.compiling = false;
         record.nullable = nullable;
         context.currentDefinition = prev;
+
+        // Track valueType entries as used imported types
+        if (record.valueType !== undefined) {
+            for (const typeName of record.valueType) {
+                // Verify the type was actually imported
+                if (
+                    !context.importedTypeNames.has(typeName) &&
+                    !context.knownTypeNames.has(typeName) &&
+                    !context.hasStarImport
+                ) {
+                    context.errors.push({
+                        message: `Type '${typeName}' in value type annotation is not imported`,
+                        definition: name,
+                    });
+                }
+                context.usedImportedTypes.add(typeName);
+            }
+
+            // Validate value expressions against declared types if resolved
+            if (context.resolvedTypes.size > 0) {
+                const declaredTypes: SchemaType[] = [];
+                for (const typeName of record.valueType) {
+                    const def = context.resolvedTypes.get(typeName);
+                    if (def !== undefined) {
+                        declaredTypes.push(def.type);
+                    }
+                }
+                if (declaredTypes.length > 0) {
+                    // Build the effective expected type (single or union)
+                    const expectedType: SchemaType =
+                        declaredTypes.length === 1
+                            ? declaredTypes[0]
+                            : { type: "type-union", types: declaredTypes };
+
+                    // Collect all leaf value nodes from the rule tree,
+                    // including those in sub-rules referenced via RulesPart
+                    const leafValues = collectLeafValues(
+                        record.grammarRules,
+                        context.valuePositions,
+                    );
+                    for (const { value, parts, pos } of leafValues) {
+                        const varTypes = buildVariableTypeMap(
+                            parts,
+                            context.derivedTypes,
+                        );
+                        const errors = validateValueType(
+                            value,
+                            expectedType,
+                            varTypes,
+                            context.resolvedTypes,
+                        );
+                        for (const error of errors) {
+                            context.errors.push({
+                                message: error,
+                                definition: name,
+                                pos,
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (referenceVariable !== undefined && !record.hasValue) {
@@ -469,11 +639,69 @@ function createNamedGrammarRules(
     return record as ResolvedDefinitionRecord;
 }
 
+type LeafValue = {
+    value: CompiledValueNode;
+    parts: GrammarPart[];
+    pos?: number | undefined;
+};
+
+/**
+ * Recursively collects all leaf value nodes from a grammar rule tree.
+ * A "leaf" is a GrammarRule that has a direct value expression (-> { ... }).
+ * Rules that pass through to sub-rules (single RulesPart, no variables,
+ * no explicit value) are traversed recursively.
+ */
+function collectLeafValues(
+    rules: GrammarRule[],
+    valuePositions: Map<CompiledValueNode, number>,
+    visited: Set<GrammarRule[]> = new Set(),
+): LeafValue[] {
+    if (visited.has(rules)) {
+        return []; // Avoid infinite loops on circular rule references
+    }
+    visited.add(rules);
+
+    const results: LeafValue[] = [];
+    for (const rule of rules) {
+        if (rule.value !== undefined) {
+            // Case 1: Explicit value expression — this is a leaf
+            results.push({
+                value: rule.value,
+                parts: rule.parts,
+                pos: valuePositions.get(rule.value),
+            });
+        } else {
+            // No explicit value — check for passthrough cases:
+            // - Single RulesPart with no variable (bare rule reference passthrough)
+            // - Multi-alternative rule where each alternative delegates
+            const hasVariable = rule.parts.some(
+                (p) => p.variable !== undefined,
+            );
+            if (!hasVariable) {
+                for (const part of rule.parts) {
+                    if (part.type === "rules") {
+                        results.push(
+                            ...collectLeafValues(
+                                part.rules,
+                                valuePositions,
+                                visited,
+                            ),
+                        );
+                    }
+                }
+            }
+            // Single-variable implicit rules (case 2) are skipped —
+            // the variable's captured value can't be structurally validated
+        }
+    }
+    return results;
+}
+
 function createGrammarRules(
     context: CompileContext,
     rules: Rule[],
     epsilonReachable: Set<string>,
-    spacingMode: SpacingMode,
+    spacingMode: CompiledSpacingMode,
     grammarRules: GrammarRule[] = [],
 ): { grammarRules: GrammarRule[]; hasValue: boolean; nullable: boolean } {
     let hasValue = true;
@@ -496,8 +724,12 @@ function createGrammarRule(
     context: CompileContext,
     rule: Rule,
     epsilonReachable: Set<string>,
-    spacingMode: SpacingMode,
-): { grammarRule: GrammarRule; hasValue: boolean; nullable: boolean } {
+    spacingMode: CompiledSpacingMode,
+): {
+    grammarRule: GrammarRule;
+    hasValue: boolean;
+    nullable: boolean;
+} {
     const { expressions, value } = rule;
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
@@ -527,7 +759,10 @@ function createGrammarRule(
             }
             case "variable": {
                 variableCount++;
-                const { name, refName, ruleReference, refPos, pos } = expr;
+                const { variableName, refName, ruleReference, refPos, pos } =
+                    expr;
+                const referencedName = refName?.name ?? "string";
+                const name = variableName.name;
                 // Check for duplicate variable definition
                 if (availableVariables.has(name)) {
                     context.errors.push({
@@ -540,7 +775,7 @@ function createGrammarRule(
                 if (ruleReference) {
                     const record = createNamedGrammarRules(
                         context,
-                        refName,
+                        referencedName,
                         refPos,
                         name,
                         currentEpr,
@@ -549,7 +784,7 @@ function createGrammarRule(
                         type: "rules",
                         rules: record.grammarRules,
                         variable: name,
-                        name: refName,
+                        name: referencedName,
                         optional: expr.optional,
                     });
                     if (!expr.optional) {
@@ -563,7 +798,7 @@ function createGrammarRule(
                         ruleNullable =
                             ruleNullable && (record.nullable ?? false);
                     }
-                } else if (refName === "number") {
+                } else if (referencedName === "number") {
                     parts.push({
                         type: "number",
                         variable: name,
@@ -575,27 +810,28 @@ function createGrammarRule(
                     // All non-built-in types must be explicitly imported
                     // Built-in types: string, wildcard, word, number
                     const isBuiltInType =
-                        refName === "string" ||
-                        refName === "wildcard" ||
-                        refName === "word";
+                        referencedName === "string" ||
+                        referencedName === "wildcard" ||
+                        referencedName === "word";
                     if (!isBuiltInType) {
                         const isImportedType =
                             context.hasStarImport ||
-                            context.knownTypeNames.has(refName) ||
-                            context.importedTypeNames.has(refName) ||
-                            globalEntityRegistry.getConverter(refName) !==
-                                undefined;
+                            context.knownTypeNames.has(referencedName) ||
+                            context.importedTypeNames.has(referencedName) ||
+                            globalEntityRegistry.getConverter(
+                                referencedName,
+                            ) !== undefined;
 
                         if (!isImportedType) {
                             context.errors.push({
-                                message: `Undefined type '${refName}' in variable '${name}'`,
+                                message: `Undefined type '${referencedName}' in variable '${name}'`,
                                 definition: context.currentDefinition,
                                 pos: refPos,
                             });
                         } else {
                             // Track imported .ts types used as variable types.
                             // These need runtime entity validation (like old "entity" declarations).
-                            context.usedImportedTypes.add(refName);
+                            context.usedImportedTypes.add(referencedName);
                         }
                     }
 
@@ -603,7 +839,7 @@ function createGrammarRule(
                         type: "wildcard",
                         variable: name,
                         optional: expr.optional,
-                        typeName: refName,
+                        typeName: referencedName,
                     });
                     if (!expr.optional) consumedInput();
                 }
@@ -615,15 +851,15 @@ function createGrammarRule(
                 // BUT: only use the phrase-set if the rule is NOT defined locally
                 // or via import (preserves grammars that define their own <Polite> etc.)
                 const isLocallyDefined =
-                    context.ruleDefMap.has(expr.name) ||
-                    context.importedRuleMap.has(expr.name);
+                    context.ruleDefMap.has(expr.refName.name) ||
+                    context.importedRuleMap.has(expr.refName.name);
                 if (
                     !isLocallyDefined &&
-                    globalPhraseSetRegistry.isPhraseSetName(expr.name)
+                    globalPhraseSetRegistry.isPhraseSetName(expr.refName.name)
                 ) {
                     parts.push({
                         type: "phraseSet",
-                        matcherName: expr.name,
+                        matcherName: expr.refName.name,
                     });
                     // Phrase sets don't produce a captured value on their own.
                     // Use defaultValue=true so single-part rules using a phrase set
@@ -634,7 +870,7 @@ function createGrammarRule(
                 }
                 const record = createNamedGrammarRules(
                     context,
-                    expr.name,
+                    expr.refName.name,
                     expr.pos,
                     undefined,
                     currentEpr,
@@ -644,7 +880,7 @@ function createGrammarRule(
                 parts.push({
                     type: "rules",
                     rules: record.grammarRules,
-                    name: expr.name,
+                    name: expr.refName.name,
                 });
                 // RuleRefExpr has no optional modifier; it is always non-optional.
                 // === false: only clear when *definitely* non-nullable (same
@@ -682,9 +918,13 @@ function createGrammarRule(
         }
     }
 
-    // Validate that all variables referenced in the value are defined
+    let compiledValue: CompiledValueNode | undefined;
     if (value !== undefined) {
-        validateVariableReferences(context, value, availableVariables);
+        compiledValue = validateAndCompileValueNode(
+            context,
+            value,
+            availableVariables,
+        );
     } else if (variableCount > 1) {
         // warn about unused variables if there are more than 1 (since 1 variable rules can be used for simple extraction without value)
         context.warnings.push({
@@ -696,7 +936,7 @@ function createGrammarRule(
     return {
         grammarRule: {
             parts,
-            value,
+            value: compiledValue,
             spacingMode,
         },
         hasValue:

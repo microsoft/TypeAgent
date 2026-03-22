@@ -9,6 +9,7 @@ import {
     DisplayContent,
     DisplayAppendMode,
     CommandDescriptors,
+    CompletionDirection,
     ParsedCommandParams,
     ParameterDefinitions,
     ClientAction,
@@ -243,6 +244,11 @@ export async function createAgentRpcClient(
                     ),
                 );
             } catch (e: any) {
+                // If channel already exists, the agent was registered via a different path
+                // (e.g., WebAgent via webTypeAgent.mts). Skip duplicate registration.
+                if (e.message?.includes("already exists")) {
+                    return;
+                }
                 // Clean up the channel if adding the agent fails
                 channelProvider.deleteChannel(param.name);
                 throw e;
@@ -274,6 +280,10 @@ export async function createAgentRpcClient(
         indexes: async (param: { contextId: number; type: string }) => {
             const context = contextMap.get(param.contextId);
             return context.indexes(param.type as any);
+        },
+        reloadAgentSchema: async (param: { contextId: number }) => {
+            const context = contextMap.get(param.contextId);
+            return context.reloadAgentSchema();
         },
         storageRead: async (param: {
             contextId: number;
@@ -508,12 +518,14 @@ export async function createAgentRpcClient(
             params: ParsedCommandParams<ParameterDefinitions>,
             names: string[],
             context: SessionContext<ShimContext>,
+            direction?: CompletionDirection,
         ) {
             return rpc.invoke("getCommandCompletion", {
                 ...getContextParam(context),
                 commands,
                 params,
                 names,
+                ...(direction !== undefined ? { direction } : {}),
             });
         },
         executeCommand(
@@ -590,6 +602,24 @@ export async function createAgentRpcClient(
                     response,
                 }),
             );
+        },
+        getDynamicSchema(
+            context: SessionContext<ShimContext>,
+            schemaName: string,
+        ) {
+            return rpc.invoke("getDynamicSchema", {
+                ...getContextParam(context),
+                schemaName,
+            });
+        },
+        getDynamicGrammar(
+            context: SessionContext<ShimContext>,
+            schemaName: string,
+        ) {
+            return rpc.invoke("getDynamicGrammar", {
+                ...getContextParam(context),
+                schemaName,
+            });
         },
     };
 

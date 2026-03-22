@@ -173,6 +173,8 @@ function getTranslatorSchemaDef(
             : actionTypeName;
     }
 
+    // For the TypeChat path, we need the .ts source file.
+    // Use originalSchemaFilePath if schemaFile is not .ts format.
     if (typeof actionConfig.schemaFile === "string") {
         return {
             kind: "file",
@@ -190,7 +192,19 @@ function getTranslatorSchemaDef(
         };
     }
 
-    throw new Error(`Unsupported schema source type: ${schemaContent.format}"`);
+    // schemaFile is .pas format; fall back to the original .ts source
+    if (actionConfig.originalSchemaFilePath) {
+        return {
+            kind: "file",
+            typeName,
+            fileName: getPackageFilePath(actionConfig.originalSchemaFilePath),
+        };
+    }
+
+    throw new Error(
+        `TypeScript schema source not available for ${actionConfig.schemaName}. ` +
+            `Add 'originalSchemaFile' to the manifest pointing to the .ts source.`,
+    );
 }
 
 function getTranslatorSchemaDefs(

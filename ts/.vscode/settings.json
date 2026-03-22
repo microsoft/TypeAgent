@@ -3,6 +3,7 @@
     "cSpell.words": [
         "aiclient",
         "AUTOINCREMENT",
+        "behaviour",
         "Chunker",
         "Exif",
         "exifreader",
@@ -47,9 +48,6 @@
     },
     "jest.jestCommandLine": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "chat.tools.terminal.autoApprove": {
-        "ForEach-Object": true,
-        "/^pnpm( --filter [^\\s]+)?( run)? build$/": true,
-        "/^pnpm( --filter [^\\s]+)?( run)? test$/": true,
-        "/^pnpm run jest-esm --(testPathPattern|testNamePattern)=\\\"[^\\\"]+\\\"$/": true
+        "ForEach-Object": true
     }
 }

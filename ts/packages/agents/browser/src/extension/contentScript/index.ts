@@ -5,6 +5,7 @@ import { initializeEventHandlers } from "./eventHandlers";
 import { restoreRecordingState } from "./recording";
 import { interceptHistory } from "./spaNavigation";
 import { PDFInterceptor } from "./pdfInterceptor";
+import { initializeContinuationHandler } from "./continuationHandler";
 import "./autoIndexing"; // Initialize auto-indexing
 
 // Imports to help with bundling
@@ -21,6 +22,29 @@ import "./spaNavigation";
 import "./types";
 
 /**
+ * Injects the tabId into the MAIN world so WebAgents can access it.
+ * This is needed because chrome.runtime APIs are not available in the MAIN world.
+ * Uses postMessage which the platformAdapter listens for to set window._tabId.
+ */
+async function injectTabIdIntoMainWorld(): Promise<void> {
+    try {
+        const response = await chrome.runtime.sendMessage({ type: "getTabId" });
+        const tabId = response?.tabId;
+        if (tabId) {
+            window.postMessage(
+                { type: "typeagent-tabId", tabId },
+                window.location.origin,
+            );
+        }
+    } catch (e) {
+        console.error("[ContentScript] Failed to inject tabId:", e);
+    }
+}
+
+// Inject tabId as early as possible (before DOMContentLoaded)
+injectTabIdIntoMainWorld();
+
+/**
  * Initializes the content script
  */
 async function initialize(): Promise<void> {
@@ -34,6 +58,9 @@ async function initialize(): Promise<void> {
 
     // Initialize PDF interceptor
     await initializePDFInterceptor();
+
+    // Initialize WebAgent continuation handler
+    initializeContinuationHandler();
 
     // Restore recording state if any
     await restoreRecordingStateFromStorage();

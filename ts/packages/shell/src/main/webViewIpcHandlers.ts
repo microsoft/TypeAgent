@@ -128,75 +128,6 @@ export async function initializeBrowserExtension(_appPath: string) {
         await BrowserAgentIpc.getinstance().send(data);
     });
 
-    // Extension service adapter IPC handlers - Must handle async response waiting
-    ipcMain.handle("browser-extension-message", async (_, message) => {
-        try {
-            // Route message through browser IPC to TypeAgent backend
-            const browserIpc = BrowserAgentIpc.getinstance();
-
-            // Check if this is a long-running import operation
-            // Note: ExtensionServiceBase sends with 'type', but it might also come as 'method'
-            const methodName = message.method || message.type;
-            const isImportOperation =
-                methodName === "importWebsiteDataWithProgress" ||
-                methodName === "importHtmlFolder";
-
-            // For import operations, use a longer timeout and handle differently
-            const timeout = isImportOperation ? 600000 : 30000; // 10 minutes for imports, 30 seconds for others
-
-            // Create a promise to wait for the WebSocket response
-            return new Promise((resolve, reject) => {
-                const messageId = Date.now().toString();
-
-                // Set up one-time response listener
-                const originalHandler = browserIpc.onMessageReceived;
-                browserIpc.onMessageReceived = (response) => {
-                    if (response.id === messageId) {
-                        // Restore original handler
-                        browserIpc.onMessageReceived = originalHandler;
-
-                        // Extract the actual data from the ActionResult if it's an extension message
-                        let result = response.result || response;
-                        if (result && result.data !== undefined) {
-                            // This is likely an ActionResult with data field containing the actual extension response
-                            result = result.data;
-                        }
-
-                        resolve(result);
-                    } else if (originalHandler) {
-                        // Forward other messages to original handler
-                        originalHandler(response);
-                    }
-                };
-
-                // Send the message directly using the method/params from the message
-                browserIpc
-                    .send({
-                        method: message.method || message.type,
-                        params: message.params || message.parameters || message,
-                        id: messageId,
-                    })
-                    .catch(reject);
-
-                // Set timeout to prevent hanging
-                setTimeout(() => {
-                    browserIpc.onMessageReceived = originalHandler;
-                    const method = message.method || message.type || "unknown";
-                    const messageInfo = JSON.stringify({
-                        method,
-                        messageId,
-                        hasParams: !!(message.params || message.parameters),
-                    });
-                    resolve({
-                        error: `Inline-browser message timeout - ${messageInfo}`,
-                    });
-                }, timeout);
-            });
-        } catch (error) {
-            return { error: (error as Error).message };
-        }
-    });
-
     // Direct WebSocket connection check via browserIPC
     ipcMain.handle("check-websocket-connection", async () => {
         try {
@@ -205,6 +136,31 @@ export async function initializeBrowserExtension(_appPath: string) {
             return { connected };
         } catch (error) {
             return { connected: false };
+        }
+    });
+
+    // RPC transport: forward channel-multiplexed messages between Electron views and agent backend
+    ipcMain.on("browser-rpc-message", async (event, message) => {
+        try {
+            const browserIpc = BrowserAgentIpc.getinstance();
+
+            // Route RPC replies from agent back to the renderer
+            browserIpc.onRpcReply = (reply: any) => {
+                event.sender.send("browser-rpc-reply", reply);
+            };
+
+            const ws = await browserIpc.ensureWebsocketConnected();
+            if (ws && ws.readyState === 1 /* WebSocket.OPEN */) {
+                // Wrap in agentService channel envelope
+                ws.send(
+                    JSON.stringify({
+                        name: "agentService",
+                        message,
+                    }),
+                );
+            }
+        } catch (error) {
+            debugShellError("Failed to forward RPC message:", error);
         }
     });
 }

@@ -3,7 +3,9 @@
 
 // Debug Schema Grammar - Comprehensive debugging interface
 
-<Start> = <showDebugPanel> | <startDebugging> | <step> | <stopDebugging> | <showHover> | <toggleBreakpoint> | <setBreakpoint> | <removeBreakpoint> | <removeAllBreakpoints>;
+import { CodeDebugActions } from "./debugActionsSchema.ts";
+
+<Start> : CodeDebugActions = <showDebugPanel> | <startDebugging> | <step> | <stopDebugging> | <showHover> | <toggleBreakpoint> | <setBreakpoint> | <removeBreakpoint> | <removeAllBreakpoints>;
 
 // Action Rules
 

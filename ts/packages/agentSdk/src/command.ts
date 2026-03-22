@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Completion types (SeparatorMode, CompletionDirection, CompletionGroups,
+// getCommandCompletion): docs/architecture/completion.md — §3 Agent SDK
+
 import { ActionContext, SessionContext } from "./agentInterface.js";
 import { ParameterDefinitions, ParsedCommandParams } from "./parameters.js";
 
@@ -49,6 +52,32 @@ export type CommandDescriptors =
 //===========================================
 // Command APIs
 //===========================================
+
+// Describes what kind of separator is required between the matched prefix
+// and the completion text.  The frontend uses this to decide when to show
+// the completion menu.
+//
+//   "space"            — whitespace required (default when omitted).
+//                        Used for commands, flags, agent names.
+//   "spacePunctuation" — whitespace or Unicode punctuation ([\s\p{P}])
+//                        required.  Used by the grammar matcher for
+//                        Latin-script completions.
+//   "optional"         — separator accepted but not required; menu shown
+//                        immediately.  Used for CJK / mixed-script
+//                        grammar completions.
+//   "none"             — no separator at all; menu shown immediately.
+//                        Used for [spacing=none] grammars.
+export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+
+// Indicates the user's editing direction, provided by the host.
+//   "forward"  — the user is moving ahead (appending characters,
+//                typed a separator, selected a menu item).  The backend
+//                should offer completions for what follows.
+//   "backward" — the user is reconsidering (e.g. backspaced).  The
+//                backend should offer alternatives for the current
+//                position.
+export type CompletionDirection = "forward" | "backward";
+
 export type CompletionGroup = {
     name: string; // The group name for the completion
     completions: string[]; // The list of completions in the group
@@ -56,6 +85,39 @@ export type CompletionGroup = {
     emojiChar?: string | undefined; // Optional icon for the completion category
     sorted?: boolean; // If true, the completions are already sorted. Default is false, and the completions sorted alphabetically.
     kind?: "literal" | "entity"; // Whether completions are fixed grammar tokens or entity values from agents
+};
+
+// Wraps an array of CompletionGroups with shared metadata that applies
+// uniformly to all groups in the response.
+export type CompletionGroups = {
+    groups: CompletionGroup[];
+    // Number of characters of the input consumed by the grammar/command parser
+    // before the completion point.  When present, the shell inserts
+    // completions at this offset, replacing space-based heuristics that fail
+    // for CJK and other non-space-delimited scripts.
+    matchedPrefixLength?: number | undefined;
+    // What kind of separator is required between the matched prefix and
+    // the completion text.  When omitted, defaults to "space" (whitespace
+    // required before completions are shown).  See SeparatorMode.
+    separatorMode?: SeparatorMode | undefined;
+    // True when the completions form a closed set — if the user types
+    // something not in the list, no further completions can exist
+    // beyond it.  When true and the user types something that doesn't
+    // prefix-match any completion, the caller can skip re-fetching.
+    // False or undefined means the parser can continue past
+    // unrecognized input and find more completions.
+    closedSet?: boolean | undefined;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.  When omitted, the dispatcher will conservatively
+    // assume true if matchedPrefixLength > 0 and false otherwise.
+    directionSensitive?: boolean | undefined;
+    // True when the completions are offered at a position where a
+    // wildcard was finalized at end-of-input.  The wildcard's extent
+    // is ambiguous — the user may still be typing within it — so the
+    // caller should allow the anchor to slide forward on further input
+    // rather than re-fetching or giving up.
+    openWildcard?: boolean | undefined;
 };
 
 export interface AppAgentCommandInterface {
@@ -68,7 +130,8 @@ export interface AppAgentCommandInterface {
         params: ParsedCommandParams<ParameterDefinitions> | undefined,
         names: string[], // array of <argName> or --<flagName> or --<jsonFlagName> for completion
         context: SessionContext<unknown>,
-    ): Promise<CompletionGroup[]>;
+        direction?: CompletionDirection,
+    ): Promise<CompletionGroups>;
 
     // Execute a resolved command.  Exception from the execution are treated as errors and displayed to the user.
     executeCommand(

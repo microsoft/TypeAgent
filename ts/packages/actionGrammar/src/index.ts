@@ -1,10 +1,15 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type { GrammarJson, Grammar } from "./grammarTypes.js";
+export type {
+    GrammarJson,
+    Grammar,
+    CompiledSpacingMode,
+} from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
+export type { SchemaLoader } from "./grammarCompiler.js";
 
 // Parser (for tooling — formatter, linters, etc.)
 export { parseGrammarRules } from "./grammarRuleParser.js";
@@ -12,7 +17,6 @@ export type {
     GrammarParseResult,
     ImportStatement,
     RuleDefinition,
-    SpacingMode,
 } from "./grammarRuleParser.js";
 
 // Writer / formatter
@@ -127,15 +131,25 @@ export type {
     DFATransition,
     DFAWildcardTransition,
     DFAPhraseSetTransition,
+    MatchAST,
+    MatchNode,
+    TokenMatchNode,
+    WildcardMatchNode,
+    PhraseSetMatchNode,
+    RuleRefMatchNode,
 } from "./dfa.js";
 export { DFABuilder } from "./dfa.js";
 export { compileNFAToDFA } from "./dfaCompiler.js";
 export {
     matchDFA,
     matchDFAWithSplitting,
+    matchDFAToAST,
+    matchDFAToASTWithSplitting,
+    evaluateMatchAST,
     getDFACompletions,
     printDFA,
     type DFAMatchResult,
+    type DFAASTMatchResult,
     type DFACompletionResult,
     type DFACompletionGroup,
     type DFAPropertyCompletion,

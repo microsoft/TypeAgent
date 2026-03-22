@@ -2,9 +2,16 @@
 // Licensed under the MIT License.
 
 import registerDebug from "debug";
+import { createChromeRpcClient } from "./chromeRpcClient";
 
 const debug = registerDebug("typeagent:browser:pdfView");
 const debugError = registerDebug("typeagent:browser:pdfView:error");
+
+let chromeRpcSingleton: ReturnType<typeof createChromeRpcClient> | undefined;
+function getChromeRpc() {
+    if (!chromeRpcSingleton) chromeRpcSingleton = createChromeRpcClient();
+    return chromeRpcSingleton;
+}
 
 /**
  * PDF View Page Controller
@@ -230,7 +237,8 @@ class PDFViewPage {
      */
     private async getViewHostUrl(): Promise<{ url: string } | null> {
         try {
-            const response = await chrome.runtime.sendMessage({
+            const { rpc } = getChromeRpc();
+            const response = await (rpc as any).invoke("getViewHostUrl", {
                 type: "getViewHostUrl",
             });
 

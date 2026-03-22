@@ -51,7 +51,7 @@ async function main() {
         collectCommandResult: true,
     });
 
-    await createWebSocketChannelServer(
+    const wss = await createWebSocketChannelServer(
         { port: 8999 },
         (channelProvider, closeFn) => {
             const invokeFunctions: AgentServerInvokeFunctions = {
@@ -75,6 +75,12 @@ async function main() {
                     });
                     createDispatcherRpcServer(dispatcher, dispatcherChannel);
                     return dispatcher.connectionId!;
+                },
+                shutdown: async () => {
+                    console.log("Shutdown requested, stopping agent server...");
+                    wss.close();
+                    await sharedDispatcher.close();
+                    process.exit(0);
                 },
             };
 

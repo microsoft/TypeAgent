@@ -2,8 +2,10 @@
 // 
 // This Action Grammar file defines natural language patterns for workbench operations.
 
+import { CodeWorkbenchActions } from "./workbenchCommandActionsSchema.ts";
+
 // Main entry point - references all action rules by their exact action names
-<Start> = <workbenchOpenFile> | <workbenchOpenFolder> | <workbenchCreateFolderFromExplorer> | <workbenchBuildRelatedTask> | <openInIntegratedTerminal>;
+<Start> : CodeWorkbenchActions = <workbenchOpenFile> | <workbenchOpenFolder> | <workbenchCreateFolderFromExplorer> | <workbenchBuildRelatedTask> | <openInIntegratedTerminal>;
 
 // Shared sub-rules for common patterns
 <Polite> = ('can you' | 'please' | 'would you' | 'could you')?;

@@ -154,7 +154,7 @@ export class ActionSchemaFileCache {
         if (schemaContent.format === "ts" || schemaContent.format === "pas") {
             return {
                 source: schemaContent.content,
-                config: undefined,
+                config: schemaContent.config,
                 fullPath: undefined,
                 format: schemaContent.format,
             };

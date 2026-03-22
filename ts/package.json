@@ -47,6 +47,7 @@
     "shell:test": "pnpm -C packages/shell run shell:test",
     "start:agent-server": "pnpm -C packages/agentServer/server run start",
     "start:mcp": "pnpm -C packages/commandExecutor run start",
+    "stop:agent-server": "pnpm -C packages/agentServer/server run stop",
     "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
     "test:keys": "npx tsx tools/scripts/testServiceKeys.ts",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
@@ -92,13 +93,20 @@
         "arm64"
       ]
     },
+    "overrides": {
+      "hono": ">=4.12.8",
+      "http-proxy-agent": ">=7.0.0",
+      "node-gyp": "^12.2.0",
+      "serialize-javascript": ">=7.0.0"
+    },
     "ignoredBuiltDependencies": [
       "leveldown"
     ]
   },
   "peerDependencyRules": {
     "ignoreMissing": [
-      "eslint"
+      "eslint",
+      "zod"
     ],
     "allowedVersions": {
       "zod": "*",

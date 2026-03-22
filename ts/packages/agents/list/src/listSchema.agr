@@ -137,7 +137,9 @@
     }
 };
 
-<Start> = <AddItems>
+import { ListAction } from "./listSchema.ts";
+
+<Start> : ListAction = <AddItems>
   | <RemoveItems>
   | <CreateList>
   | <GetList>

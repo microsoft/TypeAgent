@@ -17,7 +17,7 @@ import {
     AppAgentManifest,
     TypeAgentAction,
     AppAgentInitSettings,
-    CompletionGroup,
+    CompletionGroups,
 } from "@typeagent/agent-sdk";
 
 import {
@@ -170,7 +170,7 @@ export function createAgentRpcServer(
             }
             return agent.getCommands(getSessionContextShim(param));
         },
-        async getCommandCompletion(param): Promise<CompletionGroup[]> {
+        async getCommandCompletion(param): Promise<CompletionGroups> {
             if (agent.getCommandCompletion === undefined) {
                 throw new Error("Invalid invocation of getCommandCompletion");
             }
@@ -179,6 +179,7 @@ export function createAgentRpcServer(
                 param.params,
                 param.names,
                 getSessionContextShim(param),
+                param.direction,
             );
         },
         async executeCommand(param) {
@@ -241,6 +242,24 @@ export function createAgentRpcServer(
                 param.choiceId,
                 param.response,
                 getActionContextShim(param),
+            );
+        },
+        async getDynamicSchema(param) {
+            if (agent.getDynamicSchema === undefined) {
+                throw new Error("Invalid invocation of getDynamicSchema");
+            }
+            return agent.getDynamicSchema(
+                getSessionContextShim(param),
+                param.schemaName,
+            );
+        },
+        async getDynamicGrammar(param) {
+            if (agent.getDynamicGrammar === undefined) {
+                throw new Error("Invalid invocation of getDynamicGrammar");
+            }
+            return agent.getDynamicGrammar(
+                getSessionContextShim(param),
+                param.schemaName,
             );
         },
     };
@@ -503,6 +522,11 @@ export function createAgentRpcServer(
                 return await rpc.invoke("indexes", {
                     contextId,
                     type,
+                });
+            },
+            reloadAgentSchema: async (): Promise<void> => {
+                return rpc.invoke("reloadAgentSchema", {
+                    contextId,
                 });
             },
         };

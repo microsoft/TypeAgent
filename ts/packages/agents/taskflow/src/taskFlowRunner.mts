@@ -10,11 +10,11 @@ import type {
 } from "@typeagent/dispatcher-types";
 import {
     DisplayAppendMode,
-    getContentForType,
     type DisplayContent,
     type MessageContent,
     type TypedDisplayContent,
 } from "@typeagent/agent-sdk";
+import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
 import { convert } from "html-to-text";
 
 // ── Text utilities ───────────────────────────────────────────────────────────
@@ -110,6 +110,7 @@ function createCapturingClientIO(collector: { messages: string[] }): ClientIO {
     return {
         clear(_requestId) {},
         exit(_requestId) {},
+        setUserRequest() {},
         setDisplayInfo(_requestId, _source, _actionIndex, _action) {},
         setDisplay(message: IAgentMessage): void {
             capture(message);

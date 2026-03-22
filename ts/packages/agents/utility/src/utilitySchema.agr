@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-<Start> = <webSearch> | <webFetch> | <readFile>;
+import { UtilityAction } from "./utilitySchema.mts";
+
+<Start> : UtilityAction = <webSearch> | <webFetch> | <readFile>;
 
 <webSearch> =
       search (the)? web for $(query:wildcard)

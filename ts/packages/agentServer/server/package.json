@@ -25,10 +25,12 @@
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "start": "node dist/server.js",
+    "stop": "node dist/stop.js",
     "tsc": "tsc -b"
   },
   "dependencies": {
     "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",

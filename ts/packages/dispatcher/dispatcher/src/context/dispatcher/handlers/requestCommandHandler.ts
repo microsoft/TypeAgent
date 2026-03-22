@@ -35,7 +35,8 @@ import {
     ActionContext,
     ParsedCommandParams,
     SessionContext,
-    CompletionGroup,
+    CompletionDirection,
+    CompletionGroups,
 } from "@typeagent/agent-sdk";
 import { CommandHandler } from "@typeagent/agent-sdk/helpers/command";
 import {
@@ -454,11 +455,37 @@ export class RequestCommandHandler implements CommandHandler {
                 }
             }
             if (!reasoningHandled) {
-                await executeActions(
+                const execResult = await executeActions(
                     requestAction.actions,
                     requestAction.history?.entities,
                     context,
                 );
+                if (
+                    execResult?.fallbackToReasoning &&
+                    !systemContext.noReasoning
+                ) {
+                    const failedAction = requestAction.actions[0]?.action;
+                    const failedParams = failedAction?.parameters as
+                        | Record<string, unknown>
+                        | undefined;
+                    try {
+                        await executeReasoning(request, context, {
+                            engine: "claude",
+                            fallbackContext: {
+                                failedAction: failedAction?.actionName,
+                                failedSchema: failedAction?.schemaName,
+                                failedFlowName: failedParams?.flowName as
+                                    | string
+                                    | undefined,
+                                error: execResult.error,
+                            },
+                        });
+                    } catch (e: any) {
+                        debugRequest(
+                            `Reasoning fallback after execution failure: ${e.message}`,
+                        );
+                    }
+                }
             }
 
             await requestExplain(
@@ -474,19 +501,25 @@ export class RequestCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<CompletionGroup[]> {
-        const completions: CompletionGroup[] = [];
+        direction?: CompletionDirection,
+    ): Promise<CompletionGroups> {
+        const result: CompletionGroups = { groups: [] };
         for (const name of names) {
             if (name === "request") {
-                const requestPrefix = params.args.request;
-                completions.push(
-                    ...(await requestCompletion(
-                        requestPrefix,
-                        context.agentContext,
-                    )),
+                const requestPrefix = params.args.request ?? "";
+                const requestResult = await requestCompletion(
+                    requestPrefix,
+                    context.agentContext,
+                    direction,
                 );
+                result.groups.push(...requestResult.groups);
+                result.matchedPrefixLength = requestResult.matchedPrefixLength;
+                result.separatorMode = requestResult.separatorMode;
+                result.closedSet = requestResult.closedSet;
+                result.directionSensitive = requestResult.directionSensitive;
+                result.openWildcard = requestResult.openWildcard;
             }
         }
-        return completions;
+        return result;
     }
 }

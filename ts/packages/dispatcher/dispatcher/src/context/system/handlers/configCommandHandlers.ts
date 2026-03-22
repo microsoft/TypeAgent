@@ -18,6 +18,7 @@ import chalk from "chalk";
 import {
     ActionContext,
     CompletionGroup,
+    CompletionGroups,
     ParameterDefinitions,
     ParsedCommandParams,
     PartialParsedCommandParams,
@@ -502,7 +503,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             }
         }
 
-        return completions;
+        return { groups: completions };
     }
 }
 
@@ -557,7 +558,7 @@ class ExplainerCommandHandler implements CommandHandler {
                 });
             }
         }
-        return completions;
+        return { groups: completions };
     }
 }
 
@@ -626,7 +627,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<CompletionGroup[]> {
+    ): Promise<CompletionGroups> {
         const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "model") {
@@ -637,7 +638,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
             }
         }
 
-        return completions;
+        return { groups: completions };
     }
 }
 
@@ -746,7 +747,7 @@ class FixedSchemaCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<CompletionGroup[]> {
+    ): Promise<CompletionGroups> {
         const completions: CompletionGroup[] = [];
         const systemContext = context.agentContext;
         for (const name of names) {
@@ -757,7 +758,7 @@ class FixedSchemaCommandHandler implements CommandHandler {
                 });
             }
         }
-        return completions;
+        return { groups: completions };
     }
 }
 
@@ -839,7 +840,7 @@ class GrammarSystemCommandHandler implements CommandHandler {
                 });
             }
         }
-        return completions;
+        return { groups: completions };
     }
 }
 class GrammarUseDFACommandHandler implements CommandHandler {
@@ -882,7 +883,7 @@ class GrammarUseDFACommandHandler implements CommandHandler {
                 completions.push({ name, completions: ["true", "false"] });
             }
         }
-        return completions;
+        return { groups: completions };
     }
 }
 
@@ -1219,7 +1220,7 @@ class ConfigRequestCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<CompletionGroup[]> {
+    ): Promise<CompletionGroups> {
         const completions: CompletionGroup[] = [];
         const systemContext = context.agentContext;
         for (const name of names) {
@@ -1244,7 +1245,7 @@ class ConfigRequestCommandHandler implements CommandHandler {
                 }
             }
         }
-        return completions;
+        return { groups: completions };
     }
 }
 
@@ -1457,6 +1458,35 @@ class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
+    public readonly description =
+        "Enable or disable PowerShell script reuse for reasoning actions";
+    public readonly parameters = {
+        args: {
+            mode: {
+                description:
+                    "Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning",
+                type: "string" as const,
+                enum: ["enabled", "disabled"],
+            },
+        },
+    } as const;
+
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const mode = params.args.mode as "enabled" | "disabled";
+
+        await changeContextConfig(
+            { execution: { scriptReuse: mode } },
+            context,
+        );
+
+        return displayResult(`Script reuse ${mode}`, context);
+    }
+}
+
 const configExecutionCommandHandlers: CommandHandlerTable = {
     description: "Execution configuration",
     commands: {
@@ -1471,6 +1501,7 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
         ),
         reasoning: new ConfigExecutionReasoningCommandHandler(),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
+        scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
     },
 };
 

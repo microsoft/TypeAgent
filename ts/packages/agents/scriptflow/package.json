@@ -1,0 +1,73 @@
+{
+  "name": "scriptflow-typeagent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent ScriptFlow — reusable PowerShell scripts from reasoning traces",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/scriptflow"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./manifest.json",
+    "./agent/handlers": "./dist/actionHandler.mjs",
+    "./recipe": "./dist/types/scriptRecipe.js"
+  },
+  "scripts": {
+    "agc": "agc -i ./src/scriptflowSchema.agr -o ./dist/scriptflowSchema.ag.json",
+    "asc": "asc -i ./src/schema/scriptActions.mts -o ./dist/scriptflowSchema.pas.json -t ScriptFlowActions",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "compile": "node scripts/compileRecipes.mjs",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "debug": "^4.3.4"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/debug": "^4.1.12",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/scriptflowSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/scriptflowSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/schema/scriptActions.mts"
+          ],
+          "outputGlobs": [
+            "dist/scriptflowSchema.pas.json"
+          ]
+        }
+      }
+    }
+  }
+}

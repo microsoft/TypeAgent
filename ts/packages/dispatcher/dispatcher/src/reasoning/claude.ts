@@ -27,13 +27,15 @@ import { TypeAgentJsonValidator } from "typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
 import { nullClientIO } from "../context/interactiveIO.js";
 import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
-import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
-import { PlanGenerator } from "./planning/planGenerator.js";
-import { PlanLibrary } from "./planning/planLibrary.js";
-import { PlanMatcher } from "./planning/planMatcher.js";
-import { PlanExecutor } from "./planning/planExecutor.js";
+import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
+import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
+import {
+    formatParams as sharedFormatParams,
+    formatToolResultDisplay as sharedFormatToolResultDisplay,
+    formatThinkingDisplay as sharedFormatThinkingDisplay,
+} from "./reasoningLoopBase.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 
 const model = "claude-sonnet-4-5-20250929";
@@ -116,43 +118,64 @@ function getRecentChatContext(
 function buildPromptWithContext(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): string {
+    const parts: string[] = [];
     const chatContext = getRecentChatContext(context);
     if (chatContext) {
-        return `${chatContext}\n\n[Current request]\n${originalRequest}`;
+        parts.push(chatContext);
     }
-    return originalRequest;
+    if (fallbackContext) {
+        const lines = ["[Fallback context — a prior action failed]"];
+        if (fallbackContext.failedSchema && fallbackContext.failedAction) {
+            lines.push(
+                `Failed action: ${fallbackContext.failedSchema}.${fallbackContext.failedAction}`,
+            );
+        }
+        if (fallbackContext.failedFlowName) {
+            lines.push(`Failed flow: ${fallbackContext.failedFlowName}`);
+        }
+        if (fallbackContext.error) {
+            lines.push(`Error: ${fallbackContext.error}`);
+        }
+        lines.push(
+            "You MUST use scriptflow actions (discover_actions, listScriptFlows, executeScriptFlow, createScriptFlow, editScriptFlow, deleteScriptFlow) to handle this request. Do NOT use the Bash tool for operations that scriptflow can handle.",
+        );
+        if (fallbackContext.failedFlowName) {
+            lines.push(
+                `IMPORTANT: The flow '${fallbackContext.failedFlowName}' failed. Use editScriptFlow to fix its script rather than creating a duplicate flow. Only create a new flow if the existing one's parameters/grammar are fundamentally wrong.`,
+            );
+        }
+        parts.push(lines.join("\n"));
+    }
+
+    // Reinforce scriptflow usage for Windows even when not in fallback mode.
+    // Without this, reasoning often uses Bash + PowerShell directly and
+    // never creates a reusable scriptflow.
+    const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
+    if (
+        !fallbackContext &&
+        config.execution.scriptReuse === "enabled" &&
+        process.platform === "win32"
+    ) {
+        parts.push(
+            "[ScriptFlow reminder] For system operations (file listing, process management, text search), " +
+                "use scriptflow actions (discover_actions → listScriptFlows → executeScriptFlow/createScriptFlow) " +
+                "instead of the Bash tool. This creates reusable flows for future requests.",
+        );
+    }
+
+    parts.push(
+        parts.length > 0
+            ? `[Current request]\n${originalRequest}`
+            : originalRequest,
+    );
+    return parts.join("\n\n");
 }
 
-/**
- * Render tool input parameters as a compact inline string.
- * Omits undefined/null values; truncates long strings.
- */
-function formatParams(params: Record<string, any> | undefined): string {
-    if (!params || Object.keys(params).length === 0) return "";
-    const MAX_VALUE_LEN = 60;
-    const pairs = Object.entries(params)
-        .filter(([, v]) => v !== undefined && v !== null)
-        .map(([k, v]) => {
-            let s: string;
-            if (typeof v === "string") {
-                s =
-                    v.length > MAX_VALUE_LEN
-                        ? `"${v.slice(0, MAX_VALUE_LEN)}…"`
-                        : `"${v}"`;
-            } else if (typeof v === "object") {
-                const j = JSON.stringify(v);
-                s =
-                    j.length > MAX_VALUE_LEN
-                        ? `${j.slice(0, MAX_VALUE_LEN)}…`
-                        : j;
-            } else {
-                s = String(v);
-            }
-            return `${k}: ${s}`;
-        });
-    return pairs.length > 0 ? ` \`{ ${pairs.join(", ")} }\`` : "";
-}
+// Delegate to shared formatting utilities from reasoningLoopBase
+const formatParams = sharedFormatParams;
 
 /**
  * Format a tool call as a persistent display line.
@@ -174,56 +197,36 @@ function formatToolCallDisplay(toolName: string, input: any): string {
     return `**Tool:** ${toolName}${params}`;
 }
 
-/**
- * Format a tool result for display. Truncates long results and strips noise.
- */
-function formatToolResultDisplay(content: string, isError: boolean): string {
-    const MAX_LEN = 120;
-    let preview = content.trim().replace(/\n+/g, " ");
-    if (preview.length > MAX_LEN) {
-        preview = preview.slice(0, MAX_LEN) + "…";
-    }
-    const label = isError ? "**Error:**" : "**↳**";
-    return `${label} \`${preview || "(empty)"}\``;
-}
-
-/**
- * Render thinking content as a collapsible HTML details/summary block.
- */
-function formatThinkingDisplay(thinkingText: string): string {
-    // Escape HTML entities in thinking text for safe embedding
-    const escaped = thinkingText
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    return [
-        `<details class="reasoning-thinking">`,
-        `<summary>Thinking</summary>`,
-        `<pre>${escaped}</pre>`,
-        `</details>`,
-    ].join("");
-}
+const formatToolResultDisplay = sharedFormatToolResultDisplay;
+const formatThinkingDisplay = sharedFormatThinkingDisplay;
 
 function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
 ): Options {
     const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
     const activeSchemas = systemContext.agents.getActiveSchemas();
     const schemaDescriptions: string[] = [];
-    const validators = new Map<string, TypeAgentJsonValidator<AppAction>>();
+    const validatorSchemas = new Set<string>();
     for (const schemaName of activeSchemas) {
         const actionConfig = systemContext.agents.getActionConfig(schemaName);
         if (getActionSchemaTypeName(actionConfig.schemaType) === undefined) {
             continue;
         }
         schemaDescriptions.push(`- ${schemaName}: ${actionConfig.description}`);
-        validators.set(
-            schemaName,
-            createActionSchemaJsonValidator(
-                composeActionSchema([actionConfig], [], systemContext.agents, {
-                    activity: false,
-                }),
-            ),
+        validatorSchemas.add(schemaName);
+    }
+    // Build validators on demand so they always reflect the current schema
+    // (e.g., after reloadAgentSchema() updates actionConfig.schemaFile).
+    function getValidator(
+        schemaName: string,
+    ): TypeAgentJsonValidator<AppAction> | undefined {
+        if (!validatorSchemas.has(schemaName)) return undefined;
+        const actionConfig = systemContext.agents.getActionConfig(schemaName);
+        return createActionSchemaJsonValidator(
+            composeActionSchema([actionConfig], [], systemContext.agents, {
+                activity: false,
+            }),
         );
     }
 
@@ -240,7 +243,7 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: discoverSchema,
         handler: async (args) => {
-            const validator = validators.get(args.schemaName);
+            const validator = getValidator(args.schemaName);
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
             }
@@ -268,7 +271,7 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: executeSchema,
         handler: async (args) => {
-            const validator = validators.get(args.schemaName);
+            const validator = getValidator(args.schemaName);
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
             }
@@ -482,6 +485,56 @@ function getClaudeOptions(
                 "- For query steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
                 "- mkdir -p packages/agents/taskflow/pending packages/agents/taskflow/pending/suggestions",
+                ...(config.execution.scriptReuse === "enabled" &&
+                process.platform === "win32"
+                    ? [
+                          "",
+                          "# PowerShell Script Generation Guidelines (Windows)",
+                          "",
+                          "You are running on Windows. When the task involves file system operations, process",
+                          "management, text search, system queries, or similar operations that PowerShell handles",
+                          "natively:",
+                          "",
+                          "1. **Prefer PowerShell scripts** over other approaches when the task is a good fit for shell scripting.",
+                          "2. **Parameterize scripts for reuse.** Instead of hardcoding paths, filenames, or search terms, use PowerShell parameters:",
+                          "   ```powershell",
+                          "   param([string]$Path = '.', [string]$Filter = '*')",
+                          "   Get-ChildItem -Path $Path -Filter $Filter",
+                          "   ```",
+                          "3. **Use standard PowerShell cmdlets** (Get-ChildItem, Get-Content, Select-String, Get-Process, Test-Path, etc.) rather than .NET calls or COM objects.",
+                          "4. **Structure multi-step scripts as functions** with clear param() blocks for extractability.",
+                          "5. **Output structured data** when possible (objects, not formatted strings).",
+                          '6. Execute scripts via Bash tool: `powershell -NoProfile -Command "& { <script> }"`',
+                          "",
+                          "# ScriptFlow Integration (MANDATORY)",
+                          "",
+                          "**IMPORTANT: You MUST use scriptflow actions instead of Bash/PowerShell for file system operations,",
+                          "process management, text search, and system queries. Do NOT use the Bash tool for these tasks.**",
+                          "",
+                          "Required workflow:",
+                          "1. discover_actions('scriptflow') to see available actions",
+                          "2. execute_action scriptflow.listScriptFlows to see registered flows",
+                          "3. If an existing flow fits, use scriptflow.executeScriptFlow with named flowParameters",
+                          "4. If a flow exists but its script is broken, use scriptflow.editScriptFlow to fix it, then execute",
+                          "5. If no flow fits, create one with scriptflow.createScriptFlow then execute it",
+                          "6. Use scriptflow.deleteScriptFlow to remove obsolete or duplicate flows",
+                          "",
+                          "PARAMETER PASSING (CRITICAL):",
+                          "- Use flowParametersJson (JSON string of named params) instead of flowArgs when the flow has multiple parameters.",
+                          '  Example: { "flowName": "listFiles", "flowParametersJson": "{\\"path\\":\\"C:\\\\\\\\Users\\\\\\\\name\\\\\\\\Downloads\\",\\"filter\\":\\"*safenet*\\"}" }',
+                          "- Parameter names are CASE-INSENSITIVE but should match the flow's parameter names from listScriptFlows.",
+                          "  The listFiles flow has params: path (directory) and filter (wildcard pattern).",
+                          "  The listDownloadsWithFilter flow has param: FilterPattern (name filter).",
+                          "- Use real Windows paths (C:\\\\Users\\\\...), NOT PowerShell variables like $env:USERPROFILE.",
+                          "- Extract paths and filters from the user's request as separate parameters.",
+                          "  e.g. 'list files in downloads with safenet' → path: 'C:\\\\Users\\\\name\\\\Downloads', filter: '*safenet*'",
+                          "",
+                          "When invoked as a fallback from a failed scriptflow action, the [Fallback context] in your",
+                          "prompt tells you which action failed and why. Parse the original request to extract the correct",
+                          "parameters (path, filter, etc.) and re-invoke the scriptflow action with corrected parameters,",
+                          "or create a new scriptflow if the existing one doesn't support the request.",
+                      ]
+                    : []),
             ].join("\n"),
         },
         mcpServers: {
@@ -512,13 +565,18 @@ function generateRequestId(): string {
 async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): Promise<any> {
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
 
     // Create query to Claude Agent SDK with chat history context
     const queryInstance = query({
-        prompt: buildPromptWithContext(originalRequest, context),
+        prompt: buildPromptWithContext(
+            originalRequest,
+            context,
+            fallbackContext,
+        ),
         options: getClaudeOptions(context),
     });
 
@@ -620,6 +678,7 @@ async function executeReasoningWithoutPlanning(
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
@@ -648,11 +707,16 @@ async function executeReasoningWithTracing(
 
         // Create query to Claude Agent SDK with chat history context
         const queryInstance = query({
-            prompt: buildPromptWithContext(originalRequest, context),
+            prompt: buildPromptWithContext(
+                originalRequest,
+                context,
+                fallbackContext,
+            ),
             options: getClaudeOptions(context),
         });
 
         let finalResult: string | undefined = undefined;
+        const toolUseIdToName = new Map<string, string>();
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
@@ -674,6 +738,8 @@ async function executeReasoningWithTracing(
                             content: content.text,
                         });
                     } else if (content.type === "tool_use") {
+                        // Track tool_use_id → name for matching results
+                        toolUseIdToName.set(content.id, content.name);
                         // Record tool call for tracing
                         tracer.recordToolCall(content.name, content.input);
 
@@ -717,6 +783,17 @@ async function executeReasoningWithTracing(
                             } else if (typeof block.content === "string") {
                                 content = block.content;
                             }
+
+                            // Record tool result in trace for script extraction
+                            const toolName =
+                                toolUseIdToName.get(block.tool_use_id) ??
+                                "unknown";
+                            tracer.recordToolResult(
+                                toolName,
+                                content,
+                                isError ? content : undefined,
+                            );
+
                             context.actionIO.appendDisplay(
                                 {
                                     type: "markdown",
@@ -753,101 +830,77 @@ async function executeReasoningWithTracing(
         // Save trace
         await tracer.saveTrace();
 
-        // Phase 2: Generate plan from successful trace
+        // Auto-generate recipe from successful trace for future reuse via flowInterpreter
         if (tracer.wasSuccessful()) {
             try {
-                const planGenerator = new PlanGenerator();
-                const planLibrary = new PlanLibrary(
-                    storage,
-                    context.sessionContext.instanceStorage,
-                );
+                const recipeGen = new ReasoningRecipeGenerator();
+                const recipe = await recipeGen.generate(tracer.getTrace());
 
-                const plan = await planGenerator.generatePlan(
-                    tracer.getTrace(),
-                );
+                if (recipe) {
+                    const pendingDir = path.join(
+                        getRepoRoot(),
+                        "packages",
+                        "agents",
+                        "taskflow",
+                        "pending",
+                    );
+                    const { saveRecipe } = await import(
+                        "taskflow-typeagent/recipeCompiler"
+                    );
+                    const filePath = await saveRecipe(recipe, pendingDir);
+                    debug(`Recipe saved: ${filePath}`);
+                    context.actionIO.appendDisplay({
+                        type: "text",
+                        content: `\n✓ Recipe saved: ${recipe.actionName}.recipe.json`,
+                    });
+                }
+            } catch (error) {
+                debug("Failed to generate recipe from trace:", error);
+            }
 
-                if (plan && planGenerator.validatePlan(plan)) {
-                    // Check for duplicate plans before saving
-                    const existingPlans = await planLibrary.findMatchingPlans(
-                        originalRequest,
-                        plan.intent,
+            // Auto-generate script recipes from PowerShell scripts in trace
+            // and register them as active scriptflows for immediate reuse.
+            const scriptReuseEnabled =
+                systemContext.session.getConfig().execution.scriptReuse ===
+                "enabled";
+            if (scriptReuseEnabled && process.platform === "win32") {
+                try {
+                    const scriptGen = new ScriptRecipeGenerator();
+                    const scriptRecipes = await scriptGen.generate(
+                        tracer.getTrace(),
                     );
 
-                    let isDuplicate = false;
-                    let duplicatePlanId: string | undefined;
-
-                    if (existingPlans.length > 0) {
-                        // Use PlanMatcher to check if this plan is essentially a duplicate
-                        const planMatcher = new PlanMatcher(planLibrary);
-
-                        for (const existingPlan of existingPlans) {
-                            // Check if existing plan is user-approved
-                            if (existingPlan.approval?.status === "approved") {
+                    if (scriptRecipes.length > 0) {
+                        const saved = await saveScriptRecipesAsActiveFlows(
+                            scriptRecipes,
+                            systemContext,
+                        );
+                        for (const name of saved) {
+                            context.actionIO.appendDisplay({
+                                type: "text",
+                                content: `\n✓ Script flow registered: ${name}`,
+                            });
+                        }
+                        if (saved.length > 0) {
+                            // Reload schema so the new flows are available
+                            try {
+                                await systemContext.agents.reloadAgentSchema(
+                                    "scriptflow",
+                                    systemContext,
+                                );
+                            } catch {
                                 debug(
-                                    `Found user-approved plan: ${existingPlan.planId}, skipping new plan creation`,
+                                    "Failed to reload scriptflow schema after saving recipes",
                                 );
-
-                                // Update usage of approved plan instead
-                                await planLibrary.updatePlanUsage(
-                                    existingPlan.planId,
-                                    true,
-                                    tracer.getTrace().metrics.duration,
-                                );
-
-                                isDuplicate = true;
-                                duplicatePlanId = existingPlan.planId;
-                                break;
-                            }
-
-                            // Check if the descriptions are very similar
-                            const similarity =
-                                await planMatcher.computeSimilarity(
-                                    plan.description,
-                                    existingPlan.description,
-                                );
-
-                            if (similarity >= 0.8) {
-                                isDuplicate = true;
-                                duplicatePlanId = existingPlan.planId;
-                                debug(
-                                    `Detected duplicate plan (similarity: ${similarity}): ${existingPlan.planId}`,
-                                );
-
-                                // Update the existing plan's usage count
-                                await planLibrary.updatePlanUsage(
-                                    existingPlan.planId,
-                                    true,
-                                    tracer.getTrace().metrics.duration,
-                                );
-                                break;
                             }
                         }
                     }
-
-                    if (isDuplicate) {
-                        debug(
-                            `Skipped creating duplicate plan, updated existing: ${duplicatePlanId}`,
-                        );
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Updated existing workflow plan usage (prevented duplicate)`,
-                        });
-                    } else {
-                        await planLibrary.savePlan(plan);
-                        debug(
-                            `Generated and saved workflow plan: ${plan.planId} (${plan.intent})`,
-                        );
-
-                        // Notify user that a plan was created
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Created reusable workflow plan: ${plan.description}`,
-                        });
-                    }
+                } catch (error) {
+                    debug(
+                        "Failed to generate script recipe from trace:",
+                        error,
+                    );
                 }
-            } catch (error) {
-                // Don't fail the request if plan generation fails
-                debug("Failed to generate plan from trace:", error);
             }
         }
 
@@ -860,117 +913,6 @@ async function executeReasoningWithTracing(
         await tracer.saveTrace();
         throw error;
     }
-}
-
-/**
- * Execute reasoning action with planning (Phase 3: plan execution + fallback)
- */
-async function executeReasoningWithPlanning(
-    originalRequest: string,
-    context: ActionContext<CommandHandlerContext>,
-): Promise<any> {
-    const storage = context.sessionContext.sessionStorage;
-
-    if (!storage) {
-        // No session storage available - fallback to standard reasoning
-        debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(originalRequest, context);
-    }
-
-    // Phase 3: Try to find and execute a matching plan
-    try {
-        const planLibrary = new PlanLibrary(
-            storage,
-            context.sessionContext.instanceStorage,
-        );
-        const planMatcher = new PlanMatcher(planLibrary);
-
-        debug("Searching for matching workflow plan...");
-        displayStatus("Checking for matching workflow...", context);
-
-        const match = await planMatcher.findBestMatch(originalRequest);
-
-        if (match) {
-            debug(
-                `Found matching plan: ${match.plan.planId} (confidence: ${match.confidence})`,
-            );
-
-            // Notify user about plan reuse
-            context.actionIO.appendDisplay({
-                type: "text",
-                content: `\n♻️ Reusing workflow: ${match.plan.description} (confidence: ${Math.round(match.confidence * 100)}%)`,
-            });
-
-            // Execute the plan
-            const planExecutor = new PlanExecutor();
-            const executionResult = await planExecutor.executePlan(
-                match.plan,
-                originalRequest,
-                context,
-            );
-
-            if (executionResult.success) {
-                // Update plan usage statistics
-                await planLibrary.updatePlanUsage(
-                    match.plan.planId,
-                    true,
-                    executionResult.duration,
-                );
-
-                debug(
-                    `Plan executed successfully in ${executionResult.duration}ms`,
-                );
-
-                // Notify user of success
-                context.actionIO.appendDisplay({
-                    type: "text",
-                    content: `\n✓ Workflow completed successfully`,
-                });
-
-                // Prompt for review if plan is pending
-                if (match.plan.approval?.status === "pending_review") {
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: `\n💡 This workflow is ready for review.`,
-                    });
-                }
-
-                return executionResult.finalOutput
-                    ? createActionResultNoDisplay(executionResult.finalOutput)
-                    : undefined;
-            } else {
-                // Plan execution failed - update stats and fallback
-                await planLibrary.updatePlanUsage(
-                    match.plan.planId,
-                    false,
-                    executionResult.duration,
-                );
-
-                debug(
-                    `Plan execution failed: ${executionResult.error}, falling back to reasoning`,
-                );
-
-                context.actionIO.appendDisplay({
-                    type: "text",
-                    content: `\n⚠️ Workflow failed, using reasoning instead...`,
-                });
-
-                // Fall through to reasoning
-            }
-        } else {
-            debug("No matching plan found, using reasoning");
-            displayStatus(
-                "No matching workflow found, using reasoning...",
-                context,
-            );
-        }
-    } catch (error) {
-        debug("Plan matching/execution failed:", error);
-        // Fall through to reasoning
-    }
-
-    // Fallback: Execute reasoning with tracing
-    return executeReasoningWithTracing(originalRequest, context);
 }
 
 /**
@@ -992,13 +934,180 @@ export async function executeReasoningAction(
     const request = action.parameters.originalRequest;
     debug(`Received reasoning request: ${request}`);
 
-    // Check if plan reuse is enabled
+    // Check if plan reuse or script reuse is enabled (either triggers tracing)
     const planReuseEnabled = config.execution.planReuse === "enabled";
+    const scriptReuseEnabled = config.execution.scriptReuse === "enabled";
 
     return executeReasoning(request, context, {
-        planReuseEnabled,
+        planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
     });
+}
+
+import type { Storage } from "@typeagent/agent-sdk";
+import type { ScriptRecipe as CapturedScriptRecipe } from "./scriptRecipeGenerator.js";
+
+/**
+ * Save captured script recipes as active scriptflows by writing directly
+ * to the scriptflow agent's instance storage in the format its store expects.
+ * This avoids a dependency on the scriptflow package.
+ */
+async function saveScriptRecipesAsActiveFlows(
+    recipes: CapturedScriptRecipe[],
+    systemContext: CommandHandlerContext,
+): Promise<string[]> {
+    const storage =
+        systemContext.persistDir && systemContext.storageProvider
+            ? systemContext.storageProvider.getStorage(
+                  "scriptflow",
+                  systemContext.persistDir,
+              )
+            : undefined;
+    if (!storage) {
+        debug("No instance storage available for scriptflow");
+        return [];
+    }
+
+    // Read existing index
+    let index: {
+        version: 1;
+        flows: Record<string, unknown>;
+        deletedSamples: string[];
+        lastModified: string;
+    };
+    try {
+        const indexJson = await storage.read("index.json", "utf8");
+        index = JSON.parse(indexJson);
+    } catch {
+        index = {
+            version: 1,
+            flows: {},
+            deletedSamples: [],
+            lastModified: new Date().toISOString(),
+        };
+    }
+
+    const saved: string[] = [];
+    for (const recipe of recipes) {
+        const { actionName } = recipe;
+        // Skip if flow already exists
+        if (index.flows[actionName]) {
+            debug(`Flow '${actionName}' already exists, skipping`);
+            continue;
+        }
+
+        const flowPath = `flows/${actionName}.flow.json`;
+        const scriptPath = `scripts/${actionName}.ps1`;
+
+        // Write flow definition
+        const flowDef = {
+            version: 1,
+            actionName,
+            displayName: recipe.displayName,
+            description: recipe.description,
+            parameters: recipe.parameters,
+            scriptRef: scriptPath,
+            expectedOutputFormat: recipe.script.expectedOutputFormat,
+            grammarPatterns: recipe.grammarPatterns,
+            sandbox: recipe.sandbox,
+            source: recipe.source,
+        };
+        await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+        await storage.write(scriptPath, recipe.script.body);
+
+        // Generate grammar rule text
+        const grammarRuleText = generateGrammarRuleTextForRecipe(
+            actionName,
+            recipe.grammarPatterns,
+        );
+
+        const now = new Date().toISOString();
+        index.flows[actionName] = {
+            actionName,
+            displayName: recipe.displayName,
+            description: recipe.description,
+            flowPath,
+            scriptPath,
+            grammarRuleText,
+            created: now,
+            updated: now,
+            source: "reasoning",
+            usageCount: 0,
+            enabled: true,
+        };
+        index.lastModified = now;
+        saved.push(actionName);
+        debug(`Script flow registered as active: ${actionName}`);
+    }
+
+    if (saved.length > 0) {
+        await storage.write("index.json", JSON.stringify(index, null, 2));
+
+        // Regenerate grammar file
+        await writeDynamicGrammarForIndex(storage, index);
+    }
+
+    return saved;
+}
+
+function generateGrammarRuleTextForRecipe(
+    actionName: string,
+    patterns: { pattern: string; isAlias: boolean }[],
+): string {
+    const rules: string[] = [];
+    let aliasIndex = 0;
+    for (const pattern of patterns) {
+        const ruleName = pattern.isAlias
+            ? `${actionName}Alias${++aliasIndex}`
+            : actionName;
+        const rewritten = pattern.pattern.replace(
+            /\$\(\w+:wildcard\)/g,
+            "$(flowArgs:wildcard)",
+        );
+        const hasArgs = rewritten.includes("$(flowArgs:wildcard)");
+        const paramJson = hasArgs
+            ? `{ flowName: "${actionName}", flowArgs }`
+            : `{ flowName: "${actionName}" }`;
+        rules.push(
+            `<${ruleName}> [spacing=optional] = ${rewritten}` +
+                ` -> { actionName: "executeScriptFlow", parameters: ${paramJson} };`,
+        );
+    }
+    return rules.join("\n");
+}
+
+async function writeDynamicGrammarForIndex(
+    storage: Storage,
+    index: { flows: Record<string, any> },
+): Promise<void> {
+    const ruleNames: string[] = [];
+    const ruleTexts: string[] = [];
+    for (const entry of Object.values(index.flows)) {
+        if (!entry.enabled || !entry.grammarRuleText) continue;
+        ruleTexts.push(entry.grammarRuleText);
+        for (const line of (entry.grammarRuleText as string).split("\n")) {
+            const m = line.match(/^<(\w+)>/);
+            if (m && !ruleNames.includes(m[1])) {
+                ruleNames.push(m[1]);
+            }
+        }
+    }
+    if (ruleNames.length === 0) {
+        await storage.write("grammar/dynamic.agr", "");
+        return;
+    }
+    const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
+    await storage.write(
+        "grammar/dynamic.agr",
+        `${startRule}\n\n${ruleTexts.join("\n\n")}`,
+    );
+}
+
+export interface ReasoningFallbackContext {
+    failedAction?: string | undefined;
+    failedSchema?: string | undefined;
+    failedFlowName?: string | undefined;
+    error?: string | undefined;
 }
 
 export async function executeReasoning(
@@ -1007,6 +1116,7 @@ export async function executeReasoning(
     options?: {
         planReuseEnabled?: boolean; // false by default
         engine?: "claude"; // default is "claude" for now
+        fallbackContext?: ReasoningFallbackContext;
     },
 ) {
     const engine = options?.engine ?? "claude";
@@ -1014,11 +1124,15 @@ export async function executeReasoning(
         throw new Error(`Unsupported reasoning engine: ${engine}`);
     }
     const planReuseEnabled = options?.planReuseEnabled ?? false;
+    const fallbackContext = options?.fallbackContext;
     if (!planReuseEnabled) {
-        // Standard reasoning without planning
-        return executeReasoningWithoutPlanning(request, context);
+        return executeReasoningWithoutPlanning(
+            request,
+            context,
+            fallbackContext,
+        );
     }
 
-    // Reasoning with planning (trace capture)
-    return executeReasoningWithPlanning(request, context);
+    // Trace capture + auto recipe generation
+    return executeReasoningWithTracing(request, context, fallbackContext);
 }

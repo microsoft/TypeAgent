@@ -26,6 +26,7 @@
   "main": "index.js",
   "scripts": {
     "agc": "agc -i ./src/agent/browserSchema.agr -o ./dist/agent/browserSchema.ag.json",
+    "agc:crossword": "agc -i ./src/extension/webagent/crossword/crosswordSchema.agr -o ./dist/extension/webagent/crossword/crosswordSchema.ag.json",
     "asc": "asc -i ./src/agent/browserActionSchema.mts -o ./dist/agent/browserSchema.pas.json -t BrowserActions -e BrowserEntities",
     "build": "fluid-build . -t build",
     "build:dev": "fluid-build . -t build:dev",
@@ -52,6 +53,7 @@
     "vite:views:client": "vite build"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@mozilla/readability": "^0.6.0",
     "@popperjs/core": "^2.11.8",
     "@typeagent/action-schema": "workspace:*",
@@ -71,7 +73,7 @@
     "cytoscape-dagre": "^2.5.0",
     "dagre": "^0.8.5",
     "debug": "^4.4.0",
-    "dompurify": "^3.2.5",
+    "dompurify": "^3.3.2",
     "express": "^4.22.0",
     "express-rate-limit": "^7.5.0",
     "graphology": "^0.25.4",
@@ -81,7 +83,7 @@
     "graphology-layout-noverlap": "^0.4.1",
     "graphology-types": "^0.24.7",
     "html-to-text": "^9.0.5",
-    "jsdom": "^26.1.0",
+    "jsdom": "^28.1.0",
     "jsonpath": "^1.2.0",
     "knowledge-processor": "workspace:*",
     "knowpro": "workspace:*",
@@ -94,13 +96,16 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "readline": "^1.3.0",
     "sanitize-filename": "^1.6.3",
+    "taskflow-typeagent": "workspace:*",
     "textpro": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "website-memory": "workspace:*",
     "websocket-utils": "workspace:*",
     "ws": "^8.17.1",
-    "yaml": "^2.3.4"
+    "xss": "^1.0.15",
+    "yaml": "^2.3.4",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
@@ -115,7 +120,7 @@
     "@types/html-to-text": "^9.0.4",
     "@types/jest": "^29.5.7",
     "@types/jquery": "^3.5.14",
-    "@types/jsdom": "^21.1.7",
+    "@types/jsdom": "^28.0.0",
     "@types/jsonpath": "0.2.4",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.10.4",
@@ -131,7 +136,7 @@
     "jest": "^29.7.0",
     "jest-chrome": "^0.8.0",
     "jest-environment-jsdom": "^29.7.0",
-    "jsdom": "^26.1.0",
+    "jsdom": "^28.1.0",
     "rimraf": "^6.0.1",
     "rollup-plugin-copy": "^3.5.0",
     "ts-jest": "^29.3.2",
@@ -144,6 +149,7 @@
       "build": {
         "dependsOn": [
           "^build",
+          "asc",
           "build:extension",
           "build:views",
           "tsc:agent",

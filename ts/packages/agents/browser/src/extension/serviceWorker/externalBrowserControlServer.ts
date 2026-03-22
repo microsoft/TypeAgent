@@ -18,6 +18,7 @@ import { createContentScriptRpcClient } from "../../common/contentScriptRpc/clie
 import { ContentScriptRpc } from "../../common/contentScriptRpc/types.mjs";
 import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { screenshotCoordinator } from "./screenshotCoordinator";
+import { runBrowserAction } from "./browserActions";
 //import { generateEmbedding, indexesOfNearest, NormalizedEmbedding, SimilarityType } from "../../../../../typeagent/dist/indexNode";
 //import { openai } from "aiclient";
 
@@ -585,7 +586,16 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             await downloadImageAsFile(targetTab, dataUrl, resolvedFilename);
             return resolvedFilename;
         },
-        //};
+        runBrowserAction: async (
+            actionName: string,
+            parameters: any,
+            schemaName?: string,
+        ) => {
+            return runBrowserAction({
+                actionName,
+                parameters,
+            });
+        },
     };
     const callFunctions: BrowserControlCallFunctions = {
         setAgentStatus: (isBusy: boolean, message: string) => {

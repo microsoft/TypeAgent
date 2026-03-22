@@ -56,8 +56,8 @@ export interface ClientAPI {
     registerClient: (client: Client) => void;
     getSpeechToken: (silent: boolean) => Promise<SpeechToken | undefined>;
     getLocalWhisperStatus: () => Promise<boolean>;
-    getChatHistory: () => Promise<string | undefined>;
-    saveChatHistory: (history: string) => void;
+    getChatHistory: () => Promise<{ html: string; seq: number } | undefined>;
+    saveChatHistory: (history: string, seq: number) => void;
     saveSettings: (settings: ShellUserSettings) => void;
     openImageFile: () => void;
     openFolder: (path: string) => void;
@@ -93,7 +93,7 @@ export interface Client {
     focusInput(): void;
     titleUpdated(title: string): void;
 
-    searchMenuCompletion(id: number, item: SearchMenuItem);
+    searchMenuCompletion(id: number, item: SearchMenuItem): void;
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;

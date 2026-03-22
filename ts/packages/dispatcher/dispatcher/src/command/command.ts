@@ -73,6 +73,72 @@ export function getDefaultSubCommandDescriptor(
     return table.defaultSubCommand;
 }
 
+//
+// ── resolveCommand contract ─────────────────────────────────────────────────
+//
+// Given a normalized input string (output of normalizeCommand — no leading
+// "@", no leading whitespace), greedily resolves as many tokens as possible
+// into an agent name, then a chain of subcommand names.  Returns the point
+// at which resolution stopped and the state accumulated so far.
+//
+// Resolution is greedy and exact-match only.  Each token is consumed if and
+// only if it matches a key in the current command table.  As soon as a
+// token doesn't match, resolution stops and that token (plus everything
+// after it) becomes the suffix.  If a token matches a leaf descriptor
+// (not a sub-table), resolution also stops — the command is fully matched.
+//
+// When resolution stops at a table (not a leaf), the table's
+// defaultSubCommand (if any) is used as the descriptor.  This is the
+// "resolved to default" case — matched is false.
+//
+// The first token is special: it is tested as an agent name first.
+//   - If it matches a known, enabled agent → that agent is selected
+//     and the token is consumed (not included in suffix).
+//   - Otherwise → the "system" agent is selected and the token is
+//     NOT consumed (rolled back into the input for subcommand matching).
+//
+// Return fields (see ResolveCommandResult):
+//
+//   parsedAppAgentName
+//                The agent name parsed from input, or undefined.
+//                Set when the first token matched an agent name, OR
+//                when no subcommands were consumed (commands.length===0)
+//                — in this case the originally-matched agent name (which
+//                may be undefined) is returned.
+//
+//   actualAppAgentName
+//                The agent that will handle the command.  Either the
+//                parsed agent name or "system" as fallback.
+//
+//   commands     Ordered list of subcommand names that were successfully
+//                consumed.  May be empty.
+//
+//   suffix       The remaining input after the last consumed token,
+//                with leading whitespace trimmed.  This is the portion
+//                that was NOT resolved — it may be empty (fully resolved),
+//                a partial word (user is still typing), or multiple
+//                tokens (unrecognized input).  Callers use it as
+//                parameter text (parseCommand) or filter text for
+//                completions (getCommandCompletion).
+//
+//   table        The CommandDescriptorTable at the point where resolution
+//                stopped.  Undefined when the agent has no subcommands
+//                (flat agent with only a root descriptor).  When defined,
+//                table.commands lists the valid subcommands that could
+//                have followed.
+//
+//   descriptor   The resolved CommandDescriptor, or undefined.  It is
+//                defined when:
+//                  (a) an explicit subcommand matched a leaf, or
+//                  (b) we stopped at a table that has a defaultSubCommand.
+//                Undefined when the table has no default and the suffix
+//                didn't match any subcommand.
+//
+//   matched      true only when descriptor came from an explicit
+//                exact-match of the last consumed token against a leaf
+//                in the table.  false when descriptor is the default
+//                subcommand or when descriptor is undefined.
+//
 export async function resolveCommand(
     input: string,
     context: CommandHandlerContext,
@@ -275,7 +341,9 @@ export async function processCommandNoLock(
     attachments?: string[],
 ) {
     try {
+        context.currentAbortSignal?.throwIfAborted();
         const result = await parseCommand(originalInput, context);
+        context.currentAbortSignal?.throwIfAborted();
         return await executeCommand(
             result.command,
             result.params,
@@ -284,6 +352,9 @@ export async function processCommandNoLock(
             attachments,
         );
     } catch (e: any) {
+        if (e.name === "AbortError") {
+            throw e;
+        }
         context.clientIO.appendDisplay(
             makeClientIOMessage(
                 context,
@@ -312,8 +383,10 @@ function beginProcessCommand(
     requestId: RequestId,
     context: CommandHandlerContext,
     options?: ProcessCommandOptions,
+    signal?: AbortSignal,
 ) {
     context.currentRequestId = requestId;
+    context.currentAbortSignal = signal;
     context.commandResult = undefined;
     context.noReasoning = options?.noReasoning ?? false;
 
@@ -357,6 +430,7 @@ function endProcessCommand(
     const result = context.commandResult;
     context.commandResult = undefined;
     context.currentRequestId = undefined;
+    context.currentAbortSignal = undefined;
 
     return result;
 }
@@ -370,10 +444,26 @@ export async function processCommand(
 ): Promise<CommandResult | undefined> {
     // Process one command at at time.
     return context.commandLock(async () => {
-        beginProcessCommand(requestId, context, options);
+        const abortController = new AbortController();
+        const requestIdStr = requestId.requestId;
+        context.activeRequests.set(requestIdStr, abortController);
+        beginProcessCommand(
+            requestId,
+            context,
+            options,
+            abortController.signal,
+        );
+        context.clientIO.setUserRequest(requestId, originalInput);
         try {
             await processCommandNoLock(originalInput, context, attachments);
+        } catch (e: any) {
+            if (e.name === "AbortError") {
+                ensureCommandResult(context).cancelled = true;
+            } else {
+                throw e;
+            }
         } finally {
+            context.activeRequests.delete(requestIdStr);
             return endProcessCommand(requestId, context);
         }
     });

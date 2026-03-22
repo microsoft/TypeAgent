@@ -261,7 +261,11 @@ export function computeNFACompletions(
 
     if (reachableStates.length === 0) {
         debugCompletion(`  → no reachable states, returning empty`);
-        return { completions: [] };
+        return {
+            completions: [],
+            directionSensitive: false,
+            openWildcard: false,
+        };
     }
 
     // Explore completions from reachable states
@@ -285,6 +289,8 @@ export function computeNFACompletions(
 
     const result: GrammarCompletionResult = {
         completions: uniqueCompletions,
+        directionSensitive: false,
+        openWildcard: false,
     };
     const grammarProperties = buildGrammarProperties(nfa, properties);
     if (grammarProperties.length > 0) {

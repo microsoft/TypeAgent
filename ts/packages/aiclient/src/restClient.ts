@@ -294,6 +294,9 @@ export async function fetchWithRetry(
             retryCount++;
         }
     } catch (e: any) {
+        if (e.name === "AbortError") {
+            throw e;
+        }
         return error(`fetch error: ${e.cause?.message ?? e.message}`);
     }
 }
@@ -350,12 +353,31 @@ async function fetchWithTimeout(
     timeoutMs?: number,
 ): Promise<Response> {
     debugUrl(url);
+
+    // Combine timeout and any caller-provided abort signal
+    const externalSignal = options?.signal;
     if (!timeoutMs || timeoutMs <= 0) {
         return fetch(url, options);
     }
 
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
+
+    // If the caller provided a signal (e.g. for cancellation), forward its
+    // abort to our controller so a single signal drives the fetch.
+    let onExternalAbort: (() => void) | undefined;
+    if (externalSignal) {
+        if (externalSignal.aborted) {
+            clearTimeout(id);
+            throw (
+                externalSignal.reason ??
+                new DOMException("The operation was aborted.", "AbortError")
+            );
+        }
+        onExternalAbort = () => controller.abort(externalSignal.reason);
+        externalSignal.addEventListener("abort", onExternalAbort);
+    }
+
     try {
         const response = await fetch(
             url,
@@ -371,13 +393,19 @@ async function fetchWithTimeout(
         return response;
     } catch (e) {
         const ex = e as Error;
-        if (ex.name && ex.name === "AbortError") {
-            throw new Error(`fetch timeout ${timeoutMs}ms`);
-        } else {
+        // If the external signal caused the abort, re-throw as AbortError
+        if (ex.name === "AbortError" && externalSignal?.aborted) {
             throw e;
         }
+        if (ex.name === "AbortError") {
+            throw new Error(`fetch timeout ${timeoutMs}ms`);
+        }
+        throw e;
     } finally {
         clearTimeout(id);
+        if (onExternalAbort && externalSignal) {
+            externalSignal.removeEventListener("abort", onExternalAbort);
+        }
     }
 }
 

@@ -43,8 +43,28 @@ export type WeeklyEmailDigestAction = {
     };
 };
 
+// Find and play the most popular K-pop song this month
+export type PlayPopularKpopSongAction = {
+    actionName: "playPopularKpopSong";
+    parameters: {
+        // Time period for the chart (e.g., 'this month', 'this week')
+        timePeriod?: string;
+    };
+};
+
+// Comparison flow using claudeTask — compare latency/quality
+export type PlayPopularKpopSongClaudeAction = {
+    actionName: "playPopularKpopSongClaude";
+    parameters: {
+        // Time period for the chart (e.g., 'this month', 'this week')
+        timePeriod?: string;
+    };
+};
+
 export type TaskFlowActions =
     | ListTaskFlows
     | CreateTopSongsPlaylistAction
     | CreateTopSongsPlaylistClaudeAction
-    | WeeklyEmailDigestAction;
+    | WeeklyEmailDigestAction
+    | PlayPopularKpopSongAction
+    | PlayPopularKpopSongClaudeAction;

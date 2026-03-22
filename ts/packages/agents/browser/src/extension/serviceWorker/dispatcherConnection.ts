@@ -53,6 +53,7 @@ function createChatPanelClientIO(): ClientIO {
         exit(requestId) {
             send("dispatcher:exit", { requestId });
         },
+        setUserRequest() {},
         setDisplayInfo(requestId, source, actionIndex, action) {
             send("dispatcher:setDisplayInfo", {
                 requestId,

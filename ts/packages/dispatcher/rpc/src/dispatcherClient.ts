@@ -4,13 +4,19 @@
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import type { RpcChannel } from "@typeagent/agent-rpc/channel";
 import type { ConnectionId, Dispatcher } from "@typeagent/dispatcher-types";
-import type { DispatcherInvokeFunctions } from "./dispatcherTypes.js";
+import type {
+    DispatcherCallFunctions,
+    DispatcherInvokeFunctions,
+} from "./dispatcherTypes.js";
 
 export function createDispatcherRpcClient(
     channel: RpcChannel,
     connectionId?: ConnectionId,
 ): Dispatcher {
-    const rpc = createRpc<DispatcherInvokeFunctions>("dispatcher", channel);
+    const rpc = createRpc<DispatcherInvokeFunctions, DispatcherCallFunctions>(
+        "dispatcher",
+        channel,
+    );
 
     return {
         get connectionId() {
@@ -45,6 +51,12 @@ export function createDispatcherRpcClient(
         },
         async respondToChoice(...args) {
             return rpc.invoke("respondToChoice", ...args);
+        },
+        getDisplayHistory(...args) {
+            return rpc.invoke("getDisplayHistory", ...args);
+        },
+        cancelCommand(...args) {
+            return rpc.send("cancelCommand", ...args);
         },
     };
 }

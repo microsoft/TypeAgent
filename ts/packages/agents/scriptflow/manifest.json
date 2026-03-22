@@ -1,0 +1,12 @@
+{
+  "emojiChar": "📜",
+  "description": "Reusable PowerShell scripts captured from reasoning traces",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "PowerShell script actions. Scripts are auto-captured from reasoning and compiled for reuse.",
+    "schemaFile": "./src/schema/scriptActions.mts",
+    "compiledSchemaFile": "agents/scriptflow/dist/scriptflowSchema.pas.json",
+    "grammarFile": "./dist/scriptflowSchema.ag.json",
+    "schemaType": "ScriptFlowActions"
+  }
+}

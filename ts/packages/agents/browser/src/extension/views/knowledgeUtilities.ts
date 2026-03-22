@@ -13,6 +13,24 @@ import {
 } from "./extensionServiceBase";
 import type { ProgressCallback } from "../interfaces/websiteImport.types";
 import type { KnowledgeProgressCallback } from "../interfaces/knowledgeExtraction.types";
+import { createChromeRpcClient } from "./chromeRpcClient";
+import { createElectronRpcClient } from "./electronRpcClient";
+
+// Chrome RPC singleton for view→service-worker communication
+let chromeRpcSingleton: ReturnType<typeof createChromeRpcClient> | undefined;
+function getChromeRpc() {
+    if (!chromeRpcSingleton) chromeRpcSingleton = createChromeRpcClient();
+    return chromeRpcSingleton;
+}
+
+// Electron RPC singleton for view→agent communication
+let electronRpcSingleton:
+    | ReturnType<typeof createElectronRpcClient>
+    | undefined;
+function getElectronRpc() {
+    if (!electronRpcSingleton) electronRpcSingleton = createElectronRpcClient();
+    return electronRpcSingleton;
+}
 
 // ===================================================================
 // INTERFACES AND TYPES
@@ -496,21 +514,14 @@ export class ChromeExtensionService extends ExtensionServiceBase {
         (callback as any)._messageListener = messageListener;
     }
 
-    // Implement abstract sendMessage method
+    // Implement abstract sendMessage method — routes through the RPC client
     protected async sendMessage<T>(message: any): Promise<T> {
-        if (typeof chrome !== "undefined" && chrome.runtime) {
-            try {
-                const response = await chrome.runtime.sendMessage(message);
-                if (response && response.error) {
-                    throw new Error(response.error);
-                }
-                return response;
-            } catch (error) {
-                console.error("Chrome runtime message failed:", error);
-                throw error;
-            }
+        const { rpc } = getChromeRpc();
+        const response = await (rpc as any).invoke(message.type, message);
+        if (response && response.error) {
+            throw new Error(response.error);
         }
-        throw new Error("Chrome extension not available");
+        return response;
     }
 }
 
@@ -861,51 +872,21 @@ export class ElectronExtensionService extends ExtensionServiceBase {
         (callback as any)._extractionId = extractionId;
     }
 
-    // Implement abstract sendMessage method with message transformation
+    // Implement abstract sendMessage method — routes through the Electron RPC client
     protected async sendMessage<T>(message: any): Promise<T> {
-        if (typeof window !== "undefined" && (window as any).electronAPI) {
-            try {
-                // Transform Chrome message format to Electron format
-                const electronMessage =
-                    this.transformChromeMessageToElectron(message);
-                const response = await (
-                    window as any
-                ).electronAPI.sendBrowserMessage(electronMessage);
-                if (response && response.error) {
-                    throw new Error(response.error);
-                }
-                return response;
-            } catch (error) {
-                console.error("Electron IPC message failed:", error);
-                throw error;
+        const client = getElectronRpc();
+        if (client) {
+            const response = await (client.rpc as any).invoke(
+                message.type,
+                message,
+            );
+            if (response && response.error) {
+                throw new Error(response.error);
             }
-        }
-        throw new Error("Electron API not available");
-    }
-
-    /**
-     * Transform Chrome message format to Electron format
-     */
-    private transformChromeMessageToElectron(chromeMessage: any): any {
-        const { type, ...params } = chromeMessage;
-
-        // Handle special cases where message structure differs
-        if (
-            (type === "searchWebMemories" ||
-                type === "importWebsiteDataWithProgress") &&
-            chromeMessage.parameters
-        ) {
-            return {
-                method: type,
-                params: chromeMessage.parameters,
-            };
+            return response;
         }
 
-        // Standard transformation: move all properties except 'type' into 'params'
-        return {
-            method: type,
-            params: Object.keys(params).length > 0 ? params : {},
-        };
+        throw new Error("Electron RPC not available");
     }
 }
 
@@ -1036,10 +1017,12 @@ export class KnowledgeConnectionManager {
                 ).electronAPI.checkWebSocketConnection();
                 return response?.connected === true;
             } else if (typeof chrome !== "undefined" && chrome.runtime) {
-                // Chrome extension context
-                const response = await chrome.runtime.sendMessage({
-                    type: "checkWebSocketConnection",
-                });
+                // Chrome extension context — use RPC client
+                const { rpc } = getChromeRpc();
+                const response = await (rpc as any).invoke(
+                    "checkWebSocketConnection",
+                    { type: "checkWebSocketConnection" },
+                );
                 return response?.connected === true;
             }
             return false;
@@ -1117,25 +1100,6 @@ export function createExtensionService(): ExtensionServiceBase {
     return new ChromeExtensionService();
 }
 
-// ===================================================================
-// CONNECTION MANAGER UPDATES FOR ELECTRON
-// ===================================================================
-
-export class ElectronConnectionManager {
-    static async checkConnectionStatus(): Promise<boolean> {
-        try {
-            const response = await (
-                window as any
-            ).electronAPI.sendBrowserMessage({
-                type: "checkWebSocketConnection",
-            });
-            return response?.connected === true;
-        } catch (error) {
-            return false;
-        }
-    }
-}
-
 // Update the existing connection manager to work with both environments
 export class UnifiedConnectionManager {
     static async checkConnectionStatus(): Promise<boolean> {
@@ -1148,10 +1112,12 @@ export class UnifiedConnectionManager {
                 ).electronAPI.checkWebSocketConnection();
                 return response?.connected === true;
             } else if (typeof chrome !== "undefined" && chrome.runtime) {
-                // Chrome extension context
-                const response = await chrome.runtime.sendMessage({
-                    type: "checkWebSocketConnection",
-                });
+                // Chrome extension context - use RPC
+                const { rpc } = getChromeRpc();
+                const response = await (rpc as any).invoke(
+                    "checkWebSocketConnection",
+                    { type: "checkWebSocketConnection" },
+                );
                 return response?.connected === true;
             }
             return false;

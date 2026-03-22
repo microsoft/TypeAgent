@@ -28,14 +28,9 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import {
-    getBoardSchema,
-    handleCrosswordAction,
-} from "./crossword/actionHandler.mjs";
-
-import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
-import { handleCommerceAction } from "./commerce/actionHandler.mjs";
+import { extractPageComponent } from "./componentExtractor.mjs";
+import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
 import type {
     ElementDescriptionResult,
@@ -58,31 +53,22 @@ import {
 
 import registerDebug from "debug";
 
-import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { createGraphologyPersistenceManager } from "./knowledge/utils/graphologyPersistence.mjs";
-import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { ExtractKnowledgeHandler } from "./knowledge/extractKnowledgeCommand.mjs";
 import {
     performKnowledgeExtraction,
-    performKnowledgeExtractionWithNotifications,
     shouldRunKnowledgeExtraction,
     checkKnowledgeInIndex,
     saveKnowledgeToIndex,
     getActiveKnowledgeExtraction,
 } from "./knowledge/actions/extractionActions.mjs";
 import { initializeWebSocketBridge } from "./knowledge/progress/knowledgeWebSocketBridge.mjs";
-import { handleKnowledgeExtractionProgress } from "./knowledge/progress/extractionProgressManager.mjs";
 import {
     generateDetailedKnowledgeCards,
     generateDynamicKnowledgeHtml,
 } from "./knowledge/ui/knowledgeCardRenderer.mjs";
-import { actionContextCache } from "./knowledge/cache/actionContextCache.mjs";
-import {
-    normalizeUrlForIndex,
-    runningExtractionsCache,
-    shouldReExtract,
-} from "./knowledge/cache/extractionCache.mjs";
+import { runningExtractionsCache } from "./knowledge/cache/extractionCache.mjs";
 import {
     searchWebMemories,
     SearchWebMemoriesResponse,
@@ -96,8 +82,14 @@ import {
     loadAllowDynamicAgentDomains,
     processWebAgentMessage,
 } from "./webTypeAgent.mjs";
-import { isWebAgentMessage } from "../common/webAgentMessageTypes.mjs";
+import {
+    isBuiltInWebAgentRpcRequest,
+    BuiltInWebAgentRpcResponse,
+    WebFlowRefreshMessage,
+} from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
+import { handleWebFlowAction } from "./webFlows/actionHandler.mjs";
+import { WebFlowActions } from "./webFlows/schema/webFlowActions.mjs";
 import {
     BrowserActions,
     OpenWebPage,
@@ -113,22 +105,14 @@ import {
     getWebsiteStats,
 } from "./websiteMemory.mjs";
 import { initializeImportWebSocketHandler } from "./import/importWebSocketHandler.mjs";
-import { CrosswordActions } from "./crossword/schema/userActions.mjs";
-import { InstacartActions } from "./instacart/schema/userActions.mjs";
-import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import {
-    generatePageQuestions,
-    generateGraphQuestions,
-} from "./knowledge/actions/pageQnAActions.mjs";
 import {
     BrowserControl,
     defaultSearchProviders,
 } from "../common/browserControl.mjs";
 import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
-import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -136,7 +120,6 @@ import {
 import {
     BrowserActionContext,
     getActionBrowserControl,
-    getSessionBrowserControl,
     saveSettings,
 } from "./browserActions.mjs";
 import {
@@ -150,9 +133,9 @@ import {
     LookupAndAnswerInternet,
 } from "./lookupAndAnswerSchema.mjs";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
+import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
-const debugWebSocket = registerDebug("typeagent:browser:ws");
 const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 
 // Track retry counts for dynamic display requests
@@ -313,7 +296,6 @@ async function initializeBrowserContext(
             clientBrowserControl === undefined ? "extension" : "electron",
         index: undefined,
         localHostPort,
-        macrosStore: undefined,
         resolverSettings: {
             searchResolver: true,
             keywordResolver: true,
@@ -340,18 +322,19 @@ async function updateBrowserContext(
             context.agentContext.tabTitleIndex = createTabTitleIndex();
         }
 
-        // Initialize MacroStore
-        if (!context.agentContext.macrosStore && context.sessionStorage) {
+        // Initialize WebFlowStore (uses instance storage for cross-session persistence)
+        if (!context.agentContext.webFlowStore && context.instanceStorage) {
             try {
-                const { MacroStore } = await import("./storage/index.mjs");
-                context.agentContext.macrosStore = new MacroStore(
-                    context.sessionStorage,
+                const { WebFlowStore } = await import(
+                    "./webFlows/store/webFlowStore.mjs"
                 );
-                await context.agentContext.macrosStore.initialize();
-                debug("ActionsStore initialized successfully");
+                context.agentContext.webFlowStore = new WebFlowStore(
+                    context.instanceStorage,
+                );
+                await context.agentContext.webFlowStore.initialize();
+                debug("WebFlowStore initialized successfully");
             } catch (error) {
-                debug("Failed to initialize ActionsStore:", error);
-                // Continue without ActionsStore - will fall back to legacy storage
+                debug("Failed to initialize WebFlowStore:", error);
             }
         }
 
@@ -377,6 +360,11 @@ async function updateBrowserContext(
             );
             context.agentContext.agentWebSocketServer =
                 new AgentWebSocketServer(8081);
+
+            // Register agentRpc invoke handlers for channel-multiplexed messages
+            context.agentContext.agentWebSocketServer.setAgentInvokeHandlers(
+                createAgentInvokeHandlers(context),
+            );
 
             context.agentContext.agentWebSocketServer.getPreferredClientType =
                 () => {
@@ -413,52 +401,35 @@ async function updateBrowserContext(
                 }
             };
 
-            context.agentContext.agentWebSocketServer.onClientMessage = async (
-                client: BrowserClient,
-                message: string,
-            ) => {
-                const data = JSON.parse(message);
-                debugWebSocket(
-                    `Received message from browser client ${client.id}: ${message}`,
-                );
-
-                if (isWebAgentMessage(data)) {
-                    await processWebAgentMessage(data, context);
-                    return;
-                }
-
-                if (data.error) {
-                    console.error(data.error);
-                    throw new Error(data.error);
-                }
-
-                if (data.method) {
-                    const browserControls = context.agentContext
-                        .useExternalBrowserControl
-                        ? context.agentContext.externalBrowserControl?.control
-                        : context.agentContext.clientBrowserControl;
-
+            context.agentContext.agentWebSocketServer.onWebAgentMessage =
+                async (client: BrowserClient, data: any) => {
+                    // Check for built-in RPC requests (crossword, commerce, etc.)
                     if (
-                        (context.agentContext.useExternalBrowserControl &&
-                            client.type === "extension") ||
-                        (!context.agentContext.useExternalBrowserControl &&
-                            client.type === "electron")
+                        data.method === "webAgent/message" &&
+                        isBuiltInWebAgentRpcRequest(data.params)
                     ) {
-                        if (browserControls) {
-                            await processBrowserAgentMessage(
-                                data,
-                                browserControls,
-                                context,
-                                client,
-                            );
-                        }
-                    } else {
-                        debug(
-                            `ignoring ${client.type} browser message when in ${context.agentContext.useExternalBrowserControl ? "external" : "internal"} browser control mode`,
+                        const { id, method, params } = data.params;
+                        const result = await handleWebAgentRpc(
+                            method,
+                            params,
+                            context,
+                            client.id,
                         );
+
+                        const response: BuiltInWebAgentRpcResponse = {
+                            source: "dispatcher",
+                            method: "webAgent/message",
+                            type: "builtInRpcResponse",
+                            id,
+                            ...result,
+                        };
+
+                        client.socket.send(JSON.stringify(response));
+                        return;
                     }
-                }
-            };
+
+                    await processWebAgentMessage(data, context);
+                };
         }
 
         // Initialize external browser control using the AgentWebSocketServer
@@ -472,21 +443,14 @@ async function updateBrowserContext(
                 );
         }
 
-        if (!context.agentContext.browserConnector) {
+        if (!context.agentContext.browserControl) {
             const browserControls = context.agentContext
                 .useExternalBrowserControl
                 ? context.agentContext.externalBrowserControl?.control
                 : context.agentContext.clientBrowserControl;
 
-            if (browserControls && context.agentContext.agentWebSocketServer) {
-                debugClientRouting(
-                    `Creating BrowserConnector with preferredClientType = '${context.agentContext.preferredClientType}'`,
-                );
-                context.agentContext.browserConnector = new BrowserConnector(
-                    context.agentContext.agentWebSocketServer,
-                    browserControls,
-                    context.agentContext.preferredClientType,
-                );
+            if (browserControls) {
+                context.agentContext.browserControl = browserControls;
             }
         }
 
@@ -548,310 +512,225 @@ async function updateBrowserContext(
     }
 }
 
-async function processBrowserAgentMessage(
-    data: any,
-    browserControls: BrowserControl,
+async function handleWebAgentRpc(
+    method: string,
+    params: any,
     context: SessionContext<BrowserActionContext>,
-    client: BrowserClient,
-) {
-    debugClientRouting(
-        `processBrowserAgentMessage: method='${data.method}', client type='${client.type}', id='${client.id}', preferredClientType='${context.agentContext.preferredClientType}'`,
-    );
+    clientId: string,
+): Promise<any> {
+    switch (method) {
+        case "extractCrosswordSchema": {
+            try {
+                const schema = await extractCrosswordSchema(context, clientId);
+                if (!schema) {
+                    return {
+                        success: false,
+                        error: "No crossword found on the page",
+                    };
+                }
 
-    switch (data.method) {
-        case "knowledgeExtractionProgress": {
-            await handleKnowledgeExtractionProgress(data.params, context);
-            break;
-        }
-        case "enableSiteTranslator": {
-            const targetTranslator = data.params.translator;
-            if (targetTranslator == "browser.crossword") {
-                // initialize crossword state
-                browserControls.setAgentStatus(
-                    true,
-                    `Initializing ${targetTranslator}`,
-                );
+                const acrossClues: Record<
+                    number,
+                    { text: string; selector: string }
+                > = {};
+                const downClues: Record<
+                    number,
+                    { text: string; selector: string }
+                > = {};
 
-                const notificationId = `crossword-${Date.now()}`;
-                context.notify(
-                    AppAgentEvent.Inline,
-                    {
-                        type: "text",
-                        content: `Loading the crossword agent to get it ready for interaction...`,
+                for (const clue of schema.across) {
+                    acrossClues[clue.number] = {
+                        text: clue.text,
+                        selector: clue.cssSelector || "",
+                    };
+                }
+                for (const clue of schema.down) {
+                    downClues[clue.number] = {
+                        text: clue.text,
+                        selector: clue.cssSelector || "",
+                    };
+                }
+
+                return {
+                    success: true,
+                    data: {
+                        boardId: params?.url || "",
+                        cells: {},
+                        clues: {
+                            across: acrossClues,
+                            down: downClues,
+                        },
                     },
-                    notificationId,
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to extract crossword schema",
+                };
+            }
+        }
+
+        case "extractComponent": {
+            try {
+                const { typeName, schema, userRequest } = params;
+                const browserCtrl = context.agentContext.browserControl;
+
+                if (!browserCtrl) {
+                    return {
+                        success: false,
+                        error: "Browser control not available",
+                    };
+                }
+
+                if (!schema || !typeName) {
+                    return {
+                        success: false,
+                        error: "Schema and typeName are required",
+                    };
+                }
+
+                const htmlFragments = await browserCtrl.getHtmlFragments(
+                    false,
+                    "knowledgeExtraction",
                 );
 
-                try {
-                    debugClientRouting(
-                        `Calling getBoardSchema with client.id='${client.id}'`,
-                    );
-                    context.agentContext.crossWordState = await getBoardSchema(
-                        context,
-                        client.id,
-                    );
-
-                    browserControls.setAgentStatus(
-                        false,
-                        `Finished initializing ${targetTranslator}`,
-                    );
-                } catch (e) {
-                    browserControls.setAgentStatus(
-                        false,
-                        `Failed to initialize ${targetTranslator}`,
-                    );
-
-                    debug(
-                        `Failed to initialize ${targetTranslator}. Details ${e}`,
-                    );
+                if (!htmlFragments || htmlFragments.length === 0) {
+                    return {
+                        success: false,
+                        error: "No HTML content available from the page",
+                    };
                 }
 
-                if (context.agentContext.crossWordState) {
-                    const acrossClues =
-                        context.agentContext.crossWordState.across?.length || 0;
-                    const downClues =
-                        context.agentContext.crossWordState.down?.length || 0;
+                const response = await extractPageComponent(
+                    typeName,
+                    schema,
+                    userRequest,
+                    htmlFragments,
+                    undefined,
+                );
 
-                    // Send schema to browser extension/electron for observer installation
-                    const schema = context.agentContext.crossWordState;
-                    const allClues = [...schema.across, ...schema.down];
-                    const sampleClues = allClues.slice(0, 5);
-
-                    if (client && client.socket && sampleClues.length > 0) {
-                        try {
-                            client.socket.send(
-                                JSON.stringify({
-                                    method: "browser.crossword/schemaReady",
-                                    params: {
-                                        selectors: sampleClues.map(
-                                            (c) => c.cssSelector,
-                                        ),
-                                        texts: sampleClues.map((c) => c.text),
-                                    },
-                                }),
-                            );
-                        } catch (e) {
-                            debug(
-                                "Failed to send crossword schema to client",
-                                e,
-                            );
-                        }
-                    }
-
-                    context.notify(
-                        AppAgentEvent.Inline,
-                        {
-                            type: "text",
-                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
-                        },
-                        notificationId,
-                    );
-                } else {
-                    context.notify(
-                        AppAgentEvent.Inline,
-                        {
-                            type: "text",
-                            content: `There was an error when initializing the crossword. Try re-loading the page.`,
-                        },
-                        notificationId,
-                    );
-                }
+                return response;
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to extract component",
+                };
             }
-            await context.toggleTransientAgent(targetTranslator, true);
-            break;
         }
-        case "disableSiteTranslator": {
-            const targetTranslator = data.params.translator;
-            await context.toggleTransientAgent(targetTranslator, false);
-            break;
+
+        case "getWebFlowsForDomain": {
+            try {
+                const { domain, ifModifiedSince } = params;
+                if (!domain) {
+                    return {
+                        success: false,
+                        error: "domain parameter is required",
+                    };
+                }
+
+                const webFlowStore = context.agentContext.webFlowStore;
+                if (!webFlowStore) {
+                    return {
+                        success: true,
+                        data: { flows: [], lastUpdated: "" },
+                    };
+                }
+
+                const index = webFlowStore.getIndex();
+                const lastUpdated = index.lastUpdated;
+
+                if (ifModifiedSince && lastUpdated === ifModifiedSince) {
+                    return {
+                        success: true,
+                        data: {
+                            flows: [],
+                            lastUpdated,
+                            notModified: true,
+                        },
+                    };
+                }
+
+                const flows =
+                    await webFlowStore.listForDomainWithDetails(domain);
+                // Only include site-scoped flows in the per-site
+                // WebFlowAgent schema. Global sample flows are already
+                // available through the browser.webFlows agent.
+                const siteFlows = flows.filter((f) => f.scope.type === "site");
+                const transportFlows = siteFlows.map((f) => ({
+                    name: f.name,
+                    description: f.description,
+                    parameters: f.parameters,
+                    script: f.script,
+                }));
+
+                return {
+                    success: true,
+                    data: { flows: transportFlows, lastUpdated },
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to get webFlows for domain",
+                };
+            }
         }
-        case "removeCrosswordPageCache": {
-            await deleteCachedSchema(context, data.params.url);
-            break;
-        }
-        case "addTabIdToIndex":
-        case "deleteTabIdFromIndex":
-        case "getTabIdFromIndex":
-        case "resetTabIdToIndex": {
-            await handleTabIndexActions(
+
+        case "notify": {
+            const { message, notificationId } = params;
+            const id = notificationId || `webagent-${Date.now()}`;
+            context.notify(
+                AppAgentEvent.Inline,
                 {
-                    actionName: data.method,
-                    parameters: data.params,
+                    type: "text",
+                    content: message,
                 },
-                context,
-                data.id,
+                id,
             );
-            break;
+            return { success: true };
         }
 
-        case "detectPageActions":
-        case "registerPageDynamicAgent":
-        case "getIntentFromRecording":
-        case "getMacrosForUrl":
-        case "getAllMacros":
-        case "deleteMacro": {
-            const discoveryResult = await handleSchemaDiscoveryAction(
-                {
-                    actionName: data.method,
-                    parameters: data.params,
-                },
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: discoveryResult.data,
-                }),
-            );
-            break;
-        }
-
-        case "extractKnowledgeFromPage":
-        case "extractKnowledgeFromPageStreaming":
-        case "indexWebPageContent":
-        case "checkPageIndexStatus":
-        case "getPageIndexedKnowledge":
-        case "getRecentKnowledgeItems":
-        case "getAnalyticsData":
-        case "getDiscoverInsights":
-        case "getKnowledgeIndexStats":
-        case "clearKnowledgeIndex":
-        case "getKnowledgeGraphStatus":
-        case "buildKnowledgeGraph":
-        case "rebuildKnowledgeGraph":
-        case "getAllRelationships":
-        case "getAllCommunities":
-        case "getAllEntitiesWithMetrics":
-        case "getEntityNeighborhood":
-        case "getGlobalImportanceLayer":
-        case "getImportanceStatistics":
-        case "getHierarchicalTopics":
-        case "getTopicImportanceLayer":
-        case "getTopicViewportNeighborhood":
-        case "getTopicMetrics":
-        case "getTopicTimelines":
-        case "getViewportBasedNeighborhood":
-        case "mergeTopicHierarchies":
-        case "discoverRelatedKnowledge":
-        case "getTopicDetails":
-        case "getEntityDetails":
-        case "getUrlContentBreakdown": {
-            const knowledgeResult = await handleKnowledgeAction(
-                data.method,
-                data.params,
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: knowledgeResult,
-                }),
-            );
-            break;
-        }
-
-        case "handlePageNavigation": {
-            await handlePageNavigation(context, data.params);
-            break;
-        }
-
-        case "generatePageQuestions": {
-            const pageQuestionsResult = await generatePageQuestions(
-                data.params,
-                context,
-            );
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: pageQuestionsResult,
-                }),
-            );
-            break;
-        }
-
-        case "generateGraphQuestions": {
-            const graphQuestionsResult = await generateGraphQuestions(
-                data.params,
-                context,
-            );
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: graphQuestionsResult,
-                }),
-            );
-            break;
-        }
-
-        case "importWebsiteData":
-        case "importWebsiteDataWithProgress":
-        case "importHtmlFolder":
-        case "getWebsiteStats":
-        case "searchWebMemories":
-        case "searchByEntities":
-        case "searchByTopics":
-        case "hybridSearch": {
-            const websiteResult = await handleWebsiteAction(
-                data.method,
-                data.params,
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: websiteResult,
-                }),
-            );
-            break;
-        }
-
-        case "getLibraryStats": {
-            const libraryStatsResult = await handleWebsiteLibraryStats(
-                data.params,
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: libraryStatsResult,
-                }),
-            );
-            break;
-        }
-
-        case "recordActionUsage":
-        case "getActionStatistics": {
-            const macrosResult = await handleMacroStoreAction(
-                data.method,
-                data.params,
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: macrosResult,
-                }),
-            );
-            break;
-        }
-
-        case "getViewHostUrl": {
-            const actionsResult = {
-                url: `http://localhost:${context.agentContext.localHostPort}`,
+        default:
+            return {
+                success: false,
+                error: `Unknown webAgentRpc method: ${method}`,
             };
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: actionsResult,
-                }),
-            );
-            break;
-        }
+    }
+}
+
+/**
+ * Send a refresh notification to the browser-side WebFlowAgent.
+ * This tells the agent to re-fetch flows from the server and
+ * re-register its TypeAgent with updated schema.
+ */
+export function sendWebFlowRefreshToClient(
+    context: SessionContext<BrowserActionContext>,
+): void {
+    const wsServer = context.agentContext.agentWebSocketServer;
+    if (!wsServer) return;
+
+    const client = wsServer.getActiveClient();
+    if (!client) return;
+
+    const message: WebFlowRefreshMessage = {
+        source: "dispatcher",
+        method: "webAgent/message",
+        type: "webFlowRefresh",
+    };
+
+    try {
+        client.socket.send(JSON.stringify(message));
+        debug("Sent webFlowRefresh to active client");
+    } catch (error) {
+        debug("Failed to send webFlowRefresh:", error);
     }
 }
 
@@ -1596,10 +1475,6 @@ async function changeSearchProvider(
         const params: ParsedCommandParams<any> = {
             args: { provider: `${action.parameters.name}` },
             flags: {},
-            tokens: [],
-            lastCompletableParam: undefined,
-            lastParamImplicitQuotes: false,
-            nextArgs: [],
         };
 
         await cmd.run(context, params);
@@ -1618,11 +1493,9 @@ async function executeBrowserAction(
         | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
-        | TypeAgentAction<CrosswordActions, "browser.crossword">
-        | TypeAgentAction<ShoppingActions, "browser.commerce">
-        | TypeAgentAction<InstacartActions, "browser.instacart">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
-        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
+        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">
+        | TypeAgentAction<WebFlowActions, "browser.webFlows">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1836,46 +1709,11 @@ async function executeBrowserAction(
                 }
             }
     }
-    const connector = context.sessionContext.agentContext.browserConnector;
-    if (connector) {
+    const browserCtrl = context.sessionContext.agentContext.browserControl;
+    if (browserCtrl) {
         try {
-            // context.actionIO.setDisplay("Running remote action.");
-
             let schemaName = "browser";
-            if (action.schemaName === "browser.crossword") {
-                const crosswordResult = await handleCrosswordAction(
-                    action,
-                    context.sessionContext,
-                );
-                return createActionResult(crosswordResult);
-            } else if (action.schemaName === "browser.commerce") {
-                const commerceResult = await handleCommerceAction(
-                    action,
-                    context,
-                );
-                if (commerceResult !== undefined) {
-                    if (commerceResult instanceof String) {
-                        return createActionResult(
-                            commerceResult as unknown as string,
-                        );
-                    } else {
-                        return commerceResult as ActionResult;
-                    }
-                }
-            } else if (action.schemaName === "browser.instacart") {
-                const instacartResult = await handleInstacartAction(
-                    action,
-                    context.sessionContext,
-                );
-
-                return createActionResult(
-                    instacartResult.displayText,
-                    undefined,
-                    instacartResult.entities,
-                );
-
-                // return createActionResult(instacartResult);
-            } else if (action.schemaName === "browser.actionDiscovery") {
+            if (action.schemaName === "browser.actionDiscovery") {
                 const discoveryResult = await handleSchemaDiscoveryAction(
                     action,
                     context.sessionContext,
@@ -1884,7 +1722,20 @@ async function executeBrowserAction(
                 return createActionResult(discoveryResult.displayText);
             }
 
-            await connector?.sendActionToBrowser(action, schemaName);
+            if (action.schemaName === "browser.webFlows") {
+                const webFlowResult = await handleWebFlowAction(
+                    action,
+                    context.sessionContext,
+                );
+
+                return createActionResult(webFlowResult.displayText);
+            }
+
+            await browserCtrl.runBrowserAction(
+                action.actionName,
+                action.parameters,
+                schemaName,
+            );
         } catch (ex: any) {
             if (ex instanceof Error) {
                 console.error(ex);
@@ -1893,7 +1744,7 @@ async function executeBrowserAction(
             }
         }
     } else {
-        console.error("No WebSocket server available.");
+        console.error("No browser control available.");
     }
     return undefined;
 }
@@ -2030,259 +1881,6 @@ async function lookup(
     }
 }
 
-async function handlePageNavigation(
-    context: SessionContext<BrowserActionContext>,
-    params: { url: string; title: string; tabId?: number },
-): Promise<void> {
-    const { url, title } = params;
-
-    try {
-        // Normalize URL for consistent checking (keep query params)
-        const normalizedUrl = normalizeUrlForIndex(url);
-
-        // Check if extraction is already running for this URL
-        if (runningExtractionsCache.isRunning(url)) {
-            const running = runningExtractionsCache.getRunning(url);
-            debug(
-                `Extraction already running for ${url} (ID: ${running?.extractionId}), skipping duplicate`,
-            );
-
-            // Optionally notify about ongoing extraction
-            const cachedContext = actionContextCache.get(url);
-            if (cachedContext) {
-                displayStatus(
-                    `Knowledge extraction in progress for ${url}`,
-                    cachedContext,
-                );
-            } else {
-                context.notify(
-                    AppAgentEvent.Inline,
-                    `Knowledge extraction in progress for ${url}`,
-                );
-            }
-            return;
-        }
-
-        // Check if we already have recent knowledge for this URL
-        if (!shouldReExtract(normalizedUrl)) {
-            debug(`Skipping extraction for ${url} - recently extracted`);
-
-            // Try to load and display existing knowledge from index
-            const existingKnowledge = await checkKnowledgeInIndex(url, context);
-            const cachedContext = actionContextCache.get(url);
-
-            if (existingKnowledge) {
-                const entitiesCount = existingKnowledge.entities?.length || 0;
-                const topicsCount = existingKnowledge.topics?.length || 0;
-                const relationshipsCount =
-                    existingKnowledge.relationships?.length || 0;
-
-                if (cachedContext) {
-                    // Display existing knowledge details using action context
-                    cachedContext.actionIO.appendDisplay(
-                        {
-                            type: "markdown",
-                            content: `> 📖 **Existing Knowledge Found**
->
-> Loading ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from index
-
-${generateDetailedKnowledgeCards(existingKnowledge)}`,
-                        },
-                        "block",
-                    );
-                }
-            } else if (cachedContext) {
-                displayStatus(
-                    `Using cached knowledge for ${url}`,
-                    cachedContext,
-                );
-            } else {
-                context.notify(
-                    AppAgentEvent.Inline,
-                    `Using cached knowledge for ${url}`,
-                );
-            }
-            return;
-        }
-
-        // Check if we should run extraction
-        const cachedContext = actionContextCache.get(url);
-
-        // Determine if extraction should run
-        let shouldExtract = false;
-        let extractionMode = "content";
-
-        shouldExtract = await shouldRunKnowledgeExtraction(url, context);
-
-        const browserControl = getSessionBrowserControl(context);
-        const settings = await browserControl.getBrowserSettings();
-
-        extractionMode = settings?.extractionMode || "content";
-
-        if (!shouldExtract) {
-            return;
-        }
-
-        // Send simple navigation notification
-        context.notify(
-            AppAgentEvent.Inline,
-            `Navigated to "${title}". Analyzing the page ...`,
-        );
-
-        // Check for existing knowledge in index before starting new extraction
-        const existingKnowledge = await checkKnowledgeInIndex(url, context);
-        if (existingKnowledge) {
-            const entitiesCount = existingKnowledge.entities?.length || 0;
-            const topicsCount = existingKnowledge.topics?.length || 0;
-            const relationshipsCount =
-                existingKnowledge.relationships?.length || 0;
-
-            if (cachedContext) {
-                // Display existing knowledge first using ActionContext, then extraction will update it
-                cachedContext.actionIO.appendDisplay(
-                    {
-                        type: "markdown",
-                        content: `> 🔄 **Updating Existing Knowledge**
->
-> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships. Extracting updated knowledge...
-
-${generateDetailedKnowledgeCards(existingKnowledge)}`,
-                    },
-                    "block",
-                );
-            } else {
-                // Use notification when no ActionContext available
-                context.notify(
-                    AppAgentEvent.Inline,
-                    `Updating existing knowledge for ${url}: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships`,
-                );
-            }
-        }
-
-        // Get page contents
-        const htmlFragments =
-            await context.agentContext.browserConnector?.getHtmlFragments(
-                false,
-                "knowledgeExtraction",
-            );
-
-        if (!htmlFragments) {
-            return;
-        }
-
-        // Create extraction parameters
-        let extractionId = `navigation-${Date.now()}`;
-
-        const cachedDynamicDisplayId =
-            actionContextCache.getDynamicDisplayId(url);
-        if (cachedDynamicDisplayId) {
-            extractionId = cachedDynamicDisplayId.replace(
-                "knowledge-extraction-",
-                "",
-            );
-        }
-
-        const parameters = {
-            url,
-            title,
-            htmlFragments,
-            extractionId,
-            mode: extractionMode,
-        };
-
-        // Start extraction using the running extractions cache
-        const extractionPromise = cachedContext
-            ? performKnowledgeExtraction(url, cachedContext, extractionMode)
-            : performKnowledgeExtractionWithNotifications(
-                  url,
-                  context,
-                  extractionMode,
-                  parameters,
-              );
-
-        await runningExtractionsCache.startExtraction(
-            url,
-            extractionId,
-            extractionPromise,
-        );
-    } catch (error) {
-        // Send error notification
-        context.notify(
-            AppAgentEvent.Error,
-            `Failed to extract knowledge for ${title}: ${(error as any).message}`,
-        );
-    }
-}
-
-async function handleTabIndexActions(
-    action: any,
-    context: SessionContext<BrowserActionContext>,
-    requestId: string | undefined,
-) {
-    const agentServer = context.agentContext.agentWebSocketServer;
-    const tabTitleIndex = context.agentContext.tabTitleIndex;
-
-    if (agentServer && tabTitleIndex) {
-        try {
-            const actionName =
-                action.actionName ?? action.fullActionName.split(".").at(-1);
-            let responseBody;
-
-            switch (actionName) {
-                case "getTabIdFromIndex": {
-                    const matchedTabs = await tabTitleIndex.search(
-                        action.parameters.query,
-                        1,
-                    );
-                    let foundId = -1;
-                    if (matchedTabs && matchedTabs.length > 0) {
-                        foundId = matchedTabs[0].item.value;
-                    }
-                    responseBody = foundId;
-                    break;
-                }
-                case "addTabIdToIndex": {
-                    await tabTitleIndex.addOrUpdate(
-                        action.parameters.title,
-                        action.parameters.id,
-                    );
-                    responseBody = "OK";
-                    break;
-                }
-                case "deleteTabIdFromIndex": {
-                    await tabTitleIndex.remove(action.parameters.id);
-                    responseBody = "OK";
-                    break;
-                }
-                case "resetTabIdToIndex": {
-                    await tabTitleIndex.reset();
-                    responseBody = "OK";
-                    break;
-                }
-            }
-
-            const activeClient = agentServer.getActiveClient();
-            if (activeClient) {
-                activeClient.socket.send(
-                    JSON.stringify({
-                        id: requestId,
-                        result: responseBody,
-                    }),
-                );
-            }
-        } catch (ex: any) {
-            if (ex instanceof Error) {
-                console.error(ex);
-            } else {
-                console.error(JSON.stringify(ex));
-            }
-        }
-    } else {
-        console.error("No WebSocket server available.");
-    }
-    return undefined;
-}
-
 /**
  * Progress update helper function
  */
@@ -2335,17 +1933,16 @@ async function handleGetActionRequest(
             throw new Error("Invalid actionId format");
         }
 
-        debug(`Handling macro request for ID: ${actionId}`);
+        debug(`Handling action request for: ${actionId}`);
 
-        // Get the macros store from context
-        const macrosStore = context.agentContext.macrosStore;
-        if (!macrosStore) {
-            throw new Error("MacroStore not available");
+        const webFlowStore = context.agentContext.webFlowStore;
+        if (!webFlowStore) {
+            throw new Error("WebFlowStore not available");
         }
 
-        const macro = await macrosStore.getMacro(actionId);
+        const action = await webFlowStore.get(actionId);
 
-        if (!macro) {
+        if (!action) {
             viewServiceProcess.send({
                 type: "getActionResponse",
                 requestId,
@@ -2360,7 +1957,7 @@ async function handleGetActionRequest(
             type: "getActionResponse",
             requestId,
             success: true,
-            action: macro,
+            action: action,
             timestamp: Date.now(),
         });
 
@@ -2569,7 +2166,7 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
     }
 }
 
-async function handleWebsiteAction(
+export async function handleWebsiteAction(
     actionName: string,
     parameters: any,
     context: SessionContext<BrowserActionContext>,
@@ -2637,89 +2234,6 @@ async function handleWebsiteAction(
     }
 }
 
-async function handleMacroStoreAction(
-    actionName: string,
-    parameters: any,
-    context: SessionContext<BrowserActionContext>,
-): Promise<any> {
-    const macrosStore = context.agentContext.macrosStore;
-
-    if (!macrosStore) {
-        return {
-            success: false,
-            error: "MacroStore not available",
-        };
-    }
-
-    try {
-        switch (actionName) {
-            case "recordActionUsage": {
-                const { actionId } = parameters;
-                if (!actionId) {
-                    return {
-                        success: false,
-                        error: "Missing actionId parameter",
-                    };
-                }
-
-                await macrosStore.recordUsage(actionId);
-                debug(`Recorded usage for macro: ${actionId}`);
-
-                return {
-                    success: true,
-                    macroId: actionId,
-                };
-            }
-
-            case "getActionStatistics": {
-                const { url } = parameters;
-                let macros: any[] = [];
-                let totalMacros = 0;
-
-                if (url) {
-                    // Get macros for specific URL
-                    macros = await macrosStore.getMacrosForUrl(url);
-                    totalMacros = macros.length;
-                } else {
-                    // Get all macros
-                    macros = await macrosStore.getAllMacros();
-                    totalMacros = macros.length;
-                }
-
-                debug(`Retrieved statistics: ${totalMacros} total macros`);
-
-                return {
-                    success: true,
-                    totalMacros: totalMacros,
-                    macros: macros.map((macro) => ({
-                        id: macro.id,
-                        name: macro.name,
-                        author: macro.author,
-                        category: macro.category,
-                        usageCount: macro.metadata.usageCount,
-                        lastUsed: macro.metadata.lastUsed,
-                    })),
-                };
-            }
-
-            default:
-                return {
-                    success: false,
-                    error: `Unknown ActionsStore action: ${actionName}`,
-                };
-        }
-    } catch (error) {
-        console.error(
-            `Failed to execute ActionsStore action ${actionName}:`,
-            error,
-        );
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
 function formatLibraryStatsResponse(text: string) {
     const defaultStats = {
         totalWebsites: 0,
@@ -2776,7 +2290,7 @@ function formatLibraryStatsResponse(text: string) {
     }
 }
 
-async function handleWebsiteLibraryStats(
+export async function handleWebsiteLibraryStats(
     parameters: any,
     context: SessionContext<BrowserActionContext>,
 ): Promise<any> {
@@ -3371,22 +2885,11 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
 
-                        // Recreate BrowserConnector with new preferredClientType
-                        const browserControls =
+                        // Update browserControl to use external browser
+                        const externalControl =
                             agentContext.externalBrowserControl?.control;
-                        if (
-                            browserControls &&
-                            agentContext.agentWebSocketServer
-                        ) {
-                            debugClientRouting(
-                                "[@browser external on] Recreating BrowserConnector with preferredClientType = 'extension'",
-                            );
-                            agentContext.browserConnector =
-                                new BrowserConnector(
-                                    agentContext.agentWebSocketServer,
-                                    browserControls,
-                                    agentContext.preferredClientType,
-                                );
+                        if (externalControl) {
+                            agentContext.browserControl = externalControl;
                         }
 
                         await context.queueToggleTransientAgent(
@@ -3427,22 +2930,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
 
-                        // Recreate BrowserConnector with new preferredClientType
-                        const browserControls =
-                            agentContext.clientBrowserControl;
-                        if (
-                            browserControls &&
-                            agentContext.agentWebSocketServer
-                        ) {
-                            debugClientRouting(
-                                "[@browser external off] Recreating BrowserConnector with preferredClientType = 'electron'",
-                            );
-                            agentContext.browserConnector =
-                                new BrowserConnector(
-                                    agentContext.agentWebSocketServer,
-                                    browserControls,
-                                    agentContext.preferredClientType,
-                                );
+                        // Update browserControl to use client browser
+                        if (agentContext.clientBrowserControl) {
+                            agentContext.browserControl =
+                                agentContext.clientBrowserControl;
                         }
 
                         await context.queueToggleTransientAgent(

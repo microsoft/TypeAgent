@@ -4,7 +4,12 @@
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import registerDebug from "debug";
 import { ExecutableAction, getPropertyInfo, MatchOptions } from "agent-cache";
-import { CompletionGroup, TypeAgentAction } from "@typeagent/agent-sdk";
+import {
+    CompletionDirection,
+    CompletionGroup,
+    CompletionGroups,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
 import {
     ActionParamType,
@@ -24,7 +29,7 @@ import {
 import { getHistoryContext } from "./interpretRequest.js";
 import {
     getActionSchema,
-    getActionSchemaParameterType,
+    tryGetActionSchemaParameterType,
 } from "./actionSchemaUtils.js";
 import { getParamPatternValue } from "./actionSchemaFileCache.js";
 
@@ -71,9 +76,10 @@ function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
 }
 
 export async function requestCompletion(
-    requestPrefix: string | undefined,
+    requestPrefix: string,
     context: CommandHandlerContext,
-): Promise<CompletionGroup[]> {
+    direction?: CompletionDirection, // defaults to forward-like behavior when omitted
+): Promise<CompletionGroups> {
     debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
     const namespaceKeys = getCompletionNamespaceKeys(context);
     debugCompletion(`Request completion namespace keys`, namespaceKeys);
@@ -85,12 +91,21 @@ export async function requestCompletion(
         namespaceKeys,
         history: getHistoryContext(context),
     };
-    const results = context.agentCache.completion(requestPrefix, options);
+    const results = context.agentCache.completion(
+        requestPrefix,
+        options,
+        direction,
+    );
 
     if (results === undefined) {
-        return [];
+        return { groups: [] };
     }
 
+    const matchedPrefixLength = results.matchedPrefixLength;
+    const separatorMode = results.separatorMode;
+    const closedSet = results.closedSet;
+    const directionSensitive = results.directionSensitive;
+    const openWildcard = results.openWildcard;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -102,7 +117,14 @@ export async function requestCompletion(
     }
 
     if (results.properties === undefined) {
-        return completions;
+        return {
+            groups: completions,
+            matchedPrefixLength,
+            separatorMode,
+            closedSet,
+            directionSensitive,
+            openWildcard,
+        };
     }
 
     const propertyCompletions = new Map<string, CompletionGroup>();
@@ -122,7 +144,14 @@ export async function requestCompletion(
     }
 
     completions.push(...propertyCompletions.values());
-    return completions;
+    return {
+        groups: completions,
+        matchedPrefixLength,
+        separatorMode,
+        closedSet,
+        directionSensitive,
+        openWildcard,
+    };
 }
 
 async function collectActionCompletions(
@@ -189,13 +218,15 @@ export async function getActionParamCompletion(
     let paramCompletionEmojis: CompletionEmojis | undefined;
     if (actionSchemaFile !== undefined) {
         const actionSchema = getActionSchema(actionSchemaFile, actionName);
-        const actionParametersType = getActionSchemaParameterType(
+        const actionParametersType = tryGetActionSchemaParameterType(
             actionSchemaFile,
             actionName,
             actionSchema,
         );
-        fieldType = getPropertyType(actionParametersType, parameterName);
-        resolvedFieldType = resolveTypeReference(fieldType);
+        if (actionParametersType !== undefined) {
+            fieldType = getPropertyType(actionParametersType, parameterName);
+            resolvedFieldType = resolveTypeReference(fieldType);
+        }
         switch (resolvedFieldType?.type) {
             case "string-union":
                 literalCompletion = [...resolvedFieldType.typeEnum];

@@ -10,8 +10,8 @@ import {
     VarNumberPart,
     RulesPart,
     PhraseSetPart,
+    CompiledSpacingMode,
 } from "./grammarTypes.js";
-import { SpacingMode } from "./grammarRuleParser.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
     parseValueExpression,
@@ -57,7 +57,7 @@ interface RuleCompilationContext {
     /** Map from variable name to property path (for completion metadata) */
     completionPropertyPaths?: Map<string, string> | undefined;
     /** Spacing mode for this rule (controls token boundary behaviour) */
-    spacingMode?: SpacingMode;
+    spacingMode?: CompiledSpacingMode;
     /**
      * When set, compileStringPart deposits non-word-starting tokens here so
      * they can be stored as splitCandidates on the rule entry state.
@@ -773,7 +773,7 @@ function compileStringPart(
     part: StringPart,
     fromState: number,
     toState: number,
-    spacingMode?: SpacingMode,
+    spacingMode?: CompiledSpacingMode,
     splitCandidatesCollector?: Set<string>,
 ): number {
     // Normalize grammar tokens (lowercase + strip trailing punctuation) so they
@@ -847,7 +847,10 @@ function compileWildcardPart(
     // A wildcard is checked if:
     // 1. It has a non-string typeName (entity type like MusicDevice, Ordinal, etc.)
     // 2. It's in the checkedVariables set (has checked_wildcard paramSpec)
-    const hasEntityType = part.typeName && part.typeName !== "string";
+    const hasEntityType =
+        part.typeName &&
+        part.typeName !== "string" &&
+        part.typeName !== "wildcard";
     const hasCheckedParamSpec = checkedVariables?.has(variableName) ?? false;
     const isChecked = hasEntityType || hasCheckedParamSpec;
 

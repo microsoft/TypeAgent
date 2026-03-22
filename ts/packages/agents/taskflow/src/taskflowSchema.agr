@@ -1,10 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-<Start> = <listTaskFlows> | <createTopSongsPlaylist> | <createTopSongsPlaylistClaude> | <weeklyEmailDigest>;
+import { TaskFlowActions } from "./schema/userActions.mts";
+
+<Start> : TaskFlowActions = <listTaskFlows> | <createTopSongsPlaylist> | <createTopSongsPlaylistClaude> | <weeklyEmailDigest> | <playPopularKpopSong> | <playPopularKpopSongClaude>;
 
 // Action rules
-<listTaskFlows> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? (show me | list | display) (all)? (the)? (available)? task flows -> { actionName: "listTaskFlows", parameters: {} };
+<listTaskFlows> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? (show me | list | display) (all)? (the)? (available)? task flows -> { actionName: "listTaskFlows" };
 
 <createTopSongsPlaylist> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? create (a)? (top)? $(quantity:number) $(genre:wildcard) (songs)? playlist (for | from) (the)? $(timePeriod:wildcard) -> { actionName: "createTopSongsPlaylist", parameters: { genre, quantity, timePeriod } };
 
@@ -21,3 +23,27 @@
       -> { actionName: "weeklyEmailDigest", parameters: {} }
   | summarize (my)? (recent)? emails (for)? $(timePeriod:wildcard)
       -> { actionName: "weeklyEmailDigest", parameters: { timePeriod } };
+
+<playPopularKpopSong> =
+    play the most popular kpop song $(timePeriod:wildcard)
+      -> { actionName: "playPopularKpopSong", parameters: { timePeriod } }
+  |     play the top kpop song $(timePeriod:wildcard)
+      -> { actionName: "playPopularKpopSong", parameters: { timePeriod } }
+  |     get the most popular kpop song $(timePeriod:wildcard) and play it
+      -> { actionName: "playPopularKpopSong", parameters: { timePeriod } }
+  |     find the hottest kpop song $(timePeriod:wildcard) and play it
+      -> { actionName: "playPopularKpopSong", parameters: { timePeriod } }
+  |     play the number one kpop song $(timePeriod:wildcard)
+      -> { actionName: "playPopularKpopSong", parameters: { timePeriod } };
+
+<playPopularKpopSongClaude> =
+    claude play the most popular kpop song $(timePeriod:wildcard)
+      -> { actionName: "playPopularKpopSongClaude", parameters: { timePeriod } }
+  |     claude play the top kpop song $(timePeriod:wildcard)
+      -> { actionName: "playPopularKpopSongClaude", parameters: { timePeriod } }
+  |     claude get the most popular kpop song $(timePeriod:wildcard) and play it
+      -> { actionName: "playPopularKpopSongClaude", parameters: { timePeriod } }
+  |     claude find the hottest kpop song $(timePeriod:wildcard) and play it
+      -> { actionName: "playPopularKpopSongClaude", parameters: { timePeriod } }
+  |     claude play the number one kpop song $(timePeriod:wildcard)
+      -> { actionName: "playPopularKpopSongClaude", parameters: { timePeriod } };

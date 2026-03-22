@@ -158,6 +158,7 @@ export async function resolveURLWithHistory(
             forceCleanupDynamicAgent: async () => {},
             getSharedLocalHostPort: async () => 0,
             indexes: async () => [],
+            reloadAgentSchema: async () => {},
         };
 
         // Use searchWebMemories with URL resolution optimized parameters
