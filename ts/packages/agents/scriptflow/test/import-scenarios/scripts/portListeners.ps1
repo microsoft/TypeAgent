@@ -2,26 +2,23 @@ param(
     [string]$Ports = "80,443,3000,5000,8080"
 )
 
-$portList = $Ports -split "," | ForEach-Object { [int]$_.Trim() }
+$portList = $Ports -split "," | ForEach-Object { $_.Trim() -as [int] }
 
 $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
     Where-Object { $portList -contains $_.LocalPort }
 
-if ($listeners.Count -eq 0) {
+if (-not $listeners -or $listeners.Count -eq 0) {
     Write-Output "No listeners found on port(s): $Ports"
     return
 }
 
-$details = $listeners | ForEach-Object {
+$count = 0
+$listeners | Sort-Object LocalPort | ForEach-Object {
     $proc = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue
-    [PSCustomObject]@{
-        Port    = $_.LocalPort
-        Address = $_.LocalAddress
-        PID     = $_.OwningProcess
-        Process = if ($proc) { $proc.ProcessName } else { "(unknown)" }
-        Path    = if ($proc) { $proc.Path } else { "" }
-    }
-} | Sort-Object Port
+    $procName = if ($proc) { $proc.ProcessName } else { "(unknown)" }
+    $procPath = if ($proc) { $proc.Path } else { "" }
+    Write-Output "  Port $($_.LocalPort)  $($_.LocalAddress)  PID $($_.OwningProcess)  $procName  $procPath"
+    $count++
+}
 
-$details | Format-Table -AutoSize
-Write-Output "$($details.Count) listener(s) on $($portList.Count) checked port(s)"
+Write-Output "`n$count listener(s) on $($portList.Count) checked port(s)"

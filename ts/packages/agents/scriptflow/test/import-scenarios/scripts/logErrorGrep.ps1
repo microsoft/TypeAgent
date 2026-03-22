@@ -19,21 +19,30 @@ if ($matches.Count -eq 0) {
     return
 }
 
-$summary = $matches | ForEach-Object {
-    $level = if ($_.Line -match "FATAL") { "FATAL" }
-             elseif ($_.Line -match "ERROR") { "ERROR" }
-             elseif ($_.Line -match "WARN")  { "WARN" }
-             elseif ($_.Line -match "Exception") { "EXCEPTION" }
+$levelCounts = @{}
+$fileCounts = @{}
+
+foreach ($m in $matches) {
+    $level = if ($m.Line -match "FATAL") { "FATAL" }
+             elseif ($m.Line -match "ERROR") { "ERROR" }
+             elseif ($m.Line -match "WARN")  { "WARN" }
+             elseif ($m.Line -match "Exception") { "EXCEPTION" }
              else { "OTHER" }
-    [PSCustomObject]@{ Level = $level; File = $_.Filename; Line = $_.LineNumber }
+    $levelCounts[$level] = ($levelCounts[$level] -as [int]) + 1
+    $fileCounts[$m.Filename] = ($fileCounts[$m.Filename] -as [int]) + 1
 }
 
 Write-Output "=== Summary by Severity ==="
-$summary | Group-Object Level | Sort-Object Count -Descending |
-    ForEach-Object { Write-Output "  $($_.Name): $($_.Count) occurrence(s)" }
+foreach ($level in @("FATAL","ERROR","WARN","EXCEPTION","OTHER")) {
+    if ($levelCounts[$level]) {
+        Write-Output "  ${level}: $($levelCounts[$level]) occurrence(s)"
+    }
+}
 
 Write-Output "`n=== Top Files by Error Count ==="
-$summary | Group-Object File | Sort-Object Count -Descending | Select-Object -First 5 |
-    ForEach-Object { Write-Output "  $($_.Count) hits - $($_.Name)" }
+$sortedFiles = $fileCounts.Keys | Sort-Object { $fileCounts[$_] } -Descending | Select-Object -First 5
+foreach ($file in $sortedFiles) {
+    Write-Output "  $($fileCounts[$file]) hits - $file"
+}
 
 Write-Output "`nTotal: $($matches.Count) match(es) across $($logFiles.Count) file(s)"

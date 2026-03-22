@@ -1,8 +1,6 @@
 param(
     # Comma-separated service names, or "default" for the standard set
-    [string]$ServiceList = "default",
-    [ValidateSet("table", "list", "summary")]
-    [string]$OutputFormat = "table"
+    [string]$ServiceList = "default"
 )
 
 # Standard services to monitor
@@ -17,39 +15,33 @@ $serviceNames = if ($ServiceList -eq "default") {
     $ServiceList -split "," | ForEach-Object { $_.Trim() }
 }
 
-$results = @()
+$running = 0
+$stopped = 0
+$missing = 0
+$output = @()
+
 foreach ($name in $serviceNames) {
     $svc = Get-Service -Name $name -ErrorAction SilentlyContinue
     if ($svc) {
-        $results += [PSCustomObject]@{
-            Name      = $svc.Name
-            Display   = $svc.DisplayName
-            Status    = $svc.Status.ToString()
-            StartType = $svc.StartType.ToString()
-        }
+        $status = "$($svc.Status)"
+        $output += "  $status  $($svc.Name) - $($svc.DisplayName)"
+        if ($status -eq "Running") { $running++ } else { $stopped++ }
     } else {
-        $results += [PSCustomObject]@{
-            Name      = $name
-            Display   = "(not found)"
-            Status    = "MISSING"
-            StartType = "N/A"
-        }
+        $output += "  MISSING  $name - (not found)"
+        $missing++
     }
 }
 
-# Output based on format preference
-switch ($OutputFormat) {
-    "list"    { $results | Format-List }
-    "summary" {
-        $running = ($results | Where-Object { $_.Status -eq "Running" }).Count
-        $stopped = ($results | Where-Object { $_.Status -eq "Stopped" }).Count
-        $missing = ($results | Where-Object { $_.Status -eq "MISSING" }).Count
-        Write-Output "Services: $($results.Count) checked | $running running | $stopped stopped | $missing missing"
-        if ($stopped -gt 0 -or $missing -gt 0) {
-            Write-Output "`nAttention needed:"
-            $results | Where-Object { $_.Status -ne "Running" } |
-                ForEach-Object { Write-Output "  [$($_.Status)] $($_.Name) - $($_.Display)" }
+Write-Output "=== Service Health ==="
+Write-Output ($output -join "`n")
+Write-Output ""
+Write-Output "Summary: $($serviceNames.Count) checked | $running running | $stopped stopped | $missing missing"
+
+if ($stopped -gt 0 -or $missing -gt 0) {
+    Write-Output "`nAttention needed:"
+    foreach ($line in $output) {
+        if ($line -notmatch "Running") {
+            Write-Output $line
         }
     }
-    default   { $results | Sort-Object Status | Format-Table -AutoSize }
 }

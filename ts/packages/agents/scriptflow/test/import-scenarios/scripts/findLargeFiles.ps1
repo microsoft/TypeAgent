@@ -14,14 +14,15 @@ $files = Get-ChildItem -Path $Directory -Recurse -File -ErrorAction SilentlyCont
 if ($files.Count -eq 0) {
     Write-Output "No files found larger than ${MinSizeMB}MB in $Directory"
 } else {
-    $files | ForEach-Object {
-        [PSCustomObject]@{
-            SizeMB   = [math]::Round($_.Length / 1MB, 2)
-            Modified = $_.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
-            Path     = $_.FullName
-        }
-    } | Format-Table -AutoSize
+    $totalBytes = 0
+    foreach ($f in $files) {
+        $sizeMB = $f.Length / 1MB
+        $sizeStr = "{0:N2}" -f $sizeMB
+        $dateStr = Get-Date $f.LastWriteTime -Format "yyyy-MM-dd HH:mm"
+        Write-Output "  ${sizeStr} MB  $dateStr  $($f.FullName)"
+        $totalBytes += $f.Length
+    }
 
-    $totalGB = ($files | Measure-Object -Property Length -Sum).Sum / 1GB
-    Write-Output "`nTotal: $([math]::Round($totalGB, 2)) GB across $($files.Count) file(s)"
+    $totalGB = "{0:N2}" -f ($totalBytes / 1GB)
+    Write-Output "`nTotal: $totalGB GB across $($files.Count) file(s)"
 }

@@ -13,8 +13,9 @@ if (-not $InputFile -or -not (Test-Path $InputFile)) {
 }
 
 if (-not $OutputFile) {
-    $base = [System.IO.Path]::GetFileNameWithoutExtension($InputFile)
-    $dir = [System.IO.Path]::GetDirectoryName($InputFile)
+    $item = Get-Item $InputFile
+    $base = $item.BaseName
+    $dir = $item.DirectoryName
     $OutputFile = Join-Path $dir "${base}_filtered.csv"
 }
 

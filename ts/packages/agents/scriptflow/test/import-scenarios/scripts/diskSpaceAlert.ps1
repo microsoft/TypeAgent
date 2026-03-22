@@ -1,31 +1,34 @@
-$thresholdGB = 10
-$thresholdPct = 15
+param(
+    [int]$ThresholdGB = 10,
+    [int]$ThresholdPct = 15
+)
 
-$drives = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3" |
-    Select-Object DeviceID,
-        @{N="SizeGB";     E={[math]::Round($_.Size / 1GB, 2)}},
-        @{N="FreeGB";     E={[math]::Round($_.FreeSpace / 1GB, 2)}},
-        @{N="FreePct";    E={[math]::Round(($_.FreeSpace / $_.Size) * 100, 1)}},
-        @{N="UsedGB";     E={[math]::Round(($_.Size - $_.FreeSpace) / 1GB, 2)}}
+$drives = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DriveType=3"
 
-$alerts = @()
+$alertCount = 0
+Write-Output "=== Disk Space Report ==="
+
 foreach ($d in $drives) {
-    $status = if ($d.FreeGB -lt $thresholdGB -or $d.FreePct -lt $thresholdPct) {
-        $alerts += $d
+    $sizeGB = "{0:N2}" -f ($d.Size / 1GB)
+    $freeGB = "{0:N2}" -f ($d.FreeSpace / 1GB)
+    $usedGB = "{0:N2}" -f (($d.Size - $d.FreeSpace) / 1GB)
+    $freePct = "{0:N1}" -f (($d.FreeSpace / $d.Size) * 100)
+    $freeGBNum = $d.FreeSpace / 1GB
+    $freePctNum = ($d.FreeSpace / $d.Size) * 100
+
+    $status = if ($freeGBNum -lt $ThresholdGB -or $freePctNum -lt $ThresholdPct) {
+        $alertCount++
         "LOW"
     } else {
         "OK"
     }
-    $d | Add-Member -NotePropertyName "Status" -NotePropertyValue $status
+
+    Write-Output "  $($d.DeviceID)  Size: ${sizeGB}GB  Free: ${freeGB}GB (${freePct}%)  Used: ${usedGB}GB  [$status]"
 }
 
-$drives | Sort-Object DeviceID | Format-Table DeviceID, SizeGB, FreeGB, FreePct, UsedGB, Status -AutoSize
-
-if ($alerts.Count -gt 0) {
-    Write-Output "`nWARNING: $($alerts.Count) drive(s) below threshold ($thresholdGB GB / $thresholdPct%):"
-    foreach ($a in $alerts) {
-        Write-Output "  $($a.DeviceID) — $($a.FreeGB) GB free ($($a.FreePct)%)"
-    }
+Write-Output ""
+if ($alertCount -gt 0) {
+    Write-Output "WARNING: $alertCount drive(s) below threshold ($ThresholdGB GB / $ThresholdPct%)"
 } else {
-    Write-Output "`nAll drives OK (threshold: $thresholdGB GB / $thresholdPct%)"
+    Write-Output "All drives OK (threshold: $ThresholdGB GB / $ThresholdPct%)"
 }
