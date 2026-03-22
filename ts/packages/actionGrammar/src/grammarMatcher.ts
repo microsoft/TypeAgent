@@ -964,12 +964,23 @@ function findPartialKeywordInWildcard(
         candidateStart >= minStart;
         candidateStart--
     ) {
-        // In non-"none" modes, candidateStart must be preceded by a
-        // separator (to delimit wildcard content from the keyword
-        // fragment).  In "none" mode, no separator is needed.
+        // The candidate position must be a valid boundary between the
+        // wildcard content and the keyword fragment.  This mirrors how
+        // matchStringPart builds its leading separator regex:
+        //   - "none" mode: no separator needed (keywords are adjacent).
+        //   - Other modes: a separator is required only when
+        //     requiresSeparator returns true for the adjacent characters.
+        //     When the keyword starts with punctuation, CJK, or another
+        //     non-word-boundary character, no separator is needed — the
+        //     character itself creates a natural boundary.
         if (
             spacingMode !== "none" &&
-            !sepCharRe.test(prefix[candidateStart - 1])
+            !sepCharRe.test(prefix[candidateStart - 1]) &&
+            requiresSeparator(
+                prefix[candidateStart - 1],
+                part.value[0][0],
+                spacingMode,
+            )
         ) {
             continue;
         }
@@ -1912,6 +1923,7 @@ export function matchGrammarCompletion(
                         prefix,
                         state.index,
                         state.spacingMode,
+                        direction,
                     );
                     if (partial !== undefined) {
                         emitStringCompletion(
@@ -1919,6 +1931,9 @@ export function matchGrammarCompletion(
                             partial.consumedLength,
                             partial.remainingText,
                         );
+                        if (partial.directionSensitive) {
+                            directionSensitive = true;
+                        }
                     }
                 }
                 // A keyword completion at a position reached by
@@ -2026,10 +2041,19 @@ export function matchGrammarCompletion(
     // When advancing, demote separatorMode to "optional" — the
     // trailing space is already consumed, so no additional separator
     // is required between the anchor and the completion text.
-    const advanced = consumeTrailingSeparators(prefix, maxPrefixLength);
-    if (advanced > maxPrefixLength) {
-        maxPrefixLength = advanced;
-        separatorMode = "optional";
+    //
+    // Skip this step for backward when directionSensitive is true:
+    // a backward backup may have set maxPrefixLength to a position
+    // within all-separator content (e.g., backing up to the start of
+    // a punctuation-only keyword like "...").  Advancing past the
+    // separators would push maxPrefixLength past the backup point,
+    // invalidating the backward completion.
+    if (direction !== "backward" || !directionSensitive) {
+        const advanced = consumeTrailingSeparators(prefix, maxPrefixLength);
+        if (advanced > maxPrefixLength) {
+            maxPrefixLength = advanced;
+            separatorMode = "optional";
+        }
     }
 
     const result: GrammarCompletionResult = {
