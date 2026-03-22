@@ -28,6 +28,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.12",
     "@typeagent/agent-sdk": "workspace:*",
     "debug": "^4.3.4"
   },

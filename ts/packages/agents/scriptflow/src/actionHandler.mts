@@ -13,8 +13,15 @@ import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
+import {
+    type CommandHandler,
+    type CommandHandlerTable,
+    getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/command";
+import type { ParsedCommandParams } from "@typeagent/agent-sdk";
 import { existsSync, readFileSync, readdirSync } from "fs";
-import { join, dirname, isAbsolute } from "path";
+import { join, dirname, isAbsolute, resolve, extname } from "path";
+import { ScriptAnalyzer } from "./analysis/scriptAnalyzer.mjs";
 import { fileURLToPath } from "url";
 import { ScriptFlowStore } from "./store/scriptFlowStore.mjs";
 import type { ScriptFlowDefinition } from "./store/scriptFlowStore.mjs";
@@ -407,6 +414,84 @@ async function handleScriptFlowAction(
             return result;
         }
 
+        case "importScriptFlow": {
+            if (!flowStore) {
+                return createActionResultFromError(
+                    "Script flow store not available",
+                );
+            }
+            const importParams = action.parameters as Record<string, unknown>;
+            const filePath = importParams?.filePath as string | undefined;
+            if (!filePath) {
+                return createActionResultFromError(
+                    "Missing required parameter: filePath",
+                );
+            }
+
+            const resolvedPath = isAbsolute(filePath)
+                ? filePath
+                : resolve(process.cwd(), filePath);
+
+            if (!existsSync(resolvedPath)) {
+                return createActionResultFromError(
+                    `File not found: ${resolvedPath}`,
+                );
+            }
+
+            if (extname(resolvedPath).toLowerCase() !== ".ps1") {
+                return createActionResultFromError(
+                    "Only PowerShell (.ps1) files can be imported",
+                );
+            }
+
+            let scriptContent: string;
+            try {
+                scriptContent = readFileSync(resolvedPath, "utf8");
+            } catch (err) {
+                return createActionResultFromError(
+                    `Failed to read file: ${err}`,
+                );
+            }
+
+            if (!scriptContent.trim()) {
+                return createActionResultFromError("Script file is empty");
+            }
+
+            const overrideName = importParams?.actionName as
+                | string
+                | undefined;
+
+            let recipe;
+            try {
+                const analyzer = new ScriptAnalyzer();
+                recipe = await analyzer.analyze(
+                    scriptContent,
+                    resolvedPath,
+                    overrideName,
+                );
+            } catch (err) {
+                return createActionResultFromError(
+                    `Failed to analyze script: ${err}`,
+                );
+            }
+
+            if (flowStore.hasFlow(recipe.actionName)) {
+                return createActionResultFromError(
+                    `A flow named '${recipe.actionName}' already exists. Use a different name: @scriptflow import ${filePath} with actionName set to a new name`,
+                );
+            }
+
+            await flowStore.saveFlow(recipe, "manual");
+            await context.sessionContext.reloadAgentSchema();
+
+            const patternList = recipe.grammarPatterns
+                .map((p) => `  "${p.pattern}"`)
+                .join("\n");
+            return createActionResultFromTextDisplay(
+                `Imported script flow '${recipe.actionName}': ${recipe.description}\n\nGrammar patterns:\n${patternList}`,
+            );
+        }
+
         default: {
             if (!flowStore) {
                 return createActionResultFromError(
@@ -450,6 +535,77 @@ async function handleScriptFlowAction(
     }
 }
 
+let _agentStore: ScriptFlowStore | undefined;
+
+class ImportScriptHandler implements CommandHandler {
+    public readonly description = "Import a PowerShell script as a reusable script flow";
+    public readonly parameters = {
+        args: {
+            filePath: {
+                description: "Path to the .ps1 file to import",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ScriptFlowAgentContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const store = _agentStore;
+        if (!store) {
+            throw new Error("Script flow store not available");
+        }
+
+        const filePath = params.args.filePath;
+        if (!filePath) {
+            throw new Error("Missing required argument: filePath");
+        }
+
+        const resolvedPath = isAbsolute(filePath)
+            ? filePath
+            : resolve(process.cwd(), filePath);
+
+        if (!existsSync(resolvedPath)) {
+            throw new Error(`File not found: ${resolvedPath}`);
+        }
+
+        if (extname(resolvedPath).toLowerCase() !== ".ps1") {
+            throw new Error("Only PowerShell (.ps1) files can be imported");
+        }
+
+        const scriptContent = readFileSync(resolvedPath, "utf8");
+        if (!scriptContent.trim()) {
+            throw new Error("Script file is empty");
+        }
+
+        const analyzer = new ScriptAnalyzer();
+        const recipe = await analyzer.analyze(scriptContent, resolvedPath);
+
+        if (store.hasFlow(recipe.actionName)) {
+            throw new Error(
+                `A flow named '${recipe.actionName}' already exists. Delete it first or use a different name.`,
+            );
+        }
+
+        await store.saveFlow(recipe, "manual");
+        await context.sessionContext.reloadAgentSchema();
+
+        const patternList = recipe.grammarPatterns
+            .map((p) => `  "${p.pattern}"`)
+            .join("\n");
+        context.actionIO.setDisplay(
+            `Imported script flow '${recipe.actionName}': ${recipe.description}\n\nGrammar patterns:\n${patternList}`,
+        );
+    }
+}
+
+const handlers: CommandHandlerTable = {
+    description: "ScriptFlow commands",
+    commands: {
+        import: new ImportScriptHandler(),
+    },
+};
+
 export function instantiate(): AppAgent {
     let agentContext: ScriptFlowAgentContext = {};
 
@@ -457,6 +613,7 @@ export function instantiate(): AppAgent {
         async initializeAgentContext() {
             return agentContext;
         },
+        ...getCommandInterface(handlers),
 
         async updateAgentContext(
             enable: boolean,
@@ -473,6 +630,7 @@ export function instantiate(): AppAgent {
             const store = new ScriptFlowStore(instanceStorage);
             await store.initialize();
             agentContext.store = store;
+            _agentStore = store;
 
             await seedSampleFlows(store);
             // Dynamic grammar rules are written to grammar/dynamic.agr by the store.
