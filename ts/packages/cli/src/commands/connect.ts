@@ -4,11 +4,6 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { Dispatcher } from "agent-dispatcher";
 import {
-    getConsolePrompt,
-    processCommands,
-    withConsoleClientIO,
-} from "agent-dispatcher/helpers/console";
-import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
     withEnhancedConsoleClientIO,
@@ -16,7 +11,6 @@ import {
 import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
 import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
-import { createInterface } from "readline/promises";
 
 type CompletionData = {
     allCompletions: string[];
@@ -87,11 +81,6 @@ export default class Connect extends Command {
             description: "Port for type agent server",
             default: 8999,
         }),
-        classicUI: Flags.boolean({
-            description:
-                "Use classic terminal UI instead of enhanced UI with spinners and visual prompts",
-            default: false,
-        }),
         verbose: Flags.string({
             description:
                 "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
@@ -119,34 +108,12 @@ export default class Connect extends Command {
             enableVerboseFromFlag(namespaces);
         }
 
-        const enhancedUI = !flags.classicUI;
+        const { installDebugInterceptor } = await import(
+            "../debugInterceptor.js"
+        );
+        installDebugInterceptor();
 
-        if (enhancedUI) {
-            const { installDebugInterceptor } = await import(
-                "../debugInterceptor.js"
-            );
-            installDebugInterceptor();
-        }
-
-        const withClientIO = enhancedUI
-            ? withEnhancedConsoleClientIO
-            : withConsoleClientIO;
-        const processCommandsFn = enhancedUI
-            ? processCommandsEnhanced
-            : processCommands;
-        const getPromptFn = enhancedUI
-            ? getEnhancedConsolePrompt
-            : getConsolePrompt;
-
-        const rl = enhancedUI
-            ? undefined
-            : createInterface({
-                  input: process.stdin,
-                  output: process.stdout,
-                  terminal: true,
-              });
-
-        await withClientIO(async (clientIO, bindDispatcher) => {
+        await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
             const dispatcher = await ensureAndConnectDispatcher(
                 clientIO,
                 flags.port,
@@ -170,9 +137,9 @@ export default class Connect extends Command {
                 if (processed && flags.exit) {
                     return;
                 }
-                await processCommandsFn(
+                await processCommandsEnhanced(
                     async (dispatcher: Dispatcher) =>
-                        getPromptFn(
+                        getEnhancedConsolePrompt(
                             getStatusSummary(await dispatcher.getStatus(), {
                                 showPrimaryName: false,
                             }),
@@ -181,17 +148,15 @@ export default class Connect extends Command {
                         dispatcher.processCommand(command),
                     dispatcher,
                     undefined,
-                    enhancedUI
-                        ? (line: string) => getCompletionsData(line, dispatcher)
-                        : undefined,
-                    enhancedUI ? dispatcher : undefined,
+                    (line: string) => getCompletionsData(line, dispatcher),
+                    dispatcher,
                 );
             } finally {
                 if (dispatcher) {
                     await dispatcher.close();
                 }
             }
-        }, rl);
+        });
 
         // Some background network (like mongo) might keep the process live, exit explicitly.
         process.exit(0);
