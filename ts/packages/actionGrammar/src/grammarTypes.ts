@@ -7,6 +7,30 @@
  */
 export type CompiledSpacingMode = "required" | "optional" | "none" | undefined;
 
+// ── Operator unions (value expressions) ───────────────────────────────────────
+
+export type BinaryValueExprOp =
+    // Arithmetic
+    | "+"
+    | "-"
+    | "*"
+    | "/"
+    | "%"
+    // Comparison
+    | "==="
+    | "!=="
+    | "<"
+    | ">"
+    | "<="
+    | ">="
+    // Logical
+    | "&&"
+    | "||"
+    // Nullish coalescing
+    | "??";
+
+export type UnaryValueExprOp = "-" | "+" | "!" | "typeof";
+
 // ── Compiled value node types ─────────────────────────────────────────────────
 // ValueNode variants *without* comment annotations.  GrammarRule and
 // GrammarRuleJson use these so parser comment fields are never serialized into
@@ -35,12 +59,74 @@ export type CompiledArrayValueNode = {
     value: CompiledValueNode[];
 };
 
+// ── Compiled value expression nodes ───────────────────────────────────────────
+// These are the serializable (comment-free) node types used at match time
+// and in .ag.json output.  The parser-time variants (in grammarValueExprParser.ts)
+// augment them with leadingComments / trailingComments.
+
+export type CompiledBinaryValueExprNode = {
+    type: "binaryExpression";
+    operator: BinaryValueExprOp;
+    left: CompiledValueNode;
+    right: CompiledValueNode;
+};
+
+export type CompiledUnaryValueExprNode = {
+    type: "unaryExpression";
+    operator: UnaryValueExprOp;
+    operand: CompiledValueNode;
+};
+
+export type CompiledConditionalValueExprNode = {
+    type: "conditionalExpression";
+    test: CompiledValueNode;
+    consequent: CompiledValueNode;
+    alternate: CompiledValueNode;
+};
+
+export type CompiledMemberValueExprNode = {
+    type: "memberExpression";
+    object: CompiledValueNode;
+    /** For computed access (`obj[expr]`), property is a node; for dot access, it's a string. */
+    property: string | CompiledValueNode;
+    computed: boolean;
+    optional: boolean; // `?.` optional chaining
+};
+
+export type CompiledCallValueExprNode = {
+    type: "callExpression";
+    callee: CompiledValueNode;
+    arguments: CompiledValueNode[];
+};
+
+export type CompiledSpreadValueExprNode = {
+    type: "spreadElement";
+    argument: CompiledValueNode;
+};
+
+export type CompiledTemplateLiteralValueExprNode = {
+    type: "templateLiteral";
+    /** Static string parts (quasis). Length is expressions.length + 1. */
+    quasis: string[];
+    expressions: CompiledValueNode[];
+};
+
+export type CompiledValueExprNode =
+    | CompiledBinaryValueExprNode
+    | CompiledUnaryValueExprNode
+    | CompiledConditionalValueExprNode
+    | CompiledMemberValueExprNode
+    | CompiledCallValueExprNode
+    | CompiledSpreadValueExprNode
+    | CompiledTemplateLiteralValueExprNode;
+
 /** ValueNode without comment annotations — used in compiled grammar output (.ag.json). */
 export type CompiledValueNode =
     | CompiledLiteralValueNode
     | CompiledVariableValueNode
     | CompiledObjectValueNode
-    | CompiledArrayValueNode;
+    | CompiledArrayValueNode
+    | CompiledValueExprNode;
 
 /**
  * Grammar Types - in memory

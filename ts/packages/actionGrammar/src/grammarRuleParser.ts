@@ -10,6 +10,11 @@ import {
     CompiledArrayValueNode,
     CompiledSpacingMode,
 } from "./grammarTypes.js";
+import {
+    parseValueExpr,
+    type ValueExprNode,
+    type ValueExprParserContext,
+} from "./grammarValueExprParser.js";
 
 /**
  * Controls how flex-space separator positions between tokens are matched at runtime.
@@ -116,9 +121,15 @@ const debugParse = registerDebug("typeagent:grammar:parse");
 export function parseGrammarRules(
     fileName: string,
     content: string,
-    position: boolean = true,
+    position?: boolean,
+    enableExpressions: boolean = false,
 ): GrammarParseResult {
-    const parser = new GrammarRuleParser(fileName, content, position);
+    const parser = new GrammarRuleParser(
+        fileName,
+        content,
+        position ?? true,
+        enableExpressions,
+    );
     const result = parser.parse();
     debugParse(JSON.stringify(result, undefined, 2));
     return result;
@@ -191,7 +202,8 @@ export type ValueNode =
     | LiteralValueNode
     | ObjectValueNode
     | ArrayValueNode
-    | VariableValueNode;
+    | VariableValueNode
+    | ValueExprNode;
 
 // Parser-time value node types: compiled base types augmented with comment fields.
 // The compiler strips these before storing into GrammarRule (see grammarCompiler.ts).
@@ -353,6 +365,7 @@ class GrammarRuleParser {
         private readonly fileName: string,
         private readonly content: string,
         private readonly position: boolean = true,
+        private readonly enableExpressions: boolean = false,
     ) {}
 
     private get pos(): number | undefined {
@@ -827,18 +840,84 @@ class GrammarRuleParser {
     }
 
     private parseValue(): ValueNode {
-        if (this.isAt("{")) {
-            // Object
-            this.skipWhitespace(1);
-            // Capture comments after "{" as potential leading for the first property.
-            let pendingLeading = this.parseComments();
+        if (this.enableExpressions) {
+            return parseValueExpr(this.asExprParserContext());
+        }
+        return this.parseSimpleValue();
+    }
 
-            let first = true;
-            const obj: ObjectProperty[] = [];
-            while (true) {
-                if (this.isAtEnd()) {
-                    this.throwError("Unexpected end of file in object value.");
-                }
+    /**
+     * Creates a ValueExprParserContext adapter exposing the parser internals
+     * needed by the expression parser module.
+     */
+    private asExprParserContext(): ValueExprParserContext {
+        const self = this;
+        return {
+            get content() {
+                return self.content;
+            },
+            get curr() {
+                return self.curr;
+            },
+            set curr(v: number) {
+                self.curr = v;
+            },
+            get position() {
+                return self.position;
+            },
+            isAt: (s: string) => self.isAt(s),
+            isAtEnd: () => self.isAtEnd(),
+            isAtStringDelimiter: () => self.isAtStringDelimiter(),
+            skipWhitespace: (skip?: number) => self.skipWhitespace(skip),
+            parseComments: () => self.parseComments(),
+            consume: (expected: string, reason?: string) =>
+                self.consume(expected, reason),
+            throwError: (message: string, pos?: number) =>
+                self.throwError(message, pos ?? self.curr),
+            parseId: (expected: string) => self.parseId(expected),
+            parseStringLiteral: () => self.parseStringLiteral(),
+            parseNumberValue: () =>
+                self.parseNumberValue() as { type: "literal"; value: number },
+            parseEscapedChar: () => self.parseEscapedChar(),
+            parseObjectValue: () => self.parseObjectLiteral(),
+            parseArrayValue: () => self.parseArrayLiteral(),
+            parseValueWithComments: (leading?: Comment[]) =>
+                self.parseValueWithComments(leading),
+        };
+    }
+
+    /** Parse an object literal value: { ... } */
+    private parseObjectLiteral(): ValueNode {
+        // Object
+        this.skipWhitespace(1);
+        // Capture comments after "{" as potential leading for the first property.
+        let pendingLeading = this.parseComments();
+
+        let first = true;
+        const obj: ObjectProperty[] = [];
+        while (true) {
+            if (this.isAtEnd()) {
+                this.throwError("Unexpected end of file in object value.");
+            }
+            if (this.isAt("}")) {
+                this.skipWhitespace(1);
+                return {
+                    type: "object",
+                    value: obj,
+                    closingComments: pendingLeading,
+                } satisfies ObjectValueNode;
+            }
+
+            if (!first) {
+                const trailing = this.consumeWithTrailingComments(
+                    ",",
+                    "object property",
+                    true,
+                );
+                obj[obj.length - 1].trailingComments = trailing;
+                this.skipWhitespace(); // advance past newline + indentation
+                pendingLeading = this.parseComments();
+                // Trailing comma: if next token is "}", there is no further property.
                 if (this.isAt("}")) {
                     this.skipWhitespace(1);
                     return {
@@ -847,72 +926,74 @@ class GrammarRuleParser {
                         closingComments: pendingLeading,
                     } satisfies ObjectValueNode;
                 }
-
-                if (!first) {
-                    const trailing = this.consumeWithTrailingComments(
-                        ",",
-                        "object property",
-                        true,
-                    );
-                    obj[obj.length - 1].trailingComments = trailing;
-                    this.skipWhitespace(); // advance past newline + indentation
-                    pendingLeading = this.parseComments();
-                    // Trailing comma: if next token is "}", there is no further property.
-                    if (this.isAt("}")) {
-                        this.skipWhitespace(1);
-                        return {
-                            type: "object",
-                            value: obj,
-                            closingComments: pendingLeading,
-                        } satisfies ObjectValueNode;
-                    }
-                } else {
-                    first = false;
-                }
-
-                // Parse property name (identifier or string literal)
-                const isStringLiteral = this.isAtStringDelimiter();
-
-                const id = isStringLiteral
-                    ? this.parseStringLiteral()
-                    : this.parseId("Object property name");
-
-                // Check for full form (name: value) or short form (name)
-                let v: ValueNode | null;
-                if (this.isAt(",") || this.isAt("}")) {
-                    // Short form: only valid for identifiers (not string literals)
-                    // Represents { id: id } where id is a variable reference
-                    if (isStringLiteral) {
-                        this.throwError(
-                            "Shorthand property syntax requires an identifier, not a string literal",
-                        );
-                    }
-                    v = null;
-                } else {
-                    // Full form: propertyName: value
-                    this.consume(":", "between property name and value");
-                    v = this.parseValueWithComments();
-                }
-                obj.push({
-                    key: id,
-                    value: v,
-                    leadingComments: pendingLeading,
-                });
-                pendingLeading = undefined;
+            } else {
+                first = false;
             }
-        }
-        if (this.isAt("[")) {
-            // Array
-            this.skipWhitespace(1);
-            const arr: ArrayElement[] = [];
 
-            // Capture comments right after "[" as potential leading for the first element.
-            let pendingLeading = this.parseComments();
-            let first = true;
-            while (true) {
-                if (this.isAtEnd()) {
-                    this.throwError("Unexpected end of file in array value.");
+            // Parse property name (identifier or string literal)
+            const isStringLiteral = this.isAtStringDelimiter();
+
+            const id = isStringLiteral
+                ? this.parseStringLiteral()
+                : this.parseId("Object property name");
+
+            // Check for full form (name: value) or short form (name)
+            let v: ValueNode | null;
+            if (this.isAt(",") || this.isAt("}")) {
+                // Short form: only valid for identifiers (not string literals)
+                // Represents { id: id } where id is a variable reference
+                if (isStringLiteral) {
+                    this.throwError(
+                        "Shorthand property syntax requires an identifier, not a string literal",
+                    );
                 }
+                v = null;
+            } else {
+                // Full form: propertyName: value
+                this.consume(":", "between property name and value");
+                v = this.parseValueWithComments();
+            }
+            obj.push({
+                key: id,
+                value: v,
+                leadingComments: pendingLeading,
+            });
+            pendingLeading = undefined;
+        }
+    }
+
+    /** Parse an array literal value: [ ... ] */
+    private parseArrayLiteral(): ValueNode {
+        // Array
+        this.skipWhitespace(1);
+        const arr: ArrayElement[] = [];
+
+        // Capture comments right after "[" as potential leading for the first element.
+        let pendingLeading = this.parseComments();
+        let first = true;
+        while (true) {
+            if (this.isAtEnd()) {
+                this.throwError("Unexpected end of file in array value.");
+            }
+            if (this.isAt("]")) {
+                this.skipWhitespace(1);
+                return {
+                    type: "array",
+                    value: arr,
+                    closingComments: pendingLeading,
+                } satisfies ArrayValueNode;
+            }
+
+            if (!first) {
+                const trailingComments = this.consumeWithTrailingComments(
+                    ",",
+                    "array element",
+                    true,
+                );
+                arr[arr.length - 1].trailingComments = trailingComments;
+                this.skipWhitespace();
+                pendingLeading = this.parseComments();
+                // Trailing comma: if next token is "]", there is no further element.
                 if (this.isAt("]")) {
                     this.skipWhitespace(1);
                     return {
@@ -921,33 +1002,23 @@ class GrammarRuleParser {
                         closingComments: pendingLeading,
                     } satisfies ArrayValueNode;
                 }
-
-                if (!first) {
-                    const trailingComments = this.consumeWithTrailingComments(
-                        ",",
-                        "array element",
-                        true,
-                    );
-                    arr[arr.length - 1].trailingComments = trailingComments;
-                    this.skipWhitespace();
-                    pendingLeading = this.parseComments();
-                    // Trailing comma: if next token is "]", there is no further element.
-                    if (this.isAt("]")) {
-                        this.skipWhitespace(1);
-                        return {
-                            type: "array",
-                            value: arr,
-                            closingComments: pendingLeading,
-                        } satisfies ArrayValueNode;
-                    }
-                } else {
-                    first = false;
-                }
-                arr.push({
-                    value: this.parseValueWithComments(pendingLeading),
-                });
-                pendingLeading = undefined;
+            } else {
+                first = false;
             }
+            arr.push({
+                value: this.parseValueWithComments(pendingLeading),
+            });
+            pendingLeading = undefined;
+        }
+    }
+
+    /** Parse a simple value (no expressions) — the original parseValue logic. */
+    private parseSimpleValue(): ValueNode {
+        if (this.isAt("{")) {
+            return this.parseObjectLiteral();
+        }
+        if (this.isAt("[")) {
+            return this.parseArrayLiteral();
         }
         if (this.isAtStringDelimiter()) {
             return this.parseStringValue();

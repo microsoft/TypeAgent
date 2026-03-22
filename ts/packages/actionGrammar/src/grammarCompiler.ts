@@ -394,6 +394,9 @@ function validateAndCompileValueNode(
     node: ValueNode,
     availableVariables: Set<string>,
 ): CompiledValueNode {
+    const compile = (n: ValueNode) =>
+        validateAndCompileValueNode(context, n, availableVariables);
+
     let result: CompiledValueNode;
     switch (node.type) {
         case "literal":
@@ -436,6 +439,63 @@ function validateAndCompileValueNode(
                         availableVariables,
                     ),
                 ),
+            };
+            break;
+
+        // ── Value expression nodes ────────────────────────────────────────
+        case "binaryExpression":
+            result = {
+                type: "binaryExpression",
+                operator: node.operator,
+                left: compile(node.left),
+                right: compile(node.right),
+            };
+            break;
+        case "unaryExpression":
+            result = {
+                type: "unaryExpression",
+                operator: node.operator,
+                operand: compile(node.operand),
+            };
+            break;
+        case "conditionalExpression":
+            result = {
+                type: "conditionalExpression",
+                test: compile(node.test),
+                consequent: compile(node.consequent),
+                alternate: compile(node.alternate),
+            };
+            break;
+        case "memberExpression":
+            result = {
+                type: "memberExpression",
+                object: compile(node.object),
+                property:
+                    typeof node.property === "string"
+                        ? node.property
+                        : compile(node.property),
+                computed: node.computed,
+                optional: node.optional,
+            };
+            break;
+        case "callExpression":
+            result = {
+                type: "callExpression",
+                callee: compile(node.callee),
+                arguments: node.arguments.map(compile),
+            };
+            break;
+        case "spreadElement":
+            result = {
+                type: "spreadElement",
+                argument: compile(node.argument),
+            };
+            break;
+        case "templateLiteral":
+            result = {
+                type: "templateLiteral",
+                quasis: node.quasis,
+                expressions: node.expressions.map(compile),
             };
             break;
     }

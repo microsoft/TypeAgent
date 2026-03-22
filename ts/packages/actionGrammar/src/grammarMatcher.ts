@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { CompiledSpacingMode, CompiledValueNode } from "./grammarTypes.js";
+import { evaluateValueExpr } from "./grammarValueExprEvaluator.js";
 import registerDebug from "debug";
 // REVIEW: switch to RegExp.escape() when it becomes available.
 import escapeMatch from "regexp.escape";
@@ -478,6 +479,23 @@ function createValue(
                 wildcardPropertyNames,
                 partialValueId,
                 stat,
+            );
+        }
+        default: {
+            // Value expression node — delegate to the expression evaluator.
+            // The evalBase callback routes base nodes (literal, variable,
+            // object, array) back through createValue so variable resolution
+            // and wildcard extraction work correctly.
+            return evaluateValueExpr(node, (baseNode) =>
+                createValue(
+                    baseNode,
+                    valueIds,
+                    values,
+                    propertyName,
+                    wildcardPropertyNames,
+                    partialValueId,
+                    stat,
+                ),
             );
         }
     }

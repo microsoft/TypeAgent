@@ -6,10 +6,11 @@ import { compileGrammar, FileLoader, SchemaLoader } from "./grammarCompiler.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
 
-type LoadGrammarRulesOptions = {
+export type LoadGrammarRulesOptions = {
     start?: string; // Optional start symbol (default: "Start")
     startValueRequired?: boolean; // Whether the start rule must produce a value (default: true)
     schemaLoader?: SchemaLoader; // Optional loader for resolving .ts type imports
+    enableExpressions?: boolean; // Enable JavaScript-like value expressions (default: false)
 };
 
 function parseAndCompileGrammar(
@@ -34,7 +35,13 @@ function parseAndCompileGrammar(
 
     const start = options?.start ?? "Start";
     const startValueRequired = options?.startValueRequired ?? true;
-    const parseResult = parseGrammarRules(displayPath, content);
+    const enableExpressions = options?.enableExpressions ?? false;
+    const parseResult = parseGrammarRules(
+        displayPath,
+        content,
+        undefined,
+        enableExpressions,
+    );
     const grammar = compileGrammar(
         displayPath,
         content,

@@ -671,6 +671,257 @@ describe("Value type validation", () => {
             });
             expect(errors.length).toBe(0);
         });
+
+        it("circular rule infers type via fixed-point iteration", () => {
+            // <Items> is recursive: it references itself via <Items>.
+            // The base case produces a string, the recursive case passes through.
+            // Fixed-point iteration should infer string for <Items>.
+            const grammarText = `
+                import { PlayAction } from "schema.ts";
+                <Start> : PlayAction = play $(track:<Items>) -> { actionName: "play", trackName: track };
+                <Items> = $(x:string) | $(x:string) and <Items>;
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            // <Items> should infer as string via fixed-point; track: string matches trackName: string
+            expect(errors.length).toBe(0);
+        });
+
+        it("circular rule with type mismatch produces error after fixed-point", () => {
+            const NumActionDef = SchemaCreator.intf(
+                "NumAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    level: SchemaCreator.field(SchemaCreator.number()),
+                }),
+                undefined,
+                true,
+            );
+            const loader: SchemaLoader = (typeName) =>
+                typeName === "NumAction" ? NumActionDef : undefined;
+
+            // <Items> recurses and produces string, but level expects number
+            const grammarText = `
+                import { NumAction } from "schema.ts";
+                <Start> : NumAction = set $(level:<Items>) -> { actionName: "test", level };
+                <Items> = $(x:string) | $(x:string) and <Items>;
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: loader,
+            });
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("expected number");
+        });
+
+        it("structurally recursive rule produces self-referential type", () => {
+            // <Tree> is structurally recursive: base case is string,
+            // recursive case wraps <Tree> in an object.
+            // The type should be: Tree = string | { inner: Tree }
+            const TreeActionDef = SchemaCreator.intf(
+                "TreeAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("tree"),
+                    ),
+                    // Use 'any' so we accept whatever recursive type is inferred
+                    data: SchemaCreator.field(SchemaCreator.any()),
+                }),
+                undefined,
+                true,
+            );
+            const loader: SchemaLoader = (typeName) =>
+                typeName === "TreeAction" ? TreeActionDef : undefined;
+
+            const grammarText = `
+                import { TreeAction } from "schema.ts";
+                <Start> : TreeAction = show $(data:<Tree>) -> { actionName: "tree", data };
+                <Tree> = $(x:string) | wrap $(y:<Tree>) -> { inner: y };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: loader,
+            });
+            // Should compile without errors — the recursive type is valid
+            expect(errors.length).toBe(0);
+        });
+
+        it("mutually recursive rules converge without stack overflow", () => {
+            // <A> and <B> reference each other
+            const grammarText = `
+                import { PlayAction } from "schema.ts";
+                <Start> : PlayAction = play $(track:<A>) -> { actionName: "play", trackName: track };
+                <A> = $(x:string) | next $(y:<B>);
+                <B> = $(x:string) | back $(y:<A>);
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            // Both <A> and <B> should infer as string (from the base case)
+            expect(errors.length).toBe(0);
+        });
+
+        it("structurally recursive rule with type mismatch reports error", () => {
+            const NumActionDef = SchemaCreator.intf(
+                "NumAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    level: SchemaCreator.field(SchemaCreator.number()),
+                }),
+                undefined,
+                true,
+            );
+            const loader: SchemaLoader = (typeName) =>
+                typeName === "NumAction" ? NumActionDef : undefined;
+
+            // <Tree> is recursive: string | { inner: <Tree> }
+            // level expects number, but <Tree> produces string or object
+            const grammarText = `
+                import { NumAction } from "schema.ts";
+                <Start> : NumAction = set $(level:<Tree>) -> { actionName: "test", level };
+                <Tree> = $(x:string) | wrap $(y:<Tree>) -> { inner: y };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: loader,
+            });
+            expect(errors.length).toBe(1);
+        });
+
+        it("degenerate self-reference is caught by grammar compiler", () => {
+            // <A> = <A> is a pure self-reference with no base case.
+            // The grammar compiler catches this as an epsilon-reachable cycle
+            // before type inference even runs.
+            const grammarText = `
+                import { PlayAction } from "schema.ts";
+                <Start> : PlayAction = play $(track:<A>) -> { actionName: "play", trackName: track };
+                <A> = <A>;
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("epsilon-reachable cycle");
+        });
+
+        it("mutually recursive passthrough with type mismatch reports error", () => {
+            const NumActionDef = SchemaCreator.intf(
+                "NumAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    level: SchemaCreator.field(SchemaCreator.number()),
+                }),
+                undefined,
+                true,
+            );
+            const loader: SchemaLoader = (typeName) =>
+                typeName === "NumAction" ? NumActionDef : undefined;
+
+            // <A> and <B> mutually recurse, both produce string base case.
+            // level expects number — should report a type mismatch.
+            const grammarText = `
+                import { NumAction } from "schema.ts";
+                <Start> : NumAction = set $(level:<A>) -> { actionName: "test", level };
+                <A> = $(x:string) | next $(y:<B>);
+                <B> = $(x:string) | back $(y:<A>);
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: loader,
+            });
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("expected number");
+        });
+
+        it("mutually structurally recursive rules produce valid types", () => {
+            // <A> and <B> reference each other inside objects — structural mutual recursion.
+            // A = string | { inner: B }
+            // B = string | { inner: A }
+            const TreeActionDef = SchemaCreator.intf(
+                "TreeAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("tree"),
+                    ),
+                    data: SchemaCreator.field(SchemaCreator.any()),
+                }),
+                undefined,
+                true,
+            );
+            const loader: SchemaLoader = (typeName) =>
+                typeName === "TreeAction" ? TreeActionDef : undefined;
+
+            const grammarText = `
+                import { TreeAction } from "schema.ts";
+                <Start> : TreeAction = show $(data:<A>) -> { actionName: "tree", data };
+                <A> = $(x:string) | wrap $(y:<B>) -> { inner: y };
+                <B> = $(x:string) | wrap $(y:<A>) -> { inner: y };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: loader,
+            });
+            // Should compile without errors — both recursive types are valid
+            expect(errors.length).toBe(0);
+        });
+
+        it("chain of three mutually passthrough-recursive rules converge", () => {
+            // <A> -> <B> -> <C> -> <A> forms a 3-rule passthrough cycle.
+            // All should resolve to string from their base cases.
+            const grammarText = `
+                import { PlayAction } from "schema.ts";
+                <Start> : PlayAction = play $(track:<A>) -> { actionName: "play", trackName: track };
+                <A> = $(x:string) | next $(y:<B>);
+                <B> = $(x:string) | next $(y:<C>);
+                <C> = $(x:string) | next $(y:<A>);
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            expect(errors.length).toBe(0);
+        });
+
+        it("chain of three mutually passthrough-recursive rules with type mismatch", () => {
+            const NumActionDef = SchemaCreator.intf(
+                "NumAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    level: SchemaCreator.field(SchemaCreator.number()),
+                }),
+                undefined,
+                true,
+            );
+            const loader: SchemaLoader = (typeName) =>
+                typeName === "NumAction" ? NumActionDef : undefined;
+
+            // Chain of 3 rules all producing string, but level expects number
+            const grammarText = `
+                import { NumAction } from "schema.ts";
+                <Start> : NumAction = set $(level:<A>) -> { actionName: "test", level };
+                <A> = $(x:string) | next $(y:<B>);
+                <B> = $(x:string) | next $(y:<C>);
+                <C> = $(x:string) | next $(y:<A>);
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: loader,
+            });
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("expected number");
+        });
     });
 
     describe("Structural type equality and union derivation", () => {
@@ -888,6 +1139,460 @@ describe("Value type validation", () => {
             });
             expect(errors.length).toBe(1);
             expect(errors[0]).toContain("'turbo'");
+        });
+    });
+
+    describe("expression type inference", () => {
+        // Schema: { actionName: string, count: number, label: string, active: boolean }
+        const ExprActionDef = SchemaCreator.intf(
+            "ExprAction",
+            SchemaCreator.obj({
+                actionName: SchemaCreator.field(SchemaCreator.string("test")),
+                count: SchemaCreator.field(SchemaCreator.number()),
+                label: SchemaCreator.field(SchemaCreator.string()),
+                active: SchemaCreator.field(SchemaCreator.boolean()),
+            }),
+            undefined,
+            true,
+        );
+        const exprLoader: SchemaLoader = (typeName) =>
+            typeName === "ExprAction" ? ExprActionDef : undefined;
+        const exprOpts = {
+            schemaLoader: exprLoader,
+            enableExpressions: true,
+        };
+
+        it("template literal inferred as string - valid in string field", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: \`hello \${name}\`, active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("template literal in number field produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: \`hello \${name}\`, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("expected number");
+        });
+
+        it("arithmetic expression inferred as number", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: n * 2, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("arithmetic expression in string field produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: n * 2, active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("expected string");
+        });
+
+        it("comparison expression inferred as boolean", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: n, label: "x", active: n > 0 };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("comparison in number field produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: n > 0, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("expected number");
+        });
+
+        it("typeof inferred as string", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(x:string)
+                    -> { actionName: "test", count: 0, label: typeof x, active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("negation (!) inferred as boolean", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(x:string)
+                    -> { actionName: "test", count: 0, label: "x", active: !x };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("unary minus inferred as number", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: -n, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("ternary with same-type branches inferred correctly", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: n > 0 ? n : 0, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("string + anything inferred as string", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: "count: " + n, active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("toLowerCase inferred as string", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: name.toLowerCase(), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("indexOf on string inferred as number", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: name.indexOf("x"), label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("includes on string inferred as boolean", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: "x", active: name.includes("y") };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("string length property inferred as number", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: name.length, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("array filter inferred as same array type", () => {
+            // items is an array; filter returns the same array type
+            // We test that it doesn't produce a type error when used properly
+            const ArrayActionDef = SchemaCreator.intf(
+                "ArrayAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    items: SchemaCreator.field(
+                        SchemaCreator.array(SchemaCreator.string()),
+                    ),
+                }),
+                undefined,
+                true,
+            );
+            const arrayLoader: SchemaLoader = (typeName) =>
+                typeName === "ArrayAction" ? ArrayActionDef : undefined;
+            const grammarText = `
+                import { ArrayAction } from "schema.ts";
+                <Start> : ArrayAction = test $(name:string)
+                    -> { actionName: "test", items: [name].filter(name) };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: arrayLoader,
+                enableExpressions: true,
+            });
+            expect(errors.length).toBe(0);
+        });
+
+        it("array includes inferred as boolean", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: "x", active: ["a", "b"].includes(name) };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("array join inferred as string", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: ["a", name].join(", "), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("array indexOf inferred as number", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: ["a", "b"].indexOf(name), label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("number toFixed inferred as string", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: n.toFixed(2), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("number toFixed in number field produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: n.toFixed(2), label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("expected number");
+        });
+
+        it("array literal element types are inferred", () => {
+            const ArrayActionDef = SchemaCreator.intf(
+                "ArrayAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    items: SchemaCreator.field(
+                        SchemaCreator.array(SchemaCreator.string()),
+                    ),
+                }),
+                undefined,
+                true,
+            );
+            const arrayLoader: SchemaLoader = (typeName) =>
+                typeName === "ArrayAction" ? ArrayActionDef : undefined;
+            const grammarText = `
+                import { ArrayAction } from "schema.ts";
+                <Start> : ArrayAction = test $(name:string)
+                    -> { actionName: "test", items: [name, "literal"] };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: arrayLoader,
+                enableExpressions: true,
+            });
+            expect(errors.length).toBe(0);
+        });
+
+        it("split returns string array", () => {
+            const ArrayActionDef = SchemaCreator.intf(
+                "ArrayAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    items: SchemaCreator.field(
+                        SchemaCreator.array(SchemaCreator.string()),
+                    ),
+                }),
+                undefined,
+                true,
+            );
+            const arrayLoader: SchemaLoader = (typeName) =>
+                typeName === "ArrayAction" ? ArrayActionDef : undefined;
+            const grammarText = `
+                import { ArrayAction } from "schema.ts";
+                <Start> : ArrayAction = test $(name:string)
+                    -> { actionName: "test", items: name.split(",") };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: arrayLoader,
+                enableExpressions: true,
+            });
+            expect(errors.length).toBe(0);
         });
     });
 });
