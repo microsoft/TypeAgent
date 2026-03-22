@@ -394,116 +394,112 @@ function validateAndCompileValueNode(
     node: ValueNode,
     availableVariables: Set<string>,
 ): CompiledValueNode {
-    const compile = (n: ValueNode) =>
-        validateAndCompileValueNode(context, n, availableVariables);
-
-    let result: CompiledValueNode;
-    switch (node.type) {
-        case "literal":
-            result = { type: "literal", value: node.value };
-            break;
-        case "variable":
-            validateVariableReference(context, node.name, availableVariables);
-            result = { type: "variable", name: node.name };
-            break;
-        case "object": {
-            const value: { [key: string]: CompiledValueNode | null } = {};
-            for (const prop of node.value) {
-                if (prop.value === null) {
-                    // Shorthand form: { key } means { key: key }
-                    // Validate that 'key' is an available variable
-                    validateVariableReference(
-                        context,
-                        prop.key,
-                        availableVariables,
-                    );
-                    value[prop.key] = null;
-                } else {
-                    value[prop.key] = validateAndCompileValueNode(
-                        context,
-                        prop.value,
-                        availableVariables,
-                    );
-                }
-            }
-            result = { type: "object", value };
-            break;
+    const validateVariable = (variableName: string) => {
+        if (!availableVariables.has(variableName)) {
+            context.errors.push({
+                message: `Variable '${variableName}' is referenced in the value but not defined in the rule`,
+                definition: context.currentDefinition,
+            });
         }
-        case "array":
-            result = {
-                type: "array",
-                value: node.value.map((elem) =>
-                    validateAndCompileValueNode(
-                        context,
-                        elem.value,
-                        availableVariables,
-                    ),
-                ),
-            };
-            break;
+    };
 
-        // ── Value expression nodes ────────────────────────────────────────
-        case "binaryExpression":
-            result = {
-                type: "binaryExpression",
-                operator: node.operator,
-                left: compile(node.left),
-                right: compile(node.right),
-            };
-            break;
-        case "unaryExpression":
-            result = {
-                type: "unaryExpression",
-                operator: node.operator,
-                operand: compile(node.operand),
-            };
-            break;
-        case "conditionalExpression":
-            result = {
-                type: "conditionalExpression",
-                test: compile(node.test),
-                consequent: compile(node.consequent),
-                alternate: compile(node.alternate),
-            };
-            break;
-        case "memberExpression":
-            result = {
-                type: "memberExpression",
-                object: compile(node.object),
-                property:
-                    typeof node.property === "string"
-                        ? node.property
-                        : compile(node.property),
-                computed: node.computed,
-                optional: node.optional,
-            };
-            break;
-        case "callExpression":
-            result = {
-                type: "callExpression",
-                callee: compile(node.callee),
-                arguments: node.arguments.map(compile),
-            };
-            break;
-        case "spreadElement":
-            result = {
-                type: "spreadElement",
-                argument: compile(node.argument),
-            };
-            break;
-        case "templateLiteral":
-            result = {
-                type: "templateLiteral",
-                quasis: node.quasis,
-                expressions: node.expressions.map(compile),
-            };
-            break;
-    }
-    // Track source position of the top-level value node for error reporting
-    if (node.pos !== undefined) {
-        context.valuePositions.set(result, node.pos);
-    }
-    return result;
+    const compile = (node: ValueNode): CompiledValueNode => {
+        let result: CompiledValueNode;
+        switch (node.type) {
+            case "literal":
+                result = { type: "literal", value: node.value };
+                break;
+            case "variable":
+                validateVariable(node.name);
+                result = { type: "variable", name: node.name };
+                break;
+            case "object": {
+                const value: { [key: string]: CompiledValueNode | null } = {};
+                for (const prop of node.value) {
+                    if (prop.value === null) {
+                        // Shorthand form: { key } means { key: key }
+                        // Validate that 'key' is an available variable
+                        validateVariable(prop.key);
+                        value[prop.key] = null;
+                    } else {
+                        value[prop.key] = compile(prop.value);
+                    }
+                }
+                result = { type: "object", value };
+                break;
+            }
+            case "array":
+                result = {
+                    type: "array",
+                    value: node.value.map((elem) => compile(elem.value)),
+                };
+                break;
+
+            // ── Value expression nodes ────────────────────────────────────
+            case "binaryExpression":
+                result = {
+                    type: "binaryExpression",
+                    operator: node.operator,
+                    left: compile(node.left),
+                    right: compile(node.right),
+                };
+                break;
+            case "unaryExpression":
+                result = {
+                    type: "unaryExpression",
+                    operator: node.operator,
+                    operand: compile(node.operand),
+                };
+                break;
+            case "conditionalExpression":
+                result = {
+                    type: "conditionalExpression",
+                    test: compile(node.test),
+                    consequent: compile(node.consequent),
+                    alternate: compile(node.alternate),
+                };
+                break;
+            case "memberExpression":
+                result = {
+                    type: "memberExpression",
+                    object: compile(node.object),
+                    property:
+                        typeof node.property === "string"
+                            ? node.property
+                            : compile(node.property),
+                    computed: node.computed,
+                    optional: node.optional,
+                };
+                break;
+            case "callExpression":
+                result = {
+                    type: "callExpression",
+                    callee: compile(node.callee),
+                    arguments: node.arguments.map(compile),
+                };
+                break;
+            case "spreadElement":
+                result = {
+                    type: "spreadElement",
+                    argument: compile(node.argument),
+                };
+                break;
+            case "templateLiteral":
+                result = {
+                    type: "templateLiteral",
+                    quasis: node.quasis,
+                    expressions: node.expressions.map(compile),
+                };
+                break;
+        }
+        // Track source position of the top-level value node for error reporting
+        if (node.pos !== undefined) {
+            context.valuePositions.set(result, node.pos);
+        }
+        return result;
+    };
+
+    return compile(node);
 }
 
 // Sentinel for missing rule definitions. Pre-populated grammarRules suppress
@@ -515,22 +511,6 @@ const emptyRecord: ResolvedDefinitionRecord = {
     compiling: false,
     nullable: false,
 };
-
-/**
- * Validate that a variable reference exists in the available variables set
- */
-function validateVariableReference(
-    context: CompileContext,
-    variableName: string,
-    availableVariables: Set<string>,
-): void {
-    if (!availableVariables.has(variableName)) {
-        context.errors.push({
-            message: `Variable '${variableName}' is referenced in the value but not defined in the rule`,
-            definition: context.currentDefinition,
-        });
-    }
-}
 
 // ε-reachable cycle detection
 //
