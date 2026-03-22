@@ -6,13 +6,18 @@ import fs from "node:fs";
 import path from "node:path";
 import { rules as copyrightHeadersRules } from "./policyChecks/copyrightHeaders.mjs";
 import { rules as npmPackageRules } from "./policyChecks/npmPackage.mjs";
+import { rules as invisibleUnicodeRules } from "./policyChecks/invisibleUnicode.mjs";
 import chalk from "chalk";
 
 /********************************************************
  * Rules
  ********************************************************/
 
-const rules = [...copyrightHeadersRules, ...npmPackageRules];
+const rules = [
+    ...copyrightHeadersRules,
+    ...npmPackageRules,
+    ...invisibleUnicodeRules,
+];
 
 /********************************************************
  * Main
