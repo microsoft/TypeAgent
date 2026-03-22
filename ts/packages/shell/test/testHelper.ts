@@ -114,7 +114,7 @@ async function startShell(testGreetings: boolean = false): Promise<Page> {
             await expect(inputLocator).toHaveAttribute(
                 "contenteditable",
                 "true",
-                { timeout: 30000 },
+                { timeout: 120000 },
             );
 
             return mainWindow;

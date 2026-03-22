@@ -49,6 +49,9 @@ export async function lockInstanceDir(instanceDir: string) {
             isExiting = true;
         });
         return await lockfile.lock(instanceDir, {
+            // Retry for up to ~15 seconds to handle the case where a previous
+            // process was forcibly killed and its lock file is not yet stale.
+            retries: { retries: 15, minTimeout: 1000, maxTimeout: 1000 },
             onCompromised: (err) => {
                 if (isExiting) {
                     // We are exiting, just ignore the error
