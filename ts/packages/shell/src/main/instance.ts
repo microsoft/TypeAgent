@@ -32,7 +32,7 @@ import {
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { setPendingUpdateCallback } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
-import { isProd } from "./index.js";
+import { isProd, isTest } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
 
@@ -250,7 +250,12 @@ async function initializeDispatcher(
 
         return dispatcher;
     } catch (e: any) {
-        dialog.showErrorBox("Exception initializing dispatcher", e.stack);
+        if (isTest) {
+            // In test mode, avoid blocking dialogs so the process can exit cleanly
+            console.error("Exception initializing dispatcher:", e.stack);
+        } else {
+            dialog.showErrorBox("Exception initializing dispatcher", e.stack);
+        }
         return undefined;
     }
 }
