@@ -17,11 +17,6 @@ import {
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
 import {
-    getConsolePrompt,
-    processCommands,
-    withConsoleClientIO,
-} from "agent-dispatcher/helpers/console";
-import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
     withEnhancedConsoleClientIO,
@@ -29,7 +24,6 @@ import {
 import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getFsStorageProvider } from "dispatcher-node-providers";
-import { createInterface } from "readline/promises";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -135,11 +129,6 @@ export default class Interactive extends Command {
             default: true,
             allowNo: true,
         }),
-        classicUI: Flags.boolean({
-            description:
-                "Use classic terminal UI instead of enhanced UI with spinners and visual prompts",
-            default: false,
-        }),
         verbose: Flags.string({
             description:
                 "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
@@ -172,39 +161,15 @@ export default class Interactive extends Command {
             enableVerboseFromFlag(namespaces);
         }
 
-        const enhancedUI = !flags.classicUI;
-
-        // Install debug interceptor for enhanced UI so all stderr debug
-        // output (whether from /verbose, --verbose, or DEBUG env var)
+        // Install debug interceptor so all stderr debug output
+        // (whether from /verbose, --verbose, or DEBUG env var)
         // renders in the indented panel.
-        if (enhancedUI) {
-            const { installDebugInterceptor } = await import(
-                "../debugInterceptor.js"
-            );
-            installDebugInterceptor();
-        }
+        const { installDebugInterceptor } = await import(
+            "../debugInterceptor.js"
+        );
+        installDebugInterceptor();
 
-        // Choose between standard and enhanced UI
-        const withClientIO = enhancedUI
-            ? withEnhancedConsoleClientIO
-            : withConsoleClientIO;
-        const processCommandsFn = enhancedUI
-            ? processCommandsEnhanced
-            : processCommands;
-        const getPromptFn = enhancedUI
-            ? getEnhancedConsolePrompt
-            : getConsolePrompt;
-
-        // Only create readline for standard console - enhanced console creates its own
-        const rl = enhancedUI
-            ? undefined
-            : createInterface({
-                  input: process.stdin,
-                  output: process.stdout,
-                  terminal: true,
-              });
-
-        await withClientIO(async (clientIO, bindDispatcher) => {
+        await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
             const indexingServiceRegistry =
                 await getIndexingServiceRegistry(persistDir);
@@ -236,9 +201,9 @@ export default class Interactive extends Command {
                     }
                 }
 
-                await processCommandsFn(
+                await processCommandsEnhanced(
                     async (dispatcher: Dispatcher) =>
-                        getPromptFn(
+                        getEnhancedConsolePrompt(
                             getStatusSummary(await dispatcher.getStatus(), {
                                 showPrimaryName: false,
                             }),
@@ -247,15 +212,13 @@ export default class Interactive extends Command {
                         dispatcher.processCommand(command),
                     dispatcher,
                     undefined, // inputs
-                    enhancedUI
-                        ? (line: string) => getCompletionsData(line, dispatcher)
-                        : undefined,
-                    enhancedUI ? dispatcher : undefined,
+                    (line: string) => getCompletionsData(line, dispatcher),
+                    dispatcher,
                 );
             } finally {
                 await dispatcher.close();
             }
-        }, rl);
+        });
 
         // Some background network (like mongo) might keep the process live, exit explicitly.
         process.exit(0);
