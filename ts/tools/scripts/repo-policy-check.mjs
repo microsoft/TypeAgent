@@ -111,6 +111,11 @@ function main() {
     let fixed = 0;
     let failed = 0;
     let failedFiles = 0;
+    let excludedFiles = 0;
+    let skippedFiles = 0;
+
+    // Per-rule counters: { checked: number, failed: number }
+    const ruleStats = new Map(rules.map((r) => [r.name, { checked: 0, failed: 0 }]));
 
     const files = getCheckFiles();
 
@@ -122,6 +127,7 @@ function main() {
     const verbose = process.argv.includes("--verbose");
     for (const file of files) {
         if (!checkFile(file, config)) {
+            excludedFiles++;
             continue;
         }
         const rulesChecked = [];
@@ -134,6 +140,7 @@ function main() {
                 continue;
             }
             check++;
+            ruleStats.get(rule.name).checked++;
             const ruleColor = colors[ruleIndex++ % colors.length];
             const coloredRule = ruleColor(`  ${rule.name}: `);
             rulesChecked.push(coloredRule);
@@ -159,9 +166,13 @@ function main() {
             }
             failed++;
             failedFile = true;
+            ruleStats.get(rule.name).failed++;
         }
         if (failedFile) {
             failedFiles++;
+        }
+        if (rulesChecked.length === 0) {
+            skippedFiles++;
         }
         if (verbose) {
             if (rulesChecked.length === 0) {
@@ -193,10 +204,25 @@ function main() {
             console.log();
         }
     }
+
+    // Rule summary
+    console.log(chalk.bold("\nRule summary:"));
+    for (const [name, stats] of ruleStats) {
+        const failNote = stats.failed > 0 ? chalk.red(` (${stats.failed} failed)`) : "";
+        console.log(`  ${name}: ${stats.checked} checked${failNote}`);
+    }
+
+    // File summary
+    console.log(chalk.bold("\nFile summary:"));
+    console.log(`  Total:    ${files.length}`);
+    console.log(`  Excluded: ${excludedFiles}`);
+    console.log(`  Skipped:  ${skippedFiles} (no rules matched)`);
+    console.log(`  Checked:  ${files.length - excludedFiles - skippedFiles}`);
+
     if (failed > 0) {
         console.error(
             chalk.red(
-                `Failed ${failed}/${check} checks. ${failedFiles}/${files.length} files. ${fixed !== 0 ? `Fixed ${fixed}` : ""}`,
+                `\nFailed ${failed}/${check} checks. ${failedFiles}/${files.length} files. ${fixed !== 0 ? `Fixed ${fixed}` : ""}`,
             ),
         );
         process.exit(1);
@@ -204,7 +230,7 @@ function main() {
 
     console.log(
         chalk.green(
-            `Passed ${check} checks. ${files.length} files. ${fixed !== 0 ? `Fixed ${fixed}` : ""}`,
+            `\nPassed ${check} checks. ${fixed !== 0 ? `Fixed ${fixed}` : ""}`,
         ),
     );
 }
