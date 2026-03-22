@@ -514,3 +514,83 @@ with intelligent line-breaking. It preserves comments from the original
 parse, supports compact (single-line) and expanded (multi-line) layouts,
 and respects a configurable line-length limit. This enables tooling
 workflows where grammars are programmatically modified and re-serialized.
+
+---
+
+## Value Expression Type System
+
+Grammar value expressions (the `-> expression` part of a rule) are
+type-checked at compile time. Every expression node has a statically-known
+type — there is no `any` escape hatch. This section documents the design
+principles and restrictions.
+
+### Design Principles
+
+1. **Statically-Typed Expressions** — every node has a known compile-time
+   type. Union types (e.g. `string | number` from `??`) are valid
+   statically-known types.
+2. **No Implicit Coercion** — operators require explicitly compatible types.
+   JavaScript's implicit type coercion rules are rejected.
+3. **Operators Do One Thing** — `+` is add or concat (not both at once),
+   `&&`/`||` are boolean logic, `!` is boolean negation, ternary test must
+   be boolean. `typeof` provides runtime type discrimination.
+4. **Honest Types for Optional Captures** — `$(x:type)?` produces
+   `T | undefined`, reflecting runtime behavior.
+5. **Purpose-Built Operators for Nullability** — `??` and `?.` handle
+   `T | undefined` from optional captures.
+6. **Closed Method Surface** — every whitelisted method has a known return
+   type; unusable methods (callbacks, iterators) are excluded.
+7. **Errors Suggest Alternatives** — every restriction error tells the user
+   what to do instead.
+
+### Expression Type Restriction Table
+
+| Operator              | Required Operand Types                            | Result Type                                   | Error on Violation                                                                                                        |
+| --------------------- | ------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --- | ---------------------------------------------------------------- |
+| `+` (addition)        | `number`, `number`                                | `number`                                      | "Operator '+' requires both operands to be number or both to be string. Use a template literal for string interpolation." |
+| `+` (concat)          | `string`, `string`                                | `string`                                      | _(same)_                                                                                                                  |
+| `-` `*` `/` `%`       | `number`, `number`                                | `number`                                      | "Operator '{op}' requires both operands to be number."                                                                    |
+| `<` `>` `<=` `>=`     | same: both `number` or both `string`              | `boolean`                                     | "Operator '{op}' requires both operands to be the same type (both number or both string)."                                |
+| `===` `!==`           | any, any                                          | `boolean`                                     | _(no restriction)_                                                                                                        |
+| `&&` `\|\|`           | `boolean`, `boolean`                              | `boolean`                                     | "Operators '&&'/'                                                                                                         |     | ' require boolean operands. Use ternary for conditional values." |
+| `??`                  | `T \| undefined`, any                             | strip `undefined` from left, union with right | _(no restriction — may produce union types)_                                                                              |
+| unary `-`             | `number`                                          | `number`                                      | "Unary '-' requires a number operand."                                                                                    |
+| `!`                   | `boolean`                                         | `boolean`                                     | "Operator '!' requires a boolean operand. Use === or !== for equality checks."                                            |
+| `typeof`              | any                                               | `string`                                      | _(no restriction)_                                                                                                        |
+| ternary `? :` test    | `boolean`                                         | union of both branch types                    | "Ternary '?' test must be a boolean expression."                                                                          |
+| `${expr}` interp.     | `string`, `number`, or `boolean` (no `undefined`) | `string`                                      | "Template interpolation does not accept {type}. Use ?? to provide a default first."                                       |
+| `?.` (optional chain) | `T \| undefined`                                  | `PropType \| undefined`                       | _(no restriction)_                                                                                                        |
+
+### Optional Captures
+
+`$(x:type)?` produces type `T | undefined` at compile time:
+
+```
+$(name:string)?            → type: string | undefined
+name ?? "default"          → type: string (undefined stripped)
+name?.length               → type: number | undefined
+name + " suffix"           → ERROR: operand includes undefined, use ??
+`${name}`                  → ERROR: template does not accept undefined
+typeof name                → type: string (typeof accepts any type)
+name === "hello"           → valid (=== accepts undefined-containing types)
+```
+
+### Examples
+
+**Valid:**
+
+```
+n * 2                          → number
+name + " suffix"               → string (both operands string)
+(x > 0) && (y < 10)           → boolean
+opt ?? "fallback"              → string (undefined stripped)
+opt?.length                    → number | undefined
+```
+
+**Invalid (with fix):**
+
+```
+"count: " + n                  → ERROR: use `count: ${n}` instead
+!x  (non-boolean)              → ERROR: use x !== undefined
+x ? a : b  (non-boolean test)  → ERROR: use x > 0 ? a : b
+```

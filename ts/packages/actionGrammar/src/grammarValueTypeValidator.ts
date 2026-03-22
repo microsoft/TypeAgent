@@ -19,6 +19,99 @@ import { SchemaCreator } from "@typeagent/action-schema";
 // Sentinel for "any" — can't determine type
 const ANY_TYPE: SchemaType = SchemaCreator.any();
 
+/**
+ * Sentinel for "error during type inference."
+ * Distinct from ANY_TYPE by reference identity.  When a derive function
+ * encounters a lookup failure (unknown variable, property, or method) it
+ * pushes an error and returns ERROR_TYPE.  Compound nodes (ternary, ??, ||,
+ * &&) propagate ERROR_TYPE so downstream operators skip validation and avoid
+ * cascading error messages.
+ */
+const ERROR_TYPE: SchemaType = { type: "any" };
+
+/**
+ * A type-inference or operator-constraint error with a reference to the
+ * specific sub-expression node that caused it.  The compiler converts these
+ * to positioned `GrammarCompileError` via `valuePositions.get(error.node)`.
+ */
+export type ValueTypeError = {
+    message: string;
+    node: CompiledValueNode;
+};
+
+/**
+ * Produce a human-readable label for a SchemaType.
+ * Keeps union formatting terse (`string | number`).
+ */
+function formatSchemaType(t: SchemaType): string {
+    switch (t.type) {
+        case "type-union":
+            return t.types.map(formatSchemaType).join(" | ");
+        case "type-reference":
+            return t.name;
+        case "array":
+            return `${formatSchemaType(t.elementType)}[]`;
+        case "object":
+            return "object";
+        default:
+            return t.type;
+    }
+}
+
+/**
+ * Collect supported method names for a given object type for error messages.
+ */
+function supportedMethodsForType(typeName: string): string[] {
+    const methods: string[] = [];
+    if (typeName === "string") {
+        for (const s of [
+            STRING_TO_STRING_METHODS,
+            STRING_TO_NUMBER_METHODS,
+            STRING_TO_BOOLEAN_METHODS,
+            STRING_TO_ARRAY_METHODS,
+        ]) {
+            for (const m of s) methods.push(m);
+        }
+    } else if (typeName === "array") {
+        for (const s of [
+            ARRAY_TO_STRING_METHODS,
+            ARRAY_TO_BOOLEAN_METHODS,
+            ARRAY_TO_NUMBER_METHODS,
+            ARRAY_TO_ARRAY_METHODS,
+        ]) {
+            for (const m of s) methods.push(m);
+        }
+    } else if (typeName === "number") {
+        for (const m of NUMBER_TO_STRING_METHODS) methods.push(m);
+    }
+    return methods.sort();
+}
+
+/**
+ * Check whether a type contains `undefined` (either is `undefined` directly,
+ * or is a union with an `undefined` member).
+ */
+function containsUndefined(t: SchemaType): boolean {
+    if (t.type === "undefined") return true;
+    if (t.type === "type-union")
+        return t.types.some((m) => containsUndefined(m));
+    return false;
+}
+
+/**
+ * Remove `undefined` from a type.  Returns the original type unchanged if
+ * it doesn't contain `undefined`.  For a union, filters out `undefined`
+ * members and simplifies (single remaining member → unwrap).
+ */
+function stripUndefined(t: SchemaType): SchemaType {
+    if (t.type === "undefined") return ERROR_TYPE; // stripping leaves nothing
+    if (t.type !== "type-union") return t;
+    const remaining = t.types.filter((m) => m.type !== "undefined");
+    if (remaining.length === 0) return ERROR_TYPE;
+    if (remaining.length === 1) return remaining[0];
+    return SchemaCreator.union(...remaining);
+}
+
 /** Value expression node types that are computed at runtime. */
 const valueExprTypes = new Set([
     "binaryExpression",
@@ -70,23 +163,24 @@ const STRING_TO_BOOLEAN_METHODS = new Set([
     "endsWith",
 ]);
 
-const ARRAY_TO_BOOLEAN_METHODS = new Set(["includes", "every", "some"]);
+const ARRAY_TO_BOOLEAN_METHODS = new Set(["includes"]);
 
-const ARRAY_TO_NUMBER_METHODS = new Set([
-    "indexOf",
-    "lastIndexOf",
-    "findIndex",
-]);
+const ARRAY_TO_NUMBER_METHODS = new Set(["indexOf", "lastIndexOf"]);
 
 /** Array methods that return an array of the same element type. */
 const ARRAY_TO_ARRAY_METHODS = new Set([
-    "filter",
     "slice",
     "reverse",
     "sort",
     "concat",
     "flat",
 ]);
+
+/** String methods that return an array (special-cased for element type). */
+const STRING_TO_ARRAY_METHODS = new Set(["split"]);
+
+/** Array methods that return a string (special-cased). */
+const ARRAY_TO_STRING_METHODS = new Set(["join"]);
 
 /** Number methods that return a string. */
 const NUMBER_TO_STRING_METHODS = new Set([
@@ -95,6 +189,22 @@ const NUMBER_TO_STRING_METHODS = new Set([
     "toPrecision",
     "toExponential",
 ]);
+
+/**
+ * All method return-type tables, exported so the runtime evaluator can derive
+ * its safe-method whitelist from the same source of truth.
+ */
+export const METHOD_RETURN_TYPE_TABLES = {
+    STRING_TO_STRING_METHODS,
+    STRING_TO_NUMBER_METHODS,
+    STRING_TO_BOOLEAN_METHODS,
+    STRING_TO_ARRAY_METHODS,
+    ARRAY_TO_BOOLEAN_METHODS,
+    ARRAY_TO_NUMBER_METHODS,
+    ARRAY_TO_ARRAY_METHODS,
+    ARRAY_TO_STRING_METHODS,
+    NUMBER_TO_STRING_METHODS,
+} as const;
 
 /** Counter for generating unique names for unnamed recursive rules. */
 let ruleNameCounter = 0;
@@ -202,8 +312,8 @@ function deriveRuleValueTypeOnce(
     const types: SchemaType[] = [];
     for (const rule of rules) {
         const altType = deriveAlternativeType(rule, cache);
-        if (altType === ANY_TYPE) {
-            continue; // skip unknowable alternatives
+        if (altType === ANY_TYPE || altType === ERROR_TYPE) {
+            continue; // skip unknowable or error alternatives
         }
         // Flatten unions from nested rule references so passthrough-recursive
         // refs surface as direct union members for findRefInType.
@@ -313,7 +423,10 @@ function deriveAlternativeType(
     if (variableParts.length > 1) {
         const fields: Record<string, SchemaObjectField> = {};
         for (const p of variableParts) {
-            fields[p.variable!] = { type: derivePartType(p, cache) };
+            fields[p.variable!] = {
+                type: derivePartType(p, cache),
+                optional: p.optional || undefined,
+            };
         }
         return SchemaCreator.obj(fields);
     }
@@ -325,25 +438,36 @@ function derivePartType(
     part: GrammarPart,
     cache: Map<GrammarRule[], SchemaType>,
 ): SchemaType {
+    let baseType: SchemaType;
     switch (part.type) {
         case "wildcard":
-            return grammarTypeToSchemaType(part.typeName);
+            baseType = grammarTypeToSchemaType(part.typeName);
+            break;
         case "number":
-            return SchemaCreator.number();
+            baseType = SchemaCreator.number();
+            break;
         case "rules":
-            return deriveRuleValueType(part.rules, cache, part.name);
+            baseType = deriveRuleValueType(part.rules, cache, part.name);
+            break;
         case "string":
         case "phraseSet":
             // These parts are literal text matchers without variables.
             // They can't capture values, so return string.
-            return SchemaCreator.string();
+            baseType = SchemaCreator.string();
+            break;
     }
+    // Optional captures produce T | undefined at runtime
+    if (part.optional) {
+        return SchemaCreator.union(baseType, SchemaCreator.undefined_());
+    }
+    return baseType;
 }
 
 function deriveValueNodeType(
     value: CompiledValueNode,
     parts: GrammarPart[],
     cache: Map<GrammarRule[], SchemaType>,
+    errors?: ValueTypeError[],
 ): SchemaType {
     switch (value.type) {
         case "literal":
@@ -366,7 +490,11 @@ function deriveValueNodeType(
                     return derivePartType(part, cache);
                 }
             }
-            return ANY_TYPE;
+            errors?.push({
+                message: `Undefined variable '${value.name}'`,
+                node: value,
+            });
+            return ERROR_TYPE;
         }
         case "object": {
             // Infer field types for the object
@@ -376,21 +504,31 @@ function deriveValueNodeType(
                     propValue === null
                         ? ({ type: "variable", name: key } as CompiledValueNode)
                         : propValue;
-                const fieldType = deriveValueNodeType(fieldValue, parts, cache);
+                const fieldType = deriveValueNodeType(
+                    fieldValue,
+                    parts,
+                    cache,
+                    errors,
+                );
                 fields[key] = { type: fieldType };
             }
             return SchemaCreator.obj(fields);
         }
         case "array": {
-            const arrNode = value as CompiledArrayValueNode;
+            const arrNode = value;
             if (arrNode.value.length === 0) {
                 return SchemaCreator.array(ANY_TYPE);
             }
             const elementTypes: SchemaType[] = [];
             for (const elem of arrNode.value) {
-                const elemType = deriveValueNodeType(elem, parts, cache);
-                if (elemType === ANY_TYPE) {
-                    return SchemaCreator.array(ANY_TYPE);
+                const elemType = deriveValueNodeType(
+                    elem,
+                    parts,
+                    cache,
+                    errors,
+                );
+                if (elemType === ERROR_TYPE) {
+                    return SchemaCreator.array(ERROR_TYPE);
                 }
                 if (!elementTypes.some((t) => schemaTypesEqual(t, elemType))) {
                     elementTypes.push(elemType);
@@ -405,8 +543,18 @@ function deriveValueNodeType(
 
         // ── Value expression nodes ────────────────────────────────────────
         case "binaryExpression": {
-            const leftType = deriveValueNodeType(value.left, parts, cache);
-            const rightType = deriveValueNodeType(value.right, parts, cache);
+            const leftType = deriveValueNodeType(
+                value.left,
+                parts,
+                cache,
+                errors,
+            );
+            const rightType = deriveValueNodeType(
+                value.right,
+                parts,
+                cache,
+                errors,
+            );
             switch (value.operator) {
                 case "===":
                 case "!==":
@@ -433,14 +581,20 @@ function deriveValueNodeType(
                     ) {
                         return SchemaCreator.number();
                     }
-                    return ANY_TYPE;
+                    return ERROR_TYPE;
                 case "&&":
                 case "||":
-                case "??":
-                    if (schemaTypesEqual(leftType, rightType)) return leftType;
-                    if (leftType === ANY_TYPE) return rightType;
-                    if (rightType === ANY_TYPE) return leftType;
-                    return SchemaCreator.union(leftType, rightType);
+                    if (leftType === ERROR_TYPE || rightType === ERROR_TYPE)
+                        return ERROR_TYPE;
+                    return SchemaCreator.boolean();
+                case "??": {
+                    if (leftType === ERROR_TYPE || rightType === ERROR_TYPE)
+                        return ERROR_TYPE;
+                    const stripped = stripUndefined(leftType);
+                    if (stripped === ERROR_TYPE) return rightType;
+                    if (schemaTypesEqual(stripped, rightType)) return stripped;
+                    return SchemaCreator.union(stripped, rightType);
+                }
             }
             throw new Error(
                 `Unhandled binary operator: ${(value as any).operator}`,
@@ -449,7 +603,6 @@ function deriveValueNodeType(
         case "unaryExpression":
             switch (value.operator) {
                 case "-":
-                case "+":
                     return SchemaCreator.number();
                 case "!":
                     return SchemaCreator.boolean();
@@ -464,58 +617,114 @@ function deriveValueNodeType(
                 value.consequent,
                 parts,
                 cache,
+                errors,
             );
             const alternateType = deriveValueNodeType(
                 value.alternate,
                 parts,
                 cache,
+                errors,
             );
+            if (consequentType === ERROR_TYPE || alternateType === ERROR_TYPE)
+                return ERROR_TYPE;
             if (schemaTypesEqual(consequentType, alternateType))
                 return consequentType;
-            if (consequentType === ANY_TYPE) return alternateType;
-            if (alternateType === ANY_TYPE) return consequentType;
             return SchemaCreator.union(consequentType, alternateType);
         }
         case "memberExpression": {
-            const objectType = resolveType(
-                deriveValueNodeType(value.object, parts, cache),
+            let objectType = resolveType(
+                deriveValueNodeType(value.object, parts, cache, errors),
             );
+            if (objectType === ERROR_TYPE) return ERROR_TYPE;
+            // Optional chaining: strip undefined before lookup, add back after
+            const addUndefined =
+                value.optional && containsUndefined(objectType);
+            if (addUndefined) {
+                objectType = resolveType(stripUndefined(objectType));
+                if (objectType === ERROR_TYPE) return ERROR_TYPE;
+            }
+            let resultType: SchemaType | undefined;
             if (
                 objectType.type === "object" &&
                 !value.computed &&
                 typeof value.property === "string"
             ) {
                 const field = objectType.fields[value.property];
-                if (field !== undefined) return field.type;
+                if (field !== undefined) {
+                    resultType = field.type;
+                } else {
+                    const available = Object.keys(objectType.fields).join(", ");
+                    errors?.push({
+                        message: `Property '${value.property}' does not exist on type '${formatSchemaType(objectType)}'. Available properties: ${available}.`,
+                        node: value,
+                    });
+                    return ERROR_TYPE;
+                }
             }
-            if (typeof value.property === "string") {
+            if (
+                resultType === undefined &&
+                typeof value.property === "string"
+            ) {
                 if (
                     value.property === "length" &&
                     (objectType.type === "string" ||
                         objectType.type === "array")
                 ) {
-                    return SchemaCreator.number();
+                    resultType = SchemaCreator.number();
                 }
             }
             // Computed access with literal number on array → element type
             if (
+                resultType === undefined &&
                 value.computed &&
                 objectType.type === "array" &&
                 typeof value.property === "number"
             ) {
-                return objectType.elementType;
+                resultType = objectType.elementType;
             }
-            return ANY_TYPE;
+            if (resultType !== undefined) {
+                return addUndefined
+                    ? SchemaCreator.union(
+                          resultType,
+                          SchemaCreator.undefined_(),
+                      )
+                    : resultType;
+            }
+            if (value.computed) {
+                errors?.push({
+                    message: `Computed access ([n]) is only supported on arrays. Use property access (.prop) for object properties.`,
+                    node: value,
+                });
+            } else if (typeof value.property === "string") {
+                const supported = supportedMethodsForType(objectType.type);
+                errors?.push({
+                    message: `Property '${value.property}' does not exist on type '${formatSchemaType(objectType)}'.${supported.length > 0 ? ` Available methods: ${supported.join(", ")}.` : ""}`,
+                    node: value,
+                });
+            }
+            return ERROR_TYPE;
         }
         case "callExpression": {
             if (
-                value.callee.type === "memberExpression" &&
-                !value.callee.computed &&
-                typeof value.callee.property === "string"
+                value.callee.type !== "memberExpression" ||
+                value.callee.computed
             ) {
+                errors?.push({
+                    message: `Free function calls are not supported. Use method syntax (value.method()) instead.`,
+                    node: value,
+                });
+                return ERROR_TYPE;
+            }
+            if (typeof value.callee.property === "string") {
                 const objectType = resolveType(
-                    deriveValueNodeType(value.callee.object, parts, cache),
+                    deriveValueNodeType(
+                        value.callee.object,
+                        parts,
+                        cache,
+                        errors,
+                    ),
                 );
+                if (objectType === ERROR_TYPE) return ERROR_TYPE;
                 const method = value.callee.property;
                 if (objectType.type === "string") {
                     if (STRING_TO_STRING_METHODS.has(method))
@@ -524,28 +733,34 @@ function deriveValueNodeType(
                         return SchemaCreator.number();
                     if (STRING_TO_BOOLEAN_METHODS.has(method))
                         return SchemaCreator.boolean();
-                    if (method === "split")
+                    if (STRING_TO_ARRAY_METHODS.has(method))
                         return SchemaCreator.array(SchemaCreator.string());
                 }
                 if (objectType.type === "array") {
-                    if (method === "join") return SchemaCreator.string();
+                    if (ARRAY_TO_STRING_METHODS.has(method))
+                        return SchemaCreator.string();
                     if (ARRAY_TO_BOOLEAN_METHODS.has(method))
                         return SchemaCreator.boolean();
                     if (ARRAY_TO_NUMBER_METHODS.has(method))
                         return SchemaCreator.number();
                     if (ARRAY_TO_ARRAY_METHODS.has(method))
                         return SchemaCreator.array(objectType.elementType);
-                    if (method === "find") return objectType.elementType;
                 }
                 if (objectType.type === "number") {
                     if (NUMBER_TO_STRING_METHODS.has(method))
                         return SchemaCreator.string();
                 }
+                const supported = supportedMethodsForType(objectType.type);
+                errors?.push({
+                    message: `Method '${method}' is not supported on type '${formatSchemaType(objectType)}'.${supported.length > 0 ? ` Supported methods: ${supported.join(", ")}.` : ""}`,
+                    node: value,
+                });
+                return ERROR_TYPE;
             }
-            return ANY_TYPE;
+            return ERROR_TYPE;
         }
         case "spreadElement":
-            return deriveValueNodeType(value.argument, parts, cache);
+            return deriveValueNodeType(value.argument, parts, cache, errors);
         case "templateLiteral":
             return SchemaCreator.string();
     }
@@ -578,6 +793,7 @@ function grammarTypeToSchemaType(grammarType: string): SchemaType {
 function deriveExprValueType(
     value: CompiledValueNode,
     variableTypes: Map<string, SchemaType>,
+    errors?: ValueTypeError[],
 ): SchemaType {
     switch (value.type) {
         case "literal":
@@ -593,12 +809,27 @@ function deriveExprValueType(
                         `Unexpected literal typeof: ${typeof value.value}`,
                     );
             }
-        case "variable":
-            return variableTypes.get(value.name) ?? ANY_TYPE;
+        case "variable": {
+            const t = variableTypes.get(value.name);
+            if (t !== undefined) return t;
+            errors?.push({
+                message: `Undefined variable '${value.name}'`,
+                node: value,
+            });
+            return ERROR_TYPE;
+        }
 
         case "binaryExpression": {
-            const leftType = deriveExprValueType(value.left, variableTypes);
-            const rightType = deriveExprValueType(value.right, variableTypes);
+            const leftType = deriveExprValueType(
+                value.left,
+                variableTypes,
+                errors,
+            );
+            const rightType = deriveExprValueType(
+                value.right,
+                variableTypes,
+                errors,
+            );
             switch (value.operator) {
                 case "===":
                 case "!==":
@@ -623,14 +854,20 @@ function deriveExprValueType(
                         rightType.type === "number"
                     )
                         return SchemaCreator.number();
-                    return ANY_TYPE;
+                    return ERROR_TYPE;
                 case "&&":
                 case "||":
-                case "??":
-                    if (schemaTypesEqual(leftType, rightType)) return leftType;
-                    if (leftType === ANY_TYPE) return rightType;
-                    if (rightType === ANY_TYPE) return leftType;
-                    return SchemaCreator.union(leftType, rightType);
+                    if (leftType === ERROR_TYPE || rightType === ERROR_TYPE)
+                        return ERROR_TYPE;
+                    return SchemaCreator.boolean();
+                case "??": {
+                    if (leftType === ERROR_TYPE || rightType === ERROR_TYPE)
+                        return ERROR_TYPE;
+                    const stripped = stripUndefined(leftType);
+                    if (stripped === ERROR_TYPE) return rightType;
+                    if (schemaTypesEqual(stripped, rightType)) return stripped;
+                    return SchemaCreator.union(stripped, rightType);
+                }
             }
             throw new Error(
                 `Unhandled binary operator: ${(value as any).operator}`,
@@ -639,7 +876,6 @@ function deriveExprValueType(
         case "unaryExpression":
             switch (value.operator) {
                 case "-":
-                case "+":
                     return SchemaCreator.number();
                 case "!":
                     return SchemaCreator.boolean();
@@ -653,56 +889,112 @@ function deriveExprValueType(
             const consequentType = deriveExprValueType(
                 value.consequent,
                 variableTypes,
+                errors,
             );
             const alternateType = deriveExprValueType(
                 value.alternate,
                 variableTypes,
+                errors,
             );
+            if (consequentType === ERROR_TYPE || alternateType === ERROR_TYPE)
+                return ERROR_TYPE;
             if (schemaTypesEqual(consequentType, alternateType))
                 return consequentType;
-            if (consequentType === ANY_TYPE) return alternateType;
-            if (alternateType === ANY_TYPE) return consequentType;
             return SchemaCreator.union(consequentType, alternateType);
         }
         case "memberExpression": {
-            const objectType = resolveType(
-                deriveExprValueType(value.object, variableTypes),
+            let objectType = resolveType(
+                deriveExprValueType(value.object, variableTypes, errors),
             );
+            if (objectType === ERROR_TYPE) return ERROR_TYPE;
+            // Optional chaining: strip undefined before lookup, add back after
+            const addUndefined =
+                value.optional && containsUndefined(objectType);
+            if (addUndefined) {
+                objectType = resolveType(stripUndefined(objectType));
+                if (objectType === ERROR_TYPE) return ERROR_TYPE;
+            }
+            let resultType: SchemaType | undefined;
             if (
                 objectType.type === "object" &&
                 !value.computed &&
                 typeof value.property === "string"
             ) {
                 const field = objectType.fields[value.property];
-                if (field !== undefined) return field.type;
+                if (field !== undefined) {
+                    resultType = field.type;
+                } else {
+                    const available = Object.keys(objectType.fields).join(", ");
+                    errors?.push({
+                        message: `Property '${value.property}' does not exist on type '${formatSchemaType(objectType)}'. Available properties: ${available}.`,
+                        node: value,
+                    });
+                    return ERROR_TYPE;
+                }
             }
-            if (typeof value.property === "string") {
+            if (
+                resultType === undefined &&
+                typeof value.property === "string"
+            ) {
                 if (
                     value.property === "length" &&
                     (objectType.type === "string" ||
                         objectType.type === "array")
-                )
-                    return SchemaCreator.number();
+                ) {
+                    resultType = SchemaCreator.number();
+                }
             }
             // Computed access with literal number on array → element type
             if (
+                resultType === undefined &&
                 value.computed &&
                 objectType.type === "array" &&
                 typeof value.property === "number"
             ) {
-                return objectType.elementType;
+                resultType = objectType.elementType;
             }
-            return ANY_TYPE;
+            if (resultType !== undefined) {
+                return addUndefined
+                    ? SchemaCreator.union(
+                          resultType,
+                          SchemaCreator.undefined_(),
+                      )
+                    : resultType;
+            }
+            if (value.computed) {
+                errors?.push({
+                    message: `Computed access ([n]) is only supported on arrays. Use property access (.prop) for object properties.`,
+                    node: value,
+                });
+            } else if (typeof value.property === "string") {
+                const supported = supportedMethodsForType(objectType.type);
+                errors?.push({
+                    message: `Property '${value.property}' does not exist on type '${formatSchemaType(objectType)}'.${supported.length > 0 ? ` Available methods: ${supported.join(", ")}.` : ""}`,
+                    node: value,
+                });
+            }
+            return ERROR_TYPE;
         }
         case "callExpression": {
             if (
-                value.callee.type === "memberExpression" &&
-                !value.callee.computed &&
-                typeof value.callee.property === "string"
+                value.callee.type !== "memberExpression" ||
+                value.callee.computed
             ) {
+                errors?.push({
+                    message: `Free function calls are not supported. Use method syntax (value.method()) instead.`,
+                    node: value,
+                });
+                return ERROR_TYPE;
+            }
+            if (typeof value.callee.property === "string") {
                 const objectType = resolveType(
-                    deriveExprValueType(value.callee.object, variableTypes),
+                    deriveExprValueType(
+                        value.callee.object,
+                        variableTypes,
+                        errors,
+                    ),
                 );
+                if (objectType === ERROR_TYPE) return ERROR_TYPE;
                 const method = value.callee.property;
                 if (objectType.type === "string") {
                     if (STRING_TO_STRING_METHODS.has(method))
@@ -711,28 +1003,34 @@ function deriveExprValueType(
                         return SchemaCreator.number();
                     if (STRING_TO_BOOLEAN_METHODS.has(method))
                         return SchemaCreator.boolean();
-                    if (method === "split")
+                    if (STRING_TO_ARRAY_METHODS.has(method))
                         return SchemaCreator.array(SchemaCreator.string());
                 }
                 if (objectType.type === "array") {
-                    if (method === "join") return SchemaCreator.string();
+                    if (ARRAY_TO_STRING_METHODS.has(method))
+                        return SchemaCreator.string();
                     if (ARRAY_TO_BOOLEAN_METHODS.has(method))
                         return SchemaCreator.boolean();
                     if (ARRAY_TO_NUMBER_METHODS.has(method))
                         return SchemaCreator.number();
                     if (ARRAY_TO_ARRAY_METHODS.has(method))
                         return SchemaCreator.array(objectType.elementType);
-                    if (method === "find") return objectType.elementType;
                 }
                 if (objectType.type === "number") {
                     if (NUMBER_TO_STRING_METHODS.has(method))
                         return SchemaCreator.string();
                 }
+                const supported = supportedMethodsForType(objectType.type);
+                errors?.push({
+                    message: `Method '${method}' is not supported on type '${formatSchemaType(objectType)}'.${supported.length > 0 ? ` Supported methods: ${supported.join(", ")}.` : ""}`,
+                    node: value,
+                });
+                return ERROR_TYPE;
             }
-            return ANY_TYPE;
+            return ERROR_TYPE;
         }
         case "spreadElement":
-            return deriveExprValueType(value.argument, variableTypes);
+            return deriveExprValueType(value.argument, variableTypes, errors);
         case "templateLiteral":
             return SchemaCreator.string();
         case "object": {
@@ -745,6 +1043,7 @@ function deriveExprValueType(
                 const fieldType = deriveExprValueType(
                     fieldValue,
                     variableTypes,
+                    errors,
                 );
                 fields[key] = { type: fieldType };
             }
@@ -757,9 +1056,13 @@ function deriveExprValueType(
             }
             const elementTypes: SchemaType[] = [];
             for (const elem of arrNode.value) {
-                const elemType = deriveExprValueType(elem, variableTypes);
-                if (elemType === ANY_TYPE) {
-                    return SchemaCreator.array(ANY_TYPE);
+                const elemType = deriveExprValueType(
+                    elem,
+                    variableTypes,
+                    errors,
+                );
+                if (elemType === ERROR_TYPE) {
+                    return SchemaCreator.array(ERROR_TYPE);
                 }
                 if (!elementTypes.some((t) => schemaTypesEqual(t, elemType))) {
                     elementTypes.push(elemType);
@@ -968,6 +1271,281 @@ function resolveType(type: SchemaType): SchemaType {
     return type;
 }
 
+// ── Operator constraint set ───────────────────────────────────────────────────
+// Operators that accept undefined-containing operands without error.
+const NULLABLE_OPERATORS = new Set<string>(["??", "===", "!==", "typeof"]);
+
+/**
+ * Walk an expression tree and check that each operator's operands satisfy the
+ * type restrictions in the Expression Type Restriction Table.
+ *
+ * Returns errors (fatal constraint violations) and populates an optional
+ * `warnings` array (non-fatal, e.g. unnecessary `??` or `?.`).
+ *
+ * Check ordering per node:
+ *   1. If operand is ERROR_TYPE → skip (prevents cascading)
+ *   2. If operand contains undefined and operator is not nullable → error
+ *   3. Otherwise → check operator-specific type constraint
+ */
+function validateExprOperandTypes(
+    value: CompiledValueNode,
+    variableTypes: Map<string, SchemaType>,
+    warnings?: ValueTypeError[],
+): ValueTypeError[] {
+    const errors: ValueTypeError[] = [];
+    walkExprOperands(value, variableTypes, errors, warnings);
+    return errors;
+}
+
+function walkExprOperands(
+    value: CompiledValueNode,
+    variableTypes: Map<string, SchemaType>,
+    errors: ValueTypeError[],
+    warnings: ValueTypeError[] | undefined,
+): void {
+    switch (value.type) {
+        case "binaryExpression": {
+            // Recurse into operands first
+            walkExprOperands(value.left, variableTypes, errors, warnings);
+            walkExprOperands(value.right, variableTypes, errors, warnings);
+
+            const leftType = deriveExprValueType(value.left, variableTypes);
+            const rightType = deriveExprValueType(value.right, variableTypes);
+
+            // 1. ERROR_TYPE → skip
+            if (leftType === ERROR_TYPE || rightType === ERROR_TYPE) return;
+
+            // 2. undefined check for non-nullable operators
+            if (!NULLABLE_OPERATORS.has(value.operator)) {
+                if (containsUndefined(leftType)) {
+                    errors.push({
+                        message: `Operand type '${formatSchemaType(leftType)}' includes undefined. Use ?? to provide a default value, or ?. for property access.`,
+                        node: value.left,
+                    });
+                    return;
+                }
+                if (containsUndefined(rightType)) {
+                    errors.push({
+                        message: `Operand type '${formatSchemaType(rightType)}' includes undefined. Use ?? to provide a default value, or ?. for property access.`,
+                        node: value.right,
+                    });
+                    return;
+                }
+            }
+
+            // 3. Operator-specific constraints
+            switch (value.operator) {
+                case "+":
+                    if (
+                        !(
+                            (leftType.type === "string" &&
+                                rightType.type === "string") ||
+                            (leftType.type === "number" &&
+                                rightType.type === "number")
+                        )
+                    ) {
+                        errors.push({
+                            message: `Operator '+' requires both operands to be number or both to be string. Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'. Use a template literal for string interpolation.`,
+                            node: value,
+                        });
+                    }
+                    break;
+                case "-":
+                case "*":
+                case "/":
+                case "%":
+                    if (
+                        leftType.type !== "number" ||
+                        rightType.type !== "number"
+                    ) {
+                        errors.push({
+                            message: `Operator '${value.operator}' requires both operands to be number. Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'.`,
+                            node: value,
+                        });
+                    }
+                    break;
+                case "<":
+                case ">":
+                case "<=":
+                case ">=":
+                    if (
+                        !(
+                            (leftType.type === "number" &&
+                                rightType.type === "number") ||
+                            (leftType.type === "string" &&
+                                rightType.type === "string")
+                        )
+                    ) {
+                        errors.push({
+                            message: `Operator '${value.operator}' requires both operands to be the same type (both number or both string). Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'.`,
+                            node: value,
+                        });
+                    }
+                    break;
+                case "&&":
+                case "||":
+                    if (
+                        leftType.type !== "boolean" ||
+                        rightType.type !== "boolean"
+                    ) {
+                        errors.push({
+                            message: `Operator '${value.operator}' requires boolean operands. Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'. Use ternary (e.g., x > 0 ? a : b) for conditional values.`,
+                            node: value,
+                        });
+                    }
+                    break;
+                case "??":
+                    // Warning: unnecessary ?? if left does not contain undefined
+                    if (!containsUndefined(leftType)) {
+                        warnings?.push({
+                            message: `Operator '??' is unnecessary — left operand '${formatSchemaType(leftType)}' is never undefined.`,
+                            node: value,
+                        });
+                    }
+                    break;
+                // ===, !== have no constraint
+            }
+            break;
+        }
+        case "unaryExpression": {
+            walkExprOperands(value.operand, variableTypes, errors, warnings);
+            const operandType = deriveExprValueType(
+                value.operand,
+                variableTypes,
+            );
+            if (operandType === ERROR_TYPE) return;
+            if (
+                !NULLABLE_OPERATORS.has(value.operator) &&
+                containsUndefined(operandType)
+            ) {
+                errors.push({
+                    message: `Operand type '${formatSchemaType(operandType)}' includes undefined. Use ?? to provide a default value.`,
+                    node: value.operand,
+                });
+                return;
+            }
+            switch (value.operator) {
+                case "-":
+                    if (operandType.type !== "number") {
+                        errors.push({
+                            message: `Unary '-' requires a number operand. Got '${formatSchemaType(operandType)}'.`,
+                            node: value,
+                        });
+                    }
+                    break;
+                case "!":
+                    if (operandType.type !== "boolean") {
+                        errors.push({
+                            message: `Operator '!' requires a boolean operand. Got '${formatSchemaType(operandType)}'. Use === or !== for equality checks.`,
+                            node: value,
+                        });
+                    }
+                    break;
+                // typeof has no constraint
+            }
+            break;
+        }
+        case "conditionalExpression": {
+            walkExprOperands(value.test, variableTypes, errors, warnings);
+            walkExprOperands(value.consequent, variableTypes, errors, warnings);
+            walkExprOperands(value.alternate, variableTypes, errors, warnings);
+            const testType = deriveExprValueType(value.test, variableTypes);
+            if (testType === ERROR_TYPE) return;
+            if (testType.type !== "boolean") {
+                errors.push({
+                    message: `Ternary '?' test must be a boolean expression. Got '${formatSchemaType(testType)}'. Use a comparison (e.g., x > 0) or equality check (e.g., x !== undefined).`,
+                    node: value.test,
+                });
+            }
+            break;
+        }
+        case "memberExpression": {
+            if (typeof value.object === "object") {
+                walkExprOperands(value.object, variableTypes, errors, warnings);
+            }
+            if (typeof value.property === "object" && value.property !== null) {
+                walkExprOperands(
+                    value.property,
+                    variableTypes,
+                    errors,
+                    warnings,
+                );
+            }
+            // Warning: unnecessary ?. if object type does not contain undefined
+            if (value.optional) {
+                const objectType = deriveExprValueType(
+                    value.object,
+                    variableTypes,
+                );
+                if (
+                    objectType !== ERROR_TYPE &&
+                    !containsUndefined(objectType)
+                ) {
+                    warnings?.push({
+                        message: `Optional chaining '?.' is unnecessary — operand '${formatSchemaType(objectType)}' is never undefined. Use '.' instead.`,
+                        node: value,
+                    });
+                }
+            }
+            break;
+        }
+        case "callExpression": {
+            walkExprOperands(value.callee, variableTypes, errors, warnings);
+            for (const arg of value.arguments) {
+                walkExprOperands(arg, variableTypes, errors, warnings);
+            }
+            break;
+        }
+        case "templateLiteral": {
+            for (const expr of value.expressions) {
+                walkExprOperands(expr, variableTypes, errors, warnings);
+                const exprType = deriveExprValueType(expr, variableTypes);
+                if (exprType === ERROR_TYPE) continue;
+                // Check that all types in the expression are interpolatable
+                const types =
+                    exprType.type === "type-union"
+                        ? exprType.types
+                        : [exprType];
+                for (const t of types) {
+                    if (
+                        t.type !== "string" &&
+                        t.type !== "number" &&
+                        t.type !== "boolean"
+                    ) {
+                        errors.push({
+                            message: `Template interpolation does not accept '${formatSchemaType(exprType)}'. Use ?? to provide a default first.`,
+                            node: expr,
+                        });
+                        break;
+                    }
+                }
+            }
+            break;
+        }
+        case "spreadElement":
+            walkExprOperands(value.argument, variableTypes, errors, warnings);
+            break;
+        case "object":
+            for (const propValue of Object.values(value.value)) {
+                if (propValue !== null) {
+                    walkExprOperands(
+                        propValue,
+                        variableTypes,
+                        errors,
+                        warnings,
+                    );
+                }
+            }
+            break;
+        case "array":
+            for (const elem of (value as CompiledArrayValueNode).value) {
+                walkExprOperands(elem, variableTypes, errors, warnings);
+            }
+            break;
+        // literal, variable: no sub-expressions to check
+    }
+}
+
 /**
  * Validates a CompiledValueNode against a SchemaType at compile time.
  * Returns an array of error messages (empty if valid).
@@ -990,8 +1568,22 @@ export function validateValueType(
     // object fields) on computed values, but we can catch simple mismatches
     // like putting a number expression where a string is expected.
     if (isValueExprNode(value)) {
-        const exprType = deriveExprValueType(value, variableTypes);
-        if (exprType === ANY_TYPE) return [];
+        const inferenceErrors: ValueTypeError[] = [];
+        const exprType = deriveExprValueType(
+            value,
+            variableTypes,
+            inferenceErrors,
+        );
+        // Surface inference errors (unknown variable, property, method)
+        if (inferenceErrors.length > 0) {
+            return inferenceErrors.map((e) => e.message);
+        }
+        // Check operator constraints (even if type is compatible with expected)
+        const operandErrors = validateExprOperandTypes(value, variableTypes);
+        if (operandErrors.length > 0) {
+            return operandErrors.map((e) => e.message);
+        }
+        if (exprType === ERROR_TYPE || exprType === ANY_TYPE) return [];
         const resolved = resolveType(expectedType);
         if (resolved.type === "any") return [];
         if (resolved.type === "type-union") {

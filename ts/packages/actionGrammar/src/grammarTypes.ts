@@ -29,7 +29,7 @@ export type BinaryValueExprOp =
     // Nullish coalescing
     | "??";
 
-export type UnaryValueExprOp = "-" | "+" | "!" | "typeof";
+export type UnaryValueExprOp = "-" | "!" | "typeof";
 
 // ── Compiled value node types ─────────────────────────────────────────────────
 // ValueNode variants *without* comment annotations.  GrammarRule and

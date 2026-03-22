@@ -295,12 +295,11 @@ function parseUnary(ctx: ValueExprParserContext): any {
         } satisfies UnaryValueExprNode;
     }
 
-    // Unary + and - are tricky because:
+    // Unary - is tricky because:
     //  - `-3` should be a negative number literal, not unary minus on 3
-    //  - `+3` same
     //  - But `-x` is unary minus on variable x
     //  - And `-` before `->` is handled by additive
-    if ((ctx.isAt("-") && !ctx.isAt("->")) || ctx.isAt("+")) {
+    if (ctx.isAt("-") && !ctx.isAt("->")) {
         const opChar = ctx.content[ctx.curr];
         // Look ahead: if the next non-space character starts a number,
         // let parsePrimary handle it (since parseNumberValue handles signs).

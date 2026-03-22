@@ -1284,11 +1284,30 @@ describe("Value type validation", () => {
             expect(errors.length).toBe(0);
         });
 
-        it("negation (!) inferred as boolean", () => {
+        it("negation (!) requires boolean operand", () => {
             const grammarText = `
                 import { ExprAction } from "schema.ts";
                 <Start> : ExprAction = test $(x:string)
                     -> { actionName: "test", count: 0, label: "x", active: !x };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("!");
+            expect(errors[0]).toContain("boolean");
+        });
+
+        it("negation (!) on boolean is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: "x", active: !(n > 0) };
             `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow(
@@ -1335,11 +1354,30 @@ describe("Value type validation", () => {
             expect(errors.length).toBe(0);
         });
 
-        it("string + anything inferred as string", () => {
+        it("string + number produces error (use template literal)", () => {
             const grammarText = `
                 import { ExprAction } from "schema.ts";
                 <Start> : ExprAction = test $(n:number)
                     -> { actionName: "test", count: 0, label: "count: " + n, active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("+");
+            expect(errors[0]).toContain("template literal");
+        });
+
+        it("string + string is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: "hello " + name, active: true };
             `;
             const errors: string[] = [];
             loadGrammarRulesNoThrow(
@@ -1420,9 +1458,8 @@ describe("Value type validation", () => {
             expect(errors.length).toBe(0);
         });
 
-        it("array filter inferred as same array type", () => {
-            // items is an array; filter returns the same array type
-            // We test that it doesn't produce a type error when used properly
+        it("array filter produces error (callback method not supported)", () => {
+            // filter requires a callback, which is not supported in grammar expressions
             const ArrayActionDef = SchemaCreator.intf(
                 "ArrayAction",
                 SchemaCreator.obj({
@@ -1448,7 +1485,8 @@ describe("Value type validation", () => {
                 schemaLoader: arrayLoader,
                 enableExpressions: true,
             });
-            expect(errors.length).toBe(0);
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("filter");
         });
 
         it("array includes inferred as boolean", () => {
@@ -1592,6 +1630,376 @@ describe("Value type validation", () => {
                 schemaLoader: arrayLoader,
                 enableExpressions: true,
             });
+            expect(errors.length).toBe(0);
+        });
+    });
+
+    describe("operator type restrictions", () => {
+        // Schema with several field types for thorough testing
+        const ExprActionDef = SchemaCreator.intf(
+            "ExprAction",
+            SchemaCreator.obj({
+                actionName: SchemaCreator.field(SchemaCreator.string("test")),
+                count: SchemaCreator.field(SchemaCreator.number()),
+                label: SchemaCreator.field(SchemaCreator.string()),
+                active: SchemaCreator.field(SchemaCreator.boolean()),
+            }),
+            undefined,
+            true,
+        );
+        const exprLoader: SchemaLoader = (typeName) =>
+            typeName === "ExprAction" ? ExprActionDef : undefined;
+        const exprOpts = {
+            schemaLoader: exprLoader,
+            enableExpressions: true,
+        };
+
+        // ── Operator restriction errors ──────────────────────────────────
+
+        it("string - number produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string) $(n:number)
+                    -> { actionName: "test", count: name - n, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("-");
+            expect(errors[0]).toContain("number");
+        });
+
+        it("string < number produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string) $(n:number)
+                    -> { actionName: "test", count: 0, label: "x", active: name < n };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("<");
+        });
+
+        it("!string_var produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: "x", active: !name };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("!");
+            expect(errors[0]).toContain("boolean");
+        });
+
+        it("string ternary test produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: name ? "yes" : "no", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("boolean");
+        });
+
+        it("unary -string_var produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: -name, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("-");
+        });
+
+        it("string && string produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(x:string) $(y:string)
+                    -> { actionName: "test", count: 0, label: "x", active: x && y };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("&&");
+            expect(errors[0]).toContain("boolean");
+        });
+
+        it("number || number produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(x:number) $(y:number)
+                    -> { actionName: "test", count: 0, label: "x", active: x || y };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("||");
+            expect(errors[0]).toContain("boolean");
+        });
+
+        it("number.unknownMethod() produces error with supported methods", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: n.trim(), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("trim");
+            expect(errors[0]).toContain("Supported methods");
+            expect(errors[0]).toContain("toString");
+        });
+
+        it("string.flat() produces error with supported methods", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: name.flat(), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("flat");
+            expect(errors[0]).toContain("toLowerCase");
+        });
+
+        // ── ERROR_TYPE cascading (no secondary errors) ───────────────────
+
+        it("unknown_var + 1 does not produce secondary type errors", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: unknown_var + 1, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            // Compiler may report its own variable-not-defined error;
+            // the key check: no secondary "+" type error from cascading
+            expect(errors.some((e) => e.includes("+"))).toBe(false);
+        });
+
+        it("unknown_var.length does not produce secondary property errors", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: unknown_var.length, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            // Should not produce a secondary "Property 'length' does not exist" error
+            expect(errors.some((e) => e.includes("Property"))).toBe(false);
+        });
+
+        it("unknown_var > 0 ? a : b does not produce secondary cascading errors", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: unknown_var > 0 ? "a" : "b", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            // Should not produce secondary "Ternary test not boolean" errors
+            expect(errors.some((e) => e.includes("Ternary"))).toBe(false);
+        });
+
+        // ── Valid operations ─────────────────────────────────────────────
+
+        it("number + number is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number) $(m:number)
+                    -> { actionName: "test", count: n + m, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("string < string is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(x:string) $(y:string)
+                    -> { actionName: "test", count: 0, label: "x", active: x < y };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("boolean && boolean is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number) $(m:number)
+                    -> { actionName: "test", count: 0, label: "x", active: (n > 0) && (m < 10) };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("!(boolean) is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: "x", active: !(n > 0) };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("comparison ternary is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: n > 0 ? n : 0, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("typeof is valid with any operand", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: typeof name, active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("=== accepts any types", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: "x", active: name === "hello" };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
             expect(errors.length).toBe(0);
         });
     });

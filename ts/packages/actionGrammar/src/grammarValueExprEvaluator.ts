@@ -12,6 +12,7 @@
  */
 
 import type { CompiledValueNode } from "./grammarTypes.js";
+import { METHOD_RETURN_TYPE_TABLES } from "./grammarValueTypeValidator.js";
 
 /**
  * Callback type for evaluating base value nodes (literal, variable, object, array).
@@ -20,52 +21,11 @@ import type { CompiledValueNode } from "./grammarTypes.js";
 export type EvalBaseValueFn = (node: CompiledValueNode) => unknown;
 
 // ── Safe method whitelist ─────────────────────────────────────────────────────
+// Derived from the compile-time return-type tables — single source of truth.
 
-const SAFE_METHODS = new Set<string>([
-    // String methods
-    "toLowerCase",
-    "toUpperCase",
-    "trim",
-    "trimStart",
-    "trimEnd",
-    "slice",
-    "concat",
-    "includes",
-    "startsWith",
-    "endsWith",
-    "split",
-    "indexOf",
-    "lastIndexOf",
-    "toString",
-    "substring",
-    "replace",
-    "replaceAll",
-    "padStart",
-    "padEnd",
-    "charAt",
-    "at",
-    "repeat",
-    // Array methods
-    "join",
-    "flat",
-    "flatMap",
-    "map",
-    "filter",
-    "find",
-    "findIndex",
-    "every",
-    "some",
-    "reverse",
-    "sort",
-    "keys",
-    "values",
-    "entries",
-    "indexOf",
-    "lastIndexOf",
-    "includes",
-    "slice",
-    "concat",
-]);
+const SAFE_METHODS = new Set<string>(
+    Object.values(METHOD_RETURN_TYPE_TABLES).flatMap((s) => [...s]),
+);
 
 /**
  * Evaluate a compiled value expression node, producing a runtime value.
@@ -140,8 +100,6 @@ export function evaluateValueExpr(
             switch (node.operator) {
                 case "-":
                     return -(operand as any);
-                case "+":
-                    return +(operand as any);
                 case "!":
                     return !operand;
                 case "typeof":
