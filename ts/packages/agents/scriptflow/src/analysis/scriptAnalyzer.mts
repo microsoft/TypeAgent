@@ -24,7 +24,11 @@ export class ScriptAnalyzer {
         }
 
         const fileName = basename(filePath);
-        const prompt = this.buildPrompt(scriptContent, fileName, overrideActionName);
+        const prompt = this.buildPrompt(
+            scriptContent,
+            fileName,
+            overrideActionName,
+        );
 
         let result = "";
         const queryInstance = query({

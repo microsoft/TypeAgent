@@ -457,9 +457,7 @@ async function handleScriptFlowAction(
                 return createActionResultFromError("Script file is empty");
             }
 
-            const overrideName = importParams?.actionName as
-                | string
-                | undefined;
+            const overrideName = importParams?.actionName as string | undefined;
 
             let recipe;
             try {
@@ -538,7 +536,8 @@ async function handleScriptFlowAction(
 let _agentStore: ScriptFlowStore | undefined;
 
 class ImportScriptHandler implements CommandHandler {
-    public readonly description = "Import a PowerShell script as a reusable script flow";
+    public readonly description =
+        "Import a PowerShell script as a reusable script flow";
     public readonly parameters = {
         args: {
             filePath: {

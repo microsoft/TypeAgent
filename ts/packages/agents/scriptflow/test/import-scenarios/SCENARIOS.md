@@ -22,6 +22,7 @@ $T = "$env:TEMP\scriptflow-test"
 ## Scenario 1: Stale Branch Cleanup (fully documented, param block + switch)
 
 **Import:**
+
 ```
 @scriptflow import $T\scripts\staleBranches.ps1
 ```
@@ -29,6 +30,7 @@ $T = "$env:TEMP\scriptflow-test"
 **Verify recipe:** actionName should be something like `staleBranches` or `findStaleBranches`. Three parameters (RepoPath: path, DaysStale: number, Delete: boolean). Description pulled from .SYNOPSIS.
 
 **Test execution:**
+
 ```
 find stale branches in $T\git-repo
 ```
@@ -36,9 +38,11 @@ find stale branches in $T\git-repo
 **Expected output:** Table showing 3-4 stale branches (bugfix/legacy-fix at ~90 days, spike/abandoned-prototype at ~180 days, feature/old-experiment at ~45 days, feature/last-month at ~35 days). feature/active-work should NOT appear.
 
 **Test with non-default threshold:**
+
 ```
 # Should show only branches older than 60 days (2 branches)
 ```
+
 Use flowParametersJson: `{"RepoPath":"$T\\git-repo","DaysStale":60}`
 
 ---
@@ -48,6 +52,7 @@ Use flowParametersJson: `{"RepoPath":"$T\\git-repo","DaysStale":60}`
 This scenario uses live filesystem data — no test data setup needed.
 
 **Import:**
+
 ```
 @scriptflow import $T\scripts\findLargeFiles.ps1
 ```
@@ -55,6 +60,7 @@ This scenario uses live filesystem data — no test data setup needed.
 **Verify recipe:** Three parameters (Directory: path, MinSizeMB: number, TopN: number). Descriptions inferred from names.
 
 **Test execution — scan a real directory:**
+
 ```
 find large files in C:\Windows
 ```
@@ -62,12 +68,15 @@ find large files in C:\Windows
 **Expected output:** Table of the largest files under C:\Windows (typically .dll, .exe, .mum files). Results vary by machine.
 
 **Test with lower threshold (scan user profile):**
+
 ```
 find large files in $env:USERPROFILE
 ```
+
 With flowParametersJson: `{"Directory":"$env:USERPROFILE","MinSizeMB":50}` — shows files over 50MB in your profile.
 
 **Suggested directories to try:**
+
 - `C:\Windows` — always has large system files
 - `$env:USERPROFILE\Downloads` — often has large downloads
 - `$env:TEMP` — may have accumulated large temp files
@@ -82,17 +91,20 @@ With flowParametersJson: `{"Directory":"$env:USERPROFILE","MinSizeMB":50}` — s
 The script hardcodes `C:\Logs\AppServer`. Before importing, you have two options:
 
 **Option A** — Edit the script to point at the test data:
+
 ```powershell
 (Get-Content $T\scripts\logErrorGrep.ps1) -replace 'C:\\Logs\\AppServer', "$T\logs" |
     Set-Content $T\scripts\logErrorGrep.ps1
 ```
 
 **Option B** — Symlink or copy logs to the hardcoded path:
+
 ```powershell
 New-Item -Path C:\Logs\AppServer -ItemType Junction -Target $T\logs
 ```
 
 Then import:
+
 ```
 @scriptflow import $T\scripts\logErrorGrep.ps1
 ```
@@ -100,11 +112,13 @@ Then import:
 **Verify recipe:** Analyzer should infer parameters for logDir, date pattern, and error regex. Description should mention scanning logs for errors/warnings.
 
 **Test execution:**
+
 ```
 scan the logs for errors
 ```
 
 **Expected output:**
+
 - Summary by severity: ~11 ERROR, ~9 WARN, ~1 FATAL across both files
 - Top files section showing the main log with more hits than the worker log
 - Total match count
@@ -116,6 +130,7 @@ scan the logs for errors
 ## Scenario 4: Service Health Dashboard (inline comments, ValidateSet)
 
 **Import:**
+
 ```
 @scriptflow import $T\scripts\serviceHealth.ps1
 ```
@@ -123,6 +138,7 @@ scan the logs for errors
 **Verify recipe:** Two parameters (ServiceList: string, OutputFormat: string). ValidateSet values (table/list/summary) should appear in description or parameter metadata.
 
 **Test execution (default services):**
+
 ```
 check service health
 ```
@@ -130,6 +146,7 @@ check service health
 **Expected output:** Table of 8 Windows services with Name, Display, Status, StartType columns. Most should show "Running".
 
 **Test with custom services:**
+
 ```
 service status for WinRM, BITS, FakeService123
 ```
@@ -145,6 +162,7 @@ Should show "Services: 3 checked | 2 running | 0 stopped | 1 missing" plus atten
 ## Scenario 5: Port Listener Check (terse, single param)
 
 **Import:**
+
 ```
 @scriptflow import $T\scripts\portListeners.ps1
 ```
@@ -152,6 +170,7 @@ Should show "Services: 3 checked | 2 running | 0 stopped | 1 missing" plus atten
 **Verify recipe:** Single parameter (Ports: string). networkAccess should be false.
 
 **Test execution:**
+
 ```
 what's listening on port 80
 ```
@@ -159,6 +178,7 @@ what's listening on port 80
 **Expected output:** If a web server is running, shows its PID and process name. Otherwise "No listeners found on port(s): 80".
 
 **Test with multiple ports:**
+
 ```
 check ports 135,445,3389
 ```
@@ -170,6 +190,7 @@ check ports 135,445,3389
 ## Scenario 6: Disk Space Alert (no comments, no param block, hardcoded thresholds)
 
 **Import:**
+
 ```
 @scriptflow import $T\scripts\diskSpaceAlert.ps1
 ```
@@ -177,6 +198,7 @@ check ports 135,445,3389
 **Verify recipe:** Analyzer should infer parameters for thresholdGB (number, default 10) and thresholdPct (number, default 15). actionName like `checkDiskSpace` or `diskSpaceAlert`.
 
 **Test execution:**
+
 ```
 check disk space
 ```
@@ -190,6 +212,7 @@ check disk space
 ## Scenario 7: CSV Transform Pipeline (param block, brief comments)
 
 **Import:**
+
 ```
 @scriptflow import $T\scripts\csvTransform.ps1
 ```
@@ -197,17 +220,21 @@ check disk space
 **Verify recipe:** Six parameters (InputFile: path, OutputFile: path, FilterColumn: string, FilterPattern: string, SelectColumns: string, NoHeader: boolean).
 
 **Test execution — filter employees by department:**
+
 ```
 filter the csv file $T\csv\employees.csv
 ```
+
 With flowParametersJson: `{"InputFile":"$T\\csv\\employees.csv","FilterColumn":"Department","FilterPattern":"Engineering"}`
 
 **Expected output:** "Processed: 25 rows -> 13 rows", preview table showing only Engineering employees, output file created at `employees_filtered.csv`.
 
 **Test execution — filter sensors by status:**
+
 ```
 filter the csv file $T\csv\sensor_readings.csv
 ```
+
 With flowParametersJson: `{"InputFile":"$T\\csv\\sensor_readings.csv","FilterColumn":"Status","FilterPattern":"ERROR|CRITICAL","SelectColumns":"Timestamp,SensorId,Location,Status"}`
 
 **Expected output:** "Processed: 30 rows -> 4 rows" (2 ERROR + 2 CRITICAL), preview showing only the selected columns.
@@ -231,6 +258,7 @@ Run all 7 imports in sequence to verify the full pipeline:
 ```
 
 Then verify all are registered:
+
 ```
 list script flows
 ```
