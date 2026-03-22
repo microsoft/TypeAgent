@@ -33,6 +33,28 @@ import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
+function withAbortSignal<T>(
+    promise: Promise<T>,
+    signal: AbortSignal | undefined,
+): Promise<T> {
+    if (!signal) return promise;
+    if (signal.aborted) return Promise.reject(signal.reason);
+    return new Promise<T>((resolve, reject) => {
+        const onAbort = () => reject(signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+        promise.then(
+            (value) => {
+                signal.removeEventListener("abort", onAbort);
+                resolve(value);
+            },
+            (err) => {
+                signal.removeEventListener("abort", onAbort);
+                reject(err);
+            },
+        );
+    });
+}
+
 const defaultModel = "gpt-4o";
 
 // Track Copilot clients per dispatcher instance (WeakMap for GC)
@@ -631,7 +653,10 @@ async function executeReasoningWithoutPlanning(
             throw new Error("Prompt is undefined or empty");
         }
 
-        const response = await session.sendAndWait({ prompt });
+        const response: any = await withAbortSignal(
+            session.sendAndWait({ prompt }),
+            context.abortSignal,
+        );
         debug("Received response from Copilot");
         debug("Response:", JSON.stringify(response, null, 2));
 
@@ -881,7 +906,10 @@ async function executeReasoningWithTracing(
             const prompt = buildPromptWithContext(originalRequest, context);
             debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
 
-            const response = await session.sendAndWait({ prompt });
+            const response: any = await withAbortSignal(
+                session.sendAndWait({ prompt }),
+                context.abortSignal,
+            );
             debug("Received response from Copilot");
             debug("Response:", JSON.stringify(response, null, 2));
 

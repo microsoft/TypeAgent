@@ -912,20 +912,43 @@ async function questionWithCompletion(
             }
         };
 
+        // Track how many terminal rows the input line occupied last render
+        // so we can clear stale wrapped lines when switching to shorter input.
+        let prevInputRows = 1;
+
         // Render the prompt, input, bottom rule, and contextual hint
         const render = () => {
             // Build entire output as a single string to prevent cursor flashing
             const promptText = chalk.cyanBright(message);
             const width = process.stdout.columns || 80;
 
-            // Calculate cursor column based on cursorPos within input
-            const cursorCol =
-                getDisplayWidth(message) +
-                getDisplayWidth(input.substring(0, cursorPos)) +
-                1;
+            // Calculate how many terminal rows the input line occupies
+            const inputLineWidth =
+                getDisplayWidth(message) + getDisplayWidth(input);
+            const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
 
             let output = ANSI.hideCursor;
+
+            // Move to the start of the first input row. The cursor is on the
+            // input line after the previous render. If the previous input
+            // wrapped across multiple rows, move up to the first row.
+            if (prevInputRows > 1) {
+                output += `\x1b[${prevInputRows - 1}A`;
+            }
             output += "\r";
+
+            // Clear all rows the previous render occupied (input rows + bottom rule + hint)
+            const prevTotalRows = prevInputRows + 2;
+            for (let i = 0; i < prevTotalRows; i++) {
+                output += "\x1b[2K"; // clear entire line
+                if (i < prevTotalRows - 1) output += "\n";
+            }
+            // Move back up to the first input row
+            if (prevTotalRows > 1) {
+                output += `\x1b[${prevTotalRows - 1}A`;
+            }
+            output += "\r";
+
             output += promptText + input;
 
             // Show inline completion if available
@@ -962,11 +985,18 @@ async function questionWithCompletion(
             }
             output += "\n  " + chalk.dim(hint) + "\x1b[K";
 
-            // Cursor back to input line (up 2: bottom rule + hint)
-            output += "\x1b[2A";
-            output += `\x1b[${cursorCol}G`;
+            // Cursor back to input line: up from hint to the row where the
+            // cursor actually sits (accounting for wrapped input)
+            const cursorAbsCol =
+                getDisplayWidth(message) +
+                getDisplayWidth(input.substring(0, cursorPos));
+            const cursorRow = Math.floor(cursorAbsCol / width); // 0-based row within input
+            const rowsBelow = inputRows - 1 - cursorRow + 2; // rows below cursor row + rule + hint
+            output += `\x1b[${rowsBelow}A`;
+            output += `\x1b[${(cursorAbsCol % width) + 1}G`;
             output += ANSI.showCursor;
 
+            prevInputRows = inputRows;
             stdout.write(output);
         };
 
@@ -1006,8 +1036,7 @@ async function questionWithCompletion(
 
         // Register prompt renderer so debug panel and displayContent
         // can render above the input.
-        // PROMPT_ROWS = separator + input line + bottom rule + hint
-        const PROMPT_ROWS = 4;
+        // Total rows = separator + input rows (may wrap) + bottom rule + hint
         const panel = getDebugPanel();
         const renderWithSeparator = () => {
             const w = process.stdout.columns || 80;
@@ -1015,7 +1044,7 @@ async function questionWithCompletion(
             render();
         };
         const promptRenderer: PromptRenderer = {
-            rows: () => PROMPT_ROWS,
+            rows: () => 1 + prevInputRows + 2, // separator + input rows + rule + hint
             redraw: () => renderWithSeparator(),
         };
         panel?.setPromptRenderer(promptRenderer);
@@ -1109,7 +1138,8 @@ async function questionWithCompletion(
                 const dp = getDebugPanel();
                 if (dp && dp.lineCount > 0) {
                     // Clear prompt lines (including separator), dump buffer, re-render
-                    for (let i = 0; i < PROMPT_ROWS; i++) {
+                    const totalRows = 1 + prevInputRows + 2; // separator + input + rule + hint
+                    for (let i = 0; i < totalRows; i++) {
                         stdout.write("\x1b[1A\x1b[2K");
                     }
                     dp.dumpBuffer();
