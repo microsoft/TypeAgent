@@ -9,4 +9,9 @@ export {
 
 export { setContent, swapContent } from "./setContent.js";
 
-export { ChatPanel, ChatPanelOptions, CompletionResult } from "./chatPanel.js";
+export {
+    ChatPanel,
+    ChatPanelOptions,
+    CompletionResult,
+    DynamicDisplayResult,
+} from "./chatPanel.js";

@@ -14,6 +14,7 @@ import type { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { createChromeRpcClient } from "./chromeRpcClient.js";
 import type {
     ChatPanelInvokeFunctions,
+    ChatPanelInvokeTargets,
     ChatPanelCallFunctions,
 } from "../../common/serviceTypes.mjs";
 
@@ -62,15 +63,29 @@ function initialize() {
                 return null;
             }
         },
+        getDynamicDisplay: async (source: string, displayId: string) => {
+            return await rpc.invoke("chatPanelGetDynamicDisplay", {
+                source,
+                displayId,
+            }) as any;
+        },
     });
 
-    // Create RPC client with call handlers for inbound dispatcher callbacks
+    // Create RPC client with invoke handlers (awaited by service worker)
+    // and call handlers (fire-and-forget from service worker)
     const client = createChromeRpcClient<
         ChatPanelInvokeFunctions,
         {},
-        {},
+        ChatPanelInvokeTargets,
         ChatPanelCallFunctions
-    >(undefined, {
+    >({
+        async chatPanelAskYesNo(data) {
+            return chatPanel.askYesNo(data.message, data.defaultValue);
+        },
+        async chatPanelProposeAction(data) {
+            return chatPanel.proposeAction(data.actionText, data.source);
+        },
+    }, {
         dispatcherClear(_data) {
             chatPanel.clear();
         },
@@ -95,19 +110,63 @@ function initialize() {
                 data.mode as DisplayAppendMode,
             );
         },
-        dispatcherSetDynamicDisplay(_data) {
-            // Not supported in extension chat panel
+        dispatcherSetDynamicDisplay(data) {
+            chatPanel.setDynamicDisplay(
+                data.source,
+                data.displayId,
+                data.nextRefreshMs,
+            );
         },
         dispatcherNotify(data) {
-            if (data.event === "explained" && data.data?.error) {
-                chatPanel.addAgentMessage(
-                    {
-                        type: "text",
-                        content: data.data.error,
-                        kind: "warning",
-                    },
-                    data.source,
-                );
+            switch (data.event) {
+                case "explained":
+                    if (data.data?.error) {
+                        chatPanel.addAgentMessage(
+                            {
+                                type: "text",
+                                content: data.data.error,
+                                kind: "warning",
+                            },
+                            data.source,
+                        );
+                    }
+                    break;
+                case "error":
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content:
+                                typeof data.data === "string"
+                                    ? data.data
+                                    : data.data?.message ?? "Error",
+                            kind: "error",
+                        },
+                        data.source,
+                    );
+                    break;
+                case "warning":
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content:
+                                typeof data.data === "string"
+                                    ? data.data
+                                    : data.data?.message ?? "Warning",
+                            kind: "warning",
+                        },
+                        data.source,
+                    );
+                    break;
+                case "info":
+                case "inline":
+                case "toast":
+                    chatPanel.addAgentMessage(
+                        typeof data.data === "string"
+                            ? { type: "text", content: data.data, kind: "info" }
+                            : (data.data as DisplayContent),
+                        data.source,
+                    );
+                    break;
             }
         },
         dispatcherTakeAction(_data) {
@@ -128,7 +187,7 @@ function initialize() {
 /**
  * Handle a message typed by the user.
  */
-function handleUserMessage(text: string) {
+function handleUserMessage(text: string, attachments?: string[]) {
     chatPanel.setEnabled(false);
     chatPanel.showStatus("Processing...");
 
@@ -137,6 +196,7 @@ function handleUserMessage(text: string) {
     rpc.invoke("chatPanelProcessCommand", {
         command: text,
         clientRequestId: requestId,
+        attachments,
     })
         .then((response: any) => {
             if (response?.error) {

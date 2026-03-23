@@ -397,6 +397,27 @@ export type ChatPanelInvokeFunctions = {
         prefix: string;
     } | null>;
     chatPanelGetHistory(): Promise<any[]>;
+    chatPanelGetDynamicDisplay(params: {
+        source: string;
+        displayId: string;
+    }): Promise<{ content: any; nextRefreshMs: number }>;
+};
+
+// =============================================
+// Chat panel invoke functions (service worker → chat panel, awaited)
+// These are invoke targets that the service worker calls on the chat panel
+// and awaits a response (e.g., user confirmation).
+// =============================================
+
+export type ChatPanelInvokeTargets = {
+    chatPanelAskYesNo(data: {
+        message: string;
+        defaultValue?: boolean;
+    }): Promise<boolean>;
+    chatPanelProposeAction(data: {
+        actionText: string;
+        source: string;
+    }): Promise<boolean>;
 };
 
 // =============================================

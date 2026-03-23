@@ -315,6 +315,8 @@ export function createEnhancedClientIO(
                 dp.renderStaticSummary();
             }
             activePromptRenderer.redraw();
+            // Clear everything below the prompt to remove stale rules/hints
+            process.stdout.write("\x1b[J");
         } else if (rl) {
             // Readline is active - write above the prompt
             // Clear current line, write content, then let readline redraw prompt

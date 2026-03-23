@@ -311,6 +311,22 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
+        async chatPanelGetDynamicDisplay(params: any) {
+            try {
+                const dispatcher = await connectToDispatcher();
+                return await dispatcher.getDynamicDisplay(
+                    params.source,
+                    "html",
+                    params.displayId,
+                );
+            } catch (error: any) {
+                return {
+                    content: error?.message ?? "Refresh failed",
+                    nextRefreshMs: -1,
+                };
+            }
+        },
+
         // =============================================================
         // Complex local handlers (HTML capture + agent forward)
         // =============================================================

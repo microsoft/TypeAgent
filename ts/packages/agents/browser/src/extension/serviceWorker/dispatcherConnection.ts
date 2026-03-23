@@ -34,13 +34,19 @@ let dispatcher: Dispatcher | undefined;
 let dispatcherWs: WebSocket | undefined;
 let connectionPromise: Promise<Dispatcher> | undefined;
 
-// RPC send function for pushing fire-and-forget callbacks to the chat panel.
-// Usage: rpcSend("dispatcherSetDisplay", { message })
+// RPC functions for communicating with the chat panel.
+// rpcSend: fire-and-forget (display updates)
+// rpcInvoke: awaited (askYesNo, proposeAction)
 // Set by setChatPanelRpc() from the service worker index after the RPC server is created.
 let rpcSend: ((name: string, ...args: any[]) => void) | undefined;
+let rpcInvoke: ((name: string, ...args: any[]) => Promise<any>) | undefined;
 
-export function setChatPanelRpc(rpc: { send: (name: string, ...args: any[]) => void }) {
+export function setChatPanelRpc(rpc: {
+    send: (name: string, ...args: any[]) => void;
+    invoke: (name: string, ...args: any[]) => Promise<any>;
+}) {
     rpcSend = rpc.send.bind(rpc);
+    rpcInvoke = rpc.invoke.bind(rpc);
 }
 
 /**
@@ -90,10 +96,36 @@ function createChatPanelClientIO(): ClientIO {
             });
         },
 
-        async askYesNo(_requestId, _message, defaultValue) {
+        async askYesNo(_requestId, message, defaultValue) {
+            if (rpcInvoke) {
+                try {
+                    return await rpcInvoke("chatPanelAskYesNo", {
+                        message,
+                        defaultValue,
+                    });
+                } catch {
+                    return defaultValue ?? true;
+                }
+            }
             return defaultValue ?? true;
         },
-        async proposeAction(_requestId, _actionTemplates, _source) {
+        async proposeAction(_requestId, actionTemplates, source) {
+            if (rpcInvoke) {
+                try {
+                    const actionText = JSON.stringify(
+                        actionTemplates,
+                        null,
+                        2,
+                    );
+                    const accepted = await rpcInvoke("chatPanelProposeAction", {
+                        actionText,
+                        source,
+                    });
+                    return accepted ? undefined : false;
+                } catch {
+                    return undefined;
+                }
+            }
             return undefined;
         },
         async popupQuestion(_message, _choices, defaultId, _source) {
