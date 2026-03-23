@@ -389,6 +389,69 @@ export type ChatPanelInvokeFunctions = {
         clientRequestId: string;
         attachments?: any[];
     }): Promise<any>;
+    chatPanelGetCompletions(params: { input: string }): Promise<{
+        completions: string[];
+        startIndex: number;
+        prefix: string;
+    } | null>;
+    chatPanelGetHistory(): Promise<any[]>;
+    chatPanelGetDynamicDisplay(params: {
+        source: string;
+        displayId: string;
+    }): Promise<{ content: any; nextRefreshMs: number }>;
+};
+
+// =============================================
+// Chat panel invoke functions (service worker → chat panel, awaited)
+// These are invoke targets that the service worker calls on the chat panel
+// and awaits a response (e.g., user confirmation).
+// =============================================
+
+export type ChatPanelInvokeTargets = {
+    chatPanelAskYesNo(data: {
+        message: string;
+        defaultValue?: boolean;
+    }): Promise<boolean>;
+    chatPanelProposeAction(data: {
+        actionText: string;
+        source: string;
+    }): Promise<boolean>;
+};
+
+// =============================================
+// Chat panel call functions (service worker → chat panel, fire-and-forget)
+// =============================================
+
+export type ChatPanelCallFunctions = {
+    dispatcherClear(data: { requestId: any }): void;
+    dispatcherExit(data: { requestId: any }): void;
+    dispatcherSetDisplayInfo(data: {
+        requestId: any;
+        source: any;
+        actionIndex?: any;
+        action?: any;
+    }): void;
+    dispatcherSetDisplay(data: { message: any }): void;
+    dispatcherAppendDisplay(data: { message: any; mode: any }): void;
+    dispatcherSetDynamicDisplay(data: {
+        requestId: any;
+        source: any;
+        actionIndex: any;
+        displayId: any;
+        nextRefreshMs: any;
+    }): void;
+    dispatcherNotify(data: {
+        notificationId: any;
+        event: any;
+        data: any;
+        source: any;
+    }): void;
+    dispatcherTakeAction(data: {
+        requestId: any;
+        action: any;
+        data: any;
+    }): void;
+    dispatcherConnectionStatus(data: { connected: boolean }): void;
 };
 
 // =============================================

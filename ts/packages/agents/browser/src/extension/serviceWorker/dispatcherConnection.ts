@@ -34,28 +34,37 @@ let dispatcher: Dispatcher | undefined;
 let dispatcherWs: WebSocket | undefined;
 let connectionPromise: Promise<Dispatcher> | undefined;
 
+// RPC functions for communicating with the chat panel.
+// rpcSend: fire-and-forget (display updates)
+// rpcInvoke: awaited (askYesNo, proposeAction)
+// Set by setChatPanelRpc() from the service worker index after the RPC server is created.
+let rpcSend: ((name: string, ...args: any[]) => void) | undefined;
+let rpcInvoke: ((name: string, ...args: any[]) => Promise<any>) | undefined;
+
+export function setChatPanelRpc(rpc: {
+    send: (name: string, ...args: any[]) => void;
+    invoke: (name: string, ...args: any[]) => Promise<any>;
+}) {
+    rpcSend = rpc.send.bind(rpc);
+    rpcInvoke = rpc.invoke.bind(rpc);
+}
+
 /**
  * Create a ClientIO that forwards display callbacks to the chat panel.
  * Messages are relayed via chrome.runtime.sendMessage so the side panel
  * view can receive them even though it's in a different execution context.
  */
 function createChatPanelClientIO(): ClientIO {
-    function send(type: string, data: any) {
-        chrome.runtime.sendMessage({ type, ...data }).catch(() => {
-            // Chat panel may not be open — that's fine, ignore
-        });
-    }
-
     return {
         clear(requestId) {
-            send("dispatcher:clear", { requestId });
+            rpcSend?.("dispatcherClear", { requestId });
         },
         exit(requestId) {
-            send("dispatcher:exit", { requestId });
+            rpcSend?.("dispatcherExit", { requestId });
         },
         setUserRequest() {},
         setDisplayInfo(requestId, source, actionIndex, action) {
-            send("dispatcher:setDisplayInfo", {
+            rpcSend?.("dispatcherSetDisplayInfo", {
                 requestId,
                 source,
                 actionIndex,
@@ -63,12 +72,12 @@ function createChatPanelClientIO(): ClientIO {
             });
         },
         setDisplay(message) {
-            send("dispatcher:setDisplay", { message });
+            rpcSend?.("dispatcherSetDisplay", { message });
         },
         appendDisplay(message, mode) {
-            send("dispatcher:appendDisplay", { message, mode });
+            rpcSend?.("dispatcherAppendDisplay", { message, mode });
         },
-        appendDiagnosticData(requestId, data) {
+        appendDiagnosticData(_requestId, _data) {
             // Diagnostic data not shown in extension chat panel
         },
         setDynamicDisplay(
@@ -78,7 +87,7 @@ function createChatPanelClientIO(): ClientIO {
             displayId,
             nextRefreshMs,
         ) {
-            send("dispatcher:setDynamicDisplay", {
+            rpcSend?.("dispatcherSetDynamicDisplay", {
                 requestId,
                 source,
                 actionIndex,
@@ -87,12 +96,32 @@ function createChatPanelClientIO(): ClientIO {
             });
         },
 
-        // Input callbacks — return defaults for now
-        async askYesNo(_requestId, _message, defaultValue) {
+        async askYesNo(_requestId, message, defaultValue) {
+            if (rpcInvoke) {
+                try {
+                    return await rpcInvoke("chatPanelAskYesNo", {
+                        message,
+                        defaultValue,
+                    });
+                } catch {
+                    return defaultValue ?? true;
+                }
+            }
             return defaultValue ?? true;
         },
-        async proposeAction(_requestId, actionTemplates, _source) {
-            // Accept the default template
+        async proposeAction(_requestId, actionTemplates, source) {
+            if (rpcInvoke) {
+                try {
+                    const actionText = JSON.stringify(actionTemplates, null, 2);
+                    const accepted = await rpcInvoke("chatPanelProposeAction", {
+                        actionText,
+                        source,
+                    });
+                    return accepted ? undefined : false;
+                } catch {
+                    return undefined;
+                }
+            }
             return undefined;
         },
         async popupQuestion(_message, _choices, defaultId, _source) {
@@ -100,7 +129,7 @@ function createChatPanelClientIO(): ClientIO {
         },
 
         notify(notificationId, event, data, source) {
-            send("dispatcher:notify", {
+            rpcSend?.("dispatcherNotify", {
                 notificationId,
                 event,
                 data,
@@ -119,7 +148,7 @@ function createChatPanelClientIO(): ClientIO {
             // Not supported in extension
         },
         takeAction(requestId, action, data) {
-            send("dispatcher:takeAction", { requestId, action, data });
+            rpcSend?.("dispatcherTakeAction", { requestId, action, data });
         },
     };
 }
@@ -229,13 +258,7 @@ async function doConnect(): Promise<Dispatcher> {
                     new Error(`Failed to connect to Agent Server at ${url}`),
                 );
             }
-            // Broadcast disconnection status
-            chrome.runtime
-                .sendMessage({
-                    type: "dispatcher:connectionStatus",
-                    connected: false,
-                })
-                .catch(() => {});
+            rpcSend?.("dispatcherConnectionStatus", { connected: false });
         };
 
         ws.onerror = (event: Event) => {
