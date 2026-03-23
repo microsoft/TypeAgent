@@ -113,12 +113,16 @@ function containsUndefined(t: SchemaType): boolean {
  * Remove `undefined` from a type.  Returns the original type unchanged if
  * it doesn't contain `undefined`.  For a union, filters out `undefined`
  * members and simplifies (single remaining member → unwrap).
+ *
+ * Returns `undefined` type unchanged when the input is bare `undefined`
+ * (or a union of only `undefined` members) so callers can detect and
+ * handle it appropriately rather than receiving ERROR_TYPE.
  */
 function stripUndefined(t: SchemaType): SchemaType {
-    if (t.type === "undefined") return ERROR_TYPE; // stripping leaves nothing
+    if (t.type === "undefined") return t; // bare undefined — caller decides
     if (t.type !== "type-union") return t;
     const remaining = t.types.filter((m) => m.type !== "undefined");
-    if (remaining.length === 0) return ERROR_TYPE;
+    if (remaining.length === 0) return SchemaCreator.undefined_(); // all members were undefined
     if (remaining.length === 1) return remaining[0];
     return SchemaCreator.union(...remaining);
 }
@@ -546,6 +550,21 @@ function deriveValueType(
     return result;
 }
 
+/**
+ * Pass 1 — Type inference.
+ *
+ * Errors here mean "the type cannot be determined" and always return
+ * ERROR_TYPE so downstream nodes skip validation (no cascading errors).
+ * Examples: undefined variable, missing property, unsupported method.
+ *
+ * This function must NOT check operator constraints or emit warnings.
+ * Those belong in walkExprOperands (pass 2), which runs only after
+ * inference succeeds and has access to a warnings channel.
+ *
+ * The one subtle case is optional chaining on bare `undefined`: the
+ * condition is detected here to return the correct type (undefined),
+ * but the warning is emitted by walkExprOperands.
+ */
 function deriveValueTypeImpl(
     value: CompiledValueNode,
     resolveVar: ResolveVariable,
@@ -579,16 +598,29 @@ function deriveValueTypeImpl(
             // Infer field types for the object
             const fields: Record<string, SchemaObjectField> = {};
             for (const [key, propValue] of Object.entries(value.value)) {
-                const fieldValue =
-                    propValue === null
-                        ? ({ type: "variable", name: key } as CompiledValueNode)
-                        : propValue;
-                const fieldType = deriveValueType(
-                    fieldValue,
-                    resolveVar,
-                    errors,
-                    typeCache,
-                );
+                let fieldType: SchemaType;
+                if (propValue === null) {
+                    // Shorthand { key } — resolve variable directly instead
+                    // of creating a synthetic node (which would lack position
+                    // info and bypass the compiler's variable validation).
+                    const varType = resolveVar(key);
+                    if (varType !== undefined) {
+                        fieldType = varType;
+                    } else {
+                        errors?.push({
+                            message: `Undefined variable '${key}'`,
+                            node: value,
+                        });
+                        fieldType = ERROR_TYPE;
+                    }
+                } else {
+                    fieldType = deriveValueType(
+                        propValue,
+                        resolveVar,
+                        errors,
+                        typeCache,
+                    );
+                }
                 fields[key] = { type: fieldType };
             }
             return SchemaCreator.obj(fields);
@@ -670,7 +702,8 @@ function deriveValueTypeImpl(
                     if (isErrorType(leftType) || isErrorType(rightType))
                         return ERROR_TYPE;
                     const stripped = stripUndefined(leftType);
-                    if (isErrorType(stripped)) return rightType;
+                    // Left was bare undefined — result is entirely the right type
+                    if (stripped.type === "undefined") return rightType;
                     if (schemaTypesEqual(stripped, rightType)) return stripped;
                     return SchemaCreator.union(stripped, rightType);
                 }
@@ -720,7 +753,10 @@ function deriveValueTypeImpl(
                 value.optional && containsUndefined(objectType);
             if (addUndefined) {
                 objectType = resolveType(stripUndefined(objectType));
-                if (isErrorType(objectType)) return ERROR_TYPE;
+                // Object is always undefined — access always short-circuits
+                if (objectType.type === "undefined") {
+                    return SchemaCreator.undefined_();
+                }
             }
             let resultType: SchemaType | undefined;
             if (
@@ -1097,9 +1133,19 @@ function validateExprOperandTypes(
 }
 
 /**
- * Recursively validates operator constraints.  When `typeCache` is provided,
- * `deriveValueType` lookups are served from the cache (populated by the
- * inference pass) so child types are not re-derived.
+ * Pass 2 — Operator constraints and warnings.
+ *
+ * Runs only after deriveValueType (pass 1) succeeds with no errors.
+ * Reads inferred types from `typeCache` without re-deriving them.
+ *
+ * Errors here mean "types are known but misused" — wrong operand types
+ * for an operator, undefined flowing into a non-nullable operator, etc.
+ *
+ * Warnings mean "it works, but it's suspicious" — unnecessary `??`,
+ * unnecessary `?.`, or `?.` on bare `undefined`.
+ *
+ * Do NOT add inference-failure errors here; those belong in
+ * deriveValueTypeImpl where they can return ERROR_TYPE.
  */
 function walkExprOperands(
     value: CompiledValueNode,
@@ -1336,7 +1382,7 @@ function walkExprOperands(
                     typeCache,
                 );
             }
-            // Warning: unnecessary ?. if object type does not contain undefined
+            // Warnings for optional chaining
             if (value.optional) {
                 const objectType = deriveValueType(
                     value.object,
@@ -1344,13 +1390,35 @@ function walkExprOperands(
                     undefined,
                     typeCache,
                 );
-                if (
-                    !isErrorType(objectType) &&
-                    !containsUndefined(objectType)
-                ) {
-                    warnings?.push({
-                        message: `Optional chaining '?.' is unnecessary — operand '${formatSchemaType(objectType)}' is never undefined. Use '.' instead.`,
-                        node: value,
+                if (!isErrorType(objectType)) {
+                    if (!containsUndefined(objectType)) {
+                        warnings?.push({
+                            message: `Optional chaining '?.' is unnecessary — operand '${formatSchemaType(objectType)}' is never undefined. Use '.' instead.`,
+                            node: value,
+                        });
+                    } else if (
+                        resolveType(stripUndefined(objectType)).type ===
+                        "undefined"
+                    ) {
+                        warnings?.push({
+                            message: `Optional chaining on type 'undefined' will always produce undefined.`,
+                            node: value,
+                        });
+                    }
+                }
+            }
+            // Validate computed property type (must be number for array indexing)
+            if (value.computed && typeof value.property === "object") {
+                const propType = deriveValueType(
+                    value.property,
+                    resolveVar,
+                    undefined,
+                    typeCache,
+                );
+                if (!isErrorType(propType) && propType.type !== "number") {
+                    errors.push({
+                        message: `Computed property key must be number. Got '${formatSchemaType(propType)}'.`,
+                        node: value.property,
                     });
                 }
             }

@@ -881,6 +881,20 @@ class GrammarRuleParser {
             parseNumberValue: () =>
                 self.parseNumberValue() as { type: "literal"; value: number },
             parseEscapedChar: () => self.parseEscapedChar(),
+            isNumberStart: (pos: number) => {
+                if (pos >= self.content.length) return false;
+                const ch = self.content[pos];
+                if (/[0-9]/.test(ch)) return true;
+                // dot-digit (e.g. .5)
+                if (
+                    ch === "." &&
+                    pos + 1 < self.content.length &&
+                    /[0-9]/.test(self.content[pos + 1])
+                ) {
+                    return true;
+                }
+                return false;
+            },
             parseObjectValue: () => self.parseObjectLiteral(),
             parseArrayValue: () => self.parseArrayLiteral(),
             parseValueWithComments: (leading?: Comment[]) =>

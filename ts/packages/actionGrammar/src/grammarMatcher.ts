@@ -502,7 +502,9 @@ function createValue(
             );
         }
         default: {
-            // Value expression node — delegate to the expression evaluator.
+            // Expression node (binaryExpression, unaryExpression, etc.).
+            // All expression node types are handled by evaluateValueExpr,
+            // which throws on unknown types — no silent fallthrough risk.
             // The evalBase callback routes base nodes (literal, variable,
             // object, array) back through createValue so variable resolution
             // and wildcard extraction work correctly.

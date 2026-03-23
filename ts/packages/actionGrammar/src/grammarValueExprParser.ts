@@ -123,6 +123,9 @@ export interface ValueExprParserContext {
     parseNumberValue(): { type: "literal"; value: number };
     parseEscapedChar(): string;
 
+    /** Whether the character at `pos` starts a number literal (single source of truth). */
+    isNumberStart(pos: number): boolean;
+
     // For object/array parsing, we delegate to the existing parser.
     // The expression parser wraps these.
     parseObjectValue(): ValueNode;
@@ -298,13 +301,12 @@ function parseUnary(ctx: ValueExprParserContext): ValueNode {
         } satisfies UnaryValueExprNode;
     }
 
-    // Unary - is tricky because:
-    //  - `-3` should be a negative number literal, not unary minus on 3
-    //  - But `-x` is unary minus on variable x
-    //  - And `-` before `->` is handled by additive
+    // Unary - must distinguish `-3` (negative number literal) from `-x`
+    // (unary minus on variable).  We peek ahead: if the next non-space
+    // character starts a number, fall through to parsePrimary so the
+    // parser's parseNumberValue handles the sign.  The authoritative
+    // check is ctx.isNumberStart, defined by the parser itself.
     if (ctx.isAt("-") && !ctx.isAt("->")) {
-        // Look ahead: if the next non-space character starts a number,
-        // let parsePrimary handle it (since parseNumberValue handles signs).
         const savedPos = ctx.curr;
         ctx.curr++;
         // Skip whitespace manually to peek
@@ -315,10 +317,7 @@ function parseUnary(ctx: ValueExprParserContext): ValueNode {
         ) {
             peekPos++;
         }
-        // If next char starts a number literal, backtrack and let
-        // parsePrimary → parseNumberValue handle it (keeps number-start
-        // detection in sync with parseNumberValue’s regex).
-        if (isNumberStart(ctx.content, peekPos)) {
+        if (ctx.isNumberStart(peekPos)) {
             ctx.curr = savedPos;
             return parsePostfix(ctx);
         }
@@ -600,23 +599,4 @@ function isIdContinueChar(char: string): boolean {
 function isIdContinueAt(ctx: ValueExprParserContext, offset: number): boolean {
     const pos = ctx.curr + offset;
     return pos < ctx.content.length && isIdContinueChar(ctx.content[pos]);
-}
-
-/**
- * Check if a position in the content could be the start of a number literal.
- * Must stay in sync with GrammarRuleParser.parseNumberValue’s regex
- * (/[0-9a-z+-.]*&#47;iy).
- */
-function isNumberStart(content: string, pos: number): boolean {
-    if (pos >= content.length) return false;
-    if (/[0-9]/.test(content[pos])) return true;
-    // dot-digit (e.g. .5)
-    if (
-        content[pos] === "." &&
-        pos + 1 < content.length &&
-        /[0-9]/.test(content[pos + 1])
-    ) {
-        return true;
-    }
-    return false;
 }
