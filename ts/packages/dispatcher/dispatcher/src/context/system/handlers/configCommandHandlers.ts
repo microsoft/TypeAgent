@@ -18,7 +18,6 @@ import chalk from "chalk";
 import {
     ActionContext,
     CompletionGroup,
-    CompletionGroups,
     ParameterDefinitions,
     ParsedCommandParams,
     PartialParsedCommandParams,
@@ -255,16 +254,23 @@ function showAgentStatus(
 
     if (showSchema || showAction) {
         for (const name of agents.getSchemaNames()) {
+            const loading = agents.isSchemaLoading(name);
             if (showSchema) {
                 const state = agents.isSchemaEnabled(name);
                 const active = agents.isSchemaActive(name);
                 setStatus(status, "schemas", name, state, active, changes);
+                if (loading && status[name] !== undefined) {
+                    status[name]["schemas"] = "⏳";
+                }
             }
 
             if (showAction) {
                 const state = agents.isActionEnabled(name);
                 const active = agents.isActionActive(name);
                 setStatus(status, "actions", name, state, active, changes);
+                if (loading && status[name] !== undefined) {
+                    status[name]["actions"] = "⏳";
+                }
             }
         }
     }
@@ -503,7 +509,7 @@ class AgentToggleCommandHandler implements CommandHandler {
             }
         }
 
-        return { groups: completions };
+        return completions;
     }
 }
 
@@ -558,7 +564,7 @@ class ExplainerCommandHandler implements CommandHandler {
                 });
             }
         }
-        return { groups: completions };
+        return completions;
     }
 }
 
@@ -627,7 +633,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<CompletionGroups> {
+    ): Promise<CompletionGroup[]> {
         const completions: CompletionGroup[] = [];
         for (const name of names) {
             if (name === "model") {
@@ -638,7 +644,7 @@ class ConfigModelSetCommandHandler implements CommandHandler {
             }
         }
 
-        return { groups: completions };
+        return completions;
     }
 }
 
@@ -747,7 +753,7 @@ class FixedSchemaCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<CompletionGroups> {
+    ): Promise<CompletionGroup[]> {
         const completions: CompletionGroup[] = [];
         const systemContext = context.agentContext;
         for (const name of names) {
@@ -758,7 +764,7 @@ class FixedSchemaCommandHandler implements CommandHandler {
                 });
             }
         }
-        return { groups: completions };
+        return completions;
     }
 }
 
@@ -840,7 +846,7 @@ class GrammarSystemCommandHandler implements CommandHandler {
                 });
             }
         }
-        return { groups: completions };
+        return completions;
     }
 }
 class GrammarUseDFACommandHandler implements CommandHandler {
@@ -883,7 +889,7 @@ class GrammarUseDFACommandHandler implements CommandHandler {
                 completions.push({ name, completions: ["true", "false"] });
             }
         }
-        return { groups: completions };
+        return completions;
     }
 }
 
@@ -1220,7 +1226,7 @@ class ConfigRequestCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<CompletionGroups> {
+    ): Promise<CompletionGroup[]> {
         const completions: CompletionGroup[] = [];
         const systemContext = context.agentContext;
         for (const name of names) {
@@ -1245,7 +1251,7 @@ class ConfigRequestCommandHandler implements CommandHandler {
                 }
             }
         }
-        return { groups: completions };
+        return completions;
     }
 }
 
@@ -1458,35 +1464,6 @@ class ConfigExecutionPlanReuseCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
-    public readonly description =
-        "Enable or disable PowerShell script reuse for reasoning actions";
-    public readonly parameters = {
-        args: {
-            mode: {
-                description:
-                    "Script reuse mode: 'enabled' to capture and reuse PowerShell scripts, 'disabled' for standard reasoning",
-                type: "string" as const,
-                enum: ["enabled", "disabled"],
-            },
-        },
-    } as const;
-
-    async run(
-        context: ActionContext<CommandHandlerContext>,
-        params: ParsedCommandParams<typeof this.parameters>,
-    ) {
-        const mode = params.args.mode as "enabled" | "disabled";
-
-        await changeContextConfig(
-            { execution: { scriptReuse: mode } },
-            context,
-        );
-
-        return displayResult(`Script reuse ${mode}`, context);
-    }
-}
-
 const configExecutionCommandHandlers: CommandHandlerTable = {
     description: "Execution configuration",
     commands: {
@@ -1501,7 +1478,6 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
         ),
         reasoning: new ConfigExecutionReasoningCommandHandler(),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
-        scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
     },
 };
 
