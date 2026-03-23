@@ -529,15 +529,10 @@ boundary forks, multi-word keyword boundaries, and alternation-prefix
 overlaps. See `actionGrammar.md` "Why direction matters" for detailed
 examples and the Option A/B design trade-off.
 
-**When `directionSensitive=false`:**
-
-- **Nothing was fully matched** — only a partial match exists (e.g.,
-  `"pla"` against `play music`). No completed part to back up to.
-- **Trailing separator commits** — a space or punctuation after a
-  matched part pins the position. The user has moved past the
-  boundary (e.g., `"play "` with trailing space).
-- **Category 3b (dirty partial)** — trailing text didn't match any
-  part. Both directions produce the same alternative set.
+**When `directionSensitive=false`:** Nothing was fully matched
+(partial/dirty), or a trailing separator commits the position. See
+`actionGrammar.md` "When direction does _not_ matter" for the full
+list, including the `[spacing=none]` exception.
 
 **Examples:** The table below shows `directionSensitive` for various
 inputs. The general pattern: `true` when a part is fully matched with
@@ -554,10 +549,6 @@ or dirty.
 | `play music`           | `play `      | `false`              | Trailing space commits                                        |
 | `(play \| player) now` | `play`       | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`    |
 | `(play \| player) now` | `play `      | `false`              | Trailing space commits                                        |
-
-Exception: in `[spacing=none]` mode, whitespace is not a separator,
-so `directionSensitive` is always `true` when any word has been fully
-matched — trailing spaces do not commit.
 
 The dispatcher may additionally set `directionSensitive=true` at the
 command level — for example, when a subcommand name is both a valid

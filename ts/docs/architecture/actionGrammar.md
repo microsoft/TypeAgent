@@ -497,13 +497,18 @@ input `"play"`:
   re-opens.
 
 > **Design note — why always back up (Option A).**
-> An alternative design (Option B) would track whether each match state
-> originated from a multi-alternative `RulesPart` and only back up in
-> Category 3a when that alternation flag is set. This would preserve
-> the previous `directionSensitive=false` for plain keyword-before-
-> wildcard cases like `play <song>` (input `"play"`). We chose the
-> simpler Option A — always back up when the prefix is fully consumed
-> — for three reasons:
+> Option A (always back up when the prefix is fully consumed) makes
+> `directionSensitive=true` even for cases where backward reconsidering
+> is harmless — e.g., `play <song>` with input `"play"`, where backward
+> simply re-offers `"play"` and the user sees the same completion. This
+> causes one redundant re-fetch when the user backspaces at that
+> position.
+>
+> An alternative design (Option B) would avoid this by tracking whether
+> each match state originated from a multi-alternative `RulesPart` and
+> only back up in Category 3a when that alternation flag is set. This
+> would preserve `directionSensitive=false` for plain keyword-before-
+> wildcard cases. We chose Option A for three reasons:
 >
 > 1. **Consistency.** Categories 1 and 2 already use the same broad
 >    "has a part to reconsider" check (fully consumed prefix with a
@@ -559,29 +564,15 @@ input `"play"`:
     a word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
-- `directionSensitive` is `true` when backward completion has something
-  to reconsider — a word, keyword, wildcard, or number was fully matched
-  with no trailing separator to commit it. See "Why direction matters"
-  above for examples. It is `false` when nothing was fully matched
-  (Category 3b partial) or when a trailing separator commits the
-  position.
-  For exact matches (Category 1),
+- `directionSensitive` — see "Why direction matters" and "When
+  direction does _not_ matter" above. For exact matches (Category 1),
   it is `true` when the rule contains a wildcard, a number variable,
   a sub-rule variable capture, or a multi-part keyword — any part
   that backward completion could reconsider.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
-  wildcard boundary (e.g., a wildcard finalized at end-of-input in the
-  forward direction, or a keyword that had pinned a wildcard's end in the
-  backward direction). `openWildcard` remains `true` even after the user
-  types the full keyword text (e.g., `"play hello by"` and
-  `"play hello by "`) because the grammar matcher always forks two parse
-  paths at a wildcard-keyword boundary: one where the keyword is consumed,
-  and one where the wildcard absorbs the keyword text. Both paths produce
-  completions at the same prefix length, so neither can eliminate the
-  other. `openWildcard` only becomes `false` when the ambiguity is
-  structurally resolved by further context (e.g., the user types enough
-  after the keyword that the wildcard-absorbing path can no longer produce
-  a match at the same prefix length).
+  wildcard boundary — see `completion.md` [`openWildcard`] for the full
+  definition (definite vs. ambiguous positions, persistence semantics,
+  merge rule).
 
 See `completion.md` for full definitions of how these metadata fields
 flow through the cache, dispatcher, and shell layers.

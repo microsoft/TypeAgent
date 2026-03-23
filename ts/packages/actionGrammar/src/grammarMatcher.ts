@@ -1962,10 +1962,10 @@ export function matchGrammarCompletion(
                 pendingWildcard.valueId !== undefined
             ) {
                 // --- Category 3a: Unfinalizable pending wildcard ---
-                // The grammar reached a wildcard slot but its capture
-                // region is empty or separator-only (e.g. prefix="play "
-                // with wildcard starting at index 4 — the space is not
-                // valid wildcard content).
+                // The grammar reached a wildcard slot but it is
+                // unfinalizable (capture region empty, separator-only,
+                // or not yet started — e.g. prefix="play " with
+                // wildcard starting at index 4).
                 // Backward reconsidering is appropriate when:
                 //  (a) the last matched part followed a captured
                 //      wildcard — wildcard-keyword boundary fork, OR
