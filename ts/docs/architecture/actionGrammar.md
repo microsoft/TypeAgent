@@ -129,6 +129,15 @@ evaluated against the adjacent characters to produce a `separatorMode`
 | `[spacing=optional]` | `"optional"`          | Always `"optional"`                                                                                                                                                   |
 | `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                   |
 
+**Note:** The table above describes the _baseline_ `separatorMode`
+from the spacing annotation. When the consumed prefix already ends with
+whitespace (i.e., the separator is already present in `matchedPrefixLength`),
+the grammar matcher overrides to `"optional"` because no additional
+separator is needed. Digits are Unicode script "Common" (not a
+word-boundary script), so `auto` spacing at a digit–Latin boundary
+(e.g., `$(n:number)` followed by a Latin keyword) also produces
+`"optional"`.
+
 ### Entities
 
 Entities are typed validators and converters for captured wildcards.
@@ -436,6 +445,47 @@ text `"mx"`. This applies equally to forward and backward directions.
    keyword word plus a partial match of the second, and offers `"by"`.
    The function honors `spacingMode` for inter-word separator matching.
 
+**Why direction matters — the wildcard-keyword boundary fork:**
+
+Grammars with wildcards create structural ambiguity at the boundary
+between a wildcard and the keyword that follows it. Consider
+`play <song> by <artist>` with input `"play Never by"`:
+
+- **Interpretation A:** The wildcard `<song>` captures `"Never"`,
+  and `"by"` is the keyword. The song is _Never_.
+- **Interpretation B:** The wildcard `<song>` captures `"Never by"`,
+  absorbing the keyword text. The song is _Never by_ (perhaps
+  _Never by Myself_).
+
+Both are valid parses of the same input. The `direction` parameter
+resolves this fork:
+
+- **Forward** (`"forward"`) chooses interpretation A — it treats the
+  keyword as consumed and offers completions for the next part
+  (`<artist>`). This is what the user wants when they are typing
+  ahead.
+- **Backward** (`"backward"`) chooses interpretation B — it backs up
+  to the ambiguous boundary and re-offers the keyword (or the
+  wildcard property), letting the user reconsider the partition.
+  This is what the user wants when they are backspacing.
+
+Because the two directions produce different completions at different
+positions, the grammar matcher sets `directionSensitive=true`.
+
+**When direction does _not_ matter:**
+
+- **Keyword before a wildcard** (e.g., `"play"` before `<song>`):
+  There is no wildcard to the _left_ of `"play"`, so its position
+  is structurally pinned — no fork exists. Both directions fall
+  through to the same path (emitting the wildcard property
+  completion) and `directionSensitive=false`.
+- **Trailing separator commits:** A trailing space (or punctuation)
+  after a keyword "commits" the match position — the user has
+  moved past the boundary. Both directions agree on the committed
+  position, so `directionSensitive=false`.
+- **Category 3b (dirty partial):** Both directions produce the same
+  set of alternatives at the matched prefix position.
+
 **Metadata produced:**
 
 - `matchedPrefixLength` — characters consumed; becomes `startIndex`
@@ -453,13 +503,26 @@ text `"mx"`. This applies equally to forward and backward directions.
   (e.g., `@agent` prefixes, flags). When `matchedPrefixLength=0`
   (nothing consumed), `separatorMode` is always `"optional"` (or
   `"none"` for `[spacing=none]` rules) because there is no preceding
-  character to require a separator against.
+  character to require a separator against. Similarly, when the
+  consumed prefix already ends with whitespace (e.g., `"play "`),
+  `separatorMode` is `"optional"` because the separator is already
+  present — no additional separator is needed. For `auto` spacing,
+  `"spacePunctuation"` is produced only when both the last consumed
+  character and the first completion character are word-boundary
+  scripts (Latin, Cyrillic, etc.) and no separator has been consumed;
+  digit–Latin transitions (e.g., `"50"` → `"percent"`) produce
+  `"optional"` because digits are Unicode script "Common", not a
+  word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
-- `directionSensitive` is `true` when the matched state has a fully
-  matched word without a trailing separator — meaning backward
-  completion would produce different results (see `completion.md`
-  for how downstream layers use this field).
+- `directionSensitive` is `true` when the matched state sits at a
+  wildcard-keyword boundary fork — see "Why direction matters" above.
+  It is `false` when no fork exists: keyword before a wildcard
+  (`afterWildcard=false`), trailing separator commits the position,
+  or category 3b (dirty partial). For exact matches (category 1),
+  it is `true` when the rule contains a wildcard, a number variable,
+  a sub-rule variable capture, or a multi-part keyword — any part
+  that backward completion could reconsider.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary (e.g., a wildcard finalized at end-of-input in the
   forward direction, or a keyword that had pinned a wildcard's end in the
