@@ -224,19 +224,26 @@ export const METHOD_RETURN_TYPE_TABLES = {
     NUMBER_TO_STRING_METHODS,
 } as const;
 
-/** Per-cache counters for generating unique rule names. */
+/** Per-cache counters for generating unique names for anonymous rules. */
 const cacheCounters = new WeakMap<
     Map<GrammarRule[], SchemaType>,
     { value: number }
 >();
 
+/**
+ * Generate a unique name for an anonymous (unnamed) rule.
+ * Named rules pass their name through `deriveRuleValueType(rules, cache, name)`;
+ * this fallback is only used for inline nested groups without an explicit name.
+ * The names are internal to the type-derivation cache and never surface in
+ * user-facing error messages.
+ */
 function nextRuleName(cache: Map<GrammarRule[], SchemaType>): string {
     let counter = cacheCounters.get(cache);
     if (!counter) {
         counter = { value: 0 };
         cacheCounters.set(cache, counter);
     }
-    return `__rule_${counter.value++}`;
+    return `__anon_${counter.value++}`;
 }
 
 /**
@@ -428,7 +435,7 @@ function stripRefFromUnion(type: SchemaType, refName: string): SchemaType {
  */
 export type RuleValueKind =
     | { kind: "explicit" } // rule.value exists
-    | { kind: "variable"; part: GrammarPart } // single-variable implicit
+    | { kind: "variable"; variableName: string; part: GrammarPart } // single-variable implicit
     | { kind: "passthrough"; rules: GrammarRule[]; name?: string | undefined } // bare rule-ref
     | { kind: "default" } // zero-variable single string/phraseSet part → matched text
     | { kind: "none" }; // multi-var or no value
@@ -439,7 +446,11 @@ export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
     }
     const variableParts = rule.parts.filter((p) => p.variable !== undefined);
     if (variableParts.length === 1) {
-        return { kind: "variable", part: variableParts[0] };
+        return {
+            kind: "variable",
+            variableName: variableParts[0].variable!,
+            part: variableParts[0],
+        };
     }
     if (variableParts.length === 0 && rule.parts.length === 1) {
         const part = rule.parts[0];
@@ -770,7 +781,10 @@ function deriveValueTypeImpl(
                 } else {
                     const available = Object.keys(objectType.fields).join(", ");
                     errors?.push({
-                        message: `Property '${value.property}' does not exist on type '${formatSchemaType(objectType)}'. Available properties: ${available}.`,
+                        message:
+                            `Property '${value.property}' does not exist on type ` +
+                            `'${formatSchemaType(objectType)}'.` +
+                            `${available.length > 0 ? ` Available properties: ${available}.` : ""}`,
                         node: value,
                     });
                     return ERROR_TYPE;
@@ -813,7 +827,10 @@ function deriveValueTypeImpl(
             } else if (typeof value.property === "string") {
                 const supported = supportedMethodsForType(objectType.type);
                 errors?.push({
-                    message: `Property '${value.property}' does not exist on type '${formatSchemaType(objectType)}'.${supported.length > 0 ? ` Available methods: ${supported.join(", ")}.` : ""}`,
+                    message:
+                        `Property '${value.property}' does not exist on type ` +
+                        `'${formatSchemaType(objectType)}'.` +
+                        `${supported.length > 0 ? ` Available methods: ${supported.join(", ")}.` : ""}`,
                     node: value,
                 });
             }
@@ -867,7 +884,10 @@ function deriveValueTypeImpl(
                 }
                 const supported = supportedMethodsForType(objectType.type);
                 errors?.push({
-                    message: `Method '${method}' is not supported on type '${formatSchemaType(objectType)}'.${supported.length > 0 ? ` Supported methods: ${supported.join(", ")}.` : ""}`,
+                    message:
+                        `Method '${method}' is not supported on type ` +
+                        `'${formatSchemaType(objectType)}'.` +
+                        `${supported.length > 0 ? ` Supported methods: ${supported.join(", ")}.` : ""}`,
                     node: value,
                 });
                 return ERROR_TYPE;
@@ -918,7 +938,7 @@ function grammarTypeToSchemaType(grammarType: string): SchemaType {
 function isTypeAssignable(
     inferred: SchemaType,
     expected: SchemaType,
-    visited?: Set<string>,
+    visited: Set<string> = new Set(),
 ): boolean {
     if (expected.type === "any" || inferred.type === "any") return true;
     // Coinductive cycle detection for recursive type-references.
@@ -926,7 +946,6 @@ function isTypeAssignable(
     // the concrete (non-self-referencing) union members determine the
     // real answer.
     if (inferred.type === "type-reference") {
-        if (visited === undefined) visited = new Set<string>();
         if (visited.has(inferred.name)) return true;
         visited.add(inferred.name);
     }
@@ -1083,16 +1102,17 @@ export function buildVariableTypeMap(
 
 /**
  * Resolves a SchemaType, following type-references to their definition.
- * Uses iterative unwrapping with cycle detection for recursive types.
+ * Uses iterative unwrapping with a depth limit for recursive types.
  */
 function resolveType(type: SchemaType): SchemaType {
-    const seen = new Set<string>();
+    // Recursive types rarely nest more than a few levels;
+    // a depth limit avoids per-call Set allocation.
+    let depth = 0;
     while (type.type === "type-reference" && type.definition !== undefined) {
-        if (seen.has(type.name)) {
+        if (++depth > 20) {
             // Cycle detected — the type-reference itself is the resolved form
             return type;
         }
-        seen.add(type.name);
         type = type.definition.type;
     }
     return type;
@@ -1192,14 +1212,18 @@ function walkExprOperands(
             if (!UNDEFINED_TOLERANT_OPERATORS.has(value.operator)) {
                 if (containsUndefined(leftType)) {
                     errors.push({
-                        message: `Operand type '${formatSchemaType(leftType)}' includes undefined. Use ?? to provide a default value, or ?. for property access.`,
+                        message:
+                            `Operand type '${formatSchemaType(leftType)}' includes undefined. ` +
+                            `Use ?? to provide a default value, or ?. for property access.`,
                         node: value.left,
                     });
                     return;
                 }
                 if (containsUndefined(rightType)) {
                     errors.push({
-                        message: `Operand type '${formatSchemaType(rightType)}' includes undefined. Use ?? to provide a default value, or ?. for property access.`,
+                        message:
+                            `Operand type '${formatSchemaType(rightType)}' includes undefined. ` +
+                            `Use ?? to provide a default value, or ?. for property access.`,
                         node: value.right,
                     });
                     return;
@@ -1218,7 +1242,10 @@ function walkExprOperands(
                         )
                     ) {
                         errors.push({
-                            message: `Operator '+' requires both operands to be number or both to be string. Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'. Use a template literal for string interpolation.`,
+                            message:
+                                `Operator '+' requires both operands to be number or both to be string. ` +
+                                `Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'. ` +
+                                `Use a template literal for string interpolation.`,
                             node: value,
                         });
                     }
@@ -1232,7 +1259,9 @@ function walkExprOperands(
                         rightType.type !== "number"
                     ) {
                         errors.push({
-                            message: `Operator '${value.operator}' requires both operands to be number. Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'.`,
+                            message:
+                                `Operator '${value.operator}' requires both operands to be number. ` +
+                                `Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'.`,
                             node: value,
                         });
                     }
@@ -1250,7 +1279,10 @@ function walkExprOperands(
                         )
                     ) {
                         errors.push({
-                            message: `Operator '${value.operator}' requires both operands to be the same type (both number or both string). Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'.`,
+                            message:
+                                `Operator '${value.operator}' requires both operands to be the same type ` +
+                                `(both number or both string). ` +
+                                `Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'.`,
                             node: value,
                         });
                     }
@@ -1262,7 +1294,10 @@ function walkExprOperands(
                         rightType.type !== "boolean"
                     ) {
                         errors.push({
-                            message: `Operator '${value.operator}' requires boolean operands. Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'. Use ternary (e.g., x > 0 ? a : b) for conditional values.`,
+                            message:
+                                `Operator '${value.operator}' requires boolean operands. ` +
+                                `Got '${formatSchemaType(leftType)}' and '${formatSchemaType(rightType)}'. ` +
+                                `Use ternary (e.g., x > 0 ? a : b) for conditional values.`,
                             node: value,
                         });
                     }
@@ -1271,7 +1306,9 @@ function walkExprOperands(
                     // Warning: unnecessary ?? if left does not contain undefined
                     if (!containsUndefined(leftType)) {
                         warnings?.push({
-                            message: `Operator '??' is unnecessary — left operand '${formatSchemaType(leftType)}' is never undefined.`,
+                            message:
+                                `Operator '??' is unnecessary — left operand ` +
+                                `'${formatSchemaType(leftType)}' is never undefined.`,
                             node: value,
                         });
                     }
@@ -1300,7 +1337,9 @@ function walkExprOperands(
                 containsUndefined(operandType)
             ) {
                 errors.push({
-                    message: `Operand type '${formatSchemaType(operandType)}' includes undefined. Use ?? to provide a default value.`,
+                    message:
+                        `Operand type '${formatSchemaType(operandType)}' includes undefined. ` +
+                        `Use ?? to provide a default value.`,
                     node: value.operand,
                 });
                 return;
@@ -1317,7 +1356,10 @@ function walkExprOperands(
                 case "!":
                     if (operandType.type !== "boolean") {
                         errors.push({
-                            message: `Operator '!' requires a boolean operand. Got '${formatSchemaType(operandType)}'. Use === or !== for equality checks.`,
+                            message:
+                                `Operator '!' requires a boolean operand. ` +
+                                `Got '${formatSchemaType(operandType)}'. ` +
+                                `Use === or !== for equality checks.`,
                             node: value,
                         });
                     }
@@ -1357,7 +1399,10 @@ function walkExprOperands(
             if (isErrorType(testType)) return;
             if (testType.type !== "boolean") {
                 errors.push({
-                    message: `Ternary '?' test must be a boolean expression. Got '${formatSchemaType(testType)}'. Use a comparison (e.g., x > 0) or equality check (e.g., x !== undefined).`,
+                    message:
+                        `Ternary '?' test must be a boolean expression. ` +
+                        `Got '${formatSchemaType(testType)}'. ` +
+                        `Use a comparison (e.g., x > 0) or equality check (e.g., x !== undefined).`,
                     node: value.test,
                 });
             }
@@ -1393,7 +1438,9 @@ function walkExprOperands(
                 if (!isErrorType(objectType)) {
                     if (!containsUndefined(objectType)) {
                         warnings?.push({
-                            message: `Optional chaining '?.' is unnecessary — operand '${formatSchemaType(objectType)}' is never undefined. Use '.' instead.`,
+                            message:
+                                `Optional chaining '?.' is unnecessary — operand ` +
+                                `'${formatSchemaType(objectType)}' is never undefined. Use '.' instead.`,
                             node: value,
                         });
                     } else if (
@@ -1459,7 +1506,9 @@ function walkExprOperands(
                         t.type !== "boolean"
                     ) {
                         errors.push({
-                            message: `Template interpolation does not accept '${formatSchemaType(exprType)}'. Use ?? to provide a default first.`,
+                            message:
+                                `Template interpolation does not accept ` +
+                                `'${formatSchemaType(exprType)}'. Use ?? to provide a default first.`,
                             node: expr,
                         });
                         break;

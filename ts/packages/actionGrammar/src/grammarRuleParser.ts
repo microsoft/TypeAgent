@@ -864,9 +864,6 @@ class GrammarRuleParser {
             set curr(v: number) {
                 self.curr = v;
             },
-            get position() {
-                return self.position;
-            },
             isAt: (s: string) => self.isAt(s),
             isAtEnd: () => self.isAtEnd(),
             isAtStringDelimiter: () => self.isAtStringDelimiter(),
@@ -897,8 +894,6 @@ class GrammarRuleParser {
             },
             parseObjectValue: () => self.parseObjectLiteral(),
             parseArrayValue: () => self.parseArrayLiteral(),
-            parseValueWithComments: (leading?: Comment[]) =>
-                self.parseValueWithComments(leading),
         };
     }
 
@@ -944,6 +939,13 @@ class GrammarRuleParser {
                 }
             } else {
                 first = false;
+            }
+
+            // Reject spread in objects — only array spread is supported
+            if (this.isAt("...")) {
+                this.throwError(
+                    "Spread is not supported in object literals. Use spread in arrays ([...x]) instead.",
+                );
             }
 
             // Parse property name (identifier or string literal)

@@ -783,7 +783,7 @@ function collectLeafValues(
             case "variable":
                 results.push({
                     kind: "variable",
-                    variableName: kind.part.variable!,
+                    variableName: kind.variableName,
                     parts: rule.parts,
                 });
                 break;

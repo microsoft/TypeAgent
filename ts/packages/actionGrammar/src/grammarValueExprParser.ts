@@ -108,7 +108,6 @@ export type ValueExprNode =
 export interface ValueExprParserContext {
     readonly content: string;
     curr: number;
-    readonly position: boolean;
 
     isAt(expected: string): boolean;
     isAtEnd(): boolean;
@@ -130,7 +129,6 @@ export interface ValueExprParserContext {
     // The expression parser wraps these.
     parseObjectValue(): ValueNode;
     parseArrayValue(): ValueNode;
-    parseValueWithComments(leadingComments?: Comment[]): ValueNode;
 }
 
 /**
@@ -155,7 +153,7 @@ function parseTernary(ctx: ValueExprParserContext): ValueNode {
             test,
             consequent,
             alternate,
-        } satisfies ConditionalValueExprNode;
+        };
     }
     return test;
 }
@@ -287,7 +285,7 @@ function parseUnary(ctx: ValueExprParserContext): ValueNode {
             type: "unaryExpression",
             operator: "typeof" as UnaryValueExprOp,
             operand,
-        } satisfies UnaryValueExprNode;
+        };
     }
 
     // ! (prefix)
@@ -298,7 +296,7 @@ function parseUnary(ctx: ValueExprParserContext): ValueNode {
             type: "unaryExpression",
             operator: "!" as UnaryValueExprOp,
             operand,
-        } satisfies UnaryValueExprNode;
+        };
     }
 
     // Unary - must distinguish `-3` (negative number literal) from `-x`
@@ -329,7 +327,7 @@ function parseUnary(ctx: ValueExprParserContext): ValueNode {
             type: "unaryExpression",
             operator: "-" as UnaryValueExprOp,
             operand,
-        } satisfies UnaryValueExprNode;
+        };
     }
 
     return parsePostfix(ctx);
@@ -353,7 +351,7 @@ function parsePostfix(ctx: ValueExprParserContext): ValueNode {
                     property,
                     computed: true,
                     optional: true,
-                } satisfies MemberValueExprNode;
+                };
             } else if (ctx.isAt("(")) {
                 // ?.(args)
                 expr = {
@@ -361,7 +359,7 @@ function parsePostfix(ctx: ValueExprParserContext): ValueNode {
                     callee: expr,
                     arguments: parseCallArguments(ctx),
                     optional: true,
-                } satisfies CallValueExprNode;
+                };
             } else {
                 // ?.prop or ?.method(args)
                 const prop = ctx.parseId("property name after ?.");
@@ -373,12 +371,12 @@ function parsePostfix(ctx: ValueExprParserContext): ValueNode {
                         property: prop,
                         computed: false,
                         optional: true,
-                    } satisfies MemberValueExprNode;
+                    } as MemberValueExprNode;
                     expr = {
                         type: "callExpression",
                         callee,
                         arguments: parseCallArguments(ctx),
-                    } satisfies CallValueExprNode;
+                    };
                 } else {
                     expr = {
                         type: "memberExpression",
@@ -386,7 +384,7 @@ function parsePostfix(ctx: ValueExprParserContext): ValueNode {
                         property: prop,
                         computed: false,
                         optional: true,
-                    } satisfies MemberValueExprNode;
+                    };
                 }
             }
             continue;
@@ -404,12 +402,12 @@ function parsePostfix(ctx: ValueExprParserContext): ValueNode {
                     property: prop,
                     computed: false,
                     optional: false,
-                } satisfies MemberValueExprNode;
+                } as MemberValueExprNode;
                 expr = {
                     type: "callExpression",
                     callee,
                     arguments: parseCallArguments(ctx),
-                } satisfies CallValueExprNode;
+                };
             } else {
                 // Property access: obj.prop
                 expr = {
@@ -418,7 +416,7 @@ function parsePostfix(ctx: ValueExprParserContext): ValueNode {
                     property: prop,
                     computed: false,
                     optional: false,
-                } satisfies MemberValueExprNode;
+                };
             }
             continue;
         }
@@ -434,7 +432,7 @@ function parsePostfix(ctx: ValueExprParserContext): ValueNode {
                 property,
                 computed: true,
                 optional: false,
-            } satisfies MemberValueExprNode;
+            };
             continue;
         }
 
@@ -470,7 +468,7 @@ function parsePrimary(ctx: ValueExprParserContext): ValueNode {
         return {
             type: "spreadElement",
             argument,
-        } satisfies SpreadValueExprNode;
+        };
     }
 
     // Template literal: `quasi${expr}quasi`
@@ -553,7 +551,7 @@ function parseTemplateLiteral(
                 type: "templateLiteral",
                 quasis,
                 expressions,
-            } satisfies TemplateLiteralValueExprNode;
+            };
         }
 
         if (

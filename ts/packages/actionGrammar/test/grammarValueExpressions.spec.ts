@@ -335,10 +335,11 @@ describe("Value Expression Parser", () => {
             expect(value.type).toBe("array");
         });
 
-        // Object spread requires extending the object property parser to accept
-        // spread elements alongside key-value pairs.  This is deferred — the
-        // array-level spread (`[...x]`) is sufficient for the initial release.
-        it.todo("object spread");
+        it("object spread is rejected at parse time", () => {
+            expect(() =>
+                parseWithExpressions(`<Start> = $(x:string) -> { ...x };`),
+            ).toThrow(/Spread is not supported in object literals/);
+        });
     });
 
     describe("Backward Compatibility (no expressions)", () => {
@@ -578,8 +579,24 @@ describeForEachMatcher(
         });
 
         describe("Security", () => {
-            it("rejects disallowed method calls", () => {
+            it("rejects disallowed method calls at runtime", () => {
                 const g = `<Start> = $(x:string) -> x.constructor();`;
+                const grammar = loadWithExpressions(g);
+                expect(() => testMatchGrammar(grammar, "hello")).toThrow(
+                    /not allowed/,
+                );
+            });
+
+            it("rejects prototype-chain methods at runtime", () => {
+                const g = `<Start> = $(x:string) -> x.hasOwnProperty("length");`;
+                const grammar = loadWithExpressions(g);
+                expect(() => testMatchGrammar(grammar, "hello")).toThrow(
+                    /not allowed/,
+                );
+            });
+
+            it("rejects valueOf at runtime", () => {
+                const g = `<Start> = $(x:string) -> x.valueOf();`;
                 const grammar = loadWithExpressions(g);
                 expect(() => testMatchGrammar(grammar, "hello")).toThrow(
                     /not allowed/,
