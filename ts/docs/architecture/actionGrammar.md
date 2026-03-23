@@ -447,8 +447,16 @@ text `"mx"`. This applies equally to forward and backward directions.
 
 **Why direction matters — reconsidering the last matched part:**
 
-The `direction` parameter resolves how completions behave when the
-user is typing forward versus backspacing. The core rule is simple:
+The `direction` parameter (`"forward"` or `"backward"`) is provided by
+the host (shell or CLI) to tell the grammar matcher whether to advance
+to the next grammar part or back up to the last matched part. The host
+determines direction by comparing the current input to the previous
+input (see `completion.md` [`CompletionDirection`] for the full pipeline
+contract and the design trade-off of host-provided vs. backend-inferred
+direction).
+
+The grammar matcher uses `direction` to resolve structural ambiguity at
+match boundaries. The core rule is simple:
 
 > **`directionSensitive=true` when backward has something to
 > reconsider** — a word, keyword, wildcard, or number was fully
@@ -456,11 +464,7 @@ user is typing forward versus backspacing. The core rule is simple:
 
 Forward completion offers what comes _next_ in the grammar. Backward
 completion _backs up_ to the last successfully matched part and
-re-offers it, letting the user reconsider their choice. The shell
-determines direction by comparing the current input to the previous
-input: if the new input is shorter and is a strict prefix of the old
-input, the user is backspacing (`"backward"`); otherwise they are
-typing ahead (`"forward"`).
+re-offers it, letting the user reconsider their choice.
 
 This rule naturally handles three kinds of ambiguity:
 

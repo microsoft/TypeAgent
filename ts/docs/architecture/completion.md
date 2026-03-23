@@ -446,76 +446,6 @@ See `actionGrammar.md` Spacing modes for how the grammar matcher
 determines `separatorMode` from spacing annotations, including the
 "separator already consumed" override.
 
-### `directionSensitive`
-
-A boolean flowing through the backend pipeline (grammar → cache →
-dispatcher), indicating that the result would differ if the opposite
-`direction` had been sent.
-
-**Why it exists:** Re-fetching completions from the backend on every
-keystroke is expensive. Most of the time, switching direction (e.g.,
-the user backspaces after typing) does not change what completions are
-valid — the input position is unambiguous and both directions would
-return the same result. `directionSensitive` is an optimization signal
-that tells the shell: "you only need to re-fetch when the user changes
-direction if this flag is `true`." When it is `false`, the shell skips
-the re-fetch entirely (trigger A4 does not fire), reusing the cached
-result regardless of whether the user is now typing or backspacing.
-
-**The rule:** The grammar matcher sets `directionSensitive=true`
-whenever backward completion has something to reconsider — i.e., a
-word, keyword, wildcard, or number was fully matched with no trailing
-separator to commit it. Forward offers what comes _next_; backward
-backs up to re-offer the last thing the user passed. If those two
-results differ, `directionSensitive=true`.
-
-This arises at wildcard-keyword boundary forks, multi-word keyword
-boundaries, and alternation-prefix overlaps. See `actionGrammar.md`
-"Why direction matters" for detailed examples and the Option A/B
-design trade-off.
-
-**When `directionSensitive=false`:**
-
-- **Nothing was fully matched** — only a partial match exists (e.g.,
-  `"pla"` against `play music`). No completed part to back up to.
-- **Trailing separator commits** — a space or punctuation after a
-  matched part pins the position. The user has moved past the
-  boundary (e.g., `"play "` with trailing space).
-- **Category 3b (dirty partial)** — trailing text didn't match any
-  part. Both directions produce the same alternative set.
-
-Examples with rule `play <song> by <artist>`:
-
-| Input         | `directionSensitive` | Why                                                             |
-| ------------- | -------------------- | --------------------------------------------------------------- |
-| `play`        | `true`               | `"play"` fully matched, backward can reconsider                 |
-| `play `       | `false`              | Trailing space commits                                          |
-| `play music`  | `true`               | `"music"` in wildcard, keyword `"by"` next; no trailing space   |
-| `play music ` | `false`              | Trailing space commits                                          |
-| `pla`         | `false`              | Only partial match (cat 3b) — nothing to back up to             |
-| `play r`      | `false`              | Category 3b (dirty partial) — direction does not affect the set |
-
-Examples with keyword-only rules:
-
-| Rule                   | Input    | `directionSensitive` | Why                                                        |
-| ---------------------- | -------- | -------------------- | ---------------------------------------------------------- |
-| `play music`           | `play`   | `true`               | `"play"` fully matched, no trailing space                  |
-| `play music`           | `play `  | `false`              | Trailing space commits                                     |
-| `play music`           | `pla`    | `false`              | Only partial match — nothing to back up to                 |
-| `(play \| player) now` | `play`   | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]` |
-| `(play \| player) now` | `play `  | `false`              | Trailing space commits                                     |
-| `(play \| player) now` | `player` | `true`               | `"player"` fully matched, no trailing space                |
-
-Exception: in `[spacing=none]` mode, whitespace is not a separator,
-so `directionSensitive` is always `true` when any word has been fully
-matched — trailing spaces do not commit.
-
-The dispatcher may additionally set `directionSensitive=true` at the
-command level — for example, when a subcommand name is both a valid
-complete command and a prefix of a longer one.
-
-Merge rule: OR across sources (sensitive if _any_ source is sensitive).
-
 ### `CompletionDirection`
 
 The host-provided signal that resolves structural ambiguity when the input
@@ -536,6 +466,25 @@ parameter tells the backend which of these two intents to serve, so the
 completion menu shows contextually appropriate suggestions for whichever
 editing action the user is performing.
 
+**Why the host must provide direction:** The completion backend is
+stateless — each call to `getCommandCompletion()` receives only the
+current input string, with no memory of previous inputs. Only the host
+(shell or CLI) has access to input history and can compare the current
+input to the previous input to determine whether the user is advancing
+or backspacing. The shell makes this determination by checking whether
+the new input is shorter than and a strict prefix of the old input
+(`"backward"`); otherwise it is `"forward"`.
+
+> **Design trade-off — why not infer direction in the backend?**
+> The alternative would be a stateful backend that remembers the
+> previous input per session. This would eliminate the `direction`
+> parameter but at the cost of session state management, concurrency
+> concerns (multiple tabs, undo/redo), and coupling the backend to
+> input sequencing. The stateless design keeps the backend simple and
+> idempotent — the same `(input, direction)` pair always produces the
+> same result — while pushing the trivial "is this a backspace?"
+> comparison to the host, which already has the information.
+
 Direction is only consulted at structural ambiguity points (command-level
 and flag-level resolution). For free-form parameter values the backend
 uses the input's trailing whitespace to decide whether the last token is
@@ -548,6 +497,71 @@ satisfied.
 Direction is advisory: an incorrect signal (e.g., `"forward"` during
 backspace) may produce suboptimal completions but cannot crash or corrupt
 state, since the backend is stateless per-request.
+
+### `directionSensitive`
+
+A boolean flowing through the backend pipeline (grammar → cache →
+dispatcher), indicating that the result would differ if the opposite
+`direction` (see [`CompletionDirection`](#completiondirection) above)
+had been sent.
+
+**Why it exists:** Re-fetching completions from the backend on every
+keystroke is expensive. Most of the time, switching direction (e.g.,
+the user backspaces after typing) does not change what completions are
+valid — the input position is unambiguous and both directions would
+return the same result. `directionSensitive` is an optimization signal
+that tells the shell: "you only need to re-fetch when the user changes
+direction if this flag is `true`." When it is `false`, the shell skips
+the re-fetch entirely (trigger A4 does not fire), reusing the cached
+result regardless of whether the user is now typing or backspacing.
+
+**The rule:** The grammar matcher sets `directionSensitive=true`
+whenever backward completion has something to reconsider — i.e., a
+word, keyword, wildcard, or number was fully matched with no trailing
+separator to commit it. Forward offers what comes _next_; backward
+backs up to re-offer the last thing the user passed. If those two
+results differ, `directionSensitive=true`.
+
+This arises at three kinds of structural ambiguity: wildcard-keyword
+boundary forks, multi-word keyword boundaries, and alternation-prefix
+overlaps. See `actionGrammar.md` "Why direction matters" for detailed
+examples and the Option A/B design trade-off.
+
+**When `directionSensitive=false`:**
+
+- **Nothing was fully matched** — only a partial match exists (e.g.,
+  `"pla"` against `play music`). No completed part to back up to.
+- **Trailing separator commits** — a space or punctuation after a
+  matched part pins the position. The user has moved past the
+  boundary (e.g., `"play "` with trailing space).
+- **Category 3b (dirty partial)** — trailing text didn't match any
+  part. Both directions produce the same alternative set.
+
+**Examples:** The table below shows `directionSensitive` for various
+inputs. The general pattern: `true` when a part is fully matched with
+no trailing separator; `false` when partial, committed by whitespace,
+or dirty.
+
+| Rule                   | Input         | `directionSensitive` | Why                                                             |
+| ---------------------- | ------------- | -------------------- | --------------------------------------------------------------- |
+| `play <song> by <a>`   | `play`        | `true`               | `"play"` fully matched, backward can reconsider                 |
+| `play <song> by <a>`   | `play `       | `false`              | Trailing space commits                                          |
+| `play <song> by <a>`   | `play Never`  | `true`               | `"Never"` in wildcard, keyword `"by"` next; no trailing space   |
+| `play <song> by <a>`   | `pla`         | `false`              | Only partial match (cat 3b) — nothing to back up to             |
+| `play music`           | `play`        | `true`               | `"play"` fully matched, no trailing space                       |
+| `play music`           | `play `       | `false`              | Trailing space commits                                          |
+| `(play \| player) now` | `play`        | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`      |
+| `(play \| player) now` | `play `       | `false`              | Trailing space commits                                          |
+
+Exception: in `[spacing=none]` mode, whitespace is not a separator,
+so `directionSensitive` is always `true` when any word has been fully
+matched — trailing spaces do not commit.
+
+The dispatcher may additionally set `directionSensitive=true` at the
+command level — for example, when a subcommand name is both a valid
+complete command and a prefix of a longer one.
+
+Merge rule: OR across sources (sensitive if _any_ source is sensitive).
 
 ### `closedSet`
 
