@@ -270,6 +270,47 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
+        async chatPanelGetCompletions(params: any) {
+            try {
+                const dispatcher = await connectToDispatcher();
+                const result = await dispatcher.getCommandCompletion(
+                    params.input,
+                    "forward",
+                );
+                if (result.completions.length === 0) return null;
+                const completions: string[] = [];
+                for (const group of result.completions) {
+                    for (const c of group.completions) {
+                        completions.push(c);
+                    }
+                }
+                const startIndex = result.startIndex;
+                const prefix = params.input.substring(0, startIndex);
+                const separator =
+                    result.separatorMode === "space" ||
+                    result.separatorMode === "spacePunctuation"
+                        ? " "
+                        : "";
+                return {
+                    completions,
+                    startIndex,
+                    prefix: prefix + separator,
+                };
+            } catch {
+                return null;
+            }
+        },
+
+        async chatPanelGetHistory() {
+            try {
+                const dispatcher = await connectToDispatcher();
+                const entries = await dispatcher.getDisplayHistory();
+                return entries ?? [];
+            } catch {
+                return [];
+            }
+        },
+
         // =============================================================
         // Complex local handlers (HTML capture + agent forward)
         // =============================================================

@@ -17,6 +17,12 @@ import {
     defaultChatSettings,
 } from "./platformAdapter.js";
 
+export interface CompletionResult {
+    completions: string[];
+    startIndex: number;
+    prefix: string;
+}
+
 export interface ChatPanelOptions {
     platformAdapter: PlatformAdapter;
     settingsView?: ChatSettingsView;
@@ -24,6 +30,8 @@ export interface ChatPanelOptions {
     onSend?: (text: string) => void;
     /** Callback when user clicks stop or presses Escape during processing. */
     onCancel?: (requestId: string) => void;
+    /** Callback to fetch command completions for the current input. */
+    getCompletions?: (input: string) => Promise<CompletionResult | null>;
 }
 
 /**
@@ -40,14 +48,24 @@ export class ChatPanel {
     private readonly settingsView: ChatSettingsView;
 
     private readonly stopButton: HTMLButtonElement;
+    private readonly ghostSpan: HTMLSpanElement;
     private currentAgentContainer: AgentMessageContainer | undefined;
     private statusContainer: AgentMessageContainer | undefined;
+    private historyAgentContainer: AgentMessageContainer | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
     private activeRequestId?: string;
 
+    // Completion state
+    private completions: string[] = [];
+    private completionIndex = 0;
+    private completionPrefix = "";
+    private completionFilterStart = 0;
+    private completionTimer: ReturnType<typeof setTimeout> | undefined;
+
     public onSend?: (text: string) => void;
     public onCancel?: (requestId: string) => void;
+    public getCompletions?: (input: string) => Promise<CompletionResult | null>;
 
     constructor(
         private readonly rootElement: HTMLElement,
@@ -57,6 +75,7 @@ export class ChatPanel {
         this.settingsView = options.settingsView ?? defaultChatSettings;
         this.onSend = options.onSend;
         this.onCancel = options.onCancel;
+        this.getCompletions = options.getCompletions;
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -100,7 +119,17 @@ export class ChatPanel {
             }
         });
 
-        this.inputArea.appendChild(this.textInput);
+        // Ghost text for inline completion preview
+        this.ghostSpan = document.createElement("span");
+        this.ghostSpan.className = "chat-input-ghost";
+
+        // Wrap textarea + ghost in a container so ghost flows inline after typed text
+        const textWrapper = document.createElement("div");
+        textWrapper.className = "chat-input-text-wrapper";
+        textWrapper.appendChild(this.textInput);
+        textWrapper.appendChild(this.ghostSpan);
+
+        this.inputArea.appendChild(textWrapper);
         this.inputArea.appendChild(this.sendButton);
         this.inputArea.appendChild(this.stopButton);
 
@@ -112,16 +141,38 @@ export class ChatPanel {
 
     private setupInputHandlers() {
         this.textInput.addEventListener("keydown", (e) => {
+            if (e.key === "Tab" && this.completions.length > 0) {
+                e.preventDefault();
+                this.acceptCompletion();
+                return;
+            }
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
+                this.clearCompletions();
                 this.send();
             } else if (e.key === "Escape") {
+                if (this.completions.length > 0) {
+                    this.clearCompletions();
+                    return;
+                }
                 if (this.activeRequestId) {
                     this.onCancel?.(this.activeRequestId);
                     return;
                 }
                 this.textInput.textContent = "";
                 this.sendButton.disabled = true;
+            } else if (
+                e.key === "ArrowUp" &&
+                this.completions.length > 0
+            ) {
+                e.preventDefault();
+                this.cycleCompletion(-1);
+            } else if (
+                e.key === "ArrowDown" &&
+                this.completions.length > 0
+            ) {
+                e.preventDefault();
+                this.cycleCompletion(1);
             } else if (e.key === "ArrowUp" && !this.textInput.textContent) {
                 e.preventDefault();
                 this.navigateHistory(-1);
@@ -133,9 +184,96 @@ export class ChatPanel {
 
         this.textInput.addEventListener("input", () => {
             this.sendButton.disabled = !this.textInput.textContent?.trim();
+            this.scheduleCompletionFetch();
         });
 
         this.sendButton.addEventListener("click", () => this.send());
+    }
+
+    private scheduleCompletionFetch() {
+        if (this.completionTimer) clearTimeout(this.completionTimer);
+        if (!this.getCompletions) {
+            this.clearCompletions();
+            return;
+        }
+        const input = this.textInput.textContent ?? "";
+        if (!input.trim()) {
+            this.clearCompletions();
+            return;
+        }
+        this.completionTimer = setTimeout(async () => {
+            const current = this.textInput.textContent ?? "";
+            if (current !== input) return;
+            try {
+                const result = await this.getCompletions!(input);
+                if ((this.textInput.textContent ?? "") !== input) return;
+                if (result && result.completions.length > 0) {
+                    this.completions = result.completions;
+                    this.completionIndex = 0;
+                    this.completionPrefix = result.prefix;
+                    this.completionFilterStart = result.startIndex;
+                    this.renderGhostText();
+                } else {
+                    this.clearCompletions();
+                }
+            } catch {
+                this.clearCompletions();
+            }
+        }, 150);
+    }
+
+    private renderGhostText() {
+        if (this.completions.length === 0) {
+            this.ghostSpan.textContent = "";
+            return;
+        }
+        const input = this.textInput.textContent ?? "";
+        const completion = this.completions[this.completionIndex];
+        const full = this.completionPrefix + completion;
+        if (full.length > input.length && full.startsWith(input)) {
+            this.ghostSpan.textContent = full.slice(input.length);
+        } else {
+            this.ghostSpan.textContent = completion;
+        }
+    }
+
+    private acceptCompletion() {
+        if (this.completions.length === 0) return;
+        const completion = this.completions[this.completionIndex];
+        const full = this.completionPrefix + completion;
+        this.textInput.textContent = full;
+        this.sendButton.disabled = !full.trim();
+        this.clearCompletions();
+        this.moveCursorToEnd();
+    }
+
+    private cycleCompletion(delta: number) {
+        if (this.completions.length === 0) return;
+        this.completionIndex =
+            (this.completionIndex + delta + this.completions.length) %
+            this.completions.length;
+        this.renderGhostText();
+    }
+
+    private clearCompletions() {
+        this.completions = [];
+        this.completionIndex = 0;
+        this.ghostSpan.textContent = "";
+    }
+
+    private moveCursorToEnd() {
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (this.textInput.childNodes.length > 0) {
+            const lastNode =
+                this.textInput.childNodes[this.textInput.childNodes.length - 1];
+            range.setStartAfter(lastNode);
+        } else {
+            range.setStart(this.textInput, 0);
+        }
+        range.collapse(true);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
     }
 
     private navigateHistory(delta: number) {
@@ -275,6 +413,62 @@ export class ChatPanel {
     /** Focus the text input. */
     public focus() {
         this.textInput.focus();
+    }
+
+    /** Add a separator for previous session history. */
+    public addHistorySeparator(label: string = "previously") {
+        const sentinel = this.messageDiv.firstElementChild!;
+        const sep = document.createElement("div");
+        sep.className = "chat-history-separator";
+        sep.textContent = label;
+        sentinel.before(sep);
+    }
+
+    /** Add a dimmed history user message. */
+    public addHistoryUserMessage(text: string) {
+        const sentinel = this.messageDiv.firstElementChild!;
+        const container = document.createElement("div");
+        container.className = "chat-message-container-user chat-history-message";
+
+        const bodyDiv = document.createElement("div");
+        bodyDiv.className = "chat-message-body-hide-metrics chat-message-user";
+
+        const messageDiv = document.createElement("div");
+        messageDiv.className = "chat-message-content";
+        const span = document.createElement("span");
+        span.className = "chat-message-user-text";
+        span.textContent = text;
+        messageDiv.appendChild(span);
+        bodyDiv.appendChild(messageDiv);
+        container.appendChild(bodyDiv);
+
+        sentinel.before(container);
+    }
+
+    /** Add a dimmed history agent message. */
+    public addHistoryAgentMessage(
+        content: DisplayContent,
+        source?: string,
+        sourceIcon?: string,
+        appendMode?: DisplayAppendMode,
+    ) {
+        if (!this.historyAgentContainer || !appendMode) {
+            const sentinel = this.messageDiv.firstElementChild!;
+            this.historyAgentContainer = new AgentMessageContainer(
+                sentinel,
+                source ?? "assistant",
+                sourceIcon ?? "🤖",
+                this.settingsView,
+                this.platformAdapter,
+            );
+            this.historyAgentContainer.setHistoryStyle();
+        }
+        this.historyAgentContainer.setMessage(content, source, appendMode);
+    }
+
+    /** Reset the history agent container (call between separate history entries). */
+    public resetHistoryAgent() {
+        this.historyAgentContainer = undefined;
     }
 
     /** Enable or disable the input. */
@@ -456,6 +650,11 @@ class AgentMessageContainer {
         if (icon) {
             this.iconDiv.textContent = icon;
         }
+    }
+
+    /** Mark this container as a dimmed history message. */
+    public setHistoryStyle() {
+        this.div.classList.add("chat-history-message");
     }
 
     /** Remove this container from the DOM. */

@@ -51,18 +51,24 @@
   pointer-events: none;
 }
 
-.user-textarea {
-  padding: 5px 8px;
+.chat-input-text-wrapper {
   display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   width: calc(100% - 48px);
-  overflow: hidden;
-  resize: none;
-  outline: 0px solid transparent;
+  padding: 5px 8px;
   min-height: 30px;
+  line-height: 30px;
+  overflow: hidden;
+}
+
+.user-textarea {
+  display: inline;
+  outline: 0px solid transparent;
   line-height: 30px;
   font-family: inherit;
   font-size: inherit;
-  align-self: flex-start;
+  min-width: 1px;
 }
 
 /* Placeholder for contenteditable */
@@ -91,6 +97,34 @@
   color: #e74c3c;
   font-size: 16px;
   line-height: 24px;
+}
+
+/* Ghost text for inline command completion preview */
+.chat-input-ghost {
+  color: #999;
+  pointer-events: none;
+  white-space: pre;
+  line-height: 30px;
+  font-family: inherit;
+  font-size: inherit;
+  user-select: none;
+}
+
+/* =========================================================================
+   Session History
+   ========================================================================= */
+
+.chat-history-separator {
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+  padding: 8px 0;
+  border-top: 1px solid #e0e0e0;
+  margin: 8px 20px;
+}
+
+.chat-history-message {
+  opacity: 0.55;
 }
 
 /* =========================================================================
