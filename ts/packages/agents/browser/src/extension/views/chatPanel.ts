@@ -56,18 +56,18 @@ function initialize() {
         onSend: handleUserMessage,
         getCompletions: async (input: string) => {
             try {
-                return await rpc.invoke("chatPanelGetCompletions", {
+                return (await rpc.invoke("chatPanelGetCompletions", {
                     input,
-                }) as any;
+                })) as any;
             } catch {
                 return null;
             }
         },
         getDynamicDisplay: async (source: string, displayId: string) => {
-            return await rpc.invoke("chatPanelGetDynamicDisplay", {
+            return (await rpc.invoke("chatPanelGetDynamicDisplay", {
                 source,
                 displayId,
-            }) as any;
+            })) as any;
         },
     });
 
@@ -78,104 +78,111 @@ function initialize() {
         {},
         ChatPanelInvokeTargets,
         ChatPanelCallFunctions
-    >({
-        async chatPanelAskYesNo(data) {
-            return chatPanel.askYesNo(data.message, data.defaultValue);
+    >(
+        {
+            async chatPanelAskYesNo(data) {
+                return chatPanel.askYesNo(data.message, data.defaultValue);
+            },
+            async chatPanelProposeAction(data) {
+                return chatPanel.proposeAction(data.actionText, data.source);
+            },
         },
-        async chatPanelProposeAction(data) {
-            return chatPanel.proposeAction(data.actionText, data.source);
-        },
-    }, {
-        dispatcherClear(_data) {
-            chatPanel.clear();
-        },
-        dispatcherExit(_data) {
-            // No-op in extension
-        },
-        dispatcherSetDisplayInfo(data) {
-            chatPanel.setDisplayInfo(data.source, data.actionIndex);
-        },
-        dispatcherSetDisplay(data) {
-            chatPanel.addAgentMessage(
-                data.message.message as DisplayContent,
-                data.message.source,
-                data.message.sourceIcon,
-            );
-        },
-        dispatcherAppendDisplay(data) {
-            chatPanel.addAgentMessage(
-                data.message.message as DisplayContent,
-                data.message.source,
-                data.message.sourceIcon,
-                data.mode as DisplayAppendMode,
-            );
-        },
-        dispatcherSetDynamicDisplay(data) {
-            chatPanel.setDynamicDisplay(
-                data.source,
-                data.displayId,
-                data.nextRefreshMs,
-            );
-        },
-        dispatcherNotify(data) {
-            switch (data.event) {
-                case "explained":
-                    if (data.data?.error) {
+        {
+            dispatcherClear(_data) {
+                chatPanel.clear();
+            },
+            dispatcherExit(_data) {
+                // No-op in extension
+            },
+            dispatcherSetDisplayInfo(data) {
+                chatPanel.setDisplayInfo(data.source, data.actionIndex);
+            },
+            dispatcherSetDisplay(data) {
+                chatPanel.addAgentMessage(
+                    data.message.message as DisplayContent,
+                    data.message.source,
+                    data.message.sourceIcon,
+                );
+            },
+            dispatcherAppendDisplay(data) {
+                chatPanel.addAgentMessage(
+                    data.message.message as DisplayContent,
+                    data.message.source,
+                    data.message.sourceIcon,
+                    data.mode as DisplayAppendMode,
+                );
+            },
+            dispatcherSetDynamicDisplay(data) {
+                chatPanel.setDynamicDisplay(
+                    data.source,
+                    data.displayId,
+                    data.nextRefreshMs,
+                );
+            },
+            dispatcherNotify(data) {
+                switch (data.event) {
+                    case "explained":
+                        if (data.data?.error) {
+                            chatPanel.addAgentMessage(
+                                {
+                                    type: "text",
+                                    content: data.data.error,
+                                    kind: "warning",
+                                },
+                                data.source,
+                            );
+                        }
+                        break;
+                    case "error":
                         chatPanel.addAgentMessage(
                             {
                                 type: "text",
-                                content: data.data.error,
+                                content:
+                                    typeof data.data === "string"
+                                        ? data.data
+                                        : (data.data?.message ?? "Error"),
+                                kind: "error",
+                            },
+                            data.source,
+                        );
+                        break;
+                    case "warning":
+                        chatPanel.addAgentMessage(
+                            {
+                                type: "text",
+                                content:
+                                    typeof data.data === "string"
+                                        ? data.data
+                                        : (data.data?.message ?? "Warning"),
                                 kind: "warning",
                             },
                             data.source,
                         );
-                    }
-                    break;
-                case "error":
-                    chatPanel.addAgentMessage(
-                        {
-                            type: "text",
-                            content:
-                                typeof data.data === "string"
-                                    ? data.data
-                                    : data.data?.message ?? "Error",
-                            kind: "error",
-                        },
-                        data.source,
-                    );
-                    break;
-                case "warning":
-                    chatPanel.addAgentMessage(
-                        {
-                            type: "text",
-                            content:
-                                typeof data.data === "string"
-                                    ? data.data
-                                    : data.data?.message ?? "Warning",
-                            kind: "warning",
-                        },
-                        data.source,
-                    );
-                    break;
-                case "info":
-                case "inline":
-                case "toast":
-                    chatPanel.addAgentMessage(
-                        typeof data.data === "string"
-                            ? { type: "text", content: data.data, kind: "info" }
-                            : (data.data as DisplayContent),
-                        data.source,
-                    );
-                    break;
-            }
+                        break;
+                    case "info":
+                    case "inline":
+                    case "toast":
+                        chatPanel.addAgentMessage(
+                            typeof data.data === "string"
+                                ? {
+                                      type: "text",
+                                      content: data.data,
+                                      kind: "info",
+                                  }
+                                : (data.data as DisplayContent),
+                            data.source,
+                        );
+                        break;
+                }
+            },
+            dispatcherTakeAction(_data) {
+                // Not supported in extension chat panel
+            },
+            dispatcherConnectionStatus(data) {
+                setConnectionStatus(data.connected);
+            },
         },
-        dispatcherTakeAction(_data) {
-            // Not supported in extension chat panel
-        },
-        dispatcherConnectionStatus(data) {
-            setConnectionStatus(data.connected);
-        },
-    });
+    );
     rpc = client.rpc;
 
     // Request connection to the dispatcher
@@ -251,7 +258,7 @@ function attemptConnect() {
 
 async function loadSessionHistory() {
     try {
-        const entries: any[] = await rpc.invoke("chatPanelGetHistory") as any;
+        const entries: any[] = (await rpc.invoke("chatPanelGetHistory")) as any;
         if (!entries || entries.length === 0) return;
 
         chatPanel.addHistorySeparator();

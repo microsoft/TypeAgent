@@ -101,11 +101,7 @@ class TerminalLayout {
         const scrollBottom = height - this.promptRows;
         // Save cursor, move to bottom of scroll region, write, restore
         process.stdout.write(
-            "\x1b[s" +
-                `\x1b[${scrollBottom};1H` +
-                "\n" +
-                text +
-                "\x1b[u",
+            "\x1b[s" + `\x1b[${scrollBottom};1H` + "\n" + text + "\x1b[u",
         );
     }
 
@@ -1105,10 +1101,7 @@ async function questionWithCompletion(
                 getDisplayWidth(message) +
                 getDisplayWidth(input.substring(0, cursorPos));
             const cursorRow = Math.floor(cursorAbsCol / width);
-            layout.moveCursorToFixed(
-                1 + cursorRow,
-                (cursorAbsCol % width) + 1,
-            );
+            layout.moveCursorToFixed(1 + cursorRow, (cursorAbsCol % width) + 1);
             stdout.write(ANSI.showCursor);
 
             prevInputRows = inputRows;
@@ -1623,7 +1616,9 @@ export async function processCommandsEnhanced<T>(
 
         let request: string;
         if (inputs) {
-            process.stdout.write(ANSI.dim + "─".repeat(width) + ANSI.reset + "\n");
+            process.stdout.write(
+                ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
+            );
             request = getNextInput(prompt, inputs, promptColor);
         } else if (getCompletions) {
             // Use inline completion system with scroll region anchored prompt
@@ -1633,7 +1628,9 @@ export async function processCommandsEnhanced<T>(
                 history,
             );
         } else {
-            process.stdout.write(ANSI.dim + "─".repeat(width) + ANSI.reset + "\n");
+            process.stdout.write(
+                ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
+            );
             request = await question(promptColor(prompt), rl);
             if (request.length) {
                 process.stdout.write(

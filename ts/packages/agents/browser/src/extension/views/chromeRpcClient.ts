@@ -16,7 +16,10 @@ import { createRpc } from "@typeagent/agent-rpc/rpc";
 export function createChromeRpcClient<
     InvokeTargets extends Record<string, (...args: any[]) => Promise<any>> = {},
     CallTargets extends Record<string, (...args: any[]) => void> = {},
-    InvokeHandlers extends Record<string, (...args: any[]) => Promise<any>> = {},
+    InvokeHandlers extends Record<
+        string,
+        (...args: any[]) => Promise<any>
+    > = {},
     CallHandlers extends Record<string, (...args: any[]) => void> = {},
 >(
     invokeHandlers?: InvokeHandlers,
@@ -34,12 +37,12 @@ export function createChromeRpcClient<
         },
     );
 
-    const rpc = createRpc<InvokeTargets, CallTargets, InvokeHandlers, CallHandlers>(
-        "browser:view",
-        adapter.channel,
-        invokeHandlers,
-        callHandlers,
-    );
+    const rpc = createRpc<
+        InvokeTargets,
+        CallTargets,
+        InvokeHandlers,
+        CallHandlers
+    >("browser:view", adapter.channel, invokeHandlers, callHandlers);
 
     return { adapter, rpc };
 }

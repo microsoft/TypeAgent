@@ -187,16 +187,10 @@ export class ChatPanel {
                 }
                 this.textInput.textContent = "";
                 this.sendButton.disabled = true;
-            } else if (
-                e.key === "ArrowUp" &&
-                this.completions.length > 0
-            ) {
+            } else if (e.key === "ArrowUp" && this.completions.length > 0) {
                 e.preventDefault();
                 this.cycleCompletion(-1);
-            } else if (
-                e.key === "ArrowDown" &&
-                this.completions.length > 0
-            ) {
+            } else if (e.key === "ArrowDown" && this.completions.length > 0) {
                 e.preventDefault();
                 this.cycleCompletion(1);
             } else if (e.key === "ArrowUp" && !this.textInput.textContent) {
@@ -277,7 +271,9 @@ export class ChatPanel {
     }
 
     private clearAttachmentPreview() {
-        const preview = this.inputArea.querySelector(".chat-attachment-preview");
+        const preview = this.inputArea.querySelector(
+            ".chat-attachment-preview",
+        );
         if (preview) preview.remove();
     }
 
@@ -570,10 +566,7 @@ export class ChatPanel {
      * Show an action proposal with Accept/Cancel buttons.
      * Returns true to accept, false to cancel.
      */
-    public proposeAction(
-        actionText: string,
-        source: string,
-    ): Promise<boolean> {
+    public proposeAction(actionText: string, source: string): Promise<boolean> {
         return new Promise<boolean>((resolve) => {
             const container = this.createAgentContainer(source, "");
             container.setMessage(
@@ -642,8 +635,7 @@ export class ChatPanel {
         this.dynamicDisplays.push({
             source,
             displayId,
-            nextRefreshTime:
-                Date.now() + Math.max(nextRefreshMs, MIN_INTERVAL),
+            nextRefreshTime: Date.now() + Math.max(nextRefreshMs, MIN_INTERVAL),
         });
         this.scheduleDynamicRefresh();
     }
@@ -653,7 +645,10 @@ export class ChatPanel {
         this.dynamicDisplays.sort(
             (a, b) => a.nextRefreshTime - b.nextRefreshTime,
         );
-        const delay = Math.max(0, this.dynamicDisplays[0].nextRefreshTime - Date.now());
+        const delay = Math.max(
+            0,
+            this.dynamicDisplays[0].nextRefreshTime - Date.now(),
+        );
         if (this.dynamicTimer) clearTimeout(this.dynamicTimer);
         this.dynamicTimer = setTimeout(() => {
             this.dynamicTimer = undefined;
@@ -707,7 +702,8 @@ export class ChatPanel {
     public addHistoryUserMessage(text: string) {
         const sentinel = this.messageDiv.firstElementChild!;
         const container = document.createElement("div");
-        container.className = "chat-message-container-user chat-history-message";
+        container.className =
+            "chat-message-container-user chat-history-message";
 
         const bodyDiv = document.createElement("div");
         bodyDiv.className = "chat-message-body-hide-metrics chat-message-user";

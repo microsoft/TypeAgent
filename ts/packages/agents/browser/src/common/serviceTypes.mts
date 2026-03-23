@@ -389,9 +389,7 @@ export type ChatPanelInvokeFunctions = {
         clientRequestId: string;
         attachments?: any[];
     }): Promise<any>;
-    chatPanelGetCompletions(params: {
-        input: string;
-    }): Promise<{
+    chatPanelGetCompletions(params: { input: string }): Promise<{
         completions: string[];
         startIndex: number;
         prefix: string;

@@ -112,11 +112,7 @@ function createChatPanelClientIO(): ClientIO {
         async proposeAction(_requestId, actionTemplates, source) {
             if (rpcInvoke) {
                 try {
-                    const actionText = JSON.stringify(
-                        actionTemplates,
-                        null,
-                        2,
-                    );
+                    const actionText = JSON.stringify(actionTemplates, null, 2);
                     const accepted = await rpcInvoke("chatPanelProposeAction", {
                         actionText,
                         source,
