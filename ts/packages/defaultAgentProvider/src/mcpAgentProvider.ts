@@ -14,6 +14,7 @@ import { AppAgentProvider } from "agent-dispatcher";
 import {
     ArgDefinitions,
     ParsedCommandParams,
+    ParameterDefinitions,
     ActionContext,
 } from "@typeagent/agent-sdk";
 import {
@@ -195,7 +196,7 @@ function getMcpCommandHandlerTable(
                 },
                 run: async (
                     context: ActionContext<unknown>,
-                    params: ParsedCommandParams<{}>,
+                    params: ParsedCommandParams<ParameterDefinitions>,
                 ) => {
                     const instanceConfig: InstanceConfig = structuredClone(
                         configs.getInstanceConfig(),
@@ -203,12 +204,17 @@ function getMcpCommandHandlerTable(
                     if (instanceConfig.mcpServers === undefined) {
                         instanceConfig.mcpServers = {};
                     }
+                    const serverScriptArgs = Object.keys(args).map((k) =>
+                        String(
+                            (params.args as Record<string, unknown>)[k],
+                        ),
+                    );
                     instanceConfig.mcpServers[appAgentName] = {
-                        serverScriptArgs: params.tokens,
+                        serverScriptArgs,
                     };
                     configs.setInstanceConfig(instanceConfig);
                     context.actionIO.appendDisplay(
-                        `Server arguments set to ${params.tokens.join(" ")}.  Please restart TypeAgent to reflect the change.`,
+                        `Server arguments set to ${serverScriptArgs.join(" ")}.  Please restart TypeAgent to reflect the change.`,
                     );
                 },
             },
