@@ -117,6 +117,17 @@ async function startShell(testGreetings: boolean = false): Promise<Page> {
                 { timeout: 120000 },
             );
 
+            // Wait for the display-log replay to complete and all historical
+            // messages to be marked.  dispatcherInitialized() in the renderer
+            // sets data-dispatcher-ready on the scroll container only after it
+            // has finished replaying the display log and marking those messages
+            // as .history, so waiting for this attribute guarantees a stable DOM
+            // before tests start sending requests.
+            const scrollContainer = mainWindow.locator(
+                ".chat[data-dispatcher-ready='true']",
+            );
+            await scrollContainer.waitFor({ timeout: 120000, state: "attached" });
+
             return mainWindow;
         } catch (e) {
             console.warn(
