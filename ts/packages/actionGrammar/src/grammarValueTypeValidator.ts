@@ -1679,10 +1679,18 @@ function validateObjectValue(
                 ? { type: "variable", name: fieldKey }
                 : propValue;
 
+        // When the schema field is optional, the value may legitimately be
+        // `undefined` at runtime (e.g. from an optional grammar capture
+        // `$(x:T)?`).  Widen the expected type to include `undefined` so
+        // that `T | undefined` validates cleanly against the optional field.
+        const expectedFieldType = fieldInfo.optional
+            ? SchemaCreator.union(fieldInfo.type, SchemaCreator.undefined_())
+            : fieldInfo.type;
+
         errors.push(
             ...validateValueType(
                 actualValue,
-                fieldInfo.type,
+                expectedFieldType,
                 variableTypes,
                 resolvedTypes,
                 propPath,
