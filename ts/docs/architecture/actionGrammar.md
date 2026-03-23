@@ -492,7 +492,7 @@ input `"play"`:
 - **Backward** backs up to the matched `"play"` and re-offers it at
   `matchedPrefixLength=0`. Meanwhile, the sibling `"player"` branch
   independently offers `"player"` at `matchedPrefixLength=0` (via
-  category 3b). Both survive because they share the same prefix
+  Category 3b). Both survive because they share the same prefix
   length. The user sees `["play", "player"]` — the alternation
   re-opens.
 
@@ -506,9 +506,9 @@ input `"play"`:
 > — for three reasons:
 >
 > 1. **Consistency.** Categories 1 and 2 already use the same broad
->    `hasPartToReconsider` check (`state.index >= prefix.length &&
-lastMatchedPartInfo !== undefined`). Having Category 3a use a
->    narrower condition was an unnecessary special case.
+>    "has a part to reconsider" check (fully consumed prefix with a
+>    prior matched part). Having Category 3a use a narrower condition
+>    was an unnecessary special case.
 > 2. **Correctness.** The extra re-fetch for `play <song>` input
 >    `"play"` is harmless — backward simply re-offers `"play"` and
 >    the user sees the same wildcard property completion. The cost is
@@ -523,7 +523,7 @@ lastMatchedPartInfo !== undefined`). Having Category 3a use a
 
 - **Nothing was fully matched** (e.g., `"pla"` against `play music`):
   There is no completed part to back up to. Both directions produce
-  the same partial match (category 3b) offering `"play"`.
+  the same partial match (Category 3b) offering `"play"`.
 - **Trailing separator commits:** A trailing space (or punctuation)
   after a keyword "commits" the match position — the user has moved
   past the boundary. Both directions agree on the committed position.
@@ -531,7 +531,8 @@ lastMatchedPartInfo !== undefined`). Having Category 3a use a
   directions. Exception: in `[spacing=none]` mode, whitespace is not a
   separator, so `directionSensitive` is always `true` when any word has
   been fully matched — trailing spaces do not commit.
-  **Metadata produced:**
+
+**Metadata produced:**
 
 - `matchedPrefixLength` — characters consumed; becomes `startIndex`
   upstream in the completion pipeline.
@@ -562,9 +563,9 @@ lastMatchedPartInfo !== undefined`). Having Category 3a use a
   to reconsider — a word, keyword, wildcard, or number was fully matched
   with no trailing separator to commit it. See "Why direction matters"
   above for examples. It is `false` when nothing was fully matched
-  (category 3b partial) or when a trailing separator commits the
+  (Category 3b partial) or when a trailing separator commits the
   position.
-  For exact matches (category 1),
+  For exact matches (Category 1),
   it is `true` when the rule contains a wildcard, a number variable,
   a sub-rule variable capture, or a multi-part keyword — any part
   that backward completion could reconsider.

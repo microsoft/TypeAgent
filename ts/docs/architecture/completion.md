@@ -199,7 +199,8 @@ outcomes (exact, clean partial, pending wildcard, dirty partial) and
 produces metadata that flows through the cache, dispatcher, and shell
 layers. For the full algorithm — completion categories, per-direction
 behavior, partial keyword detection, spacing annotation semantics, and
-the Option A design trade-off — see `actionGrammar.md`.
+the Option A/B design trade-off (always back up vs. alternation-only
+back up) — see `actionGrammar.md`.
 
 **Metadata produced** (see [Key types](#key-types) for full definitions):
 
@@ -210,6 +211,7 @@ the Option A design trade-off — see `actionGrammar.md`.
 - `separatorMode` — determined by the rule's `[spacing=...]` annotation
 - `closedSet` — `true` when all completions are grammar keywords
 - `directionSensitive` — `true` when backward completion would differ
+  (see [`directionSensitive`](#directionsensitive) below)
 - `openWildcard` — `true` at ambiguous wildcard boundaries
 
 ---
@@ -542,16 +544,16 @@ inputs. The general pattern: `true` when a part is fully matched with
 no trailing separator; `false` when partial, committed by whitespace,
 or dirty.
 
-| Rule                   | Input         | `directionSensitive` | Why                                                             |
-| ---------------------- | ------------- | -------------------- | --------------------------------------------------------------- |
-| `play <song> by <a>`   | `play`        | `true`               | `"play"` fully matched, backward can reconsider                 |
-| `play <song> by <a>`   | `play `       | `false`              | Trailing space commits                                          |
-| `play <song> by <a>`   | `play Never`  | `true`               | `"Never"` in wildcard, keyword `"by"` next; no trailing space   |
-| `play <song> by <a>`   | `pla`         | `false`              | Only partial match (cat 3b) — nothing to back up to             |
-| `play music`           | `play`        | `true`               | `"play"` fully matched, no trailing space                       |
-| `play music`           | `play `       | `false`              | Trailing space commits                                          |
-| `(play \| player) now` | `play`        | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`      |
-| `(play \| player) now` | `play `       | `false`              | Trailing space commits                                          |
+| Rule                   | Input        | `directionSensitive` | Why                                                           |
+| ---------------------- | ------------ | -------------------- | ------------------------------------------------------------- |
+| `play <song> by <a>`   | `play`       | `true`               | `"play"` fully matched, backward can reconsider               |
+| `play <song> by <a>`   | `play `      | `false`              | Trailing space commits                                        |
+| `play <song> by <a>`   | `play Never` | `true`               | `"Never"` in wildcard, keyword `"by"` next; no trailing space |
+| `play <song> by <a>`   | `pla`        | `false`              | Only partial match (Category 3b) — nothing to back up to      |
+| `play music`           | `play`       | `true`               | `"play"` fully matched, no trailing space                     |
+| `play music`           | `play `      | `false`              | Trailing space commits                                        |
+| `(play \| player) now` | `play`       | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`    |
+| `(play \| player) now` | `play `      | `false`              | Trailing space commits                                        |
 
 Exception: in `[spacing=none]` mode, whitespace is not a separator,
 so `directionSensitive` is always `true` when any word has been fully
@@ -592,8 +594,10 @@ that could absorb more text, moving the boundary forward — for example,
 a keyword completion following a wildcard that was finalized at
 end-of-input, or a backward completion backing up to a keyword that had
 pinned the end of a wildcard. The ambiguity persists until further
-context structurally resolves it. See `actionGrammar.md` for the full
-grammar-level analysis.
+context structurally resolves it (e.g., the user types enough after the
+keyword that the wildcard-absorbing path can no longer match at the same
+prefix length). See `actionGrammar.md` for the full grammar-level
+analysis.
 
 Values:
 

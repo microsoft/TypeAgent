@@ -1968,14 +1968,13 @@ export function matchGrammarCompletion(
                 // valid wildcard content).
                 // Backward reconsidering is appropriate when:
                 //  (a) the last matched part followed a captured
-                //      wildcard (afterWildcard) — wildcard-keyword
-                //      boundary fork, OR
+                //      wildcard — wildcard-keyword boundary fork, OR
                 //  (b) the prefix was fully consumed before the
                 //      wildcard started (state.index >= prefix.length)
                 //      — the user hasn't typed into the wildcard yet
                 //      and may want to reconsider the preceding part
                 //      (e.g., alternation-prefix overlap:
-                //      (play|plays) <song>, input "play").
+                //      (play | player) <song>, input "play").
                 const canReconsider3a =
                     state.lastMatchedPartInfo !== undefined &&
                     (state.lastMatchedPartInfo.afterWildcard ||
