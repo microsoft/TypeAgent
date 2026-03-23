@@ -391,55 +391,72 @@ function stripRefFromUnion(type: SchemaType, refName: string): SchemaType {
     return SchemaCreator.union(...remaining);
 }
 
+/**
+ * Classifies how a grammar rule produces its output value.
+ * Used by both `deriveAlternativeType` (type inference) and
+ * `collectLeafValues` in grammarCompiler.ts (validation collection).
+ */
+export type RuleValueKind =
+    | { kind: "explicit" } // rule.value exists
+    | { kind: "variable"; part: GrammarPart } // single-variable implicit
+    | { kind: "passthrough"; rules: GrammarRule[]; name?: string | undefined } // bare rule-ref
+    | { kind: "default" } // zero-variable single string/phraseSet part → matched text
+    | { kind: "none" }; // multi-var or no value
+
+export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
+    if (rule.value !== undefined) {
+        return { kind: "explicit" };
+    }
+    const variableParts = rule.parts.filter((p) => p.variable !== undefined);
+    if (variableParts.length === 1) {
+        return { kind: "variable", part: variableParts[0] };
+    }
+    if (variableParts.length === 0 && rule.parts.length === 1) {
+        const part = rule.parts[0];
+        if (part.type === "rules") {
+            return {
+                kind: "passthrough",
+                rules: part.rules,
+                name: part.name,
+            };
+        }
+        if (part.type === "string" || part.type === "phraseSet") {
+            return { kind: "default" };
+        }
+    }
+    return { kind: "none" };
+}
+
 function deriveAlternativeType(
     rule: GrammarRule,
     cache: Map<GrammarRule[], SchemaType>,
 ): SchemaType {
-    if (rule.value !== undefined) {
-        // Explicit value expression — build a resolver from the rule's parts
-        const resolveVar: ResolveVariable = (name) => {
-            for (const part of rule.parts) {
-                if (part.variable === name) {
-                    return derivePartType(part, cache);
+    const kind = classifyRuleValue(rule);
+    switch (kind.kind) {
+        case "explicit": {
+            const resolveVar: ResolveVariable = (name) => {
+                for (const part of rule.parts) {
+                    if (part.variable === name) {
+                        return derivePartType(part, cache);
+                    }
                 }
-            }
-            return undefined;
-        };
-        return deriveValueType(rule.value, resolveVar);
-    }
-
-    // Check for single-variable implicit (value IS the variable's capture)
-    const variableParts = rule.parts.filter((p) => p.variable !== undefined);
-    if (variableParts.length === 1) {
-        return derivePartType(variableParts[0], cache);
-    }
-
-    // Single-part passthrough (bare rule ref, no variables)
-    if (
-        variableParts.length === 0 &&
-        rule.parts.length === 1 &&
-        rule.parts[0].type === "rules"
-    ) {
-        return deriveRuleValueType(
-            rule.parts[0].rules,
-            cache,
-            rule.parts[0].name,
-        );
-    }
-
-    // Multi-variable implicit: output is an object keyed by variable names
-    if (variableParts.length > 1) {
-        const fields: Record<string, SchemaObjectField> = {};
-        for (const p of variableParts) {
-            fields[p.variable!] = {
-                type: derivePartType(p, cache),
-                optional: p.optional || undefined,
+                return undefined;
             };
+            return deriveValueType(rule.value!, resolveVar);
         }
-        return SchemaCreator.obj(fields);
+        case "variable":
+            return derivePartType(kind.part, cache);
+        case "passthrough":
+            return deriveRuleValueType(kind.rules, cache, kind.name);
+        case "default":
+            // Single string/phraseSet part produces a string value at runtime
+            // (the matched text).
+            return SchemaCreator.string();
+        case "none":
+            // Multi-variable implicit rules don't produce a value at
+            // runtime (the compiler warns and sets hasValue = false).
+            return ANY_TYPE;
     }
-
-    return ANY_TYPE;
 }
 
 function derivePartType(
@@ -482,11 +499,32 @@ type ResolveVariable = (name: string) => SchemaType | undefined;
  * Derives the output SchemaType of a compiled value expression node.
  * The `resolveVar` callback is the only point of variation between
  * compilation and validation contexts.
+ *
+ * When `typeCache` is provided, results are memoized so that a subsequent
+ * validation pass can look up child types without re-traversing the tree.
  */
 function deriveValueType(
     value: CompiledValueNode,
     resolveVar: ResolveVariable,
     errors?: ValueTypeError[],
+    typeCache?: Map<CompiledValueNode, SchemaType>,
+): SchemaType {
+    if (typeCache !== undefined) {
+        const cached = typeCache.get(value);
+        if (cached !== undefined) return cached;
+    }
+    const result = deriveValueTypeImpl(value, resolveVar, errors, typeCache);
+    if (typeCache !== undefined) {
+        typeCache.set(value, result);
+    }
+    return result;
+}
+
+function deriveValueTypeImpl(
+    value: CompiledValueNode,
+    resolveVar: ResolveVariable,
+    errors: ValueTypeError[] | undefined,
+    typeCache: Map<CompiledValueNode, SchemaType> | undefined,
 ): SchemaType {
     switch (value.type) {
         case "literal":
@@ -523,6 +561,7 @@ function deriveValueType(
                     fieldValue,
                     resolveVar,
                     errors,
+                    typeCache,
                 );
                 fields[key] = { type: fieldType };
             }
@@ -535,7 +574,12 @@ function deriveValueType(
             }
             const elementTypes: SchemaType[] = [];
             for (const elem of arrNode.value) {
-                const elemType = deriveValueType(elem, resolveVar, errors);
+                const elemType = deriveValueType(
+                    elem,
+                    resolveVar,
+                    errors,
+                    typeCache,
+                );
                 if (elemType === ERROR_TYPE) {
                     return SchemaCreator.array(ERROR_TYPE);
                 }
@@ -552,8 +596,18 @@ function deriveValueType(
 
         // ── Value expression nodes ────────────────────────────────────────
         case "binaryExpression": {
-            const leftType = deriveValueType(value.left, resolveVar, errors);
-            const rightType = deriveValueType(value.right, resolveVar, errors);
+            const leftType = deriveValueType(
+                value.left,
+                resolveVar,
+                errors,
+                typeCache,
+            );
+            const rightType = deriveValueType(
+                value.right,
+                resolveVar,
+                errors,
+                typeCache,
+            );
             switch (value.operator) {
                 case "===":
                 case "!==":
@@ -616,11 +670,13 @@ function deriveValueType(
                 value.consequent,
                 resolveVar,
                 errors,
+                typeCache,
             );
             const alternateType = deriveValueType(
                 value.alternate,
                 resolveVar,
                 errors,
+                typeCache,
             );
             if (consequentType === ERROR_TYPE || alternateType === ERROR_TYPE)
                 return ERROR_TYPE;
@@ -630,7 +686,7 @@ function deriveValueType(
         }
         case "memberExpression": {
             let objectType = resolveType(
-                deriveValueType(value.object, resolveVar, errors),
+                deriveValueType(value.object, resolveVar, errors, typeCache),
             );
             if (objectType === ERROR_TYPE) return ERROR_TYPE;
             // Optional chaining: strip undefined before lookup, add back after
@@ -714,7 +770,12 @@ function deriveValueType(
             }
             if (typeof value.callee.property === "string") {
                 const objectType = resolveType(
-                    deriveValueType(value.callee.object, resolveVar, errors),
+                    deriveValueType(
+                        value.callee.object,
+                        resolveVar,
+                        errors,
+                        typeCache,
+                    ),
                 );
                 if (objectType === ERROR_TYPE) return ERROR_TYPE;
                 const method = value.callee.property;
@@ -752,7 +813,12 @@ function deriveValueType(
             return ERROR_TYPE;
         }
         case "spreadElement":
-            return deriveValueType(value.argument, resolveVar, errors);
+            return deriveValueType(
+                value.argument,
+                resolveVar,
+                errors,
+                typeCache,
+            );
         case "templateLiteral":
             return SchemaCreator.string();
     }
@@ -990,26 +1056,55 @@ function validateExprOperandTypes(
     value: CompiledValueNode,
     resolveVar: ResolveVariable,
     warnings?: ValueTypeError[],
+    typeCache?: Map<CompiledValueNode, SchemaType>,
 ): ValueTypeError[] {
     const errors: ValueTypeError[] = [];
-    walkExprOperands(value, resolveVar, errors, warnings);
+    walkExprOperands(value, resolveVar, errors, warnings, typeCache);
     return errors;
 }
 
+/**
+ * Recursively validates operator constraints.  When `typeCache` is provided,
+ * `deriveValueType` lookups are served from the cache (populated by the
+ * inference pass) so child types are not re-derived.
+ */
 function walkExprOperands(
     value: CompiledValueNode,
     resolveVar: ResolveVariable,
     errors: ValueTypeError[],
     warnings: ValueTypeError[] | undefined,
+    typeCache: Map<CompiledValueNode, SchemaType> | undefined,
 ): void {
     switch (value.type) {
         case "binaryExpression": {
             // Recurse into operands first
-            walkExprOperands(value.left, resolveVar, errors, warnings);
-            walkExprOperands(value.right, resolveVar, errors, warnings);
+            walkExprOperands(
+                value.left,
+                resolveVar,
+                errors,
+                warnings,
+                typeCache,
+            );
+            walkExprOperands(
+                value.right,
+                resolveVar,
+                errors,
+                warnings,
+                typeCache,
+            );
 
-            const leftType = deriveValueType(value.left, resolveVar);
-            const rightType = deriveValueType(value.right, resolveVar);
+            const leftType = deriveValueType(
+                value.left,
+                resolveVar,
+                undefined,
+                typeCache,
+            );
+            const rightType = deriveValueType(
+                value.right,
+                resolveVar,
+                undefined,
+                typeCache,
+            );
 
             // 1. ERROR_TYPE → skip
             if (leftType === ERROR_TYPE || rightType === ERROR_TYPE) return;
@@ -1107,8 +1202,19 @@ function walkExprOperands(
             break;
         }
         case "unaryExpression": {
-            walkExprOperands(value.operand, resolveVar, errors, warnings);
-            const operandType = deriveValueType(value.operand, resolveVar);
+            walkExprOperands(
+                value.operand,
+                resolveVar,
+                errors,
+                warnings,
+                typeCache,
+            );
+            const operandType = deriveValueType(
+                value.operand,
+                resolveVar,
+                undefined,
+                typeCache,
+            );
             if (operandType === ERROR_TYPE) return;
             if (
                 !NULLABLE_OPERATORS.has(value.operator) &&
@@ -1142,10 +1248,33 @@ function walkExprOperands(
             break;
         }
         case "conditionalExpression": {
-            walkExprOperands(value.test, resolveVar, errors, warnings);
-            walkExprOperands(value.consequent, resolveVar, errors, warnings);
-            walkExprOperands(value.alternate, resolveVar, errors, warnings);
-            const testType = deriveValueType(value.test, resolveVar);
+            walkExprOperands(
+                value.test,
+                resolveVar,
+                errors,
+                warnings,
+                typeCache,
+            );
+            walkExprOperands(
+                value.consequent,
+                resolveVar,
+                errors,
+                warnings,
+                typeCache,
+            );
+            walkExprOperands(
+                value.alternate,
+                resolveVar,
+                errors,
+                warnings,
+                typeCache,
+            );
+            const testType = deriveValueType(
+                value.test,
+                resolveVar,
+                undefined,
+                typeCache,
+            );
             if (testType === ERROR_TYPE) return;
             if (testType.type !== "boolean") {
                 errors.push({
@@ -1157,14 +1286,31 @@ function walkExprOperands(
         }
         case "memberExpression": {
             if (typeof value.object === "object") {
-                walkExprOperands(value.object, resolveVar, errors, warnings);
+                walkExprOperands(
+                    value.object,
+                    resolveVar,
+                    errors,
+                    warnings,
+                    typeCache,
+                );
             }
             if (typeof value.property === "object" && value.property !== null) {
-                walkExprOperands(value.property, resolveVar, errors, warnings);
+                walkExprOperands(
+                    value.property,
+                    resolveVar,
+                    errors,
+                    warnings,
+                    typeCache,
+                );
             }
             // Warning: unnecessary ?. if object type does not contain undefined
             if (value.optional) {
-                const objectType = deriveValueType(value.object, resolveVar);
+                const objectType = deriveValueType(
+                    value.object,
+                    resolveVar,
+                    undefined,
+                    typeCache,
+                );
                 if (
                     objectType !== ERROR_TYPE &&
                     !containsUndefined(objectType)
@@ -1178,16 +1324,27 @@ function walkExprOperands(
             break;
         }
         case "callExpression": {
-            walkExprOperands(value.callee, resolveVar, errors, warnings);
+            walkExprOperands(
+                value.callee,
+                resolveVar,
+                errors,
+                warnings,
+                typeCache,
+            );
             for (const arg of value.arguments) {
-                walkExprOperands(arg, resolveVar, errors, warnings);
+                walkExprOperands(arg, resolveVar, errors, warnings, typeCache);
             }
             break;
         }
         case "templateLiteral": {
             for (const expr of value.expressions) {
-                walkExprOperands(expr, resolveVar, errors, warnings);
-                const exprType = deriveValueType(expr, resolveVar);
+                walkExprOperands(expr, resolveVar, errors, warnings, typeCache);
+                const exprType = deriveValueType(
+                    expr,
+                    resolveVar,
+                    undefined,
+                    typeCache,
+                );
                 if (exprType === ERROR_TYPE) continue;
                 // Check that all types in the expression are interpolatable
                 const types =
@@ -1211,18 +1368,30 @@ function walkExprOperands(
             break;
         }
         case "spreadElement":
-            walkExprOperands(value.argument, resolveVar, errors, warnings);
+            walkExprOperands(
+                value.argument,
+                resolveVar,
+                errors,
+                warnings,
+                typeCache,
+            );
             break;
         case "object":
             for (const propValue of Object.values(value.value)) {
                 if (propValue !== null) {
-                    walkExprOperands(propValue, resolveVar, errors, warnings);
+                    walkExprOperands(
+                        propValue,
+                        resolveVar,
+                        errors,
+                        warnings,
+                        typeCache,
+                    );
                 }
             }
             break;
         case "array":
             for (const elem of (value as CompiledArrayValueNode).value) {
-                walkExprOperands(elem, resolveVar, errors, warnings);
+                walkExprOperands(elem, resolveVar, errors, warnings, typeCache);
             }
             break;
         // literal, variable: no sub-expressions to check
@@ -1256,15 +1425,26 @@ export function validateExprTypes(
         return { errors: [], inferredType: undefined };
     }
     const resolveVar: ResolveVariable = (name) => variableTypes.get(name);
+    const typeCache = new Map<CompiledValueNode, SchemaType>();
     const inferenceErrors: ValueTypeError[] = [];
-    const exprType = deriveValueType(value, resolveVar, inferenceErrors);
+    const exprType = deriveValueType(
+        value,
+        resolveVar,
+        inferenceErrors,
+        typeCache,
+    );
     if (inferenceErrors.length > 0) {
         return {
             errors: inferenceErrors.map((e) => e.message),
             inferredType: undefined,
         };
     }
-    const operandErrors = validateExprOperandTypes(value, resolveVar);
+    const operandErrors = validateExprOperandTypes(
+        value,
+        resolveVar,
+        undefined,
+        typeCache,
+    );
     if (operandErrors.length > 0) {
         return {
             errors: operandErrors.map((e) => e.message),
@@ -1278,6 +1458,28 @@ export function validateExprTypes(
                 ? undefined
                 : exprType,
     };
+}
+
+/**
+ * Validates that a variable's inferred type is assignable to the expected type.
+ * Used by the compiler for single-variable implicit rules where no value node
+ * exists — the variable's capture type is checked directly.
+ */
+export function validateVariableType(
+    variableName: string,
+    variableType: SchemaType,
+    expectedType: SchemaType,
+): string[] {
+    if (variableType === ANY_TYPE) return [];
+    const resolved = resolveType(expectedType);
+    if (resolved.type === "any") return [];
+    if (!isTypeAssignable(variableType, resolved)) {
+        const resolvedVar = resolveType(variableType);
+        return [
+            `Value expected ${formatSchemaType(resolved)}, but variable '${variableName}' produces ${formatSchemaType(resolvedVar)}`,
+        ];
+    }
+    return [];
 }
 
 /**

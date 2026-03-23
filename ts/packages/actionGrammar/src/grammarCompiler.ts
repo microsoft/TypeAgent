@@ -27,7 +27,9 @@ import type {
 import {
     validateValueType,
     validateExprTypes,
+    validateVariableType,
     buildVariableTypeMap,
+    classifyRuleValue,
 } from "./grammarValueTypeValidator.js";
 
 export type FileLoader = {
@@ -634,27 +636,30 @@ function createNamedGrammarRules(
             // Pass 1: Expression-internal consistency (always runs).
             // Catches operator constraint violations and inference errors
             // regardless of whether a schema loader resolved types.
+            // Only applies to "value" leaves (expression nodes);
+            // "variable" leaves have no expression to validate internally.
             const leafExprTypes = new Map<CompiledValueNode, SchemaType>();
             const leafVarTypes = new Map<
                 CompiledValueNode,
                 Map<string, SchemaType>
             >();
-            for (const { value, parts, pos } of leafValues) {
+            for (const leaf of leafValues) {
+                if (leaf.kind !== "value") continue;
                 const varTypes = buildVariableTypeMap(
-                    parts,
+                    leaf.parts,
                     context.derivedTypes,
                 );
-                leafVarTypes.set(value, varTypes);
-                const result = validateExprTypes(value, varTypes);
+                leafVarTypes.set(leaf.value, varTypes);
+                const result = validateExprTypes(leaf.value, varTypes);
                 for (const error of result.errors) {
                     context.errors.push({
                         message: error,
                         definition: name,
-                        pos,
+                        pos: leaf.pos,
                     });
                 }
                 if (result.inferredType !== undefined) {
-                    leafExprTypes.set(value, result.inferredType);
+                    leafExprTypes.set(leaf.value, result.inferredType);
                 }
             }
 
@@ -673,21 +678,43 @@ function createNamedGrammarRules(
                             ? declaredTypes[0]
                             : { type: "type-union", types: declaredTypes };
 
-                    for (const { value, pos } of leafValues) {
-                        const varTypes = leafVarTypes.get(value)!;
-                        const errors = validateValueType(
-                            value,
-                            expectedType,
-                            varTypes,
-                            context.resolvedTypes,
-                            "",
-                            leafExprTypes.get(value),
-                        );
+                    for (const leaf of leafValues) {
+                        let errors: string[];
+                        if (leaf.kind === "value") {
+                            const varTypes = leafVarTypes.get(leaf.value)!;
+                            errors = validateValueType(
+                                leaf.value,
+                                expectedType,
+                                varTypes,
+                                context.resolvedTypes,
+                                "",
+                                leafExprTypes.get(leaf.value),
+                            );
+                        } else {
+                            // "variable" leaf — check variable type directly
+                            const varTypes = buildVariableTypeMap(
+                                leaf.parts,
+                                context.derivedTypes,
+                            );
+                            const varType = varTypes.get(leaf.variableName);
+                            if (varType !== undefined) {
+                                errors = validateVariableType(
+                                    leaf.variableName,
+                                    varType,
+                                    expectedType,
+                                );
+                            } else {
+                                errors = [];
+                            }
+                        }
                         for (const error of errors) {
                             context.errors.push({
                                 message: error,
                                 definition: name,
-                                pos,
+                                pos:
+                                    leaf.kind === "value"
+                                        ? leaf.pos
+                                        : undefined,
                             });
                         }
                     }
@@ -706,17 +733,28 @@ function createNamedGrammarRules(
     return record as ResolvedDefinitionRecord;
 }
 
-type LeafValue = {
-    value: CompiledValueNode;
-    parts: GrammarPart[];
-    pos?: number | undefined;
-};
+type LeafValue =
+    | {
+          kind: "value";
+          value: CompiledValueNode;
+          parts: GrammarPart[];
+          pos?: number | undefined;
+      }
+    | {
+          kind: "variable";
+          variableName: string;
+          parts: GrammarPart[];
+      };
 
 /**
  * Recursively collects all leaf value nodes from a grammar rule tree.
- * A "leaf" is a GrammarRule that has a direct value expression (-> { ... }).
+ * A "leaf" is a GrammarRule that has a direct value expression (-> { ... })
+ * or a single-variable implicit rule whose variable type must be validated.
  * Rules that pass through to sub-rules (single RulesPart, no variables,
  * no explicit value) are traversed recursively.
+ *
+ * Uses `classifyRuleValue` from the validator to keep classification
+ * logic in sync with `deriveAlternativeType`.
  */
 function collectLeafValues(
     rules: GrammarRule[],
@@ -730,48 +768,29 @@ function collectLeafValues(
 
     const results: LeafValue[] = [];
     for (const rule of rules) {
-        if (rule.value !== undefined) {
-            // Case 1: Explicit value expression — this is a leaf
-            results.push({
-                value: rule.value,
-                parts: rule.parts,
-                pos: valuePositions.get(rule.value),
-            });
-        } else {
-            // No explicit value — determine implicit value case.
-            // Mirrors the hasValue logic in createGrammarRule:
-            //   Case 2: variableCount === 1  →  implicit value is the variable
-            //   Case 3: variableCount === 0  →  passthrough delegation
-            const variableParts = rule.parts.filter(
-                (p) => p.variable !== undefined,
-            );
-            if (variableParts.length === 1) {
-                // Case 2: Single variable — synthesize a variable reference
-                // so its type is validated against the declared output type
-                const syntheticValue: CompiledValueNode = {
-                    type: "variable",
-                    name: variableParts[0].variable!,
-                };
+        const kind = classifyRuleValue(rule);
+        switch (kind.kind) {
+            case "explicit":
                 results.push({
-                    value: syntheticValue,
+                    kind: "value",
+                    value: rule.value!,
+                    parts: rule.parts,
+                    pos: valuePositions.get(rule.value!),
+                });
+                break;
+            case "variable":
+                results.push({
+                    kind: "variable",
+                    variableName: kind.part.variable!,
                     parts: rule.parts,
                 });
-            } else if (variableParts.length === 0) {
-                // Case 3: No variables — recurse into sub-rules
-                for (const part of rule.parts) {
-                    if (part.type === "rules") {
-                        results.push(
-                            ...collectLeafValues(
-                                part.rules,
-                                valuePositions,
-                                visited,
-                            ),
-                        );
-                    }
-                }
-            }
-            // variableParts.length > 1 with no explicit value:
-            // already warned in createGrammarRule, no implicit value to validate
+                break;
+            case "passthrough":
+                results.push(
+                    ...collectLeafValues(kind.rules, valuePositions, visited),
+                );
+                break;
+            // "none": multi-var with no explicit value — already warned
         }
     }
     return results;
@@ -814,6 +833,14 @@ function createGrammarRule(
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
     let variableCount = 0;
+    // Tracks whether the last expression part can implicitly produce a value.
+    // Only string parts (literals) and rule parts (named references or nested
+    // groups) set this — variables use variableCount instead, and wildcards/
+    // numbers/phrase-sets don't produce a passthrough value on their own
+    // (phrase-sets set it to true only to suppress the "no value" diagnostic).
+    // Used in the final hasValue computation for zero-variable, single-part
+    // rules: the matched string text or the referenced rule's value is
+    // returned as the rule's implicit value at match time.
     let defaultValue = false;
     // A rule alternative is nullable if ALL of its parts can match ε.
     let ruleNullable = true;

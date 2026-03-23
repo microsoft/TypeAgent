@@ -353,7 +353,9 @@ GrammarParseResult {
 3. Validates entity references against the global entity registry
 4. Compiles value expressions into `CompiledValueNode` trees
 5. Resolves spacing mode annotations
-6. Produces the flat `Grammar` structure ready for matching
+6. Type-checks value expressions in two passes (see
+   [Validation architecture](#validation-architecture) below)
+7. Produces the flat `Grammar` structure ready for matching
 
 ### Matching backend
 
@@ -523,6 +525,45 @@ Grammar value expressions (the `-> expression` part of a rule) are
 type-checked at compile time. Every expression node has a statically-known
 type — there is no `any` escape hatch. This section documents the design
 principles and restrictions.
+
+### Validation Architecture
+
+Type checking runs in two passes, implemented in
+`grammarValueTypeValidator.ts` and orchestrated by the compiler in
+`grammarCompiler.ts`:
+
+**Pass 1 — Expression-internal consistency** (`validateExprTypes`):
+Infers the result type of the expression, validates operator constraints
+(e.g. `+` requires matching operand types), and detects unknown
+variables, properties, and methods. This pass runs unconditionally —
+it only needs variable types derived from grammar parts, not resolved
+schema types. Uses a type cache so that child types inferred during
+the validation walk are not re-derived.
+
+**Pass 2 — Conformance against declared type** (`validateValueType`):
+Checks that the expression's inferred type (from pass 1) is assignable
+to the declared output type annotation (e.g. `<Rule> : PlayAction`).
+This pass only runs when a `SchemaLoader` resolved the declared types,
+so grammars compiled without schema information still get pass 1
+coverage.
+
+The compiler collects **leaf values** — the value expressions that
+actually produce the rule's output — via `collectLeafValues`, which
+uses the shared `classifyRuleValue()` function to categorize each
+grammar rule:
+
+| Kind          | Condition                      | Leaf source                                                      |
+| ------------- | ------------------------------ | ---------------------------------------------------------------- |
+| `explicit`    | Explicit `-> { ... }`          | The compiled value node                                          |
+| `variable`    | Single variable, no value      | Variable part (type checked directly via `validateVariableType`) |
+| `passthrough` | No variables, single RulesPart | Recurse into sub-rule                                            |
+| `none`        | Multi-variable, no value       | Skipped (already warned)                                         |
+
+The `variable` kind ensures that single-variable implicit rules like
+`"play" $(x:<Song>)` have their variable's type validated against the
+declared output type, rather than silently accepting any capture.
+`classifyRuleValue` is also used by `deriveAlternativeType` for type
+inference, so both paths share the same classification logic.
 
 ### Design Principles
 
