@@ -4,6 +4,7 @@
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { parseGrammarRules } from "../src/grammarRuleParser.js";
 import { writeGrammarRules } from "../src/grammarRuleWriter.js";
+import { evaluateValueExpr } from "../src/grammarValueExprEvaluator.js";
 import { describeForEachMatcher } from "./testUtils.js";
 
 const enableExpressions = true;
@@ -725,8 +726,52 @@ describe("Value Expression Round-trip", () => {
         );
     });
 
-    it("precedence boundary: ?? vs ||", () => {
+    it("precedence boundary: ?? vs || (parenthesized is OK)", () => {
         assertRoundTrip(`<Start> = $(a:string) $(b:string) -> (a ?? b) || b;`);
+    });
+
+    it("?? vs || without parens is a parse error", () => {
+        expect(() =>
+            parseWithExpressions(
+                `<Start> = $(a:string) $(b:string) -> a ?? b || b;`,
+            ),
+        ).toThrow(/cannot be mixed/);
+    });
+
+    it("?? vs && without parens is a parse error", () => {
+        expect(() =>
+            parseWithExpressions(
+                `<Start> = $(a:string) $(b:string) -> a ?? b && b;`,
+            ),
+        ).toThrow(/cannot be mixed/);
+    });
+
+    it("|| vs ?? without parens is a parse error", () => {
+        expect(() =>
+            parseWithExpressions(
+                `<Start> = $(a:string) $(b:string) -> a || b ?? b;`,
+            ),
+        ).toThrow(/cannot be mixed/);
+    });
+
+    it("&& vs ?? without parens is a parse error", () => {
+        expect(() =>
+            parseWithExpressions(
+                `<Start> = $(a:string) $(b:string) -> a && b ?? b;`,
+            ),
+        ).toThrow(/cannot be mixed/);
+    });
+
+    it("?? with parenthesized || is OK", () => {
+        assertRoundTrip(
+            `<Start> = $(a:string) $(b:string) $(c:string) -> a ?? (b || c);`,
+        );
+    });
+
+    it("|| with parenthesized ?? is OK", () => {
+        assertRoundTrip(
+            `<Start> = $(a:string) $(b:string) $(c:string) -> (a ?? b) || c;`,
+        );
     });
 
     it("nested ternary (right-associative)", () => {
@@ -737,5 +782,73 @@ describe("Value Expression Round-trip", () => {
 
     it("optional call: ?.() round-trips", () => {
         assertRoundTrip(`<Start> = $(x:string) -> x?.toLowerCase();`);
+    });
+
+    // ── Associativity tests ───────────────────────────────────────────────
+    // All binary operators are left-associative per ECMA-262 (including ??).
+    // The writer must parenthesize right-side children at equal precedence.
+
+    it("?? is left-associative: a ?? b ?? c", () => {
+        assertRoundTrip(
+            `<Start> = $(a:string) $(b:string) $(c:string) -> a ?? b ?? c;`,
+        );
+    });
+
+    it("?? left-assoc: (a ?? b) ?? c === a ?? b ?? c", () => {
+        const g1 = `<Start> = $(a:string) $(b:string) $(c:string) -> a ?? b ?? c;`;
+        const g2 = `<Start> = $(a:string) $(b:string) $(c:string) -> (a ?? b) ?? c;`;
+        const parsed1 = parseWithExpressions(g1);
+        const parsed2 = parseWithExpressions(g2);
+        expect(stripAnnotations(parsed1.definitions[0].rules[0].value)).toEqual(
+            stripAnnotations(parsed2.definitions[0].rules[0].value),
+        );
+    });
+
+    it("?? right-grouping preserved: a ?? (b ?? c)", () => {
+        assertRoundTrip(
+            `<Start> = $(a:string) $(b:string) $(c:string) -> a ?? (b ?? c);`,
+        );
+    });
+
+    it("|| is left-associative: a || b || c", () => {
+        assertRoundTrip(
+            `<Start> = $(a:string) $(b:string) $(c:string) -> a || b || c;`,
+        );
+    });
+
+    it("&& is left-associative: a && b && c", () => {
+        assertRoundTrip(
+            `<Start> = $(a:string) $(b:string) $(c:string) -> a && b && c;`,
+        );
+    });
+});
+
+// ── Evaluator Unit Tests ──────────────────────────────────────────────────────
+
+describe("Value Expression Evaluator", () => {
+    it("rejects free function calls before evaluating arguments", () => {
+        // Construct a callExpression node whose callee is a variable (not a memberExpression)
+        // with an argument that throws if evaluated.  The callee check must fire first.
+        const argNode = { type: "literal" as const, value: "side-effect" };
+        const callNode = {
+            type: "callExpression" as const,
+            callee: { type: "variable" as const, name: "freeFunc" },
+            arguments: [argNode],
+        };
+
+        let argEvaluated = false;
+        const evalBase = (node: any) => {
+            if (node === argNode) {
+                argEvaluated = true;
+            }
+            if (node.type === "variable") return () => {};
+            return node.value;
+        };
+
+        expect(() => evaluateValueExpr(callNode as any, evalBase)).toThrow(
+            /Free function calls are not supported/,
+        );
+        // The argument must NOT have been evaluated
+        expect(argEvaluated).toBe(false);
     });
 });

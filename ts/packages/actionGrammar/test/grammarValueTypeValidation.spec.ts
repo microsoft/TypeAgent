@@ -2002,5 +2002,69 @@ describe("Value type validation", () => {
             );
             expect(errors.length).toBe(0);
         });
+
+        it("resolveType handles circular type-reference chains", () => {
+            // Create a mutually-recursive grammar where <A> → <B> → <A>.
+            // Type derivation must not hang or throw, and validation should
+            // complete gracefully.
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(level:<A>)
+                    -> { actionName: "test", count: 0, label: level, active: true };
+                <A> = $(x:string) | recurse $(y:<B>);
+                <B> = $(x:string) | recurse $(y:<A>);
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            // The important thing is that this does not hang.
+            // The recursive rules produce string, which matches the label field.
+            expect(errors.length).toBe(0);
+        });
+
+        it("resolveType handles 3-way circular type-reference chains", () => {
+            // Three-way cycle: <A> → <B> → <C> → <A>
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(level:<A>)
+                    -> { actionName: "test", count: 0, label: level, active: true };
+                <A> = $(x:string) | next $(y:<B>);
+                <B> = $(x:string) | next $(y:<C>);
+                <C> = $(x:string) | next $(y:<A>);
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("resolveType handles self-referencing rule", () => {
+            // Direct self-reference: <A> → <A>
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(level:<A>)
+                    -> { actionName: "test", count: 0, label: level, active: true };
+                <A> = $(x:string) | next $(y:<A>);
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
     });
 });

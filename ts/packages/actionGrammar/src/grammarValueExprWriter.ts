@@ -13,12 +13,33 @@
  */
 
 import { BINARY_PRECEDENCE } from "./grammarTypes.js";
+import type { BinaryValueExprOp } from "./grammarTypes.js";
 import type { ValueNode } from "./grammarRuleParser.js";
 
 // ── Operator precedence table ─────────────────────────────────────────────────
 // Imported from grammarTypes.ts — single source of truth.  The parser encodes
 // the same precedence implicitly via its recursive-descent call chain;
 // round-trip tests verify the two stay in sync.
+//
+// Per ECMA-262 §13.13, `??` cannot be mixed with `||` or `&&` without
+// explicit parentheses.  `isCoalescingConflict` enforces this in the
+// writer so round-tripping always produces valid expressions.
+
+const NULLISH_OPS: ReadonlySet<BinaryValueExprOp> = new Set(["??"]);
+const LOGICAL_OPS: ReadonlySet<BinaryValueExprOp> = new Set(["||", "&&"]);
+
+/** True when parent and child mix `??` with `||`/`&&`. */
+function isCoalescingConflict(
+    parentOp: BinaryValueExprOp,
+    child: ValueNode,
+): boolean {
+    if (child.type !== "binaryExpression") return false;
+    const childOp = child.operator;
+    return (
+        (NULLISH_OPS.has(parentOp) && LOGICAL_OPS.has(childOp)) ||
+        (LOGICAL_OPS.has(parentOp) && NULLISH_OPS.has(childOp))
+    );
+}
 
 function precedenceOf(node: ValueNode): number {
     if (node.type === "binaryExpression") {
@@ -65,9 +86,9 @@ export function writeValueExprNode(
         // ── Binary expression ─────────────────────────────────────────────
         case "binaryExpression": {
             const prec = BINARY_PRECEDENCE[node.operator];
-            writeWithParens(ctx, node.left, prec, "left");
+            writeWithParens(ctx, node.left, prec, "left", node.operator);
             ctx.write(` ${node.operator} `);
-            writeWithParens(ctx, node.right, prec, "right");
+            writeWithParens(ctx, node.right, prec, "right", node.operator);
             return;
         }
 
@@ -162,13 +183,20 @@ function writeWithParens(
     child: ValueNode,
     parentPrec: number,
     side: "left" | "right",
+    parentOp?: BinaryValueExprOp,
 ): void {
     const childPrec = precedenceOf(child);
-    // Parenthesize if lower precedence, or if equal precedence on the right
-    // side (to preserve left-associativity for most operators).
+    // All binary operators are left-associative per the JS specification
+    // (including `??`, see ECMA-262 §13.13 — "ShortCircuitExpression").
+    // Parenthesize if child has lower precedence, or equal precedence on
+    // the right side to preserve left-to-right evaluation order.
+    //
+    // Per ECMA-262 §13.13, `??` must always be parenthesized when nested
+    // inside `||`/`&&` and vice versa — regardless of precedence.
     const needsParens =
         childPrec < parentPrec ||
-        (childPrec === parentPrec && side === "right");
+        (childPrec === parentPrec && side === "right") ||
+        (parentOp !== undefined && isCoalescingConflict(parentOp, child));
     if (needsParens) ctx.write("(");
     writeValueExprNode(ctx, child);
     if (needsParens) ctx.write(")");

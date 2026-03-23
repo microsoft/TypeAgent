@@ -142,7 +142,7 @@ export function parseValueExpr(ctx: ValueExprParserContext): ValueNode {
 // ── Precedence levels ─────────────────────────────────────────────────────────
 
 function parseTernary(ctx: ValueExprParserContext): ValueNode {
-    const test = parseNullishCoalescing(ctx);
+    const test = parseShortCircuit(ctx);
     if (ctx.isAt("?") && !ctx.isAt("?.") && !ctx.isAt("??")) {
         ctx.skipWhitespace(1);
         const consequent = parseTernary(ctx); // right-associative
@@ -158,35 +158,81 @@ function parseTernary(ctx: ValueExprParserContext): ValueNode {
     return test;
 }
 
-function parseNullishCoalescing(ctx: ValueExprParserContext): ValueNode {
-    let left = parseLogicalOr(ctx);
-    while (ctx.isAt("??")) {
-        const op: BinaryValueExprOp = "??";
-        ctx.skipWhitespace(2);
-        const right = parseLogicalOr(ctx);
-        left = { type: "binaryExpression", operator: op, left, right };
-    }
-    return left;
-}
-
-function parseLogicalOr(ctx: ValueExprParserContext): ValueNode {
-    let left = parseLogicalAnd(ctx);
-    while (ctx.isAt("||")) {
-        const op: BinaryValueExprOp = "||";
-        ctx.skipWhitespace(2);
-        const right = parseLogicalAnd(ctx);
-        left = { type: "binaryExpression", operator: op, left, right };
-    }
-    return left;
-}
-
-function parseLogicalAnd(ctx: ValueExprParserContext): ValueNode {
+/**
+ * Short-circuit operators: `??`, `||`, `&&`.
+ *
+ * Per ECMA-262 §13.13, `??` cannot be mixed with `||` or `&&` at the
+ * same nesting level without explicit parentheses.  Parenthesized
+ * sub-expressions are fine because they enter a fresh `parseTernary`
+ * call via `parsePrimary`.
+ *
+ * Once we see `??` we stay in nullish-coalescing mode; once we see
+ * `||` or `&&` we stay in logical mode.  Encountering the other
+ * family is a parse error.
+ */
+function parseShortCircuit(ctx: ValueExprParserContext): ValueNode {
     let left = parseEquality(ctx);
+
+    // Determine which family the first operator belongs to.
+    if (ctx.isAt("??")) {
+        // Nullish coalescing mode — reject || and &&.
+        while (ctx.isAt("??")) {
+            ctx.skipWhitespace(2);
+            const right = parseEquality(ctx);
+            left = {
+                type: "binaryExpression",
+                operator: "??" as BinaryValueExprOp,
+                left,
+                right,
+            };
+        }
+        if (ctx.isAt("||") || ctx.isAt("&&")) {
+            ctx.throwError(
+                `'??' cannot be mixed with '${ctx.isAt("||") ? "||" : "&&"}' without parentheses (per ECMA-262 §13.13).`,
+            );
+        }
+        return left;
+    }
+
+    // Logical mode (||/&&) — reject ??.
+    // &&  binds tighter than ||, so parse && in an inner loop.
+    if (ctx.isAt("||") || ctx.isAt("&&")) {
+        left = parseLogicalAndChain(ctx, left);
+        while (ctx.isAt("||")) {
+            ctx.skipWhitespace(2);
+            let right = parseEquality(ctx);
+            right = parseLogicalAndChain(ctx, right);
+            left = {
+                type: "binaryExpression",
+                operator: "||" as BinaryValueExprOp,
+                left,
+                right,
+            };
+        }
+        if (ctx.isAt("??")) {
+            ctx.throwError(
+                `'${left.type === "binaryExpression" && (left as any).operator === "&&" ? "&&" : "||"}' cannot be mixed with '??' without parentheses (per ECMA-262 §13.13).`,
+            );
+        }
+    }
+
+    return left;
+}
+
+/** Consume a chain of `&&` operators (higher precedence than `||`). */
+function parseLogicalAndChain(
+    ctx: ValueExprParserContext,
+    left: ValueNode,
+): ValueNode {
     while (ctx.isAt("&&")) {
-        const op: BinaryValueExprOp = "&&";
         ctx.skipWhitespace(2);
         const right = parseEquality(ctx);
-        left = { type: "binaryExpression", operator: op, left, right };
+        left = {
+            type: "binaryExpression",
+            operator: "&&" as BinaryValueExprOp,
+            left,
+            right,
+        };
     }
     return left;
 }
@@ -585,12 +631,15 @@ function parseTemplateLiteral(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+const ID_START_RE = /^\p{ID_Start}$/u;
+const ID_CONTINUE_RE = /^\p{ID_Continue}$/u;
+
 function isIdStartChar(char: string): boolean {
-    return /^\p{ID_Start}$/u.test(char);
+    return ID_START_RE.test(char);
 }
 
 function isIdContinueChar(char: string): boolean {
-    return /^\p{ID_Continue}$/u.test(char);
+    return ID_CONTINUE_RE.test(char);
 }
 
 /** Check if character at `pos + offset` from ctx.curr is an ID_Continue char. */

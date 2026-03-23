@@ -141,6 +141,14 @@ export function evaluateValueExpr(
 
         // ── Method / function call ────────────────────────────────────────
         case "callExpression": {
+            // Only method calls are supported (callee must be a memberExpression).
+            // Check before evaluating arguments to fail fast on invalid ASTs.
+            if (node.callee.type !== "memberExpression") {
+                throw new Error(
+                    "Free function calls are not supported in grammar value expressions. Use obj.method() form.",
+                );
+            }
+
             // Short-circuit for optional calls: ?.() when callee is nullish.
             if (node.optional) {
                 const calleeVal = evaluateValueExpr(node.callee, evalBase);
@@ -152,13 +160,6 @@ export function evaluateValueExpr(
             const args = node.arguments.map((a) =>
                 evaluateValueExpr(a, evalBase),
             );
-
-            // Only method calls are supported (callee must be a memberExpression).
-            if (node.callee.type !== "memberExpression") {
-                throw new Error(
-                    "Free function calls are not supported in grammar value expressions. Use obj.method() form.",
-                );
-            }
 
             const memberNode = node.callee;
             const obj = evaluateValueExpr(memberNode.object, evalBase);

@@ -12,6 +12,7 @@ import type {
 import type {
     SchemaType,
     SchemaTypeDefinition,
+    SchemaTypeReference,
     ActionParamObject as SchemaTypeObject,
     SchemaObjectField,
 } from "@typeagent/action-schema";
@@ -1104,18 +1105,26 @@ export function buildVariableTypeMap(
  * Resolves a SchemaType, following type-references to their definition.
  * Uses Floyd's tortoise-and-hare cycle detection — O(1) space, no
  * allocation, no arbitrary depth limit.
+ *
+ * Invariant: `slow` is always behind `fast` on the same reference chain.
+ * If `fast` hasn't reached a non-reference (i.e. the while-loop is still
+ * running), every node behind it — including `slow` — must also be a
+ * type-reference with a definition.
  */
 function resolveType(type: SchemaType): SchemaType {
-    let slow = type;
-    let fast = type;
+    let slow: SchemaType = type;
+    let fast: SchemaType = type;
     while (fast.type === "type-reference" && fast.definition !== undefined) {
-        slow = (slow as any).definition?.type ?? slow;
+        // Advance fast two steps.
         fast = fast.definition.type;
         if (fast.type === "type-reference" && fast.definition !== undefined) {
             fast = fast.definition.type;
         } else {
             return fast;
         }
+        // Advance slow one step.  Safe: slow is behind fast on the same
+        // reference chain, so it must still be a resolvable type-reference.
+        slow = (slow as SchemaTypeReference).definition!.type;
         if (slow === fast) {
             // Cycle detected — the type-reference itself is the resolved form
             return type;
