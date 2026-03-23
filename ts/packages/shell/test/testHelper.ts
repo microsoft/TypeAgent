@@ -270,6 +270,7 @@ export async function sendUserRequestAndWaitForResponse(
 export async function sendUserRequestAndWaitForCompletion(
     prompt: string,
     page: Page,
+    timeout: number = 90000,
 ): Promise<string> {
     const locators = await getAgentMessageLocators(page);
 
@@ -277,7 +278,7 @@ export async function sendUserRequestAndWaitForCompletion(
     await sendUserRequest(prompt, page);
 
     // wait for agent response
-    return waitForAgentMessage(page, 30000, locators.length + 1, true);
+    return waitForAgentMessage(page, timeout, locators.length + 1, true);
 }
 
 /**
