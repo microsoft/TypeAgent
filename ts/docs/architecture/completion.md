@@ -194,68 +194,23 @@ the grammar matcher assigns at different input states:
 **Entry point:** `matchGrammarCompletion(grammar, prefix, minPrefixLength)`
 
 Computes the set of valid next-tokens for a partial input against compiled
-grammar rules. For the full algorithm, per-direction behavior, partial
-keyword detection, and spacing annotation semantics, see
-`actionGrammar.md`.
+grammar rules. The matcher categorizes each partial match into one of four
+outcomes (exact, clean partial, pending wildcard, dirty partial) and
+produces metadata that flows through the cache, dispatcher, and shell
+layers. For the full algorithm — completion categories, per-direction
+behavior, partial keyword detection, spacing annotation semantics, and
+the Option A design trade-off — see `actionGrammar.md`.
 
-**Completion categories** — The matcher categorizes each match state into
-one of four outcomes:
-
-| Category           | Condition                                               | Result                                               |
-| ------------------ | ------------------------------------------------------- | ---------------------------------------------------- |
-| 1 — Exact          | Rule fully matched, prefix fully consumed               | No forward completions; backward re-offers last part |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts               | Next part of rule offered                            |
-| 3a — Pending wc    | Wildcard still consuming; no keyword finalizes it       | Wildcard property completion                         |
-| 3b — Dirty partial | Input extends beyond what the current rule part matched | All alternatives at matched prefix; caller filters   |
-
-**`directionSensitive` by category:**
-
-- **Category 1 (Exact match):** `directionSensitive=true` when there
-  is a matched part to reconsider — i.e., a word, keyword, wildcard,
-  number, or sub-rule capture that backward completion could back up
-  to (the `hasPartToReconsider` condition in the code). Forward offers
-  no completions; backward offers the last matched word/wildcard.
-  A trailing separator after the exact match commits the position and
-  clears direction sensitivity. For single-keyword exact matches with
-  no trailing parts and a trailing separator (e.g., grammar `hello`
-  with input `"hello "`), `directionSensitive` is `false`.
-- **Categories 2/3a:** `directionSensitive=true` when backward has a
-  matched part to reconsider. This includes:
-
-  - A keyword matched _after_ a captured wildcard
-    (`afterWildcard=true`) — the wildcard-keyword boundary fork.
-  - A keyword or multi-word string part fully matched without a
-    trailing separator — backward can back up into it.
-  - A keyword in an alternation group where a sibling branch is a
-    longer prefix — backward backs up, allowing the sibling branch's
-    category-3b completion to surface.
-  - A keyword before an open-ended wildcard — backward backs up
-    to reconsider the keyword even though the wildcard would accept
-    any text.
-
-- **Category 3b (dirty partial):** `directionSensitive=false`
-  always. Even if earlier words were fully matched (e.g., `"play r"`
-  where `"play"` matched but `"r"` is trailing unmatched text),
-  the completions are the same set of alternatives for both
-  directions — the caller filters by the trailing text. The grammar
-  position is identical regardless of direction.
-
-**Metadata produced:**
+**Metadata produced** (see [Key types](#key-types) for full definitions):
 
 - `matchedPrefixLength` — characters consumed; becomes `startIndex` upstream
-- `properties` — a `GrammarCompletionProperty[]` carrying entity/wildcard
-  property slot information (property names and match metadata) for the
-  completions. Although the TypeScript type is
-  `GrammarCompletionProperty[] | undefined`, the grammar matcher always
-  returns an array — it is `[]` (empty) for keyword-only completions and
-  populated when entity wildcards contribute completions.
+- `properties` — `GrammarCompletionProperty[]` carrying entity/wildcard
+  property slot information for agent `getActionCompletion()` calls;
+  `[]` for keyword-only completions
 - `separatorMode` — determined by the rule's `[spacing=...]` annotation
 - `closedSet` — `true` when all completions are grammar keywords
 - `directionSensitive` — `true` when backward completion would differ
-  (see [`directionSensitive`](#directionsensitive))
 - `openWildcard` — `true` at ambiguous wildcard boundaries
-
-See [Key types](#key-types) for full definitions of these fields.
 
 ---
 
@@ -335,7 +290,9 @@ longer one. For free-form parameter values, the backend derives mid-token
 status from the input's trailing whitespace instead.
 
 Orchestrates command resolution, parameter parsing, agent invocation, and
-built-in completions.
+built-in completions. The dispatcher may override `separatorMode` from the
+grammar — for example, setting `"space"` for structured commands
+(`@agent` prefixes, flags) or `"none"` when reconsidering a command name.
 
 **Pipeline:**
 
@@ -485,15 +442,9 @@ text.
 | `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars; also digit–Latin boundaries (digits are Unicode script "Common", not "Latin", so a transition like `"0"→"i"` is a script change that does not require a separator)                                                                            |
 | `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
 
-**Separator already consumed:** When the consumed prefix (up to
-`matchedPrefixLength`) already ends with whitespace, the separator
-requirement is already satisfied. In this case the grammar matcher
-reports `separatorMode="optional"` regardless of the spacing annotation,
-because no _additional_ separator is needed between the consumed prefix
-and the completion text. For example, with input `"play "` (trailing
-space) and `auto` spacing, `separatorMode` is `"optional"` — not
-`"spacePunctuation"` — because the space is already part of the
-consumed prefix.
+See `actionGrammar.md` Spacing modes for how the grammar matcher
+determines `separatorMode` from spacing annotations, including the
+"separator already consumed" override.
 
 ### `directionSensitive`
 
@@ -518,22 +469,10 @@ separator to commit it. Forward offers what comes _next_; backward
 backs up to re-offer the last thing the user passed. If those two
 results differ, `directionSensitive=true`.
 
-There are three situations where this arises:
-
-1. **Wildcard-keyword boundary fork.** `play <song> by <artist>`,
-   input `"play Never by"`: forward treats `"by"` as the keyword and
-   offers `<artist>` completions; backward backs up to `"by"` and
-   re-offers it, since the wildcard could absorb it.
-
-2. **Multi-word keyword boundary.** `play music`, input `"play"`:
-   forward offers `"music"`; backward re-offers `"play"`.
-
-3. **Alternation-prefix overlap.** `(play | player) now`, input
-   `"play"`: forward offers `"now"` (the `"play"` branch matched);
-   backward backs up to re-offer `"play"` at `matchedPrefixLength=0`,
-   and the sibling `"player"` branch independently offers `"player"`
-   at the same prefix length via category 3b. Result: both
-   alternatives surface.
+This arises at wildcard-keyword boundary forks, multi-word keyword
+boundaries, and alternation-prefix overlaps. See `actionGrammar.md`
+"Why direction matters" for detailed examples and the Option A/B
+design trade-off.
 
 **When `directionSensitive=false`:**
 
@@ -635,27 +574,12 @@ Examples: the start of a wildcard (pinned by the preceding keyword), or a
 keyword matched without a preceding wildcard.
 
 A position is **ambiguous** when it sits at the boundary of a wildcard
-that could absorb more text, moving the boundary forward. This happens
-in two cases:
-
-- **Forward:** a keyword completion follows a wildcard that was finalized
-  at end-of-input (the matcher treats EOI as a tentative wildcard
-  boundary). The wildcard consumed everything up to EOI, but the user
-  may still be typing within it.
-- **Backward:** completion backs up to a keyword that had pinned the end
-  of a preceding wildcard. Backing up un-pins that boundary — the
-  wildcard could extend to absorb the keyword text.
-
-**Persistence:** `openWildcard` remains `true` even after the user types
-the full keyword text (e.g., `"play hello by"` and `"play hello by "`)
-because the grammar matcher always forks two parse paths at a
-wildcard-keyword boundary: one where the keyword is consumed, and one
-where the wildcard absorbs the keyword text. Both paths produce
-completions at the same prefix length, so neither can eliminate the
-other. `openWildcard` only becomes `false` when the ambiguity is
-structurally resolved by further context (e.g., the user types enough
-after the keyword that the wildcard-absorbing path can no longer produce
-a match at the same prefix length).
+that could absorb more text, moving the boundary forward — for example,
+a keyword completion following a wildcard that was finalized at
+end-of-input, or a backward completion backing up to a keyword that had
+pinned the end of a wildcard. The ambiguity persists until further
+context structurally resolves it. See `actionGrammar.md` for the full
+grammar-level analysis.
 
 Values:
 

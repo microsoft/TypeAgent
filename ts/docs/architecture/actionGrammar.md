@@ -492,6 +492,29 @@ input `"play"`:
   length. The user sees `["play", "player"]` — the alternation
   re-opens.
 
+> **Design note — why always back up (Option A).**
+> An alternative design (Option B) would track whether each match state
+> originated from a multi-alternative `RulesPart` and only back up in
+> Category 3a when that alternation flag is set. This would preserve
+> the previous `directionSensitive=false` for plain keyword-before-
+> wildcard cases like `play <song>` (input `"play"`). We chose the
+> simpler Option A — always back up when the prefix is fully consumed
+> — for three reasons:
+>
+> 1. **Consistency.** Categories 1 and 2 already use the same broad
+>    `hasPartToReconsider` check (`state.index >= prefix.length &&
+lastMatchedPartInfo !== undefined`). Having Category 3a use a
+>    narrower condition was an unnecessary special case.
+> 2. **Correctness.** The extra re-fetch for `play <song>` input
+>    `"play"` is harmless — backward simply re-offers `"play"` and
+>    the user sees the same wildcard property completion. The cost is
+>    one redundant backend call when the user backspaces at that
+>    specific position.
+> 3. **Simplicity.** Option B required threading a `fromAlternation`
+>    flag through match-state expansion, nested-rule finalization, and
+>    repeat iterations — new bookkeeping with no user-visible benefit
+>    beyond avoiding that one redundant call.
+
 **When direction does _not_ matter (`directionSensitive=false`):**
 
 - **Nothing was fully matched** (e.g., `"pla"` against `play music`):
@@ -501,7 +524,9 @@ input `"play"`:
   after a keyword "commits" the match position — the user has moved
   past the boundary. Both directions agree on the committed position.
   For example, `"play "` (with space) offers `"music"` for both
-  directions.
+  directions. Exception: in `[spacing=none]` mode, whitespace is not a
+  separator, so `directionSensitive` is always `true` when any word has
+  been fully matched — trailing spaces do not commit.
   **Metadata produced:**
 
 - `matchedPrefixLength` — characters consumed; becomes `startIndex`
@@ -514,21 +539,19 @@ input `"play"`:
   titles, contact names). When the grammar offers only keyword completions
   (no wildcards), `properties` is empty.
 - `separatorMode` — determined by the grammar rule's `[spacing=...]`
-  annotation (see [Spacing modes](#spacing-modes) above).
-  The dispatcher may override to `"space"` for structured commands
-  (e.g., `@agent` prefixes, flags). When `matchedPrefixLength=0`
-  (nothing consumed), `separatorMode` is always `"optional"` (or
-  `"none"` for `[spacing=none]` rules) because there is no preceding
-  character to require a separator against. Similarly, when the
-  consumed prefix already ends with whitespace (e.g., `"play "`),
-  `separatorMode` is `"optional"` because the separator is already
-  present — no additional separator is needed. For `auto` spacing,
-  `"spacePunctuation"` is produced only when both the last consumed
-  character and the first completion character are word-boundary
-  scripts (Latin, Cyrillic, etc.) and no separator has been consumed;
-  digit–Latin transitions (e.g., `"50"` → `"percent"`) produce
-  `"optional"` because digits are Unicode script "Common", not a
-  word-boundary script.
+  annotation (see [Spacing modes](#spacing-modes) above). Special cases:
+  - When `matchedPrefixLength=0` (nothing consumed), `separatorMode` is
+    always `"optional"` (or `"none"` for `[spacing=none]` rules) because
+    there is no preceding character to require a separator against.
+  - When the consumed prefix already ends with whitespace (e.g.,
+    `"play "`), `separatorMode` is `"optional"` because the separator is
+    already present — no additional separator is needed.
+  - For `auto` spacing, `"spacePunctuation"` is produced only when both
+    the last consumed character and the first completion character are
+    word-boundary scripts (Latin, Cyrillic, etc.) and no separator has
+    been consumed; digit–Latin transitions (e.g., `"50"` → `"percent"`)
+    produce `"optional"` because digits are Unicode script "Common", not
+    a word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
 - `directionSensitive` is `true` when backward completion has something
@@ -544,7 +567,16 @@ input `"play"`:
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary (e.g., a wildcard finalized at end-of-input in the
   forward direction, or a keyword that had pinned a wildcard's end in the
-  backward direction).
+  backward direction). `openWildcard` remains `true` even after the user
+  types the full keyword text (e.g., `"play hello by"` and
+  `"play hello by "`) because the grammar matcher always forks two parse
+  paths at a wildcard-keyword boundary: one where the keyword is consumed,
+  and one where the wildcard absorbs the keyword text. Both paths produce
+  completions at the same prefix length, so neither can eliminate the
+  other. `openWildcard` only becomes `false` when the ambiguity is
+  structurally resolved by further context (e.g., the user types enough
+  after the keyword that the wildcard-absorbing path can no longer produce
+  a match at the same prefix length).
 
 See `completion.md` for full definitions of how these metadata fields
 flow through the cache, dispatcher, and shell layers.
