@@ -182,7 +182,9 @@ function main() {
     let skippedFiles = 0;
 
     // Per-rule counters: { checked: number, failed: number }
-    const ruleStats = new Map(rules.map((r) => [r.name, { checked: 0, failed: 0 }]));
+    const ruleStats = new Map(
+        rules.map((r) => [r.name, { checked: 0, failed: 0 }]),
+    );
 
     const files = getCheckFiles();
 
@@ -278,7 +280,9 @@ function main() {
     let depFailed = 0;
     let depFailedFiles = 0;
     const depRules = rules.filter((r) => r.applyToDependencies);
-    const depRuleStats = new Map(depRules.map((r) => [r.name, { checked: 0, failed: 0 }]));
+    const depRuleStats = new Map(
+        depRules.map((r) => [r.name, { checked: 0, failed: 0 }]),
+    );
 
     if (checkDependencies && depRules.length > 0) {
         // Build a combined extension filter from all dependency rules so the
@@ -336,13 +340,15 @@ function main() {
     // Rule summary
     console.log(chalk.bold("\nRule summary:"));
     for (const [name, stats] of ruleStats) {
-        const failNote = stats.failed > 0 ? chalk.red(` (${stats.failed} failed)`) : "";
+        const failNote =
+            stats.failed > 0 ? chalk.red(` (${stats.failed} failed)`) : "";
         console.log(`  ${name}: ${stats.checked} checked${failNote}`);
     }
     if (checkDependencies) {
         console.log(chalk.bold("\nDependency rule summary:"));
         for (const [name, stats] of depRuleStats) {
-            const failNote = stats.failed > 0 ? chalk.red(` (${stats.failed} failed)`) : "";
+            const failNote =
+                stats.failed > 0 ? chalk.red(` (${stats.failed} failed)`) : "";
             console.log(`  ${name}: ${stats.checked} checked${failNote}`);
         }
     }

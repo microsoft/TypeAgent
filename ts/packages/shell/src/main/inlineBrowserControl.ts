@@ -300,7 +300,7 @@ export function createInlineBrowserControl(
                           encodeURIComponent(query),
                       )
                     : "https://www.bing.com/search?q=" +
-                          encodeURIComponent(query),
+                      encodeURIComponent(query),
             );
 
             // Always use tabs
