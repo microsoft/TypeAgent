@@ -689,6 +689,16 @@ export class ChatPanel {
         this.textInput.focus();
     }
 
+    /** Programmatically inject and send a command.
+     *  @param displayText Optional friendly text shown in the user bubble instead of the raw command.
+     */
+    public injectCommand(command: string, displayText?: string) {
+        this.commandHistory.unshift(command);
+        this.historyIndex = -1;
+        this.addUserMessage(displayText ?? command);
+        this.onSend?.(command);
+    }
+
     /** Add a separator for previous session history. */
     public addHistorySeparator(label: string = "previously") {
         const sentinel = this.messageDiv.firstElementChild!;
@@ -790,6 +800,33 @@ export class ChatPanel {
         div.appendChild(dateSpan);
 
         return div;
+    }
+
+    /**
+     * Add follow-up action buttons below the current agent message.
+     * Each button injects the specified command into the chat when clicked.
+     */
+    public addFollowUpButtons(
+        buttons: { label: string; command: string; displayText?: string }[],
+    ) {
+        if (!this.currentAgentContainer || buttons.length === 0) return;
+
+        const buttonDiv = document.createElement("div");
+        buttonDiv.className = "chat-followup-buttons";
+
+        for (const btn of buttons) {
+            const el = document.createElement("button");
+            el.className = "chat-followup-button";
+            el.textContent = btn.label;
+            el.addEventListener("click", () => {
+                buttonDiv.remove();
+                this.injectCommand(btn.command, btn.displayText ?? btn.label);
+            });
+            buttonDiv.appendChild(el);
+        }
+
+        this.currentAgentContainer.appendElement(buttonDiv);
+        this.scrollToBottom();
     }
 
     private scrollToBottom() {

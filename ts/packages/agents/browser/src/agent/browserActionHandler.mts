@@ -2832,6 +2832,168 @@ async function handleDownloadImage(
     }
 }
 
+class RecordActionHandler implements CommandHandler {
+    public readonly description =
+        "Record a new browser action by capturing user interactions";
+    public readonly parameters = {
+        args: {
+            name: {
+                description: "Name for the action to record",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const actionName = params.args.name;
+        if (!actionName) {
+            context.actionIO.setDisplay({
+                type: "text",
+                content:
+                    "Please provide a name for the action. Example: @browser record Search for products",
+            });
+            return;
+        }
+
+        context.actionIO.setDisplay({
+            type: "markdown",
+            content:
+                `### Recording: "${actionName}"\n\n` +
+                "Perform the action on the web page. When you're done, type **@browser stop recording** to finish.\n\n" +
+                "*Recording user interactions...*",
+        });
+
+        // The actual startRecording/stopRecording calls happen via the
+        // chatPanelStartRecording/chatPanelStopRecording RPC from the
+        // browser extension service worker. This command just sets up
+        // the context. The chat panel UI will show recording controls.
+    }
+}
+
+class StopRecordingHandler implements CommandHandler {
+    public readonly description = "Stop recording and create a WebFlow";
+    public readonly parameters = {
+        args: {
+            description: {
+                description: "Description of what the recorded action does",
+                implicitQuotes: true,
+                optional: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        context.actionIO.setDisplay({
+            type: "markdown",
+            content:
+                "Recording stopped." +
+                (params.args.description
+                    ? ` Description: ${params.args.description}`
+                    : ""),
+        });
+    }
+}
+
+class DiscoverActionsHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Discover available actions on the current web page";
+    public async run(context: ActionContext<BrowserActionContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        if (!agentContext.browserControl) {
+            displayError("No browser connection available.", context);
+            return;
+        }
+
+        context.actionIO.appendDisplay("Analyzing page...", "temporary");
+
+        try {
+            const discoveryResult = await handleSchemaDiscoveryAction(
+                {
+                    actionName: "detectPageActions",
+                    parameters: {},
+                } as any,
+                context.sessionContext,
+            );
+
+            const discoveredActions = discoveryResult.data?.schema || [];
+
+            // Also fetch user-authored/recorded WebFlows for this domain
+            let webFlows: any[] = [];
+            const webFlowStore = agentContext.webFlowStore;
+            if (webFlowStore && agentContext.browserControl) {
+                try {
+                    const url = await agentContext.browserControl.getPageUrl();
+                    if (url) {
+                        const domain = new URL(url).hostname;
+                        webFlows =
+                            await webFlowStore.listForDomainWithDetails(domain);
+                    }
+                } catch {
+                    // URL parsing failed — skip WebFlows
+                }
+            }
+
+            // Build combined markdown
+            let md = "";
+
+            if (discoveredActions.length > 0) {
+                md += `### Discovered Actions (${discoveredActions.length})\n\n`;
+                for (const action of discoveredActions) {
+                    const params = action.parameters
+                        ? Object.keys(action.parameters).join(", ")
+                        : "";
+                    const paramStr = params ? ` *(${params})*` : "";
+                    md += `- **${action.actionName}**${paramStr}`;
+                    if (action.description) {
+                        md += ` — ${action.description}`;
+                    }
+                    md += "\n";
+                }
+            }
+
+            if (webFlows.length > 0) {
+                md += `\n### Saved Actions (${webFlows.length})\n\n`;
+                for (const flow of webFlows) {
+                    const params = flow.parameters
+                        ? Object.keys(flow.parameters).join(", ")
+                        : "";
+                    const paramStr = params ? ` *(${params})*` : "";
+                    const source = flow.source?.type
+                        ? ` [${flow.source.type}]`
+                        : "";
+                    md += `- **${flow.name}**${paramStr}`;
+                    if (flow.description) {
+                        md += ` — ${flow.description}`;
+                    }
+                    md += `${source}\n`;
+                }
+            }
+
+            if (!md) {
+                context.actionIO.setDisplay({
+                    type: "text",
+                    content: "No actions found on this page.",
+                });
+                return;
+            }
+
+            context.actionIO.setDisplay({
+                type: "markdown",
+                content: md,
+            });
+        } catch (error: any) {
+            displayError(
+                `Discovery failed: ${error?.message || error}`,
+                context,
+            );
+        }
+    }
+}
+
 export const handlers: CommandHandlerTable = {
     description: "Browser App Agent Commands",
     commands: {
@@ -3013,6 +3175,14 @@ export const handlers: CommandHandlerTable = {
             },
         },
         extractKnowledge: new ExtractKnowledgeHandler(),
+        discover: new DiscoverActionsHandler(),
+        record: new RecordActionHandler(),
+        stop: {
+            description: "Stop operations",
+            commands: {
+                recording: new StopRecordingHandler(),
+            },
+        },
         search: new SearchProviderCommandHandlerTable(),
     },
 };
