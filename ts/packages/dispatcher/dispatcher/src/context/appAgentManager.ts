@@ -770,7 +770,9 @@ export class AppAgentManager implements ActionConfigProvider {
                     if (this.loadingSchemas.has(name)) {
                         // Schema is still loading (e.g. slow MCP server start).
                         // Skip for now; refreshAgentSchema will re-run setState once ready.
-                        debug(`Schema '${name}' is still loading, skipping enable`);
+                        debug(
+                            `Schema '${name}' is still loading, skipping enable`,
+                        );
                     } else {
                         const e = record.schemaErrors.get(name);
                         if (e !== undefined) {
