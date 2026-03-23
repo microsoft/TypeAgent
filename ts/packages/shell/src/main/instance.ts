@@ -152,8 +152,10 @@ async function initializeDispatcher(
                 );
             }
             const configName = isTest ? "test" : undefined;
-            const indexingServiceRegistry =
-                await getIndexingServiceRegistry(instanceDir, configName);
+            const indexingServiceRegistry = await getIndexingServiceRegistry(
+                instanceDir,
+                configName,
+            );
 
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
