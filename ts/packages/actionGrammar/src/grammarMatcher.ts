@@ -1966,17 +1966,25 @@ export function matchGrammarCompletion(
                 // region is empty or separator-only (e.g. prefix="play "
                 // with wildcard starting at index 4 — the space is not
                 // valid wildcard content).
-                if (
-                    direction === "backward" &&
+                // Backward reconsidering is appropriate when:
+                //  (a) the last matched part followed a captured
+                //      wildcard (afterWildcard) — wildcard-keyword
+                //      boundary fork, OR
+                //  (b) the prefix was fully consumed before the
+                //      wildcard started (state.index >= prefix.length)
+                //      — the user hasn't typed into the wildcard yet
+                //      and may want to reconsider the preceding part
+                //      (e.g., alternation-prefix overlap:
+                //      (play|plays) <song>, input "play").
+                const canReconsider3a =
                     state.lastMatchedPartInfo !== undefined &&
-                    state.lastMatchedPartInfo.afterWildcard
-                ) {
-                    // Backward: the unfinalizable wildcard follows a
-                    // keyword that was matched after a captured
-                    // wildcard.  Back up to the keyword instead of
-                    // offering property completion for the unfilled
-                    // wildcard — the user hasn't started typing into
-                    // the unfilled slot yet.
+                    (state.lastMatchedPartInfo.afterWildcard ||
+                        state.index >= prefix.length);
+                if (direction === "backward" && canReconsider3a) {
+                    // Backward: back up to the last matched keyword
+                    // instead of offering property completion for the
+                    // unfilled wildcard — the user hasn't started
+                    // typing into the unfilled slot yet.
                     emitBackwardCompletion(state, undefined);
                 } else {
                     // Forward (or backward with nothing to
@@ -1990,9 +1998,9 @@ export function matchGrammarCompletion(
                         pendingWildcard.start,
                     );
                 }
-                // Forward and backward produce different results when
-                // the last matched part followed a captured wildcard.
-                if (state.lastMatchedPartInfo?.afterWildcard) {
+                // Forward and backward produce different results
+                // when backward can reconsider the last matched part.
+                if (canReconsider3a) {
                     directionSensitive = true;
                 }
             } else if (!matched) {

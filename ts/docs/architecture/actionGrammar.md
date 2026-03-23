@@ -445,48 +445,64 @@ text `"mx"`. This applies equally to forward and backward directions.
    keyword word plus a partial match of the second, and offers `"by"`.
    The function honors `spacingMode` for inter-word separator matching.
 
-**Why direction matters — the wildcard-keyword boundary fork:**
+**Why direction matters — reconsidering the last matched part:**
 
-Grammars with wildcards create structural ambiguity at the boundary
-between a wildcard and the keyword that follows it. Consider
+The `direction` parameter resolves how completions behave when the
+user is typing forward versus backspacing. The core rule is simple:
+
+> **`directionSensitive=true` when backward has something to
+> reconsider** — a word, keyword, wildcard, or number was fully
+> matched with no trailing separator to commit it.
+
+Forward completion offers what comes _next_ in the grammar. Backward
+completion _backs up_ to the last successfully matched part and
+re-offers it, letting the user reconsider their choice. The shell
+determines direction by comparing the current input to the previous
+input: if the new input is shorter and is a strict prefix of the old
+input, the user is backspacing (`"backward"`); otherwise they are
+typing ahead (`"forward"`).
+
+This rule naturally handles three kinds of ambiguity:
+
+**1. Wildcard-keyword boundary fork.** Consider
 `play <song> by <artist>` with input `"play Never by"`:
 
-- **Interpretation A:** The wildcard `<song>` captures `"Never"`,
-  and `"by"` is the keyword. The song is _Never_.
-- **Interpretation B:** The wildcard `<song>` captures `"Never by"`,
-  absorbing the keyword text. The song is _Never by_ (perhaps
-  _Never by Myself_).
+- **Forward** treats `"by"` as the keyword (the wildcard `<song>`
+  captured `"Never"`) and offers completions for `<artist>`.
+- **Backward** backs up to the keyword `"by"` at `matchedPrefixLength`
+  after `"Never "`, re-offering `"by"` — letting the user extend the
+  wildcard (perhaps the song is _Never by Myself_).
 
-Both are valid parses of the same input. The `direction` parameter
-resolves this fork:
+**2. Multi-word keyword boundary.** Consider `play music` with input
+`"play"`:
 
-- **Forward** (`"forward"`) chooses interpretation A — it treats the
-  keyword as consumed and offers completions for the next part
-  (`<artist>`). This is what the user wants when they are typing
-  ahead.
-- **Backward** (`"backward"`) chooses interpretation B — it backs up
-  to the ambiguous boundary and re-offers the keyword (or the
-  wildcard property), letting the user reconsider the partition.
-  This is what the user wants when they are backspacing.
+- **Forward** offers `"music"` (the next word).
+- **Backward** backs up to `"play"` and re-offers it, since the user
+  may be reconsidering their input.
 
-Because the two directions produce different completions at different
-positions, the grammar matcher sets `directionSensitive=true`.
+**3. Alternation-prefix overlap.** Consider `(play | player) now` with
+input `"play"`:
 
-**When direction does _not_ matter:**
+- **Forward** chooses the `"play"` branch (it matched fully), advances
+  to the parent, and offers `"now"` at `matchedPrefixLength=4`.
+- **Backward** backs up to the matched `"play"` and re-offers it at
+  `matchedPrefixLength=0`. Meanwhile, the sibling `"player"` branch
+  independently offers `"player"` at `matchedPrefixLength=0` (via
+  category 3b). Both survive because they share the same prefix
+  length. The user sees `["play", "player"]` — the alternation
+  re-opens.
 
-- **Keyword before a wildcard** (e.g., `"play"` before `<song>`):
-  There is no wildcard to the _left_ of `"play"`, so its position
-  is structurally pinned — no fork exists. Both directions fall
-  through to the same path (emitting the wildcard property
-  completion) and `directionSensitive=false`.
+**When direction does _not_ matter (`directionSensitive=false`):**
+
+- **Nothing was fully matched** (e.g., `"pla"` against `play music`):
+  There is no completed part to back up to. Both directions produce
+  the same partial match (category 3b) offering `"play"`.
 - **Trailing separator commits:** A trailing space (or punctuation)
-  after a keyword "commits" the match position — the user has
-  moved past the boundary. Both directions agree on the committed
-  position, so `directionSensitive=false`.
-- **Category 3b (dirty partial):** Both directions produce the same
-  set of alternatives at the matched prefix position.
-
-**Metadata produced:**
+  after a keyword "commits" the match position — the user has moved
+  past the boundary. Both directions agree on the committed position.
+  For example, `"play "` (with space) offers `"music"` for both
+  directions.
+  **Metadata produced:**
 
 - `matchedPrefixLength` — characters consumed; becomes `startIndex`
   upstream in the completion pipeline.
@@ -515,11 +531,13 @@ positions, the grammar matcher sets `directionSensitive=true`.
   word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
-- `directionSensitive` is `true` when the matched state sits at a
-  wildcard-keyword boundary fork — see "Why direction matters" above.
-  It is `false` when no fork exists: keyword before a wildcard
-  (`afterWildcard=false`), trailing separator commits the position,
-  or category 3b (dirty partial). For exact matches (category 1),
+- `directionSensitive` is `true` when backward completion has something
+  to reconsider — a word, keyword, wildcard, or number was fully matched
+  with no trailing separator to commit it. See "Why direction matters"
+  above for examples. It is `false` when nothing was fully matched
+  (category 3b partial) or when a trailing separator commits the
+  position.
+  For exact matches (category 1),
   it is `true` when the rule contains a wildcard, a number variable,
   a sub-rule variable capture, or a multi-part keyword — any part
   that backward completion could reconsider.

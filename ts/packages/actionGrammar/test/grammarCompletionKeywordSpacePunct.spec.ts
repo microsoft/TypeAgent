@@ -1034,7 +1034,7 @@ describeForEachCompletion(
                 expect(result.closedSet).toBe(false);
                 // Keyword matched, wildcard is next (not at EOI boundary) → openWildcard false
                 expect(result.openWildcard).toBe(false);
-                expect(result.directionSensitive).toBe(false);
+                expect(result.directionSensitive).toBe(true);
                 // requiresSeparator(",", "a", auto) → comma is punct → "optional"
                 expect(result.separatorMode).toBe("optional");
             });
@@ -1485,7 +1485,7 @@ describeForEachCompletion(
                 // Entity wildcard → closedSet false
                 expect(result.closedSet).toBe(false);
                 expect(result.openWildcard).toBe(false);
-                expect(result.directionSensitive).toBe(false);
+                expect(result.directionSensitive).toBe(true);
                 // requiresSeparator(".", wildcard-first-char, auto) → false → "optional"
                 expect(result.separatorMode).toBe("optional");
             });

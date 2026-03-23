@@ -405,7 +405,7 @@ describeForEachCompletion(
                 expect(result.matchedPrefixLength).toBe(4);
                 expect(result.separatorMode).toBe("spacePunctuation");
                 expect(result.closedSet).toBe(false);
-                expect(result.directionSensitive).toBe(false);
+                expect(result.directionSensitive).toBe(true);
                 expect(result.openWildcard).toBe(false);
             });
 
@@ -683,7 +683,7 @@ describeForEachCompletion(
                 expect(result.matchedPrefixLength).toBe(4);
                 expect(result.separatorMode).toBe("spacePunctuation");
                 expect(result.closedSet).toBe(false);
-                expect(result.directionSensitive).toBe(false);
+                expect(result.directionSensitive).toBe(true);
                 expect(result.openWildcard).toBe(false);
             });
 

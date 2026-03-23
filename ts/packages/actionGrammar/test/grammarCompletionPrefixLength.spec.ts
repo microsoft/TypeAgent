@@ -489,7 +489,7 @@ describeForEachCompletion(
                 expect(result.matchedPrefixLength).toBe(4);
                 // matchedPrefixLength=4; boundary "y" → entity needs separator.
                 expect(result.separatorMode).toBe("spacePunctuation");
-                expect(result.directionSensitive).toBe(false);
+                expect(result.directionSensitive).toBe(true);
                 expect(result.closedSet).toBe(false);
                 expect(result.openWildcard).toBe(false);
             });
@@ -1718,10 +1718,10 @@ describeForEachCompletion(
                 expect(result.separatorMode).toBe("optional");
             });
 
-            it("not sensitive after 'play' (wildcard not yet captured)", () => {
-                // "play" matched the string part, but the nested wildcard
-                // rule hasn't captured anything yet.  The nested rule
-                // creates a fresh state without lastMatchedPartInfo.
+            it("sensitive after 'play' (wildcard not yet captured)", () => {
+                // "play" matched the string part, wildcard hasn't
+                // captured anything yet.  Backward would reconsider
+                // the matched keyword.
                 const result = matchGrammarCompletion(
                     grammar,
                     "play",
@@ -1731,7 +1731,7 @@ describeForEachCompletion(
                 expect(result.completions).toHaveLength(0);
                 expect(result.properties!.length).toBeGreaterThan(0);
                 expect(result.matchedPrefixLength).toBe(4);
-                expect(result.directionSensitive).toBe(false);
+                expect(result.directionSensitive).toBe(true);
                 expect(result.closedSet).toBe(false);
                 expect(result.openWildcard).toBe(false);
                 expect(result.separatorMode).toBe("spacePunctuation");
@@ -2106,6 +2106,256 @@ describeForEachCompletion(
                 expect(backward.closedSet).toBe(true);
                 expect(backward.openWildcard).toBe(false);
                 expect(backward.separatorMode).toBe("optional");
+            });
+        });
+
+        // ============================================================
+        // Alternation-prefix overlap before wildcard
+        //
+        // When one branch of an alternation fully matches and a sibling
+        // is a partial match, backward should re-open the alternation
+        // instead of advancing into the wildcard.
+        // ============================================================
+        describe("alternation-prefix overlap before wildcard", () => {
+            describe("(play|plays) $(song:wildcard)", () => {
+                const g = `<Start> = (play | plays) $(song:wildcard) -> { actionName: "play", parameters: { song } };`;
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("forward offers wildcard property for 'play'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play",
+                        undefined,
+                        "forward",
+                    );
+                    // "play" branch matches fully; forward advances to
+                    // the wildcard <song> and offers property completion.
+                    expect(result.completions).toEqual([]);
+                    expect(result.properties).toHaveLength(1);
+                    expect(result.matchedPrefixLength).toBe(4);
+                    expect(result.directionSensitive).toBe(true);
+                    expect(result.openWildcard).toBe(false);
+                });
+
+                it("backward re-opens alternation for 'play'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play",
+                        undefined,
+                        "backward",
+                    );
+                    // Backward backs up to the matched "play" at mpl=0.
+                    // The sibling "plays" branch independently offers
+                    // "plays" at mpl=0 via category 3b.
+                    expect(result.completions).toContain("play");
+                    expect(result.completions).toContain("plays");
+                    expect(result.matchedPrefixLength).toBe(0);
+                    expect(result.directionSensitive).toBe(true);
+                    expect(result.closedSet).toBe(true);
+                    expect(result.openWildcard).toBe(false);
+                });
+
+                it("trailing space commits — both directions offer wildcard", () => {
+                    const forward = matchGrammarCompletion(
+                        grammar,
+                        "play ",
+                        undefined,
+                        "forward",
+                    );
+                    const backward = matchGrammarCompletion(
+                        grammar,
+                        "play ",
+                        undefined,
+                        "backward",
+                    );
+                    // Trailing space commits the alternation choice.
+                    // Both directions offer the wildcard property.
+                    expect(forward.properties).toHaveLength(1);
+                    expect(backward.properties).toHaveLength(1);
+                    expect(forward.directionSensitive).toBe(false);
+                    expect(backward.directionSensitive).toBe(false);
+                });
+
+                it("forward offers wildcard for 'plays'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "plays",
+                        undefined,
+                        "forward",
+                    );
+                    expect(result.completions).toEqual([]);
+                    expect(result.properties).toHaveLength(1);
+                    expect(result.matchedPrefixLength).toBe(5);
+                    expect(result.directionSensitive).toBe(true);
+                });
+
+                it("backward on 'plays' backs up to 'plays'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "plays",
+                        undefined,
+                        "backward",
+                    );
+                    // "plays" only matches the "plays" branch; "play"
+                    // also matches (shorter), but mpl from "plays"
+                    // backward (0) should show both alternatives.
+                    expect(result.completions).toContain("plays");
+                    expect(result.matchedPrefixLength).toBe(0);
+                    expect(result.directionSensitive).toBe(true);
+                });
+
+                it("partial 'pla' is not direction-sensitive", () => {
+                    const result = matchGrammarCompletion(grammar, "pla");
+                    // Both branches are only partially matched — no
+                    // alternation overlap, category 3b for both.
+                    expect(result.completions).toContain("play");
+                    expect(result.completions).toContain("plays");
+                    expect(result.matchedPrefixLength).toBe(0);
+                    expect(result.directionSensitive).toBe(false);
+                });
+            });
+
+            describe("(play|plays) $(song:wildcard) by $(artist:wildcard)", () => {
+                const g = `<Start> = (play | plays) $(song:wildcard) by $(artist:wildcard) -> { actionName: "play", parameters: { song, artist } };`;
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("backward re-opens alternation for 'play'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play",
+                        undefined,
+                        "backward",
+                    );
+                    expect(result.completions).toContain("play");
+                    expect(result.completions).toContain("plays");
+                    expect(result.matchedPrefixLength).toBe(0);
+                    expect(result.directionSensitive).toBe(true);
+                });
+
+                it("forward offers wildcard for 'play'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play",
+                        undefined,
+                        "forward",
+                    );
+                    expect(result.completions).toEqual([]);
+                    expect(result.properties).toHaveLength(1);
+                    expect(result.matchedPrefixLength).toBe(4);
+                });
+            });
+
+            describe("three-way overlap: (play|player|playing) $(song:wildcard)", () => {
+                const g = `<Start> = (play | player | playing) $(song:wildcard) -> { actionName: "play", parameters: { song } };`;
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("backward on 'play' shows all three alternatives", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play",
+                        undefined,
+                        "backward",
+                    );
+                    expect(result.completions).toContain("play");
+                    expect(result.completions).toContain("player");
+                    expect(result.completions).toContain("playing");
+                    expect(result.matchedPrefixLength).toBe(0);
+                    expect(result.directionSensitive).toBe(true);
+                });
+            });
+
+            describe("(play|player) now — keyword-only alternation", () => {
+                const g = `<Start> = (play | player) now -> { actionName: "play" };`;
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("forward offers 'now' after 'play'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play",
+                        undefined,
+                        "forward",
+                    );
+                    // "play" branch fully matches → Category 2, next
+                    // part is " now".
+                    expect(result.completions).toContain("now");
+                    expect(result.matchedPrefixLength).toBe(4);
+                    expect(result.directionSensitive).toBe(true);
+                });
+
+                it("backward re-opens alternation for 'play'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play",
+                        undefined,
+                        "backward",
+                    );
+                    // Backward backs up to the matched "play" keyword
+                    // at mpl=0, showing both alternatives.
+                    expect(result.completions).toContain("play");
+                    expect(result.completions).toContain("player");
+                    expect(result.matchedPrefixLength).toBe(0);
+                    expect(result.directionSensitive).toBe(true);
+                    expect(result.closedSet).toBe(true);
+                });
+
+                it("partial 'pla' shows both alternatives, not direction-sensitive", () => {
+                    const result = matchGrammarCompletion(grammar, "pla");
+                    // Completions contain the alternation words only;
+                    // the trailing " now" is offered separately after
+                    // the alternation resolves.
+                    expect(result.completions).toContain("play");
+                    expect(result.completions).toContain("player");
+                    expect(result.matchedPrefixLength).toBe(0);
+                    expect(result.directionSensitive).toBe(false);
+                });
+
+                it("'player' forward offers 'now'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "player",
+                        undefined,
+                        "forward",
+                    );
+                    expect(result.completions).toContain("now");
+                    expect(result.matchedPrefixLength).toBe(6);
+                    expect(result.directionSensitive).toBe(true);
+                });
+
+                it("'player' backward backs up", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "player",
+                        undefined,
+                        "backward",
+                    );
+                    expect(result.completions).toContain("player");
+                    expect(result.matchedPrefixLength).toBe(0);
+                    expect(result.directionSensitive).toBe(true);
+                });
+
+                it("'play n' forward offers 'now'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play n",
+                        undefined,
+                        "forward",
+                    );
+                    expect(result.completions).toContain("now");
+                    expect(result.matchedPrefixLength).toBe(4);
+                });
+
+                it("trailing space 'play ' commits the choice", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play ",
+                        undefined,
+                        "forward",
+                    );
+                    // Trailing space commits — only "play" branch
+                    // survives; "player" is eliminated.
+                    expect(result.completions).toContain("now");
+                    expect(result.matchedPrefixLength).toBe(5);
+                });
             });
         });
     },
