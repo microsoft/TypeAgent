@@ -3,6 +3,7 @@
 
 import type {
     CompiledValueNode,
+    CompiledValueExprNode,
     CompiledObjectValueNode,
     CompiledArrayValueNode,
     GrammarPart,
@@ -112,19 +113,22 @@ function stripUndefined(t: SchemaType): SchemaType {
     return SchemaCreator.union(...remaining);
 }
 
-/** Value expression node types that are computed at runtime. */
-const valueExprTypes = new Set([
-    "binaryExpression",
-    "unaryExpression",
-    "conditionalExpression",
-    "memberExpression",
-    "callExpression",
-    "spreadElement",
-    "templateLiteral",
-]);
-
-function isValueExprNode(node: CompiledValueNode): boolean {
-    return valueExprTypes.has(node.type);
+/** Type guard for value expression nodes (computed at runtime). */
+function isValueExprNode(
+    node: CompiledValueNode,
+): node is CompiledValueExprNode {
+    switch (node.type) {
+        case "binaryExpression":
+        case "unaryExpression":
+        case "conditionalExpression":
+        case "memberExpression":
+        case "callExpression":
+        case "spreadElement":
+        case "templateLiteral":
+            return true;
+        default:
+            return false;
+    }
 }
 
 // ── Method return type tables ─────────────────────────────────────────────────
@@ -1037,8 +1041,15 @@ function resolveType(type: SchemaType): SchemaType {
 }
 
 // ── Operator constraint set ───────────────────────────────────────────────────
-// Operators that accept undefined-containing operands without error.
-const NULLABLE_OPERATORS = new Set<string>(["??", "===", "!==", "typeof"]);
+// Operators that accept `T | undefined` operands without error.
+// ("nullable" here means may-be-undefined, not may-be-null — the grammar
+// type system uses `undefined` from optional captures, never `null`.)
+const UNDEFINED_TOLERANT_OPERATORS = new Set<string>([
+    "??",
+    "===",
+    "!==",
+    "typeof",
+]);
 
 /**
  * Walk an expression tree and check that each operator's operands satisfy the
@@ -1109,8 +1120,8 @@ function walkExprOperands(
             // 1. ERROR_TYPE → skip
             if (leftType === ERROR_TYPE || rightType === ERROR_TYPE) return;
 
-            // 2. undefined check for non-nullable operators
-            if (!NULLABLE_OPERATORS.has(value.operator)) {
+            // 2. undefined check for non-undefined-tolerant operators
+            if (!UNDEFINED_TOLERANT_OPERATORS.has(value.operator)) {
                 if (containsUndefined(leftType)) {
                     errors.push({
                         message: `Operand type '${formatSchemaType(leftType)}' includes undefined. Use ?? to provide a default value, or ?. for property access.`,
@@ -1217,7 +1228,7 @@ function walkExprOperands(
             );
             if (operandType === ERROR_TYPE) return;
             if (
-                !NULLABLE_OPERATORS.has(value.operator) &&
+                !UNDEFINED_TOLERANT_OPERATORS.has(value.operator) &&
                 containsUndefined(operandType)
             ) {
                 errors.push({

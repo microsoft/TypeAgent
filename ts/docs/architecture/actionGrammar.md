@@ -526,6 +526,10 @@ type-checked at compile time. Every expression node has a statically-known
 type — there is no `any` escape hatch. This section documents the design
 principles and restrictions.
 
+Enable expressions via `enableExpressions: true` in
+`LoadGrammarRulesOptions` when your grammar rules need computed values
+(arithmetic, conditionals, method calls) in the `->` position.
+
 ### Validation Architecture
 
 Type checking runs in two passes, implemented in
@@ -565,6 +569,30 @@ declared output type, rather than silently accepting any capture.
 `classifyRuleValue` is also used by `deriveAlternativeType` for type
 inference, so both paths share the same classification logic.
 
+### Implicit Value Behavior
+
+When a grammar rule has no explicit `-> value` expression, the compiler
+and matcher use `classifyRuleValue()` to determine how the rule produces
+its output. The implicit value depends on the rule's structure:
+
+**Single-variable implicit** (`variable` kind): A rule with exactly one
+variable part and no explicit value expression passes the variable's
+captured value through as the rule's output. For example,
+`"play" $(x:<Song>)` produces the value captured by `x`.
+
+**Single-part passthrough** (`passthrough` kind): A rule with no
+variable parts and a single `RulesPart` (bare rule reference or nested
+group) passes the referenced rule's value through. For example,
+`<Greeting> = <Hello> | <Hi>` produces whichever sub-rule matched.
+
+**String literal default** (`default` kind): A rule with no variable
+parts and a single string literal or phrase-set part produces the
+matched text as a string. For example, `"hello"` produces `"hello"`.
+
+**No value** (`none` kind): Rules with multiple variable parts but no
+explicit value expression produce no value — the compiler warns about
+this because the output is ambiguous.
+
 ### Design Principles
 
 1. **Statically-Typed Expressions** — every node has a known compile-time
@@ -587,13 +615,13 @@ inference, so both paths share the same classification logic.
 ### Expression Type Restriction Table
 
 | Operator              | Required Operand Types                            | Result Type                                   | Error on Violation                                                                                                        |
-| --------------------- | ------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --- | ---------------------------------------------------------------- |
+| --------------------- | ------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `+` (addition)        | `number`, `number`                                | `number`                                      | "Operator '+' requires both operands to be number or both to be string. Use a template literal for string interpolation." |
 | `+` (concat)          | `string`, `string`                                | `string`                                      | _(same)_                                                                                                                  |
 | `-` `*` `/` `%`       | `number`, `number`                                | `number`                                      | "Operator '{op}' requires both operands to be number."                                                                    |
 | `<` `>` `<=` `>=`     | same: both `number` or both `string`              | `boolean`                                     | "Operator '{op}' requires both operands to be the same type (both number or both string)."                                |
 | `===` `!==`           | any, any                                          | `boolean`                                     | _(no restriction)_                                                                                                        |
-| `&&` `\|\|`           | `boolean`, `boolean`                              | `boolean`                                     | "Operators '&&'/'                                                                                                         |     | ' require boolean operands. Use ternary for conditional values." |
+| `&&` `\|\|`           | `boolean`, `boolean`                              | `boolean`                                     | "Operators '&&'/'\|\|' require boolean operands. Use ternary for conditional values."                                     |
 | `??`                  | `T \| undefined`, any                             | strip `undefined` from left, union with right | _(no restriction — may produce union types)_                                                                              |
 | unary `-`             | `number`                                          | `number`                                      | "Unary '-' requires a number operand."                                                                                    |
 | `!`                   | `boolean`                                         | `boolean`                                     | "Operator '!' requires a boolean operand. Use === or !== for equality checks."                                            |

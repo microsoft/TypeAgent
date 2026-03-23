@@ -636,8 +636,9 @@ function createNamedGrammarRules(
             // Pass 1: Expression-internal consistency (always runs).
             // Catches operator constraint violations and inference errors
             // regardless of whether a schema loader resolved types.
-            // Only applies to "value" leaves (expression nodes);
-            // "variable" leaves have no expression to validate internally.
+            // Only expression-typed leaves will produce errors here;
+            // validateExprTypes early-returns for non-expression nodes.
+            // "variable" leaves have no value node to validate internally.
             const leafExprTypes = new Map<CompiledValueNode, SchemaType>();
             const leafVarTypes = new Map<
                 CompiledValueNode,
@@ -833,14 +834,9 @@ function createGrammarRule(
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
     let variableCount = 0;
-    // Tracks whether the last expression part can implicitly produce a value.
-    // Only string parts (literals) and rule parts (named references or nested
-    // groups) set this — variables use variableCount instead, and wildcards/
-    // numbers/phrase-sets don't produce a passthrough value on their own
-    // (phrase-sets set it to true only to suppress the "no value" diagnostic).
-    // Used in the final hasValue computation for zero-variable, single-part
-    // rules: the matched string text or the referenced rule's value is
-    // returned as the rule's implicit value at match time.
+    // Whether the last part can implicitly produce a value (string literal
+    // or rule reference). Used for zero-variable, single-part rules where
+    // the matched text or referenced rule's value is the implicit output.
     let defaultValue = false;
     // A rule alternative is nullable if ALL of its parts can match ε.
     let ruleNullable = true;

@@ -8,7 +8,9 @@
  * JavaScript-like expressions in the value position (after `->`) of .agr
  * grammar rules.
  *
- * "ValueExpr" is used to distinguish from the *matching* expression side.
+ * "ValueExpr" distinguishes these nodes from the *pattern-matching* side
+ * of a grammar rule (the part before `->`) — these nodes represent the
+ * *value-producing* side (after `->`).
  *
  * Operator precedence (lowest to highest):
  *   1. Ternary            ? :
@@ -19,7 +21,7 @@
  *   6. Comparison         < > <= >=
  *   7. Additive           + -
  *   8. Multiplicative     * / %
- *   9. Unary              - + ! typeof
+ *   9. Unary              - ! typeof
  *  10. Postfix            . ?. [] ()
  *  11. Primary            literals, variables, objects, arrays, templates, (expr), ...expr
  */
@@ -122,22 +124,22 @@ export interface ValueExprParserContext {
 
     // For object/array parsing, we delegate to the existing parser.
     // The expression parser wraps these.
-    parseObjectValue(): any; // returns ObjectValueNode
-    parseArrayValue(): any; // returns ArrayValueNode
-    parseValueWithComments(leadingComments?: Comment[]): any; // returns ValueNode
+    parseObjectValue(): ValueNode;
+    parseArrayValue(): ValueNode;
+    parseValueWithComments(leadingComments?: Comment[]): ValueNode;
 }
 
 /**
  * Parse a value expression.
  * Entry point called from GrammarRuleParser.parseValue() when enableExpressions is true.
  */
-export function parseValueExpr(ctx: ValueExprParserContext): any {
+export function parseValueExpr(ctx: ValueExprParserContext): ValueNode {
     return parseTernary(ctx);
 }
 
 // ── Precedence levels ─────────────────────────────────────────────────────────
 
-function parseTernary(ctx: ValueExprParserContext): any {
+function parseTernary(ctx: ValueExprParserContext): ValueNode {
     const test = parseNullishCoalescing(ctx);
     if (ctx.isAt("?") && !ctx.isAt("?.") && !ctx.isAt("??")) {
         ctx.skipWhitespace(1);
@@ -154,7 +156,7 @@ function parseTernary(ctx: ValueExprParserContext): any {
     return test;
 }
 
-function parseNullishCoalescing(ctx: ValueExprParserContext): any {
+function parseNullishCoalescing(ctx: ValueExprParserContext): ValueNode {
     let left = parseLogicalOr(ctx);
     while (ctx.isAt("??")) {
         const op: BinaryValueExprOp = "??";
@@ -165,7 +167,7 @@ function parseNullishCoalescing(ctx: ValueExprParserContext): any {
     return left;
 }
 
-function parseLogicalOr(ctx: ValueExprParserContext): any {
+function parseLogicalOr(ctx: ValueExprParserContext): ValueNode {
     let left = parseLogicalAnd(ctx);
     while (ctx.isAt("||")) {
         const op: BinaryValueExprOp = "||";
@@ -176,7 +178,7 @@ function parseLogicalOr(ctx: ValueExprParserContext): any {
     return left;
 }
 
-function parseLogicalAnd(ctx: ValueExprParserContext): any {
+function parseLogicalAnd(ctx: ValueExprParserContext): ValueNode {
     let left = parseEquality(ctx);
     while (ctx.isAt("&&")) {
         const op: BinaryValueExprOp = "&&";
@@ -187,7 +189,7 @@ function parseLogicalAnd(ctx: ValueExprParserContext): any {
     return left;
 }
 
-function parseEquality(ctx: ValueExprParserContext): any {
+function parseEquality(ctx: ValueExprParserContext): ValueNode {
     let left = parseComparison(ctx);
     while (true) {
         let op: BinaryValueExprOp | undefined;
@@ -206,7 +208,7 @@ function parseEquality(ctx: ValueExprParserContext): any {
     return left;
 }
 
-function parseComparison(ctx: ValueExprParserContext): any {
+function parseComparison(ctx: ValueExprParserContext): ValueNode {
     let left = parseAdditive(ctx);
     while (true) {
         let op: BinaryValueExprOp | undefined;
@@ -233,7 +235,7 @@ function parseComparison(ctx: ValueExprParserContext): any {
     return left;
 }
 
-function parseAdditive(ctx: ValueExprParserContext): any {
+function parseAdditive(ctx: ValueExprParserContext): ValueNode {
     let left = parseMultiplicative(ctx);
     while (true) {
         let op: BinaryValueExprOp | undefined;
@@ -252,7 +254,7 @@ function parseAdditive(ctx: ValueExprParserContext): any {
     return left;
 }
 
-function parseMultiplicative(ctx: ValueExprParserContext): any {
+function parseMultiplicative(ctx: ValueExprParserContext): ValueNode {
     let left = parseUnary(ctx);
     while (true) {
         let op: BinaryValueExprOp | undefined;
@@ -272,7 +274,7 @@ function parseMultiplicative(ctx: ValueExprParserContext): any {
     return left;
 }
 
-function parseUnary(ctx: ValueExprParserContext): any {
+function parseUnary(ctx: ValueExprParserContext): ValueNode {
     // typeof
     if (ctx.isAt("typeof") && !isIdContinueAt(ctx, 6)) {
         ctx.skipWhitespace(6);
@@ -300,7 +302,6 @@ function parseUnary(ctx: ValueExprParserContext): any {
     //  - But `-x` is unary minus on variable x
     //  - And `-` before `->` is handled by additive
     if (ctx.isAt("-") && !ctx.isAt("->")) {
-        const opChar = ctx.content[ctx.curr];
         // Look ahead: if the next non-space character starts a number,
         // let parsePrimary handle it (since parseNumberValue handles signs).
         const savedPos = ctx.curr;
@@ -330,7 +331,7 @@ function parseUnary(ctx: ValueExprParserContext): any {
         const operand = parseUnary(ctx);
         return {
             type: "unaryExpression",
-            operator: opChar as UnaryValueExprOp,
+            operator: "-" as UnaryValueExprOp,
             operand,
         } satisfies UnaryValueExprNode;
     }
@@ -338,7 +339,7 @@ function parseUnary(ctx: ValueExprParserContext): any {
     return parsePostfix(ctx);
 }
 
-function parsePostfix(ctx: ValueExprParserContext): any {
+function parsePostfix(ctx: ValueExprParserContext): ValueNode {
     let expr = parsePrimary(ctx);
 
     while (true) {
@@ -434,9 +435,9 @@ function parsePostfix(ctx: ValueExprParserContext): any {
     return expr;
 }
 
-function parseCallArguments(ctx: ValueExprParserContext): any[] {
+function parseCallArguments(ctx: ValueExprParserContext): ValueNode[] {
     ctx.skipWhitespace(1); // skip "("
-    const args: any[] = [];
+    const args: ValueNode[] = [];
     if (!ctx.isAt(")")) {
         args.push(parseTernary(ctx));
         while (ctx.isAt(",")) {
@@ -448,7 +449,7 @@ function parseCallArguments(ctx: ValueExprParserContext): any[] {
     return args;
 }
 
-function parsePrimary(ctx: ValueExprParserContext): any {
+function parsePrimary(ctx: ValueExprParserContext): ValueNode {
     // Spread: ...expr
     if (ctx.isAt("...")) {
         ctx.skipWhitespace(3);
@@ -520,7 +521,7 @@ function parseTemplateLiteral(
 ): TemplateLiteralValueExprNode {
     ctx.curr++; // skip opening backtick
     const quasis: string[] = [];
-    const expressions: any[] = [];
+    const expressions: ValueNode[] = [];
     const chars: string[] = [];
 
     while (true) {

@@ -8,7 +8,7 @@
  * is one of the expression types (binaryExpression, unaryExpression, etc.).
  *
  * Security: method calls are restricted to a whitelist of safe built-in
- * string/array methods.  No arbitrary function execution is allowed.
+ * string/array/number methods.  No arbitrary function execution is allowed.
  */
 
 import type { CompiledValueNode } from "./grammarTypes.js";
@@ -48,7 +48,11 @@ export function evaluateValueExpr(
 
         // ── Binary expression ─────────────────────────────────────────────
         case "binaryExpression": {
-            // Short-circuit operators
+            // Short-circuit operators.
+            // These use JS short-circuit semantics (returning the actual
+            // operand value, not a coerced boolean).  This is correct
+            // because the type system guarantees boolean operands, so
+            // the result is always boolean.
             if (node.operator === "&&") {
                 const left = evaluateValueExpr(node.left, evalBase);
                 return left ? evaluateValueExpr(node.right, evalBase) : left;
