@@ -1100,9 +1100,15 @@ export class AppAgentManager implements ActionConfigProvider {
         }
 
         // Get fresh manifest from provider and refresh schemas
-        const manifest = await record.provider.getAppAgentManifest(appAgentName);
+        const manifest =
+            await record.provider.getAppAgentManifest(appAgentName);
         const semanticMapP: Promise<void>[] = [];
-        this.refreshAgentSchema(appAgentName, manifest, semanticMapP, undefined);
+        this.refreshAgentSchema(
+            appAgentName,
+            manifest,
+            semanticMapP,
+            undefined,
+        );
         await Promise.all(semanticMapP);
 
         // Clear translator cache to force re-translation with new schema
