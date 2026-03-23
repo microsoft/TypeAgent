@@ -121,7 +121,9 @@ const debugParse = registerDebug("typeagent:grammar:parse");
 export function parseGrammarRules(
     fileName: string,
     content: string,
+    /** Whether to track source positions on value nodes (default: true). */
     position?: boolean,
+    /** Enable JavaScript-like value expressions in the `->` position (default: false). */
     enableExpressions: boolean = false,
 ): GrammarParseResult {
     const parser = new GrammarRuleParser(

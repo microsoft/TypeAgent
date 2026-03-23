@@ -71,6 +71,7 @@ export type CallValueExprNode = {
     type: "callExpression";
     callee: ValueNode;
     arguments: ValueNode[];
+    optional?: boolean; // `?.()` optional call
 } & CommentFields;
 
 export type SpreadValueExprNode = {
@@ -314,14 +315,10 @@ function parseUnary(ctx: ValueExprParserContext): ValueNode {
         ) {
             peekPos++;
         }
-        // If next char is a digit or dot-digit, this is a number literal — backtrack
-        if (
-            peekPos < ctx.content.length &&
-            (/[0-9]/.test(ctx.content[peekPos]) ||
-                (ctx.content[peekPos] === "." &&
-                    peekPos + 1 < ctx.content.length &&
-                    /[0-9]/.test(ctx.content[peekPos + 1])))
-        ) {
+        // If next char starts a number literal, backtrack and let
+        // parsePrimary → parseNumberValue handle it (keeps number-start
+        // detection in sync with parseNumberValue’s regex).
+        if (isNumberStart(ctx.content, peekPos)) {
             ctx.curr = savedPos;
             return parsePostfix(ctx);
         }
@@ -364,17 +361,34 @@ function parsePostfix(ctx: ValueExprParserContext): ValueNode {
                     type: "callExpression",
                     callee: expr,
                     arguments: parseCallArguments(ctx),
+                    optional: true,
                 } satisfies CallValueExprNode;
             } else {
-                // ?.prop
+                // ?.prop or ?.method(args)
                 const prop = ctx.parseId("property name after ?.");
-                expr = {
-                    type: "memberExpression",
-                    object: expr,
-                    property: prop,
-                    computed: false,
-                    optional: true,
-                } satisfies MemberValueExprNode;
+                if (ctx.isAt("(")) {
+                    // ?.method(args)
+                    const callee = {
+                        type: "memberExpression",
+                        object: expr,
+                        property: prop,
+                        computed: false,
+                        optional: true,
+                    } satisfies MemberValueExprNode;
+                    expr = {
+                        type: "callExpression",
+                        callee,
+                        arguments: parseCallArguments(ctx),
+                    } satisfies CallValueExprNode;
+                } else {
+                    expr = {
+                        type: "memberExpression",
+                        object: expr,
+                        property: prop,
+                        computed: false,
+                        optional: true,
+                    } satisfies MemberValueExprNode;
+                }
             }
             continue;
         }
@@ -586,4 +600,23 @@ function isIdContinueChar(char: string): boolean {
 function isIdContinueAt(ctx: ValueExprParserContext, offset: number): boolean {
     const pos = ctx.curr + offset;
     return pos < ctx.content.length && isIdContinueChar(ctx.content[pos]);
+}
+
+/**
+ * Check if a position in the content could be the start of a number literal.
+ * Must stay in sync with GrammarRuleParser.parseNumberValue’s regex
+ * (/[0-9a-z+-.]*&#47;iy).
+ */
+function isNumberStart(content: string, pos: number): boolean {
+    if (pos >= content.length) return false;
+    if (/[0-9]/.test(content[pos])) return true;
+    // dot-digit (e.g. .5)
+    if (
+        content[pos] === "." &&
+        pos + 1 < content.length &&
+        /[0-9]/.test(content[pos + 1])
+    ) {
+        return true;
+    }
+    return false;
 }

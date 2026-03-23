@@ -12,28 +12,13 @@
  * produces the same AST.
  */
 
-import type { BinaryValueExprOp } from "./grammarTypes.js";
+import { BINARY_PRECEDENCE } from "./grammarTypes.js";
 import type { ValueNode } from "./grammarRuleParser.js";
 
 // ── Operator precedence table ─────────────────────────────────────────────────
-// Higher number = tighter binding.
-
-const BINARY_PRECEDENCE: Record<BinaryValueExprOp, number> = {
-    "??": 1,
-    "||": 2,
-    "&&": 3,
-    "===": 4,
-    "!==": 4,
-    "<": 5,
-    ">": 5,
-    "<=": 5,
-    ">=": 5,
-    "+": 6,
-    "-": 6,
-    "*": 7,
-    "/": 7,
-    "%": 7,
-};
+// Imported from grammarTypes.ts — single source of truth.  The parser encodes
+// the same precedence implicitly via its recursive-descent call chain;
+// round-trip tests verify the two stay in sync.
 
 function precedenceOf(node: ValueNode): number {
     if (node.type === "binaryExpression") {
@@ -137,7 +122,7 @@ export function writeValueExprNode(
         // ── Call expression ───────────────────────────────────────────────
         case "callExpression":
             writeValueExprNode(ctx, node.callee);
-            ctx.write("(");
+            ctx.write(node.optional ? "?.(" : "(");
             for (let i = 0; i < node.arguments.length; i++) {
                 if (i > 0) ctx.write(", ");
                 writeValueExprNode(ctx, node.arguments[i]);

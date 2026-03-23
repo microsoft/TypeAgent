@@ -71,6 +71,9 @@ export function evaluateValueExpr(
             const left = evaluateValueExpr(node.left, evalBase);
             const right = evaluateValueExpr(node.right, evalBase);
 
+            // Casts to `any` are safe: compile-time validation in
+            // grammarValueTypeValidator.ts guarantees operand types match
+            // the operator's requirements (e.g. both number for `-`).
             switch (node.operator) {
                 case "+":
                     return (left as any) + (right as any);
@@ -101,9 +104,10 @@ export function evaluateValueExpr(
         // ── Unary expression ──────────────────────────────────────────────
         case "unaryExpression": {
             const operand = evaluateValueExpr(node.operand, evalBase);
+            // Cast safe: compile-time type validation ensures correct operand type.
             switch (node.operator) {
                 case "-":
-                    return -(operand as any);
+                    return -(operand as number);
                 case "!":
                     return !operand;
                 case "typeof":
@@ -137,6 +141,14 @@ export function evaluateValueExpr(
 
         // ── Method / function call ────────────────────────────────────────
         case "callExpression": {
+            // Short-circuit for optional calls: ?.() when callee is nullish.
+            if (node.optional) {
+                const calleeVal = evaluateValueExpr(node.callee, evalBase);
+                if (calleeVal == null) {
+                    return undefined;
+                }
+            }
+
             const args = node.arguments.map((a) =>
                 evaluateValueExpr(a, evalBase),
             );

@@ -586,6 +586,16 @@ describeForEachMatcher(
                 );
             });
         });
+
+        describe("Spread", () => {
+            it("spread in array flattens elements", () => {
+                const g = `<Start> = $(x:string) -> [...x.split(" "), "extra"];`;
+                const grammar = loadWithExpressions(g);
+                expect(testMatchGrammar(grammar, "hello world")).toStrictEqual([
+                    ["hello", "world", "extra"],
+                ]);
+            });
+        });
     },
 );
 
@@ -652,5 +662,63 @@ describe("Value Expression Round-trip", () => {
         assertRoundTrip(
             `<Start> = $(x:string) -> { name: x.toUpperCase(), len: x.length };`,
         );
+    });
+
+    // ── Precedence edge cases ─────────────────────────────────────────────
+    // These validate that the shared BINARY_PRECEDENCE table in grammarTypes.ts
+    // stays in sync with the parser's implicit precedence (function call chain).
+
+    it("left-associativity: a + b + c", () => {
+        assertRoundTrip(
+            `<Start> = $(a:number) $(b:number) $(c:number) -> a + b + c;`,
+        );
+    });
+
+    it("left-assoc preserves: (a + b) + c === a + b + c", () => {
+        // Left-associative: (a + b) + c should NOT add parens
+        const g1 = `<Start> = $(a:number) $(b:number) $(c:number) -> a + b + c;`;
+        const g2 = `<Start> = $(a:number) $(b:number) $(c:number) -> (a + b) + c;`;
+        const parsed1 = parseWithExpressions(g1);
+        const parsed2 = parseWithExpressions(g2);
+        // Both should produce the same AST (left-associative)
+        expect(stripAnnotations(parsed1.definitions[0].rules[0].value)).toEqual(
+            stripAnnotations(parsed2.definitions[0].rules[0].value),
+        );
+    });
+
+    it("right-associativity required: a + (b + c)", () => {
+        assertRoundTrip(
+            `<Start> = $(a:number) $(b:number) $(c:number) -> a + (b + c);`,
+        );
+    });
+
+    it("precedence boundary: * vs +", () => {
+        assertRoundTrip(
+            `<Start> = $(a:number) $(b:number) $(c:number) -> a + b * c;`,
+        );
+    });
+
+    it("precedence boundary: + vs ===", () => {
+        assertRoundTrip(`<Start> = $(a:number) $(b:number) -> a + b === 5;`);
+    });
+
+    it("precedence boundary: && vs ||", () => {
+        assertRoundTrip(
+            `<Start> = $(a:string) $(b:string) $(c:string) -> a && b || c;`,
+        );
+    });
+
+    it("precedence boundary: ?? vs ||", () => {
+        assertRoundTrip(`<Start> = $(a:string) $(b:string) -> (a ?? b) || b;`);
+    });
+
+    it("nested ternary (right-associative)", () => {
+        assertRoundTrip(
+            `<Start> = $(a:number) -> a > 0 ? a > 10 ? "big" : "small" : "negative";`,
+        );
+    });
+
+    it("optional call: ?.() round-trips", () => {
+        assertRoundTrip(`<Start> = $(x:string) -> x?.toLowerCase();`);
     });
 });

@@ -31,6 +31,27 @@ export type BinaryValueExprOp =
 
 export type UnaryValueExprOp = "-" | "!" | "typeof";
 
+// ── Operator precedence table (value expressions) ────────────────────────────
+// Higher number = tighter binding.  Shared between the writer (for
+// parenthesization) and validated by round-trip tests against the parser.
+
+export const BINARY_PRECEDENCE: Record<BinaryValueExprOp, number> = {
+    "??": 1,
+    "||": 2,
+    "&&": 3,
+    "===": 4,
+    "!==": 4,
+    "<": 5,
+    ">": 5,
+    "<=": 5,
+    ">=": 5,
+    "+": 6,
+    "-": 6,
+    "*": 7,
+    "/": 7,
+    "%": 7,
+};
+
 // ── Compiled value node types ─────────────────────────────────────────────────
 // ValueNode variants *without* comment annotations.  GrammarRule and
 // GrammarRuleJson use these so parser comment fields are never serialized into
@@ -97,6 +118,7 @@ export type CompiledCallValueExprNode = {
     type: "callExpression";
     callee: CompiledValueNode;
     arguments: CompiledValueNode[];
+    optional?: boolean; // `?.()` optional call
 };
 
 export type CompiledSpreadValueExprNode = {

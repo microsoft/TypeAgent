@@ -454,9 +454,10 @@ function createValue(
         case "array": {
             const arr: any[] = [];
             for (const [index, v] of node.value.entries()) {
-                arr.push(
-                    createValue(
-                        v,
+                if (v.type === "spreadElement") {
+                    // Spread: evaluate the argument and flatten into the array.
+                    const inner = createValue(
+                        v.argument,
                         valueIds,
                         values,
                         propertyName
@@ -465,8 +466,27 @@ function createValue(
                         wildcardPropertyNames,
                         partialValueId,
                         stat,
-                    ),
-                );
+                    );
+                    if (Array.isArray(inner)) {
+                        arr.push(...inner);
+                    } else {
+                        arr.push(inner);
+                    }
+                } else {
+                    arr.push(
+                        createValue(
+                            v,
+                            valueIds,
+                            values,
+                            propertyName
+                                ? `${propertyName}.${index}`
+                                : index.toString(),
+                            wildcardPropertyNames,
+                            partialValueId,
+                            stat,
+                        ),
+                    );
+                }
             }
             return arr;
         }

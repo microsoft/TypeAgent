@@ -22,13 +22,23 @@ const ANY_TYPE: SchemaType = SchemaCreator.any();
 
 /**
  * Sentinel for "error during type inference."
- * Distinct from ANY_TYPE by reference identity.  When a derive function
- * encounters a lookup failure (unknown variable, property, or method) it
- * pushes an error and returns ERROR_TYPE.  Compound nodes (ternary, ??, ||,
- * &&) propagate ERROR_TYPE so downstream operators skip validation and avoid
+ * Distinguished from ANY_TYPE by a Symbol brand so that identity checks
+ * cannot accidentally confuse the two.  When a derive function encounters
+ * a lookup failure (unknown variable, property, or method) it pushes an
+ * error and returns ERROR_TYPE.  Compound nodes (ternary, ??, ||, &&)
+ * propagate ERROR_TYPE so downstream operators skip validation and avoid
  * cascading error messages.
  */
-const ERROR_TYPE: SchemaType = { type: "any" };
+const _errorBrand: unique symbol = Symbol("errorType");
+const ERROR_TYPE: SchemaType & { [_errorBrand]: true } = Object.assign(
+    { type: "any" as const },
+    { [_errorBrand]: true as const },
+);
+
+/** Check whether a type is the error sentinel (more robust than `=== ERROR_TYPE`). */
+function isErrorType(t: SchemaType): boolean {
+    return (t as any)[_errorBrand] === true;
+}
 
 /**
  * A type-inference or operator-constraint error with a reference to the
@@ -210,8 +220,20 @@ export const METHOD_RETURN_TYPE_TABLES = {
     NUMBER_TO_STRING_METHODS,
 } as const;
 
-/** Counter for generating unique names for unnamed recursive rules. */
-let ruleNameCounter = 0;
+/** Per-cache counters for generating unique rule names. */
+const cacheCounters = new WeakMap<
+    Map<GrammarRule[], SchemaType>,
+    { value: number }
+>();
+
+function nextRuleName(cache: Map<GrammarRule[], SchemaType>): string {
+    let counter = cacheCounters.get(cache);
+    if (!counter) {
+        counter = { value: 0 };
+        cacheCounters.set(cache, counter);
+    }
+    return `__rule_${counter.value++}`;
+}
 
 /**
  * Derives the output SchemaType of a compiled rule (GrammarRule[]).
@@ -246,7 +268,7 @@ function deriveRuleValueType(
 
     // Create a type-reference as the provisional seed for this rule.
     // Any recursive back-references during derivation will embed this ref.
-    const ruleName = name ?? `__rule_${ruleNameCounter++}`;
+    const ruleName = name ?? nextRuleName(cache);
     const ref = SchemaCreator.ref(ruleName);
     cache.set(rules, ref);
 
@@ -316,7 +338,7 @@ function deriveRuleValueTypeOnce(
     const types: SchemaType[] = [];
     for (const rule of rules) {
         const altType = deriveAlternativeType(rule, cache);
-        if (altType === ANY_TYPE || altType === ERROR_TYPE) {
+        if (altType === ANY_TYPE || isErrorType(altType)) {
             continue; // skip unknowable or error alternatives
         }
         // Flatten unions from nested rule references so passthrough-recursive
@@ -584,7 +606,7 @@ function deriveValueTypeImpl(
                     errors,
                     typeCache,
                 );
-                if (elemType === ERROR_TYPE) {
+                if (isErrorType(elemType)) {
                     return SchemaCreator.array(ERROR_TYPE);
                 }
                 if (!elementTypes.some((t) => schemaTypesEqual(t, elemType))) {
@@ -641,14 +663,14 @@ function deriveValueTypeImpl(
                     return ERROR_TYPE;
                 case "&&":
                 case "||":
-                    if (leftType === ERROR_TYPE || rightType === ERROR_TYPE)
+                    if (isErrorType(leftType) || isErrorType(rightType))
                         return ERROR_TYPE;
                     return SchemaCreator.boolean();
                 case "??": {
-                    if (leftType === ERROR_TYPE || rightType === ERROR_TYPE)
+                    if (isErrorType(leftType) || isErrorType(rightType))
                         return ERROR_TYPE;
                     const stripped = stripUndefined(leftType);
-                    if (stripped === ERROR_TYPE) return rightType;
+                    if (isErrorType(stripped)) return rightType;
                     if (schemaTypesEqual(stripped, rightType)) return stripped;
                     return SchemaCreator.union(stripped, rightType);
                 }
@@ -682,7 +704,7 @@ function deriveValueTypeImpl(
                 errors,
                 typeCache,
             );
-            if (consequentType === ERROR_TYPE || alternateType === ERROR_TYPE)
+            if (isErrorType(consequentType) || isErrorType(alternateType))
                 return ERROR_TYPE;
             if (schemaTypesEqual(consequentType, alternateType))
                 return consequentType;
@@ -692,13 +714,13 @@ function deriveValueTypeImpl(
             let objectType = resolveType(
                 deriveValueType(value.object, resolveVar, errors, typeCache),
             );
-            if (objectType === ERROR_TYPE) return ERROR_TYPE;
+            if (isErrorType(objectType)) return ERROR_TYPE;
             // Optional chaining: strip undefined before lookup, add back after
             const addUndefined =
                 value.optional && containsUndefined(objectType);
             if (addUndefined) {
                 objectType = resolveType(stripUndefined(objectType));
-                if (objectType === ERROR_TYPE) return ERROR_TYPE;
+                if (isErrorType(objectType)) return ERROR_TYPE;
             }
             let resultType: SchemaType | undefined;
             if (
@@ -781,7 +803,7 @@ function deriveValueTypeImpl(
                         typeCache,
                     ),
                 );
-                if (objectType === ERROR_TYPE) return ERROR_TYPE;
+                if (isErrorType(objectType)) return ERROR_TYPE;
                 const method = value.callee.property;
                 if (objectType.type === "string") {
                     if (STRING_TO_STRING_METHODS.has(method))
@@ -1118,7 +1140,7 @@ function walkExprOperands(
             );
 
             // 1. ERROR_TYPE → skip
-            if (leftType === ERROR_TYPE || rightType === ERROR_TYPE) return;
+            if (isErrorType(leftType) || isErrorType(rightType)) return;
 
             // 2. undefined check for non-undefined-tolerant operators
             if (!UNDEFINED_TOLERANT_OPERATORS.has(value.operator)) {
@@ -1226,7 +1248,7 @@ function walkExprOperands(
                 undefined,
                 typeCache,
             );
-            if (operandType === ERROR_TYPE) return;
+            if (isErrorType(operandType)) return;
             if (
                 !UNDEFINED_TOLERANT_OPERATORS.has(value.operator) &&
                 containsUndefined(operandType)
@@ -1286,7 +1308,7 @@ function walkExprOperands(
                 undefined,
                 typeCache,
             );
-            if (testType === ERROR_TYPE) return;
+            if (isErrorType(testType)) return;
             if (testType.type !== "boolean") {
                 errors.push({
                     message: `Ternary '?' test must be a boolean expression. Got '${formatSchemaType(testType)}'. Use a comparison (e.g., x > 0) or equality check (e.g., x !== undefined).`,
@@ -1323,7 +1345,7 @@ function walkExprOperands(
                     typeCache,
                 );
                 if (
-                    objectType !== ERROR_TYPE &&
+                    !isErrorType(objectType) &&
                     !containsUndefined(objectType)
                 ) {
                     warnings?.push({
@@ -1356,7 +1378,7 @@ function walkExprOperands(
                     undefined,
                     typeCache,
                 );
-                if (exprType === ERROR_TYPE) continue;
+                if (isErrorType(exprType)) continue;
                 // Check that all types in the expression are interpolatable
                 const types =
                     exprType.type === "type-union"
@@ -1465,7 +1487,7 @@ export function validateExprTypes(
     return {
         errors: [],
         inferredType:
-            exprType === ERROR_TYPE || exprType === ANY_TYPE
+            isErrorType(exprType) || exprType === ANY_TYPE
                 ? undefined
                 : exprType,
     };

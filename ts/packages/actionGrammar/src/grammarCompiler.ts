@@ -479,6 +479,7 @@ function validateAndCompileValueNode(
                     type: "callExpression",
                     callee: compile(node.callee),
                     arguments: node.arguments.map(compile),
+                    ...(node.optional ? { optional: true } : {}),
                 };
                 break;
             case "spreadElement":
