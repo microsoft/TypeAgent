@@ -17,13 +17,31 @@ import {
     defaultChatSettings,
 } from "./platformAdapter.js";
 
+export interface CompletionResult {
+    completions: string[];
+    startIndex: number;
+    prefix: string;
+}
+
+export interface DynamicDisplayResult {
+    content: DisplayContent;
+    nextRefreshMs: number;
+}
+
 export interface ChatPanelOptions {
     platformAdapter: PlatformAdapter;
     settingsView?: ChatSettingsView;
-    /** Callback when user sends a message. */
-    onSend?: (text: string) => void;
+    /** Callback when user sends a message (with optional base64 image attachments). */
+    onSend?: (text: string, attachments?: string[]) => void;
     /** Callback when user clicks stop or presses Escape during processing. */
     onCancel?: (requestId: string) => void;
+    /** Callback to fetch command completions for the current input. */
+    getCompletions?: (input: string) => Promise<CompletionResult | null>;
+    /** Callback to fetch refreshed dynamic display content. */
+    getDynamicDisplay?: (
+        source: string,
+        displayId: string,
+    ) => Promise<DynamicDisplayResult>;
 }
 
 /**
@@ -40,14 +58,39 @@ export class ChatPanel {
     private readonly settingsView: ChatSettingsView;
 
     private readonly stopButton: HTMLButtonElement;
+    private readonly ghostSpan: HTMLSpanElement;
     private currentAgentContainer: AgentMessageContainer | undefined;
     private statusContainer: AgentMessageContainer | undefined;
+    private historyAgentContainer: AgentMessageContainer | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
     private activeRequestId?: string;
 
-    public onSend?: (text: string) => void;
+    // Completion state
+    private completions: string[] = [];
+    private completionIndex = 0;
+    private completionPrefix = "";
+    private completionFilterStart = 0;
+    private completionTimer: ReturnType<typeof setTimeout> | undefined;
+
+    // Dynamic display refresh state
+    private dynamicDisplays: {
+        source: string;
+        displayId: string;
+        nextRefreshTime: number;
+    }[] = [];
+    private dynamicTimer?: ReturnType<typeof setTimeout>;
+
+    // Pending image attachments (base64 data URLs)
+    private pendingAttachments: string[] = [];
+
+    public onSend?: (text: string, attachments?: string[]) => void;
     public onCancel?: (requestId: string) => void;
+    public getCompletions?: (input: string) => Promise<CompletionResult | null>;
+    public getDynamicDisplay?: (
+        source: string,
+        displayId: string,
+    ) => Promise<DynamicDisplayResult>;
 
     constructor(
         private readonly rootElement: HTMLElement,
@@ -57,6 +100,8 @@ export class ChatPanel {
         this.settingsView = options.settingsView ?? defaultChatSettings;
         this.onSend = options.onSend;
         this.onCancel = options.onCancel;
+        this.getCompletions = options.getCompletions;
+        this.getDynamicDisplay = options.getDynamicDisplay;
 
         // Build DOM structure
         const wrapper = document.createElement("div");
@@ -100,7 +145,17 @@ export class ChatPanel {
             }
         });
 
-        this.inputArea.appendChild(this.textInput);
+        // Ghost text for inline completion preview
+        this.ghostSpan = document.createElement("span");
+        this.ghostSpan.className = "chat-input-ghost";
+
+        // Wrap textarea + ghost in a container so ghost flows inline after typed text
+        const textWrapper = document.createElement("div");
+        textWrapper.className = "chat-input-text-wrapper";
+        textWrapper.appendChild(this.textInput);
+        textWrapper.appendChild(this.ghostSpan);
+
+        this.inputArea.appendChild(textWrapper);
         this.inputArea.appendChild(this.sendButton);
         this.inputArea.appendChild(this.stopButton);
 
@@ -112,16 +167,32 @@ export class ChatPanel {
 
     private setupInputHandlers() {
         this.textInput.addEventListener("keydown", (e) => {
+            if (e.key === "Tab" && this.completions.length > 0) {
+                e.preventDefault();
+                this.acceptCompletion();
+                return;
+            }
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
+                this.clearCompletions();
                 this.send();
             } else if (e.key === "Escape") {
+                if (this.completions.length > 0) {
+                    this.clearCompletions();
+                    return;
+                }
                 if (this.activeRequestId) {
                     this.onCancel?.(this.activeRequestId);
                     return;
                 }
                 this.textInput.textContent = "";
                 this.sendButton.disabled = true;
+            } else if (e.key === "ArrowUp" && this.completions.length > 0) {
+                e.preventDefault();
+                this.cycleCompletion(-1);
+            } else if (e.key === "ArrowDown" && this.completions.length > 0) {
+                e.preventDefault();
+                this.cycleCompletion(1);
             } else if (e.key === "ArrowUp" && !this.textInput.textContent) {
                 e.preventDefault();
                 this.navigateHistory(-1);
@@ -133,9 +204,163 @@ export class ChatPanel {
 
         this.textInput.addEventListener("input", () => {
             this.sendButton.disabled = !this.textInput.textContent?.trim();
+            this.scheduleCompletionFetch();
         });
 
         this.sendButton.addEventListener("click", () => this.send());
+
+        // Drag-drop for image files
+        this.inputArea.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            this.inputArea.classList.add("chat-input-dragover");
+        });
+        this.inputArea.addEventListener("dragleave", () => {
+            this.inputArea.classList.remove("chat-input-dragover");
+        });
+        this.inputArea.addEventListener("drop", (e) => {
+            e.preventDefault();
+            this.inputArea.classList.remove("chat-input-dragover");
+            this.handleFileDrop(e.dataTransfer?.files);
+        });
+    }
+
+    private handleFileDrop(files: FileList | undefined | null) {
+        if (!files) return;
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (!file.type.startsWith("image/")) continue;
+            const reader = new FileReader();
+            reader.onload = () => {
+                if (typeof reader.result === "string") {
+                    this.pendingAttachments.push(reader.result);
+                    this.showAttachmentPreview(reader.result);
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    private showAttachmentPreview(dataUrl: string) {
+        let preview = this.inputArea.querySelector(
+            ".chat-attachment-preview",
+        ) as HTMLDivElement | null;
+        if (!preview) {
+            preview = document.createElement("div");
+            preview.className = "chat-attachment-preview";
+            this.inputArea.insertBefore(preview, this.inputArea.firstChild);
+        }
+        const img = document.createElement("img");
+        img.src = dataUrl;
+        img.className = "chat-attachment-thumb";
+        const removeBtn = document.createElement("span");
+        removeBtn.className = "chat-attachment-remove";
+        removeBtn.textContent = "\u00d7";
+        removeBtn.addEventListener("click", () => {
+            const idx = this.pendingAttachments.indexOf(dataUrl);
+            if (idx >= 0) this.pendingAttachments.splice(idx, 1);
+            wrapper.remove();
+            if (this.pendingAttachments.length === 0 && preview) {
+                preview.remove();
+            }
+        });
+        const wrapper = document.createElement("span");
+        wrapper.className = "chat-attachment-item";
+        wrapper.appendChild(img);
+        wrapper.appendChild(removeBtn);
+        preview.appendChild(wrapper);
+    }
+
+    private clearAttachmentPreview() {
+        const preview = this.inputArea.querySelector(
+            ".chat-attachment-preview",
+        );
+        if (preview) preview.remove();
+    }
+
+    private scheduleCompletionFetch() {
+        if (this.completionTimer) clearTimeout(this.completionTimer);
+        if (!this.getCompletions) {
+            this.clearCompletions();
+            return;
+        }
+        const input = this.textInput.textContent ?? "";
+        if (!input.trim()) {
+            this.clearCompletions();
+            return;
+        }
+        this.completionTimer = setTimeout(async () => {
+            const current = this.textInput.textContent ?? "";
+            if (current !== input) return;
+            try {
+                const result = await this.getCompletions!(input);
+                if ((this.textInput.textContent ?? "") !== input) return;
+                if (result && result.completions.length > 0) {
+                    this.completions = result.completions;
+                    this.completionIndex = 0;
+                    this.completionPrefix = result.prefix;
+                    this.completionFilterStart = result.startIndex;
+                    this.renderGhostText();
+                } else {
+                    this.clearCompletions();
+                }
+            } catch {
+                this.clearCompletions();
+            }
+        }, 150);
+    }
+
+    private renderGhostText() {
+        if (this.completions.length === 0) {
+            this.ghostSpan.textContent = "";
+            return;
+        }
+        const input = this.textInput.textContent ?? "";
+        const completion = this.completions[this.completionIndex];
+        const full = this.completionPrefix + completion;
+        if (full.length > input.length && full.startsWith(input)) {
+            this.ghostSpan.textContent = full.slice(input.length);
+        } else {
+            this.ghostSpan.textContent = completion;
+        }
+    }
+
+    private acceptCompletion() {
+        if (this.completions.length === 0) return;
+        const completion = this.completions[this.completionIndex];
+        const full = this.completionPrefix + completion;
+        this.textInput.textContent = full;
+        this.sendButton.disabled = !full.trim();
+        this.clearCompletions();
+        this.moveCursorToEnd();
+    }
+
+    private cycleCompletion(delta: number) {
+        if (this.completions.length === 0) return;
+        this.completionIndex =
+            (this.completionIndex + delta + this.completions.length) %
+            this.completions.length;
+        this.renderGhostText();
+    }
+
+    private clearCompletions() {
+        this.completions = [];
+        this.completionIndex = 0;
+        this.ghostSpan.textContent = "";
+    }
+
+    private moveCursorToEnd() {
+        const range = document.createRange();
+        const sel = window.getSelection();
+        if (this.textInput.childNodes.length > 0) {
+            const lastNode =
+                this.textInput.childNodes[this.textInput.childNodes.length - 1];
+            range.setStartAfter(lastNode);
+        } else {
+            range.setStart(this.textInput, 0);
+        }
+        range.collapse(true);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
     }
 
     private navigateHistory(delta: number) {
@@ -161,8 +386,15 @@ export class ChatPanel {
         this.textInput.textContent = "";
         this.sendButton.disabled = true;
 
+        const attachments =
+            this.pendingAttachments.length > 0
+                ? [...this.pendingAttachments]
+                : undefined;
+        this.pendingAttachments = [];
+        this.clearAttachmentPreview();
+
         this.addUserMessage(text);
-        this.onSend?.(text);
+        this.onSend?.(text, attachments);
     }
 
     /** Set the active request ID and show the stop button. */
@@ -272,9 +504,246 @@ export class ChatPanel {
         this.scrollToBottom();
     }
 
+    /**
+     * Show a Yes/No prompt and return the user's choice.
+     */
+    public askYesNo(message: string, defaultValue?: boolean): Promise<boolean> {
+        return new Promise<boolean>((resolve) => {
+            const container = this.createAgentContainer("system", "");
+            container.setMessage(
+                { type: "text", content: message },
+                undefined,
+                undefined,
+            );
+
+            const buttonDiv = document.createElement("div");
+            buttonDiv.className = "chat-prompt-buttons";
+
+            const yesBtn = document.createElement("button");
+            yesBtn.className = "chat-prompt-button chat-prompt-yes";
+            yesBtn.textContent = "Yes";
+
+            const noBtn = document.createElement("button");
+            noBtn.className = "chat-prompt-button chat-prompt-no";
+            noBtn.textContent = "No";
+
+            const cleanup = () => {
+                buttonDiv.remove();
+                document.removeEventListener("keydown", keyHandler);
+            };
+
+            const keyHandler = (e: KeyboardEvent) => {
+                if (e.key === "Enter") {
+                    cleanup();
+                    resolve(true);
+                } else if (e.key === "Escape" || e.key === "Delete") {
+                    cleanup();
+                    resolve(false);
+                }
+            };
+
+            yesBtn.addEventListener("click", () => {
+                cleanup();
+                resolve(true);
+            });
+            noBtn.addEventListener("click", () => {
+                cleanup();
+                resolve(false);
+            });
+
+            document.addEventListener("keydown", keyHandler);
+
+            buttonDiv.appendChild(yesBtn);
+            buttonDiv.appendChild(noBtn);
+
+            // Append buttons after the message in the same container
+            container.appendElement(buttonDiv);
+            this.scrollToBottom();
+        });
+    }
+
+    /**
+     * Show an action proposal with Accept/Cancel buttons.
+     * Returns true to accept, false to cancel.
+     */
+    public proposeAction(actionText: string, source: string): Promise<boolean> {
+        return new Promise<boolean>((resolve) => {
+            const container = this.createAgentContainer(source, "");
+            container.setMessage(
+                { type: "text", content: `Proposed action:\n${actionText}` },
+                source,
+                undefined,
+            );
+
+            const buttonDiv = document.createElement("div");
+            buttonDiv.className = "chat-prompt-buttons";
+
+            const acceptBtn = document.createElement("button");
+            acceptBtn.className = "chat-prompt-button chat-prompt-yes";
+            acceptBtn.textContent = "Accept";
+
+            const cancelBtn = document.createElement("button");
+            cancelBtn.className = "chat-prompt-button chat-prompt-no";
+            cancelBtn.textContent = "Cancel";
+
+            const cleanup = () => {
+                buttonDiv.remove();
+                document.removeEventListener("keydown", keyHandler);
+            };
+
+            const keyHandler = (e: KeyboardEvent) => {
+                if (e.key === "Enter") {
+                    cleanup();
+                    resolve(true);
+                } else if (e.key === "Escape") {
+                    cleanup();
+                    resolve(false);
+                }
+            };
+
+            acceptBtn.addEventListener("click", () => {
+                cleanup();
+                resolve(true);
+            });
+            cancelBtn.addEventListener("click", () => {
+                cleanup();
+                resolve(false);
+            });
+
+            document.addEventListener("keydown", keyHandler);
+
+            buttonDiv.appendChild(acceptBtn);
+            buttonDiv.appendChild(cancelBtn);
+
+            container.appendElement(buttonDiv);
+            this.scrollToBottom();
+        });
+    }
+
+    /**
+     * Register a dynamic display for periodic refresh.
+     * The agent calls this to indicate content at displayId should be
+     * refreshed after nextRefreshMs milliseconds.
+     */
+    public setDynamicDisplay(
+        source: string,
+        displayId: string,
+        nextRefreshMs: number,
+    ) {
+        if (!this.getDynamicDisplay) return;
+        const MIN_INTERVAL = 500;
+        this.dynamicDisplays.push({
+            source,
+            displayId,
+            nextRefreshTime: Date.now() + Math.max(nextRefreshMs, MIN_INTERVAL),
+        });
+        this.scheduleDynamicRefresh();
+    }
+
+    private scheduleDynamicRefresh() {
+        if (this.dynamicDisplays.length === 0) return;
+        this.dynamicDisplays.sort(
+            (a, b) => a.nextRefreshTime - b.nextRefreshTime,
+        );
+        const delay = Math.max(
+            0,
+            this.dynamicDisplays[0].nextRefreshTime - Date.now(),
+        );
+        if (this.dynamicTimer) clearTimeout(this.dynamicTimer);
+        this.dynamicTimer = setTimeout(() => {
+            this.dynamicTimer = undefined;
+            this.refreshDynamicDisplays();
+        }, delay);
+    }
+
+    private async refreshDynamicDisplays() {
+        const now = Date.now();
+        while (
+            this.dynamicDisplays.length > 0 &&
+            this.dynamicDisplays[0].nextRefreshTime <= now
+        ) {
+            const item = this.dynamicDisplays.shift()!;
+            try {
+                const result = await this.getDynamicDisplay!(
+                    item.source,
+                    item.displayId,
+                );
+                this.addAgentMessage(result.content, item.source);
+                if (result.nextRefreshMs > 0) {
+                    this.dynamicDisplays.push({
+                        source: item.source,
+                        displayId: item.displayId,
+                        nextRefreshTime:
+                            Date.now() + Math.max(result.nextRefreshMs, 500),
+                    });
+                }
+            } catch {
+                // Refresh failed — don't re-register
+            }
+        }
+        this.scheduleDynamicRefresh();
+    }
+
     /** Focus the text input. */
     public focus() {
         this.textInput.focus();
+    }
+
+    /** Add a separator for previous session history. */
+    public addHistorySeparator(label: string = "previously") {
+        const sentinel = this.messageDiv.firstElementChild!;
+        const sep = document.createElement("div");
+        sep.className = "chat-history-separator";
+        sep.textContent = label;
+        sentinel.before(sep);
+    }
+
+    /** Add a dimmed history user message. */
+    public addHistoryUserMessage(text: string) {
+        const sentinel = this.messageDiv.firstElementChild!;
+        const container = document.createElement("div");
+        container.className =
+            "chat-message-container-user chat-history-message";
+
+        const bodyDiv = document.createElement("div");
+        bodyDiv.className = "chat-message-body-hide-metrics chat-message-user";
+
+        const messageDiv = document.createElement("div");
+        messageDiv.className = "chat-message-content";
+        const span = document.createElement("span");
+        span.className = "chat-message-user-text";
+        span.textContent = text;
+        messageDiv.appendChild(span);
+        bodyDiv.appendChild(messageDiv);
+        container.appendChild(bodyDiv);
+
+        sentinel.before(container);
+    }
+
+    /** Add a dimmed history agent message. */
+    public addHistoryAgentMessage(
+        content: DisplayContent,
+        source?: string,
+        sourceIcon?: string,
+        appendMode?: DisplayAppendMode,
+    ) {
+        if (!this.historyAgentContainer || !appendMode) {
+            const sentinel = this.messageDiv.firstElementChild!;
+            this.historyAgentContainer = new AgentMessageContainer(
+                sentinel,
+                source ?? "assistant",
+                sourceIcon ?? "🤖",
+                this.settingsView,
+                this.platformAdapter,
+            );
+            this.historyAgentContainer.setHistoryStyle();
+        }
+        this.historyAgentContainer.setMessage(content, source, appendMode);
+    }
+
+    /** Reset the history agent container (call between separate history entries). */
+    public resetHistoryAgent() {
+        this.historyAgentContainer = undefined;
     }
 
     /** Enable or disable the input. */
@@ -456,6 +925,16 @@ class AgentMessageContainer {
         if (icon) {
             this.iconDiv.textContent = icon;
         }
+    }
+
+    /** Mark this container as a dimmed history message. */
+    public setHistoryStyle() {
+        this.div.classList.add("chat-history-message");
+    }
+
+    /** Append a raw DOM element to the message body. */
+    public appendElement(element: HTMLElement) {
+        this.messageDiv.appendChild(element);
     }
 
     /** Remove this container from the DOM. */
