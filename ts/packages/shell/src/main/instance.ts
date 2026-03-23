@@ -151,13 +151,14 @@ async function initializeDispatcher(
                     "instanceDir is required when not in connect mode",
                 );
             }
+            const configName = isTest ? "test" : undefined;
             const indexingServiceRegistry =
-                await getIndexingServiceRegistry(instanceDir);
+                await getIndexingServiceRegistry(instanceDir, configName);
 
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
                     createShellAgentProvider(shellWindow),
-                    ...getDefaultAppAgentProviders(instanceDir),
+                    ...getDefaultAppAgentProviders(instanceDir, configName),
                 ],
                 agentInitOptions: {
                     browser: browserControl.control,
