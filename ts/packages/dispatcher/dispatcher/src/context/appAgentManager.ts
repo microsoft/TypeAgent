@@ -468,10 +468,14 @@ export class AppAgentManager implements ActionConfigProvider {
                         if (useNFAGrammar && agentGrammarRegistry) {
                             try {
                                 // Enrich grammar with checked variables from .pas.json if available
-                                if (config.compiledSchemaFilePath) {
+                                const compiledSchemaFilePath =
+                                    config.schemaFilePath?.endsWith(".pas.json")
+                                        ? config.schemaFilePath
+                                        : undefined;
+                                if (compiledSchemaFilePath) {
                                     try {
                                         const pasJsonPath = getPackageFilePath(
-                                            config.compiledSchemaFilePath,
+                                            compiledSchemaFilePath,
                                         );
                                         enrichGrammarWithCheckedVariables(
                                             g,
