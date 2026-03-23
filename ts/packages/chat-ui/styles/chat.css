@@ -195,6 +195,37 @@
   border: 1px solid #ddd;
 }
 
+/* =========================================================================
+   Follow-Up Action Buttons
+   ========================================================================= */
+
+.chat-followup-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+
+.chat-followup-button {
+  padding: 6px 14px;
+  border: 1px solid #90caf9;
+  border-radius: 16px;
+  background: #e3f2fd;
+  color: #1565c0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.chat-followup-button:hover {
+  background: #bbdefb;
+  border-color: #42a5f5;
+}
+
 .chat-attachment-remove {
   position: absolute;
   top: -4px;
