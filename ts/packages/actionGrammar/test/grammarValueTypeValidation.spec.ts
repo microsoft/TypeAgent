@@ -398,9 +398,9 @@ describe("Value type validation", () => {
         expect(errors.length).toBe(0);
     });
 
-    it("single-variable implicit rule is not validated", () => {
+    it("single-variable implicit rule is validated against declared type", () => {
         // $(x:string) with no -> produces the variable's value implicitly.
-        // This can't be structurally validated at compile time.
+        // The variable type (string) must conform to the declared type (PauseAction).
         const grammarText = `
             import { PauseAction } from "schema.ts";
             <Start> : PauseAction = <Wrapper>;
@@ -410,8 +410,8 @@ describe("Value type validation", () => {
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: mockSchemaLoader,
         });
-        // Single-variable implicit value can't be checked — no error
-        expect(errors.length).toBe(0);
+        // string doesn't conform to PauseAction — expect a type error
+        expect(errors.length).toBe(1);
     });
 
     it("error in passthrough sub-rule of mixed alternatives", () => {
