@@ -1102,20 +1102,26 @@ export function buildVariableTypeMap(
 
 /**
  * Resolves a SchemaType, following type-references to their definition.
- * Uses iterative unwrapping with a depth limit for recursive types.
+ * Uses Floyd's tortoise-and-hare cycle detection — O(1) space, no
+ * allocation, no arbitrary depth limit.
  */
 function resolveType(type: SchemaType): SchemaType {
-    // Recursive types rarely nest more than a few levels;
-    // a depth limit avoids per-call Set allocation.
-    let depth = 0;
-    while (type.type === "type-reference" && type.definition !== undefined) {
-        if (++depth > 20) {
+    let slow = type;
+    let fast = type;
+    while (fast.type === "type-reference" && fast.definition !== undefined) {
+        slow = (slow as any).definition?.type ?? slow;
+        fast = fast.definition.type;
+        if (fast.type === "type-reference" && fast.definition !== undefined) {
+            fast = fast.definition.type;
+        } else {
+            return fast;
+        }
+        if (slow === fast) {
             // Cycle detected — the type-reference itself is the resolved form
             return type;
         }
-        type = type.definition.type;
     }
-    return type;
+    return fast;
 }
 
 // ── Operator constraint set ───────────────────────────────────────────────────
