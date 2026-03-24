@@ -58,6 +58,123 @@ let pendingChoicePromise: Promise<void> | null = null;
 // Active custom prompt renderer (set by questionWithCompletion)
 let activePromptRenderer: PromptRenderer | null = null;
 
+/**
+ * Manages an ANSI scroll region so the prompt is anchored to the
+ * bottom of the terminal.  Content written via writeContent() scrolls
+ * naturally in the upper region; the prompt is redrawn in-place in the
+ * fixed lower region.
+ */
+class TerminalLayout {
+    private promptRows = 0;
+    private active = false;
+    private resizeHandler: (() => void) | undefined;
+
+    /** Activate the scroll region, reserving `rows` at the bottom. */
+    setup(rows: number) {
+        this.promptRows = rows;
+        this.active = true;
+        // Move existing content up so the prompt appears right below it.
+        // We move the cursor to the bottom of where the scroll region
+        // will be, then set up the region. This way the first \n in
+        // writeContent() scrolls from this position.
+        const height = process.stdout.rows || 24;
+        const scrollHeight = Math.max(1, height - this.promptRows);
+        // Move cursor to scrollHeight row — if existing content is above,
+        // this positions us below it (or at it). Then apply the region.
+        process.stdout.write(`\x1b[${scrollHeight};1H`);
+        this.applyScrollRegion();
+        // Listen for terminal resize
+        this.resizeHandler = () => {
+            if (this.active) {
+                this.applyScrollRegion();
+            }
+        };
+        process.stdout.on("resize", this.resizeHandler);
+    }
+
+    /** Update the number of reserved prompt rows (e.g. when input wraps). */
+    setPromptRows(rows: number) {
+        if (rows !== this.promptRows) {
+            this.promptRows = rows;
+            if (this.active) this.applyScrollRegion();
+        }
+    }
+
+    /** Write content into the scroll region (appears above the prompt). */
+    writeContent(text: string) {
+        if (!this.active) {
+            process.stdout.write(text);
+            return;
+        }
+        const height = process.stdout.rows || 24;
+        const scrollBottom = height - this.promptRows;
+        // Save cursor, move to bottom of scroll region, write, restore
+        process.stdout.write(
+            "\x1b[s" + `\x1b[${scrollBottom};1H` + "\n" + text + "\x1b[u",
+        );
+    }
+
+    /** Draw content in the fixed bottom region at a given row offset (0-based from prompt start). */
+    drawFixed(row: number, text: string) {
+        if (!this.active) return;
+        const height = process.stdout.rows || 24;
+        const promptStart = height - this.promptRows + 1;
+        process.stdout.write(`\x1b[${promptStart + row};1H\x1b[2K` + text);
+    }
+
+    /** Clear the entire fixed region. */
+    clearFixed() {
+        if (!this.active) return;
+        const height = process.stdout.rows || 24;
+        const promptStart = height - this.promptRows + 1;
+        for (let r = promptStart; r <= height; r++) {
+            process.stdout.write(`\x1b[${r};1H\x1b[2K`);
+        }
+    }
+
+    /** Move cursor to a specific column on a given row of the fixed region. */
+    moveCursorToFixed(row: number, col: number) {
+        if (!this.active) return;
+        const height = process.stdout.rows || 24;
+        const promptStart = height - this.promptRows + 1;
+        process.stdout.write(`\x1b[${promptStart + row};${col}H`);
+    }
+
+    /** Tear down the scroll region and restore normal terminal behavior. */
+    cleanup() {
+        if (!this.active) return;
+        this.active = false;
+        if (this.resizeHandler) {
+            process.stdout.removeListener("resize", this.resizeHandler);
+            this.resizeHandler = undefined;
+        }
+        // Reset scroll region to full terminal first
+        process.stdout.write("\x1b[r");
+        // Move to the row just after the scroll region ended and clear
+        // everything from there to the bottom of the screen. This wipes
+        // the old fixed region content (prompt/rule/hint).
+        const height = process.stdout.rows || 24;
+        const scrollBottom = Math.max(1, height - this.promptRows);
+        process.stdout.write(`\x1b[${scrollBottom};1H`);
+        // Emit a newline to advance past the last content line, then
+        // clear from cursor to end of screen to remove all stale content.
+        process.stdout.write("\n\x1b[J");
+    }
+
+    get isActive() {
+        return this.active;
+    }
+
+    private applyScrollRegion() {
+        const height = process.stdout.rows || 24;
+        const scrollHeight = Math.max(1, height - this.promptRows);
+        process.stdout.write(`\x1b[1;${scrollHeight}r`);
+    }
+}
+
+// Shared terminal layout instance — activated when questionWithCompletion is running
+let terminalLayout: TerminalLayout | null = null;
+
 // Track the active request for cancellation support
 let currentRequestId: string | undefined;
 let isProcessing = false;
@@ -293,9 +410,20 @@ export function createEnhancedClientIO(
                 currentSpinner.flushStream();
                 currentSpinner.writeAbove(displayText);
             }
+        } else if (terminalLayout?.isActive && activePromptRenderer) {
+            // Scroll region is active — write content into the scroll region.
+            // The prompt stays anchored at the bottom automatically.
+            if (appendMode !== "inline") {
+                if (lastAppendMode === "inline") {
+                    terminalLayout.writeContent("");
+                }
+                terminalLayout.writeContent(displayText);
+            } else {
+                terminalLayout.writeContent(displayText);
+            }
+            activePromptRenderer.redraw();
         } else if (activePromptRenderer) {
-            // Custom prompt (questionWithCompletion) is active.
-            // Clear the prompt rows, write content above, then re-render.
+            // Fallback: scroll region not active but prompt renderer is.
             const rows = activePromptRenderer.rows();
             for (let i = 0; i < rows; i++) {
                 process.stdout.write("\x1b[1A\x1b[2K");
@@ -309,12 +437,12 @@ export function createEnhancedClientIO(
             } else {
                 process.stdout.write(displayText);
             }
-            // Also re-render any collapsed debug panel summary
             const dp = getDebugPanel();
             if (dp && dp.lineCount > 0) {
                 dp.renderStaticSummary();
             }
             activePromptRenderer.redraw();
+            process.stdout.write("\x1b[J");
         } else if (rl) {
             // Readline is active - write above the prompt
             // Clear current line, write content, then let readline redraw prompt
@@ -912,23 +1040,37 @@ async function questionWithCompletion(
             }
         };
 
-        // Render the prompt, input, bottom rule, and contextual hint
+        let prevInputRows = 1;
+        const layout = new TerminalLayout();
+        terminalLayout = layout;
+
+        // Fixed region layout:
+        //   row 0: separator (─)
+        //   row 1..inputRows: prompt + input (may wrap)
+        //   row inputRows+1: bottom rule (─)
+        //   row inputRows+2: hint line
+        const EXTRA_ROWS = 3; // separator + bottom rule + hint
+
         const render = () => {
-            // Build entire output as a single string to prevent cursor flashing
             const promptText = chalk.cyanBright(message);
             const width = process.stdout.columns || 80;
 
-            // Calculate cursor column based on cursorPos within input
-            const cursorCol =
-                getDisplayWidth(message) +
-                getDisplayWidth(input.substring(0, cursorPos)) +
-                1;
+            const inputLineWidth =
+                getDisplayWidth(message) + getDisplayWidth(input);
+            const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
+            const totalRows = inputRows + EXTRA_ROWS;
 
-            let output = ANSI.hideCursor;
-            output += "\r";
-            output += promptText + input;
+            // Update scroll region if prompt height changed
+            layout.setPromptRows(totalRows);
 
-            // Show inline completion if available
+            // Build the prompt content for the fixed region
+            layout.clearFixed();
+
+            // Row 0: separator
+            layout.drawFixed(0, ANSI.dim + "─".repeat(width) + ANSI.reset);
+
+            // Row 1: prompt + input + ghost completion text
+            let inputLine = promptText + input;
             if (
                 filteredCompletions.length > 0 &&
                 completionIndex < filteredCompletions.length
@@ -941,17 +1083,18 @@ async function questionWithCompletion(
                 if (fullCompletion.length > input.length) {
                     const suggestion = fullCompletion.slice(input.length);
                     const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
-                    output += chalk.dim(suggestion + counter);
+                    inputLine += chalk.dim(suggestion + counter);
                 }
             }
-
-            output += "\x1b[K";
+            layout.drawFixed(1, inputLine);
 
             // Bottom rule
-            output +=
-                "\n" + ANSI.dim + "─".repeat(width) + ANSI.reset + "\x1b[K";
+            layout.drawFixed(
+                inputRows + 1,
+                ANSI.dim + "─".repeat(width) + ANSI.reset,
+            );
 
-            // Contextual hint line
+            // Hint line
             let hint: string;
             if (filteredCompletions.length > 0) {
                 hint = "↑↓ completions · tab accept · esc clear";
@@ -960,14 +1103,17 @@ async function questionWithCompletion(
             } else {
                 hint = "↑↓ history · /help commands";
             }
-            output += "\n  " + chalk.dim(hint) + "\x1b[K";
+            layout.drawFixed(inputRows + 2, "  " + chalk.dim(hint));
 
-            // Cursor back to input line (up 2: bottom rule + hint)
-            output += "\x1b[2A";
-            output += `\x1b[${cursorCol}G`;
-            output += ANSI.showCursor;
+            // Position cursor in the input line
+            const cursorAbsCol =
+                getDisplayWidth(message) +
+                getDisplayWidth(input.substring(0, cursorPos));
+            const cursorRow = Math.floor(cursorAbsCol / width);
+            layout.moveCursorToFixed(1 + cursorRow, (cursorAbsCol % width) + 1);
+            stdout.write(ANSI.showCursor);
 
-            stdout.write(output);
+            prevInputRows = inputRows;
         };
 
         // Fetch completions for current input
@@ -1001,22 +1147,14 @@ async function questionWithCompletion(
             render();
         };
 
-        // Initial render
+        // Activate the scroll region and draw initial prompt
+        layout.setup(prevInputRows + EXTRA_ROWS);
         render();
 
-        // Register prompt renderer so debug panel and displayContent
-        // can render above the input.
-        // PROMPT_ROWS = separator + input line + bottom rule + hint
-        const PROMPT_ROWS = 4;
         const panel = getDebugPanel();
-        const renderWithSeparator = () => {
-            const w = process.stdout.columns || 80;
-            stdout.write(ANSI.dim + "─".repeat(w) + ANSI.reset + "\n");
-            render();
-        };
         const promptRenderer: PromptRenderer = {
-            rows: () => PROMPT_ROWS,
-            redraw: () => renderWithSeparator(),
+            rows: () => prevInputRows + EXTRA_ROWS,
+            redraw: () => render(),
         };
         panel?.setPromptRenderer(promptRenderer);
         activePromptRenderer = promptRenderer;
@@ -1105,15 +1243,12 @@ async function questionWithCompletion(
                 cleanup();
                 process.exit(0);
             } else if (code === 4) {
-                // Ctrl+D — dump debug buffer above the prompt
+                // Ctrl+D — dump debug buffer into the scroll region
                 const dp = getDebugPanel();
                 if (dp && dp.lineCount > 0) {
-                    // Clear prompt lines (including separator), dump buffer, re-render
-                    for (let i = 0; i < PROMPT_ROWS; i++) {
-                        stdout.write("\x1b[1A\x1b[2K");
-                    }
+                    // dumpBuffer writes to stdout — it will appear in the scroll region
                     dp.dumpBuffer();
-                    renderWithSeparator();
+                    render();
                 }
                 return;
             } else if (code === 13) {
@@ -1130,26 +1265,19 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                 }
-                // ConPTY on Windows can echo the input line when Enter
-                // is pressed, causing a duplicate. Overwrite the entire
-                // 3-line frame (input + bottom rule + hint) from scratch.
+                // Tear down the scroll region and write the finalized input
+                // into the normal terminal flow so it appears in scrollback.
+                cleanup();
                 const width = process.stdout.columns || 80;
                 const styledInput = chalk.cyanBright(message) + input;
-                let out = ANSI.hideCursor;
-                // Go up to input line: ConPTY echo moved us 1 down,
-                // but we may also be on a ConPTY-echoed duplicate line.
-                // Use save/restore isn't reliable, so go up 3 lines
-                // (echo line + hint + bottom rule) to be safe, then
-                // clear everything downward.
-                out += "\x1b[3A";
-                out += "\r" + ANSI.clearLine + styledInput;
-                out +=
-                    "\n" + ANSI.dim + "─".repeat(width) + ANSI.reset + "\x1b[K";
-                out += "\n\x1b[K"; // clear hint line
-                out += "\n\x1b[K"; // clear any ConPTY echo remnant
-                out += ANSI.showCursor;
-                stdout.write(out);
-                cleanup();
+                stdout.write(
+                    styledInput +
+                        "\n" +
+                        ANSI.dim +
+                        "─".repeat(width) +
+                        ANSI.reset +
+                        "\n",
+                );
                 resolve(input);
             } else if (code === 9) {
                 // Tab - accept current completion and continue
@@ -1218,6 +1346,8 @@ async function questionWithCompletion(
         };
 
         const cleanup = () => {
+            layout.cleanup();
+            terminalLayout = null;
             panel?.setPromptRenderer(null);
             activePromptRenderer = null;
             stdin.removeListener("data", onData);
@@ -1491,23 +1621,26 @@ export async function processCommandsEnhanced<T>(
                 ? await interactivePrompt(context)
                 : interactivePrompt;
 
-        // Draw separator before prompt
         const width = process.stdout.columns || 80;
-        process.stdout.write(ANSI.dim + "─".repeat(width) + ANSI.reset + "\n");
 
         let request: string;
         if (inputs) {
+            process.stdout.write(
+                ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
+            );
             request = getNextInput(prompt, inputs, promptColor);
         } else if (getCompletions) {
-            // Use inline completion system
+            // Use inline completion system with scroll region anchored prompt
             request = await questionWithCompletion(
                 promptColor(prompt),
                 (line: string) => getCompletions(line, context),
                 history,
             );
         } else {
+            process.stdout.write(
+                ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
+            );
             request = await question(promptColor(prompt), rl);
-            // Non-completions path has no bottom rule; draw separator after input
             if (request.length) {
                 process.stdout.write(
                     ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
@@ -1524,13 +1657,6 @@ export async function processCommandsEnhanced<T>(
             request.toLowerCase() === "quit" ||
             request.toLowerCase() === "exit"
         ) {
-            // Clear the frame remnants (bottom rule + hint) without moving cursor
-            process.stdout.write(
-                "\x1b[s" + // save cursor position
-                    "\n\x1b[K" + // move to bottom rule line, clear it
-                    "\n\x1b[K" + // move to hint line, clear it
-                    "\x1b[u", // restore cursor position
-            );
             break;
         }
 
@@ -1541,7 +1667,6 @@ export async function processCommandsEnhanced<T>(
                     processCommand(cmd, context),
                 );
                 if (slashResult.exit) {
-                    process.stdout.write("\x1b[s\n\x1b[K\n\x1b[K\x1b[u");
                     break;
                 }
             } catch (error) {

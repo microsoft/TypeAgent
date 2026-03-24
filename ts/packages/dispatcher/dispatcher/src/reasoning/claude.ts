@@ -584,6 +584,7 @@ async function executeReasoningWithoutPlanning(
 
     // Process streaming response
     for await (const message of queryInstance) {
+        context.abortSignal?.throwIfAborted();
         debug(message);
         // Capture session ID from first message for future resume
         if ("session_id" in message && !getSessionId(context)) {
@@ -720,6 +721,7 @@ async function executeReasoningWithTracing(
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
+            context.abortSignal?.throwIfAborted();
             debug(message);
             // Capture session ID from first message for future resume
             if ("session_id" in message && !getSessionId(context)) {

@@ -14,6 +14,8 @@ import { getActiveTab } from "./tabManager";
 import { screenshotCoordinator } from "./screenshotCoordinator";
 import { createChromeRpcServer } from "./chromeRpcServer";
 import { createAllHandlers } from "./serviceWorkerRpcHandlers";
+import { setChatPanelRpc } from "./dispatcherConnection";
+import { setContextMenuRpcSend } from "./contextMenu";
 
 import {
     isWebAgentMessage,
@@ -49,7 +51,9 @@ export async function initialize(): Promise<void> {
     initializeContextMenu();
 
     // Set up RPC server for typed view communication
-    createChromeRpcServer(createAllHandlers());
+    const { rpc } = createChromeRpcServer(createAllHandlers());
+    setChatPanelRpc(rpc as any);
+    setContextMenuRpcSend((rpc as any).send.bind(rpc));
 
     // Set up event listeners
     setupEventListeners();

@@ -14,6 +14,12 @@ import {
     connectToDispatcher,
     isDispatcherConnected,
 } from "./dispatcherConnection";
+import {
+    startRecording,
+    stopRecording,
+    captureHtmlFragments,
+    takeScreenshot,
+} from "./recording";
 import { broadcastEvent } from "./extensionEventHelpers";
 import {
     knowledgeExtractionCallbacks,
@@ -267,6 +273,168 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                     error?.message || error,
                 );
                 return { error: error?.message || "Command failed" };
+            }
+        },
+
+        async chatPanelGetCompletions(params: any) {
+            try {
+                const dispatcher = await connectToDispatcher();
+                const result = await dispatcher.getCommandCompletion(
+                    params.input,
+                    "forward",
+                );
+                if (result.completions.length === 0) return null;
+                const completions: string[] = [];
+                for (const group of result.completions) {
+                    for (const c of group.completions) {
+                        completions.push(c);
+                    }
+                }
+                const startIndex = result.startIndex;
+                const prefix = params.input.substring(0, startIndex);
+                const separator =
+                    result.separatorMode === "space" ||
+                    result.separatorMode === "spacePunctuation"
+                        ? " "
+                        : "";
+                return {
+                    completions,
+                    startIndex,
+                    prefix: prefix + separator,
+                };
+            } catch {
+                return null;
+            }
+        },
+
+        async chatPanelGetHistory() {
+            try {
+                const dispatcher = await connectToDispatcher();
+                const entries = await dispatcher.getDisplayHistory();
+                return entries ?? [];
+            } catch {
+                return [];
+            }
+        },
+
+        async chatPanelGetDynamicDisplay(params: any) {
+            try {
+                const dispatcher = await connectToDispatcher();
+                return await dispatcher.getDynamicDisplay(
+                    params.source,
+                    "html",
+                    params.displayId,
+                );
+            } catch (error: any) {
+                return {
+                    content: error?.message ?? "Refresh failed",
+                    nextRefreshMs: -1,
+                };
+            }
+        },
+
+        async chatPanelQueryKnowledge(params: any) {
+            try {
+                return await forward("searchWebMemories", {
+                    query: params.query,
+                    searchScope: "current_page",
+                    metadata: { url: params.url },
+                });
+            } catch (error: any) {
+                return { error: error?.message || "Query failed" };
+            }
+        },
+
+        async chatPanelGenerateQuestions(params: any) {
+            try {
+                return await forward("generatePageQuestions", {
+                    url: params.url,
+                    pageKnowledge: params.knowledge,
+                });
+            } catch (error: any) {
+                return {
+                    error: error?.message || "Failed to generate questions",
+                };
+            }
+        },
+
+        async chatPanelStartRecording() {
+            try {
+                await startRecording();
+                return { success: true };
+            } catch (error: any) {
+                return { success: false, error: error?.message };
+            }
+        },
+
+        async chatPanelStopRecording() {
+            try {
+                const recorded = await stopRecording();
+                const steps = recorded?.recordedActions || [];
+                // Capture page context for later WebFlow creation
+                const html = await captureHtmlFragments();
+                const screenshot = await takeScreenshot();
+                // Store for later use by chatPanelCreateWebFlowFromRecording
+                (globalThis as any).__lastRecording = {
+                    steps,
+                    html,
+                    screenshot,
+                    url:
+                        (await (await import("./tabManager")).getActiveTab())
+                            ?.url || "",
+                };
+                return { success: true, stepCount: steps.length };
+            } catch (error: any) {
+                return { success: false, stepCount: 0, error: error?.message };
+            }
+        },
+
+        async chatPanelCreateWebFlowFromRecording(params: any) {
+            try {
+                const recording = (globalThis as any).__lastRecording;
+                if (!recording) {
+                    return { success: false, error: "No recording available" };
+                }
+                if (!recording.steps || recording.steps.length === 0) {
+                    (globalThis as any).__lastRecording = undefined;
+                    return {
+                        success: false,
+                        error: "Cannot save an action with 0 recorded steps",
+                    };
+                }
+                // Format parameters to match the agent's
+                // CreateWebFlowFromRecording schema
+                const htmlFragments = Array.isArray(recording.html)
+                    ? recording.html.map((f: any) =>
+                          typeof f === "string"
+                              ? { content: f, frameId: 0 }
+                              : f,
+                      )
+                    : [];
+                const result = await forward("createWebFlowFromRecording", {
+                    actionName: params.actionName,
+                    actionDescription: params.actionDescription,
+                    recordedSteps: JSON.stringify(recording.steps),
+                    startUrl: recording.url,
+                    fragments: htmlFragments,
+                    screenshots: recording.screenshot
+                        ? [recording.screenshot]
+                        : [],
+                });
+                (globalThis as any).__lastRecording = undefined;
+                // The agent returns { displayText, data: { webFlowName } }
+                const savedName =
+                    result?.data?.webFlowName ||
+                    result?.webFlowName ||
+                    result?.flowName ||
+                    result?.displayText?.match(/Created action:\s*(.+)/)?.[1] ||
+                    params.actionName;
+                return {
+                    success: true,
+                    flowName: savedName,
+                };
+            } catch (error: any) {
+                return { success: false, error: error?.message };
             }
         },
 

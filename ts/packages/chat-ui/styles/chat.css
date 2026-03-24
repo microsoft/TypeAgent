@@ -51,18 +51,24 @@
   pointer-events: none;
 }
 
-.user-textarea {
-  padding: 5px 8px;
+.chat-input-text-wrapper {
   display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   width: calc(100% - 48px);
-  overflow: hidden;
-  resize: none;
-  outline: 0px solid transparent;
+  padding: 5px 8px;
   min-height: 30px;
+  line-height: 30px;
+  overflow: hidden;
+}
+
+.user-textarea {
+  display: inline;
+  outline: 0px solid transparent;
   line-height: 30px;
   font-family: inherit;
   font-size: inherit;
-  align-self: flex-start;
+  min-width: 1px;
 }
 
 /* Placeholder for contenteditable */
@@ -91,6 +97,148 @@
   color: #e74c3c;
   font-size: 16px;
   line-height: 24px;
+}
+
+/* Ghost text for inline command completion preview */
+.chat-input-ghost {
+  color: #999;
+  pointer-events: none;
+  white-space: pre;
+  line-height: 30px;
+  font-family: inherit;
+  font-size: inherit;
+  user-select: none;
+}
+
+/* =========================================================================
+   Session History
+   ========================================================================= */
+
+.chat-history-separator {
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+  padding: 8px 0;
+  border-top: 1px solid #e0e0e0;
+  margin: 8px 20px;
+}
+
+.chat-history-message {
+  opacity: 0.55;
+}
+
+/* =========================================================================
+   Interactive Prompt Buttons (Yes/No, Accept/Cancel)
+   ========================================================================= */
+
+.chat-prompt-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 4px 0;
+}
+
+.chat-prompt-button {
+  padding: 6px 16px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.chat-prompt-yes {
+  background-color: #e8f5e9;
+  border-color: #81c784;
+  color: #2e7d32;
+}
+
+.chat-prompt-yes:hover {
+  background-color: #c8e6c9;
+}
+
+.chat-prompt-no {
+  background-color: #fce4ec;
+  border-color: #e57373;
+  color: #c62828;
+}
+
+.chat-prompt-no:hover {
+  background-color: #f8bbd0;
+}
+
+/* =========================================================================
+   File Attachment / Drag-Drop
+   ========================================================================= */
+
+.chat-input-dragover {
+  border-color: #4fc3f7 !important;
+  background-color: #e1f5fe !important;
+}
+
+.chat-attachment-preview {
+  display: flex;
+  gap: 6px;
+  padding: 4px 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.chat-attachment-item {
+  position: relative;
+  display: inline-block;
+}
+
+.chat-attachment-thumb {
+  height: 48px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+/* =========================================================================
+   Follow-Up Action Buttons
+   ========================================================================= */
+
+.chat-followup-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+
+.chat-followup-button {
+  padding: 6px 14px;
+  border: 1px solid #90caf9;
+  border-radius: 16px;
+  background: #e3f2fd;
+  color: #1565c0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.chat-followup-button:hover {
+  background: #bbdefb;
+  border-color: #42a5f5;
+}
+
+.chat-attachment-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #e57373;
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  cursor: pointer;
 }
 
 /* =========================================================================

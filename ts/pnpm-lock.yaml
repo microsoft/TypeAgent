@@ -2349,6 +2349,9 @@ importers:
 
   packages/agents/scriptflow:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.12
+        version: 0.2.12(zod@4.3.6)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
