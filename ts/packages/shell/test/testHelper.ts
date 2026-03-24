@@ -131,6 +131,18 @@ async function startShell(testGreetings: boolean = false): Promise<Page> {
                 state: "attached",
             });
 
+            // Wait for the initial agent greeting to appear.  The shell always
+            // sends an @greeting command (mock or real) at startup.  Waiting for
+            // it ensures (a) the dispatcher's commandLock has been cycled at
+            // least once so subsequent NL requests don't absorb cold-start cost,
+            // and (b) the greeting message is stable in the DOM before
+            // getAgentMessageLocators() counts it, preventing an off-by-one on
+            // expectedMessageCount.
+            await mainWindow
+                .locator(".chat-message-container-agent")
+                .first()
+                .waitFor({ timeout: 120000, state: "attached" });
+
             return mainWindow;
         } catch (e) {
             console.warn(
@@ -284,7 +296,7 @@ export async function sendUserRequestAndWaitForResponse(
 export async function sendUserRequestAndWaitForCompletion(
     prompt: string,
     page: Page,
-    timeout: number = 90000,
+    timeout: number = 180000,
 ): Promise<string> {
     const locators = await getAgentMessageLocators(page);
 

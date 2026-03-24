@@ -7,7 +7,7 @@
     "rootDir": "./src",
     "outDir": "./dist"
   },
-  "include": [],
+  "include": ["./src/types/*.d.ts"],
   "references": [{ "path": "./src" }],
   "ts-node": {
     "esm": true
