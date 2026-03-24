@@ -214,43 +214,34 @@ describe("Value Expression Parser", () => {
             }
         });
 
-        it("-3 is parsed as unary minus on literal per ECMA-262", () => {
+        it("-3 is constant-folded to literal -3", () => {
             const r = parseWithExpressions(`<Start> = hello -> -3;`);
             const value = r.definitions[0].rules[0].value!;
-            expect(value.type).toBe("unaryExpression");
-            if (value.type === "unaryExpression") {
-                expect(value.operator).toBe("-");
-                expect(value.operand).toEqual({
-                    type: "literal",
-                    value: 3,
-                });
+            expect(value.type).toBe("literal");
+            if (value.type === "literal") {
+                expect(value.value).toBe(-3);
             }
         });
 
-        it("x + -3 is parsed as unary minus on literal", () => {
+        it("x + -3 constant-folds the -3 to a literal", () => {
             const r = parseWithExpressions(`<Start> = $(x:number) -> x + -3;`);
             const value = r.definitions[0].rules[0].value!;
             expect(value.type).toBe("binaryExpression");
             if (value.type === "binaryExpression") {
                 expect(value.operator).toBe("+");
                 expect(value.right).toEqual({
-                    type: "unaryExpression",
-                    operator: "-",
-                    operand: { type: "literal", value: 3 },
+                    type: "literal",
+                    value: -3,
                 });
             }
         });
 
-        it("- 3 with space is also unary minus", () => {
+        it("- 3 with space is also constant-folded", () => {
             const r = parseWithExpressions(`<Start> = hello -> - 3;`);
             const value = r.definitions[0].rules[0].value!;
-            expect(value.type).toBe("unaryExpression");
-            if (value.type === "unaryExpression") {
-                expect(value.operator).toBe("-");
-                expect(value.operand).toEqual({
-                    type: "literal",
-                    value: 3,
-                });
+            expect(value.type).toBe("literal");
+            if (value.type === "literal") {
+                expect(value.value).toBe(-3);
             }
         });
 
@@ -457,6 +448,17 @@ describe("Value Expression Parser", () => {
                 `<Start> = hello -> "world";`,
             );
             expect(grammar).toBeDefined();
+        });
+
+        it("negative number literal works when flag is off", () => {
+            const r = parseGrammarRules(
+                "test.agr",
+                `<Start> = hello -> -3;`,
+                false,
+                false, // enableExpressions = false
+            );
+            const value = r.definitions[0].rules[0].value!;
+            expect(value).toEqual({ type: "literal", value: -3 });
         });
     });
 });

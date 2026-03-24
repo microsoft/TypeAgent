@@ -345,10 +345,15 @@ function parseUnary(ctx: ValueExprParserContext): ValueNode {
     }
 
     // Unary minus: per ECMA-262, `-` is always a unary operator,
-    // never part of a numeric literal.
+    // never part of a numeric literal.  However, we constant-fold
+    // `-<number>` into a single literal to keep the AST compact.
     if (ctx.isAt("-") && !ctx.isAt("->")) {
         ctx.skipWhitespace(1);
         const operand = parseUnary(ctx);
+        // Constant-fold: -(number literal) → literal with negated value
+        if (operand.type === "literal" && typeof operand.value === "number") {
+            return { type: "literal", value: -operand.value };
+        }
         return {
             type: "unaryExpression",
             operator: "-" as UnaryValueExprOp,

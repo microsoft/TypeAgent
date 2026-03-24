@@ -23,22 +23,18 @@ const ANY_TYPE: SchemaType = SchemaCreator.any();
 
 /**
  * Sentinel for "error during type inference."
- * Distinguished from ANY_TYPE by a Symbol brand so that identity checks
- * cannot accidentally confuse the two.  When a derive function encounters
+ * Module-private — only reachable via `isErrorType()`, so identity
+ * comparison is safe and sufficient.  When a derive function encounters
  * a lookup failure (unknown variable, property, or method) it pushes an
  * error and returns ERROR_TYPE.  Compound nodes (ternary, ??, ||, &&)
  * propagate ERROR_TYPE so downstream operators skip validation and avoid
  * cascading error messages.
  */
-const _errorBrand: unique symbol = Symbol("errorType");
-const ERROR_TYPE: SchemaType & { [_errorBrand]: true } = Object.assign(
-    { type: "any" as const },
-    { [_errorBrand]: true as const },
-);
+const ERROR_TYPE: SchemaType = { type: "any" as const };
 
-/** Check whether a type is the error sentinel (more robust than `=== ERROR_TYPE`). */
+/** Check whether a type is the error sentinel. */
 function isErrorType(t: SchemaType): boolean {
-    return (t as any)[_errorBrand] === true;
+    return t === ERROR_TYPE;
 }
 
 /**
@@ -72,8 +68,12 @@ function formatSchemaType(t: SchemaType): string {
 
 /**
  * Collect supported method names for a given object type for error messages.
+ * Results are memoized since the method sets are static.
  */
+const _supportedMethodsCache = new Map<string, string[]>();
 function supportedMethodsForType(typeName: string): string[] {
+    let cached = _supportedMethodsCache.get(typeName);
+    if (cached !== undefined) return cached;
     const methods: string[] = [];
     if (typeName === "string") {
         for (const s of [
@@ -96,7 +96,9 @@ function supportedMethodsForType(typeName: string): string[] {
     } else if (typeName === "number") {
         for (const m of NUMBER_TO_STRING_METHODS) methods.push(m);
     }
-    return methods.sort();
+    cached = methods.sort();
+    _supportedMethodsCache.set(typeName, cached);
+    return cached;
 }
 
 /**
@@ -225,7 +227,11 @@ export const METHOD_RETURN_TYPE_TABLES = {
     NUMBER_TO_STRING_METHODS,
 } as const;
 
-/** Per-cache counters for generating unique names for anonymous rules. */
+/** Per-cache counters for generating unique names for anonymous rules.
+ * A WeakMap keyed on the type-derivation cache (a plain Map) avoids
+ * polluting the cache object itself and lets the counter be reclaimed
+ * automatically when the cache goes out of scope after compilation.
+ */
 const cacheCounters = new WeakMap<
     Map<GrammarRule[], SchemaType>,
     { value: number }
@@ -685,13 +691,16 @@ function deriveValueTypeImpl(
                 case ">":
                 case "<=":
                 case ">=":
+                    // Operand type constraints checked in pass 2
                     return SchemaCreator.boolean();
                 case "-":
                 case "*":
                 case "/":
                 case "%":
+                    // Operand type constraints checked in pass 2
                     return SchemaCreator.number();
                 case "+":
+                    // Operand type constraints checked in pass 2
                     if (
                         leftType.type === "string" ||
                         rightType.type === "string"
@@ -704,9 +713,12 @@ function deriveValueTypeImpl(
                     ) {
                         return SchemaCreator.number();
                     }
+                    // Can't determine result type — pass 2 will emit the
+                    // constraint error for mismatched operands.
                     return ERROR_TYPE;
                 case "&&":
                 case "||":
+                    // Operand type constraints checked in pass 2
                     if (isErrorType(leftType) || isErrorType(rightType))
                         return ERROR_TYPE;
                     return SchemaCreator.boolean();
@@ -725,6 +737,7 @@ function deriveValueTypeImpl(
             );
         }
         case "unaryExpression":
+            // Operand type constraints checked in pass 2
             switch (value.operator) {
                 case "-":
                     return SchemaCreator.number();
