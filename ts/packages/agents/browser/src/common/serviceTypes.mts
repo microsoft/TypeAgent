@@ -399,6 +399,14 @@ export type ChatPanelInvokeFunctions = {
         source: string;
         displayId: string;
     }): Promise<{ content: any; nextRefreshMs: number }>;
+    chatPanelQueryKnowledge(params: {
+        query: string;
+        url: string;
+    }): Promise<any>;
+    chatPanelGenerateQuestions(params: {
+        url: string;
+        knowledge?: any;
+    }): Promise<any>;
     chatPanelStartRecording(): Promise<{ success: boolean; error?: string }>;
     chatPanelStopRecording(): Promise<{
         success: boolean;

@@ -21,6 +21,11 @@ import type {
 // Platform adapter: open links in a real Chrome tab
 const platformAdapter: PlatformAdapter = {
     handleLinkClick(href: string, _target: string | null) {
+        // Rewrite typeagent-browser:// URLs to the actual extension URL
+        if (href.startsWith("typeagent-browser://")) {
+            const path = href.replace("typeagent-browser://", "");
+            href = chrome.runtime.getURL(path);
+        }
         chrome.tabs.create({ url: href });
     },
 };
@@ -98,7 +103,7 @@ function initialize() {
                 chatPanel.setDisplayInfo(data.source, data.actionIndex);
             },
             dispatcherSetDisplay(data) {
-                chatPanel.addAgentMessage(
+                chatPanel.replaceAgentMessage(
                     data.message.message as DisplayContent,
                     data.message.source,
                     data.message.sourceIcon,
@@ -319,16 +324,17 @@ function addContextualFollowUps(command: string) {
                 label: "Record New Action",
                 command: "@browser record New Action",
             },
-            {
-                label: "Create Action (describe)",
-                command: "@browser start authoring",
-            },
+            // {
+            //     label: "Create Action (describe)",
+            //     command: "@browser author",
+            // ,
         ]);
-    } else if (normalized.includes("@browser extractknowledge")) {
+    } else if (normalized.startsWith("@browser ask")) {
+        // After a Q&A answer, offer to extract full knowledge
         chatPanel.addFollowUpButtons([
             {
-                label: "Ask about this page",
-                command: "What is this page about?",
+                label: "Extract full knowledge",
+                command: "@browser extractKnowledge",
             },
         ]);
     } else if (normalized.startsWith("@browser record")) {
