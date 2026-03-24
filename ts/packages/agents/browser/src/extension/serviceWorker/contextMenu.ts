@@ -2,6 +2,32 @@
 // Licensed under the MIT License.
 
 import { sendActionToAgent } from "./websocket";
+import { setChatPanelRpc } from "./dispatcherConnection";
+
+// RPC send function — set after RPC server is created in index.ts
+let rpcSendFn: ((name: string, ...args: any[]) => void) | undefined;
+
+export function setContextMenuRpcSend(
+    fn: (name: string, ...args: any[]) => void,
+) {
+    rpcSendFn = fn;
+}
+
+async function openChatAndInjectCommand(
+    tabId: number,
+    command: string,
+): Promise<void> {
+    await chrome.sidePanel.open({ tabId });
+    await chrome.sidePanel.setOptions({
+        tabId,
+        path: "views/chatPanel.html",
+        enabled: true,
+    });
+    // Small delay to let the chat panel initialize before injecting
+    setTimeout(() => {
+        rpcSendFn?.("injectCommand", { command });
+    }, 500);
+}
 
 /**
  * Initializes the context menu items
@@ -53,13 +79,7 @@ export async function handleContextMenuClick(
 
     switch (info.menuItemId) {
         case "discoverPageActions": {
-            await chrome.sidePanel.open({ tabId: tab.id! });
-
-            await chrome.sidePanel.setOptions({
-                tabId: tab.id!,
-                path: "views/pageMacros.html",
-                enabled: true,
-            });
+            await openChatAndInjectCommand(tab.id!, "@browser discover");
             break;
         }
         case "manageMacros": {
@@ -92,26 +112,15 @@ export async function handleContextMenuClick(
         }
 
         case "extractKnowledgeFromPage": {
-            await chrome.sidePanel.open({ tabId: tab.id! });
-
-            await chrome.sidePanel.setOptions({
-                tabId: tab.id!,
-                path: "views/pageKnowledge.html",
-                enabled: true,
-            });
-
+            await openChatAndInjectCommand(
+                tab.id!,
+                "@browser extractKnowledge",
+            );
             break;
         }
 
         case "learnMoreFromPage": {
-            await chrome.sidePanel.open({ tabId: tab.id! });
-
-            await chrome.sidePanel.setOptions({
-                tabId: tab.id!,
-                path: "views/pageQnA.html",
-                enabled: true,
-            });
-
+            await openChatAndInjectCommand(tab.id!, "What is this page about?");
             break;
         }
 

@@ -73,6 +73,15 @@ class TerminalLayout {
     setup(rows: number) {
         this.promptRows = rows;
         this.active = true;
+        // Move existing content up so the prompt appears right below it.
+        // We move the cursor to the bottom of where the scroll region
+        // will be, then set up the region. This way the first \n in
+        // writeContent() scrolls from this position.
+        const height = process.stdout.rows || 24;
+        const scrollHeight = Math.max(1, height - this.promptRows);
+        // Move cursor to scrollHeight row — if existing content is above,
+        // this positions us below it (or at it). Then apply the region.
+        process.stdout.write(`\x1b[${scrollHeight};1H`);
         this.applyScrollRegion();
         // Listen for terminal resize
         this.resizeHandler = () => {
