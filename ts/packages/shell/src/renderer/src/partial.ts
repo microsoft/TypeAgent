@@ -346,6 +346,12 @@ export class PartialCompletion {
             event.preventDefault();
             return true;
         }
+        // In inline mode, Enter should dismiss the ghost completion and let
+        // the normal Enter → send behaviour proceed.  Only Tab accepts inline.
+        if (this.inline && event.key === "Enter") {
+            this.searchMenu.hide();
+            return false;
+        }
         return this.searchMenu.handleSpecialKeys(event);
     }
 
