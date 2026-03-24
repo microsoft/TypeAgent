@@ -425,24 +425,38 @@ function createValue(
         case "object": {
             const obj: Record<string, any> = {};
 
-            for (const [k, v] of Object.entries(node.value)) {
-                if (v === null) {
-                    // Shorthand form: { k } means { k: k }
-                    obj[k] = createValueForVariable(
-                        k,
+            for (const elem of node.value) {
+                if (elem.type === "spread") {
+                    // Spread: evaluate the argument and merge into the object.
+                    const inner = createValue(
+                        elem.argument,
                         valueIds,
                         values,
-                        propertyName ? `${propertyName}.${k}` : k,
+                        propertyName,
+                        wildcardPropertyNames,
+                        partialValueId,
+                        stat,
+                    );
+                    if (inner != null && typeof inner === "object") {
+                        Object.assign(obj, inner);
+                    }
+                } else if (elem.value === null) {
+                    // Shorthand form: { k } means { k: k }
+                    obj[elem.key] = createValueForVariable(
+                        elem.key,
+                        valueIds,
+                        values,
+                        propertyName ? `${propertyName}.${elem.key}` : elem.key,
                         wildcardPropertyNames,
                         partialValueId,
                         stat,
                     );
                 } else {
-                    obj[k] = createValue(
-                        v,
+                    obj[elem.key] = createValue(
+                        elem.value,
                         valueIds,
                         values,
-                        propertyName ? `${propertyName}.${k}` : k,
+                        propertyName ? `${propertyName}.${elem.key}` : elem.key,
                         wildcardPropertyNames,
                         partialValueId,
                         stat,

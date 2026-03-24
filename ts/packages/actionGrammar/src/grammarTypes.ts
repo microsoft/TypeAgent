@@ -66,14 +66,29 @@ export type CompiledVariableValueNode = {
     type: "variable";
     name: string;
 };
-// Note: CompiledObjectValueNode uses an unordered dict for values because
-// property order is irrelevant at match time.  The parser-time ObjectValueNode
-// (in grammarRuleParser.ts) uses an ordered ObjectProperty[] array instead so
-// it can preserve per-property comments and original source order for
-// round-trip fidelity.
+// A named property in a compiled object: { key: value }.
+// null value = shorthand: { x } means { x: x }.
+export type CompiledObjectPropertyElement = {
+    type: "property";
+    key: string;
+    value: CompiledValueNode | null;
+};
+// A spread element in a compiled object: { ...expr }.
+export type CompiledObjectSpreadElement = {
+    type: "spread";
+    argument: CompiledValueNode;
+};
+export type CompiledObjectElement =
+    | CompiledObjectPropertyElement
+    | CompiledObjectSpreadElement;
+
+// CompiledObjectValueNode uses an ordered array of elements because spread
+// elements interleave with named properties and override semantics depend on
+// source order.  The parser-time ObjectValueNode (in grammarRuleParser.ts)
+// augments the elements with comment fields for round-trip fidelity.
 export type CompiledObjectValueNode = {
     type: "object";
-    value: { [key: string]: CompiledValueNode | null };
+    value: CompiledObjectElement[];
 };
 export type CompiledArrayValueNode = {
     type: "array";

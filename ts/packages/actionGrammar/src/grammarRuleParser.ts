@@ -233,6 +233,19 @@ export type ObjectProperty = {
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
 };
+// A spread element in an ObjectValueNode: { ...expr }.
+export type ObjectSpreadElement = {
+    argument: ValueNode;
+    leadingComments?: Comment[] | undefined;
+    trailingComments?: Comment[] | undefined;
+};
+// A single element in an ObjectValueNode — either a named property or a spread.
+export type ObjectElement = ObjectProperty | ObjectSpreadElement;
+
+/** Type guard: true when the element is a spread (`{ ...expr }`). */
+export function isObjectSpread(e: ObjectElement): e is ObjectSpreadElement {
+    return "argument" in e;
+}
 
 // A value node as it appears as an element in an array literal.
 // trailingComments: same-line comments after the trailing ','.
@@ -243,7 +256,7 @@ export type ArrayElement = {
 // ObjectValueNode and ArrayValueNode override the `value` field so it can
 // hold recursive ValueNode/ArrayElement references (not just CompiledValueNode).
 type ObjectValueNode = Omit<CompiledObjectValueNode, "value"> & {
-    value: ObjectProperty[];
+    value: ObjectElement[];
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
@@ -856,7 +869,7 @@ class GrammarRuleParser implements ValueExprParserContext {
         let pendingLeading = this.parseComments();
 
         let first = true;
-        const obj: ObjectProperty[] = [];
+        const obj: ObjectElement[] = [];
         while (true) {
             if (this.isAtEnd()) {
                 this.throwError("Unexpected end of file in object value.");
@@ -892,11 +905,16 @@ class GrammarRuleParser implements ValueExprParserContext {
                 first = false;
             }
 
-            // Reject spread in objects — only array spread is supported
+            // Spread element: { ...expr }
             if (this.isAt("...")) {
-                this.throwError(
-                    "Spread is not supported in object literals. Use spread in arrays ([...x]) instead.",
-                );
+                this.skipWhitespace(3);
+                const argument = this.parseValueWithComments();
+                obj.push({
+                    argument,
+                    leadingComments: pendingLeading,
+                } satisfies ObjectSpreadElement);
+                pendingLeading = undefined;
+                continue;
             }
 
             // Parse property name (identifier or string literal)

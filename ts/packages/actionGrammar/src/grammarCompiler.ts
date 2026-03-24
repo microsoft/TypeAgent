@@ -9,6 +9,7 @@ import {
     StringPart,
     CompiledSpacingMode,
     CompiledValueNode,
+    CompiledObjectElement,
 } from "./grammarTypes.js";
 import {
     Rule,
@@ -16,6 +17,7 @@ import {
     ImportStatement,
     parseGrammarRules,
     ValueNode,
+    isObjectSpread,
 } from "./grammarRuleParser.js";
 import { getLineCol } from "./utils.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
@@ -412,27 +414,44 @@ function validateAndCompileValueNode(
             result = { type: "variable", name: node.name };
             break;
         case "object": {
-            const value: { [key: string]: CompiledValueNode | null } = {};
-            for (const prop of node.value) {
-                if (prop.value === null) {
+            const elements: CompiledObjectElement[] = [];
+            for (const elem of node.value) {
+                if (isObjectSpread(elem)) {
+                    elements.push({
+                        type: "spread",
+                        argument: validateAndCompileValueNode(
+                            context,
+                            elem.argument,
+                            availableVariables,
+                        ),
+                    });
+                } else if (elem.value === null) {
                     // Shorthand form: { key } means { key: key }
                     // Validate that 'key' is an available variable
-                    if (!availableVariables.has(prop.key)) {
+                    if (!availableVariables.has(elem.key)) {
                         context.errors.push({
-                            message: `Variable '${prop.key}' is referenced in the value but not defined in the rule`,
+                            message: `Variable '${elem.key}' is referenced in the value but not defined in the rule`,
                             definition: context.currentDefinition,
                         });
                     }
-                    value[prop.key] = null;
+                    elements.push({
+                        type: "property",
+                        key: elem.key,
+                        value: null,
+                    });
                 } else {
-                    value[prop.key] = validateAndCompileValueNode(
-                        context,
-                        prop.value,
-                        availableVariables,
-                    );
+                    elements.push({
+                        type: "property",
+                        key: elem.key,
+                        value: validateAndCompileValueNode(
+                            context,
+                            elem.value,
+                            availableVariables,
+                        ),
+                    });
                 }
             }
-            result = { type: "object", value };
+            result = { type: "object", value: elements };
             break;
         }
         case "array":

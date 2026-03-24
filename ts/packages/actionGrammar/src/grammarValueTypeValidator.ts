@@ -652,31 +652,51 @@ function deriveValueTypeImpl(
         case "object": {
             // Infer field types for the object
             const fields: Record<string, SchemaObjectField> = {};
-            for (const [key, propValue] of Object.entries(value.value)) {
-                let fieldType: SchemaType;
-                if (propValue === null) {
-                    // Shorthand { key } — resolve variable directly instead
-                    // of creating a synthetic node (which would lack position
-                    // info and bypass the compiler's variable validation).
-                    const varType = resolveVar(key);
-                    if (varType !== undefined) {
-                        fieldType = varType;
-                    } else {
-                        errors?.push({
-                            message: `Undefined variable '${key}'`,
-                            node: value,
-                        });
-                        fieldType = ERROR_TYPE;
-                    }
-                } else {
-                    fieldType = deriveValueType(
-                        propValue,
+            for (const elem of value.value) {
+                if (elem.type === "spread") {
+                    // Spread: derive argument type and merge its fields
+                    const argType = deriveValueType(
+                        elem.argument,
                         resolveVar,
                         errors,
                         typeCache,
                     );
+                    if (argType.type === "object") {
+                        for (const [fk, fv] of Object.entries(argType.fields)) {
+                            fields[fk] = fv;
+                        }
+                    } else if (!isErrorType(argType)) {
+                        errors?.push({
+                            message: `Spread argument must be an object type, got ${formatSchemaType(argType)}`,
+                            node: elem.argument,
+                        });
+                    }
+                } else {
+                    let fieldType: SchemaType;
+                    if (elem.value === null) {
+                        // Shorthand { key } — resolve variable directly instead
+                        // of creating a synthetic node (which would lack position
+                        // info and bypass the compiler's variable validation).
+                        const varType = resolveVar(elem.key);
+                        if (varType !== undefined) {
+                            fieldType = varType;
+                        } else {
+                            errors?.push({
+                                message: `Undefined variable '${elem.key}'`,
+                                node: value,
+                            });
+                            fieldType = ERROR_TYPE;
+                        }
+                    } else {
+                        fieldType = deriveValueType(
+                            elem.value,
+                            resolveVar,
+                            errors,
+                            typeCache,
+                        );
+                    }
+                    fields[elem.key] = { type: fieldType };
                 }
-                fields[key] = { type: fieldType };
             }
             return SchemaCreator.obj(fields);
         }
@@ -1653,10 +1673,18 @@ function walkExprOperands(
             );
             break;
         case "object":
-            for (const propValue of Object.values(value.value)) {
-                if (propValue !== null) {
+            for (const elem of value.value) {
+                if (elem.type === "spread") {
                     walkExprOperands(
-                        propValue,
+                        elem.argument,
+                        resolveVar,
+                        errors,
+                        warnings,
+                        typeCache,
+                    );
+                } else if (elem.value !== null) {
+                    walkExprOperands(
+                        elem.value,
                         resolveVar,
                         errors,
                         warnings,
@@ -1947,15 +1975,26 @@ function validateObjectValue(
     const errors: string[] = [];
     const objValue = value as CompiledObjectValueNode;
 
+    // Build a flat property map from the element list for field lookup.
+    // Spread elements are opaque at compile time — we skip them for
+    // required-field and extraneous-field checks because their fields
+    // aren't statically known.
+    const propMap = new Map<string, CompiledValueNode | null>();
+    for (const elem of objValue.value) {
+        if (elem.type === "property") {
+            propMap.set(elem.key, elem.value);
+        }
+    }
+
     // Check required fields exist
     for (const [fieldKey, fieldInfo] of Object.entries(expected.fields) as [
         string,
         SchemaObjectField,
     ][]) {
         const propPath = fullPath(path, fieldKey);
-        const propValue = objValue.value[fieldKey];
+        const propValue = propMap.get(fieldKey);
 
-        if (propValue === undefined) {
+        if (propValue === undefined && !propMap.has(fieldKey)) {
             if (!fieldInfo.optional) {
                 errors.push(`Missing required property '${propPath}'`);
             }
@@ -1966,7 +2005,7 @@ function validateObjectValue(
         const actualValue: CompiledValueNode =
             propValue === null
                 ? { type: "variable", name: fieldKey }
-                : propValue;
+                : propValue!;
 
         // When the schema field is optional, the value may legitimately be
         // `undefined` at runtime (e.g. from an optional grammar capture
@@ -1987,8 +2026,9 @@ function validateObjectValue(
         );
     }
 
-    // Check for extraneous properties
-    for (const actualKey of Object.keys(objValue.value)) {
+    // Check for extraneous properties (skip spread elements — their
+    // fields aren't statically enumerable)
+    for (const actualKey of propMap.keys()) {
         if (!(actualKey in expected.fields)) {
             errors.push(`Extraneous property '${fullPath(path, actualKey)}'`);
         }
