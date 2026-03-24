@@ -105,6 +105,51 @@ import {
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
 
+function wrapClientIOWithDisplayLog(
+    clientIO: ClientIO,
+    displayLog: DisplayLog,
+): ClientIO {
+    return {
+        ...clientIO,
+        setUserRequest(requestId, command) {
+            const seq = displayLog.logUserRequest(requestId, command);
+            clientIO.setUserRequest(requestId, command, seq);
+        },
+        setDisplayInfo(requestId, source, actionIndex?, action?) {
+            const seq = displayLog.logSetDisplayInfo(
+                requestId,
+                source,
+                actionIndex,
+                action,
+            );
+            clientIO.setDisplayInfo(
+                requestId,
+                source,
+                actionIndex,
+                action,
+                seq,
+            );
+        },
+        setDisplay(message) {
+            const seq = displayLog.logSetDisplay(message);
+            clientIO.setDisplay(message, seq);
+        },
+        appendDisplay(message, mode) {
+            const seq = displayLog.logAppendDisplay(message, mode);
+            clientIO.appendDisplay(message, mode, seq);
+        },
+        notify(notificationId, event, data, source) {
+            const seq = displayLog.logNotify(
+                notificationId,
+                event,
+                data,
+                source,
+            );
+            clientIO.notify(notificationId, event, data, source, seq);
+        },
+    };
+}
+
 export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
 
