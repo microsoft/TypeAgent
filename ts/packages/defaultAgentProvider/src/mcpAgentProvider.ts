@@ -205,9 +205,7 @@ function getMcpCommandHandlerTable(
                         instanceConfig.mcpServers = {};
                     }
                     const serverScriptArgs = Object.keys(args).map((k) =>
-                        String(
-                            (params.args as Record<string, unknown>)[k],
-                        ),
+                        String((params.args as Record<string, unknown>)[k]),
                     );
                     instanceConfig.mcpServers[appAgentName] = {
                         serverScriptArgs,
