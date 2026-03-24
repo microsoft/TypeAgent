@@ -397,113 +397,174 @@ function validateAndCompileValueNode(
     node: ValueNode,
     availableVariables: Set<string>,
 ): CompiledValueNode {
-    const validateVariable = (variableName: string) => {
-        if (!availableVariables.has(variableName)) {
-            context.errors.push({
-                message: `Variable '${variableName}' is referenced in the value but not defined in the rule`,
-                definition: context.currentDefinition,
-            });
-        }
-    };
-
-    const compile = (node: ValueNode): CompiledValueNode => {
-        let result: CompiledValueNode;
-        switch (node.type) {
-            case "literal":
-                result = { type: "literal", value: node.value };
-                break;
-            case "variable":
-                validateVariable(node.name);
-                result = { type: "variable", name: node.name };
-                break;
-            case "object": {
-                const value: { [key: string]: CompiledValueNode | null } = {};
-                for (const prop of node.value) {
-                    if (prop.value === null) {
-                        // Shorthand form: { key } means { key: key }
-                        // Validate that 'key' is an available variable
-                        validateVariable(prop.key);
-                        value[prop.key] = null;
-                    } else {
-                        value[prop.key] = compile(prop.value);
-                    }
-                }
-                result = { type: "object", value };
-                break;
+    let result: CompiledValueNode;
+    switch (node.type) {
+        case "literal":
+            result = { type: "literal", value: node.value };
+            break;
+        case "variable":
+            if (!availableVariables.has(node.name)) {
+                context.errors.push({
+                    message: `Variable '${node.name}' is referenced in the value but not defined in the rule`,
+                    definition: context.currentDefinition,
+                });
             }
-            case "array":
-                result = {
-                    type: "array",
-                    value: node.value.map((elem) => compile(elem.value)),
-                };
-                break;
-
-            // ── Value expression nodes ────────────────────────────────────
-            case "binaryExpression":
-                result = {
-                    type: "binaryExpression",
-                    operator: node.operator,
-                    left: compile(node.left),
-                    right: compile(node.right),
-                };
-                break;
-            case "unaryExpression":
-                result = {
-                    type: "unaryExpression",
-                    operator: node.operator,
-                    operand: compile(node.operand),
-                };
-                break;
-            case "conditionalExpression":
-                result = {
-                    type: "conditionalExpression",
-                    test: compile(node.test),
-                    consequent: compile(node.consequent),
-                    alternate: compile(node.alternate),
-                };
-                break;
-            case "memberExpression":
-                result = {
-                    type: "memberExpression",
-                    object: compile(node.object),
-                    property:
-                        typeof node.property === "string"
-                            ? node.property
-                            : compile(node.property),
-                    computed: node.computed,
-                    optional: node.optional,
-                };
-                break;
-            case "callExpression":
-                result = {
-                    type: "callExpression",
-                    callee: compile(node.callee),
-                    arguments: node.arguments.map(compile),
-                    ...(node.optional ? { optional: true } : {}),
-                };
-                break;
-            case "spreadElement":
-                result = {
-                    type: "spreadElement",
-                    argument: compile(node.argument),
-                };
-                break;
-            case "templateLiteral":
-                result = {
-                    type: "templateLiteral",
-                    quasis: node.quasis,
-                    expressions: node.expressions.map(compile),
-                };
-                break;
+            result = { type: "variable", name: node.name };
+            break;
+        case "object": {
+            const value: { [key: string]: CompiledValueNode | null } = {};
+            for (const prop of node.value) {
+                if (prop.value === null) {
+                    // Shorthand form: { key } means { key: key }
+                    // Validate that 'key' is an available variable
+                    if (!availableVariables.has(prop.key)) {
+                        context.errors.push({
+                            message: `Variable '${prop.key}' is referenced in the value but not defined in the rule`,
+                            definition: context.currentDefinition,
+                        });
+                    }
+                    value[prop.key] = null;
+                } else {
+                    value[prop.key] = validateAndCompileValueNode(
+                        context,
+                        prop.value,
+                        availableVariables,
+                    );
+                }
+            }
+            result = { type: "object", value };
+            break;
         }
-        // Track source position of the top-level value node for error reporting
-        if (node.pos !== undefined) {
-            context.valuePositions.set(result, node.pos);
-        }
-        return result;
-    };
+        case "array":
+            result = {
+                type: "array",
+                value: node.value.map((elem) =>
+                    validateAndCompileValueNode(
+                        context,
+                        elem.value,
+                        availableVariables,
+                    ),
+                ),
+            };
+            break;
 
-    return compile(node);
+        // ── Value expression nodes ────────────────────────────────────
+        case "binaryExpression":
+            result = {
+                type: "binaryExpression",
+                operator: node.operator,
+                left: validateAndCompileValueNode(
+                    context,
+                    node.left,
+                    availableVariables,
+                ),
+                right: validateAndCompileValueNode(
+                    context,
+                    node.right,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "unaryExpression":
+            result = {
+                type: "unaryExpression",
+                operator: node.operator,
+                operand: validateAndCompileValueNode(
+                    context,
+                    node.operand,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "conditionalExpression":
+            result = {
+                type: "conditionalExpression",
+                test: validateAndCompileValueNode(
+                    context,
+                    node.test,
+                    availableVariables,
+                ),
+                consequent: validateAndCompileValueNode(
+                    context,
+                    node.consequent,
+                    availableVariables,
+                ),
+                alternate: validateAndCompileValueNode(
+                    context,
+                    node.alternate,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "memberExpression":
+            result = {
+                type: "memberExpression",
+                object: validateAndCompileValueNode(
+                    context,
+                    node.object,
+                    availableVariables,
+                ),
+                property:
+                    typeof node.property === "string"
+                        ? node.property
+                        : validateAndCompileValueNode(
+                              context,
+                              node.property,
+                              availableVariables,
+                          ),
+                computed: node.computed,
+                optional: node.optional,
+            };
+            break;
+        case "callExpression":
+            result = {
+                type: "callExpression",
+                callee: validateAndCompileValueNode(
+                    context,
+                    node.callee,
+                    availableVariables,
+                ),
+                arguments: node.arguments.map((arg) =>
+                    validateAndCompileValueNode(
+                        context,
+                        arg,
+                        availableVariables,
+                    ),
+                ),
+                ...(node.optional ? { optional: true } : {}),
+            };
+            break;
+        case "spreadElement":
+            result = {
+                type: "spreadElement",
+                argument: validateAndCompileValueNode(
+                    context,
+                    node.argument,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "templateLiteral":
+            result = {
+                type: "templateLiteral",
+                quasis: node.quasis,
+                expressions: node.expressions.map((expr) =>
+                    validateAndCompileValueNode(
+                        context,
+                        expr,
+                        availableVariables,
+                    ),
+                ),
+            };
+            break;
+        default:
+            throw new Error(`Unknown value node type '${(node as any).type}'`);
+    }
+    // Track source position of the value node for error reporting
+    if (node.pos !== undefined) {
+        context.valuePositions.set(result, node.pos);
+    }
+    return result;
 }
 
 // Sentinel for missing rule definitions. Pre-populated grammarRules suppress

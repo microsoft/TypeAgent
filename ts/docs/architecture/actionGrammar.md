@@ -257,6 +257,11 @@ are documented in `completion.md`.
 2. **Entity-aware validation** — Typed wildcards (`CalendarDate`, `Ordinal`,
    etc.) can validate captured values against registered entity converters.
 
+3. **Follow the ECMA-262 specification** — Value expressions follow
+   JavaScript semantics as defined in ECMA-262 wherever applicable,
+   including operator precedence, associativity, short-circuit
+   evaluation rules, and numeric literal grammar.
+
 ### Core data model
 
 #### Grammar types (in-memory representation)

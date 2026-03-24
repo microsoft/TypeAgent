@@ -201,6 +201,59 @@ describe("Value Expression Parser", () => {
             }
         });
 
+        it("unary minus on variable", () => {
+            const r = parseWithExpressions(`<Start> = $(x:number) -> -x;`);
+            const value = r.definitions[0].rules[0].value!;
+            expect(value.type).toBe("unaryExpression");
+            if (value.type === "unaryExpression") {
+                expect(value.operator).toBe("-");
+                expect(value.operand).toEqual({
+                    type: "variable",
+                    name: "x",
+                });
+            }
+        });
+
+        it("-3 is parsed as unary minus on literal per ECMA-262", () => {
+            const r = parseWithExpressions(`<Start> = hello -> -3;`);
+            const value = r.definitions[0].rules[0].value!;
+            expect(value.type).toBe("unaryExpression");
+            if (value.type === "unaryExpression") {
+                expect(value.operator).toBe("-");
+                expect(value.operand).toEqual({
+                    type: "literal",
+                    value: 3,
+                });
+            }
+        });
+
+        it("x + -3 is parsed as unary minus on literal", () => {
+            const r = parseWithExpressions(`<Start> = $(x:number) -> x + -3;`);
+            const value = r.definitions[0].rules[0].value!;
+            expect(value.type).toBe("binaryExpression");
+            if (value.type === "binaryExpression") {
+                expect(value.operator).toBe("+");
+                expect(value.right).toEqual({
+                    type: "unaryExpression",
+                    operator: "-",
+                    operand: { type: "literal", value: 3 },
+                });
+            }
+        });
+
+        it("- 3 with space is also unary minus", () => {
+            const r = parseWithExpressions(`<Start> = hello -> - 3;`);
+            const value = r.definitions[0].rules[0].value!;
+            expect(value.type).toBe("unaryExpression");
+            if (value.type === "unaryExpression") {
+                expect(value.operator).toBe("-");
+                expect(value.operand).toEqual({
+                    type: "literal",
+                    value: 3,
+                });
+            }
+        });
+
         it("typeof", () => {
             const r = parseWithExpressions(
                 `<Start> = $(x:string) -> typeof x;`,
@@ -537,6 +590,18 @@ describeForEachMatcher(
                     true,
                 ]);
             });
+
+            it("unary minus negates variable", () => {
+                const g = `<Start> = $(x:number) -> -x;`;
+                const grammar = loadWithExpressions(g);
+                expect(testMatchGrammar(grammar, "5")).toStrictEqual([-5]);
+            });
+
+            it("negative number literal", () => {
+                const g = `<Start> = hello -> -3;`;
+                const grammar = loadWithExpressions(g);
+                expect(testMatchGrammar(grammar, "hello")).toStrictEqual([-3]);
+            });
         });
 
         describe("Member Access", () => {
@@ -746,20 +811,20 @@ describe("Value Expression Round-trip", () => {
         ).toThrow(/cannot be mixed/);
     });
 
-    it("|| vs ?? without parens is a parse error", () => {
+    it("|| vs ?? without parens mentions || in the error", () => {
         expect(() =>
             parseWithExpressions(
                 `<Start> = $(a:string) $(b:string) -> a || b ?? b;`,
             ),
-        ).toThrow(/cannot be mixed/);
+        ).toThrow(/'\|\|' cannot be mixed with '\?\?'/);
     });
 
-    it("&& vs ?? without parens is a parse error", () => {
+    it("&& vs ?? without parens mentions && in the error", () => {
         expect(() =>
             parseWithExpressions(
                 `<Start> = $(a:string) $(b:string) -> a && b ?? b;`,
             ),
-        ).toThrow(/cannot be mixed/);
+        ).toThrow(/'&&' cannot be mixed with '\?\?'/);
     });
 
     it("?? with parenthesized || is OK", () => {
@@ -821,6 +886,22 @@ describe("Value Expression Round-trip", () => {
             `<Start> = $(a:string) $(b:string) $(c:string) -> a && b && c;`,
         );
     });
+
+    it("unary minus on variable", () => {
+        assertRoundTrip(`<Start> = $(x:number) -> -x;`);
+    });
+
+    it("spread in array", () => {
+        assertRoundTrip(`<Start> = $(x:string) -> [...x.split(" "), "extra"];`);
+    });
+
+    it("optional chaining ?.", () => {
+        assertRoundTrip(`<Start> = $(x:string) -> x?.length;`);
+    });
+
+    it("computed optional chaining ?.[]", () => {
+        assertRoundTrip(`<Start> = $(x:string) -> x?.[0];`);
+    });
 });
 
 // ── Evaluator Unit Tests ──────────────────────────────────────────────────────
@@ -849,6 +930,37 @@ describe("Value Expression Evaluator", () => {
             /Free function calls are not supported/,
         );
         // The argument must NOT have been evaluated
+        expect(argEvaluated).toBe(false);
+    });
+
+    it("optional call short-circuits without evaluating arguments", () => {
+        // obj?.method() where obj is null — should return undefined without
+        // evaluating arguments or looking up the method.
+        const argNode = { type: "literal" as const, value: "arg" };
+        const callNode = {
+            type: "callExpression" as const,
+            callee: {
+                type: "memberExpression" as const,
+                object: { type: "variable" as const, name: "obj" },
+                property: "method",
+                computed: false,
+                optional: true,
+            },
+            arguments: [argNode],
+            optional: false, // optional is on the member, not the call itself
+        };
+
+        let argEvaluated = false;
+        const evalBase = (node: any) => {
+            if (node === argNode) {
+                argEvaluated = true;
+            }
+            if (node.type === "variable" && node.name === "obj") return null;
+            return node.value;
+        };
+
+        const result = evaluateValueExpr(callNode as any, evalBase);
+        expect(result).toBeUndefined();
         expect(argEvaluated).toBe(false);
     });
 });

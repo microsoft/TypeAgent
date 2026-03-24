@@ -119,11 +119,8 @@ export interface ValueExprParserContext {
     throwError(message: string, pos?: number): never;
     parseId(expected: string): string;
     parseStringLiteral(): string;
-    parseNumberValue(): { type: "literal"; value: number };
+    parseNumberValue(): ValueNode;
     parseEscapedChar(): string;
-
-    /** Whether the character at `pos` starts a number literal (single source of truth). */
-    isNumberStart(pos: number): boolean;
 
     // For object/array parsing, we delegate to the existing parser.
     // The expression parser wraps these.
@@ -188,7 +185,7 @@ function parseShortCircuit(ctx: ValueExprParserContext): ValueNode {
         }
         if (ctx.isAt("||") || ctx.isAt("&&")) {
             ctx.throwError(
-                `'??' cannot be mixed with '${ctx.isAt("||") ? "||" : "&&"}' without parentheses (per ECMA-262 §13.13).`,
+                `'??' cannot be mixed with '${ctx.isAt("||") ? "||" : "&&"}' without parentheses.`,
             );
         }
         return left;
@@ -197,8 +194,10 @@ function parseShortCircuit(ctx: ValueExprParserContext): ValueNode {
     // Logical mode (||/&&) — reject ??.
     // &&  binds tighter than ||, so parse && in an inner loop.
     if (ctx.isAt("||") || ctx.isAt("&&")) {
+        let seenOr = false;
         left = parseLogicalAndChain(ctx, left);
         while (ctx.isAt("||")) {
+            seenOr = true;
             ctx.skipWhitespace(2);
             let right = parseEquality(ctx);
             right = parseLogicalAndChain(ctx, right);
@@ -211,7 +210,7 @@ function parseShortCircuit(ctx: ValueExprParserContext): ValueNode {
         }
         if (ctx.isAt("??")) {
             ctx.throwError(
-                `'${left.type === "binaryExpression" && (left as any).operator === "&&" ? "&&" : "||"}' cannot be mixed with '??' without parentheses (per ECMA-262 §13.13).`,
+                `'${seenOr ? "||" : "&&"}' cannot be mixed with '??' without parentheses.`,
             );
         }
     }
@@ -345,28 +344,9 @@ function parseUnary(ctx: ValueExprParserContext): ValueNode {
         };
     }
 
-    // Unary - must distinguish `-3` (negative number literal) from `-x`
-    // (unary minus on variable).  We peek ahead: if the next non-space
-    // character starts a number, fall through to parsePrimary so the
-    // parser's parseNumberValue handles the sign.  The authoritative
-    // check is ctx.isNumberStart, defined by the parser itself.
+    // Unary minus: per ECMA-262, `-` is always a unary operator,
+    // never part of a numeric literal.
     if (ctx.isAt("-") && !ctx.isAt("->")) {
-        const savedPos = ctx.curr;
-        ctx.curr++;
-        // Skip whitespace manually to peek
-        let peekPos = ctx.curr;
-        while (
-            peekPos < ctx.content.length &&
-            /\s/.test(ctx.content[peekPos])
-        ) {
-            peekPos++;
-        }
-        if (ctx.isNumberStart(peekPos)) {
-            ctx.curr = savedPos;
-            return parsePostfix(ctx);
-        }
-        // It's a unary operator
-        ctx.curr = savedPos;
         ctx.skipWhitespace(1);
         const operand = parseUnary(ctx);
         return {

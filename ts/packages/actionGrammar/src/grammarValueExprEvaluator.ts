@@ -149,21 +149,10 @@ export function evaluateValueExpr(
                 );
             }
 
-            // Short-circuit for optional calls: ?.() when callee is nullish.
-            if (node.optional) {
-                const calleeVal = evaluateValueExpr(node.callee, evalBase);
-                if (calleeVal == null) {
-                    return undefined;
-                }
-            }
-
-            const args = node.arguments.map((a) =>
-                evaluateValueExpr(a, evalBase),
-            );
-
             const memberNode = node.callee;
             const obj = evaluateValueExpr(memberNode.object, evalBase);
 
+            // Short-circuit for optional chaining on the member (?.method)
             if (memberNode.optional && obj == null) {
                 return undefined;
             }
@@ -172,6 +161,14 @@ export function evaluateValueExpr(
                 typeof memberNode.property === "string"
                     ? memberNode.property
                     : String(evaluateValueExpr(memberNode.property, evalBase));
+
+            // Short-circuit for optional calls: ?.() when method is nullish.
+            if (node.optional) {
+                const fn = (obj as any)?.[methodName];
+                if (fn == null) {
+                    return undefined;
+                }
+            }
 
             if (!SAFE_METHODS.has(methodName)) {
                 throw new Error(
@@ -186,6 +183,10 @@ export function evaluateValueExpr(
                     `'${methodName}' is not a function on the target value`,
                 );
             }
+
+            const args = node.arguments.map((a) =>
+                evaluateValueExpr(a, evalBase),
+            );
             return fn.apply(obj, args);
         }
 

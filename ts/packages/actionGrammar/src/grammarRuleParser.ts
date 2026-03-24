@@ -361,11 +361,11 @@ export function isExpressionSpecialChar(char: string) {
 //   "INVARIANT EXCEPTION: does not skip trailing whitespace — <reason>."
 // Callers of such methods are responsible for the subsequent whitespace skip.
 
-class GrammarRuleParser {
-    private curr: number = 0;
+class GrammarRuleParser implements ValueExprParserContext {
+    curr: number = 0;
     constructor(
         private readonly fileName: string,
-        private readonly content: string,
+        readonly content: string,
         private readonly position: boolean = true,
         private readonly enableExpressions: boolean = false,
     ) {}
@@ -377,7 +377,7 @@ class GrammarRuleParser {
     private isAtWhiteSpace() {
         return !this.isAtEnd() && isWhitespace(this.content[this.curr]);
     }
-    private isAt(expected: string) {
+    isAt(expected: string) {
         return this.content.startsWith(expected, this.curr);
     }
     private skipAfter(skip: number, after: string) {
@@ -392,7 +392,7 @@ class GrammarRuleParser {
 
     // Advances skip characters then skips whitespace characters only.
     // Pure — does not consume or collect comments.
-    private skipWhitespace(skip: number = 0): boolean {
+    skipWhitespace(skip: number = 0): boolean {
         const start = this.curr;
         this.curr += skip;
         while (this.isAtWhiteSpace()) {
@@ -405,7 +405,7 @@ class GrammarRuleParser {
     // skipping whitespace between consecutive comments.
     // Returns the collected comments, or undefined if none.
     // Callers must have already skipped whitespace before calling.
-    private parseComments(): Comment[] | undefined {
+    parseComments(): Comment[] | undefined {
         const comments: Comment[] = [];
         while (this.isAtComment()) {
             comments.push(this.parseComment());
@@ -517,7 +517,7 @@ class GrammarRuleParser {
         return comments.length > 0 ? comments : undefined;
     }
 
-    private parseId(expected: string): string {
+    parseId(expected: string): string {
         const start = this.curr;
         const content = this.content;
         if (!isIdStart(content[start])) {
@@ -532,7 +532,7 @@ class GrammarRuleParser {
         return content.substring(start, end);
     }
 
-    private parseEscapedChar() {
+    parseEscapedChar() {
         if (this.isAtEnd()) {
             this.throwError("Missing escaped character.");
         }
@@ -782,7 +782,7 @@ class GrammarRuleParser {
             : { expressions: expNodes };
     }
 
-    private parseStringLiteral(): string {
+    parseStringLiteral(): string {
         const quote = this.content[this.curr];
         this.curr++;
         const s: string[] = [];
@@ -805,7 +805,7 @@ class GrammarRuleParser {
         return { type: "literal", value: this.parseStringLiteral() };
     }
 
-    private parseNumberValue(): LiteralValueNode {
+    parseNumberValue(): LiteralValueNode {
         // Capture all a-z to get Infinity
         const regexp = /[0-9a-z\+\-\.]*/iy;
         regexp.lastIndex = this.curr;
@@ -843,62 +843,13 @@ class GrammarRuleParser {
 
     private parseValue(): ValueNode {
         if (this.enableExpressions) {
-            return parseValueExpr(this.asExprParserContext());
+            return parseValueExpr(this);
         }
         return this.parseSimpleValue();
     }
 
-    /**
-     * Creates a ValueExprParserContext adapter exposing the parser internals
-     * needed by the expression parser module.
-     */
-    private asExprParserContext(): ValueExprParserContext {
-        const self = this;
-        return {
-            get content() {
-                return self.content;
-            },
-            get curr() {
-                return self.curr;
-            },
-            set curr(v: number) {
-                self.curr = v;
-            },
-            isAt: (s: string) => self.isAt(s),
-            isAtEnd: () => self.isAtEnd(),
-            isAtStringDelimiter: () => self.isAtStringDelimiter(),
-            skipWhitespace: (skip?: number) => self.skipWhitespace(skip),
-            parseComments: () => self.parseComments(),
-            consume: (expected: string, reason?: string) =>
-                self.consume(expected, reason),
-            throwError: (message: string, pos?: number) =>
-                self.throwError(message, pos ?? self.curr),
-            parseId: (expected: string) => self.parseId(expected),
-            parseStringLiteral: () => self.parseStringLiteral(),
-            parseNumberValue: () =>
-                self.parseNumberValue() as { type: "literal"; value: number },
-            parseEscapedChar: () => self.parseEscapedChar(),
-            isNumberStart: (pos: number) => {
-                if (pos >= self.content.length) return false;
-                const ch = self.content[pos];
-                if (/[0-9]/.test(ch)) return true;
-                // dot-digit (e.g. .5)
-                if (
-                    ch === "." &&
-                    pos + 1 < self.content.length &&
-                    /[0-9]/.test(self.content[pos + 1])
-                ) {
-                    return true;
-                }
-                return false;
-            },
-            parseObjectValue: () => self.parseObjectLiteral(),
-            parseArrayValue: () => self.parseArrayLiteral(),
-        };
-    }
-
     /** Parse an object literal value: { ... } */
-    private parseObjectLiteral(): ValueNode {
+    parseObjectValue(): ValueNode {
         // Object
         this.skipWhitespace(1);
         // Capture comments after "{" as potential leading for the first property.
@@ -981,7 +932,7 @@ class GrammarRuleParser {
     }
 
     /** Parse an array literal value: [ ... ] */
-    private parseArrayLiteral(): ValueNode {
+    parseArrayValue(): ValueNode {
         // Array
         this.skipWhitespace(1);
         const arr: ArrayElement[] = [];
@@ -1033,10 +984,10 @@ class GrammarRuleParser {
     /** Parse a simple value (no expressions) — the original parseValue logic. */
     private parseSimpleValue(): ValueNode {
         if (this.isAt("{")) {
-            return this.parseObjectLiteral();
+            return this.parseObjectValue();
         }
         if (this.isAt("[")) {
-            return this.parseArrayLiteral();
+            return this.parseArrayValue();
         }
         if (this.isAtStringDelimiter()) {
             return this.parseStringValue();
@@ -1263,7 +1214,7 @@ class GrammarRuleParser {
         };
     }
 
-    private consume(expected: string, reason?: string) {
+    consume(expected: string, reason?: string) {
         if (!this.isAt(expected)) {
             this.throwUnexpectedCharError(
                 `'${expected}' expected${reason ? ` ${reason}` : ""}.`,
@@ -1276,7 +1227,7 @@ class GrammarRuleParser {
         return getLineCol(this.content, pos);
     }
 
-    private throwError(message: string, pos: number = this.curr): never {
+    throwError(message: string, pos: number = this.curr): never {
         if (pos === this.content.length) {
             while (pos > 0) {
                 if (!isWhitespace(this.content[pos - 1])) {
@@ -1306,7 +1257,7 @@ class GrammarRuleParser {
         );
     }
 
-    private isAtEnd() {
+    isAtEnd() {
         return this.curr >= this.content.length;
     }
 
@@ -1314,7 +1265,7 @@ class GrammarRuleParser {
         return this.isAt("//") || this.isAt("/*");
     }
 
-    private isAtStringDelimiter() {
+    isAtStringDelimiter() {
         return this.isAt('"') || this.isAt("'");
     }
 
