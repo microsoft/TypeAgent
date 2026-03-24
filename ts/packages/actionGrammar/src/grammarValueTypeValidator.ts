@@ -227,6 +227,43 @@ export const METHOD_RETURN_TYPE_TABLES = {
     NUMBER_TO_STRING_METHODS,
 } as const;
 
+// ── Method argument type constraints ──────────────────────────────────────────
+// Maps "objectType.method" to the expected argument types.  Each entry is an
+// array of argument slots; `undefined` means "any type accepted" for that slot.
+// Only methods whose arguments have meaningful type constraints are listed —
+// methods with no constraints (e.g. trim()) are omitted and pass validation.
+type ArgType = "string" | "number" | undefined;
+const METHOD_ARG_TYPES: Record<string, ArgType[]> = {
+    // String methods
+    "string.slice": ["number", "number"],
+    "string.substring": ["number", "number"],
+    "string.repeat": ["number"],
+    "string.padStart": ["number", "string"],
+    "string.padEnd": ["number", "string"],
+    "string.replace": ["string", "string"],
+    "string.replaceAll": ["string", "string"],
+    "string.charAt": ["number"],
+    "string.at": ["number"],
+    "string.indexOf": ["string", "number"],
+    "string.lastIndexOf": ["string", "number"],
+    "string.charCodeAt": ["number"],
+    "string.codePointAt": ["number"],
+    "string.includes": ["string", "number"],
+    "string.startsWith": ["string", "number"],
+    "string.endsWith": ["string", "number"],
+    "string.split": ["string", "number"],
+    // Array methods
+    "array.slice": ["number", "number"],
+    "array.indexOf": [undefined, "number"],
+    "array.lastIndexOf": [undefined, "number"],
+    "array.join": ["string"],
+    // Number methods
+    "number.toFixed": ["number"],
+    "number.toPrecision": ["number"],
+    "number.toExponential": ["number"],
+    "number.toString": ["number"],
+};
+
 /** Per-cache counters for generating unique names for anonymous rules.
  * A WeakMap keyed on the type-derivation cache (a plain Map) avoids
  * polluting the cache object itself and lets the counter be reclaimed
@@ -862,7 +899,7 @@ function deriveValueTypeImpl(
                 return ERROR_TYPE;
             }
             if (typeof value.callee.property === "string") {
-                const objectType = resolveType(
+                let objectType = resolveType(
                     deriveValueType(
                         value.callee.object,
                         resolveVar,
@@ -871,30 +908,48 @@ function deriveValueTypeImpl(
                     ),
                 );
                 if (isErrorType(objectType)) return ERROR_TYPE;
+                // Optional chaining on callee: strip undefined before
+                // method lookup, add back to result after.
+                const addUndefined =
+                    value.callee.optional && containsUndefined(objectType);
+                if (addUndefined) {
+                    objectType = resolveType(stripUndefined(objectType));
+                    if (objectType.type === "undefined") {
+                        return SchemaCreator.undefined_();
+                    }
+                }
                 const method = value.callee.property;
+                const wrapResult = (t: SchemaType): SchemaType =>
+                    addUndefined
+                        ? SchemaCreator.union(t, SchemaCreator.undefined_())
+                        : t;
                 if (objectType.type === "string") {
                     if (STRING_TO_STRING_METHODS.has(method))
-                        return SchemaCreator.string();
+                        return wrapResult(SchemaCreator.string());
                     if (STRING_TO_NUMBER_METHODS.has(method))
-                        return SchemaCreator.number();
+                        return wrapResult(SchemaCreator.number());
                     if (STRING_TO_BOOLEAN_METHODS.has(method))
-                        return SchemaCreator.boolean();
+                        return wrapResult(SchemaCreator.boolean());
                     if (STRING_TO_ARRAY_METHODS.has(method))
-                        return SchemaCreator.array(SchemaCreator.string());
+                        return wrapResult(
+                            SchemaCreator.array(SchemaCreator.string()),
+                        );
                 }
                 if (objectType.type === "array") {
                     if (ARRAY_TO_STRING_METHODS.has(method))
-                        return SchemaCreator.string();
+                        return wrapResult(SchemaCreator.string());
                     if (ARRAY_TO_BOOLEAN_METHODS.has(method))
-                        return SchemaCreator.boolean();
+                        return wrapResult(SchemaCreator.boolean());
                     if (ARRAY_TO_NUMBER_METHODS.has(method))
-                        return SchemaCreator.number();
+                        return wrapResult(SchemaCreator.number());
                     if (ARRAY_TO_ARRAY_METHODS.has(method))
-                        return SchemaCreator.array(objectType.elementType);
+                        return wrapResult(
+                            SchemaCreator.array(objectType.elementType),
+                        );
                 }
                 if (objectType.type === "number") {
                     if (NUMBER_TO_STRING_METHODS.has(method))
-                        return SchemaCreator.string();
+                        return wrapResult(SchemaCreator.string());
                 }
                 const supported = supportedMethodsForType(objectType.type);
                 errors?.push({
@@ -1510,6 +1565,49 @@ function walkExprOperands(
             for (const arg of value.arguments) {
                 walkExprOperands(arg, resolveVar, errors, warnings, typeCache);
             }
+            // Validate argument types against method signatures
+            if (
+                value.callee.type === "memberExpression" &&
+                !value.callee.computed &&
+                typeof value.callee.property === "string"
+            ) {
+                const objectType = deriveValueType(
+                    value.callee.object,
+                    resolveVar,
+                    undefined,
+                    typeCache,
+                );
+                if (!isErrorType(objectType)) {
+                    const key = `${objectType.type}.${value.callee.property}`;
+                    const expectedArgs = METHOD_ARG_TYPES[key];
+                    if (expectedArgs !== undefined) {
+                        for (
+                            let i = 0;
+                            i < value.arguments.length &&
+                            i < expectedArgs.length;
+                            i++
+                        ) {
+                            const expected = expectedArgs[i];
+                            if (expected === undefined) continue;
+                            const argType = deriveValueType(
+                                value.arguments[i],
+                                resolveVar,
+                                undefined,
+                                typeCache,
+                            );
+                            if (isErrorType(argType)) continue;
+                            if (argType.type !== expected) {
+                                errors.push({
+                                    message:
+                                        `Argument ${i + 1} of '${value.callee.property}' ` +
+                                        `expects ${expected}, got '${formatSchemaType(argType)}'.`,
+                                    node: value.arguments[i],
+                                });
+                            }
+                        }
+                    }
+                }
+            }
             break;
         }
         case "templateLiteral": {
@@ -1584,6 +1682,7 @@ function walkExprOperands(
  */
 export type ExprValidationResult = {
     errors: string[];
+    warnings: string[];
     inferredType: SchemaType | undefined;
 };
 
@@ -1599,42 +1698,54 @@ export function validateExprTypes(
     value: CompiledValueNode,
     variableTypes: Map<string, SchemaType>,
 ): ExprValidationResult {
-    if (!isValueExprNode(value)) {
-        return { errors: [], inferredType: undefined };
-    }
     const resolveVar: ResolveVariable = (name) => variableTypes.get(name);
     const typeCache = new Map<CompiledValueNode, SchemaType>();
-    const inferenceErrors: ValueTypeError[] = [];
-    const exprType = deriveValueType(
-        value,
-        resolveVar,
-        inferenceErrors,
-        typeCache,
-    );
-    if (inferenceErrors.length > 0) {
-        return {
-            errors: inferenceErrors.map((e) => e.message),
-            inferredType: undefined,
-        };
+
+    // Infer the result type only for expression-typed nodes.
+    let exprType: SchemaType | undefined;
+    if (isValueExprNode(value)) {
+        const inferenceErrors: ValueTypeError[] = [];
+        exprType = deriveValueType(
+            value,
+            resolveVar,
+            inferenceErrors,
+            typeCache,
+        );
+        if (inferenceErrors.length > 0) {
+            return {
+                errors: inferenceErrors.map((e) => e.message),
+                warnings: [],
+                inferredType: undefined,
+            };
+        }
     }
+
+    // Walk sub-expressions for operator constraints and warnings.
+    // This recurses into object/array property values so expressions
+    // nested inside object literals are validated too.
+    const exprWarnings: ValueTypeError[] = [];
     const operandErrors = validateExprOperandTypes(
         value,
         resolveVar,
-        undefined,
+        exprWarnings,
         typeCache,
     );
     if (operandErrors.length > 0) {
         return {
             errors: operandErrors.map((e) => e.message),
+            warnings: exprWarnings.map((e) => e.message),
             inferredType: undefined,
         };
     }
     return {
         errors: [],
+        warnings: exprWarnings.map((e) => e.message),
         inferredType:
-            isErrorType(exprType) || exprType === ANY_TYPE
-                ? undefined
-                : exprType,
+            exprType !== undefined &&
+            !isErrorType(exprType) &&
+            exprType !== ANY_TYPE
+                ? exprType
+                : undefined,
     };
 }
 

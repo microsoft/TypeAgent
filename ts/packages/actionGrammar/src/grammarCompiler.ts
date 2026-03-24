@@ -721,6 +721,13 @@ function createNamedGrammarRules(
                         pos: leaf.pos,
                     });
                 }
+                for (const warning of result.warnings) {
+                    context.warnings.push({
+                        message: warning,
+                        definition: name,
+                        pos: leaf.pos,
+                    });
+                }
                 if (result.inferredType !== undefined) {
                     leafExprTypes.set(leaf.value, result.inferredType);
                 }

@@ -735,6 +735,12 @@ describe("Value Expression Round-trip", () => {
         assertRoundTrip("<Start> = $(x:string) -> `hello ${x}`;");
     });
 
+    it("template literal with escape sequences", () => {
+        assertRoundTrip(
+            "<Start> = $(x:string) -> `line1\\nline2\\t${x}\\r\\0`;",
+        );
+    });
+
     it("member access", () => {
         assertRoundTrip(`<Start> = $(x:string) -> x.length;`);
     });

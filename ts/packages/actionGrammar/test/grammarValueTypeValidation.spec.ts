@@ -2066,5 +2066,173 @@ describe("Value type validation", () => {
             );
             expect(errors.length).toBe(0);
         });
+
+        it("string.slice with string arg produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: name.slice("x"), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("slice");
+            expect(errors[0]).toContain("number");
+        });
+
+        it("string.indexOf with number first arg produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: "x", active: "hello".indexOf(n) > 0 };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("indexOf");
+            expect(errors[0]).toContain("string");
+        });
+
+        it("string.padStart with correct args is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: name.padStart(10, "0"), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("number.toFixed with string arg produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: n.toFixed("2"), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("toFixed");
+            expect(errors[0]).toContain("number");
+        });
+
+        it("array.join with number arg produces error", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: ["a", "b"].join(n), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("join");
+            expect(errors[0]).toContain("string");
+        });
+
+        it("unnecessary ?? emits warning", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: name ?? "default", active: true };
+            `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                warnings,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBeGreaterThan(0);
+            expect(warnings[0]).toContain("??");
+            expect(warnings[0]).toContain("unnecessary");
+        });
+
+        it("unnecessary ?. emits warning", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: name?.length ?? 0, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                warnings,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+            expect(warnings.length).toBeGreaterThan(0);
+            expect(warnings.some((w) => w.includes("?."))).toBe(true);
+            expect(warnings.some((w) => w.includes("unnecessary"))).toBe(true);
+        });
+
+        it("?. on type that is always undefined emits warning", () => {
+            // Create a schema with an optional field (T | undefined)
+            const OptActionDef = SchemaCreator.intf(
+                "OptAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    label: SchemaCreator.field(SchemaCreator.string()),
+                }),
+                undefined,
+                true,
+            );
+            const optLoader: SchemaLoader = (typeName) =>
+                typeName === "OptAction" ? OptActionDef : undefined;
+            const grammarText = `
+                import { OptAction } from "schema.ts";
+                <Start> : OptAction = test $(name:string)?
+                    -> { actionName: "test", label: name?.toLowerCase() ?? "none" };
+            `;
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, warnings, {
+                schemaLoader: optLoader,
+                enableExpressions: true,
+            });
+            expect(errors.length).toBe(0);
+            // name is string | undefined, so ?. is legitimate
+            // name?.toLowerCase() returns string | undefined, so ?? is legitimate
+            // No warnings expected here — both operators are necessary
+            expect(warnings.length).toBe(0);
+        });
     });
 });

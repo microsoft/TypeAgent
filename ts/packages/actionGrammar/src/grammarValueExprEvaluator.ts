@@ -22,10 +22,17 @@ export type EvalBaseValueFn = (node: CompiledValueNode) => unknown;
 
 // ── Safe method whitelist ─────────────────────────────────────────────────────
 // Derived from the compile-time return-type tables — single source of truth.
+// Each table value is a Set<string> of method names; flatMap spreads them into
+// a single deduplicated set.  The assertion below ensures no table is empty,
+// catching accidental additions of non-method-name entries.
 
-const SAFE_METHODS = new Set<string>(
-    Object.values(METHOD_RETURN_TYPE_TABLES).flatMap((s) => [...s]),
-);
+const _allTables = Object.values(METHOD_RETURN_TYPE_TABLES);
+if (_allTables.some((s) => s.size === 0)) {
+    throw new Error(
+        "METHOD_RETURN_TYPE_TABLES contains an empty set — each table must list at least one method.",
+    );
+}
+const SAFE_METHODS = new Set<string>(_allTables.flatMap((s) => [...s]));
 
 /**
  * Evaluate a compiled value expression node, producing a runtime value.

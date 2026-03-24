@@ -206,5 +206,9 @@ function escapeTemplateChars(s: string): string {
     return s
         .replace(/\\/g, "\\\\")
         .replace(/`/g, "\\`")
-        .replace(/\$\{/g, "\\${");
+        .replace(/\$\{/g, "\\${")
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "\\r")
+        .replace(/\t/g, "\\t")
+        .replace(/\0/g, "\\0");
 }
