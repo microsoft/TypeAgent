@@ -241,9 +241,15 @@ export class PartialCompletionSession {
         // ACTIVE from here.
         const { anchor, separatorMode: sepMode, noMatchPolicy } = this;
 
-        // [A4] Direction changed on a direction-sensitive result.
-        // The loaded completions were computed for the opposite direction
-        // and would differ — but only at the anchor boundary itself.
+        // [A4] Backward at a direction-sensitive anchor.
+        // The two-pass backward approach means the loaded result is
+        // always a forward-at-P result.  When the user is at the
+        // anchor going backward, the loaded forward result does not
+        // apply — re-fetch to get backward's backed-up result.
+        //
+        // Only backward needs this check: forward at the anchor
+        // matches the loaded result (which is forward-at-P).
+        //
         // Once the user has typed past the anchor (rawPrefix is
         // non-empty), the direction-sensitive point has been passed:
         // the trailing text acts as a commit signal, and backward is
@@ -255,12 +261,12 @@ export class PartialCompletionSession {
         // satisfied, A3 will catch it.  So this check only needs to
         // handle the exact-anchor case.
         if (
-            direction !== this.lastDirection &&
+            direction === "backward" &&
             this.directionSensitive &&
             input === anchor
         ) {
             debug(
-                `Partial completion re-fetch: direction changed (${this.lastDirection} → ${direction}), directionSensitive`,
+                `Partial completion re-fetch: backward at anchor, directionSensitive`,
             );
             return false;
         }

@@ -182,6 +182,7 @@ export function describeForEachCompletion(
 export function expectMetadata(
     result: GrammarCompletionResult,
     expected: {
+        completions?: string[];
         matchedPrefixLength?: number;
         separatorMode?:
             | "space"
@@ -193,8 +194,15 @@ export function expectMetadata(
         directionSensitive?: boolean;
         openWildcard?: boolean;
         properties?: unknown[];
+        sortCompletions?: boolean;
     },
 ): void {
+    if ("completions" in expected) {
+        const actual = expected.sortCompletions
+            ? [...result.completions].sort()
+            : result.completions;
+        expect(actual).toEqual(expected.completions);
+    }
     if ("matchedPrefixLength" in expected) {
         expect(result.matchedPrefixLength).toBe(expected.matchedPrefixLength);
     }

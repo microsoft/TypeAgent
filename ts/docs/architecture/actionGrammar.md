@@ -456,7 +456,15 @@ contract and the design trade-off of host-provided vs. backend-inferred
 direction).
 
 The grammar matcher uses `direction` to resolve structural ambiguity at
-match boundaries. The core rule is simple:
+match boundaries. `directionSensitive` is `true` when querying the same
+input prefix with the opposite direction would produce a different
+result (different completions, different `matchedPrefixLength`, or
+both). The caller uses this to decide whether a direction change
+requires a re-fetch: the `partialCompletionSession` re-fetches only
+when the user is still at the `matchedPrefixLength` position
+(`input === anchor`); once the user types past it, the cached
+completions remain usable via trie filtering regardless of direction.
+The core rule is simple:
 
 > **`directionSensitive=true` when backward has something to
 > reconsider** — a word, keyword, wildcard, or number was fully
@@ -465,6 +473,46 @@ match boundaries. The core rule is simple:
 Forward completion offers what comes _next_ in the grammar. Backward
 completion _backs up_ to the last successfully matched part and
 re-offers it, letting the user reconsider their choice.
+
+> **Design principle — closest to cursor.** When backward has several
+> candidate backup positions (e.g., wildcard start vs. partial keyword
+> inside the wildcard), it should prefer the one **nearest the cursor**
+> (highest `matchedPrefixLength`). This keeps the user's context:
+> `findPartialKeywordInWildcard` embodies this by choosing a partial-
+> keyword position over the wildcard start.
+
+**Two-pass backward.** The grammar matcher processes every alternative
+rule via a work list. For **forward**, this naturally collects
+completions from _all_ rules that survive to the winning prefix length.
+For **backward**, each rule independently backs up to its own last
+matched part — producing completions from only the _winning_ rule(s),
+which can miss sibling alternatives.
+
+To make backward non-lossy, the matcher uses a two-pass approach:
+
+1. **Pass 1 (backward):** Run the main loop with `direction="backward"`.
+   This determines the _backed-up position P_ via `emitBackwardCompletion`
+   or `tryPartialStringMatch`.
+2. **Pass 2 (forward re-invocation):** If backward actually backed up
+   (`backwardEmitted=true` and `P < prefix.length`), re-invoke
+   `matchGrammarCompletion(grammar, prefix[0..P], minPrefixLength,
+"forward")`. This processes _all_ rules from scratch on the shorter
+   input, collecting every rule's completions at P. The re-invocation
+   result has `directionSensitive` set to `true` (by definition, forward
+   at the original longer prefix would differ).
+
+Re-invocation is **skipped** when:
+
+- `backwardEmitted=false` — backward didn't back up (e.g., trailing
+  separator committed the match), so the result already matches forward.
+- `openWildcard=true` — the backed-up position is at an ambiguous
+  wildcard boundary. Forward on the shorter input would re-parse with
+  fresh greedy wildcards that absorb different text, producing an
+  incorrect structural interpretation.
+- `partialKeywordBackup=true` — a multi-word keyword partial match
+  (via `findPartialKeywordInWildcard`) determined P. Forward can't
+  reconstruct the keyword-word boundary because the wildcard absorbs
+  the consumed words.
 
 This rule naturally handles three kinds of ambiguity:
 
@@ -565,10 +613,15 @@ input `"play"`:
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
 - `directionSensitive` — see "Why direction matters" and "When
-  direction does _not_ matter" above. For exact matches (Category 1),
-  it is `true` when the rule contains a wildcard, a number variable,
-  a sub-rule variable capture, or a multi-part keyword — any part
-  that backward completion could reconsider.
+  direction does _not_ matter" above. The flag is now evaluated at
+  `matchedPrefixLength` rather than at the full input, thanks to the
+  two-pass backward approach: when re-invocation fires, forward at
+  the backed-up position naturally evaluates `directionSensitive` for
+  that position, then the matcher overrides it to `true` (since
+  forward at the full input would differ). When backward falls through
+  to forward behavior (`backwardEmitted=false`), the trailing-separator
+  advancement is applied normally and `directionSensitive` reflects
+  the forward-only evaluation.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary — see `completion.md` [`openWildcard`] for the full
   definition (definite vs. ambiguous positions, persistence semantics,

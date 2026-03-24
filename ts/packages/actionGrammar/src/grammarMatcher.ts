@@ -1696,6 +1696,21 @@ export function matchGrammarCompletion(
     // full definition of definite vs ambiguous positions.
     let openWildcard = false;
 
+    // Whether a findPartialKeywordInWildcard match determined the
+    // backed-up position.  When true, the two-pass backward
+    // re-invocation is skipped because the partial keyword position
+    // reflects a multi-word keyword boundary that forward can't
+    // reconstruct (the wildcard would greedily absorb the already-
+    // matched keyword words).
+    let partialKeywordBackup = false;
+
+    // Whether backward actually emitted a backed-up completion (via
+    // emitBackwardCompletion or findPartialKeywordInWildcard).  When
+    // false, backward fell through to forward behavior — the two-pass
+    // re-invocation and the trailing-separator-advancement guard are
+    // both skipped so the result is identical to forward.
+    let backwardEmitted = false;
+
     // Helper: update maxPrefixLength.  When it increases, all previously
     // accumulated completions from shorter matches are irrelevant
     // — clear them.
@@ -1708,6 +1723,7 @@ export function matchGrammarCompletion(
             closedSet = true;
             directionSensitive = false;
             openWildcard = false;
+            partialKeywordBackup = false;
         }
     }
 
@@ -1795,6 +1811,7 @@ export function matchGrammarCompletion(
                 savedWildcard.valueId,
                 savedWildcard.start,
             );
+            backwardEmitted = true;
         } else if (state.lastMatchedPartInfo !== undefined) {
             const info = state.lastMatchedPartInfo;
             if (info.type === "string") {
@@ -1811,6 +1828,7 @@ export function matchGrammarCompletion(
                         backResult.consumedLength,
                         backResult.remainingText,
                     );
+                    backwardEmitted = true;
                     if (info.afterWildcard) {
                         openWildcard = true;
                     }
@@ -1821,6 +1839,7 @@ export function matchGrammarCompletion(
                 // Number part — offer property completion for the
                 // number slot so the user can re-enter a value.
                 emitPropertyCompletion(state, info.valueId, info.start);
+                backwardEmitted = true;
                 if (info.afterWildcard) {
                     openWildcard = true;
                 }
@@ -1907,6 +1926,8 @@ export function matchGrammarCompletion(
                             partialResult.completionWord,
                         );
                         openWildcard = true;
+                        partialKeywordBackup = true;
+                        backwardEmitted = true;
                     } else {
                         emitBackwardCompletion(state, savedPendingWildcard);
                     }
@@ -1933,6 +1954,9 @@ export function matchGrammarCompletion(
                         );
                         if (partial.directionSensitive) {
                             directionSensitive = true;
+                            if (direction === "backward") {
+                                backwardEmitted = true;
+                            }
                         }
                     }
                 }
@@ -2033,11 +2057,59 @@ export function matchGrammarCompletion(
                         );
                         if (partial.directionSensitive) {
                             directionSensitive = true;
+                            if (direction === "backward") {
+                                backwardEmitted = true;
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    // Two-pass backward: the first (backward) pass determines the
+    // backed-up position P.  Re-invoke with forward on prefix[0..P]
+    // to pick up ALL rules' completions at P — not just the winning
+    // rule's.  This makes completion(input, "backward") ===
+    // completion(input[0..P], "forward") by construction, and
+    // directionSensitive is naturally evaluated at P.
+    //
+    // Re-invoke only when backward actually backed up (backwardEmitted
+    // is true).  When backward fell through to forward behavior
+    // (e.g. trailing separator committed the match), backwardEmitted
+    // remains false and we skip re-invocation.
+    //
+    // Skip re-invocation when:
+    //  - backwardEmitted is false: backward didn't back up; the
+    //    result already matches forward.
+    //  - P === prefix.length: nothing to re-invoke over.
+    //  - openWildcard is true: the backed-up position is at an
+    //    ambiguous wildcard boundary.  Forward on prefix[0..P] would
+    //    re-parse with fresh greedy wildcards that absorb different
+    //    text, producing an incorrect structural interpretation.
+    //  - partialKeywordBackup is true: a multi-word keyword partial
+    //    match determined P.  Forward can't reconstruct the keyword
+    //    word boundary because the wildcard absorbs the consumed words.
+    if (
+        direction === "backward" &&
+        maxPrefixLength < prefix.length &&
+        backwardEmitted &&
+        !partialKeywordBackup &&
+        !openWildcard
+    ) {
+        debugCompletion(
+            `Backward backed up to ${maxPrefixLength}; re-invoking forward`,
+        );
+        const reResult = matchGrammarCompletion(
+            grammar,
+            prefix.substring(0, maxPrefixLength),
+            minPrefixLength,
+            "forward",
+        );
+        // The forward call at P already evaluates directionSensitive
+        // correctly for position P — whether forward(input[0..P]) and
+        // backward(input[0..P]) would differ.  Do not override it.
+        return reResult;
     }
 
     // Advance past trailing separators so the reported prefix length
@@ -2049,13 +2121,11 @@ export function matchGrammarCompletion(
     // trailing space is already consumed, so no additional separator
     // is required between the anchor and the completion text.
     //
-    // Skip this step for backward when directionSensitive is true:
-    // a backward backup may have set maxPrefixLength to a position
-    // within all-separator content (e.g., backing up to the start of
-    // a punctuation-only keyword like "...").  Advancing past the
-    // separators would push maxPrefixLength past the backup point,
-    // invalidating the backward completion.
-    if (direction !== "backward" || !directionSensitive) {
+    // Skip advancement when backward backed up (backwardEmitted):
+    // the backed-up position P is where backward intentionally wants
+    // completions to anchor.  Advancing P past trailing separators
+    // would move the anchor forward, defeating the backup.
+    if (!backwardEmitted) {
         const advanced = consumeTrailingSeparators(prefix, maxPrefixLength);
         if (advanced > maxPrefixLength) {
             maxPrefixLength = advanced;

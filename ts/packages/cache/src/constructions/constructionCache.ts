@@ -593,7 +593,12 @@ export class ConstructionCache {
         // length includes any trailing whitespace the user typed.
         // When advancing, demote separatorMode to "optional" — the
         // trailing space is already consumed.
-        if (maxPrefixLength < requestPrefix.length) {
+        //
+        // Skip advancement when backward backed up: the backed-up
+        // position is where backward wants completions to anchor.
+        // Advancing past trailing separator chars would defeat the
+        // backup (e.g. separator-only keywords like "...").
+        if (!backward && maxPrefixLength < requestPrefix.length) {
             const trailing = requestPrefix.substring(maxPrefixLength);
             if (/^[\s\p{P}]+$/u.test(trailing)) {
                 maxPrefixLength = requestPrefix.length;
