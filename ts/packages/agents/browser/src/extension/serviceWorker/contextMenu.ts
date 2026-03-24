@@ -34,6 +34,28 @@ async function openChatAndInjectCommand(
  */
 export function initializeContextMenu(): void {
     chrome.contextMenus.create({
+        title: "Open TypeAgent Chat",
+        id: "openChatPanel",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        type: "separator",
+        id: "menuSeparator1",
+    });
+
+    chrome.contextMenus.create({
+        title: "Learn more from page",
+        id: "learnMoreFromPage",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        type: "separator",
+        id: "menuSeparator2",
+    });
+
+    chrome.contextMenus.create({
         title: "Discover page macros",
         id: "discoverPageActions",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
@@ -54,12 +76,12 @@ export function initializeContextMenu(): void {
 
     chrome.contextMenus.create({
         type: "separator",
-        id: "menuSeparator2",
+        id: "menuSeparator3",
     });
 
     chrome.contextMenus.create({
-        title: "Open TypeAgent Chat",
-        id: "openChatPanel",
+        title: "Knowledge Library",
+        id: "showWebsiteLibrary",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 }
@@ -120,7 +142,10 @@ export async function handleContextMenuClick(
         }
 
         case "learnMoreFromPage": {
-            await openChatAndInjectCommand(tab.id!, "What is this page about?");
+            await openChatAndInjectCommand(
+                tab.id!,
+                "@browser ask What is this page about?",
+            );
             break;
         }
 
