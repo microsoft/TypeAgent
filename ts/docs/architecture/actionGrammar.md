@@ -257,6 +257,11 @@ are documented in `completion.md`.
 2. **Entity-aware validation** — Typed wildcards (`CalendarDate`, `Ordinal`,
    etc.) can validate captured values against registered entity converters.
 
+3. **Follow the ECMA-262 specification** — Value expressions follow
+   JavaScript semantics as defined in ECMA-262 wherever applicable,
+   including operator precedence, associativity, short-circuit
+   evaluation rules, and numeric literal grammar.
+
 ### Core data model
 
 #### Grammar types (in-memory representation)
@@ -353,7 +358,9 @@ GrammarParseResult {
 3. Validates entity references against the global entity registry
 4. Compiles value expressions into `CompiledValueNode` trees
 5. Resolves spacing mode annotations
-6. Produces the flat `Grammar` structure ready for matching
+6. Type-checks value expressions in two passes (see
+   [Validation architecture](#validation-architecture) below)
+7. Produces the flat `Grammar` structure ready for matching
 
 ### Matching backend
 
@@ -514,3 +521,150 @@ with intelligent line-breaking. It preserves comments from the original
 parse, supports compact (single-line) and expanded (multi-line) layouts,
 and respects a configurable line-length limit. This enables tooling
 workflows where grammars are programmatically modified and re-serialized.
+
+---
+
+## Value Expression Type System
+
+Grammar value expressions (the `-> expression` part of a rule) are
+type-checked at compile time. Every expression node has a statically-known
+type — there is no `any` escape hatch. This section documents the design
+principles and restrictions.
+
+Enable expressions via `enableExpressions: true` in
+`LoadGrammarRulesOptions` when your grammar rules need computed values
+(arithmetic, conditionals, method calls) in the `->` position.
+
+### Validation Architecture
+
+Type checking runs in two passes, implemented in
+`grammarValueTypeValidator.ts` and orchestrated by the compiler in
+`grammarCompiler.ts`:
+
+**Pass 1 — Expression-internal consistency** (`validateExprTypes`):
+Infers the result type of the expression, validates operator constraints
+(e.g. `+` requires matching operand types), and detects unknown
+variables, properties, and methods. This pass runs unconditionally —
+it only needs variable types derived from grammar parts, not resolved
+schema types. Uses a type cache so that child types inferred during
+the validation walk are not re-derived.
+
+**Pass 2 — Conformance against declared type** (`validateValueType`):
+Checks that the expression's inferred type (from pass 1) is assignable
+to the declared output type annotation (e.g. `<Rule> : PlayAction`).
+This pass only runs when a `SchemaLoader` resolved the declared types,
+so grammars compiled without schema information still get pass 1
+coverage.
+
+The compiler collects **leaf values** — the value expressions that
+actually produce the rule's output — via `collectLeafValues`, which
+uses the shared `classifyRuleValue()` function to categorize each
+grammar rule:
+
+| Kind          | Condition                      | Leaf source                                                      |
+| ------------- | ------------------------------ | ---------------------------------------------------------------- |
+| `explicit`    | Explicit `-> { ... }`          | The compiled value node                                          |
+| `variable`    | Single variable, no value      | Variable part (type checked directly via `validateVariableType`) |
+| `passthrough` | No variables, single RulesPart | Recurse into sub-rule                                            |
+| `none`        | Multi-variable, no value       | Skipped (already warned)                                         |
+
+The `variable` kind ensures that single-variable implicit rules like
+`"play" $(x:<Song>)` have their variable's type validated against the
+declared output type, rather than silently accepting any capture.
+`classifyRuleValue` is also used by `deriveAlternativeType` for type
+inference, so both paths share the same classification logic.
+
+### Implicit Value Behavior
+
+When a grammar rule has no explicit `-> value` expression, the compiler
+and matcher use `classifyRuleValue()` to determine how the rule produces
+its output. The implicit value depends on the rule's structure:
+
+**Single-variable implicit** (`variable` kind): A rule with exactly one
+variable part and no explicit value expression passes the variable's
+captured value through as the rule's output. For example,
+`"play" $(x:<Song>)` produces the value captured by `x`.
+
+**Single-part passthrough** (`passthrough` kind): A rule with no
+variable parts and a single `RulesPart` (bare rule reference or nested
+group) passes the referenced rule's value through. For example,
+`<Greeting> = <Hello> | <Hi>` produces whichever sub-rule matched.
+
+**String literal default** (`default` kind): A rule with no variable
+parts and a single string literal or phrase-set part produces the
+matched text as a string. For example, `"hello"` produces `"hello"`.
+
+**No value** (`none` kind): Rules with multiple variable parts but no
+explicit value expression produce no value — the compiler warns about
+this because the output is ambiguous.
+
+### Design Principles
+
+1. **Statically-Typed Expressions** — every node has a known compile-time
+   type. Union types (e.g. `string | number` from `??`) are valid
+   statically-known types.
+2. **No Implicit Coercion** — operators require explicitly compatible types.
+   JavaScript's implicit type coercion rules are rejected.
+3. **Operators Do One Thing** — `+` is add or concat (not both at once),
+   `&&`/`||` are boolean logic, `!` is boolean negation, ternary test must
+   be boolean. `typeof` provides runtime type discrimination.
+4. **Honest Types for Optional Captures** — `$(x:type)?` produces
+   `T | undefined`, reflecting runtime behavior.
+5. **Purpose-Built Operators for Nullability** — `??` and `?.` handle
+   `T | undefined` from optional captures.
+6. **Closed Method Surface** — every whitelisted method has a known return
+   type; unusable methods (callbacks, iterators) are excluded.
+7. **Errors Suggest Alternatives** — every restriction error tells the user
+   what to do instead.
+
+### Expression Type Restriction Table
+
+| Operator              | Required Operand Types                            | Result Type                                   | Error on Violation                                                                                                        |
+| --------------------- | ------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `+` (addition)        | `number`, `number`                                | `number`                                      | "Operator '+' requires both operands to be number or both to be string. Use a template literal for string interpolation." |
+| `+` (concat)          | `string`, `string`                                | `string`                                      | _(same)_                                                                                                                  |
+| `-` `*` `/` `%`       | `number`, `number`                                | `number`                                      | "Operator '{op}' requires both operands to be number."                                                                    |
+| `<` `>` `<=` `>=`     | same: both `number` or both `string`              | `boolean`                                     | "Operator '{op}' requires both operands to be the same type (both number or both string)."                                |
+| `===` `!==`           | any, any                                          | `boolean`                                     | _(no restriction)_                                                                                                        |
+| `&&` `\|\|`           | `boolean`, `boolean`                              | `boolean`                                     | "Operators '&&'/'\|\|' require boolean operands. Use ternary for conditional values."                                     |
+| `??`                  | `T \| undefined`, any                             | strip `undefined` from left, union with right | _(no restriction — may produce union types)_                                                                              |
+| unary `-`             | `number`                                          | `number`                                      | "Unary '-' requires a number operand."                                                                                    |
+| `!`                   | `boolean`                                         | `boolean`                                     | "Operator '!' requires a boolean operand. Use === or !== for equality checks."                                            |
+| `typeof`              | any                                               | `string`                                      | _(no restriction)_                                                                                                        |
+| ternary `? :` test    | `boolean`                                         | union of both branch types                    | "Ternary '?' test must be a boolean expression."                                                                          |
+| `${expr}` interp.     | `string`, `number`, or `boolean` (no `undefined`) | `string`                                      | "Template interpolation does not accept {type}. Use ?? to provide a default first."                                       |
+| `?.` (optional chain) | `T \| undefined`                                  | `PropType \| undefined`                       | _(no restriction)_                                                                                                        |
+
+### Optional Captures
+
+`$(x:type)?` produces type `T | undefined` at compile time:
+
+```
+$(name:string)?            → type: string | undefined
+name ?? "default"          → type: string (undefined stripped)
+name?.length               → type: number | undefined
+name + " suffix"           → ERROR: operand includes undefined, use ??
+`${name}`                  → ERROR: template does not accept undefined
+typeof name                → type: string (typeof accepts any type)
+name === "hello"           → valid (=== accepts undefined-containing types)
+```
+
+### Examples
+
+**Valid:**
+
+```
+n * 2                          → number
+name + " suffix"               → string (both operands string)
+(x > 0) && (y < 10)           → boolean
+opt ?? "fallback"              → string (undefined stripped)
+opt?.length                    → number | undefined
+```
+
+**Invalid (with fix):**
+
+```
+"count: " + n                  → ERROR: use `count: ${n}` instead
+!x  (non-boolean)              → ERROR: use x !== undefined
+x ? a : b  (non-boolean test)  → ERROR: use x > 0 ? a : b
+```
