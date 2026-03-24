@@ -181,6 +181,9 @@ function initialize() {
             dispatcherConnectionStatus(data) {
                 setConnectionStatus(data.connected);
             },
+            injectCommand(data) {
+                chatPanel.injectCommand(data.command);
+            },
         },
     );
     rpc = client.rpc;
@@ -191,10 +194,77 @@ function initialize() {
     chatPanel.focus();
 }
 
+let lastRecordedActionName = "Recorded Action";
+
+function extractRecordedActionName(): string | undefined {
+    // Look through command history for the last @browser record command
+    for (let i = 0; i < (chatPanel as any).commandHistory?.length || 0; i++) {
+        const cmd = (chatPanel as any).commandHistory[i];
+        if (cmd && cmd.toLowerCase().startsWith("@browser record")) {
+            const name = cmd.substring("@browser record".length).trim();
+            if (name) return name;
+        }
+    }
+    return undefined;
+}
+
+// Map internal command markers to friendly display labels
+const internalCommandLabels: Record<string, string> = {
+    __save_recording__: "Yes, save the recording",
+    __discard_recording__: "Discard recording",
+};
+
+function handleInternalCommand(text: string): boolean {
+    if (text === "__save_recording__") {
+        rpc.invoke("chatPanelCreateWebFlowFromRecording", {
+            actionName: lastRecordedActionName,
+            actionDescription: `Recorded action: ${lastRecordedActionName}`,
+        })
+            .then((result: any) => {
+                if (result?.success) {
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content: `Action "${result.flowName}" saved as a reusable WebFlow!`,
+                            kind: "success",
+                        },
+                        "browser",
+                    );
+                } else {
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content: `Failed to save: ${result?.error || "Unknown error"}`,
+                            kind: "error",
+                        },
+                        "browser",
+                    );
+                }
+                chatPanel.setEnabled(true);
+                chatPanel.focus();
+            })
+            .catch(() => {
+                chatPanel.setEnabled(true);
+            });
+        return true;
+    }
+    if (text === "__discard_recording__") {
+        chatPanel.addAgentMessage(
+            { type: "text", content: "Recording discarded." },
+            "browser",
+        );
+        return true;
+    }
+    return false;
+}
+
 /**
  * Handle a message typed by the user.
  */
 function handleUserMessage(text: string, attachments?: string[]) {
+    // Handle internal commands (save/discard recording) without going to dispatcher
+    if (handleInternalCommand(text)) return;
+
     chatPanel.setEnabled(false);
     chatPanel.showStatus("Processing...");
 
@@ -216,6 +286,10 @@ function handleUserMessage(text: string, attachments?: string[]) {
                     "system",
                 );
             }
+
+            // Add contextual follow-up buttons based on the command
+            addContextualFollowUps(text);
+
             chatPanel.setEnabled(true);
             chatPanel.focus();
         })
@@ -231,6 +305,86 @@ function handleUserMessage(text: string, attachments?: string[]) {
             chatPanel.setEnabled(true);
             chatPanel.focus();
         });
+}
+
+/**
+ * Add contextual follow-up buttons based on the command that just completed.
+ */
+function addContextualFollowUps(command: string) {
+    const normalized = command.toLowerCase().trim();
+
+    if (normalized.includes("@browser discover")) {
+        chatPanel.addFollowUpButtons([
+            {
+                label: "Record New Action",
+                command: "@browser record New Action",
+            },
+            {
+                label: "Create Action (describe)",
+                command: "@browser start authoring",
+            },
+        ]);
+    } else if (normalized.includes("@browser extractknowledge")) {
+        chatPanel.addFollowUpButtons([
+            {
+                label: "Ask about this page",
+                command: "What is this page about?",
+            },
+        ]);
+    } else if (normalized.startsWith("@browser record")) {
+        // Start recording via service worker and show controls
+        rpc.invoke("chatPanelStartRecording")
+            .then((result: any) => {
+                if (result?.success) {
+                    chatPanel.addFollowUpButtons([
+                        {
+                            label: "Stop Recording",
+                            command: "@browser stop recording",
+                        },
+                    ]);
+                }
+            })
+            .catch(() => {});
+    } else if (normalized.includes("@browser stop recording")) {
+        // Stop recording and offer to save
+        rpc.invoke("chatPanelStopRecording")
+            .then((result: any) => {
+                if (result?.success && result.stepCount > 0) {
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content: `Captured ${result.stepCount} step(s). Save as a reusable action?`,
+                        },
+                        "browser",
+                    );
+                    // Extract action name from the original record command
+                    lastRecordedActionName =
+                        extractRecordedActionName() || "Recorded Action";
+                    chatPanel.addFollowUpButtons([
+                        {
+                            label: "Save Action",
+                            command: "__save_recording__",
+                            displayText: "Yes, save the recording",
+                        },
+                        {
+                            label: "Discard",
+                            command: "__discard_recording__",
+                            displayText: "Discard recording",
+                        },
+                    ]);
+                } else if (result?.success) {
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content: "No steps were recorded.",
+                            kind: "warning",
+                        },
+                        "browser",
+                    );
+                }
+            })
+            .catch(() => {});
+    }
 }
 
 /**

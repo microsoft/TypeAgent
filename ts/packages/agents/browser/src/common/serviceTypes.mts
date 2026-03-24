@@ -399,6 +399,16 @@ export type ChatPanelInvokeFunctions = {
         source: string;
         displayId: string;
     }): Promise<{ content: any; nextRefreshMs: number }>;
+    chatPanelStartRecording(): Promise<{ success: boolean; error?: string }>;
+    chatPanelStopRecording(): Promise<{
+        success: boolean;
+        stepCount: number;
+        error?: string;
+    }>;
+    chatPanelCreateWebFlowFromRecording(params: {
+        actionName: string;
+        actionDescription: string;
+    }): Promise<{ success: boolean; flowName?: string; error?: string }>;
 };
 
 // =============================================
@@ -452,6 +462,8 @@ export type ChatPanelCallFunctions = {
         data: any;
     }): void;
     dispatcherConnectionStatus(data: { connected: boolean }): void;
+    /** Inject a command into the chat panel as if the user typed it. */
+    injectCommand(data: { command: string }): void;
 };
 
 // =============================================

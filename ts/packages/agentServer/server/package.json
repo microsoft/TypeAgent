@@ -24,7 +24,7 @@
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "start": "node dist/server.js",
+    "start": "node --disable-warning=DEP0190 dist/server.js",
     "stop": "node dist/stop.js",
     "tsc": "tsc -b"
   },
