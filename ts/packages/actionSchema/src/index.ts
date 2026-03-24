@@ -8,6 +8,7 @@ export {
     SchemaTypeArray as ActionParamArray,
     SchemaTypeObject as ActionParamObject,
     SchemaTypeDefinition,
+    SchemaTypeReference,
     ActionSchemaTypeDefinition,
     ActionSchemaEntryTypeDefinition,
     ActionSchemaGroup,

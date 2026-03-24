@@ -16,6 +16,7 @@ import {
     SchemaTypeString,
     SchemaTypeUnion,
     SchemaTypeAny,
+    SchemaTypeUndefined,
 } from "./type.js";
 
 export function any(): SchemaTypeAny {
@@ -41,6 +42,10 @@ export function number(): SchemaTypeNumber {
 
 export function boolean(): SchemaTypeBoolean {
     return { type: "boolean" };
+}
+
+export function undefined_(): SchemaTypeUndefined {
+    return { type: "undefined" };
 }
 
 export function array<T extends SchemaType>(
