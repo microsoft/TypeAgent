@@ -13,6 +13,7 @@ import {
     RuleDefinition,
     ValueNode,
 } from "./grammarRuleParser.js";
+import { writeValueExprNode } from "./grammarValueExprWriter.js";
 
 export type GrammarWriterOptions = {
     maxLineLength?: number; // Maximum line length before breaking (default: 80)
@@ -1140,6 +1141,16 @@ function writeValueNode(
             });
             break;
         }
+        default:
+            // Value expression node — delegate to the expression writer.
+            writeValueExprNode(
+                {
+                    write: (text: string) => result.write(text),
+                    writeBase: (node) => writeValueNode(result, node, baseCol),
+                },
+                value,
+            );
+            break;
     }
     writeValueComments(result, value.trailingComments, indent, true);
 }

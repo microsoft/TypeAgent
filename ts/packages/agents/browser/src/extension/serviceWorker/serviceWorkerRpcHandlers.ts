@@ -333,6 +333,31 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
+        async chatPanelQueryKnowledge(params: any) {
+            try {
+                return await forward("searchWebMemories", {
+                    query: params.query,
+                    searchScope: "current_page",
+                    metadata: { url: params.url },
+                });
+            } catch (error: any) {
+                return { error: error?.message || "Query failed" };
+            }
+        },
+
+        async chatPanelGenerateQuestions(params: any) {
+            try {
+                return await forward("generatePageQuestions", {
+                    url: params.url,
+                    pageKnowledge: params.knowledge,
+                });
+            } catch (error: any) {
+                return {
+                    error: error?.message || "Failed to generate questions",
+                };
+            }
+        },
+
         async chatPanelStartRecording() {
             try {
                 await startRecording();
