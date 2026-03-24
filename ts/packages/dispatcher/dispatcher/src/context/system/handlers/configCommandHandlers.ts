@@ -1508,6 +1508,7 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
         ),
         reasoning: new ConfigExecutionReasoningCommandHandler(),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
+        scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
     },
 };
 

@@ -40,6 +40,7 @@ import {
     AgentGrammarRegistry,
     compileGrammarToNFA,
     enrichGrammarWithCheckedVariables,
+    loadGrammarRulesNoThrow,
 } from "action-grammar";
 import fs from "node:fs";
 import { FlowDefinition } from "../execute/flowInterpreter.js";
@@ -1017,30 +1018,6 @@ private async loadDynamicGrammar(
 
         debug(`Loaded dynamic schema for ${schemaName}`);
     }
-
-    public async reloadAgentSchema(
-        schemaName: string,
-        context: CommandHandlerContext,
-    ): Promise<void> {
-        const appAgentName = getAppAgentName(schemaName);
-        const record = this.getRecord(appAgentName);
-        if (!record.appAgent || !record.sessionContext) {
-            throw new Error(`Agent '${appAgentName}' is not initialized`);
-        }
-
-        await this.loadDynamicSchema(
-            schemaName,
-            record.appAgent,
-            record.sessionContext,
-            context,
-        );
-        await this.loadDynamicGrammar(
-            schemaName,
-            record.appAgent,
-            record.sessionContext,
-            context,
-        );
-    }    
 
     private async updateAction(
         schemaName: string,
