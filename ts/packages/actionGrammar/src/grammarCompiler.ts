@@ -26,7 +26,10 @@ import type {
 } from "@typeagent/action-schema";
 import {
     validateValueType,
+    validateExprTypes,
+    validateVariableType,
     buildVariableTypeMap,
+    classifyRuleValue,
 } from "./grammarValueTypeValidator.js";
 
 export type FileLoader = {
@@ -400,7 +403,12 @@ function validateAndCompileValueNode(
             result = { type: "literal", value: node.value };
             break;
         case "variable":
-            validateVariableReference(context, node.name, availableVariables);
+            if (!availableVariables.has(node.name)) {
+                context.errors.push({
+                    message: `Variable '${node.name}' is referenced in the value but not defined in the rule`,
+                    definition: context.currentDefinition,
+                });
+            }
             result = { type: "variable", name: node.name };
             break;
         case "object": {
@@ -409,11 +417,12 @@ function validateAndCompileValueNode(
                 if (prop.value === null) {
                     // Shorthand form: { key } means { key: key }
                     // Validate that 'key' is an available variable
-                    validateVariableReference(
-                        context,
-                        prop.key,
-                        availableVariables,
-                    );
+                    if (!availableVariables.has(prop.key)) {
+                        context.errors.push({
+                            message: `Variable '${prop.key}' is referenced in the value but not defined in the rule`,
+                            definition: context.currentDefinition,
+                        });
+                    }
                     value[prop.key] = null;
                 } else {
                     value[prop.key] = validateAndCompileValueNode(
@@ -438,8 +447,120 @@ function validateAndCompileValueNode(
                 ),
             };
             break;
+
+        // ── Value expression nodes ────────────────────────────────────
+        case "binaryExpression":
+            result = {
+                type: "binaryExpression",
+                operator: node.operator,
+                left: validateAndCompileValueNode(
+                    context,
+                    node.left,
+                    availableVariables,
+                ),
+                right: validateAndCompileValueNode(
+                    context,
+                    node.right,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "unaryExpression":
+            result = {
+                type: "unaryExpression",
+                operator: node.operator,
+                operand: validateAndCompileValueNode(
+                    context,
+                    node.operand,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "conditionalExpression":
+            result = {
+                type: "conditionalExpression",
+                test: validateAndCompileValueNode(
+                    context,
+                    node.test,
+                    availableVariables,
+                ),
+                consequent: validateAndCompileValueNode(
+                    context,
+                    node.consequent,
+                    availableVariables,
+                ),
+                alternate: validateAndCompileValueNode(
+                    context,
+                    node.alternate,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "memberExpression":
+            result = {
+                type: "memberExpression",
+                object: validateAndCompileValueNode(
+                    context,
+                    node.object,
+                    availableVariables,
+                ),
+                property:
+                    typeof node.property === "string"
+                        ? node.property
+                        : validateAndCompileValueNode(
+                              context,
+                              node.property,
+                              availableVariables,
+                          ),
+                computed: node.computed,
+                optional: node.optional,
+            };
+            break;
+        case "callExpression":
+            result = {
+                type: "callExpression",
+                callee: validateAndCompileValueNode(
+                    context,
+                    node.callee,
+                    availableVariables,
+                ),
+                arguments: node.arguments.map((arg) =>
+                    validateAndCompileValueNode(
+                        context,
+                        arg,
+                        availableVariables,
+                    ),
+                ),
+                ...(node.optional ? { optional: true } : {}),
+            };
+            break;
+        case "spreadElement":
+            result = {
+                type: "spreadElement",
+                argument: validateAndCompileValueNode(
+                    context,
+                    node.argument,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "templateLiteral":
+            result = {
+                type: "templateLiteral",
+                quasis: node.quasis,
+                expressions: node.expressions.map((expr) =>
+                    validateAndCompileValueNode(
+                        context,
+                        expr,
+                        availableVariables,
+                    ),
+                ),
+            };
+            break;
+        default:
+            throw new Error(`Unknown value node type '${(node as any).type}'`);
     }
-    // Track source position of the top-level value node for error reporting
+    // Track source position of the value node for error reporting
     if (node.pos !== undefined) {
         context.valuePositions.set(result, node.pos);
     }
@@ -455,22 +576,6 @@ const emptyRecord: ResolvedDefinitionRecord = {
     compiling: false,
     nullable: false,
 };
-
-/**
- * Validate that a variable reference exists in the available variables set
- */
-function validateVariableReference(
-    context: CompileContext,
-    variableName: string,
-    availableVariables: Set<string>,
-): void {
-    if (!availableVariables.has(variableName)) {
-        context.errors.push({
-            message: `Variable '${variableName}' is referenced in the value but not defined in the rule`,
-            definition: context.currentDefinition,
-        });
-    }
-}
 
 // ε-reachable cycle detection
 //
@@ -583,7 +688,52 @@ function createNamedGrammarRules(
                 context.usedImportedTypes.add(typeName);
             }
 
-            // Validate value expressions against declared types if resolved
+            // Collect all leaf value nodes from the rule tree,
+            // including those in sub-rules referenced via RulesPart
+            const leafValues = collectLeafValues(
+                record.grammarRules,
+                context.valuePositions,
+            );
+
+            // Pass 1: Expression-internal consistency (always runs).
+            // Catches operator constraint violations and inference errors
+            // regardless of whether a schema loader resolved types.
+            // Only expression-typed leaves will produce errors here;
+            // validateExprTypes early-returns for non-expression nodes.
+            // "variable" leaves have no value node to validate internally.
+            const leafExprTypes = new Map<CompiledValueNode, SchemaType>();
+            const leafVarTypes = new Map<
+                CompiledValueNode,
+                Map<string, SchemaType>
+            >();
+            for (const leaf of leafValues) {
+                if (leaf.kind !== "value") continue;
+                const varTypes = buildVariableTypeMap(
+                    leaf.parts,
+                    context.derivedTypes,
+                );
+                leafVarTypes.set(leaf.value, varTypes);
+                const result = validateExprTypes(leaf.value, varTypes);
+                for (const error of result.errors) {
+                    context.errors.push({
+                        message: error,
+                        definition: name,
+                        pos: leaf.pos,
+                    });
+                }
+                for (const warning of result.warnings) {
+                    context.warnings.push({
+                        message: warning,
+                        definition: name,
+                        pos: leaf.pos,
+                    });
+                }
+                if (result.inferredType !== undefined) {
+                    leafExprTypes.set(leaf.value, result.inferredType);
+                }
+            }
+
+            // Pass 2: Conformance against declared type (only when resolved).
             if (context.resolvedTypes.size > 0) {
                 const declaredTypes: SchemaType[] = [];
                 for (const typeName of record.valueType) {
@@ -593,34 +743,48 @@ function createNamedGrammarRules(
                     }
                 }
                 if (declaredTypes.length > 0) {
-                    // Build the effective expected type (single or union)
                     const expectedType: SchemaType =
                         declaredTypes.length === 1
                             ? declaredTypes[0]
                             : { type: "type-union", types: declaredTypes };
 
-                    // Collect all leaf value nodes from the rule tree,
-                    // including those in sub-rules referenced via RulesPart
-                    const leafValues = collectLeafValues(
-                        record.grammarRules,
-                        context.valuePositions,
-                    );
-                    for (const { value, parts, pos } of leafValues) {
-                        const varTypes = buildVariableTypeMap(
-                            parts,
-                            context.derivedTypes,
-                        );
-                        const errors = validateValueType(
-                            value,
-                            expectedType,
-                            varTypes,
-                            context.resolvedTypes,
-                        );
+                    for (const leaf of leafValues) {
+                        let errors: string[];
+                        if (leaf.kind === "value") {
+                            const varTypes = leafVarTypes.get(leaf.value)!;
+                            errors = validateValueType(
+                                leaf.value,
+                                expectedType,
+                                varTypes,
+                                context.resolvedTypes,
+                                "",
+                                leafExprTypes.get(leaf.value),
+                            );
+                        } else {
+                            // "variable" leaf — check variable type directly
+                            const varTypes = buildVariableTypeMap(
+                                leaf.parts,
+                                context.derivedTypes,
+                            );
+                            const varType = varTypes.get(leaf.variableName);
+                            if (varType !== undefined) {
+                                errors = validateVariableType(
+                                    leaf.variableName,
+                                    varType,
+                                    expectedType,
+                                );
+                            } else {
+                                errors = [];
+                            }
+                        }
                         for (const error of errors) {
                             context.errors.push({
                                 message: error,
                                 definition: name,
-                                pos,
+                                pos:
+                                    leaf.kind === "value"
+                                        ? leaf.pos
+                                        : undefined,
                             });
                         }
                     }
@@ -639,17 +803,28 @@ function createNamedGrammarRules(
     return record as ResolvedDefinitionRecord;
 }
 
-type LeafValue = {
-    value: CompiledValueNode;
-    parts: GrammarPart[];
-    pos?: number | undefined;
-};
+type LeafValue =
+    | {
+          kind: "value";
+          value: CompiledValueNode;
+          parts: GrammarPart[];
+          pos?: number | undefined;
+      }
+    | {
+          kind: "variable";
+          variableName: string;
+          parts: GrammarPart[];
+      };
 
 /**
  * Recursively collects all leaf value nodes from a grammar rule tree.
- * A "leaf" is a GrammarRule that has a direct value expression (-> { ... }).
+ * A "leaf" is a GrammarRule that has a direct value expression (-> { ... })
+ * or a single-variable implicit rule whose variable type must be validated.
  * Rules that pass through to sub-rules (single RulesPart, no variables,
  * no explicit value) are traversed recursively.
+ *
+ * Uses `classifyRuleValue` from the validator to keep classification
+ * logic in sync with `deriveAlternativeType`.
  */
 function collectLeafValues(
     rules: GrammarRule[],
@@ -663,35 +838,29 @@ function collectLeafValues(
 
     const results: LeafValue[] = [];
     for (const rule of rules) {
-        if (rule.value !== undefined) {
-            // Case 1: Explicit value expression — this is a leaf
-            results.push({
-                value: rule.value,
-                parts: rule.parts,
-                pos: valuePositions.get(rule.value),
-            });
-        } else {
-            // No explicit value — check for passthrough cases:
-            // - Single RulesPart with no variable (bare rule reference passthrough)
-            // - Multi-alternative rule where each alternative delegates
-            const hasVariable = rule.parts.some(
-                (p) => p.variable !== undefined,
-            );
-            if (!hasVariable) {
-                for (const part of rule.parts) {
-                    if (part.type === "rules") {
-                        results.push(
-                            ...collectLeafValues(
-                                part.rules,
-                                valuePositions,
-                                visited,
-                            ),
-                        );
-                    }
-                }
-            }
-            // Single-variable implicit rules (case 2) are skipped —
-            // the variable's captured value can't be structurally validated
+        const kind = classifyRuleValue(rule);
+        switch (kind.kind) {
+            case "explicit":
+                results.push({
+                    kind: "value",
+                    value: rule.value!,
+                    parts: rule.parts,
+                    pos: valuePositions.get(rule.value!),
+                });
+                break;
+            case "variable":
+                results.push({
+                    kind: "variable",
+                    variableName: kind.variableName,
+                    parts: rule.parts,
+                });
+                break;
+            case "passthrough":
+                results.push(
+                    ...collectLeafValues(kind.rules, valuePositions, visited),
+                );
+                break;
+            // "none": multi-var with no explicit value — already warned
         }
     }
     return results;
@@ -734,6 +903,9 @@ function createGrammarRule(
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
     let variableCount = 0;
+    // Whether the last part can implicitly produce a value (string literal
+    // or rule reference). Used for zero-variable, single-part rules where
+    // the matched text or referenced rule's value is the implicit output.
     let defaultValue = false;
     // A rule alternative is nullable if ALL of its parts can match ε.
     let ruleNullable = true;

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { CompiledSpacingMode, CompiledValueNode } from "./grammarTypes.js";
+import { evaluateValueExpr } from "./grammarValueExprEvaluator.js";
 import registerDebug from "debug";
 // REVIEW: switch to RegExp.escape() when it becomes available.
 import escapeMatch from "regexp.escape";
@@ -453,9 +454,10 @@ function createValue(
         case "array": {
             const arr: any[] = [];
             for (const [index, v] of node.value.entries()) {
-                arr.push(
-                    createValue(
-                        v,
+                if (v.type === "spreadElement") {
+                    // Spread: evaluate the argument and flatten into the array.
+                    const inner = createValue(
+                        v.argument,
                         valueIds,
                         values,
                         propertyName
@@ -464,8 +466,27 @@ function createValue(
                         wildcardPropertyNames,
                         partialValueId,
                         stat,
-                    ),
-                );
+                    );
+                    if (Array.isArray(inner)) {
+                        arr.push(...inner);
+                    } else {
+                        arr.push(inner);
+                    }
+                } else {
+                    arr.push(
+                        createValue(
+                            v,
+                            valueIds,
+                            values,
+                            propertyName
+                                ? `${propertyName}.${index}`
+                                : index.toString(),
+                            wildcardPropertyNames,
+                            partialValueId,
+                            stat,
+                        ),
+                    );
+                }
             }
             return arr;
         }
@@ -478,6 +499,25 @@ function createValue(
                 wildcardPropertyNames,
                 partialValueId,
                 stat,
+            );
+        }
+        default: {
+            // Expression node (binaryExpression, unaryExpression, etc.).
+            // All expression node types are handled by evaluateValueExpr,
+            // which throws on unknown types — no silent fallthrough risk.
+            // The evalBase callback routes base nodes (literal, variable,
+            // object, array) back through createValue so variable resolution
+            // and wildcard extraction work correctly.
+            return evaluateValueExpr(node, (baseNode) =>
+                createValue(
+                    baseNode,
+                    valueIds,
+                    values,
+                    propertyName,
+                    wildcardPropertyNames,
+                    partialValueId,
+                    stat,
+                ),
             );
         }
     }
