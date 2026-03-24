@@ -203,12 +203,21 @@ function writeWithParens(
 }
 
 function escapeTemplateChars(s: string): string {
-    return s
-        .replace(/\\/g, "\\\\")
-        .replace(/`/g, "\\`")
-        .replace(/\$\{/g, "\\${")
-        .replace(/\n/g, "\\n")
-        .replace(/\r/g, "\\r")
-        .replace(/\t/g, "\\t")
-        .replace(/\0/g, "\\0");
+    return (
+        s
+            // Syntactically required — these would break the template literal
+            .replace(/\\/g, "\\\\")
+            .replace(/`/g, "\\`")
+            .replace(/\$\{/g, "\\${")
+            // Non-printable characters — escaped for readability / round-trip clarity
+            .replace(/\n/g, "\\n")
+            .replace(/\r/g, "\\r")
+            .replace(/\t/g, "\\t")
+            .replace(/\v/g, "\\v")
+            .replace(/\0/g, "\\0")
+            .replace(/\x08/g, "\\b")
+            .replace(/\f/g, "\\f")
+            .replace(/\u2028/g, "\\u2028")
+            .replace(/\u2029/g, "\\u2029")
+    );
 }
