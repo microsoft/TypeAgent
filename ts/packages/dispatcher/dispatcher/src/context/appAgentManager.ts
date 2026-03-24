@@ -120,6 +120,7 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
+    private readonly loadingSchemas = new Set<string>();
     private readonly flowRegistry = new Map<string, FlowDefinition>();
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
@@ -147,6 +148,10 @@ export class AppAgentManager implements ActionConfigProvider {
     }
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
+    }
+
+    public isSchemaLoading(schemaName: string): boolean {
+        return this.loadingSchemas.has(schemaName);
     }
 
     public getAppAgentDescription(appAgentName: string) {
@@ -276,6 +281,7 @@ export class AppAgentManager implements ActionConfigProvider {
         actionEmbeddingCache?: EmbeddingCache,
         agentGrammarRegistry?: AgentGrammarRegistry,
         useNFAGrammar?: boolean,
+        stateRefreshFn?: () => Promise<void>,
     ) {
         const agentNames = provider.getAppAgentNames();
         const semanticMapP: Promise<void>[] = [];
@@ -296,6 +302,94 @@ export class AppAgentManager implements ActionConfigProvider {
         debug("Waiting for action embeddings");
         await Promise.all(semanticMapP);
         debug("Finish action embeddings");
+
+        if (provider.onSchemaReady && stateRefreshFn) {
+            // Mark only the agents that are actually loading asynchronously (e.g.
+            // serverCommand MCP agents with slow startup).  Agents that failed
+            // synchronously should show ❌, not ⏳.
+            const loadingNames = new Set(
+                provider.getLoadingAgentNames?.() ?? [],
+            );
+            for (const name of agentNames) {
+                if (!loadingNames.has(name)) {
+                    continue;
+                }
+                const record = this.agents.get(name);
+                if (record) {
+                    for (const schemaName of Object.keys(
+                        convertToActionConfig(name, record.manifest),
+                    )) {
+                        this.loadingSchemas.add(schemaName);
+                    }
+                }
+            }
+
+            provider.onSchemaReady(async (agentName, manifest) => {
+                try {
+                    const refreshSemanticMapP: Promise<void>[] = [];
+                    this.refreshAgentSchema(
+                        agentName,
+                        manifest,
+                        refreshSemanticMapP,
+                        actionGrammarStore,
+                        actionEmbeddingCache,
+                        agentGrammarRegistry,
+                        useNFAGrammar,
+                    );
+                    await Promise.all(refreshSemanticMapP);
+                    await stateRefreshFn();
+                } catch (e) {
+                    debugError(
+                        `Failed to refresh schema for agent '${agentName}': ${e}`,
+                    );
+                }
+            });
+        }
+    }
+
+    private refreshAgentSchema(
+        appAgentName: string,
+        manifest: AppAgentManifest,
+        semanticMapP: Promise<void>[],
+        actionGrammarStore: GrammarStore | undefined,
+        actionEmbeddingCache?: EmbeddingCache,
+        agentGrammarRegistry?: AgentGrammarRegistry,
+        useNFAGrammar?: boolean,
+    ) {
+        const record = this.agents.get(appAgentName);
+        if (record === undefined) {
+            throw new Error(`Agent not found: ${appAgentName}`);
+        }
+
+        // Update the manifest (emoji, schema, etc.)
+        record.manifest = manifest;
+
+        const actionConfigs = convertToActionConfig(appAgentName, manifest);
+        for (const [schemaName, config] of Object.entries(actionConfigs)) {
+            debug(`Refreshing action config: ${schemaName}`);
+            this.actionConfigs.set(schemaName, config);
+            if (config.transient) {
+                this.transientAgents[schemaName] = false;
+            }
+            try {
+                const actionSchemaFile =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
+                if (this.actionSemanticMap) {
+                    semanticMapP.push(
+                        this.actionSemanticMap.addActionSchemaFile(
+                            config,
+                            actionSchemaFile,
+                            actionEmbeddingCache,
+                        ),
+                    );
+                }
+                record.schemaErrors.delete(schemaName);
+                this.loadingSchemas.delete(schemaName);
+            } catch (e: any) {
+                record.schemaErrors.set(schemaName, e);
+                this.loadingSchemas.delete(schemaName);
+            }
+        }
     }
 
     private addAgentManifest(
@@ -373,14 +467,20 @@ export class AppAgentManager implements ActionConfigProvider {
                         // Add to NFA grammar registry if using NFA system
                         if (useNFAGrammar && agentGrammarRegistry) {
                             try {
-                                // Enrich grammar with checked variables from the already-parsed action schema
-                                enrichGrammarWithCheckedVariables(
-                                    g,
-                                    actionSchemaFile.parsedActionSchema,
-                                );
-                                debug(
-                                    `Enriched grammar with checked variables for schema: ${schemaName}`,
-                                );
+                                // Enrich grammar with checked variables from parsed schema
+                                try {
+                                    enrichGrammarWithCheckedVariables(
+                                        g,
+                                        actionSchemaFile.parsedActionSchema,
+                                    );
+                                    debug(
+                                        `Enriched grammar with checked variables for schema: ${schemaName}`,
+                                    );
+                                } catch (enrichError) {
+                                    debug(
+                                        `Could not enrich grammar with checked variables for ${schemaName}: ${enrichError}`,
+                                    );
+                                }
 
                                 const nfa = compileGrammarToNFA(g, schemaName);
                                 agentGrammarRegistry.registerAgent(
@@ -662,16 +762,24 @@ export class AppAgentManager implements ActionConfigProvider {
             );
             if (enableSchema !== record.schemas.has(name)) {
                 if (enableSchema) {
-                    const e = record.schemaErrors.get(name);
-                    if (e !== undefined) {
-                        failedSchemas.push([name, enableSchema, e]);
-                        debugError(
-                            `Schema '${name}' is not enabled because of error: ${e.message}`,
+                    if (this.loadingSchemas.has(name)) {
+                        // Schema is still loading (e.g. slow MCP server start).
+                        // Skip for now; refreshAgentSchema will re-run setState once ready.
+                        debug(
+                            `Schema '${name}' is still loading, skipping enable`,
                         );
                     } else {
-                        record.schemas.add(name);
-                        changedSchemas.push([name, enableSchema]);
-                        debug(`Schema enabled ${name}`);
+                        const e = record.schemaErrors.get(name);
+                        if (e !== undefined) {
+                            failedSchemas.push([name, enableSchema, e]);
+                            debugError(
+                                `Schema '${name}' is not enabled because of error: ${e.message}`,
+                            );
+                        } else {
+                            record.schemas.add(name);
+                            changedSchemas.push([name, enableSchema]);
+                            debug(`Schema enabled ${name}`);
+                        }
                     }
                 } else {
                     record.schemas.delete(name);
@@ -688,21 +796,26 @@ export class AppAgentManager implements ActionConfigProvider {
                 failedActions,
             );
             if (enableAction !== record.actions.has(name)) {
-                p.push(
-                    (async () => {
-                        try {
-                            await this.updateAction(
-                                name,
-                                record,
-                                enableAction,
-                                context,
-                            );
-                            changedActions.push([name, enableAction]);
-                        } catch (e: any) {
-                            failedActions.push([name, enableAction, e]);
-                        }
-                    })(),
-                );
+                if (enableAction && this.loadingSchemas.has(name)) {
+                    // Action agent is still loading — skip to avoid blocking on server startup.
+                    debug(`Action '${name}' is still loading, skipping enable`);
+                } else {
+                    p.push(
+                        (async () => {
+                            try {
+                                await this.updateAction(
+                                    name,
+                                    record,
+                                    enableAction,
+                                    context,
+                                );
+                                changedActions.push([name, enableAction]);
+                            } catch (e: any) {
+                                failedActions.push([name, enableAction, e]);
+                            }
+                        })(),
+                    );
+                }
             }
         }
 
@@ -906,30 +1019,6 @@ export class AppAgentManager implements ActionConfigProvider {
         debug(`Loaded dynamic schema for ${schemaName}`);
     }
 
-    public async reloadAgentSchema(
-        schemaName: string,
-        context: CommandHandlerContext,
-    ): Promise<void> {
-        const appAgentName = getAppAgentName(schemaName);
-        const record = this.getRecord(appAgentName);
-        if (!record.appAgent || !record.sessionContext) {
-            throw new Error(`Agent '${appAgentName}' is not initialized`);
-        }
-
-        await this.loadDynamicSchema(
-            schemaName,
-            record.appAgent,
-            record.sessionContext,
-            context,
-        );
-        await this.loadDynamicGrammar(
-            schemaName,
-            record.appAgent,
-            record.sessionContext,
-            context,
-        );
-    }
-
     private async updateAction(
         schemaName: string,
         record: AppAgentRecord,
@@ -954,7 +1043,6 @@ export class AppAgentManager implements ActionConfigProvider {
                         schemaName,
                     ),
                 );
-
                 // Load dynamic schema and grammar from agent callbacks
                 await this.loadDynamicSchema(
                     schemaName,
@@ -1117,6 +1205,38 @@ export class AppAgentManager implements ActionConfigProvider {
         config: ActionConfig,
     ): ActionSchemaFile {
         return this.actionSchemaFileCache.getActionSchemaFile(config);
+    }
+
+    public async reloadAgentSchema(
+        appAgentName: string,
+        context: CommandHandlerContext,
+    ): Promise<void> {
+        const record = this.getRecord(appAgentName);
+        if (record.provider === undefined) {
+            return;
+        }
+
+        // Unload cached schema files so they get reloaded from disk
+        for (const schemaName of this.actionConfigs.keys()) {
+            if (getAppAgentName(schemaName) === appAgentName) {
+                this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+            }
+        }
+
+        // Get fresh manifest from provider and refresh schemas
+        const manifest =
+            await record.provider.getAppAgentManifest(appAgentName);
+        const semanticMapP: Promise<void>[] = [];
+        this.refreshAgentSchema(
+            appAgentName,
+            manifest,
+            semanticMapP,
+            undefined,
+        );
+        await Promise.all(semanticMapP);
+
+        // Clear translator cache to force re-translation with new schema
+        context.translatorCache.clear();
     }
 
     public setTraceNamespaces(namespaces: string) {

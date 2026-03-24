@@ -82,7 +82,6 @@ import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.j
 import { createBuiltinAppAgentProvider } from "./inlineAgentProvider.js";
 import { CommandResult } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
-import { DisplayLog } from "../displayLog.js";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
@@ -97,54 +96,14 @@ import fs from "node:fs";
 import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
 import { CosmosPartitionKeyBuilder } from "telemetry";
 import { DefaultAzureCredential } from "@azure/identity";
+import { DisplayLog } from "../displayLog.js";
+import {
+    fromJSONParsedActionSchema,
+    ParsedActionSchemaJSON,
+} from "@typeagent/action-schema";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
-
-function wrapClientIOWithDisplayLog(
-    clientIO: ClientIO,
-    displayLog: DisplayLog,
-): ClientIO {
-    return {
-        ...clientIO,
-        setUserRequest(requestId, command) {
-            const seq = displayLog.logUserRequest(requestId, command);
-            clientIO.setUserRequest(requestId, command, seq);
-        },
-        setDisplayInfo(requestId, source, actionIndex?, action?) {
-            const seq = displayLog.logSetDisplayInfo(
-                requestId,
-                source,
-                actionIndex,
-                action,
-            );
-            clientIO.setDisplayInfo(
-                requestId,
-                source,
-                actionIndex,
-                action,
-                seq,
-            );
-        },
-        setDisplay(message) {
-            const seq = displayLog.logSetDisplay(message);
-            clientIO.setDisplay(message, seq);
-        },
-        appendDisplay(message, mode) {
-            const seq = displayLog.logAppendDisplay(message, mode);
-            clientIO.appendDisplay(message, mode, seq);
-        },
-        notify(notificationId, event, data, source) {
-            const seq = displayLog.logNotify(
-                notificationId,
-                event,
-                data,
-                source,
-            );
-            clientIO.notify(notificationId, event, data, source, seq);
-        },
-    };
-}
 
 export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
@@ -204,10 +163,12 @@ export type CommandHandlerContext = {
     logger?: Logger | undefined;
     currentRequestId: RequestId | undefined;
     currentAbortSignal: AbortSignal | undefined;
+    activeRequests: Map<string, AbortController>;
     noReasoning: boolean;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
+    displayLog: DisplayLog;
 
     batchMode: boolean;
     pendingChoiceRoutes: Map<
@@ -223,16 +184,10 @@ export type CommandHandlerContext = {
     commandProfiler?: Profiler | undefined;
     promptLogger?: PromptLogger | undefined;
 
-    // Maps requestId string → AbortController for in-flight commands.
-    // Used by cancelCommand() to abort a running command.
-    activeRequests: Map<string, AbortController>;
-
     instanceDirLock: (() => Promise<void>) | undefined;
 
     userRequestKnowledgeExtraction: boolean;
     actionResultKnowledgeExtraction: boolean;
-
-    displayLog: DisplayLog;
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -481,6 +436,7 @@ async function addAppAgentProviders(
         );
 
         if (appAgentProviders) {
+            const stateRefreshFn = () => setAppAgentStates(context);
             for (const provider of appAgentProviders) {
                 await context.agents.addProvider(
                     provider,
@@ -488,6 +444,7 @@ async function addAppAgentProviders(
                     embeddingCache,
                     context.agentGrammarRegistry,
                     useNFAGrammar,
+                    stateRefreshFn,
                 );
             }
         }
@@ -593,11 +550,7 @@ export async function initializeCommandHandlerContext(
         }
         const sessionDirPath = session.getSessionDirPath();
         debug(`Session directory: ${sessionDirPath}`);
-        const displayLog = await DisplayLog.load(sessionDirPath);
-        const clientIO = wrapClientIOWithDisplayLog(
-            options?.clientIO ?? nullClientIO,
-            displayLog,
-        );
+        const clientIO = options?.clientIO ?? nullClientIO;
         const loggerSink = getLoggerSink(() => context.dblogging, clientIO);
         const logger = new ChildLogger(loggerSink, DispatcherName, {
             hostName,
@@ -638,6 +591,7 @@ export async function initializeCommandHandlerContext(
             commandLock: createLimiter(1), // Make sure we process one command at a time.
             currentRequestId: undefined,
             currentAbortSignal: undefined,
+            activeRequests: new Map<string, AbortController>(),
             noReasoning: false,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
@@ -654,12 +608,12 @@ export async function initializeCommandHandlerContext(
             chatHistory: createChatHistory(
                 session.getConfig().execution.history,
             ),
+            displayLog: await DisplayLog.load(persistDir),
             logger,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             promptLogger: createPromptLogger(getCosmosFactories()),
             batchMode: false,
             pendingChoiceRoutes: new Map(),
-            activeRequests: new Map(),
             instanceDirLock,
             constructionProvider,
             collectCommandResult: options?.collectCommandResult ?? false,
@@ -674,8 +628,6 @@ export async function initializeCommandHandlerContext(
             actionResultKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.actionResultKnowledgeExtraction ?? true,
-
-            displayLog,
         };
 
         await initializeMemory(context, sessionDirPath);
@@ -811,20 +763,63 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
     // Enable auto-save
     await grammarStore.setAutoSave(config.cache.autoSave);
 
+    // Import getPackageFilePath for resolving schema paths
+    const { getPackageFilePath } = await import(
+        "../utils/getPackageFilePath.js"
+    );
+
     // Configure agent cache with grammar generation support
     context.agentCache.configureGrammarGeneration(
         context.agentGrammarRegistry,
         grammarStore,
         true,
         (schemaName: string) => {
-            const actionSchemaFile =
-                context.agents.tryGetActionSchemaFile(schemaName);
-            if (!actionSchemaFile) {
+            // Get compiled schema file path (.pas.json) from action config for grammar generation
+            const actionConfig = context.agents.tryGetActionConfig(schemaName);
+            if (!actionConfig) {
                 throw new Error(
-                    `Action schema file not found for schema: ${schemaName}`,
+                    `Action config not found for schema: ${schemaName}`,
                 );
             }
-            return actionSchemaFile.parsedActionSchema;
+
+            let schemaPath: string | undefined;
+
+            // Use schemaFilePath directly if it's already a .pas.json file
+            if (
+                actionConfig.schemaFilePath &&
+                actionConfig.schemaFilePath.endsWith(".pas.json")
+            ) {
+                schemaPath = getPackageFilePath(actionConfig.schemaFilePath);
+            } else if (
+                actionConfig.schemaFilePath &&
+                actionConfig.schemaFilePath.endsWith(".ts")
+            ) {
+                // Fallback: try to derive .pas.json path from .ts schemaFilePath
+                // Try common pattern: ./src/schema.ts -> ../dist/schema.pas.json
+                const derivedPath = actionConfig.schemaFilePath
+                    .replace(/^\.\/src\//, "../dist/")
+                    .replace(/\.ts$/, ".pas.json");
+                debug(
+                    `Attempting fallback .pas.json path for ${schemaName}: ${derivedPath}`,
+                );
+                try {
+                    schemaPath = getPackageFilePath(derivedPath);
+                } catch {
+                    // Fallback path doesn't exist, continue to error
+                }
+            }
+
+            if (!schemaPath) {
+                throw new Error(
+                    `Compiled schema file path (.pas.json) not found for schema: ${schemaName}. ` +
+                        `Please ensure the schema is compiled to a .pas.json file.`,
+                );
+            }
+
+            const content = fs.readFileSync(schemaPath, "utf-8");
+            return fromJSONParsedActionSchema(
+                JSON.parse(content) as ParsedActionSchemaJSON,
+            );
         },
     );
 
@@ -908,7 +903,6 @@ export async function closeCommandHandlerContext(
 ) {
     // Save the session because the token count is in it.
     context.session.save();
-    await context.displayLog.save();
     await context.agents.close();
     if (context.instanceDirLock) {
         await context.instanceDirLock();
@@ -919,10 +913,7 @@ export async function setSessionOnCommandHandlerContext(
     context: CommandHandlerContext,
     session: Session,
 ) {
-    // Persist the old session's display log before switching
-    await context.displayLog.save();
     context.session = session;
-    context.displayLog = await DisplayLog.load(session.getSessionDirPath());
     await context.agents.close();
 
     await initializeMemory(context, session.getSessionDirPath());
