@@ -153,6 +153,33 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
         expect(menu.hide).toHaveBeenCalled();
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
+
+    test("terminal punctuation-only suffix hides menu without re-fetch", async () => {
+        // Regression: typing "?" at end of "what's on the shopping list?"
+        // was treated as a spacePunctuation separator, stripping it to ""
+        // and showing ALL completions as ghost text.
+        const menu = makeMenu();
+        const result = makeCompletionResult(["list"], 28, {
+            separatorMode: "spacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        // Anchor is established at "what's on the shopping list"
+        session.update("what's on the shopping list", getPos);
+        await Promise.resolve();
+
+        // User types "?" — purely punctuation, no whitespace
+        menu.updatePrefix.mockClear();
+        menu.hide.mockClear();
+        session.update("what's on the shopping list?", getPos);
+
+        // Menu must be hidden, not shown with ghost completions
+        expect(menu.hide).toHaveBeenCalled();
+        expect(menu.updatePrefix).not.toHaveBeenCalled();
+        // No re-fetch — session is kept alive
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
 });
 
 // ── separatorMode: "optional" ─────────────────────────────────────────────────

@@ -341,6 +341,19 @@ export class PartialCompletionSession {
             ? stripLeadingSeparator(rawPrefix, sepMode)
             : rawPrefix;
 
+        // [A5] Punctuation-only separator — the user typed a purely
+        // punctuation character (e.g. "?") that satisfies spacePunctuation
+        // but is sentence-terminal, not a word separator.  After stripping,
+        // completionPrefix would be "" which shows ALL trie items as ghost
+        // text — unwanted noise.  Hide without re-fetching.
+        if (completionPrefix === "" && rawPrefix !== "" && !/\s/.test(rawPrefix)) {
+            debug(
+                `Partial completion hidden: punctuation-only separator '${rawPrefix}'`,
+            );
+            this.menu.hide();
+            return true; // HIDE+KEEP
+        }
+
         const position = getPosition(completionPrefix);
         if (position !== undefined) {
             debug(
