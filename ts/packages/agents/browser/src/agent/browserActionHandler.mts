@@ -65,7 +65,7 @@ import {
 } from "./knowledge/actions/extractionActions.mjs";
 import { initializeWebSocketBridge } from "./knowledge/progress/knowledgeWebSocketBridge.mjs";
 import {
-    generateDetailedKnowledgeCards,
+    generateLiveKnowledgePreview,
     generateDynamicKnowledgeHtml,
 } from "./knowledge/ui/knowledgeCardRenderer.mjs";
 import { runningExtractionsCache } from "./knowledge/cache/extractionCache.mjs";
@@ -1204,17 +1204,29 @@ async function openWebPage(
         const topicsCount = existingKnowledge.topics?.length || 0;
         const relationshipsCount = existingKnowledge.relationships?.length || 0;
 
-        // Display existing knowledge with detailed cards
-        const knowledgeMarkdown =
-            generateDetailedKnowledgeCards(existingKnowledge);
+        // Display existing knowledge with HTML bubble cards
+        const knowledgeHtml = generateLiveKnowledgePreview(
+            {
+                entities: existingKnowledge.entities || [],
+                topics:
+                    existingKnowledge.topics ||
+                    existingKnowledge.keyTopics ||
+                    [],
+                relationships: existingKnowledge.relationships || [],
+            },
+            "complete",
+        );
         context.actionIO.appendDisplay(
             {
-                type: "markdown",
-                content: `> 📖 **Existing Knowledge Found**
->
-> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from previous extraction
-
-${knowledgeMarkdown}`,
+                type: "html",
+                content: `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
+                    <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
+                    <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
+                        Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from previous extraction
+                    </div>
+                </div>
+                ${knowledgeHtml}`,
             },
             "block",
         );
@@ -2832,6 +2844,45 @@ async function handleDownloadImage(
     }
 }
 
+class StartAuthoringHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Start an interactive session to create a new web automation action by describing it";
+    public async run(context: ActionContext<BrowserActionContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        if (!agentContext.browserControl) {
+            displayError("No browser connection available.", context);
+            return;
+        }
+
+        context.actionIO.appendDisplay(
+            "Starting authoring session...",
+            "temporary",
+        );
+
+        try {
+            const result = await handleSchemaDiscoveryAction(
+                {
+                    actionName: "startAuthoringSession",
+                    parameters: {},
+                } as any,
+                context.sessionContext,
+            );
+
+            context.actionIO.setDisplay({
+                type: "markdown",
+                content:
+                    result.displayText ||
+                    "Authoring session started. Describe the action you want to create.",
+            });
+        } catch (error: any) {
+            displayError(
+                `Failed to start authoring: ${error?.message || error}`,
+                context,
+            );
+        }
+    }
+}
+
 class RecordActionHandler implements CommandHandler {
     public readonly description =
         "Record a new browser action by capturing user interactions";
@@ -2895,6 +2946,110 @@ class StopRecordingHandler implements CommandHandler {
                     ? ` Description: ${params.args.description}`
                     : ""),
         });
+    }
+}
+
+class AskAboutPageHandler implements CommandHandler {
+    public readonly description =
+        "Ask a question about the current web page using extracted knowledge";
+    public readonly parameters = {
+        args: {
+            question: {
+                description: "Question to ask about the page",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const agentContext = context.sessionContext.agentContext;
+        if (!agentContext.browserControl) {
+            displayError("No browser connection available.", context);
+            return;
+        }
+
+        const question = params.args.question;
+        if (!question) {
+            context.actionIO.setDisplay({
+                type: "text",
+                content:
+                    "Please provide a question. Example: @browser ask What is this page about?",
+            });
+            return;
+        }
+
+        context.actionIO.appendDisplay(
+            "Searching page knowledge...",
+            "temporary",
+        );
+
+        try {
+            const url = await agentContext.browserControl.getPageUrl();
+            if (!url) {
+                displayError("No active page found.", context);
+                return;
+            }
+
+            // Query knowledge for this page
+            const { handleKnowledgeAction } = await import(
+                "./knowledge/actions/knowledgeActionRouter.mjs"
+            );
+            const result = await handleKnowledgeAction(
+                "searchWebMemories",
+                {
+                    query: question,
+                    searchScope: "current_page",
+                    metadata: { url },
+                },
+                context.sessionContext,
+            );
+
+            if (result?.error) {
+                displayError(
+                    `Knowledge query failed: ${result.error}`,
+                    context,
+                );
+                return;
+            }
+
+            // Format the answer
+            let md = "";
+            if (result?.answer) {
+                md += `${result.answer}\n\n`;
+            } else if (result?.websites && result.websites.length > 0) {
+                for (const site of result.websites.slice(0, 3)) {
+                    md += `**${site.title || site.url}**\n`;
+                    if (site.summary) md += `${site.summary}\n`;
+                    md += "\n";
+                }
+            } else {
+                md += "No relevant knowledge found for this page. ";
+                md +=
+                    "Try extracting knowledge first with `@browser extractKnowledge`.\n";
+            }
+
+            if (
+                result?.suggestedFollowups &&
+                result.suggestedFollowups.length > 0
+            ) {
+                md += "\n**You might also ask:**\n";
+                for (const q of result.suggestedFollowups.slice(0, 3)) {
+                    md += `- ${q}\n`;
+                }
+            }
+
+            context.actionIO.setDisplay({
+                type: "markdown",
+                content: md,
+            });
+        } catch (error: any) {
+            displayError(
+                `Failed to query page: ${error?.message || error}`,
+                context,
+            );
+        }
     }
 }
 
@@ -3175,7 +3330,9 @@ export const handlers: CommandHandlerTable = {
             },
         },
         extractKnowledge: new ExtractKnowledgeHandler(),
+        ask: new AskAboutPageHandler(),
         discover: new DiscoverActionsHandler(),
+        author: new StartAuthoringHandler(),
         record: new RecordActionHandler(),
         stop: {
             description: "Stop operations",

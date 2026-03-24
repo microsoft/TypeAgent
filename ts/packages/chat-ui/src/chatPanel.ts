@@ -80,6 +80,7 @@ export class ChatPanel {
         nextRefreshTime: number;
     }[] = [];
     private dynamicTimer?: ReturnType<typeof setTimeout>;
+    private dynamicContainers = new Map<string, AgentMessageContainer>();
 
     // Pending image attachments (base64 data URLs)
     private pendingAttachments: string[] = [];
@@ -447,6 +448,30 @@ export class ChatPanel {
     }
 
     /**
+     * Replace the current agent message content (reuses existing container).
+     * If no container exists, creates one.
+     */
+    public replaceAgentMessage(
+        content: DisplayContent,
+        source?: string,
+        sourceIcon?: string,
+    ) {
+        if (this.statusContainer) {
+            this.statusContainer.remove();
+            this.statusContainer = undefined;
+        }
+
+        if (!this.currentAgentContainer) {
+            this.currentAgentContainer = this.createAgentContainer(
+                source ?? "assistant",
+                sourceIcon ?? "🤖",
+            );
+        }
+        this.currentAgentContainer.setMessage(content, source, undefined);
+        this.scrollToBottom();
+    }
+
+    /**
      * Display or append an agent message.
      * Call with appendMode to add to the current agent message.
      */
@@ -668,7 +693,18 @@ export class ChatPanel {
                     item.source,
                     item.displayId,
                 );
-                this.addAgentMessage(result.content, item.source);
+
+                // Reuse the same container so refreshes replace content
+                const key = `${item.source}:${item.displayId}`;
+                let container = this.dynamicContainers.get(key);
+                if (!container) {
+                    container = this.createAgentContainer(item.source, "🌐");
+                    this.dynamicContainers.set(key, container);
+                }
+                // Replace content (no append mode = replace)
+                container.setMessage(result.content, item.source, undefined);
+                this.scrollToBottom();
+
                 if (result.nextRefreshMs > 0) {
                     this.dynamicDisplays.push({
                         source: item.source,
@@ -676,6 +712,9 @@ export class ChatPanel {
                         nextRefreshTime:
                             Date.now() + Math.max(result.nextRefreshMs, 500),
                     });
+                } else {
+                    // Display is done — remove from tracking
+                    this.dynamicContainers.delete(key);
                 }
             } catch {
                 // Refresh failed — don't re-register
