@@ -909,7 +909,7 @@ export class AppAgentManager implements ActionConfigProvider {
         await Promise.all(closeP);
     }
 
-private async loadDynamicGrammar(
+    private async loadDynamicGrammar(
         schemaName: string,
         appAgent: AppAgent,
         sessionContext: SessionContext,
@@ -1055,7 +1055,7 @@ private async loadDynamicGrammar(
                     record.appAgent!,
                     sessionContext,
                     context,
-                );                
+                );
             } catch (e) {
                 // Rollback if there is a exception
                 record.actions.delete(schemaName);

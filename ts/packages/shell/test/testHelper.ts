@@ -217,7 +217,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
     await locator.waitFor({ timeout: 30000, state: "visible" });
     await locator.focus({ timeout: 30000 });
     await locator.fill(prompt, { timeout: 30000 });
-    
+
     // robgruen - dismiss completion suggestion since it doesn't auto-dismiss on input and would cause the Enter key press to not submit the request but instead accept the suggestion
     // TODO: fix completion to not need this workaround
     await locator.press("ArrowLeft", { timeout: 30000 });
