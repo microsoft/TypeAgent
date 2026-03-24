@@ -126,7 +126,10 @@ async function startShell(testGreetings: boolean = false): Promise<Page> {
             const scrollContainer = mainWindow.locator(
                 ".chat[data-dispatcher-ready='true']",
             );
-            await scrollContainer.waitFor({ timeout: 120000, state: "attached" });
+            await scrollContainer.waitFor({
+                timeout: 120000,
+                state: "attached",
+            });
 
             return mainWindow;
         } catch (e) {
