@@ -1702,6 +1702,10 @@ type RangeCandidate =
           spacingMode: CompiledSpacingMode;
       };
 
+// Callers pass either a literal char ("a" for property candidates) or
+// completionText[0] from tryPartialStringMatch, which always returns
+// non-empty grammar words.  firstCompletionChar is therefore always
+// a single character.
 function computeNeedsSep(
     prefix: string,
     position: number,
@@ -1809,6 +1813,12 @@ export function matchGrammarCompletion(
     // candidate processing, the trailing-separator-advancement guard,
     // and the directionSensitive override are all skipped so the
     // result is identical to forward.
+    //
+    // Invariant: these three post-loop behaviors always coincide
+    // because they all depend on the same condition — backward
+    // produced a backed-up position different from forward.  When
+    // backward falls through (no backup), the result must be
+    // identical to forward, so none of the three should fire.
     let backwardEmitted = false;
 
     // Helper: update maxPrefixLength.  When it increases, all previously
@@ -2068,11 +2078,15 @@ export function matchGrammarCompletion(
                         nextPart.type === "wildcard" ||
                         nextPart.type === "number"
                     ) {
+                        // preFinalizeState is always defined here:
+                        // the guard `savedPendingWildcard?.valueId !== undefined`
+                        // implies `savedPendingWildcard !== undefined`, which is
+                        // the same condition that created preFinalizeState.
                         rangeCandidates.push({
                             kind: "wildcardProperty",
                             wildcardStart: savedPendingWildcard.start,
                             valueId: savedPendingWildcard.valueId,
-                            state: preFinalizeState ?? { ...state },
+                            state: preFinalizeState!,
                             spacingMode: state.spacingMode,
                         });
                     }
@@ -2226,6 +2240,11 @@ export function matchGrammarCompletion(
     // completion text at the same maxPrefixLength.  Showing
     // duplicates in the menu is unhelpful, so we deduplicate
     // globally.
+    //
+    // closedSet carries forward from Phase A's last
+    // updateMaxPrefixLength call (starts true).  Phase B only
+    // sets it to false (when property candidates survive); it
+    // is never reset to true here.
     const completions = new Set<string>();
     const properties: GrammarCompletionProperty[] = [];
 

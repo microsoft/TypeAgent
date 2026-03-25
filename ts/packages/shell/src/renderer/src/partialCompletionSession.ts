@@ -105,8 +105,6 @@ export class PartialCompletionSession {
     private noMatchPolicy: NoMatchPolicy = "refetch";
     // True when completions differ between forward and backward.
     private directionSensitive: boolean = false;
-    // Direction used for the last fetch.
-    private lastDirection: CompletionDirection = "forward";
 
     // The in-flight completion request, or undefined when settled.
     private completionP: Promise<CommandCompletionResult> | undefined;
@@ -461,7 +459,6 @@ export class PartialCompletionSession {
                     result.openWildcard,
                 );
                 this.directionSensitive = result.directionSensitive;
-                this.lastDirection = direction;
 
                 const completions = toMenuItems(result.completions);
 
