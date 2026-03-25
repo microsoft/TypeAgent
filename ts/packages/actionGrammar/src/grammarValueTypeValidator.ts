@@ -694,6 +694,15 @@ function deriveValueTypeImpl(
                             errors,
                             typeCache,
                         );
+                        // Narrow string literals to string-union to
+                        // preserve exact values through type inference
+                        // (e.g. for spread field validation).
+                        if (
+                            elem.value.type === "literal" &&
+                            typeof elem.value.value === "string"
+                        ) {
+                            fieldType = SchemaCreator.string(elem.value.value);
+                        }
                     }
                     fields[elem.key] = { type: fieldType };
                 }
@@ -1042,7 +1051,18 @@ function isTypeAssignable(
     const resolvedExpected = resolveType(expected);
     if (resolvedExpected.type === "any" || resolvedInferred.type === "any")
         return true;
-    if (resolvedExpected.type === resolvedInferred.type) return true;
+    if (resolvedExpected.type === resolvedInferred.type) {
+        // For string-union, check enum value containment
+        if (
+            resolvedExpected.type === "string-union" &&
+            resolvedInferred.type === "string-union"
+        ) {
+            return resolvedInferred.typeEnum.every((v) =>
+                resolvedExpected.typeEnum.includes(v),
+            );
+        }
+        return true;
+    }
     // string is assignable to string-union (runtime value might match)
     if (
         resolvedExpected.type === "string-union" &&
@@ -1976,13 +1996,39 @@ function validateObjectValue(
     const objValue = value as CompiledObjectValueNode;
 
     // Build a flat property map from the element list for field lookup.
-    // Spread elements are opaque at compile time — we skip them for
-    // required-field and extraneous-field checks because their fields
-    // aren't statically known.
+    // For spread elements, statically derive the argument type and merge
+    // its fields so that required-field and extraneous-field checks
+    // account for fields contributed by the spread.
+    const resolveVar = (name: string) => variableTypes.get(name);
     const propMap = new Map<string, CompiledValueNode | null>();
+    const hasSpread = objValue.value.some((e) => e.type === "spread");
+    // Augment variable types with spread-contributed field types so
+    // synthetic variable nodes resolve to their actual inferred types
+    // during downstream validation.
+    const augmentedVarTypes = hasSpread
+        ? new Map(variableTypes)
+        : variableTypes;
     for (const elem of objValue.value) {
         if (elem.type === "property") {
             propMap.set(elem.key, elem.value);
+        } else {
+            // Spread element — derive its type and merge known fields.
+            const argType = resolveType(
+                deriveValueType(elem.argument, resolveVar),
+            );
+            if (argType.type === "object") {
+                for (const [fk, fv] of Object.entries(argType.fields)) {
+                    // Spread fields override earlier properties (same as
+                    // JS semantics: later wins).  Subsequent explicit
+                    // properties will in turn override via propMap.set.
+                    propMap.set(fk, { type: "variable", name: fk });
+                    augmentedVarTypes.set(fk, fv.type);
+                }
+            } else if (argType.type !== "any") {
+                errors.push(
+                    `Spread argument in '${fieldName(path)}' must be an object type, got ${argType.type}`,
+                );
+            }
         }
     }
 
@@ -1994,7 +2040,7 @@ function validateObjectValue(
         const propPath = fullPath(path, fieldKey);
         const propValue = propMap.get(fieldKey);
 
-        if (propValue === undefined && !propMap.has(fieldKey)) {
+        if (!propMap.has(fieldKey)) {
             if (!fieldInfo.optional) {
                 errors.push(`Missing required property '${propPath}'`);
             }
@@ -2019,18 +2065,24 @@ function validateObjectValue(
             ...validateValueType(
                 actualValue,
                 expectedFieldType,
-                variableTypes,
+                augmentedVarTypes,
                 resolvedTypes,
                 propPath,
             ),
         );
     }
 
-    // Check for extraneous properties (skip spread elements — their
-    // fields aren't statically enumerable)
-    for (const actualKey of propMap.keys()) {
-        if (!(actualKey in expected.fields)) {
-            errors.push(`Extraneous property '${fullPath(path, actualKey)}'`);
+    // Check for extraneous properties.  When a spread is present we
+    // cannot be certain about extraneous fields (the spread may
+    // contribute additional fields whose types we can't fully resolve),
+    // so skip this check in that case.
+    if (!hasSpread) {
+        for (const actualKey of propMap.keys()) {
+            if (!(actualKey in expected.fields)) {
+                errors.push(
+                    `Extraneous property '${fullPath(path, actualKey)}'`,
+                );
+            }
         }
     }
 
@@ -2150,8 +2202,23 @@ function validateStringUnionValue(
                 `${fieldName(path)} expected a string union member, but variable '${value.name}' captures ${resolveType(varType).type}`,
             ];
         }
-        // Can't validate the actual value at compile time — variable could
-        // capture any string. Accept it.
+        // If the variable has a known string-union type (e.g. from a
+        // sub-rule that produces a specific literal), check that all
+        // possible values are in the expected enum.
+        if (varType.type === "string-union") {
+            const invalid = varType.typeEnum.filter(
+                (v) => !typeEnum.includes(v),
+            );
+            if (invalid.length > 0) {
+                const expected =
+                    typeEnum.length === 1
+                        ? `'${typeEnum[0]}'`
+                        : `one of ${typeEnum.map((s) => `'${s}'`).join(", ")}`;
+                return [
+                    `${fieldName(path)} expected ${expected}, got '${invalid.join("', '")}'`,
+                ];
+            }
+        }
         return [];
     }
 
