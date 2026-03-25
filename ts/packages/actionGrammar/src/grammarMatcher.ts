@@ -437,15 +437,15 @@ function createValue(
                         partialValueId,
                         stat,
                     );
-                    if (inner != null && typeof inner === "object") {
-                        // Object.assign is the natural fit here: it copies
-                        // exactly the own enumerable string-keyed properties
-                        // we need, matching JS spread semantics.  Per-key
-                        // propertyName tracking is already handled by the
-                        // recursive createValue call above (which receives
-                        // the parent propertyName), so no per-key logic is
-                        // needed at the merge site.
+                    if (inner === undefined) {
+                        // Partial match — the spread argument's variable
+                        // hasn't been captured yet.  Skip silently.
+                    } else if (typeof inner === "object") {
                         Object.assign(obj, inner);
+                    } else {
+                        throw new Error(
+                            `Internal error: spread argument must produce an object, got ${typeof inner}`,
+                        );
                     }
                 } else if (elem.value === null) {
                     // Shorthand form: { k } means { k: k }
