@@ -382,6 +382,62 @@ describe("Value type validation", () => {
         });
         // string doesn't conform to PauseAction — expect a type error
         expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("Variable '$x'");
+    });
+
+    it("implicit variable error includes variable name for type mismatch", () => {
+        const NumActionDef = SchemaCreator.intf(
+            "NumAction",
+            SchemaCreator.obj({
+                actionName: SchemaCreator.field(SchemaCreator.string("count")),
+                value: SchemaCreator.field(SchemaCreator.number()),
+            }),
+            undefined,
+            true,
+        );
+        const loader: SchemaLoader = (typeName) =>
+            typeName === "NumAction" ? NumActionDef : undefined;
+
+        // Variable captures string, but declared type expects { actionName, value: number }
+        const grammarText = `
+            import { NumAction } from "schema.ts";
+            <Start> : NumAction = <Wrapper>;
+            <Wrapper> = $(myVar:string);
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("Variable '$myVar'");
+    });
+
+    it("implicit variable with object type reports nested field errors with variable context", () => {
+        const ItemDef = SchemaCreator.intf(
+            "Item",
+            SchemaCreator.obj({
+                name: SchemaCreator.field(SchemaCreator.string()),
+                count: SchemaCreator.field(SchemaCreator.number()),
+            }),
+            undefined,
+            true,
+        );
+        const loader: SchemaLoader = (typeName) =>
+            typeName === "Item" ? ItemDef : undefined;
+
+        // Sub-rule produces { name: string, count: string } but Item expects count: number
+        const grammarText = `
+            import { Item } from "schema.ts";
+            <Start> : Item = <Sub>;
+            <Sub> = $(n:string) $(c:string) -> { name: n, count: c };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("count");
+        expect(errors[0]).toContain("expected number");
     });
 
     it("error in passthrough sub-rule of mixed alternatives", () => {
