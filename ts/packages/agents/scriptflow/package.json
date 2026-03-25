@@ -20,6 +20,8 @@
   "scripts": {
     "agc": "agc -i ./src/scriptflowSchema.agr -o ./dist/scriptflowSchema.ag.json",
     "asc": "asc -i ./src/schema/scriptActions.mts -o ./dist/scriptflowSchema.pas.json -t ScriptFlowActions",
+    "benchmark": "npx tsx benchmark/run-benchmark.mts",
+    "benchmark:dry": "npx tsx benchmark/run-benchmark.mts --dry-run",
     "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "compile": "node scripts/compileRecipes.mjs",
