@@ -41,12 +41,16 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                action: {
-                                    type: "literal",
-                                    value: "playMusic",
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "action",
+                                    value: {
+                                        type: "literal",
+                                        value: "playMusic",
+                                    },
                                 },
-                            },
+                            ],
                         },
                     },
                 ],
@@ -123,13 +127,14 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                action: {
-                                    type: "literal",
-                                    value: "play",
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "action",
+                                    value: { type: "literal", value: "play" },
                                 },
-                                track: null, // same as { type: "variable", name: "track" }
-                            },
+                                { type: "property", key: "track", value: null },
+                            ],
                         },
                     },
                 ],
@@ -165,9 +170,9 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: null,
-                            },
+                            value: [
+                                { type: "property", key: "track", value: null },
+                            ],
                         },
                     },
                 ],
@@ -208,10 +213,14 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: null,
-                                artist: null,
-                            },
+                            value: [
+                                { type: "property", key: "track", value: null },
+                                {
+                                    type: "property",
+                                    key: "artist",
+                                    value: null,
+                                },
+                            ],
                         },
                     },
                 ],
@@ -270,10 +279,14 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: null,
-                                artist: null,
-                            },
+                            value: [
+                                { type: "property", key: "track", value: null },
+                                {
+                                    type: "property",
+                                    key: "artist",
+                                    value: null,
+                                },
+                            ],
                         },
                     },
                 ],
@@ -340,10 +353,14 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: null,
-                                device: null,
-                            },
+                            value: [
+                                { type: "property", key: "track", value: null },
+                                {
+                                    type: "property",
+                                    key: "device",
+                                    value: null,
+                                },
+                            ],
                         },
                     },
                 ],
@@ -385,13 +402,14 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                actionName: {
-                                    type: "literal",
-                                    value: "play",
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "actionName",
+                                    value: { type: "literal", value: "play" },
                                 },
-                                track: null,
-                            },
+                                { type: "property", key: "track", value: null },
+                            ],
                         },
                     },
                 ],
@@ -429,10 +447,14 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: null,
-                                artist: null,
-                            },
+                            value: [
+                                { type: "property", key: "track", value: null },
+                                {
+                                    type: "property",
+                                    key: "artist",
+                                    value: null,
+                                },
+                            ],
                         },
                     },
                 ],
@@ -476,10 +498,14 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: null,
-                                artist: null,
-                            },
+                            value: [
+                                { type: "property", key: "track", value: null },
+                                {
+                                    type: "property",
+                                    key: "artist",
+                                    value: null,
+                                },
+                            ],
                         },
                     },
                 ],
@@ -512,12 +538,13 @@ describe("DFA AST Matching", () => {
                         parts: [{ type: "string", value: ["pause"] }],
                         value: {
                             type: "object",
-                            value: {
-                                actionName: {
-                                    type: "literal",
-                                    value: "pause",
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "actionName",
+                                    value: { type: "literal", value: "pause" },
                                 },
-                            },
+                            ],
                         },
                     },
                 ],
@@ -544,12 +571,16 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                action: {
-                                    type: "literal",
-                                    value: "playMusic",
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "action",
+                                    value: {
+                                        type: "literal",
+                                        value: "playMusic",
+                                    },
                                 },
-                            },
+                            ],
                         },
                     },
                     {
@@ -559,12 +590,16 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                action: {
-                                    type: "literal",
-                                    value: "stopMusic",
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "action",
+                                    value: {
+                                        type: "literal",
+                                        value: "stopMusic",
+                                    },
                                 },
-                            },
+                            ],
                         },
                     },
                 ],
@@ -607,10 +642,14 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                artist: null,
-                                track: null,
-                            },
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "artist",
+                                    value: null,
+                                },
+                                { type: "property", key: "track", value: null },
+                            ],
                         },
                     },
                 ],
@@ -673,7 +712,9 @@ describe("DFA AST Matching", () => {
                         ],
                         value: {
                             type: "object",
-                            value: { track: null },
+                            value: [
+                                { type: "property", key: "track", value: null },
+                            ],
                         },
                     },
                 ],

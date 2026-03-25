@@ -4,7 +4,6 @@
 import type {
     CompiledValueNode,
     CompiledValueExprNode,
-    CompiledObjectValueNode,
     CompiledArrayValueNode,
     GrammarPart,
     GrammarRule,
@@ -66,12 +65,18 @@ function formatSchemaType(t: SchemaType): string {
     }
 }
 
+/** Check whether a type is string-like (plain string or string-union). */
+function isStringType(t: SchemaType): boolean {
+    return t.type === "string" || t.type === "string-union";
+}
+
 /**
  * Collect supported method names for a given object type for error messages.
  * Results are memoized since the method sets are static.
  */
 const _supportedMethodsCache = new Map<string, string[]>();
 function supportedMethodsForType(typeName: string): string[] {
+    if (typeName === "string-union") typeName = "string";
     let cached = _supportedMethodsCache.get(typeName);
     if (cached !== undefined) return cached;
     const methods: string[] = [];
@@ -630,7 +635,14 @@ function deriveValueTypeImpl(
         case "literal":
             switch (typeof value.value) {
                 case "string":
-                    return SchemaCreator.string();
+                    // Return string-union to preserve the exact literal
+                    // value through type inference.  This is safe:
+                    // string-union is assignable to string, so it causes
+                    // no false positives for string-typed fields, while
+                    // enabling precise enum containment checks whenever
+                    // the inferred type flows through spread, ternary,
+                    // or rule type derivation.
+                    return SchemaCreator.string(value.value);
                 case "number":
                     return SchemaCreator.number();
                 case "boolean":
@@ -650,34 +662,61 @@ function deriveValueTypeImpl(
             return ERROR_TYPE;
         }
         case "object": {
-            // Infer field types for the object
+            // Infer field types for the object.
+            // If any spread resolves to ERROR_TYPE, the object's shape
+            // is indeterminate — propagate ERROR_TYPE to prevent
+            // cascading "missing required property" errors.
             const fields: Record<string, SchemaObjectField> = {};
-            for (const [key, propValue] of Object.entries(value.value)) {
-                let fieldType: SchemaType;
-                if (propValue === null) {
-                    // Shorthand { key } — resolve variable directly instead
-                    // of creating a synthetic node (which would lack position
-                    // info and bypass the compiler's variable validation).
-                    const varType = resolveVar(key);
-                    if (varType !== undefined) {
-                        fieldType = varType;
-                    } else {
-                        errors?.push({
-                            message: `Undefined variable '${key}'`,
-                            node: value,
-                        });
-                        fieldType = ERROR_TYPE;
-                    }
-                } else {
-                    fieldType = deriveValueType(
-                        propValue,
+            let hasErrorSpread = false;
+            for (const elem of value.value) {
+                if (elem.type === "spread") {
+                    // Spread: derive argument type and merge its fields
+                    const argType = deriveValueType(
+                        elem.argument,
                         resolveVar,
                         errors,
                         typeCache,
                     );
+                    if (argType.type === "object") {
+                        for (const [fk, fv] of Object.entries(argType.fields)) {
+                            fields[fk] = fv;
+                        }
+                    } else if (isErrorType(argType)) {
+                        hasErrorSpread = true;
+                    } else if (argType.type !== "any") {
+                        errors?.push({
+                            message: `Spread argument must be an object type, got ${formatSchemaType(argType)}`,
+                            node: elem.argument,
+                        });
+                    }
+                } else {
+                    let fieldType: SchemaType;
+                    if (elem.value === null) {
+                        // Shorthand { key } — resolve variable directly instead
+                        // of creating a synthetic node (which would lack position
+                        // info and bypass the compiler's variable validation).
+                        const varType = resolveVar(elem.key);
+                        if (varType !== undefined) {
+                            fieldType = varType;
+                        } else {
+                            errors?.push({
+                                message: `Undefined variable '${elem.key}'`,
+                                node: value,
+                            });
+                            fieldType = ERROR_TYPE;
+                        }
+                    } else {
+                        fieldType = deriveValueType(
+                            elem.value,
+                            resolveVar,
+                            errors,
+                            typeCache,
+                        );
+                    }
+                    fields[elem.key] = { type: fieldType };
                 }
-                fields[key] = { type: fieldType };
             }
+            if (hasErrorSpread) return ERROR_TYPE;
             return SchemaCreator.obj(fields);
         }
         case "array": {
@@ -738,10 +777,7 @@ function deriveValueTypeImpl(
                     return SchemaCreator.number();
                 case "+":
                     // Operand type constraints checked in pass 2
-                    if (
-                        leftType.type === "string" ||
-                        rightType.type === "string"
-                    ) {
+                    if (isStringType(leftType) || isStringType(rightType)) {
                         return SchemaCreator.string();
                     }
                     if (
@@ -847,8 +883,7 @@ function deriveValueTypeImpl(
             ) {
                 if (
                     value.property === "length" &&
-                    (objectType.type === "string" ||
-                        objectType.type === "array")
+                    (isStringType(objectType) || objectType.type === "array")
                 ) {
                     resultType = SchemaCreator.number();
                 }
@@ -923,7 +958,7 @@ function deriveValueTypeImpl(
                     addUndefined
                         ? SchemaCreator.union(t, SchemaCreator.undefined_())
                         : t;
-                if (objectType.type === "string") {
+                if (isStringType(objectType)) {
                     if (STRING_TO_STRING_METHODS.has(method))
                         return wrapResult(SchemaCreator.string());
                     if (STRING_TO_NUMBER_METHODS.has(method))
@@ -1022,7 +1057,18 @@ function isTypeAssignable(
     const resolvedExpected = resolveType(expected);
     if (resolvedExpected.type === "any" || resolvedInferred.type === "any")
         return true;
-    if (resolvedExpected.type === resolvedInferred.type) return true;
+    if (resolvedExpected.type === resolvedInferred.type) {
+        // For string-union, check enum value containment
+        if (
+            resolvedExpected.type === "string-union" &&
+            resolvedInferred.type === "string-union"
+        ) {
+            return resolvedInferred.typeEnum.every((v) =>
+                resolvedExpected.typeEnum.includes(v),
+            );
+        }
+        return true;
+    }
     // string is assignable to string-union (runtime value might match)
     if (
         resolvedExpected.type === "string-union" &&
@@ -1318,8 +1364,8 @@ function walkExprOperands(
                 case "+":
                     if (
                         !(
-                            (leftType.type === "string" &&
-                                rightType.type === "string") ||
+                            (isStringType(leftType) &&
+                                isStringType(rightType)) ||
                             (leftType.type === "number" &&
                                 rightType.type === "number")
                         )
@@ -1357,8 +1403,7 @@ function walkExprOperands(
                         !(
                             (leftType.type === "number" &&
                                 rightType.type === "number") ||
-                            (leftType.type === "string" &&
-                                rightType.type === "string")
+                            (isStringType(leftType) && isStringType(rightType))
                         )
                     ) {
                         errors.push({
@@ -1578,7 +1623,10 @@ function walkExprOperands(
                     typeCache,
                 );
                 if (!isErrorType(objectType)) {
-                    const key = `${objectType.type}.${value.callee.property}`;
+                    const typeName = isStringType(objectType)
+                        ? "string"
+                        : objectType.type;
+                    const key = `${typeName}.${value.callee.property}`;
                     const expectedArgs = METHOD_ARG_TYPES[key];
                     if (expectedArgs !== undefined) {
                         for (
@@ -1596,7 +1644,11 @@ function walkExprOperands(
                                 typeCache,
                             );
                             if (isErrorType(argType)) continue;
-                            if (argType.type !== expected) {
+                            if (
+                                expected === "string"
+                                    ? !isStringType(argType)
+                                    : argType.type !== expected
+                            ) {
                                 errors.push({
                                     message:
                                         `Argument ${i + 1} of '${value.callee.property}' ` +
@@ -1627,7 +1679,7 @@ function walkExprOperands(
                         : [exprType];
                 for (const t of types) {
                     if (
-                        t.type !== "string" &&
+                        !isStringType(t) &&
                         t.type !== "number" &&
                         t.type !== "boolean"
                     ) {
@@ -1653,10 +1705,18 @@ function walkExprOperands(
             );
             break;
         case "object":
-            for (const propValue of Object.values(value.value)) {
-                if (propValue !== null) {
+            for (const elem of value.value) {
+                if (elem.type === "spread") {
                     walkExprOperands(
-                        propValue,
+                        elem.argument,
+                        resolveVar,
+                        errors,
+                        warnings,
+                        typeCache,
+                    );
+                } else if (elem.value !== null) {
+                    walkExprOperands(
+                        elem.value,
                         resolveVar,
                         errors,
                         warnings,
@@ -1701,28 +1761,25 @@ export function validateExprTypes(
     const resolveVar: ResolveVariable = (name) => variableTypes.get(name);
     const typeCache = new Map<CompiledValueNode, SchemaType>();
 
-    // Infer the result type only for expression-typed nodes.
+    // Pass 1: Infer the result type only for expression-typed nodes.
+    const inferenceErrors: ValueTypeError[] = [];
     let exprType: SchemaType | undefined;
     if (isValueExprNode(value)) {
-        const inferenceErrors: ValueTypeError[] = [];
         exprType = deriveValueType(
             value,
             resolveVar,
             inferenceErrors,
             typeCache,
         );
-        if (inferenceErrors.length > 0) {
-            return {
-                errors: inferenceErrors.map((e) => e.message),
-                warnings: [],
-                inferredType: undefined,
-            };
-        }
     }
 
-    // Walk sub-expressions for operator constraints and warnings.
+    // Pass 2: Walk sub-expressions for operator constraints and warnings.
     // This recurses into object/array property values so expressions
     // nested inside object literals are validated too.
+    // Always runs even after inference errors — ERROR_TYPE guards in
+    // walkExprOperands prevent cascading, and the typeCache has valid
+    // entries for sub-expressions that inferred successfully, so
+    // warnings (e.g. unnecessary ?.) on those nodes are still collected.
     const exprWarnings: ValueTypeError[] = [];
     const operandErrors = validateExprOperandTypes(
         value,
@@ -1730,17 +1787,16 @@ export function validateExprTypes(
         exprWarnings,
         typeCache,
     );
-    if (operandErrors.length > 0) {
-        return {
-            errors: operandErrors.map((e) => e.message),
-            warnings: exprWarnings.map((e) => e.message),
-            inferredType: undefined,
-        };
-    }
+
+    const errors = [
+        ...inferenceErrors.map((e) => e.message),
+        ...operandErrors.map((e) => e.message),
+    ];
     return {
-        errors: [],
+        errors,
         warnings: exprWarnings.map((e) => e.message),
         inferredType:
+            errors.length === 0 &&
             exprType !== undefined &&
             !isErrorType(exprType) &&
             exprType !== ANY_TYPE
@@ -1938,63 +1994,183 @@ function validateObjectValue(
         );
     }
 
-    if (value.type !== "object") {
-        return [
-            `${fieldName(path)} expected an object, got ${value.type} value`,
-        ];
+    // Derive the type of the whole object expression.
+    // deriveValueType processes elements in source order (last-write-wins),
+    // correctly handling spread override semantics.
+    // Collect inference errors to surface spread-of-non-object diagnostics
+    // that aren't caught by the expression validation pass (object literals
+    // aren't expression nodes).
+    const resolveVar = (name: string) => variableTypes.get(name);
+    const inferErrors: ValueTypeError[] = [];
+    const inferred = deriveValueType(value, resolveVar, inferErrors);
+
+    const errors = inferErrors.map((e) => e.message);
+    if (isErrorType(inferred)) {
+        // Primary error already reported — skip structural validation
+        // to avoid cascading "missing required property" noise.
+    } else if (inferred.type === "object") {
+        errors.push(...validateInferredObjectType(inferred, expected, path));
+    } else {
+        errors.push(
+            `${fieldName(path)} expected an object, but inferred type is ${formatSchemaType(inferred)}`,
+        );
     }
+    return errors;
+}
 
+/**
+ * Structurally compare an inferred object type against an expected schema
+ * object type, producing per-field error messages for missing required
+ * properties, extraneous properties, and type mismatches.
+ */
+function validateInferredObjectType(
+    inferred: SchemaTypeObject,
+    expected: SchemaTypeObject,
+    path: string,
+): string[] {
     const errors: string[] = [];
-    const objValue = value as CompiledObjectValueNode;
 
-    // Check required fields exist
+    // Check required fields exist and types match.
     for (const [fieldKey, fieldInfo] of Object.entries(expected.fields) as [
         string,
         SchemaObjectField,
     ][]) {
         const propPath = fullPath(path, fieldKey);
-        const propValue = objValue.value[fieldKey];
-
-        if (propValue === undefined) {
+        if (!(fieldKey in inferred.fields)) {
             if (!fieldInfo.optional) {
                 errors.push(`Missing required property '${propPath}'`);
             }
             continue;
         }
 
-        // null means shorthand { key } which refers to variable named `key`
-        const actualValue: CompiledValueNode =
-            propValue === null
-                ? { type: "variable", name: fieldKey }
-                : propValue;
-
-        // When the schema field is optional, the value may legitimately be
-        // `undefined` at runtime (e.g. from an optional grammar capture
-        // `$(x:T)?`).  Widen the expected type to include `undefined` so
-        // that `T | undefined` validates cleanly against the optional field.
+        const inferredFieldType = inferred.fields[fieldKey].type;
         const expectedFieldType = fieldInfo.optional
             ? SchemaCreator.union(fieldInfo.type, SchemaCreator.undefined_())
             : fieldInfo.type;
 
         errors.push(
-            ...validateValueType(
-                actualValue,
+            ...validateInferredAgainstExpected(
+                inferredFieldType,
                 expectedFieldType,
-                variableTypes,
-                resolvedTypes,
                 propPath,
             ),
         );
     }
 
-    // Check for extraneous properties
-    for (const actualKey of Object.keys(objValue.value)) {
+    // Check for extraneous properties.
+    // Note: any-typed spreads contribute no fields to the inferred type,
+    // so they don't cause false positives in this check. However, they
+    // *may* supply required fields at runtime, so required-field checks
+    // above can produce false positives when the spread argument has
+    // type `any`.
+    for (const actualKey of Object.keys(inferred.fields)) {
         if (!(actualKey in expected.fields)) {
             errors.push(`Extraneous property '${fullPath(path, actualKey)}'`);
         }
     }
 
     return errors;
+}
+
+/**
+ * Validate an inferred type against an expected type, producing detailed
+ * error messages. Recursively validates nested object structure and uses
+ * {@link isTypeAssignable} for leaf types.
+ */
+function validateInferredAgainstExpected(
+    inferred: SchemaType,
+    expected: SchemaType,
+    path: string,
+): string[] {
+    const resolvedExpected = resolveType(expected);
+    const resolvedInferred = resolveType(inferred);
+
+    if (resolvedExpected.type === "any" || resolvedInferred.type === "any") {
+        return [];
+    }
+
+    // undefined is always accepted — matches optional fields / optional
+    // captures where the value may be absent at runtime.
+    if (
+        resolvedExpected.type === "undefined" ||
+        resolvedInferred.type === "undefined"
+    ) {
+        return [];
+    }
+
+    // Recurse into nested objects for structural validation.
+    if (
+        resolvedExpected.type === "object" &&
+        resolvedInferred.type === "object"
+    ) {
+        return validateInferredObjectType(
+            resolvedInferred,
+            resolvedExpected,
+            path,
+        );
+    }
+
+    // If inferred is a type-union (e.g. T | undefined from optional
+    // captures), distribute: each member must individually match the
+    // expected type.  This ensures T matches some expected member and
+    // undefined matches the undefined member.
+    if (resolvedInferred.type === "type-union") {
+        for (const memberType of resolvedInferred.types) {
+            const memberErrors = validateInferredAgainstExpected(
+                memberType,
+                expected,
+                path,
+            );
+            if (memberErrors.length > 0) {
+                return memberErrors;
+            }
+        }
+        return [];
+    }
+
+    // Union: inferred must match at least one member.
+    if (resolvedExpected.type === "type-union") {
+        for (const memberType of resolvedExpected.types) {
+            if (
+                validateInferredAgainstExpected(
+                    resolvedInferred,
+                    memberType,
+                    path,
+                ).length === 0
+            ) {
+                return [];
+            }
+        }
+        return [`${fieldName(path)} does not match any union type member`];
+    }
+
+    // String-union vs string-union: produce specific error with actual values.
+    if (
+        resolvedExpected.type === "string-union" &&
+        resolvedInferred.type === "string-union"
+    ) {
+        const invalid = resolvedInferred.typeEnum.filter(
+            (v) => !resolvedExpected.typeEnum.includes(v),
+        );
+        if (invalid.length > 0) {
+            const expectedStr =
+                resolvedExpected.typeEnum.length === 1
+                    ? `'${resolvedExpected.typeEnum[0]}'`
+                    : `one of ${resolvedExpected.typeEnum.map((s) => `'${s}'`).join(", ")}`;
+            return [
+                `${fieldName(path)} expected ${expectedStr}, got '${invalid.join("', '")}'`,
+            ];
+        }
+        return [];
+    }
+
+    if (!isTypeAssignable(resolvedInferred, resolvedExpected)) {
+        return [
+            `${fieldName(path)} expected ${formatSchemaType(resolvedExpected)}, got ${formatSchemaType(resolvedInferred)}`,
+        ];
+    }
+
+    return [];
 }
 
 function validateArrayValue(
@@ -2110,8 +2286,24 @@ function validateStringUnionValue(
                 `${fieldName(path)} expected a string union member, but variable '${value.name}' captures ${resolveType(varType).type}`,
             ];
         }
-        // Can't validate the actual value at compile time — variable could
-        // capture any string. Accept it.
+        // If the variable has a known string-union type (e.g. from a
+        // sub-rule that produces a specific literal), check that all
+        // possible values are in the expected enum.
+        const resolvedVarType = resolveType(varType);
+        if (resolvedVarType.type === "string-union") {
+            const invalid = resolvedVarType.typeEnum.filter(
+                (v) => !typeEnum.includes(v),
+            );
+            if (invalid.length > 0) {
+                const expected =
+                    typeEnum.length === 1
+                        ? `'${typeEnum[0]}'`
+                        : `one of ${typeEnum.map((s) => `'${s}'`).join(", ")}`;
+                return [
+                    `${fieldName(path)} expected ${expected}, got '${invalid.join("', '")}'`,
+                ];
+            }
+        }
         return [];
     }
 

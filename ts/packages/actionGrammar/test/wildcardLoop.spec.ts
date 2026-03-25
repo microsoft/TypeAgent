@@ -23,9 +23,13 @@ describe("Wildcard Loop Behavior", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -56,9 +60,13 @@ describe("Wildcard Loop Behavior", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -94,10 +102,18 @@ describe("Wildcard Loop Behavior", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            track: { type: "variable", name: "track" },
-                            artist: { type: "variable", name: "artist" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                            {
+                                type: "property",
+                                key: "artist",
+                                value: { type: "variable", name: "artist" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -128,9 +144,13 @@ describe("Wildcard Loop Behavior", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],

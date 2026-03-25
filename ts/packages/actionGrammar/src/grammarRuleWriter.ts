@@ -8,6 +8,7 @@ import {
     Expr,
     GrammarParseResult,
     isExpressionSpecialChar,
+    isObjectSpread,
     isWhitespace,
     Rule,
     RuleDefinition,
@@ -1093,25 +1094,32 @@ function writeValueNode(
                 close: "}",
                 flatSep: ", ",
                 brokenBaseCol: baseCol,
-                emitItem: (prop) => {
+                emitItem: (elem) => {
                     writeValueComments(
                         result,
-                        prop.leadingComments,
+                        elem.leadingComments,
                         entryIndent,
                     );
-                    if (prop.value === null) {
-                        result.write(prop.key);
-                    } else {
-                        result.write(`${prop.key}: `);
+                    if (isObjectSpread(elem)) {
+                        result.write("...");
                         writeValueNode(
                             result,
-                            prop.value,
+                            elem.argument,
+                            baseCol + result.indentSize,
+                        );
+                    } else if (elem.value === null) {
+                        result.write(elem.key);
+                    } else {
+                        result.write(`${elem.key}: `);
+                        writeValueNode(
+                            result,
+                            elem.value,
                             baseCol + result.indentSize,
                         );
                     }
                 },
-                getItemTrailingText: (prop) =>
-                    trailingCommentText(prop.trailingComments),
+                getItemTrailingText: (elem) =>
+                    trailingCommentText(elem.trailingComments),
                 ...(objClosing ? { closingLines: objClosing } : {}),
             });
             break;

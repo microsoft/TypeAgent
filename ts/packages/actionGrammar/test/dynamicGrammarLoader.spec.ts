@@ -213,9 +213,13 @@ describe("Dynamic Grammar Loader", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: { type: "variable", name: "track" },
-                            },
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "track",
+                                    value: { type: "variable", name: "track" },
+                                },
+                            ],
                         },
                     },
                 ],
