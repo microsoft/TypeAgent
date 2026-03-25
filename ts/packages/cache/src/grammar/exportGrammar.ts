@@ -323,6 +323,7 @@ function convertToValueNode(entry: any, leafValues: ValueNode[]): ValueNode {
         return {
             type: "object",
             value: Object.entries(entry).map(([k, v]) => ({
+                type: "property" as const,
                 key: k,
                 value: convertToValueNode(v, leafValues),
             })),

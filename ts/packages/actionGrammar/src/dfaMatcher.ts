@@ -2060,7 +2060,11 @@ function evaluateValueNode(
                         );
                     }
                 }
-                // spread elements are not supported in the DFA path
+                // Spread elements are not evaluated in the DFA path.
+                // The current NFA and DFA matchers do not support value
+                // expressions; spread requires runtime evaluation of the
+                // argument, which is only implemented in the NFA
+                // interpreter (grammarMatcher.ts).
             }
             return result;
         }

@@ -369,7 +369,7 @@ function parseObjectProperties(
  * Parse a value expression from the grammar's action value format.
  * The grammar parser produces ValueNode objects with the following structure:
  * - { type: "literal", value: ... }
- * - { type: "object", value: { [key: string]: ValueNode } }
+ * - { type: "object", value: CompiledObjectElement[] }
  * - { type: "array", value: ValueNode[] }
  * - { type: "variable", name: string }
  *
@@ -402,7 +402,13 @@ export function parseValueExpression(value: any): ValueExpression {
                 // New format: { type: "object", value: CompiledObjectElement[] }
                 const elements = value.value as any[];
 
-                // Helper to extract properties from elements array
+                // Helper to extract properties from elements array.
+                // TODO: Spread elements are silently skipped: the current NFA
+                // and DFA matchers do not support value expressions, so
+                // spread is only evaluated in the NFA interpreter
+                // (grammarMatcher.ts).  This code path converts compiled
+                // output for environment evaluation, which only sees
+                // property elements.
                 const extractProps = (
                     elems: any[],
                 ): Map<string, ValueExpression> => {

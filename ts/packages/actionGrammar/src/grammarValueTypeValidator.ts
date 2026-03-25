@@ -4,7 +4,6 @@
 import type {
     CompiledValueNode,
     CompiledValueExprNode,
-    CompiledObjectValueNode,
     CompiledArrayValueNode,
     GrammarPart,
     GrammarRule,
@@ -663,8 +662,12 @@ function deriveValueTypeImpl(
             return ERROR_TYPE;
         }
         case "object": {
-            // Infer field types for the object
+            // Infer field types for the object.
+            // If any spread resolves to ERROR_TYPE, the object's shape
+            // is indeterminate — propagate ERROR_TYPE to prevent
+            // cascading "missing required property" errors.
             const fields: Record<string, SchemaObjectField> = {};
+            let hasErrorSpread = false;
             for (const elem of value.value) {
                 if (elem.type === "spread") {
                     // Spread: derive argument type and merge its fields
@@ -678,7 +681,9 @@ function deriveValueTypeImpl(
                         for (const [fk, fv] of Object.entries(argType.fields)) {
                             fields[fk] = fv;
                         }
-                    } else if (!isErrorType(argType)) {
+                    } else if (isErrorType(argType)) {
+                        hasErrorSpread = true;
+                    } else if (argType.type !== "any") {
                         errors?.push({
                             message: `Spread argument must be an object type, got ${formatSchemaType(argType)}`,
                             node: elem.argument,
@@ -711,6 +716,7 @@ function deriveValueTypeImpl(
                     fields[elem.key] = { type: fieldType };
                 }
             }
+            if (hasErrorSpread) return ERROR_TYPE;
             return SchemaCreator.obj(fields);
         }
         case "array": {
@@ -1755,28 +1761,25 @@ export function validateExprTypes(
     const resolveVar: ResolveVariable = (name) => variableTypes.get(name);
     const typeCache = new Map<CompiledValueNode, SchemaType>();
 
-    // Infer the result type only for expression-typed nodes.
+    // Pass 1: Infer the result type only for expression-typed nodes.
+    const inferenceErrors: ValueTypeError[] = [];
     let exprType: SchemaType | undefined;
     if (isValueExprNode(value)) {
-        const inferenceErrors: ValueTypeError[] = [];
         exprType = deriveValueType(
             value,
             resolveVar,
             inferenceErrors,
             typeCache,
         );
-        if (inferenceErrors.length > 0) {
-            return {
-                errors: inferenceErrors.map((e) => e.message),
-                warnings: [],
-                inferredType: undefined,
-            };
-        }
     }
 
-    // Walk sub-expressions for operator constraints and warnings.
+    // Pass 2: Walk sub-expressions for operator constraints and warnings.
     // This recurses into object/array property values so expressions
     // nested inside object literals are validated too.
+    // Always runs even after inference errors — ERROR_TYPE guards in
+    // walkExprOperands prevent cascading, and the typeCache has valid
+    // entries for sub-expressions that inferred successfully, so
+    // warnings (e.g. unnecessary ?.) on those nodes are still collected.
     const exprWarnings: ValueTypeError[] = [];
     const operandErrors = validateExprOperandTypes(
         value,
@@ -1784,17 +1787,16 @@ export function validateExprTypes(
         exprWarnings,
         typeCache,
     );
-    if (operandErrors.length > 0) {
-        return {
-            errors: operandErrors.map((e) => e.message),
-            warnings: exprWarnings.map((e) => e.message),
-            inferredType: undefined,
-        };
-    }
+
+    const errors = [
+        ...inferenceErrors.map((e) => e.message),
+        ...operandErrors.map((e) => e.message),
+    ];
     return {
-        errors: [],
+        errors,
         warnings: exprWarnings.map((e) => e.message),
         inferredType:
+            errors.length === 0 &&
             exprType !== undefined &&
             !isErrorType(exprType) &&
             exprType !== ANY_TYPE
@@ -1992,104 +1994,183 @@ function validateObjectValue(
         );
     }
 
-    if (value.type !== "object") {
-        return [
-            `${fieldName(path)} expected an object, got ${value.type} value`,
-        ];
-    }
-
-    const errors: string[] = [];
-    const objValue = value as CompiledObjectValueNode;
-
-    // Build a flat property map from the element list for field lookup.
-    // For spread elements, statically derive the argument type and merge
-    // its fields so that required-field and extraneous-field checks
-    // account for fields contributed by the spread.
+    // Derive the type of the whole object expression.
+    // deriveValueType processes elements in source order (last-write-wins),
+    // correctly handling spread override semantics.
+    // Collect inference errors to surface spread-of-non-object diagnostics
+    // that aren't caught by the expression validation pass (object literals
+    // aren't expression nodes).
     const resolveVar = (name: string) => variableTypes.get(name);
-    const propMap = new Map<string, CompiledValueNode | null>();
-    const hasSpread = objValue.value.some((e) => e.type === "spread");
-    // Augment variable types with spread-contributed field types so
-    // synthetic variable nodes resolve to their actual inferred types
-    // during downstream validation.
-    const augmentedVarTypes = hasSpread
-        ? new Map(variableTypes)
-        : variableTypes;
-    for (const elem of objValue.value) {
-        if (elem.type === "property") {
-            propMap.set(elem.key, elem.value);
-        } else {
-            // Spread element — derive its type and merge known fields.
-            const argType = resolveType(
-                deriveValueType(elem.argument, resolveVar),
-            );
-            if (argType.type === "object") {
-                for (const [fk, fv] of Object.entries(argType.fields)) {
-                    // Spread fields override earlier properties (same as
-                    // JS semantics: later wins).  Subsequent explicit
-                    // properties will in turn override via propMap.set.
-                    propMap.set(fk, { type: "variable", name: fk });
-                    augmentedVarTypes.set(fk, fv.type);
-                }
-            } else if (argType.type !== "any") {
-                errors.push(
-                    `Spread argument in '${fieldName(path)}' must be an object type, got ${argType.type}`,
-                );
-            }
-        }
-    }
+    const inferErrors: ValueTypeError[] = [];
+    const inferred = deriveValueType(value, resolveVar, inferErrors);
 
-    // Check required fields exist
+    const errors = inferErrors.map((e) => e.message);
+    if (isErrorType(inferred)) {
+        // Primary error already reported — skip structural validation
+        // to avoid cascading "missing required property" noise.
+    } else if (inferred.type === "object") {
+        errors.push(...validateInferredObjectType(inferred, expected, path));
+    } else {
+        errors.push(
+            `${fieldName(path)} expected an object, but inferred type is ${formatSchemaType(inferred)}`,
+        );
+    }
+    return errors;
+}
+
+/**
+ * Structurally compare an inferred object type against an expected schema
+ * object type, producing per-field error messages for missing required
+ * properties, extraneous properties, and type mismatches.
+ */
+function validateInferredObjectType(
+    inferred: SchemaTypeObject,
+    expected: SchemaTypeObject,
+    path: string,
+): string[] {
+    const errors: string[] = [];
+
+    // Check required fields exist and types match.
     for (const [fieldKey, fieldInfo] of Object.entries(expected.fields) as [
         string,
         SchemaObjectField,
     ][]) {
         const propPath = fullPath(path, fieldKey);
-        const propValue = propMap.get(fieldKey);
-
-        if (!propMap.has(fieldKey)) {
+        if (!(fieldKey in inferred.fields)) {
             if (!fieldInfo.optional) {
                 errors.push(`Missing required property '${propPath}'`);
             }
             continue;
         }
 
-        // null means shorthand { key } which refers to variable named `key`.
-        // propMap.has(fieldKey) is true (we continued above otherwise),
-        // so propValue is CompiledValueNode | null — ?? handles both.
-        const actualValue: CompiledValueNode = propValue ?? {
-            type: "variable",
-            name: fieldKey,
-        };
-
-        // When the schema field is optional, the value may legitimately be
-        // `undefined` at runtime (e.g. from an optional grammar capture
-        // `$(x:T)?`).  Widen the expected type to include `undefined` so
-        // that `T | undefined` validates cleanly against the optional field.
+        const inferredFieldType = inferred.fields[fieldKey].type;
         const expectedFieldType = fieldInfo.optional
             ? SchemaCreator.union(fieldInfo.type, SchemaCreator.undefined_())
             : fieldInfo.type;
 
         errors.push(
-            ...validateValueType(
-                actualValue,
+            ...validateInferredAgainstExpected(
+                inferredFieldType,
                 expectedFieldType,
-                augmentedVarTypes,
-                resolvedTypes,
                 propPath,
             ),
         );
     }
 
-    // Check for extraneous properties. Spread-contributed fields from
-    // resolved object types are in propMap and can be checked; any-typed
-    // spreads add no keys, so they don't cause false positives.
-    for (const actualKey of propMap.keys()) {
+    // Check for extraneous properties.
+    // Note: any-typed spreads contribute no fields to the inferred type,
+    // so they don't cause false positives in this check. However, they
+    // *may* supply required fields at runtime, so required-field checks
+    // above can produce false positives when the spread argument has
+    // type `any`.
+    for (const actualKey of Object.keys(inferred.fields)) {
         if (!(actualKey in expected.fields)) {
             errors.push(`Extraneous property '${fullPath(path, actualKey)}'`);
         }
     }
 
     return errors;
+}
+
+/**
+ * Validate an inferred type against an expected type, producing detailed
+ * error messages. Recursively validates nested object structure and uses
+ * {@link isTypeAssignable} for leaf types.
+ */
+function validateInferredAgainstExpected(
+    inferred: SchemaType,
+    expected: SchemaType,
+    path: string,
+): string[] {
+    const resolvedExpected = resolveType(expected);
+    const resolvedInferred = resolveType(inferred);
+
+    if (resolvedExpected.type === "any" || resolvedInferred.type === "any") {
+        return [];
+    }
+
+    // undefined is always accepted — matches optional fields / optional
+    // captures where the value may be absent at runtime.
+    if (
+        resolvedExpected.type === "undefined" ||
+        resolvedInferred.type === "undefined"
+    ) {
+        return [];
+    }
+
+    // Recurse into nested objects for structural validation.
+    if (
+        resolvedExpected.type === "object" &&
+        resolvedInferred.type === "object"
+    ) {
+        return validateInferredObjectType(
+            resolvedInferred,
+            resolvedExpected,
+            path,
+        );
+    }
+
+    // If inferred is a type-union (e.g. T | undefined from optional
+    // captures), distribute: each member must individually match the
+    // expected type.  This ensures T matches some expected member and
+    // undefined matches the undefined member.
+    if (resolvedInferred.type === "type-union") {
+        for (const memberType of resolvedInferred.types) {
+            const memberErrors = validateInferredAgainstExpected(
+                memberType,
+                expected,
+                path,
+            );
+            if (memberErrors.length > 0) {
+                return memberErrors;
+            }
+        }
+        return [];
+    }
+
+    // Union: inferred must match at least one member.
+    if (resolvedExpected.type === "type-union") {
+        for (const memberType of resolvedExpected.types) {
+            if (
+                validateInferredAgainstExpected(
+                    resolvedInferred,
+                    memberType,
+                    path,
+                ).length === 0
+            ) {
+                return [];
+            }
+        }
+        return [`${fieldName(path)} does not match any union type member`];
+    }
+
+    // String-union vs string-union: produce specific error with actual values.
+    if (
+        resolvedExpected.type === "string-union" &&
+        resolvedInferred.type === "string-union"
+    ) {
+        const invalid = resolvedInferred.typeEnum.filter(
+            (v) => !resolvedExpected.typeEnum.includes(v),
+        );
+        if (invalid.length > 0) {
+            const expectedStr =
+                resolvedExpected.typeEnum.length === 1
+                    ? `'${resolvedExpected.typeEnum[0]}'`
+                    : `one of ${resolvedExpected.typeEnum.map((s) => `'${s}'`).join(", ")}`;
+            return [
+                `${fieldName(path)} expected ${expectedStr}, got '${invalid.join("', '")}'`,
+            ];
+        }
+        return [];
+    }
+
+    if (!isTypeAssignable(resolvedInferred, resolvedExpected)) {
+        return [
+            `${fieldName(path)} expected ${formatSchemaType(resolvedExpected)}, got ${formatSchemaType(resolvedInferred)}`,
+        ];
+    }
+
+    return [];
 }
 
 function validateArrayValue(

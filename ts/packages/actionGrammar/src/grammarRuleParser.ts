@@ -228,6 +228,7 @@ type VariableValueNode = CompiledVariableValueNode & {
 // trailingComments: same-line comments after the trailing ',' — block comments
 //   that close before the next newline and/or a final line comment.
 export type ObjectProperty = {
+    type: "property";
     key: string;
     value: ValueNode | null; // null = shorthand: { x } means { x: x }
     leadingComments?: Comment[] | undefined;
@@ -235,6 +236,7 @@ export type ObjectProperty = {
 };
 // A spread element in an ObjectValueNode: { ...expr }.
 export type ObjectSpreadElement = {
+    type: "spread";
     argument: ValueNode;
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
@@ -244,7 +246,7 @@ export type ObjectElement = ObjectProperty | ObjectSpreadElement;
 
 /** Type guard: true when the element is a spread (`{ ...expr }`). */
 export function isObjectSpread(e: ObjectElement): e is ObjectSpreadElement {
-    return "argument" in e;
+    return e.type === "spread";
 }
 
 // A value node as it appears as an element in an array literal.
@@ -910,6 +912,7 @@ class GrammarRuleParser implements ValueExprParserContext {
                 this.skipWhitespace(3);
                 const argument = this.parseValueWithComments();
                 obj.push({
+                    type: "spread",
                     argument,
                     leadingComments: pendingLeading,
                 } satisfies ObjectSpreadElement);
@@ -941,6 +944,7 @@ class GrammarRuleParser implements ValueExprParserContext {
                 v = this.parseValueWithComments();
             }
             obj.push({
+                type: "property",
                 key: id,
                 value: v,
                 leadingComments: pendingLeading,

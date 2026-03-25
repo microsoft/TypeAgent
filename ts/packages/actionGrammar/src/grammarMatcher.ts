@@ -438,6 +438,13 @@ function createValue(
                         stat,
                     );
                     if (inner != null && typeof inner === "object") {
+                        // Object.assign is the natural fit here: it copies
+                        // exactly the own enumerable string-keyed properties
+                        // we need, matching JS spread semantics.  Per-key
+                        // propertyName tracking is already handled by the
+                        // recursive createValue call above (which receives
+                        // the parent propertyName), so no per-key logic is
+                        // needed at the merge site.
                         Object.assign(obj, inner);
                     }
                 } else if (elem.value === null) {

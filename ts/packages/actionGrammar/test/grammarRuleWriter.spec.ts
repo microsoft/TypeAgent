@@ -311,6 +311,16 @@ describe("Grammar Rule Writer", () => {
     it("with object value", () => {
         validateRoundTrip(`<test> = hello -> { b: true, n: 12, s: "string" };`);
     });
+    it("with object spread value", () => {
+        validateRoundTrip(
+            `<test> = hello $(x:<other>) -> { ...x, extra: 1 };\n<other> = world -> { a: 2 };`,
+        );
+    });
+    it("with object spread only", () => {
+        validateRoundTrip(
+            `<test> = hello $(x:<other>) -> { ...x };\n<other> = world -> { a: 2 };`,
+        );
+    });
     it("with array value", () => {
         validateRoundTrip(`<test> = hello -> [true, 34.3, "string"];`);
     });
