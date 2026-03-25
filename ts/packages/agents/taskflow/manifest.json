@@ -1,19 +1,12 @@
 {
-  "emojiChar": "🔁",
-  "description": "Compiled task flows — user-taught macros over TypeAgent actions",
+  "emojiChar": "\ud83d\udd01",
+  "description": "User-taught macros over TypeAgent actions",
   "defaultEnabled": true,
   "schema": {
-    "description": "Task flows compiled from Claude recordings. Say 'learn: [task]' to teach new flows.",
+    "description": "Task flow actions. Flows are taught from examples and registered for reuse.",
     "originalSchemaFile": "./src/schema/userActions.mts",
     "schemaFile": "./dist/taskflowSchema.pas.json",
     "grammarFile": "./dist/taskflowSchema.ag.json",
     "schemaType": "TaskFlowActions"
-  },
-  "flows": {
-    "createTopSongsPlaylist": "./flows/createTopSongsPlaylist.flow.json",
-    "createTopSongsPlaylistClaude": "./flows/createTopSongsPlaylistClaude.flow.json",
-    "weeklyEmailDigest": "./flows/weeklyEmailDigest.flow.json",
-    "playPopularKpopSong": "./flows/playPopularKpopSong.flow.json",
-    "playPopularKpopSongClaude": "./flows/playPopularKpopSongClaude.flow.json"
   }
 }
