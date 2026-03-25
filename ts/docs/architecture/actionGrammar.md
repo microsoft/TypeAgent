@@ -129,6 +129,15 @@ evaluated against the adjacent characters to produce a `separatorMode`
 | `[spacing=optional]` | `"optional"`          | Always `"optional"`                                                                                                                                                   |
 | `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                   |
 
+**Note:** The table above describes the _baseline_ `separatorMode`
+from the spacing annotation. When the consumed prefix already ends with
+whitespace (i.e., the separator is already present in `matchedPrefixLength`),
+the grammar matcher overrides to `"optional"` because no additional
+separator is needed. Digits are Unicode script "Common" (not a
+word-boundary script), so `auto` spacing at a digit–Latin boundary
+(e.g., `$(n:number)` followed by a Latin keyword) also produces
+`"optional"`.
+
 ### Entities
 
 Entities are typed validators and converters for captured wildcards.
@@ -393,9 +402,9 @@ on ambiguous grammars with long inputs. No built-in priority ranking.
 
 #### Completion matching (`matchGrammarCompletion`)
 
-`matchGrammarCompletion(grammar, prefix, minPrefixLength)` runs a partial
-match against an incomplete input prefix and returns the set of valid
-next-tokens, enabling real-time autocompletion.
+`matchGrammarCompletion(grammar, prefix, minPrefixLength, direction)` runs
+a partial match against an incomplete input prefix and returns the set of
+valid next-tokens, enabling real-time autocompletion.
 
 `minPrefixLength` controls the minimum number of characters that must be
 matched before completions are offered. When set to a value greater than
@@ -443,6 +452,161 @@ text `"mx"`. This applies equally to forward and backward directions.
    keyword word plus a partial match of the second, and offers `"by"`.
    The function honors `spacingMode` for inter-word separator matching.
 
+**Why direction matters — reconsidering the last matched part:**
+
+The `direction` parameter (`"forward"` or `"backward"`) is provided by
+the host (shell or CLI) to tell the grammar matcher whether to advance
+to the next grammar part or back up to the last matched part. The host
+determines direction by comparing the current input to the previous
+input (see `completion.md` [`CompletionDirection`] for the full pipeline
+contract and the design trade-off of host-provided vs. backend-inferred
+direction).
+
+The grammar matcher uses `direction` to resolve structural ambiguity at
+match boundaries. `directionSensitive` is `true` when querying the same
+input prefix with the opposite direction would produce a different
+result (different completions, different `matchedPrefixLength`, or
+both). The caller uses this to decide whether a direction change
+requires a re-fetch: the `partialCompletionSession` re-fetches only
+when the user is still at the `matchedPrefixLength` position
+(`input === anchor`); once the user types past it, the cached
+completions remain usable via trie filtering regardless of direction.
+The core rule is simple:
+
+> **`directionSensitive=true` when backward has something to
+> reconsider** — a word, keyword, wildcard, or number was fully
+> matched with no trailing separator to commit it.
+
+Forward completion offers what comes _next_ in the grammar. Backward
+completion _backs up_ to the last successfully matched part and
+re-offers it, letting the user reconsider their choice.
+
+> **Design principle — closest to cursor.** When backward has several
+> candidate backup positions (e.g., wildcard start vs. partial keyword
+> inside the wildcard), it should prefer the one **nearest the cursor**
+> (highest `matchedPrefixLength`). This keeps the user's context:
+> `findPartialKeywordInWildcard` embodies this by choosing a partial-
+> keyword position over the wildcard start.
+
+**Single-pass backward with range candidates.** The grammar matcher
+processes every alternative rule via a work list. For **forward**, this
+naturally collects completions from _all_ rules that survive to the
+winning prefix length. For **backward**, each rule independently backs
+up to its own last matched part — producing completions from only the
+_winning_ rule(s), which can miss sibling alternatives.
+
+To make backward non-lossy, the matcher uses **range candidates** —
+a single-pass approach that defers sibling-rule resolution to Phase B
+(the post-loop conversion step):
+
+1. **Main loop (backward):** For each state, `collectBackwardCandidate`
+   determines the backed-up position _P_ via `tryPartialStringMatch`
+   or property completion. When a Category 2 state has a wildcard
+   preceding the next keyword part, the state also saves a
+   `RangeCandidate` recording the wildcard-start and next-part —
+   the wildcard's end position is flexible and will be resolved later.
+2. **Phase B (range candidate resolution):** After all rules have been
+   processed and `maxPrefixLength` is settled, range candidates are
+   evaluated. Each candidate checks whether `maxPrefixLength` falls
+   inside its valid range (`[wildcardStart+1, prefix.length]`) and
+   whether the wildcard text at that split is well-formed (via
+   `getWildcardStr`). If so, `tryPartialStringMatch` runs forward at
+   `maxPrefixLength` to produce sibling completions — the same result
+   the old two-pass re-invocation would have produced, but without a
+   second full traversal of the grammar.
+
+**Correctness invariant — two-pass equivalence.** Let _P_ =
+`completion(input, backward).matchedPrefixLength`. The range-candidate
+resolution in Phase B must produce the same completions as
+`completion(input[0..P], forward)` — i.e., a single backward pass
+with range candidates is equivalent to the old two-pass approach
+(backward to find _P_, then forward at _P_ to collect siblings).
+This invariant is verified by the "two-pass backward invariant" tests.
+
+Range candidates are **skipped** when:
+
+- `backwardEmitted=false` — backward didn't back up (e.g., trailing
+  separator committed the match), so the result already matches forward.
+- `openWildcard=true` — the backed-up position is at an ambiguous
+  wildcard boundary. Forward evaluation at the shorter input would
+  re-parse with fresh greedy wildcards that absorb different text,
+  producing an incorrect structural interpretation.
+- `partialKeywordBackup=true` — a multi-word keyword partial match
+  (via `findPartialKeywordInWildcard`) determined P. Forward can't
+  reconstruct the keyword-word boundary because the wildcard absorbs
+  the consumed words.
+
+This rule naturally handles three kinds of ambiguity:
+
+**1. Wildcard-keyword boundary fork.** Consider
+`play <song> by <artist>` with input `"play Never by"`:
+
+- **Forward** treats `"by"` as the keyword (the wildcard `<song>`
+  captured `"Never"`) and offers completions for `<artist>`.
+- **Backward** backs up to the keyword `"by"` at `matchedPrefixLength`
+  after `"Never "`, re-offering `"by"` — letting the user extend the
+  wildcard (perhaps the song is _Never by Myself_).
+
+**2. Multi-word keyword boundary.** Consider `play music` with input
+`"play"`:
+
+- **Forward** offers `"music"` (the next word).
+- **Backward** backs up to `"play"` and re-offers it, since the user
+  may be reconsidering their input.
+
+**3. Alternation-prefix overlap.** Consider `(play | player) now` with
+input `"play"`:
+
+- **Forward** chooses the `"play"` branch (it matched fully), advances
+  to the parent, and offers `"now"` at `matchedPrefixLength=4`.
+- **Backward** backs up to the matched `"play"` and re-offers it at
+  `matchedPrefixLength=0`. Meanwhile, the sibling `"player"` branch
+  independently offers `"player"` at `matchedPrefixLength=0` (via
+  Category 3b). Both survive because they share the same prefix
+  length. The user sees `["play", "player"]` — the alternation
+  re-opens.
+
+> **Design note — why always back up (Option A).**
+> Option A (always back up when the prefix is fully consumed) makes
+> `directionSensitive=true` even for cases where backward reconsidering
+> is harmless — e.g., `play <song>` with input `"play"`, where backward
+> simply re-offers `"play"` and the user sees the same completion. This
+> causes one redundant re-fetch when the user backspaces at that
+> position.
+>
+> An alternative design (Option B) would avoid this by tracking whether
+> each match state originated from a multi-alternative `RulesPart` and
+> only back up in Category 3a when that alternation flag is set. This
+> would preserve `directionSensitive=false` for plain keyword-before-
+> wildcard cases. We chose Option A for three reasons:
+>
+> 1. **Consistency.** Categories 1 and 2 already use the same broad
+>    "has a part to reconsider" check (fully consumed prefix with a
+>    prior matched part). Having Category 3a use a narrower condition
+>    was an unnecessary special case.
+> 2. **Correctness.** The extra re-fetch for `play <song>` input
+>    `"play"` is harmless — backward simply re-offers `"play"` and
+>    the user sees the same wildcard property completion. The cost is
+>    one redundant backend call when the user backspaces at that
+>    specific position.
+> 3. **Simplicity.** Option B required threading a `fromAlternation`
+>    flag through match-state expansion, nested-rule finalization, and
+>    repeat iterations — new bookkeeping with no user-visible benefit
+>    beyond avoiding that one redundant call.
+
+**When direction does _not_ matter (`directionSensitive=false`):**
+
+- **Nothing was fully matched** (e.g., `"pla"` against `play music`):
+  There is no completed part to back up to. Both directions produce
+  the same partial match (Category 3b) offering `"play"`.
+- **Trailing separator commits:** A trailing space (or punctuation)
+  after a keyword "commits" the match position — the user has moved
+  past the boundary. Both directions agree on the committed position.
+  For example, `"play "` (with space) offers `"music"` for both
+  directions. Exception: in `[spacing=none]` mode, whitespace is not a
+  separator, so `directionSensitive` is always `true` when any word has
+  been fully matched — trailing spaces do not commit.
+
 **Metadata produced:**
 
 - `matchedPrefixLength` — characters consumed; becomes `startIndex`
@@ -455,22 +619,38 @@ text `"mx"`. This applies equally to forward and backward directions.
   titles, contact names). When the grammar offers only keyword completions
   (no wildcards), `properties` is empty.
 - `separatorMode` — determined by the grammar rule's `[spacing=...]`
-  annotation (see [Spacing modes](#spacing-modes) above).
-  The dispatcher may override to `"space"` for structured commands
-  (e.g., `@agent` prefixes, flags). When `matchedPrefixLength=0`
-  (nothing consumed), `separatorMode` is always `"optional"` (or
-  `"none"` for `[spacing=none]` rules) because there is no preceding
-  character to require a separator against.
+  annotation (see [Spacing modes](#spacing-modes) above). Special cases:
+  - When `matchedPrefixLength=0` (nothing consumed), `separatorMode` is
+    always `"optional"` (or `"none"` for `[spacing=none]` rules) because
+    there is no preceding character to require a separator against.
+  - When the consumed prefix already ends with whitespace (e.g.,
+    `"play "`), `separatorMode` is `"optional"` because the separator is
+    already present — no additional separator is needed.
+  - For `auto` spacing, `"spacePunctuation"` is produced only when both
+    the last consumed character and the first completion character are
+    word-boundary scripts (Latin, Cyrillic, etc.) and no separator has
+    been consumed; digit–Latin transitions (e.g., `"50"` → `"percent"`)
+    produce `"optional"` because digits are Unicode script "Common", not
+    a word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
-- `directionSensitive` is `true` when the matched state has a fully
-  matched word without a trailing separator — meaning backward
-  completion would produce different results (see `completion.md`
-  for how downstream layers use this field).
+- `directionSensitive` — see "Why direction matters" and "When
+  direction does _not_ matter" above. The flag is evaluated at
+  `matchedPrefixLength` rather than at the full input. When backward
+  backs up (`backwardEmitted=true` and `maxPrefixLength < prefix.length`),
+  `directionSensitive` is recomputed for the backed-up position using
+  a heuristic: at `P > 0`, at least one keyword was matched before the
+  completion point, so `directionSensitive` is `true`; at `P = 0`,
+  nothing was matched, so it is `false`. This recomputation is skipped
+  when `partialKeywordBackup` or `openWildcard` is set (the backed-up
+  position is structurally pinned). When backward falls through to
+  forward behavior (`backwardEmitted=false`), the trailing-separator
+  advancement is applied normally and `directionSensitive` reflects
+  the forward-only evaluation.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
-  wildcard boundary (e.g., a wildcard finalized at end-of-input in the
-  forward direction, or a keyword that had pinned a wildcard's end in the
-  backward direction).
+  wildcard boundary — see `completion.md` [`openWildcard`] for the full
+  definition (definite vs. ambiguous positions, persistence semantics,
+  merge rule).
 
 See `completion.md` for full definitions of how these metadata fields
 flow through the cache, dispatcher, and shell layers.

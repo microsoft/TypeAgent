@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { describeForEachCompletion } from "./testUtils.js";
+import { describeForEachCompletion, expectMetadata } from "./testUtils.js";
 
 describeForEachCompletion(
     "Grammar Completion - longest match property",
@@ -20,31 +20,66 @@ describeForEachCompletion(
             it("completes first part for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
                 expect(result.completions).toContain("first");
-                expect(result.matchedPrefixLength).toBe(0);
+                expectMetadata(result, {
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("completes second part after first matched", () => {
                 const result = matchGrammarCompletion(grammar, "first");
                 expect(result.completions).toContain("second");
-                expect(result.matchedPrefixLength).toBe(5);
+                expectMetadata(result, {
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("completes second part after first matched with space", () => {
                 const result = matchGrammarCompletion(grammar, "first ");
                 expect(result.completions).toContain("second");
-                expect(result.matchedPrefixLength).toBe(6);
+                expectMetadata(result, {
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("completes third part after first two matched", () => {
                 const result = matchGrammarCompletion(grammar, "first second");
                 expect(result.completions).toContain("third");
-                expect(result.matchedPrefixLength).toBe(12);
+                expectMetadata(result, {
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("completes third part after first two matched with space", () => {
                 const result = matchGrammarCompletion(grammar, "first second ");
                 expect(result.completions).toContain("third");
-                expect(result.matchedPrefixLength).toBe(13);
+                expectMetadata(result, {
+                    matchedPrefixLength: 13,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("no completion for exact full match", () => {
@@ -54,7 +89,14 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toHaveLength(0);
                 // Exact match records the full consumed length.
-                expect(result.matchedPrefixLength).toBe(18);
+                expectMetadata(result, {
+                    matchedPrefixLength: 18,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("partial prefix of third part completes correctly", () => {
@@ -63,7 +105,14 @@ describeForEachCompletion(
                     "first second th",
                 );
                 expect(result.completions).toContain("third");
-                expect(result.matchedPrefixLength).toBe(12);
+                expectMetadata(result, {
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -83,13 +132,27 @@ describeForEachCompletion(
                     "alpha bravo charlie",
                 );
                 expect(result.completions).toContain("delta");
-                expect(result.matchedPrefixLength).toBe(19);
+                expectMetadata(result, {
+                    matchedPrefixLength: 19,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("completes charlie after two parts matched", () => {
                 const result = matchGrammarCompletion(grammar, "alpha bravo");
                 expect(result.completions).toContain("charlie");
-                expect(result.matchedPrefixLength).toBe(11);
+                expectMetadata(result, {
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -111,14 +174,28 @@ describeForEachCompletion(
                 // Short rule matches exactly, no completion from it.
                 // Long rule matches alpha + bravo and offers "charlie".
                 expect(result.completions).toContain("charlie");
-                expect(result.matchedPrefixLength).toBe(11);
+                expectMetadata(result, {
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("both rules offer completions at same depth for first part", () => {
                 const result = matchGrammarCompletion(grammar, "alpha");
                 // Both rules need "bravo" next.
                 expect(result.completions).toContain("bravo");
-                expect(result.matchedPrefixLength).toBe(5);
+                expectMetadata(result, {
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -135,7 +212,14 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "prefix");
                 expect(result.completions).toContain("suffix_x");
                 expect(result.completions).toContain("suffix_y");
-                expect(result.matchedPrefixLength).toBe(6);
+                expectMetadata(result, {
+                    matchedPrefixLength: 6,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("alternative still offered even when one rule matches exactly", () => {
@@ -147,7 +231,14 @@ describeForEachCompletion(
                 // Rule 2's "suffix_y" at prefixLength 6 is filtered out
                 // because a longer match exists.
                 expect(result.completions).toHaveLength(0);
-                expect(result.matchedPrefixLength).toBe(15);
+                expectMetadata(result, {
+                    matchedPrefixLength: 15,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -165,13 +256,27 @@ describeForEachCompletion(
                 // Should offer "middle" (optional) and "finish" (skipping optional)
                 expect(result.completions).toContain("middle");
                 expect(result.completions).toContain("finish");
-                expect(result.matchedPrefixLength).toBe(5);
+                expectMetadata(result, {
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers finish after optional part matched", () => {
                 const result = matchGrammarCompletion(grammar, "begin middle");
                 expect(result.completions).toContain("finish");
-                expect(result.matchedPrefixLength).toBe(12);
+                expectMetadata(result, {
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("longest path wins for 'finish' completion when optional is matched", () => {
@@ -183,7 +288,14 @@ describeForEachCompletion(
                 //     is filtered out because a longer match (12) exists.
                 const result = matchGrammarCompletion(grammar, "begin middle");
                 expect(result.completions).toContain("finish");
-                expect(result.matchedPrefixLength).toBe(12);
+                expectMetadata(result, {
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -196,7 +308,14 @@ describeForEachCompletion(
             it("completes 'percent' after number matched", () => {
                 const result = matchGrammarCompletion(grammar, "set volume 50");
                 expect(result.completions).toContain("percent");
-                expect(result.matchedPrefixLength).toBe(13);
+                expectMetadata(result, {
+                    matchedPrefixLength: 13,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("completes 'percent' after number with space", () => {
@@ -205,7 +324,14 @@ describeForEachCompletion(
                     "set volume 50 ",
                 );
                 expect(result.completions).toContain("percent");
-                expect(result.matchedPrefixLength).toBe(14);
+                expectMetadata(result, {
+                    matchedPrefixLength: 14,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("no completion for exact match", () => {
@@ -214,6 +340,14 @@ describeForEachCompletion(
                     "set volume 50 percent",
                 );
                 expect(result.completions).toHaveLength(0);
+                expectMetadata(result, {
+                    matchedPrefixLength: 21,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -233,7 +367,14 @@ describeForEachCompletion(
                 expect(result.completions).toContain("rock");
                 expect(result.completions).toContain("pop");
                 expect(result.completions).toContain("jazz");
-                expect(result.matchedPrefixLength).toBe(4);
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("all alternatives offered even with partial trailing text", () => {
@@ -243,7 +384,14 @@ describeForEachCompletion(
                 expect(result.completions).toContain("rock");
                 expect(result.completions).toContain("pop");
                 expect(result.completions).toContain("jazz");
-                expect(result.matchedPrefixLength).toBe(4);
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("all alternatives offered with 'p' trailing text", () => {
@@ -252,6 +400,40 @@ describeForEachCompletion(
                 expect(result.completions).toContain("pop");
                 expect(result.completions).toContain("rock");
                 expect(result.completions).toContain("jazz");
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
+            });
+
+            it("closedSet=true for first string part on empty input", () => {
+                const result = matchGrammarCompletion(grammar, "");
+                expect(result.completions).toContain("play");
+                expectMetadata(result, {
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
+            });
+
+            it("closedSet=true for exact match (no completions)", () => {
+                const result = matchGrammarCompletion(grammar, "play rock");
+                expect(result.completions).toHaveLength(0);
+                expectMetadata(result, {
+                    matchedPrefixLength: 9,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -268,11 +450,26 @@ describeForEachCompletion(
                 // Wildcard is next, should have property completion
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                });
             });
 
             it("offers 'by' terminator after wildcard text", () => {
                 const result = matchGrammarCompletion(grammar, "play hello");
                 expect(result.completions).toContain("by");
+                expectMetadata(result, {
+                    matchedPrefixLength: 10,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("offers artist wildcard property after 'by'", () => {
@@ -280,6 +477,13 @@ describeForEachCompletion(
                 // After "by", the next part is the artist wildcard
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
+                expectMetadata(result, {
+                    matchedPrefixLength: 13,
+                    separatorMode: "spacePunctuation",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: true,
+                });
             });
         });
 
@@ -294,13 +498,27 @@ describeForEachCompletion(
             it("completes 'deep' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
                 expect(result.completions).toContain("deep");
-                expect(result.matchedPrefixLength).toBe(0);
+                expectMetadata(result, {
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("completes 'done' after deeply nested match", () => {
                 const result = matchGrammarCompletion(grammar, "deep");
                 expect(result.completions).toContain("done");
-                expect(result.matchedPrefixLength).toBe(4);
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -312,6 +530,14 @@ describeForEachCompletion(
             it("offers 'hello' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
                 expect(result.completions).toContain("hello");
+                expectMetadata(result, {
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers repeat alternatives after 'hello'", () => {
@@ -319,6 +545,14 @@ describeForEachCompletion(
                 // After "hello", the ()+ group requires at least one match
                 expect(result.completions).toContain("world");
                 expect(result.completions).toContain("earth");
+                expectMetadata(result, {
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'done' and repeat alternatives after first repeat match", () => {
@@ -330,6 +564,14 @@ describeForEachCompletion(
                     result.completions.includes("world") ||
                         result.completions.includes("earth"),
                 ).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'done' after two repeat matches", () => {
@@ -338,6 +580,14 @@ describeForEachCompletion(
                     "hello world earth",
                 );
                 expect(result.completions).toContain("done");
+                expectMetadata(result, {
+                    matchedPrefixLength: 17,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -367,6 +617,13 @@ describeForEachCompletion(
                 expect(result.matchedPrefixLength).toBeGreaterThanOrEqual(10);
                 // "gamma" must appear as completion from the longer match.
                 expect(result.completions).toContain("gamma");
+                expectMetadata(result, {
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("shorter partial prefix completion also appears (known behavior)", () => {
@@ -375,7 +632,14 @@ describeForEachCompletion(
                 // since "beta" is a prefix of "beta gamma". This is expected:
                 // both rules produce valid completions for the input.
                 // We verify maxPrefixLength is from the longest match.
-                expect(result.matchedPrefixLength).toBe(10);
+                expectMetadata(result, {
+                    matchedPrefixLength: 10,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -389,18 +653,40 @@ describeForEachCompletion(
             it("completes after case-insensitive match", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
                 expect(result.completions).toContain("World");
-                expect(result.matchedPrefixLength).toBe(5);
+                expectMetadata(result, {
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("completes after uppercase input", () => {
                 const result = matchGrammarCompletion(grammar, "HELLO");
                 expect(result.completions).toContain("World");
-                expect(result.matchedPrefixLength).toBe(5);
+                expectMetadata(result, {
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("partial prefix is case insensitive", () => {
                 const result = matchGrammarCompletion(grammar, "hello WO");
                 expect(result.completions).toContain("World");
+                expectMetadata(result, {
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -420,6 +706,14 @@ describeForEachCompletion(
                 expect(result.completions).toContain("rock");
                 expect(result.completions).not.toContain("now");
                 expect(result.completions).not.toContain("stop");
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("only matching rule offers completions for 'stop'", () => {
@@ -427,6 +721,14 @@ describeForEachCompletion(
                 expect(result.completions).toContain("now");
                 expect(result.completions).not.toContain("rock");
                 expect(result.completions).not.toContain("play");
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("all first parts offered for unrelated input", () => {
@@ -435,7 +737,14 @@ describeForEachCompletion(
                 // are offered at prefixLength 0.  The caller filters by
                 // the trailing text "dance".
                 expect(result.completions.sort()).toEqual(["play", "stop"]);
-                expect(result.matchedPrefixLength).toBe(0);
+                expectMetadata(result, {
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -453,12 +762,26 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play");
                 expect(result.properties).toBeDefined();
                 expect(result.properties!.length).toBeGreaterThan(0);
-                expect(result.matchedPrefixLength).toBe(4);
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                });
             });
 
             it("string terminator after entity text", () => {
                 const result = matchGrammarCompletion(grammar, "play mysong");
                 expect(result.completions).toContain("next");
+                expectMetadata(result, {
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -479,6 +802,18 @@ describeForEachCompletion(
                 expect(r1.completions).toEqual(r2.completions);
                 expect(r2.completions).toEqual(r3.completions);
                 expect(r1.completions).toContain("two");
+                expect(r1.separatorMode).toBe("spacePunctuation");
+                expect(r2.separatorMode).toBe("optional");
+                expect(r3.separatorMode).toBe("optional");
+                expect(r1.closedSet).toBe(true);
+                expect(r2.closedSet).toBe(true);
+                expect(r3.closedSet).toBe(true);
+                expect(r1.openWildcard).toBe(false);
+                expect(r2.openWildcard).toBe(false);
+                expect(r3.openWildcard).toBe(false);
+                expect(r1.properties).toEqual([]);
+                expect(r2.properties).toEqual([]);
+                expect(r3.properties).toEqual([]);
             });
 
             it("matchedPrefixLength includes trailing whitespace", () => {
@@ -490,94 +825,14 @@ describeForEachCompletion(
                 expect(r1.matchedPrefixLength).toBe(3);
                 expect(r2.matchedPrefixLength).toBe(4);
                 expect(r3.matchedPrefixLength).toBe(5);
+                // directionSensitive: true without trailing space, false with
+                expect(r1.directionSensitive).toBe(true);
+                expect(r2.directionSensitive).toBe(false);
+                expect(r3.directionSensitive).toBe(false);
             });
         });
 
         describe("closedSet flag - exhaustiveness", () => {
-            describe("string-only completions are exhaustive", () => {
-                const g = [
-                    `<Start> = play $(g:<Genre>) -> { genre: g };`,
-                    `<Genre> = rock -> "rock";`,
-                    `<Genre> = pop -> "pop";`,
-                    `<Genre> = jazz -> "jazz";`,
-                ].join("\n");
-                const grammar = loadGrammarRules("test.grammar", g);
-
-                it("closedSet=true for first string part on empty input", () => {
-                    const result = matchGrammarCompletion(grammar, "");
-                    expect(result.completions).toContain("play");
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
-                });
-
-                it("closedSet=true for alternatives after prefix", () => {
-                    const result = matchGrammarCompletion(grammar, "play");
-                    expect(result.completions).toContain("rock");
-                    expect(result.completions).toContain("pop");
-                    expect(result.completions).toContain("jazz");
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
-                });
-
-                it("closedSet=true for exact match (no completions)", () => {
-                    const result = matchGrammarCompletion(grammar, "play rock");
-                    expect(result.completions).toHaveLength(0);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
-                });
-            });
-
-            describe("wildcard/entity completions are not exhaustive", () => {
-                const g = [
-                    `entity SongName;`,
-                    `<Start> = play $(song:SongName) next -> { song };`,
-                ].join("\n");
-                const grammar = loadGrammarRules("test.grammar", g);
-
-                it("closedSet=false for entity wildcard property completion", () => {
-                    const result = matchGrammarCompletion(grammar, "play");
-                    expect(result.properties).toBeDefined();
-                    expect(result.properties!.length).toBeGreaterThan(0);
-                    expect(result.closedSet).toBe(false);
-                });
-
-                it("closedSet=true for string completion after wildcard", () => {
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "play mysong",
-                    );
-                    expect(result.completions).toContain("next");
-                    // The "next" keyword is the only valid continuation
-                    // from the grammar — no property completions at this
-                    // point — so completions are exhaustive.
-                    expect(result.closedSet).toBe(true);
-                });
-            });
-
-            describe("untyped wildcard produces property completion → not exhaustive", () => {
-                const g = [
-                    `<Start> = play $(name) by $(artist) -> { name, artist };`,
-                ].join("\n");
-                const grammar = loadGrammarRules("test.grammar", g);
-
-                it("closedSet=false for untyped wildcard property", () => {
-                    const result = matchGrammarCompletion(grammar, "play");
-                    expect(result.properties).toBeDefined();
-                    expect(result.properties!.length).toBeGreaterThan(0);
-                    expect(result.closedSet).toBe(false);
-                    expect(result.openWildcard).toBe(false);
-                });
-
-                it("closedSet=true for 'by' keyword after wildcard captured", () => {
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "play hello",
-                    );
-                    expect(result.completions).toContain("by");
-                    expect(result.closedSet).toBe(true);
-                });
-            });
-
             describe("mixed string and entity at same prefix length", () => {
                 // Two rules sharing "play" prefix: one leads to string
                 // completion ("shuffle"), one to entity property.
@@ -595,7 +850,12 @@ describeForEachCompletion(
                     expect(result.completions).toContain("shuffle");
                     expect(result.properties).toBeDefined();
                     expect(result.properties!.length).toBeGreaterThan(0);
-                    expect(result.closedSet).toBe(false);
+                    expectMetadata(result, {
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: false,
+                    });
                 });
 
                 it("string rule first, entity rule second", () => {
@@ -610,7 +870,12 @@ describeForEachCompletion(
                     expect(result.completions).toContain("shuffle");
                     expect(result.properties).toBeDefined();
                     expect(result.properties!.length).toBeGreaterThan(0);
-                    expect(result.closedSet).toBe(false);
+                    expectMetadata(result, {
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: false,
+                    });
                 });
             });
 
@@ -635,65 +900,14 @@ describeForEachCompletion(
                     // (closedSet=false) — but this is at a shorter prefix
                     // length so it's discarded.
                     expect(result.completions).toContain("finish");
-                    expect(result.matchedPrefixLength).toBe(11);
-                    expect(result.closedSet).toBe(true);
-                });
-            });
-
-            describe("sequential parts - closedSet stays true throughout", () => {
-                const g = [
-                    `<Start> = $(a:<A>) $(b:<B>) $(c:<C>) -> { a, b, c };`,
-                    `<A> = first -> "a";`,
-                    `<B> = second -> "b";`,
-                    `<C> = third -> "c";`,
-                ].join("\n");
-                const grammar = loadGrammarRules("test.grammar", g);
-
-                it("closedSet=true for first part", () => {
-                    const result = matchGrammarCompletion(grammar, "");
-                    expect(result.completions).toContain("first");
-                    expect(result.closedSet).toBe(true);
-                });
-
-                it("closedSet=true for second part", () => {
-                    const result = matchGrammarCompletion(grammar, "first");
-                    expect(result.completions).toContain("second");
-                    expect(result.closedSet).toBe(true);
-                });
-
-                it("closedSet=true for third part", () => {
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "first second",
-                    );
-                    expect(result.completions).toContain("third");
-                    expect(result.closedSet).toBe(true);
-                });
-
-                it("closedSet=true for exact full match", () => {
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "first second third",
-                    );
-                    expect(result.completions).toHaveLength(0);
-                    expect(result.closedSet).toBe(true);
-                });
-            });
-
-            describe("optional parts", () => {
-                const g = [
-                    `<Start> = $(a:<A>) $(b:<B>)? $(c:<C>) -> { a, c };`,
-                    `<A> = begin -> "a";`,
-                    `<B> = middle -> "b";`,
-                    `<C> = finish -> "c";`,
-                ].join("\n");
-                const grammar = loadGrammarRules("test.grammar", g);
-
-                it("closedSet=true for alternatives after optional", () => {
-                    const result = matchGrammarCompletion(grammar, "begin");
-                    expect(result.completions).toContain("middle");
-                    expect(result.completions).toContain("finish");
-                    expect(result.closedSet).toBe(true);
+                    expectMetadata(result, {
+                        matchedPrefixLength: 11,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
             });
         });
@@ -711,7 +925,14 @@ describeForEachCompletion(
                         "play hello",
                     );
                     expect(result.completions).toContain("by");
-                    expect(result.openWildcard).toBe(true);
+                    expectMetadata(result, {
+                        matchedPrefixLength: 10,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
                 });
 
                 it("openWildcard=true for multi-word wildcard before keyword", () => {
@@ -720,7 +941,14 @@ describeForEachCompletion(
                         "play my favorite song",
                     );
                     expect(result.completions).toContain("by");
-                    expect(result.openWildcard).toBe(true);
+                    expectMetadata(result, {
+                        matchedPrefixLength: 21,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
                 });
 
                 it("openWildcard=true for ambiguous keyword boundary", () => {
@@ -732,7 +960,13 @@ describeForEachCompletion(
                         grammar,
                         "play hello by",
                     );
-                    expect(result.openWildcard).toBe(true);
+                    expectMetadata(result, {
+                        matchedPrefixLength: 13,
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: true,
+                    });
                 });
 
                 it("openWildcard=true persists with trailing separator", () => {
@@ -745,7 +979,13 @@ describeForEachCompletion(
                         grammar,
                         "play hello by ",
                     );
-                    expect(result.openWildcard).toBe(true);
+                    expectMetadata(result, {
+                        matchedPrefixLength: 14,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                    });
                 });
             });
 
@@ -760,7 +1000,11 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    expect(result.openWildcard).toBe(false);
+                    expectMetadata(result, {
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: false,
+                    });
                 });
 
                 it("openWildcard=false for backward to wildcard start with multi-word", () => {
@@ -770,7 +1014,11 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    expect(result.openWildcard).toBe(false);
+                    expectMetadata(result, {
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: false,
+                    });
                 });
             });
 
@@ -788,9 +1036,12 @@ describeForEachCompletion(
                         "backward",
                     );
                     expect(result.completions).toContain("by");
-                    expect(result.openWildcard).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.directionSensitive).toBe(true);
+                    expectMetadata(result, {
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
                 });
 
                 it("forward offers property completion for unfilled wildcard after keyword", () => {
@@ -802,8 +1053,13 @@ describeForEachCompletion(
                     );
                     expect(result.properties).toBeDefined();
                     expect(result.properties!.length).toBeGreaterThan(0);
-                    expect(result.closedSet).toBe(false);
-                    expect(result.directionSensitive).toBe(true);
+                    expectMetadata(result, {
+                        matchedPrefixLength: 17,
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: true,
+                    });
                 });
 
                 it("openWildcard=true for backward after multi-word wildcard and keyword", () => {
@@ -817,8 +1073,12 @@ describeForEachCompletion(
                         "backward",
                     );
                     expect(result.completions).toContain("by");
-                    expect(result.openWildcard).toBe(true);
-                    expect(result.directionSensitive).toBe(true);
+                    expectMetadata(result, {
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
                 });
             });
         });
@@ -832,11 +1092,14 @@ describeForEachCompletion(
             it("forward: offers 'by' with openWildcard=true", () => {
                 const result = matchGrammarCompletion(grammar, "play Never b");
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(12);
-                expect(result.separatorMode).toBe("spacePunctuation");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward: offers 'by' (partial keyword wins over wildcard start)", () => {
@@ -847,11 +1110,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 11,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("forward: partial keyword with multi-word wildcard", () => {
@@ -860,11 +1126,14 @@ describeForEachCompletion(
                     "play my favorite song b",
                 );
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(23);
-                expect(result.separatorMode).toBe("spacePunctuation");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 23,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward: partial keyword with multi-word wildcard", () => {
@@ -875,11 +1144,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(22);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 22,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -897,11 +1169,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("played");
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 11,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward: full first keyword word offers 'by'", () => {
@@ -912,11 +1187,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(17);
-                expect(result.separatorMode).toBe("spacePunctuation");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 17,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward: full first keyword word + partial second offers 'by'", () => {
@@ -927,11 +1205,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(18);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 18,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward: multi-word wildcard + full first keyword word + partial second", () => {
@@ -942,11 +1223,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(20);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 20,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward: multi-word wildcard + full first keyword word offers 'by'", () => {
@@ -957,11 +1241,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(19);
-                expect(result.separatorMode).toBe("spacePunctuation");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 19,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -979,11 +1266,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("playedby");
-                expect(result.matchedPrefixLength).toBe(9);
-                expect(result.separatorMode).toBe("none");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 9,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward: longer partial keyword prefix in none mode", () => {
@@ -994,11 +1284,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("playedby");
-                expect(result.matchedPrefixLength).toBe(9);
-                expect(result.separatorMode).toBe("none");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 9,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward: multi-word wildcard with partial keyword in none mode", () => {
@@ -1009,11 +1302,14 @@ describeForEachCompletion(
                     "backward",
                 );
                 expect(result.completions).toContain("playedby");
-                expect(result.matchedPrefixLength).toBe(13);
-                expect(result.separatorMode).toBe("none");
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    matchedPrefixLength: 13,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
     },

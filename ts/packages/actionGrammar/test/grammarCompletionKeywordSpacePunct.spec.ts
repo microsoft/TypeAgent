@@ -15,7 +15,7 @@
  */
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { describeForEachCompletion } from "./testUtils.js";
+import { describeForEachCompletion, expectMetadata } from "./testUtils.js";
 
 describeForEachCompletion(
     "Grammar Completion - Keywords with Space/Punctuation",
@@ -31,62 +31,70 @@ describeForEachCompletion(
 
             it("offers first segment for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
                 // Empty input: no prior match to reconsider → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
                 // Keyword-only grammar → exhaustive
-                expect(result.closedSet).toBe(true);
                 // No wildcards → position is definite
-                expect(result.openWildcard).toBe(false);
                 // Empty input → first keyword offered; separator before "hello,"
                 // is N/A (no prior char). separatorMode reflects the gap
                 // between matchedPrefixLength and the completion text.
                 // At position 0 with no prior char, auto mode: "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers first segment for partial prefix 'hel'", () => {
                 const result = matchGrammarCompletion(grammar, "hel");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
                 // Category 3b (dirty partial): "hel" partially matches "hello,".
                 // Prefix-filter match → directionSensitive = false
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // mpl=0, no prior char → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers second segment after first segment typed", () => {
                 // "hello," typed → first word matched fully
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
                 // "hello," fully matched, no trailing separator.
                 // Backward would back up; forward advances. → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → comma is punct → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers second segment after first segment + space", () => {
                 const result = matchGrammarCompletion(grammar, "hello, ");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(7);
                 // Trailing space commits the match → both directions same
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Trailing separator consumed → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode: comma-ending word before Latin word", () => {
@@ -94,32 +102,44 @@ describeForEachCompletion(
                 // requiresSeparator(",", "w", auto) → false (comma not word-boundary)
                 // → separatorMode should be "optional"
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("no completions for exact match", () => {
                 const result = matchGrammarCompletion(grammar, "hello, world");
-                expect(result.completions).toHaveLength(0);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(12);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Exact match forward: no completion emitted → separatorMode not set
-                expect(result.separatorMode).toBeUndefined();
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 12,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers second segment for partial second word 'wor'", () => {
                 const result = matchGrammarCompletion(grammar, "hello, wor");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
                 // Category 3b: "wor" partially matches "world" → prefix-filter
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → comma is punct → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -134,26 +154,30 @@ describeForEachCompletion(
 
             it("offers first segment for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers second segment after 'hello'", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.completions).toEqual([",world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(5);
                 // "hello" fully matched, no trailing sep → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("o", ",", auto) → comma is punct → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [",world"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode: Latin word before comma-starting word", () => {
@@ -161,31 +185,43 @@ describeForEachCompletion(
                 // requiresSeparator("o", ",", auto) → false (comma not word-boundary)
                 // → separatorMode should be "optional"
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [",world"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers second segment after 'hello '", () => {
                 const result = matchGrammarCompletion(grammar, "hello ");
-                expect(result.completions).toEqual([",world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
                 // Trailing space commits → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [",world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("no completions for exact match", () => {
                 const result = matchGrammarCompletion(grammar, "hello,world");
-                expect(result.completions).toHaveLength(0);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Exact match forward: no completion emitted → separatorMode not set
-                expect(result.separatorMode).toBeUndefined();
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 11,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -200,63 +236,73 @@ describeForEachCompletion(
 
             it("offers first segment for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers dot segment after 'hello'", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.completions).toEqual(["."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(5);
                 // "hello" fully matched, no trailing sep → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("o", ".", auto) → dot is punct → false → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["."],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world' after 'hello.'", () => {
                 const result = matchGrammarCompletion(grammar, "hello.");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
                 // "hello." two segments matched, no trailing sep → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(".", "w", auto) → false → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world' after 'hello . '", () => {
                 const result = matchGrammarCompletion(grammar, "hello . ");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(8);
                 // Trailing space commits → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 8,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("no completions for exact match", () => {
                 const result = matchGrammarCompletion(grammar, "hello . world");
-                expect(result.completions).toHaveLength(0);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(13);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Exact match forward: no completion emitted → separatorMode not set
-                expect(result.separatorMode).toBeUndefined();
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 13,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -271,74 +317,86 @@ describeForEachCompletion(
 
             it("offers 'hello world' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'hello world' for partial prefix 'hel'", () => {
                 const result = matchGrammarCompletion(grammar, "hel");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
                 // 3b dirty partial with prefix-filter → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'hello world' for partial prefix 'hello '", () => {
                 // "hello " is partial match of single segment "hello world"
                 const result = matchGrammarCompletion(grammar, "hello ");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'hello world' for partial prefix 'hello w'", () => {
                 const result = matchGrammarCompletion(grammar, "hello w");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'next' after full 'hello world' typed", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
-                expect(result.completions).toEqual(["next"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
                 // "hello world" fully matched as single segment, no trailing sep
                 // → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("d", "n", auto) → both Latin → true → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'next' after 'hello world '", () => {
                 const result = matchGrammarCompletion(grammar, "hello world ");
-                expect(result.completions).toEqual(["next"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(12);
                 // Trailing space commits → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("no completions for exact match", () => {
@@ -346,14 +404,16 @@ describeForEachCompletion(
                     grammar,
                     "hello world next",
                 );
-                expect(result.completions).toHaveLength(0);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(16);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Exact match forward: no completion emitted → separatorMode not set
-                expect(result.separatorMode).toBeUndefined();
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 16,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -369,40 +429,46 @@ describeForEachCompletion(
 
             it("offers first segment 'hello ' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello "]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello "],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world' after 'hello ' typed", () => {
                 // "hello " fully matches segment "hello "
                 const result = matchGrammarCompletion(grammar, "hello ");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
                 // "hello " fully matched, no trailing sep → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(" ", "w", auto) → space is not script boundary → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'next' after 'hello world' typed", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
-                expect(result.completions).toEqual(["next"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
                 // Both segments matched, no trailing sep → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("d", "n", auto) → both Latin → true → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -429,34 +495,46 @@ describeForEachCompletion(
 
                 it("offers first segment 'hello' for empty input", () => {
                     const result = matchGrammarCompletion(grammar, "");
-                    expect(result.completions).toEqual(["hello"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(0);
-                    expect(result.directionSensitive).toBe(false);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
-                    expect(result.separatorMode).toBe("optional");
+                    expectMetadata(result, {
+                        completions: ["hello"],
+                        matchedPrefixLength: 0,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: false,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("offers second segment ' world' after 'hello'", () => {
                     // "hello" fully matches first segment; next is " world"
                     const result = matchGrammarCompletion(grammar, "hello");
-                    expect(result.completions).toEqual([" world"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(5);
                     // "hello" fully matched, no trailing sep → direction-sensitive
-                    expect(result.directionSensitive).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // requiresSeparator("o", " ", auto) → space is not word-boundary → "optional"
-                    expect(result.separatorMode).toBe("optional");
+                    expectMetadata(result, {
+                        completions: [" world"],
+                        matchedPrefixLength: 5,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("separatorMode after 'hello' before ' world'", () => {
                     // requiresSeparator("o", " ", auto) → " " not word-boundary → false
                     // → separatorMode = "optional"
                     const result = matchGrammarCompletion(grammar, "hello");
-                    expect(result.separatorMode).toBe("optional");
+                    expectMetadata(result, {
+                        completions: [" world"],
+                        matchedPrefixLength: 5,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("offers 'next' after 'hello world' (one space)", () => {
@@ -465,15 +543,17 @@ describeForEachCompletion(
                         grammar,
                         "hello world",
                     );
-                    expect(result.completions).toEqual(["next"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(11);
                     // Both segments matched, no trailing sep → direction-sensitive
-                    expect(result.directionSensitive).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // requiresSeparator("d", "n", auto) → both Latin → "spacePunctuation"
-                    expect(result.separatorMode).toBe("spacePunctuation");
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 11,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("offers 'next' after 'hello  world' (two spaces)", () => {
@@ -482,13 +562,15 @@ describeForEachCompletion(
                         grammar,
                         "hello  world",
                     );
-                    expect(result.completions).toEqual(["next"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(12);
-                    expect(result.directionSensitive).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
-                    expect(result.separatorMode).toBe("spacePunctuation");
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 12,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("offers ' world' after 'hello ' (trailing space consumed as partial)", () => {
@@ -500,15 +582,17 @@ describeForEachCompletion(
                     // and the regex is non-greedy, so the space should be
                     // left for the literal " world".
                     const result = matchGrammarCompletion(grammar, "hello ");
-                    expect(result.completions).toEqual([" world"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(6);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // Trailing space: consumeTrailingSeparators advances → "optional"
-                    expect(result.separatorMode).toBe("optional");
                     // Trailing space commits "hello" → not direction-sensitive
-                    expect(result.directionSensitive).toBe(false);
+                    expectMetadata(result, {
+                        completions: [" world"],
+                        matchedPrefixLength: 6,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: false,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
             });
 
@@ -525,15 +609,17 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    expect(result.completions).toEqual([" world"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(5);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // requiresSeparator("o", " ", auto) → "optional"
-                    expect(result.separatorMode).toBe("optional");
                     // Backward differs from forward → direction-sensitive
-                    expect(result.directionSensitive).toBe(true);
+                    expectMetadata(result, {
+                        completions: [" world"],
+                        matchedPrefixLength: 5,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("backward on 'hello world ' commits → offers 'next'", () => {
@@ -545,15 +631,17 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    expect(result.completions).toEqual(["next"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(12);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // Trailing space consumed → "optional"
-                    expect(result.separatorMode).toBe("optional");
                     // Trailing space commits → same as forward → not direction-sensitive
-                    expect(result.directionSensitive).toBe(false);
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 12,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: false,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("backward on 'hello' backs up to 'hello'", () => {
@@ -564,15 +652,17 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    expect(result.completions).toEqual(["hello"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(0);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // mpl=0 → "optional"
-                    expect(result.separatorMode).toBe("optional");
-                    // Backed up to start → direction-sensitive
-                    expect(result.directionSensitive).toBe(true);
+                    // Backed up to start — at P=0 forward and backward agree
+                    expectMetadata(result, {
+                        completions: ["hello"],
+                        matchedPrefixLength: 0,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: false,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("backward on 'hello ' — space consumed, backs up to ' world'", () => {
@@ -586,15 +676,17 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    expect(result.completions).toEqual([" world"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(6);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // Trailing space consumed → "optional"
-                    expect(result.separatorMode).toBe("optional");
                     // Trailing space commits → not direction-sensitive
-                    expect(result.directionSensitive).toBe(false);
+                    expectMetadata(result, {
+                        completions: [" world"],
+                        matchedPrefixLength: 6,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: false,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("directionSensitive is true for 'hello world' (no trailing sep)", () => {
@@ -604,7 +696,15 @@ describeForEachCompletion(
                         undefined,
                         "forward",
                     );
-                    expect(result.directionSensitive).toBe(true);
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 11,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("directionSensitive is false for 'hello world ' (trailing sep)", () => {
@@ -614,7 +714,15 @@ describeForEachCompletion(
                         undefined,
                         "forward",
                     );
-                    expect(result.directionSensitive).toBe(false);
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 12,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: false,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
             });
 
@@ -624,14 +732,16 @@ describeForEachCompletion(
 
                 it("offers ' world' after 'hello'", () => {
                     const result = matchGrammarCompletion(grammar, "hello");
-                    expect(result.completions).toEqual([" world"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(5);
-                    expect(result.directionSensitive).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // required mode: requiresSeparator always true → "spacePunctuation"
-                    expect(result.separatorMode).toBe("spacePunctuation");
+                    expectMetadata(result, {
+                        completions: [" world"],
+                        matchedPrefixLength: 5,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("offers 'next' after 'hello  world' (two spaces)", () => {
@@ -641,13 +751,15 @@ describeForEachCompletion(
                         grammar,
                         "hello  world",
                     );
-                    expect(result.completions).toEqual(["next"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(12);
-                    expect(result.directionSensitive).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
-                    expect(result.separatorMode).toBe("spacePunctuation");
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 12,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
             });
 
@@ -661,13 +773,15 @@ describeForEachCompletion(
                         grammar,
                         "hello world",
                     );
-                    expect(result.completions).toEqual(["next"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(11);
-                    expect(result.directionSensitive).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
-                    expect(result.separatorMode).toBe("optional");
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 11,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
             });
 
@@ -678,13 +792,15 @@ describeForEachCompletion(
                 it("offers ' world' after 'hello'", () => {
                     // None mode: no flex-space, literal " world" starts immediately
                     const result = matchGrammarCompletion(grammar, "hello");
-                    expect(result.completions).toEqual([" world"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(5);
-                    expect(result.directionSensitive).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
-                    expect(result.separatorMode).toBe("none");
+                    expectMetadata(result, {
+                        completions: [" world"],
+                        matchedPrefixLength: 5,
+                        separatorMode: "none",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("offers 'next' after 'hello world' (literal space consumed)", () => {
@@ -693,14 +809,16 @@ describeForEachCompletion(
                         grammar,
                         "hello world",
                     );
-                    expect(result.completions).toEqual(["next"]);
-                    expect(result.properties).toEqual([]);
-                    expect(result.matchedPrefixLength).toBe(11);
-                    expect(result.directionSensitive).toBe(true);
-                    expect(result.closedSet).toBe(true);
-                    expect(result.openWildcard).toBe(false);
                     // None mode → "none"
-                    expect(result.separatorMode).toBe("none");
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 11,
+                        separatorMode: "none",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
 
                 it("separatorMode after ' world' in none mode", () => {
@@ -708,7 +826,15 @@ describeForEachCompletion(
                         grammar,
                         "hello world",
                     );
-                    expect(result.separatorMode).toBe("none");
+                    expectMetadata(result, {
+                        completions: ["next"],
+                        matchedPrefixLength: 11,
+                        separatorMode: "none",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [],
+                    });
                 });
             });
         });
@@ -724,49 +850,57 @@ describeForEachCompletion(
 
             it("offers 'hello-world' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello-world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello-world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'hello-world' for partial 'hello'", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.completions).toEqual(["hello-world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
                 // 3b dirty partial with prefix-filter
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello-world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'hello-world' for partial 'hello-'", () => {
                 const result = matchGrammarCompletion(grammar, "hello-");
-                expect(result.completions).toEqual(["hello-world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello-world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'next' after 'hello-world' typed", () => {
                 const result = matchGrammarCompletion(grammar, "hello-world");
-                expect(result.completions).toEqual(["next"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
                 // Fully matched, no trailing sep → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("d", "n", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -781,57 +915,73 @@ describeForEachCompletion(
 
             it("offers 'set:' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["set:"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["set:"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'value' after 'set:'", () => {
                 const result = matchGrammarCompletion(grammar, "set:");
-                expect(result.completions).toEqual(["value"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(4);
                 // "set:" fully matched, no trailing sep → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(":", "v", auto) → colon is punct → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["value"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'value' after 'set: '", () => {
                 const result = matchGrammarCompletion(grammar, "set: ");
-                expect(result.completions).toEqual(["value"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(5);
                 // Trailing space commits → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["value"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'done' after 'set: value'", () => {
                 const result = matchGrammarCompletion(grammar, "set: value");
-                expect(result.completions).toEqual(["done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(10);
                 // "value" fully matched, no trailing sep → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("e", "d", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 10,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode: colon-ending word before Latin word", () => {
                 // requiresSeparator(":", "v", auto) → false → "optional"
                 const result = matchGrammarCompletion(grammar, "set:");
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["value"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -846,49 +996,57 @@ describeForEachCompletion(
 
             it("offers 'hello' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers '...' after 'hello'", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.completions).toEqual(["..."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(5);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("o", ".", auto) → dot is punct → false → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["..."],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world' after 'hello...'", () => {
                 const result = matchGrammarCompletion(grammar, "hello...");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(8);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(".", "w", auto) → false → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 8,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world' after 'hello ... '", () => {
                 const result = matchGrammarCompletion(grammar, "hello ... ");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(10);
                 // Trailing space commits
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 10,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -903,29 +1061,33 @@ describeForEachCompletion(
 
             it("offers '...' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["..."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["..."],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'done' after '...'", () => {
                 const result = matchGrammarCompletion(grammar, "...");
-                expect(result.completions).toEqual(["done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(3);
                 // "..." fully matched (word 0), no trailing separator →
                 // backward would back up → direction-sensitive.
                 // Consistent with Latin keyword behavior (e.g., "hello"
                 // in grammar "hello done" → directionSensitive=true).
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(".", "d", auto) → false → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("backward on '...' backs up to '...'", () => {
@@ -937,26 +1099,30 @@ describeForEachCompletion(
                 );
                 // "..." fully matched, no trailing separator → backward
                 // backs up to offer "..." at position 0.
-                expect(result.completions).toEqual(["..."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // mpl=0, backward exact match → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["..."],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'done' after '... '", () => {
                 const result = matchGrammarCompletion(grammar, "... ");
-                expect(result.completions).toEqual(["done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(4);
                 // Trailing space commits
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -971,45 +1137,51 @@ describeForEachCompletion(
 
             it("offers ',done' after wildcard content", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.completions).toEqual([",done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(5);
                 // Wildcard finalized at EOI, keyword follows → openWildcard
-                expect(result.openWildcard).toBe(true);
                 // Keyword completion → closedSet true
-                expect(result.closedSet).toBe(true);
                 // Wildcard finalized at EOI → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
                 // requiresSeparator("o", ",", auto) → false → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [",done"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("offers ',done' after wildcard + space", () => {
                 const result = matchGrammarCompletion(grammar, "hello ");
-                expect(result.completions).toEqual([",done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
                 // Trailing space consumed by wildcard; wildcard still at EOI
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.separatorMode).toBe("optional");
                 // Wildcard finalized at EOI → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [",done"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("matchedPrefixLength includes comma when typed", () => {
                 // "hello," — comma starts the keyword
                 const result = matchGrammarCompletion(grammar, "hello,d");
-                expect(result.completions).toEqual([",done"]);
-                expect(result.properties).toEqual([]);
                 // Wildcard absorbs all input → mpl = input length
-                expect(result.matchedPrefixLength).toBe(7);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(true);
                 // requiresSeparator("d", ",", auto) → comma is punct → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Wildcard to reconsider → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [",done"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -1027,34 +1199,70 @@ describeForEachCompletion(
 
             it("offers property completion after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.properties?.length).toBeGreaterThan(0);
-                expect(result.completions).toHaveLength(0);
-                expect(result.matchedPrefixLength).toBe(6);
                 // Entity wildcard → closedSet false
-                expect(result.closedSet).toBe(false);
                 // Keyword matched, wildcard is next (not at EOI boundary) → openWildcard false
-                expect(result.openWildcard).toBe(false);
-                expect(result.directionSensitive).toBe(false);
                 // requiresSeparator(",", "a", auto) → comma is punct → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            match: {
+                                actionName: "test",
+                                parameters: {},
+                            },
+                            propertyNames: ["parameters.x"],
+                        },
+                    ],
+                });
             });
 
             it("offers property completion after 'hello, '", () => {
                 const result = matchGrammarCompletion(grammar, "hello, ");
-                expect(result.properties?.length).toBeGreaterThan(0);
-                expect(result.completions).toHaveLength(0);
-                expect(result.matchedPrefixLength).toBe(7);
-                expect(result.closedSet).toBe(false);
-                expect(result.openWildcard).toBe(false);
                 // Trailing space commits
-                expect(result.directionSensitive).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 7,
+                    separatorMode: "optional",
+                    closedSet: false,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            match: {
+                                actionName: "test",
+                                parameters: {},
+                            },
+                            propertyNames: ["parameters.x"],
+                        },
+                    ],
+                });
             });
 
             it("separatorMode: comma before entity should be 'optional'", () => {
                 // requiresSeparator(",", "a", auto) → false → optional
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            match: {
+                                actionName: "test",
+                                parameters: {},
+                            },
+                            propertyNames: ["parameters.x"],
+                        },
+                    ],
+                });
             });
         });
 
@@ -1069,29 +1277,33 @@ describeForEachCompletion(
 
             it("offers '.world' terminator after wildcard content", () => {
                 const result = matchGrammarCompletion(grammar, "hello, foo");
-                expect(result.completions).toEqual([".world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(10);
                 // Wildcard finalized at EOI, keyword follows → openWildcard
-                expect(result.openWildcard).toBe(true);
                 // Keyword completion → closedSet true
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
                 // requiresSeparator("o", ".", auto) → dot is punct → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [".world"],
+                    matchedPrefixLength: 10,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("offers '.world' terminator after wildcard + space", () => {
                 const result = matchGrammarCompletion(grammar, "hello, foo ");
-                expect(result.completions).toEqual([".world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // Trailing space absorbed by wildcard → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Wildcard finalized at EOI → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [".world"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -1110,15 +1322,17 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Backward differs from forward → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("forward on 'hello, world' offers 'done'", () => {
@@ -1128,14 +1342,16 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.completions).toEqual(["done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(12);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("d", "d", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("backward on 'hello,' backs up to 'hello,'", () => {
@@ -1146,15 +1362,17 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "hello," fully matched, no trailing separator → backs up
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // mpl=0 → "optional"
-                expect(result.separatorMode).toBe("optional");
-                // Backed up to start → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                // Backed up to start — at P=0 forward and backward agree
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("backward on 'hello, ' (trailing space) commits → forward behavior", () => {
@@ -1165,15 +1383,17 @@ describeForEachCompletion(
                     "backward",
                 );
                 // Trailing space commits → should offer "world" like forward
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(7);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Trailing space consumed → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Trailing space commits → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1194,15 +1414,17 @@ describeForEachCompletion(
                 );
                 // "hello world" is one segment — no trailing separator,
                 // backward should back up to start
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // mpl=0 → "optional"
-                expect(result.separatorMode).toBe("optional");
-                // Backed up to start → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                // Backed up to start — at P=0 forward and backward agree
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("backward on 'hello world ' commits → offers 'next'", () => {
@@ -1212,15 +1434,17 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toEqual(["next"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(12);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Trailing space consumed → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Trailing space commits → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1236,39 +1460,46 @@ describeForEachCompletion(
 
             it("offers both first segments for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions.sort()).toEqual(["hello,", "hello."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,", "hello."],
+                    sortCompletions: true,
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world' after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
                 // Only the comma variant should match
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world' after 'hello.'", () => {
                 const result = matchGrammarCompletion(grammar, "hello.");
                 // Only the dot variant should match
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(".", "w", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1285,37 +1516,43 @@ describeForEachCompletion(
 
             it("offers first segment for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers second segment after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'done' after 'hello, world'", () => {
                 const result = matchGrammarCompletion(grammar, "hello, world");
-                expect(result.completions).toEqual(["done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(12);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("d", "d", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1329,33 +1566,45 @@ describeForEachCompletion(
 
             it("offers first segment for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers second segment after 'hello, '", () => {
                 // required mode needs explicit separator after "hello,"
                 const result = matchGrammarCompletion(grammar, "hello, ");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(7);
                 // Trailing space commits in required mode
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Trailing space consumed → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode for required spacing after punctuation word", () => {
                 // Trailing space triggers consumeTrailingSeparators → "optional"
                 const result = matchGrammarCompletion(grammar, "hello, ");
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1365,19 +1614,29 @@ describeForEachCompletion(
 
             it("offers second segment after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // optional mode: requiresSeparator always false → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode should be 'optional'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1387,32 +1646,44 @@ describeForEachCompletion(
 
             it("offers first segment for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // None mode → "none"
-                expect(result.separatorMode).toBe("none");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers second segment after 'hello,'", () => {
                 // In none mode, no separator between segments
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // None mode → "none"
-                expect(result.separatorMode).toBe("none");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode should be 'none'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.separatorMode).toBe("none");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1426,32 +1697,44 @@ describeForEachCompletion(
 
             it("offers 'hello world' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // None mode → "none"
-                expect(result.separatorMode).toBe("none");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'next' after 'hello world'", () => {
                 // In none mode, "hello world" directly adjacent to "next"
                 const result = matchGrammarCompletion(grammar, "hello world");
-                expect(result.completions).toEqual(["next"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // None mode → "none"
-                expect(result.separatorMode).toBe("none");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode should be 'none' after escaped-space keyword", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
-                expect(result.separatorMode).toBe("none");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1468,38 +1751,60 @@ describeForEachCompletion(
 
             it("offers '...' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["..."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["..."],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers property completion after '...'", () => {
                 const result = matchGrammarCompletion(grammar, "...");
-                expect(result.properties?.length).toBeGreaterThan(0);
-                expect(result.completions).toHaveLength(0);
-                expect(result.matchedPrefixLength).toBe(3);
                 // Entity wildcard → closedSet false
-                expect(result.closedSet).toBe(false);
-                expect(result.openWildcard).toBe(false);
-                expect(result.directionSensitive).toBe(false);
                 // requiresSeparator(".", wildcard-first-char, auto) → false → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            match: {
+                                actionName: "test",
+                                parameters: {},
+                            },
+                            propertyNames: ["parameters.x"],
+                        },
+                    ],
+                });
             });
 
             it("offers property completion after '... '", () => {
                 const result = matchGrammarCompletion(grammar, "... ");
-                expect(result.properties?.length).toBeGreaterThan(0);
-                expect(result.completions).toHaveLength(0);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.closedSet).toBe(false);
-                expect(result.openWildcard).toBe(false);
                 // Trailing space commits
-                expect(result.directionSensitive).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: false,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            match: {
+                                actionName: "test",
+                                parameters: {},
+                            },
+                            propertyNames: ["parameters.x"],
+                        },
+                    ],
+                });
             });
         });
 
@@ -1515,37 +1820,43 @@ describeForEachCompletion(
 
             it("offers first segment for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world!' after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.completions).toEqual(["world!"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world!"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'thanks.' after 'hello, world!'", () => {
                 const result = matchGrammarCompletion(grammar, "hello, world!");
-                expect(result.completions).toEqual(["thanks."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(13);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("!", "t", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["thanks."],
+                    matchedPrefixLength: 13,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("no completions for exact match", () => {
@@ -1553,14 +1864,16 @@ describeForEachCompletion(
                     grammar,
                     "hello, world! thanks.",
                 );
-                expect(result.completions).toHaveLength(0);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(21);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Exact match forward: no completion emitted → separatorMode not set
-                expect(result.separatorMode).toBeUndefined();
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 21,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1583,17 +1896,19 @@ describeForEachCompletion(
                 );
                 // findPartialKeywordInWildcard should find "hel" as
                 // partial prefix of "hello,"
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
                 // Wildcard boundary pinned at partial keyword → openWildcard
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // findPartialKeywordInWildcard: position=4 ("hel" starts after " ")
-                expect(result.matchedPrefixLength).toBe(4);
                 // requiresSeparator(" ", "h", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Backward differs from forward → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("forward on 'foo hel' offers 'hello,' at prefix position", () => {
@@ -1603,16 +1918,18 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
                 // Wildcard finalized at EOI → openWildcard
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
                 // Wildcard absorbs all input → mpl = input length
-                expect(result.matchedPrefixLength).toBe(7);
                 // requiresSeparator("l", "h", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             // NOTE: Expected behavior under exhaustive matching.
@@ -1635,16 +1952,18 @@ describeForEachCompletion(
                 );
                 // Under exhaustive matching: ["hello,"] (wildcard absorbed all input)
                 // Under non-exhaustive matching: would be ["world"]
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // Wildcard absorbs all input → mpl = input length
-                expect(result.matchedPrefixLength).toBe(10);
                 // requiresSeparator(",", "h", auto) → comma is punct → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Wildcard to reconsider → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 10,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -1661,15 +1980,17 @@ describeForEachCompletion(
             it("partial prefix 'hello, world' still offers 'worldly'", () => {
                 // "world" is a partial prefix of "worldly", not a full match
                 const result = matchGrammarCompletion(grammar, "hello, world");
-                expect(result.completions).toEqual(["worldly"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
                 // 3b dirty partial with prefix-filter
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["worldly"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'things' after 'hello, worldly'", () => {
@@ -1677,14 +1998,16 @@ describeForEachCompletion(
                     grammar,
                     "hello, worldly",
                 );
-                expect(result.completions).toEqual(["things"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(14);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("y", "t", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["things"],
+                    matchedPrefixLength: 14,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1703,25 +2026,29 @@ describeForEachCompletion(
             it("offers 'hello,world' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
                 // "\," identity escape → "," → segment "hello,world"
-                expect(result.completions).toEqual(["hello,world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'next' after 'hello,world' typed", () => {
                 const result = matchGrammarCompletion(grammar, "hello,world");
-                expect(result.completions).toEqual(["next"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("d", "n", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1737,25 +2064,29 @@ describeForEachCompletion(
 
             it("offers first segment for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["don't"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["don't"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'stop' after \"don't\"", () => {
                 const result = matchGrammarCompletion(grammar, "don't");
-                expect(result.completions).toEqual(["stop"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(5);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("t", "s", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["stop"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode: apostrophe-ending word before Latin word", () => {
@@ -1765,7 +2096,15 @@ describeForEachCompletion(
                 // is 's' (start of "stop").  requiresSeparator("t", "s", auto)
                 // → both Latin → true → "spacePunctuation".
                 const result = matchGrammarCompletion(grammar, "don't");
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["stop"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1781,35 +2120,41 @@ describeForEachCompletion(
 
             it("offers 'price' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["price"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["price"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers '1.99' after 'price'", () => {
                 const result = matchGrammarCompletion(grammar, "price");
-                expect(result.completions).toEqual(["1.99"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(5);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["1.99"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'done' after 'price 1.99'", () => {
                 const result = matchGrammarCompletion(grammar, "price 1.99");
-                expect(result.completions).toEqual(["done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(10);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 10,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1823,12 +2168,28 @@ describeForEachCompletion(
 
             it("closedSet is true for keyword-only completions", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.closedSet).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("closedSet is true after partial match", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                expect(result.closedSet).toBe(true);
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1850,14 +2211,16 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("backward on 'play hello,' — comma part of keyword, not trailing sep", () => {
@@ -1872,15 +2235,17 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("y", "h", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
                 // Backed up to "hello," → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("backward on 'play hello, ' — space after comma commits", () => {
@@ -1891,15 +2256,17 @@ describeForEachCompletion(
                     "backward",
                 );
                 // Space after "hello," is a real trailing separator → commits
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(12);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Trailing space consumed → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Trailing space commits → not direction-sensitive
-                expect(result.directionSensitive).toBe(false);
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1913,41 +2280,46 @@ describeForEachCompletion(
 
             it("offers both 'shuffle' and 'hello,' after 'play'", () => {
                 const result = matchGrammarCompletion(grammar, "play");
-                expect(result.completions.sort()).toEqual(
-                    ["hello,", "shuffle"].sort(),
-                );
-                expect(result.properties).toEqual([]);
                 // "play" fully matched, no trailing sep → direction-sensitive
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("y", "h" or "s", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["hello,", "shuffle"],
+                    sortCompletions: true,
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'world' after 'play hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "play hello,");
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator(",", "w", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'hello,' after 'play shuffle'", () => {
                 const result = matchGrammarCompletion(grammar, "play shuffle");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(12);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("e", "h", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -1963,28 +2335,32 @@ describeForEachCompletion(
 
             it("offers '.' terminator after wildcard content", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.completions).toEqual(["."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(5);
                 // Wildcard finalized at EOI → openWildcard
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
                 // requiresSeparator("o", ".", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["."],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("offers '.' terminator after wildcard + space", () => {
                 const result = matchGrammarCompletion(grammar, "hello ");
-                expect(result.completions).toEqual(["."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // Trailing space absorbed by wildcard → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Wildcard finalized at EOI → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["."],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             // NOTE: Expected behavior under exhaustive matching.
@@ -2000,15 +2376,17 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hello.");
                 // Under exhaustive matching: ["."]
                 // Under non-exhaustive matching: would be []
-                expect(result.completions).toEqual(["."]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(6);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // Exhaustive: wildcard absorbed dot → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Wildcard finalized at EOI → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["."],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -2025,36 +2403,42 @@ describeForEachCompletion(
 
             it("offers 'v1.0' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["v1.0"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["v1.0"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'is' after 'v1.0'", () => {
                 const result = matchGrammarCompletion(grammar, "v1.0");
-                expect(result.completions).toEqual(["is"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["is"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'released' after 'v1.0 is'", () => {
                 const result = matchGrammarCompletion(grammar, "v1.0 is");
-                expect(result.completions).toEqual(["released"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(7);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("s", "r", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["released"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -2069,36 +2453,42 @@ describeForEachCompletion(
 
             it("offers 'hello world' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'hello world' for partial 'hello '", () => {
                 const result = matchGrammarCompletion(grammar, "hello ");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("no completions after exact match 'hello world'", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
-                expect(result.completions).toHaveLength(0);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // Exact match forward: no completion emitted → separatorMode not set
-                expect(result.separatorMode).toBeUndefined();
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 11,
+                    separatorMode: undefined,
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -2114,25 +2504,29 @@ describeForEachCompletion(
 
             it("offers 'hello,' for partial 'hel'", () => {
                 const result = matchGrammarCompletion(grammar, "hel");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'hello,' for partial 'hello'", () => {
                 // "hello" without comma is partial prefix of "hello,"
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.completions).toEqual(["hello,"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello,"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -2146,30 +2540,42 @@ describeForEachCompletion(
 
             it("offers 'hello world' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'next' after 'hello world'", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
-                expect(result.completions).toEqual(["next"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(11);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // required mode: requiresSeparator always true → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("separatorMode should be 'spacePunctuation' for required spacing", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -2188,7 +2594,15 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("directionSensitive is false for 'hello, world ' (trailing sep commits)", () => {
@@ -2198,7 +2612,15 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.directionSensitive).toBe(false);
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 13,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -2212,28 +2634,32 @@ describeForEachCompletion(
 
             it("offers 'hello world' terminator after wildcard content", () => {
                 const result = matchGrammarCompletion(grammar, "foo");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(3);
                 // Wildcard finalized at EOI → openWildcard
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.directionSensitive).toBe(true);
                 // requiresSeparator("o", "h", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("offers 'hello world' after wildcard + space", () => {
                 const result = matchGrammarCompletion(grammar, "foo ");
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // Trailing space absorbed by wildcard → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Wildcard finalized at EOI → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             // NOTE: Expected behavior under exhaustive matching.
@@ -2253,15 +2679,17 @@ describeForEachCompletion(
                 );
                 // Under exhaustive matching: ["hello world"]
                 // Under non-exhaustive matching: would be []
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(15);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // Exhaustive: wildcard absorbed all → requiresSep("d","h") → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
                 // Wildcard finalized at EOI → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 15,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward finds partial 'hel' in wildcard tail", () => {
@@ -2271,16 +2699,18 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // Backward partial keyword found in wildcard tail
-                expect(result.matchedPrefixLength).toBe(4);
                 // requiresSeparator(" ", "h", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Backward differs from forward → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -2298,25 +2728,29 @@ describeForEachCompletion(
 
             it("offers 'hello, world' preserving comma and space", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toEqual(["hello, world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(0);
-                expect(result.directionSensitive).toBe(false);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
-                expect(result.separatorMode).toBe("optional");
+                expectMetadata(result, {
+                    completions: ["hello, world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
 
             it("offers 'done' after exact segment match", () => {
                 const result = matchGrammarCompletion(grammar, "hello, world");
-                expect(result.completions).toEqual(["done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(12);
-                expect(result.directionSensitive).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.openWildcard).toBe(false);
                 // requiresSeparator("d", "d", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
             });
         });
 
@@ -2340,16 +2774,18 @@ describeForEachCompletion(
 
             it("forward on 'foo' offers ',world' after wildcard", () => {
                 const result = matchGrammarCompletion(grammar, "foo");
-                expect(result.completions).toEqual([",world"]);
-                expect(result.properties).toEqual([]);
                 // Wildcard absorbs all input → mpl = input length
-                expect(result.matchedPrefixLength).toBe(3);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // requiresSeparator("o", ",", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
                 // Wildcard to reconsider → direction-sensitive
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [",world"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo ,wor' finds partial of ',world'", () => {
@@ -2361,13 +2797,15 @@ describeForEachCompletion(
                 );
                 // ",wor" is a partial prefix of ",world"
                 // candidateStart at position 4 (the comma) — prefix[3]=" " is separator ✓
-                expect(result.completions).toEqual([",world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [",world"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo,wor' — no explicit separator before comma", () => {
@@ -2382,13 +2820,15 @@ describeForEachCompletion(
                 // needed between wildcard content and keyword. The comma
                 // at candidateStart=3 is accepted, and ",wor" is a partial
                 // prefix of ",world".
-                expect(result.completions).toEqual([",world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(3);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [",world"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("forward on 'foo ,world' offers 'done' after matched keyword", () => {
@@ -2396,17 +2836,18 @@ describeForEachCompletion(
                 // Wildcard captures "foo", ",world" matched → next is "done"
                 // But under exhaustive matching, wildcard may also
                 // absorb ",world" → still offers ",world"
-                expect(result.completions.sort()).toEqual(
-                    expect.arrayContaining([",world"]),
-                );
-                expect(result.properties).toEqual([]);
-                expect(result.closedSet).toBe(true);
                 // Wildcard absorbs all input → mpl = input length
-                expect(result.matchedPrefixLength).toBe(10);
                 // requiresSeparator("d", ",", auto) → "optional"
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
-                expect(result.openWildcard).toBe(true);
+                expectMetadata(result, {
+                    completions: [",world"],
+                    sortCompletions: true,
+                    matchedPrefixLength: 10,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -2423,13 +2864,15 @@ describeForEachCompletion(
 
             it("forward on 'foo' offers ','", () => {
                 const result = matchGrammarCompletion(grammar, "foo");
-                expect(result.completions).toEqual([","]);
-                expect(result.properties).toEqual([]);
-                expect(result.matchedPrefixLength).toBe(3);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [","],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo ,' finds full match of ',' → offers 'world'", () => {
@@ -2440,14 +2883,16 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "," is a full match of the first word → next word is "world"
-                expect(result.completions).toEqual(["world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
                 // Full match of "," → next word "world" offered at mpl=5
-                expect(result.matchedPrefixLength).toBe(5);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["world"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -2468,13 +2913,15 @@ describeForEachCompletion(
 
             it("forward on 'foo' offers ' done'", () => {
                 const result = matchGrammarCompletion(grammar, "foo");
-                expect(result.completions).toEqual([" done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(3);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [" done"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo do' — ' done' starts with literal space", () => {
@@ -2488,13 +2935,15 @@ describeForEachCompletion(
                 // (space is not a word-boundary script), so no separator is
                 // needed. candidateStart=3 (the space) is accepted.
                 // textToCheck=" do" is a partial prefix of " done".
-                expect(result.completions).toEqual([" done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(3);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: [" done"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -2511,14 +2960,16 @@ describeForEachCompletion(
 
             it("forward on 'foo' offers 'hello '", () => {
                 const result = matchGrammarCompletion(grammar, "foo");
-                expect(result.completions).toEqual(["hello "]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(3);
                 // requiresSeparator("o", "h", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello "],
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo hel' finds partial of 'hello '", () => {
@@ -2530,13 +2981,15 @@ describeForEachCompletion(
                 );
                 // "hel" is partial prefix of "hello " (segment includes
                 // trailing space)
-                expect(result.completions).toEqual(["hello "]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello "],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -2553,13 +3006,15 @@ describeForEachCompletion(
 
             it("forward on 'foo' offers '-done'", () => {
                 const result = matchGrammarCompletion(grammar, "foo");
-                expect(result.completions).toEqual(["-done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(3);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["-done"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo -do' finds partial of '-done'", () => {
@@ -2571,13 +3026,15 @@ describeForEachCompletion(
                 );
                 // "-do" partially matches "-done". candidateStart at
                 // position 4 ("-"): prefix[3]=" " is separator ✓
-                expect(result.completions).toEqual(["-done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["-done"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo-do' — hyphen starts keyword, no separator needed", () => {
@@ -2591,13 +3048,15 @@ describeForEachCompletion(
                 // (hyphen is not a word-boundary script), so no separator is
                 // needed. candidateStart=3 (the hyphen) is accepted.
                 // "-do" is a partial prefix of "-done".
-                expect(result.completions).toEqual(["-done"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(3);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["-done"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -2614,14 +3073,16 @@ describeForEachCompletion(
 
             it("forward on 'foo' offers 'done!'", () => {
                 const result = matchGrammarCompletion(grammar, "foo");
-                expect(result.completions).toEqual(["done!"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(3);
                 // requiresSeparator("o", "d", auto) → both Latin → "spacePunctuation"
-                expect(result.separatorMode).toBe("spacePunctuation");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["done!"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo don' finds partial of 'done!'", () => {
@@ -2632,13 +3093,15 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "don" is partial prefix of "done!"
-                expect(result.completions).toEqual(["done!"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["done!"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo done' — full word match but segment has trailing '!'", () => {
@@ -2651,13 +3114,15 @@ describeForEachCompletion(
                 // "done" is NOT a full match of "done!" — the segment
                 // includes the exclamation mark. So "done" is a partial
                 // prefix of "done!".
-                expect(result.completions).toEqual(["done!"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["done!"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
 
@@ -2683,13 +3148,15 @@ describeForEachCompletion(
                 );
                 // "hello" is partial prefix of "hello world" (single
                 // segment includes the space)
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo hello ' finds partial of 'hello world'", () => {
@@ -2701,13 +3168,15 @@ describeForEachCompletion(
                 );
                 // "hello " is partial prefix of "hello world" (space
                 // included in single segment)
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
 
             it("backward on 'foo hello w' finds partial of 'hello world'", () => {
@@ -2718,13 +3187,15 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "hello w" is partial prefix of "hello world"
-                expect(result.completions).toEqual(["hello world"]);
-                expect(result.properties).toEqual([]);
-                expect(result.openWildcard).toBe(true);
-                expect(result.closedSet).toBe(true);
-                expect(result.matchedPrefixLength).toBe(4);
-                expect(result.separatorMode).toBe("optional");
-                expect(result.directionSensitive).toBe(true);
+                expectMetadata(result, {
+                    completions: ["hello world"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
             });
         });
     },

@@ -174,3 +174,55 @@ export function describeForEachCompletion(
         fn(createTestCompletion(variant), variant);
     });
 }
+
+/**
+ * Assert completion metadata fields in a canonical order.
+ * Only the fields present in `expected` are checked.
+ */
+export function expectMetadata(
+    result: GrammarCompletionResult,
+    expected: {
+        completions?: string[];
+        matchedPrefixLength?: number;
+        separatorMode?:
+            | "space"
+            | "spacePunctuation"
+            | "optional"
+            | "none"
+            | undefined;
+        closedSet?: boolean;
+        directionSensitive?: boolean;
+        openWildcard?: boolean;
+        properties?: unknown[];
+        sortCompletions?: boolean;
+    },
+): void {
+    if ("completions" in expected) {
+        const actual = expected.sortCompletions
+            ? [...result.completions].sort()
+            : result.completions;
+        expect(actual).toEqual(expected.completions);
+    }
+    if ("matchedPrefixLength" in expected) {
+        expect(result.matchedPrefixLength).toBe(expected.matchedPrefixLength);
+    }
+    if ("separatorMode" in expected) {
+        if (expected.separatorMode === undefined) {
+            expect(result.separatorMode).toBeUndefined();
+        } else {
+            expect(result.separatorMode).toBe(expected.separatorMode);
+        }
+    }
+    if ("closedSet" in expected) {
+        expect(result.closedSet).toBe(expected.closedSet);
+    }
+    if ("directionSensitive" in expected) {
+        expect(result.directionSensitive).toBe(expected.directionSensitive);
+    }
+    if ("openWildcard" in expected) {
+        expect(result.openWildcard).toBe(expected.openWildcard);
+    }
+    if ("properties" in expected) {
+        expect(result.properties).toEqual(expected.properties);
+    }
+}
