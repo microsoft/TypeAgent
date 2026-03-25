@@ -1,25 +1,29 @@
 {
-  "name": "createTopSongsPlaylist",
+  "version": 1,
+  "actionName": "createTopSongsPlaylist",
   "description": "Find top streaming songs in a music genre and create a Spotify playlist from them",
-  "parameters": {
-    "genre": {
+  "parameters": [
+    {
+      "name": "genre",
       "type": "string",
       "required": true,
       "description": "Music genre (e.g. bluegrass, jazz, country, rock, hip-hop)"
     },
-    "quantity": {
+    {
+      "name": "quantity",
       "type": "number",
       "required": false,
       "default": 10,
       "description": "Number of top songs to include"
     },
-    "timePeriod": {
+    {
+      "name": "timePeriod",
       "type": "string",
       "required": false,
       "default": "this month",
       "description": "Chart time period (e.g. 'this month', 'this week', '2024')"
     }
-  },
+  ],
   "steps": [
     {
       "id": "chartPage",
@@ -48,5 +52,14 @@
         "songs": "${songs.data}"
       }
     }
-  ]
+  ],
+  "grammarPatterns": [
+    "create (a)? (top)? $(quantity:number) $(genre:wildcard) (songs)? playlist (for | from) (the)? $(timePeriod:wildcard)",
+    "make (a)? $(genre:wildcard) playlist (with)? $(quantity:number) (songs)?",
+    "top $(quantity:number) $(genre:wildcard) songs playlist"
+  ],
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-03-25T00:00:00Z"
+  }
 }

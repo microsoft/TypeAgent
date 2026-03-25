@@ -8,8 +8,7 @@
       "type": "string",
       "required": false,
       "default": "this month",
-      "description": "Time period for the chart (e.g., 'this month', 'this week')",
-      "testValue": "this month"
+      "description": "Time period for the chart (e.g., 'this month', 'this week')"
     }
   ],
   "steps": [
@@ -50,5 +49,9 @@
     "get the most popular kpop song $(timePeriod:wildcard) and play it",
     "find the hottest kpop song $(timePeriod:wildcard) and play it",
     "play the number one kpop song $(timePeriod:wildcard)"
-  ]
+  ],
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-03-25T00:00:00Z"
+  }
 }

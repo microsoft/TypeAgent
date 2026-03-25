@@ -2487,6 +2487,9 @@ importers:
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../../dispatcher/types
+      debug:
+        specifier: ^4.3.4
+        version: 4.4.3(supports-color@8.1.1)
       html-to-text:
         specifier: ^9.0.5
         version: 9.0.5
@@ -2494,6 +2497,9 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       '@types/html-to-text':
         specifier: ^9.0.4
         version: 9.0.4

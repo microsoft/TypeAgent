@@ -363,7 +363,7 @@ function getClaudeOptions(
                 "- 'learn: [task]' or 'remember how to [task]' or 'record [task]' → STANDARD recording",
                 "- 'dev: learn: [task]' or 'dev: record [task]' → DEV MODE recording (see below)",
                 "",
-                "STANDARD RECORDING STEPS (run in TypeAgent shell — do NOT write TypeScript here):",
+                "STANDARD RECORDING STEPS:",
                 "1. Call discover_actions for each agent schema needed.",
                 "2. SOURCE RESEARCH — required before recording any web fetch step:",
                 "   Goal: find a stable, server-side-rendered page whose URL can be templated with",
@@ -394,34 +394,26 @@ function getClaudeOptions(
                 "     readFile(path), writeFile(path, content),",
                 "     llmTransform(input, prompt, parseJson?, model?),",
                 "     claudeTask(goal, parseJson?, model?, maxTurns?)  ← EXPENSIVE, sparingly",
-                "5. Add a testValue to each parameter for use during compilation.",
+                "5. Add a testValue to each parameter for use during testing.",
                 "6. Note the expected output format of each step in observedOutputFormat if known.",
-                "7. Write recipe files — CHECK BEFORE WRITING:",
-                "   Use Read to check if the file already exists.",
-                "   If pending/ACTION_NAME.recipe.json already exists → append _v2, _v3, etc.",
-                "   and tell the user which name you used.",
-                "   a. packages/agents/taskflow/pending/ACTION_NAME.recipe.json",
-                "      — fast path: webFetch+llmTransform (or webSearch+llmTransform if no stable URL)",
-                "   b. packages/agents/taskflow/pending/ACTION_NAME_claude.recipe.json",
-                "      — comparison path using claudeTask for the research/data step",
-                "      — actionName must be ACTION_NAME + 'Claude' (e.g. createPlaylistClaude)",
-                "      — description: 'Comparison flow using claudeTask — compare latency/quality'",
-                "      — IMPORTANT: claudeTask only has WebSearch/WebFetch tools — it CANNOT call",
-                "        TypeAgent actions (no createPlaylist, no player, no agents). So the recipe",
-                "        must still have a separate callAction step for any TypeAgent action needed.",
-                "        Structure: [claudeTask step to research/fetch data, parseJson:true]",
-                "                 + [callAction step to act on the result (e.g. player.createPlaylist)]",
-                "      — always write this companion recipe so the two approaches can be A/B tested",
-                "8. If you noticed gaps (missing actions, output format issues), also write:",
-                "   packages/agents/taskflow/pending/suggestions/ACTION_NAME.suggestions.md",
-                "9. Tell user: 'Recipe saved. To compile, run from packages/agents/taskflow:'",
-                "   pnpm run compile",
+                "7. Register the flow by calling execute_action with schemaName 'taskflow',",
+                "   actionName 'executeTaskFlow' to test the recipe. The recipe is also auto-saved",
+                "   to instance storage after successful reasoning traces — no manual compile needed.",
+                "   If you need to write the recipe to disk for review, write it as a .recipe.json",
+                "   file in the current working directory (not in the package directory).",
+                "8. If you noticed gaps (missing actions, output format issues), write a suggestions",
+                "   file. Suggestions are stored in instance storage alongside the flow and reviewed",
+                "   when promoting pending recipes. Include:",
+                "   - Missing actions or parameters that would improve the flow",
+                "   - Actions that return text but should return JSON",
+                "   - Multi-step sequences that could be a single action",
+                "9. Tell user: 'Task flow registered: ACTION_NAME. It is now available for use.'",
                 "",
                 "DEV MODE RECORDING — interactive improvement loop:",
                 "When triggered with 'dev: learn: [task]':",
                 "- Follow standard recording steps 1-5",
                 "- BEFORE writing the recipe, surface improvement opportunities:",
-                "  * 'action X returns plain text — JSON output would let the compiled flow work with",
+                "  * 'action X returns plain text — JSON output would let the flow work with",
                 "    typed data. Want me to add outputFormat support to that action? (~5 min)'",
                 "  * 'there is no action for Y — want me to create one now?'",
                 "  * 'steps A and B could be a single action — want me to add a combined action?'",
@@ -484,7 +476,6 @@ function getClaudeOptions(
                 "- Use exact schemaName from discover_actions; utility agent is schemaName 'utility'",
                 "- For query steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
-                "- mkdir -p packages/agents/taskflow/pending packages/agents/taskflow/pending/suggestions",
                 ...(config.execution.scriptReuse === "enabled" &&
                 process.platform === "win32"
                     ? [
@@ -839,22 +830,27 @@ async function executeReasoningWithTracing(
                 const recipe = await recipeGen.generate(tracer.getTrace());
 
                 if (recipe) {
-                    const pendingDir = path.join(
-                        getRepoRoot(),
-                        "packages",
-                        "agents",
-                        "taskflow",
-                        "pending",
+                    const saved = await saveTaskFlowRecipeToInstanceStorage(
+                        recipe,
+                        systemContext,
                     );
-                    const { saveRecipe } = await import(
-                        "taskflow-typeagent/recipeCompiler"
-                    );
-                    const filePath = await saveRecipe(recipe, pendingDir);
-                    debug(`Recipe saved: ${filePath}`);
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: `\n✓ Recipe saved: ${recipe.actionName}.recipe.json`,
-                    });
+                    if (saved) {
+                        debug(`TaskFlow recipe saved: ${recipe.actionName}`);
+                        context.actionIO.appendDisplay({
+                            type: "text",
+                            content: `\n✓ Task flow registered: ${recipe.actionName}`,
+                        });
+                        try {
+                            await systemContext.agents.reloadAgentSchema(
+                                "taskflow",
+                                systemContext,
+                            );
+                        } catch {
+                            debug(
+                                "Failed to reload taskflow schema after saving recipe",
+                            );
+                        }
+                    }
                 }
             } catch (error) {
                 debug("Failed to generate recipe from trace:", error);
@@ -1103,6 +1099,126 @@ async function writeDynamicGrammarForIndex(
         "grammar/dynamic.agr",
         `${startRule}\n\n${ruleTexts.join("\n\n")}`,
     );
+}
+
+/**
+ * Save a TaskFlow recipe directly to instance storage and register it as
+ * an active flow. Mirrors saveScriptRecipesAsActiveFlows but for TaskFlow.
+ */
+async function saveTaskFlowRecipeToInstanceStorage(
+    recipe: {
+        actionName: string;
+        description: string;
+        parameters: Array<{
+            name: string;
+            type: string;
+            required: boolean;
+            description: string;
+            default?: unknown;
+        }>;
+        steps: Array<{
+            id: string;
+            schemaName: string;
+            actionName: string;
+            parameters: Record<string, unknown>;
+            observedOutputFormat?: string;
+        }>;
+        grammarPatterns: string[];
+        source?: { type: string; sourceId?: string; timestamp: string };
+    },
+    systemContext: CommandHandlerContext,
+): Promise<boolean> {
+    const storage =
+        systemContext.persistDir && systemContext.storageProvider
+            ? systemContext.storageProvider.getStorage(
+                  "taskflow",
+                  systemContext.persistDir,
+              )
+            : undefined;
+    if (!storage) {
+        debug("No instance storage available for taskflow");
+        return false;
+    }
+
+    // Read existing index
+    let index: {
+        version: 1;
+        flows: Record<string, unknown>;
+        deletedSamples: string[];
+        lastModified: string;
+    };
+    try {
+        const indexJson = await storage.read("index.json", "utf8");
+        index = JSON.parse(indexJson);
+    } catch {
+        index = {
+            version: 1,
+            flows: {},
+            deletedSamples: [],
+            lastModified: new Date().toISOString(),
+        };
+    }
+
+    const { actionName } = recipe;
+    if (index.flows[actionName]) {
+        debug(`TaskFlow '${actionName}' already exists, skipping`);
+        return false;
+    }
+
+    // Build flow definition (parameters as Record, not array)
+    const flowParams: Record<string, unknown> = {};
+    for (const p of recipe.parameters) {
+        const def: Record<string, unknown> = { type: p.type };
+        if (p.required !== undefined) def.required = p.required;
+        if (p.default !== undefined) def.default = p.default;
+        if (p.description) def.description = p.description;
+        flowParams[p.name] = def;
+    }
+
+    const flowDef = {
+        name: actionName,
+        description: recipe.description,
+        parameters: flowParams,
+        steps: recipe.steps,
+    };
+
+    const flowPath = `flows/${actionName}.flow.json`;
+    await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+
+    // Generate grammar rule text — preserve named captures for TaskFlow
+    const grammarRules: string[] = [];
+    for (const pattern of recipe.grammarPatterns) {
+        const captures = [...pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
+            (m) => m[1],
+        );
+        const paramJson =
+            captures.length > 0
+                ? `{ flowName: "${actionName}", ${captures.join(", ")} }`
+                : `{ flowName: "${actionName}" }`;
+        grammarRules.push(
+            `<${actionName}> [spacing=optional] = ${pattern}` +
+                ` -> { actionName: "executeTaskFlow", parameters: ${paramJson} };`,
+        );
+    }
+    const grammarRuleText = grammarRules.join("\n");
+
+    const now = new Date().toISOString();
+    index.flows[actionName] = {
+        actionName,
+        description: recipe.description,
+        flowPath,
+        grammarRuleText,
+        created: now,
+        updated: now,
+        source: "reasoning",
+        usageCount: 0,
+        enabled: true,
+    };
+    index.lastModified = now;
+
+    await storage.write("index.json", JSON.stringify(index, null, 2));
+    debug(`TaskFlow registered as active: ${actionName}`);
+    return true;
 }
 
 export interface ReasoningFallbackContext {
