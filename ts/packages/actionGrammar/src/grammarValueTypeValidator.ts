@@ -66,12 +66,18 @@ function formatSchemaType(t: SchemaType): string {
     }
 }
 
+/** Check whether a type is string-like (plain string or string-union). */
+function isStringType(t: SchemaType): boolean {
+    return t.type === "string" || t.type === "string-union";
+}
+
 /**
  * Collect supported method names for a given object type for error messages.
  * Results are memoized since the method sets are static.
  */
 const _supportedMethodsCache = new Map<string, string[]>();
 function supportedMethodsForType(typeName: string): string[] {
+    if (typeName === "string-union") typeName = "string";
     let cached = _supportedMethodsCache.get(typeName);
     if (cached !== undefined) return cached;
     const methods: string[] = [];
@@ -630,7 +636,14 @@ function deriveValueTypeImpl(
         case "literal":
             switch (typeof value.value) {
                 case "string":
-                    return SchemaCreator.string();
+                    // Return string-union to preserve the exact literal
+                    // value through type inference.  This is safe:
+                    // string-union is assignable to string, so it causes
+                    // no false positives for string-typed fields, while
+                    // enabling precise enum containment checks whenever
+                    // the inferred type flows through spread, ternary,
+                    // or rule type derivation.
+                    return SchemaCreator.string(value.value);
                 case "number":
                     return SchemaCreator.number();
                 case "boolean":
@@ -694,15 +707,6 @@ function deriveValueTypeImpl(
                             errors,
                             typeCache,
                         );
-                        // Narrow string literals to string-union to
-                        // preserve exact values through type inference
-                        // (e.g. for spread field validation).
-                        if (
-                            elem.value.type === "literal" &&
-                            typeof elem.value.value === "string"
-                        ) {
-                            fieldType = SchemaCreator.string(elem.value.value);
-                        }
                     }
                     fields[elem.key] = { type: fieldType };
                 }
@@ -767,10 +771,7 @@ function deriveValueTypeImpl(
                     return SchemaCreator.number();
                 case "+":
                     // Operand type constraints checked in pass 2
-                    if (
-                        leftType.type === "string" ||
-                        rightType.type === "string"
-                    ) {
+                    if (isStringType(leftType) || isStringType(rightType)) {
                         return SchemaCreator.string();
                     }
                     if (
@@ -876,8 +877,7 @@ function deriveValueTypeImpl(
             ) {
                 if (
                     value.property === "length" &&
-                    (objectType.type === "string" ||
-                        objectType.type === "array")
+                    (isStringType(objectType) || objectType.type === "array")
                 ) {
                     resultType = SchemaCreator.number();
                 }
@@ -952,7 +952,7 @@ function deriveValueTypeImpl(
                     addUndefined
                         ? SchemaCreator.union(t, SchemaCreator.undefined_())
                         : t;
-                if (objectType.type === "string") {
+                if (isStringType(objectType)) {
                     if (STRING_TO_STRING_METHODS.has(method))
                         return wrapResult(SchemaCreator.string());
                     if (STRING_TO_NUMBER_METHODS.has(method))
@@ -1358,8 +1358,8 @@ function walkExprOperands(
                 case "+":
                     if (
                         !(
-                            (leftType.type === "string" &&
-                                rightType.type === "string") ||
+                            (isStringType(leftType) &&
+                                isStringType(rightType)) ||
                             (leftType.type === "number" &&
                                 rightType.type === "number")
                         )
@@ -1397,8 +1397,7 @@ function walkExprOperands(
                         !(
                             (leftType.type === "number" &&
                                 rightType.type === "number") ||
-                            (leftType.type === "string" &&
-                                rightType.type === "string")
+                            (isStringType(leftType) && isStringType(rightType))
                         )
                     ) {
                         errors.push({
@@ -1618,7 +1617,10 @@ function walkExprOperands(
                     typeCache,
                 );
                 if (!isErrorType(objectType)) {
-                    const key = `${objectType.type}.${value.callee.property}`;
+                    const typeName = isStringType(objectType)
+                        ? "string"
+                        : objectType.type;
+                    const key = `${typeName}.${value.callee.property}`;
                     const expectedArgs = METHOD_ARG_TYPES[key];
                     if (expectedArgs !== undefined) {
                         for (
@@ -1636,7 +1638,11 @@ function walkExprOperands(
                                 typeCache,
                             );
                             if (isErrorType(argType)) continue;
-                            if (argType.type !== expected) {
+                            if (
+                                expected === "string"
+                                    ? !isStringType(argType)
+                                    : argType.type !== expected
+                            ) {
                                 errors.push({
                                     message:
                                         `Argument ${i + 1} of '${value.callee.property}' ` +
@@ -1667,7 +1673,7 @@ function walkExprOperands(
                         : [exprType];
                 for (const t of types) {
                     if (
-                        t.type !== "string" &&
+                        !isStringType(t) &&
                         t.type !== "number" &&
                         t.type !== "boolean"
                     ) {
@@ -2047,11 +2053,13 @@ function validateObjectValue(
             continue;
         }
 
-        // null means shorthand { key } which refers to variable named `key`
-        const actualValue: CompiledValueNode =
-            propValue === null
-                ? { type: "variable", name: fieldKey }
-                : propValue!;
+        // null means shorthand { key } which refers to variable named `key`.
+        // propMap.has(fieldKey) is true (we continued above otherwise),
+        // so propValue is CompiledValueNode | null — ?? handles both.
+        const actualValue: CompiledValueNode = propValue ?? {
+            type: "variable",
+            name: fieldKey,
+        };
 
         // When the schema field is optional, the value may legitimately be
         // `undefined` at runtime (e.g. from an optional grammar capture
@@ -2072,17 +2080,12 @@ function validateObjectValue(
         );
     }
 
-    // Check for extraneous properties.  When a spread is present we
-    // cannot be certain about extraneous fields (the spread may
-    // contribute additional fields whose types we can't fully resolve),
-    // so skip this check in that case.
-    if (!hasSpread) {
-        for (const actualKey of propMap.keys()) {
-            if (!(actualKey in expected.fields)) {
-                errors.push(
-                    `Extraneous property '${fullPath(path, actualKey)}'`,
-                );
-            }
+    // Check for extraneous properties. Spread-contributed fields from
+    // resolved object types are in propMap and can be checked; any-typed
+    // spreads add no keys, so they don't cause false positives.
+    for (const actualKey of propMap.keys()) {
+        if (!(actualKey in expected.fields)) {
+            errors.push(`Extraneous property '${fullPath(path, actualKey)}'`);
         }
     }
 
@@ -2205,8 +2208,9 @@ function validateStringUnionValue(
         // If the variable has a known string-union type (e.g. from a
         // sub-rule that produces a specific literal), check that all
         // possible values are in the expected enum.
-        if (varType.type === "string-union") {
-            const invalid = varType.typeEnum.filter(
+        const resolvedVarType = resolveType(varType);
+        if (resolvedVarType.type === "string-union") {
+            const invalid = resolvedVarType.typeEnum.filter(
                 (v) => !typeEnum.includes(v),
             );
             if (invalid.length > 0) {

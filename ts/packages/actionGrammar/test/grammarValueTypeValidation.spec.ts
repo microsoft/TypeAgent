@@ -2255,6 +2255,7 @@ describe("Value type validation", () => {
         it("spread missing required field produces error", () => {
             // Base sub-rule produces { other: string } which does NOT
             // include trackName, so the required field is still missing.
+            // The spread also contributes "other" which is extraneous.
             const grammarText = `
                 import { PlayAction } from "schema.ts";
                 <Base> = $(x:string) -> { other: x };
@@ -2264,9 +2265,18 @@ describe("Value type validation", () => {
             loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
                 schemaLoader: mockSchemaLoader,
             });
-            expect(errors.length).toBe(1);
-            expect(errors[0]).toContain("Missing required property");
-            expect(errors[0]).toContain("trackName");
+            expect(
+                errors.some(
+                    (e) =>
+                        e.includes("Missing required property") &&
+                        e.includes("trackName"),
+                ),
+            ).toBe(true);
+            expect(
+                errors.some(
+                    (e) => e.includes("Extraneous") && e.includes("other"),
+                ),
+            ).toBe(true);
         });
 
         it("spread with non-object argument produces type-inference error", () => {
@@ -2355,6 +2365,248 @@ describe("Value type validation", () => {
             });
             // base1 contributes actionName, base2 contributes trackName
             // — all required fields covered.
+            expect(errors.length).toBe(0);
+        });
+    });
+
+    describe("string literal type inference", () => {
+        // String literals now infer as string-union (single-member) rather
+        // than plain string. These tests verify that all expression dispatch
+        // points (operators, methods, template literals) correctly treat
+        // string-union the same as string.
+        const ExprActionDef = SchemaCreator.intf(
+            "ExprAction",
+            SchemaCreator.obj({
+                actionName: SchemaCreator.field(SchemaCreator.string("test")),
+                count: SchemaCreator.field(SchemaCreator.number()),
+                label: SchemaCreator.field(SchemaCreator.string()),
+                active: SchemaCreator.field(SchemaCreator.boolean()),
+            }),
+            undefined,
+            true,
+        );
+        const exprLoader: SchemaLoader = (typeName) =>
+            typeName === "ExprAction" ? ExprActionDef : undefined;
+        const exprOpts = {
+            schemaLoader: exprLoader,
+            enableExpressions: true,
+        };
+
+        it("literal + variable string is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: "hello " + name, active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal + literal string is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test
+                    -> { actionName: "test", count: 0, label: "hello " + "world", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string methods work (toLowerCase)", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test
+                    -> { actionName: "test", count: 0, label: "HELLO".toLowerCase(), active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string indexOf inferred as number", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test
+                    -> { actionName: "test", count: "hello".indexOf("e"), label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string includes inferred as boolean", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test
+                    -> { actionName: "test", count: 0, label: "x", active: "hello".includes("e") };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string .length inferred as number", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test
+                    -> { actionName: "test", count: "hello".length, label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string in template literal interpolation is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: \`prefix ${"a"} \${name}\`, active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string comparison is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: 0, label: "x", active: name < "z" };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string as method arg is valid", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(name:string)
+                    -> { actionName: "test", count: name.indexOf("x"), label: "x", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string split returns string array", () => {
+            const ArrayActionDef = SchemaCreator.intf(
+                "ArrayAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    items: SchemaCreator.field(
+                        SchemaCreator.array(SchemaCreator.string()),
+                    ),
+                }),
+                undefined,
+                true,
+            );
+            const arrayLoader: SchemaLoader = (typeName) =>
+                typeName === "ArrayAction" ? ArrayActionDef : undefined;
+            const grammarText = `
+                import { ArrayAction } from "schema.ts";
+                <Start> : ArrayAction = test
+                    -> { actionName: "test", items: "a,b,c".split(",") };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: arrayLoader,
+                enableExpressions: true,
+            });
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string in ternary branch accepted for string field", () => {
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test $(n:number)
+                    -> { actionName: "test", count: 0, label: n > 0 ? "yes" : "no", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
+            expect(errors.length).toBe(0);
+        });
+
+        it("literal string assigned to plain string field passes", () => {
+            // A string literal "hello" now infers as string-union(["hello"]),
+            // which must be assignable to a plain string field.
+            const grammarText = `
+                import { ExprAction } from "schema.ts";
+                <Start> : ExprAction = test
+                    -> { actionName: "test", count: 0, label: "hello", active: true };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow(
+                "test",
+                grammarText,
+                errors,
+                undefined,
+                exprOpts,
+            );
             expect(errors.length).toBe(0);
         });
     });
@@ -2593,6 +2845,64 @@ describe("Value type validation", () => {
                 schemaLoader: mockSchemaLoader,
             });
             expect(errors.length).toBe(0);
+        });
+
+        it("spread of any-typed (untyped sub-rule) variable passes", () => {
+            // An untyped sub-rule produces 'any'. Spreading 'any' should
+            // not produce errors — we can't know the fields at compile time.
+            const grammarText = `
+                import { PlayAction } from "schema.ts";
+                <Untyped> = $(x:string) $(y:string);
+                <Start> : PlayAction = play $(u:<Untyped>) -> { actionName: "play", ...u };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            // 'any' spread should not cause errors (missing trackName is
+            // still flagged because the spread can't guarantee it).
+            // The key check: no "must be an object type" error.
+            expect(
+                errors.some((e) => e.includes("must be an object type")),
+            ).toBe(false);
+        });
+
+        it("extraneous explicit property detected even with spread", () => {
+            // { ...b, bogus: "x" } — bogus is explicitly listed and not
+            // in the schema, so it should be flagged as extraneous.
+            const grammarText = `
+                import { PlayAction } from "schema.ts";
+                <Base> = $(x:string) -> { actionName: "play", trackName: x };
+                <Start> : PlayAction = play $(b:<Base>) -> { ...b, bogus: "x" };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            expect(
+                errors.some(
+                    (e) => e.includes("Extraneous") && e.includes("bogus"),
+                ),
+            ).toBe(true);
+        });
+
+        it("extraneous spread-contributed property detected", () => {
+            // Base produces { actionName, trackName, extra } — extra is
+            // not in PauseAction's schema, so it should be flagged.
+            const grammarText = `
+                import { PauseAction } from "schema.ts";
+                <Base> = pause -> { actionName: "pause", extra: "oops" };
+                <Start> : PauseAction = $(b:<Base>) -> { ...b };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            expect(
+                errors.some(
+                    (e) => e.includes("Extraneous") && e.includes("extra"),
+                ),
+            ).toBe(true);
         });
     });
 });

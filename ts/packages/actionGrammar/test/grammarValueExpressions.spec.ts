@@ -411,6 +411,14 @@ describe("Value Expression Parser", () => {
             const value = r.definitions[0].rules[0].value!;
             expect(value.type).toBe("object");
         });
+
+        it("object spread without comma between elements is rejected", () => {
+            expect(() =>
+                parseWithExpressions(
+                    `<Start> = $(x:string) $(y:string) -> { ...x ...y };`,
+                ),
+            ).toThrow();
+        });
     });
 
     describe("Backward Compatibility (no expressions)", () => {
