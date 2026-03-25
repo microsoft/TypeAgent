@@ -2065,9 +2065,8 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                // "some" appears twice (one per rule)
                 expectMetadata(result, {
-                    completions: ["some", "some"],
+                    completions: ["some"],
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
@@ -2084,9 +2083,8 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                // "play" appears twice (one per rule)
                 expectMetadata(result, {
-                    completions: ["play", "play"],
+                    completions: ["play"],
                     matchedPrefixLength: 0,
                     separatorMode: "optional",
                     closedSet: true,
@@ -2791,7 +2789,7 @@ describeForEachCompletion(
                     );
                     // Both should offer "play" at P=0.
                     expectMetadata(backward, {
-                        completions: ["play", "play"],
+                        completions: ["play"],
                         matchedPrefixLength: 0,
                         directionSensitive: false,
                     });
@@ -3178,7 +3176,7 @@ describeForEachCompletion(
                     // Re-invocation forward on "set" gives both
                     // "volume" and "brightness".
                     expectMetadata(result, {
-                        completions: ["volume", "volume", "brightness"],
+                        completions: ["volume", "brightness"],
                         matchedPrefixLength: 3,
                         directionSensitive: true,
                     });
@@ -3191,11 +3189,8 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    // All three rules back up to P=0, each offering
-                    // "set".  Re-invocation forward on "" gives
-                    // ["set","set","set"] (one per rule).
                     expectMetadata(result, {
-                        completions: ["set", "set", "set"],
+                        completions: ["set"],
                         matchedPrefixLength: 0,
                         directionSensitive: false,
                     });

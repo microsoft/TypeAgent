@@ -395,9 +395,9 @@ on ambiguous grammars with long inputs. No built-in priority ranking.
 
 #### Completion matching (`matchGrammarCompletion`)
 
-`matchGrammarCompletion(grammar, prefix, minPrefixLength)` runs a partial
-match against an incomplete input prefix and returns the set of valid
-next-tokens, enabling real-time autocompletion.
+`matchGrammarCompletion(grammar, prefix, minPrefixLength, direction)` runs
+a partial match against an incomplete input prefix and returns the set of
+valid next-tokens, enabling real-time autocompletion.
 
 `minPrefixLength` controls the minimum number of characters that must be
 matched before completions are offered. When set to a value greater than
@@ -481,34 +481,41 @@ re-offers it, letting the user reconsider their choice.
 > `findPartialKeywordInWildcard` embodies this by choosing a partial-
 > keyword position over the wildcard start.
 
-**Two-pass backward.** The grammar matcher processes every alternative
-rule via a work list. For **forward**, this naturally collects
-completions from _all_ rules that survive to the winning prefix length.
-For **backward**, each rule independently backs up to its own last
-matched part — producing completions from only the _winning_ rule(s),
-which can miss sibling alternatives.
+**Single-pass backward with range candidates.** The grammar matcher
+processes every alternative rule via a work list. For **forward**, this
+naturally collects completions from _all_ rules that survive to the
+winning prefix length. For **backward**, each rule independently backs
+up to its own last matched part — producing completions from only the
+_winning_ rule(s), which can miss sibling alternatives.
 
-To make backward non-lossy, the matcher uses a two-pass approach:
+To make backward non-lossy, the matcher uses **range candidates** —
+a single-pass approach that defers sibling-rule resolution to Phase B
+(the post-loop conversion step):
 
-1. **Pass 1 (backward):** Run the main loop with `direction="backward"`.
-   This determines the _backed-up position P_ via `emitBackwardCompletion`
-   or `tryPartialStringMatch`.
-2. **Pass 2 (forward re-invocation):** If backward actually backed up
-   (`backwardEmitted=true` and `P < prefix.length`), re-invoke
-   `matchGrammarCompletion(grammar, prefix[0..P], minPrefixLength,
-"forward")`. This processes _all_ rules from scratch on the shorter
-   input, collecting every rule's completions at P. The re-invocation
-   result has `directionSensitive` set to `true` (by definition, forward
-   at the original longer prefix would differ).
+1. **Main loop (backward):** For each state, `collectBackwardCandidate`
+   determines the backed-up position _P_ via `tryPartialStringMatch`
+   or property completion. When a Category 2 state has a wildcard
+   preceding the next keyword part, the state also saves a
+   `RangeCandidate` recording the wildcard-start and next-part —
+   the wildcard's end position is flexible and will be resolved later.
+2. **Phase B (range candidate resolution):** After all rules have been
+   processed and `maxPrefixLength` is settled, range candidates are
+   evaluated. Each candidate checks whether `maxPrefixLength` falls
+   inside its valid range (`[wildcardStart+1, prefix.length]`) and
+   whether the wildcard text at that split is well-formed (via
+   `getWildcardStr`). If so, `tryPartialStringMatch` runs forward at
+   `maxPrefixLength` to produce sibling completions — the same result
+   the old two-pass re-invocation would have produced, but without a
+   second full traversal of the grammar.
 
-Re-invocation is **skipped** when:
+Range candidates are **skipped** when:
 
 - `backwardEmitted=false` — backward didn't back up (e.g., trailing
   separator committed the match), so the result already matches forward.
 - `openWildcard=true` — the backed-up position is at an ambiguous
-  wildcard boundary. Forward on the shorter input would re-parse with
-  fresh greedy wildcards that absorb different text, producing an
-  incorrect structural interpretation.
+  wildcard boundary. Forward evaluation at the shorter input would
+  re-parse with fresh greedy wildcards that absorb different text,
+  producing an incorrect structural interpretation.
 - `partialKeywordBackup=true` — a multi-word keyword partial match
   (via `findPartialKeywordInWildcard`) determined P. Forward can't
   reconstruct the keyword-word boundary because the wildcard absorbs
@@ -613,13 +620,16 @@ input `"play"`:
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
 - `directionSensitive` — see "Why direction matters" and "When
-  direction does _not_ matter" above. The flag is now evaluated at
-  `matchedPrefixLength` rather than at the full input, thanks to the
-  two-pass backward approach: when re-invocation fires, forward at
-  the backed-up position naturally evaluates `directionSensitive` for
-  that position, then the matcher overrides it to `true` (since
-  forward at the full input would differ). When backward falls through
-  to forward behavior (`backwardEmitted=false`), the trailing-separator
+  direction does _not_ matter" above. The flag is evaluated at
+  `matchedPrefixLength` rather than at the full input. When backward
+  backs up (`backwardEmitted=true` and `maxPrefixLength < prefix.length`),
+  `directionSensitive` is recomputed for the backed-up position using
+  a heuristic: at `P > 0`, at least one keyword was matched before the
+  completion point, so `directionSensitive` is `true`; at `P = 0`,
+  nothing was matched, so it is `false`. This recomputation is skipped
+  when `partialKeywordBackup` or `openWildcard` is set (the backed-up
+  position is structurally pinned). When backward falls through to
+  forward behavior (`backwardEmitted=false`), the trailing-separator
   advancement is applied normally and `directionSensitive` reflects
   the forward-only evaluation.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
