@@ -508,6 +508,14 @@ a single-pass approach that defers sibling-rule resolution to Phase B
    the old two-pass re-invocation would have produced, but without a
    second full traversal of the grammar.
 
+**Correctness invariant — two-pass equivalence.** Let _P_ =
+`completion(input, backward).matchedPrefixLength`. The range-candidate
+resolution in Phase B must produce the same completions as
+`completion(input[0..P], forward)` — i.e., a single backward pass
+with range candidates is equivalent to the old two-pass approach
+(backward to find _P_, then forward at _P_ to collect siblings).
+This invariant is verified by the "two-pass backward invariant" tests.
+
 Range candidates are **skipped** when:
 
 - `backwardEmitted=false` — backward didn't back up (e.g., trailing
