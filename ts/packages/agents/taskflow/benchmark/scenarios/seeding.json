@@ -1,0 +1,95 @@
+[
+  {
+    "id": "seed-01",
+    "category": "seeding",
+    "description": "Seeded flows appear in list output",
+    "setup": {
+      "requiredFlows": [
+        "createTopSongsPlaylist",
+        "playPopularKpopSong",
+        "weeklyEmailDigest"
+      ]
+    },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": [
+              "createTopSongsPlaylist",
+              "playPopularKpopSong",
+              "weeklyEmailDigest"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "seed-02",
+    "category": "seeding",
+    "description": "Seeded flow count is 3",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputPattern": "3"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "seed-03",
+    "category": "seeding",
+    "description": "Grammar resolves createTopSongsPlaylist after seeding",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "create 10 jazz songs playlist for this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist"
+        }
+      }
+    ]
+  },
+  {
+    "id": "seed-04",
+    "category": "seeding",
+    "description": "Grammar resolves playPopularKpopSong after seeding",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "play the most popular kpop song this week",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "playPopularKpopSong"
+        }
+      }
+    ]
+  },
+  {
+    "id": "seed-05",
+    "category": "seeding",
+    "description": "Grammar resolves weeklyEmailDigest after seeding",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "email digest for today",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "weeklyEmailDigest"
+        }
+      }
+    ]
+  }
+]
