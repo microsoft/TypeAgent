@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-entity Ordinal, Cardinal;
+import { Ordinal, Cardinal };
 import { PlayerActions } from "./playerSchema.ts";
 
 <Start> : PlayerActions = <Pause>

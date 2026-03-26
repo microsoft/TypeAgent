@@ -492,9 +492,9 @@ import * from "other.agr"; // imp comment
 `);
     });
 
-    it("entity declaration with leading and trailing comments", () => {
+    it("source-less import with leading and trailing comments", () => {
         roundTrip(`// entities
-entity Foo, Bar; // the entities
+import { Foo, Bar }; // the entities
 <A> = x;
 `);
     });
@@ -886,56 +886,58 @@ x
     });
 });
 
-// ─── Entity and import block formatting ───────────────────────────────────────
+// ─── Source-less import and import block formatting ──────────────────────────
 
-describe("Entity block formatting", () => {
-    it("short entity list stays flat", () => {
-        expect(fmt("entity Foo, Bar;", 40)).toBe("entity Foo, Bar;\n\n");
+describe("Source-less import block formatting", () => {
+    it("short import list stays flat", () => {
+        expect(fmt("import { Foo, Bar };", 40)).toBe(
+            "import { Foo, Bar };\n\n",
+        );
     });
 
-    it("single entity stays flat", () => {
-        expect(fmt("entity Foo;", 40)).toBe("entity Foo;\n\n");
+    it("single import stays flat", () => {
+        expect(fmt("import { Foo };", 40)).toBe("import { Foo };\n\n");
     });
 
-    it("long entity list breaks into block", () => {
+    it("long import list breaks into block", () => {
         expect(
-            fmt("entity VeryLongName, AnotherLongName, YetAnother;", 30),
+            fmt("import { VeryLongName, AnotherLongName, YetAnother };", 30),
         ).toBe(
-            "entity\n  VeryLongName,\n  AnotherLongName,\n  YetAnother;\n\n",
+            "import {\n  VeryLongName,\n  AnotherLongName,\n  YetAnother\n};\n\n",
         );
     });
 
-    it("entity block round-trips", () => {
+    it("source-less import block round-trips", () => {
         roundTrip(
-            "entity VeryLongEntityName, AnotherLongEntityName, ThirdEntity;",
+            "import { VeryLongEntityName, AnotherLongEntityName, ThirdEntity };",
             30,
         );
     });
 
-    it("entity block with trailing comment", () => {
-        // Trailing comment stays on same line as ";"
-        expect(fmt("entity VeryLongName, AnotherLongName; // note", 30)).toBe(
-            "entity\n  VeryLongName,\n  AnotherLongName; // note\n\n",
-        );
+    it("source-less import block with trailing comment", () => {
+        expect(
+            fmt("import { VeryLongName, AnotherLongName }; // note", 30),
+        ).toBe("import {\n  VeryLongName,\n  AnotherLongName\n}; // note\n\n");
     });
 
-    it("entity block with trailing comment round-trips", () => {
-        roundTrip("entity VeryLongName, AnotherLongName; // note", 30);
+    it("source-less import block with trailing comment round-trips", () => {
+        roundTrip("import { VeryLongName, AnotherLongName }; // note", 30);
     });
 
-    it("entity block with block comments on names", () => {
+    it("source-less import block with block comments on names", () => {
         roundTrip(
-            "entity /* a */ VeryLongName /* b */, /* c */ AnotherLong /* d */;",
+            "import { /* a */ VeryLongName /* b */, /* c */ AnotherLong /* d */ };",
             30,
         );
     });
 
-    it("multi-line entity input round-trips", () => {
+    it("multi-line source-less import round-trips", () => {
         roundTrip(
-            `entity
+            `import {
   Foo,
   Bar,
-  Baz;
+  Baz,
+};
 <A> = x;
 `,
             80,

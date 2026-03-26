@@ -1222,7 +1222,7 @@ describe("Grammar Rule Parser", () => {
         it("should throw error for malformed rule name", () => {
             const grammar = "greeting = hello;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
-                "Expected rule definition, 'import' statement, or 'entity' declaration",
+                "Expected rule definition or 'import' statement",
             );
         });
 

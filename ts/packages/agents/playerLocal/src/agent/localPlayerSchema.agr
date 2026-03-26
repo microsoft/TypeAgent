@@ -3,7 +3,7 @@
 
 // Grammar rules for Local Music Player
 
-entity Ordinal, Cardinal;
+import { Ordinal, Cardinal };
 
 import { LocalPlayerActions } from "./localPlayerSchema.ts";
 

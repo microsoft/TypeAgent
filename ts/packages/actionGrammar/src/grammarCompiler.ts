@@ -80,8 +80,7 @@ type CompileContext = {
     ruleDefMap: DefinitionMap;
     exportedNames: Set<string>; // Only rules with export keyword are importable
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
-    knownTypeNames: Set<string>; // Type names imported from .ts files
-    importedTypeNames: Map<string, number | undefined>; // Explicitly named .ts type imports with positions (excludes entity names and wildcards)
+    importedTypeNames: Map<string, number | undefined>; // All imported type names with positions (source-less entity imports + .ts type imports)
     usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
     resolvedTypes: Map<string, SchemaTypeDefinition>; // Parsed schema types resolved via SchemaLoader
     hasStarImport: boolean; // Indicates if there's a star import
@@ -99,7 +98,7 @@ function createImportCompileContext(
     importStmt: ImportStatement,
 ): CompileContext {
     const fullPath = fileLoader.resolvePath(
-        importStmt.source,
+        importStmt.source!,
         referencingFileName,
     );
     if (grammarFileMap.has(fullPath)) {
@@ -128,21 +127,12 @@ function createCompileContext(
     fileUtils: FileLoader | undefined,
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
-    entityNames?: string[],
     schemaLoader?: SchemaLoader,
 ): CompileContext {
     const ruleDefMap: DefinitionMap = new Map();
 
-    // Build separate sets of imported rule names and type names
+    // Build imported rule names and type names
     const importedRuleMap = new Map<string, CompileContext>();
-    const knownTypeNames = new Set<string>();
-
-    // Entity declarations (e.g., "entity CalendarDate;") are valid type names
-    if (entityNames) {
-        for (const name of entityNames) {
-            knownTypeNames.add(name);
-        }
-    }
     const importedTypeNames = new Map<string, number | undefined>();
     const usedImportedTypes = new Set<string>();
     const resolvedTypes = new Map<string, SchemaTypeDefinition>();
@@ -165,7 +155,6 @@ function createCompileContext(
         ruleDefMap,
         exportedNames,
         importedRuleMap,
-        knownTypeNames,
         importedTypeNames,
         usedImportedTypes,
         resolvedTypes,
@@ -200,6 +189,15 @@ function createCompileContext(
     // Process imports AFTER definitions - this populates importedRuleMap
     if (imports) {
         for (const importStmt of imports) {
+            // Source-less imports are entity declarations: import { Ordinal, Cardinal };
+            if (importStmt.source === undefined) {
+                if (importStmt.names !== "*") {
+                    for (const { name } of importStmt.names) {
+                        importedTypeNames.set(name, importStmt.pos);
+                    }
+                }
+                continue;
+            }
             // Determine if this is a type import (.ts) or grammar import (.agr)
             const isGrammarImport = importStmt.source.endsWith(".agr");
             if (isGrammarImport) {
@@ -257,10 +255,10 @@ function createCompileContext(
                             // Resolve relative source path against the grammar file
                             const resolvedSource = fileUtils
                                 ? fileUtils.resolvePath(
-                                      importStmt.source,
+                                      importStmt.source!,
                                       fullPath,
                                   )
-                                : importStmt.source;
+                                : importStmt.source!;
                             const def = schemaLoader(name, resolvedSource);
                             if (def !== undefined) {
                                 if (!def.exported) {
@@ -297,7 +295,6 @@ export function compileGrammar(
     errors: string[],
     warnings?: string[],
     imports?: ImportStatement[],
-    entityNames?: string[],
     schemaLoader?: SchemaLoader,
 ): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
@@ -309,7 +306,6 @@ export function compileGrammar(
         fileUtils,
         definitions,
         imports,
-        entityNames,
         schemaLoader,
     );
 
@@ -696,7 +692,6 @@ function createNamedGrammarRules(
                 // Verify the type was actually imported
                 if (
                     !context.importedTypeNames.has(typeName) &&
-                    !context.knownTypeNames.has(typeName) &&
                     !context.hasStarImport
                 ) {
                     context.errors.push({
@@ -1017,7 +1012,6 @@ function createGrammarRule(
                     if (!isBuiltInType) {
                         const isImportedType =
                             context.hasStarImport ||
-                            context.knownTypeNames.has(referencedName) ||
                             context.importedTypeNames.has(referencedName) ||
                             globalEntityRegistry.getConverter(
                                 referencedName,

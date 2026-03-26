@@ -221,7 +221,7 @@ describe("Agent Grammar Registry", () => {
             expect(agentGrammar.match(["resume"]).matched).toBe(true);
 
             // Add third rule with entity declaration to test merging
-            const thirdRule = `entity Ordinal;
+            const thirdRule = `import { Ordinal };
 <Start> = <skip>;
 <skip> = skip;`;
 
