@@ -2912,7 +2912,7 @@ class RecordActionHandler implements CommandHandler {
             type: "markdown",
             content:
                 `### Recording: "${actionName}"\n\n` +
-                "Perform the action on the web page. When you're done, type **@browser stop recording** to finish.\n\n" +
+                "Perform the action on the web page. When you're done, use the buttons below to save or cancel.\n\n" +
                 "*Recording user interactions...*",
         });
 
