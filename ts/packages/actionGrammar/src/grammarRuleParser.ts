@@ -33,9 +33,8 @@ type SpacingMode = CompiledSpacingMode | "auto";
 const debugParse = registerDebug("typeagent:grammar:parse");
 /**
  * The grammar for cache grammar files is defined as follows (in BNF and regular expressions):
- *   <AgentCacheGrammar> ::= (<EntityDeclaration> | <ImportStatement> | <RuleDefinition>)*
- *   <EntityDeclaration> ::= "entity" <Identifier> ("," <Identifier>)* ";"
- *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) "from" <StringLiteral> ";"
+ *   <AgentCacheGrammar> ::= (<ImportStatement> | <RuleDefinition>)*
+ *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) ("from" <StringLiteral>)? ";"
  *   <ImportAll> ::= "*"
  *   <ImportNames> ::= "{" <Identifier> ("," <Identifier>)* "}"
  *   <RuleDefinition> ::= "export"? <RuleName> <RuleAnnotation>? <ValueType>? "=" <Rules> ";"
@@ -305,7 +304,7 @@ export type RuleDefinition = {
 // Import types
 export type ImportStatement = {
     names: CommentedName[] | "*"; // Specific names or * for all
-    source: string; // File path or module name
+    source: string | undefined; // File path or module name; undefined for source-less (entity) imports
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined; // comments before "import"
     afterImportComments?: Comment[] | undefined; // after "import" keyword, before "{" or "*"
@@ -315,18 +314,10 @@ export type ImportStatement = {
     trailingComments?: Comment[] | undefined; // comments on same line as ";"
 };
 
-// Entity declaration — one "entity Foo, Bar;" statement
-export type EntityDeclaration = {
-    names: CommentedName[];
-    leadingComments?: Comment[] | undefined; // comments before "entity"
-    trailingComments?: Comment[] | undefined; // comments on same line as ";"
-};
-
-// Grammar Parse Result (includes entity declarations and imports)
+// Grammar Parse Result (includes imports)
 export type GrammarParseResult = {
-    entities: string[]; // Entity types this grammar depends on (flattened, backward compat)
-    entityDeclarations?: EntityDeclaration[] | undefined; // Structured entity statements with comments
-    imports: ImportStatement[]; // Import statements
+    entities: string[]; // Entity types this grammar depends on (derived from source-less imports)
+    imports: ImportStatement[]; // Import statements (includes source-less entity imports)
     definitions: RuleDefinition[];
     leadingComments?: Comment[] | undefined; // comments at top of file before first item
     trailingComments?: Comment[] | undefined; // comments after last definition (end of file)
@@ -1316,38 +1307,10 @@ class GrammarRuleParser implements ValueExprParserContext {
         return this.tryConsumeTrailingComments(blockOnlyAtEOL);
     }
 
-    private parseEntityDeclaration(
-        leadingComments?: Comment[],
-    ): EntityDeclaration {
-        // entity Ordinal;
-        // entity Ordinal, CalendarDate;
-        this.skipWhitespace(6); // skip "entity"
-        const names: CommentedName[] = [];
-        // Collect leading comments before the first name (after "entity" keyword).
-        let pendingLeading = this.parseComments();
-        while (true) {
-            const name = this.parseId("entity name");
-            // Collect trailing comments after the name, before "," or ";".
-            const trailingComments = this.parseComments();
-            names.push({
-                name,
-                leadingComments: pendingLeading,
-                trailingComments,
-            });
-            if (!this.isAt(",")) break;
-            this.skipWhitespace(1); // skip ","
-            pendingLeading = this.parseComments();
-        }
-        const trailingComments = this.consumeWithTrailingComments(
-            ";",
-            "entity declaration",
-        );
-        return { names, leadingComments, trailingComments };
-    }
-
     private parseImportStatement(leadingComments?: Comment[]): ImportStatement {
-        // import { Name1, Name2 } from "file";
-        // import * from "file";
+        // import { Name1, Name2 } from "file";   (sourced import)
+        // import * from "file";                   (wildcard import)
+        // import { Name1, Name2 };                (source-less / entity import)
         this.skipWhitespace(6); // skip "import"
         const afterImportComments = this.parseComments();
         const pos = this.pos;
@@ -1412,22 +1375,25 @@ class GrammarRuleParser implements ValueExprParserContext {
             this.throwUnexpectedCharError("Expected '{' or '*' after 'import'");
         }
 
-        // Parse "from"
-        if (!this.isAt("from")) {
-            this.throwUnexpectedCharError(
-                "Expected 'from' keyword in import statement",
-            );
-        }
-        this.skipWhitespace(4); // skip "from"
-        const afterFromComments = this.parseComments();
+        // Parse optional "from" clause
+        let source: string | undefined;
+        let afterFromComments: Comment[] | undefined;
+        if (this.isAt("from")) {
+            this.skipWhitespace(4); // skip "from"
+            afterFromComments = this.parseComments();
 
-        // Parse source string
-        if (!this.isAtStringDelimiter()) {
+            // Parse source string
+            if (!this.isAtStringDelimiter()) {
+                this.throwUnexpectedCharError(
+                    "Expected string literal for import source",
+                );
+            }
+            source = this.parseStringLiteral();
+        } else if (names === "*") {
             this.throwUnexpectedCharError(
-                "Expected string literal for import source",
+                "Wildcard import ('import *') requires a 'from' clause",
             );
         }
-        const source = this.parseStringLiteral();
 
         const trailingComments = this.consumeWithTrailingComments(
             ";",
@@ -1448,8 +1414,6 @@ class GrammarRuleParser implements ValueExprParserContext {
     }
 
     public parse(): GrammarParseResult {
-        const entities: string[] = [];
-        const entityDeclarations: EntityDeclaration[] = [];
         const imports: ImportStatement[] = [];
         const definitions: RuleDefinition[] = [];
         let trailingComments: Comment[] | undefined;
@@ -1491,19 +1455,19 @@ class GrammarRuleParser implements ValueExprParserContext {
                 );
                 continue;
             }
-            if (this.isAt("entity")) {
-                const decl = this.parseEntityDeclaration(constructLeading);
-                entityDeclarations.push(decl);
-                entities.push(...decl.names.map((n) => n.name));
-                continue;
-            }
             this.throwUnexpectedCharError(
-                "Expected rule definition, 'import' statement, or 'entity' declaration",
+                "Expected rule definition or 'import' statement",
             );
+        }
+        // Derive entity names from source-less imports
+        const entities: string[] = [];
+        for (const imp of imports) {
+            if (imp.source === undefined && imp.names !== "*") {
+                entities.push(...imp.names.map((n) => n.name));
+            }
         }
         return {
             entities,
-            entityDeclarations,
             imports,
             definitions,
             leadingComments,

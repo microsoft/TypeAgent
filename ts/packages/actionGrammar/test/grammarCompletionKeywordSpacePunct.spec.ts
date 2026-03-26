@@ -1192,7 +1192,7 @@ describeForEachCompletion(
 
         describe("completion: wildcard after keyword ending with punctuation", () => {
             const g = `
-                entity Name;
+                import { Name };
                 <Start> = hello, $(x:Name) -> { actionName: "test", parameters: { x } };
             `;
             const grammar = loadGrammarRules("test.grammar", g);
@@ -1744,7 +1744,7 @@ describeForEachCompletion(
 
         describe("punctuation-only keyword before wildcard", () => {
             const g = `
-                entity Name;
+                import { Name };
                 <Start> = ... $(x:Name) -> { actionName: "test", parameters: { x } };
             `;
             const grammar = loadGrammarRules("test.grammar", g);

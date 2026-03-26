@@ -753,7 +753,7 @@ describeForEachCompletion(
             // completions, and matchedPrefixLength should indicate where the
             // entity value begins.
             const g = [
-                `entity SongName;`,
+                `import { SongName };`,
                 `<Start> = play $(song:SongName) next -> { song };`,
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
@@ -840,7 +840,7 @@ describeForEachCompletion(
 
                 it("entity rule first, string rule second", () => {
                     const g = [
-                        `entity SongName;`,
+                        `import { SongName };`,
                         `<Start> = play $(song:SongName) -> { action: "search", song };`,
                         `<Start> = play shuffle -> { action: "shuffle" };`,
                     ].join("\n");
@@ -860,7 +860,7 @@ describeForEachCompletion(
 
                 it("string rule first, entity rule second", () => {
                     const g = [
-                        `entity SongName;`,
+                        `import { SongName };`,
                         `<Start> = play shuffle -> { action: "shuffle" };`,
                         `<Start> = play $(song:SongName) -> { action: "search", song };`,
                     ].join("\n");
@@ -881,7 +881,7 @@ describeForEachCompletion(
 
             describe("competing rules - longer match resets closedSet", () => {
                 const g = [
-                    `entity SongName;`,
+                    `import { SongName };`,
                     `<Start> = $(a:<A>) $(song:SongName) -> { a, song };`,
                     `<Start> = $(a:<A>) $(b:<B>) finish -> { a, b };`,
                     `<A> = alpha -> "a";`,

@@ -540,7 +540,7 @@ describeForEachCompletion(
             // Grammar where the completion is a wildcard entity (not a static string).
             // separatorMode describes the boundary at matchedPrefixLength.
             const g = [
-                `entity TrackName;`,
+                `import { TrackName };`,
                 `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
@@ -726,7 +726,7 @@ describeForEachCompletion(
 
             describe("wildcard at end", () => {
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -780,7 +780,7 @@ describeForEachCompletion(
 
             describe("wildcard in middle", () => {
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(name:TrackName) now -> { actionName: "play", parameters: { name } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -830,7 +830,7 @@ describeForEachCompletion(
 
             describe("wildcard followed by multiple literals", () => {
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(name:TrackName) right now -> { actionName: "play", parameters: { name } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -879,8 +879,8 @@ describeForEachCompletion(
 
             describe("wildcard is last matched part before unmatched literal", () => {
                 const g = [
-                    `entity TrackName;`,
-                    `entity ArtistName;`,
+                    `import { TrackName };`,
+                    `import { ArtistName };`,
                     `<Start> = play $(track:TrackName) by $(artist:ArtistName) -> { actionName: "play", parameters: { track, artist } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -948,7 +948,7 @@ describeForEachCompletion(
                 // backward main loop: backward backs up to "now" which
                 // follows a captured wildcard (afterWildcard=true).
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(track:TrackName) now -> { actionName: "play", parameters: { track } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -1103,7 +1103,7 @@ describeForEachCompletion(
 
             describe("multi-rule with shared prefix and wildcard", () => {
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
                     `<Start> = play music -> "play_music";`,
                 ].join("\n");
@@ -2808,7 +2808,7 @@ describeForEachCompletion(
 
             describe("multi-rule with wildcard and literal", () => {
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
                     `<Start> = play music -> "play_music";`,
                 ].join("\n");
@@ -2929,7 +2929,7 @@ describeForEachCompletion(
 
             describe("wildcard followed by literal", () => {
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(name:TrackName) right now -> { actionName: "play", parameters: { name } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -2974,7 +2974,7 @@ describeForEachCompletion(
 
             describe("wildcard at end with exact match", () => {
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -3244,7 +3244,7 @@ describeForEachCompletion(
             // alternatives ("from", "track", "song") from contributing
             // completions at the same position.
             const g = [
-                `entity TrackName, ArtistName, AlbumName;`,
+                `import { TrackName, ArtistName, AlbumName };`,
                 `<Start> = play $(trackName:<TrackPhrase>) by $(artist:ArtistName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } };`,
                 `<Start> = play $(trackName:<TrackPhrase>) from (the)? album $(albumName:AlbumName) -> { actionName: "playTrack", parameters: { trackName, albumName } };`,
                 `<Start> = play $(trackName:<TrackPhrase>) by $(artist:ArtistName) from (the)? album $(albumName:AlbumName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist], albumName } };`,
@@ -3318,7 +3318,7 @@ describeForEachCompletion(
             // Tests whether PlayTrackNumberCommand's (<Item>)?
             // alternatives also contribute at the backed-up position.
             const g = [
-                `entity Ordinal, Cardinal, TrackName, ArtistName, AlbumName;`,
+                `import { Ordinal, Cardinal, TrackName, ArtistName, AlbumName };`,
                 // PlayTrackNumberCommand
                 `<Start> = play (the)? $(n:Ordinal) (<Item>)? -> { actionName: "playFromCurrentTrackList", parameters: { trackNumber: n } };`,
                 `<Item> = one | cut | <TrackTerm>;`,
