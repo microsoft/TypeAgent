@@ -5,7 +5,7 @@ import { NFA, NFATransition } from "./nfa.js";
 import {
     GrammarCompletionResult,
     GrammarCompletionProperty,
-} from "./grammarMatcher.js";
+} from "./grammarCompletion.js";
 import registerDebug from "debug";
 
 const debugCompletion = registerDebug("typeagent:nfa:completion");

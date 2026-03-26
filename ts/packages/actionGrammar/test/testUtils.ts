@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 import { isDeepStrictEqual } from "node:util";
+import { matchGrammar } from "../src/grammarMatcher.js";
 import {
-    matchGrammar,
     matchGrammarCompletion,
     type GrammarCompletionResult,
-} from "../src/grammarMatcher.js";
+} from "../src/grammarCompletion.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchGrammarWithNFA } from "../src/nfaMatcher.js";
 import { tokenizeRequest } from "../src/nfaMatcher.js";
@@ -159,7 +159,7 @@ export function createTestCompletion(
 }
 
 const completionVariants: CompletionVariant[] = ["grammar"];
-// TODO: Enable "nfa" and "dfa" variants once they match grammarMatcher completion behavior.
+// TODO: Enable "nfa" and "dfa" variants once they match grammarCompletion behavior.
 // const completionVariants: CompletionVariant[] = ["grammar", "nfa", "dfa"];
 
 /**

@@ -402,9 +402,10 @@ on ambiguous grammars with long inputs. No built-in priority ranking.
 
 #### Completion matching (`matchGrammarCompletion`)
 
-`matchGrammarCompletion(grammar, prefix, minPrefixLength, direction)` runs
-a partial match against an incomplete input prefix and returns the set of
-valid next-tokens, enabling real-time autocompletion.
+`grammarCompletion.ts` provides `matchGrammarCompletion(grammar, prefix,
+minPrefixLength, direction)` which runs a partial match against an
+incomplete input prefix and returns the set of valid next-tokens,
+enabling real-time autocompletion.
 
 `minPrefixLength` controls the minimum number of characters that must be
 matched before completions are offered. When set to a value greater than
