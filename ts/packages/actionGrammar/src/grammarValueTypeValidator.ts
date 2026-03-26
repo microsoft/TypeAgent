@@ -69,6 +69,11 @@ function isStringType(t: SchemaType): boolean {
     return t.type === "string" || t.type === "string-union";
 }
 
+/** Check whether a type is boolean-like (boolean, true, or false literal). */
+function isBooleanType(t: SchemaType): boolean {
+    return t.type === "boolean" || t.type === "true" || t.type === "false";
+}
+
 /**
  * Collect supported method names for a given object type for error messages.
  * Results are memoized since the method sets are static.
@@ -485,7 +490,7 @@ export type RuleValueKind =
     | { kind: "explicit" } // rule.value exists
     | { kind: "variable"; variableName: string; part: GrammarPart } // single-variable implicit
     | { kind: "passthrough"; rules: GrammarRule[]; name?: string | undefined } // bare rule-ref
-    | { kind: "default" } // zero-variable single string/phraseSet part → matched text
+    | { kind: "default"; part: GrammarPart } // zero-variable single string/phraseSet part → matched text
     | { kind: "none" }; // multi-var or no value
 
 export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
@@ -510,7 +515,7 @@ export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
             };
         }
         if (part.type === "string" || part.type === "phraseSet") {
-            return { kind: "default" };
+            return { kind: "default", part };
         }
     }
     return { kind: "none" };
@@ -538,8 +543,14 @@ function deriveAlternativeType(
         case "passthrough":
             return deriveRuleValueType(kind.rules, cache, kind.name);
         case "default":
-            // Single string/phraseSet part produces a string value at runtime
-            // (the matched text).
+            // Single string/phraseSet part produces the matched text at runtime.
+            // For string parts, the exact tokens are known — produce a
+            // string-union with the literal value so that enum conformance
+            // can be checked (strict conformance principle).
+            // PhraseSet parts produce an unknown string at runtime.
+            if (kind.part.type === "string") {
+                return SchemaCreator.string(kind.part.value.join(" "));
+            }
             return SchemaCreator.string();
         case "none":
             // Multi-variable implicit rules don't produce a value at
@@ -565,8 +576,10 @@ function derivePartType(
             break;
         case "string":
         case "phraseSet":
-            // These parts are literal text matchers without variables.
-            // They can't capture values, so return string.
+            // DEAD CODE: StringPart.variable and PhraseSetPart.variable are
+            // typed as `undefined` — these parts never carry a variable name,
+            // so callers (buildVariableTypeMap, deriveAlternativeType) will
+            // never invoke derivePartType for them.  Kept for exhaustiveness.
             baseType = SchemaCreator.string();
             break;
     }
@@ -645,12 +658,9 @@ function deriveValueTypeImpl(
                 case "number":
                     return SchemaCreator.number();
                 case "boolean":
-                    // TODO: return SchemaCreator.true_() / SchemaCreator.false_()
-                    // to preserve literal precision (matching how string literals
-                    // return string-union).  Currently not possible because
-                    // actionSchema doesn't maintain boolean or number literal
-                    // types — SchemaCreator has no true_/false_ factory.
-                    return SchemaCreator.boolean();
+                    return value.value
+                        ? SchemaCreator.true_()
+                        : SchemaCreator.false_();
                 default:
                     throw new Error(
                         `Unexpected literal typeof: ${typeof value.value}`,
@@ -1043,6 +1053,24 @@ function grammarTypeToSchemaType(grammarType: string): SchemaType {
  * the type-reference approach (producing `A = string | A`).  Both
  * representations validate identically.
  *
+ * Design principle — STRICT CONFORMANCE:
+ * The purpose of type checking is to ensure that values produced by the
+ * grammar conform to the types declared in the schema.  Assignability
+ * must therefore be SOUND: if `isTypeAssignable(A, B)` returns true, then
+ * every possible runtime value of type A must be a valid value of type B.
+ *
+ * Widening directions that are SOUND (kept):
+ *   - `string-union` → `string`  (every enum member IS a string)
+ *   - `true` / `false` → `boolean` (every literal IS a boolean)
+ *
+ * Widening directions that are UNSOUND (rejected):
+ *   - `string` → `string-union`  (a bare string could produce values
+ *     outside the declared enum — the grammar must use a sub-rule or
+ *     literal that produces one of the declared enum values)
+ *   - `boolean` → `true` / `false`  (a bare boolean capture could
+ *     produce the wrong literal — the grammar must use a literal `true`
+ *     or `false` value, or an expression that infers the exact literal)
+ *
  * NOTE: This is a shallow type-discriminant check.  For object and array
  * types it only verifies that both sides share the same discriminant
  * ("object" or "array") — it does NOT compare fields or element types.
@@ -1086,23 +1114,10 @@ function isTypeAssignable(
         }
         return true;
     }
-    // string is assignable to string-union (runtime value might match)
-    if (
-        resolvedExpected.type === "string-union" &&
-        resolvedInferred.type === "string"
-    )
-        return true;
     // string-union is assignable to string (every enum value is a string)
     if (
         resolvedExpected.type === "string" &&
         resolvedInferred.type === "string-union"
-    )
-        return true;
-    // boolean is assignable to true/false literal types
-    if (
-        (resolvedExpected.type === "true" ||
-            resolvedExpected.type === "false") &&
-        resolvedInferred.type === "boolean"
     )
         return true;
     // true/false literal types are assignable to boolean
@@ -1435,8 +1450,8 @@ function walkExprOperands(
                 case "&&":
                 case "||":
                     if (
-                        leftType.type !== "boolean" ||
-                        rightType.type !== "boolean"
+                        !isBooleanType(leftType) ||
+                        !isBooleanType(rightType)
                     ) {
                         errors.push({
                             message:
@@ -1499,7 +1514,7 @@ function walkExprOperands(
                     }
                     break;
                 case "!":
-                    if (operandType.type !== "boolean") {
+                    if (!isBooleanType(operandType)) {
                         errors.push({
                             message:
                                 `Operator '!' requires a boolean operand. ` +
@@ -1542,7 +1557,7 @@ function walkExprOperands(
                 typeCache,
             );
             if (isErrorType(testType)) return;
-            if (testType.type !== "boolean") {
+            if (!isBooleanType(testType)) {
                 errors.push({
                     message:
                         `Ternary '?' test must be a boolean expression. ` +
@@ -1698,7 +1713,7 @@ function walkExprOperands(
                     if (
                         !isStringType(t) &&
                         t.type !== "number" &&
-                        t.type !== "boolean"
+                        !isBooleanType(t)
                     ) {
                         errors.push({
                             message:
@@ -1884,12 +1899,9 @@ export function validateValueType(
         if (exprType === undefined) return [];
         const resolved = resolveType(expectedType);
         if (resolved.type === "any") return [];
-        if (!isTypeAssignable(exprType, resolved)) {
-            return [
-                `${fieldName(path)} expected ${formatSchemaType(resolved)}, got ${formatSchemaType(exprType)} expression`,
-            ];
-        }
-        return [];
+        // Use structural validation so array element types and object
+        // fields are checked, not just the type discriminant.
+        return validateInferredAgainstExpected(exprType, resolved, path);
     }
 
     const resolved = resolveType(expectedType);
@@ -1942,10 +1954,10 @@ export function validateValueType(
             );
 
         case "true":
-            return validateLiteralBooleanValue(value, true, path);
+            return validateLiteralBooleanValue(value, true, variableTypes, path);
 
         case "false":
-            return validateLiteralBooleanValue(value, false, path);
+            return validateLiteralBooleanValue(value, false, variableTypes, path);
 
         case "string-union":
             return validateStringUnionValue(
@@ -2086,15 +2098,6 @@ function validateInferredAgainstExpected(
         return [];
     }
 
-    // undefined is always accepted — matches optional fields / optional
-    // captures where the value may be absent at runtime.
-    if (
-        resolvedExpected.type === "undefined" ||
-        resolvedInferred.type === "undefined"
-    ) {
-        return [];
-    }
-
     // Recurse into nested objects for structural validation.
     if (
         resolvedExpected.type === "object" &&
@@ -2104,6 +2107,18 @@ function validateInferredAgainstExpected(
             resolvedInferred,
             resolvedExpected,
             path,
+        );
+    }
+
+    // Recurse into arrays for element-type validation.
+    if (
+        resolvedExpected.type === "array" &&
+        resolvedInferred.type === "array"
+    ) {
+        return validateInferredAgainstExpected(
+            resolvedInferred.elementType,
+            resolvedExpected.elementType,
+            path ? `${path}[]` : "[]",
         );
     }
 
@@ -2249,6 +2264,7 @@ function validatePrimitiveValue(
 function validateLiteralBooleanValue(
     value: CompiledValueNode,
     expected: boolean,
+    variableTypes: Map<string, SchemaType>,
     path: string,
 ): string[] {
     if (value.type === "literal" && value.value === expected) {
@@ -2258,7 +2274,19 @@ function validateLiteralBooleanValue(
         return [`${fieldName(path)} expected ${expected}, got ${value.value}`];
     }
     if (value.type === "variable") {
-        return []; // Can't validate variable value at compile time
+        const varType = variableTypes.get(value.name);
+        if (varType === undefined || varType === ANY_TYPE) {
+            return []; // Unknown variable type — skip
+        }
+        const expectedType = expected
+            ? SchemaCreator.true_()
+            : SchemaCreator.false_();
+        if (!isTypeAssignable(varType, expectedType)) {
+            return [
+                `${fieldName(path)} expected ${expected}, but variable '${value.name}' captures ${formatSchemaType(resolveType(varType))}`,
+            ];
+        }
+        return [];
     }
     return [`${fieldName(path)} expected ${expected}, got ${value.type} value`];
 }
@@ -2274,16 +2302,9 @@ function validateStringUnionValue(
         if (varType === undefined || varType === ANY_TYPE) {
             return [];
         }
-        // Accept if the variable could produce a string value
-        if (!isTypeAssignable(varType, SchemaCreator.string())) {
-            return [
-                `${fieldName(path)} expected a string union member, but variable '${value.name}' captures ${resolveType(varType).type}`,
-            ];
-        }
-        // If the variable has a known string-union type (e.g. from a
-        // sub-rule that produces a specific literal), check that all
-        // possible values are in the expected enum.
         const resolvedVarType = resolveType(varType);
+        // string-union variable: check that all possible values are in
+        // the expected enum.
         if (resolvedVarType.type === "string-union") {
             const invalid = resolvedVarType.typeEnum.filter(
                 (v) => !typeEnum.includes(v),
@@ -2297,8 +2318,20 @@ function validateStringUnionValue(
                     `${fieldName(path)} expected ${expected}, got '${invalid.join("', '")}'`,
                 ];
             }
+            return [];
         }
-        return [];
+        // A bare string cannot be verified to produce one of the enum
+        // values — reject it.  The grammar must use a sub-rule or literal
+        // that produces a value matching the declared enum.
+        if (!isTypeAssignable(varType, SchemaCreator.string(typeEnum[0]))) {
+            return [
+                `${fieldName(path)} expected ${typeEnum.length === 1 ? `'${typeEnum[0]}'` : `one of ${typeEnum.map((s) => `'${s}'`).join(", ")}`}, but variable '${value.name}' captures ${formatSchemaType(resolvedVarType)}`,
+            ];
+        }
+        // string type does not guarantee conformance to the enum
+        return [
+            `${fieldName(path)} expected ${typeEnum.length === 1 ? `'${typeEnum[0]}'` : `one of ${typeEnum.map((s) => `'${s}'`).join(", ")}`}, but variable '${value.name}' captures string (use a sub-rule that produces one of the declared values)`,
+        ];
     }
 
     if (value.type === "literal" && typeof value.value === "string") {

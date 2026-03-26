@@ -780,21 +780,32 @@ this because the output is ambiguous.
 
 ### Design Principles
 
-1. **Statically-Typed Expressions** — every node has a known compile-time
+1. **Strict Conformance** — the purpose of type checking is to ensure
+   that values produced by the grammar conform to the types declared in
+   the schema. If an inferred type is deemed assignable to an expected
+   type, then every possible runtime value of the inferred type must be
+   a valid value of the expected type. Widening directions that are sound
+   are permitted (e.g. `string-union` → `string`, `true`/`false` →
+   `boolean`), while unsound widenings are rejected (e.g. bare `string`
+   → `string-union`, bare `boolean` → `true`/`false`). When the grammar
+   needs a value that conforms to a narrow type (such as a string enum),
+   it must use a sub-rule or literal that produces a matching value — a
+   bare wildcard capture is not sufficient.
+2. **Statically-Typed Expressions** — every node has a known compile-time
    type. Union types (e.g. `string | number` from `??`) are valid
    statically-known types.
-2. **No Implicit Coercion** — operators require explicitly compatible types.
+3. **No Implicit Coercion** — operators require explicitly compatible types.
    JavaScript's implicit type coercion rules are rejected.
-3. **Operators Do One Thing** — `+` is add or concat (not both at once),
+4. **Operators Do One Thing** — `+` is add or concat (not both at once),
    `&&`/`||` are boolean logic, `!` is boolean negation, ternary test must
    be boolean. `typeof` provides runtime type discrimination.
-4. **Honest Types for Optional Captures** — `$(x:type)?` produces
+5. **Honest Types for Optional Captures** — `$(x:type)?` produces
    `T | undefined`, reflecting runtime behavior.
-5. **Purpose-Built Operators for Nullability** — `??` and `?.` handle
+6. **Purpose-Built Operators for Nullability** — `??` and `?.` handle
    `T | undefined` from optional captures.
-6. **Closed Method Surface** — every whitelisted method has a known return
+7. **Closed Method Surface** — every whitelisted method has a known return
    type; unusable methods (callbacks, iterators) are excluded.
-7. **Errors Suggest Alternatives** — every restriction error tells the user
+8. **Errors Suggest Alternatives** — every restriction error tells the user
    what to do instead.
 
 ### Expression Type Restriction Table

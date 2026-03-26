@@ -1203,3 +1203,203 @@ describe("operator type restrictions", () => {
         ).toBe(true);
     });
 });
+
+// ── Structural conformance for expression results ─────────────────────────────
+// Verify that expression results are validated structurally against the
+// expected type, not just by type discriminant.  Previously, the expression
+// branch used the shallow `isTypeAssignable` which would accept `string[]`
+// for `number[]` because both are "array".
+
+describe("expression structural conformance", () => {
+    it("split() result (string[]) rejected for number[] field", () => {
+        const ArrayActionDef = SchemaCreator.intf(
+            "ArrayAction",
+            SchemaCreator.obj({
+                actionName: SchemaCreator.field(SchemaCreator.string("act")),
+                items: SchemaCreator.field(
+                    SchemaCreator.array(SchemaCreator.number()),
+                ),
+            }),
+            undefined,
+            true,
+        );
+        const loader: SchemaLoader = (typeName) =>
+            typeName === "ArrayAction" ? ArrayActionDef : undefined;
+        const grammarText = `
+            import { ArrayAction } from "schema.ts";
+            <Start> : ArrayAction = test $(s:string)
+                -> { actionName: "act", items: s.split(",") };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+            enableExpressions: true,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("number");
+        expect(errors[0]).toContain("string");
+    });
+
+    it("split() result (string[]) accepted for string[] field", () => {
+        const ArrayActionDef = SchemaCreator.intf(
+            "ArrayAction",
+            SchemaCreator.obj({
+                actionName: SchemaCreator.field(SchemaCreator.string("act")),
+                items: SchemaCreator.field(
+                    SchemaCreator.array(SchemaCreator.string()),
+                ),
+            }),
+            undefined,
+            true,
+        );
+        const loader: SchemaLoader = (typeName) =>
+            typeName === "ArrayAction" ? ArrayActionDef : undefined;
+        const grammarText = `
+            import { ArrayAction } from "schema.ts";
+            <Start> : ArrayAction = test $(s:string)
+                -> { actionName: "act", items: s.split(",") };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+            enableExpressions: true,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    it("comparison expression (boolean) rejected for string field", () => {
+        const grammarText = `
+            import { ExprAction } from "schema.ts";
+            <Start> : ExprAction = test $(n:number)
+                -> { actionName: "test", count: 0, label: n > 5, active: true };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow(
+            "test",
+            grammarText,
+            errors,
+            undefined,
+            exprOpts,
+        );
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("string");
+        expect(errors[0]).toContain("boolean");
+    });
+
+    it("arithmetic expression (number) rejected for boolean field", () => {
+        const grammarText = `
+            import { ExprAction } from "schema.ts";
+            <Start> : ExprAction = test $(n:number)
+                -> { actionName: "test", count: 0, label: "x", active: n + 1 };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow(
+            "test",
+            grammarText,
+            errors,
+            undefined,
+            exprOpts,
+        );
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("boolean");
+        expect(errors[0]).toContain("number");
+    });
+
+    it("ternary producing number rejected for string field", () => {
+        const grammarText = `
+            import { ExprAction } from "schema.ts";
+            <Start> : ExprAction = test $(n:number)
+                -> { actionName: "test", count: 0, label: n > 0 ? 1 : 2, active: true };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow(
+            "test",
+            grammarText,
+            errors,
+            undefined,
+            exprOpts,
+        );
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("string");
+        expect(errors[0]).toContain("number");
+    });
+
+    it("ternary producing string accepted for string field", () => {
+        const grammarText = `
+            import { ExprAction } from "schema.ts";
+            <Start> : ExprAction = test $(n:number)
+                -> { actionName: "test", count: 0, label: n > 0 ? "yes" : "no", active: true };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow(
+            "test",
+            grammarText,
+            errors,
+            undefined,
+            exprOpts,
+        );
+        expect(errors.length).toBe(0);
+    });
+
+    it("optional capture without ?? rejected for required field", () => {
+        // $(name:string)? produces string | undefined, which should not
+        // pass for a required string field without a ?? fallback.
+        const grammarText = `
+            import { ExprAction } from "schema.ts";
+            <Start> : ExprAction = test $(name:string)?
+                -> { actionName: "test", count: 0, label: name, active: true };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow(
+            "test",
+            grammarText,
+            errors,
+            undefined,
+            exprOpts,
+        );
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("undefined");
+    });
+
+    it("optional capture with ?? fallback accepted for required field", () => {
+        const grammarText = `
+            import { ExprAction } from "schema.ts";
+            <Start> : ExprAction = test $(name:string)?
+                -> { actionName: "test", count: 0, label: name ?? "default", active: true };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow(
+            "test",
+            grammarText,
+            errors,
+            undefined,
+            exprOpts,
+        );
+        expect(errors.length).toBe(0);
+    });
+
+    it("optional capture accepted for optional field", () => {
+        const OptActionDef = SchemaCreator.intf(
+            "OptAction",
+            SchemaCreator.obj({
+                actionName: SchemaCreator.field(SchemaCreator.string("test")),
+                label: SchemaCreator.optional(SchemaCreator.string()),
+            }),
+            undefined,
+            true,
+        );
+        const loader: SchemaLoader = (typeName) =>
+            typeName === "OptAction" ? OptActionDef : undefined;
+        const grammarText = `
+            import { OptAction } from "schema.ts";
+            <Start> : OptAction = test $(name:string)?
+                -> { actionName: "test", label: name };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+            enableExpressions: true,
+        });
+        expect(errors.length).toBe(0);
+    });
+});
