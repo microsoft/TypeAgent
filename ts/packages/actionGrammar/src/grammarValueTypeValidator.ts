@@ -1449,10 +1449,7 @@ function walkExprOperands(
                     break;
                 case "&&":
                 case "||":
-                    if (
-                        !isBooleanType(leftType) ||
-                        !isBooleanType(rightType)
-                    ) {
+                    if (!isBooleanType(leftType) || !isBooleanType(rightType)) {
                         errors.push({
                             message:
                                 `Operator '${value.operator}' requires boolean operands. ` +
@@ -1954,10 +1951,20 @@ export function validateValueType(
             );
 
         case "true":
-            return validateLiteralBooleanValue(value, true, variableTypes, path);
+            return validateLiteralBooleanValue(
+                value,
+                true,
+                variableTypes,
+                path,
+            );
 
         case "false":
-            return validateLiteralBooleanValue(value, false, variableTypes, path);
+            return validateLiteralBooleanValue(
+                value,
+                false,
+                variableTypes,
+                path,
+            );
 
         case "string-union":
             return validateStringUnionValue(
