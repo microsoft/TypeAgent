@@ -1,0 +1,128 @@
+[
+  {
+    "id": "rec-01",
+    "category": "recording",
+    "description": "Record a weather briefing flow via learn: trigger",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "learn: get the weather forecast and add key points to my daily briefing list",
+        "expected": {
+          "routedTo": "reasoning",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Task flow registered"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "rec-02",
+    "category": "recording",
+    "description": "Newly recorded flow appears in list",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputPattern": "4|5|6|7"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "rec-03",
+    "category": "recording",
+    "description": "Record a research flow",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "learn: research a topic on the web and save a summary to a file",
+        "expected": {
+          "routedTo": "reasoning",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Task flow registered"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "rec-04",
+    "category": "recording",
+    "description": "Recorded research flow appears in list",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "rec-05",
+    "category": "recording",
+    "description": "Record a meeting prep flow",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "learn: prepare for my meetings today by checking calendar and related emails",
+        "expected": {
+          "routedTo": "reasoning",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Task flow registered"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "rec-06",
+    "category": "recording",
+    "description": "All recorded flows appear in list",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "rec-07",
+    "category": "recording",
+    "description": "Record using 'remember how to' trigger",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "remember how to search for a topic and create a list of findings",
+        "expected": {
+          "routedTo": "reasoning",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  }
+]

@@ -18,6 +18,13 @@ export interface ScriptFlowIndex {
     lastModified: string;
 }
 
+export interface ScriptFlowParameterMeta {
+    name: string;
+    type: "string" | "number" | "boolean" | "path";
+    required: boolean;
+    description: string;
+}
+
 export interface ScriptFlowIndexEntry {
     actionName: string;
     displayName: string;
@@ -25,6 +32,7 @@ export interface ScriptFlowIndexEntry {
     flowPath: string;
     scriptPath: string;
     grammarRuleText: string;
+    parameters: ScriptFlowParameterMeta[];
     created: string;
     updated: string;
     source: "reasoning" | "manual" | "seed";
@@ -67,21 +75,16 @@ export function generateGrammarRuleText(
             ? `${actionName}Alias${++aliasIndex}`
             : actionName;
 
-        // Replace all named wildcards with a single flowArgs capture.
-        // e.g. "list files in $(path:wildcard)" → "list files in $(flowArgs:wildcard)"
-        const rewritten = pattern.pattern.replace(
-            /\$\(\w+:wildcard\)/g,
-            "$(flowArgs:wildcard)",
+        // Preserve named parameter captures — use flow's own actionName
+        const captures = [...pattern.pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
+            (m) => m[1],
         );
-
-        const hasArgs = rewritten.includes("$(flowArgs:wildcard)");
-        const paramJson = hasArgs
-            ? `{ flowName: "${actionName}", flowArgs }`
-            : `{ flowName: "${actionName}" }`;
+        const paramJson =
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
 
         rules.push(
-            `<${ruleName}> [spacing=optional] = ${rewritten}` +
-                ` -> { actionName: "executeScriptFlow", parameters: ${paramJson} };`,
+            `<${ruleName}> [spacing=optional] = ${pattern.pattern}` +
+                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
         );
     }
 
@@ -148,6 +151,15 @@ export class ScriptFlowStore {
             recipe.grammarPatterns,
         );
 
+        const paramMeta: ScriptFlowParameterMeta[] = recipe.parameters.map(
+            (p) => ({
+                name: p.name,
+                type: p.type,
+                required: p.required,
+                description: p.description,
+            }),
+        );
+
         const now = new Date().toISOString();
         this.index.flows[actionName] = {
             actionName,
@@ -156,6 +168,7 @@ export class ScriptFlowStore {
             flowPath,
             scriptPath,
             grammarRuleText,
+            parameters: paramMeta,
             created: now,
             updated: now,
             source,
@@ -362,22 +375,17 @@ export class ScriptFlowStore {
     }
 
     generateDynamicSchemaText(): string {
-        const flowNames = Object.values(this.index.flows)
-            .filter((e) => e.enabled)
-            .map((e) => e.actionName);
+        const enabledFlows = Object.values(this.index.flows).filter(
+            (e) => e.enabled,
+        );
 
+        const flowNames = enabledFlows.map((e) => e.actionName);
         const flowNameType =
             flowNames.length > 0
                 ? flowNames.map((n) => `"${n}"`).join(" | ")
                 : "string";
 
-        // Build per-flow descriptions for the comment
-        const flowDescriptions = Object.values(this.index.flows)
-            .filter((e) => e.enabled)
-            .map((e) => `//   - "${e.actionName}": ${e.description}`)
-            .join("\n");
-
-        return [
+        const lines: string[] = [
             "// Lists all registered script flows",
             "export type ListScriptFlows = {",
             '    actionName: "listScriptFlows";',
@@ -390,19 +398,44 @@ export class ScriptFlowStore {
             "        name: string;",
             "    };",
             "};",
-            "",
-            "// Execute a registered script flow by name with parameters",
-            "// Available flows:",
-            flowDescriptions,
-            "export type ExecuteScriptFlow = {",
-            '    actionName: "executeScriptFlow";',
-            "    parameters: {",
-            `        flowName: ${flowNameType};`,
-            "        flowArgs?: string;",
-            '        // JSON string of named parameters e.g. \'{"Directory":"C:\\\\Users","Pattern":"*.txt"}\'',
-            "        flowParametersJson?: string;",
-            "    };",
-            "};",
+        ];
+
+        // Generate per-flow action types with unique actionNames
+        const flowTypeNames: string[] = [];
+        for (const entry of enabledFlows) {
+            const typeName =
+                entry.actionName.charAt(0).toUpperCase() +
+                entry.actionName.slice(1) +
+                "Action";
+            flowTypeNames.push(typeName);
+
+            lines.push("");
+            lines.push(`// ${entry.description}`);
+            lines.push(`export type ${typeName} = {`);
+            lines.push(`    actionName: "${entry.actionName}";`);
+
+            if ((entry.parameters ?? []).length > 0) {
+                lines.push("    parameters: {");
+                for (const p of entry.parameters ?? []) {
+                    const tsType =
+                        p.type === "number"
+                            ? "number"
+                            : p.type === "boolean"
+                              ? "boolean"
+                              : "string";
+                    const opt = p.required ? "" : "?";
+                    if (p.description) {
+                        lines.push(`        // ${p.description}`);
+                    }
+                    lines.push(`        ${p.name}${opt}: ${tsType};`);
+                }
+                lines.push("    };");
+            }
+
+            lines.push("};");
+        }
+
+        lines.push(
             "",
             "// Create a new script flow with grammar rules for future reuse",
             "export type CreateScriptFlow = {",
@@ -427,7 +460,7 @@ export class ScriptFlowStore {
             "    };",
             "};",
             "",
-            "// Edit an existing script flow's script body (preserves grammar patterns and parameters)",
+            "// Edit an existing script flow's script body",
             "export type EditScriptFlow = {",
             '    actionName: "editScriptFlow";',
             "    parameters: {",
@@ -441,22 +474,25 @@ export class ScriptFlowStore {
             "export type ImportScriptFlow = {",
             '    actionName: "importScriptFlow";',
             "    parameters: {",
-            "        // Absolute or relative path to the .ps1 file to import",
             "        filePath: string;",
-            "        // Optional: override the generated action name",
             "        actionName?: string;",
             "    };",
             "};",
-            "",
-            "export type ScriptFlowActions =",
-            "    | ListScriptFlows",
-            "    | DeleteScriptFlow",
-            "    | ExecuteScriptFlow",
-            "    | CreateScriptFlow",
-            "    | EditScriptFlow",
-            "    | ImportScriptFlow;",
-            "",
-        ].join("\n");
+        );
+
+        lines.push("");
+        lines.push("export type ScriptFlowActions =");
+        lines.push("    | ListScriptFlows");
+        lines.push("    | DeleteScriptFlow");
+        for (const typeName of flowTypeNames) {
+            lines.push(`    | ${typeName}`);
+        }
+        lines.push("    | CreateScriptFlow");
+        lines.push("    | EditScriptFlow");
+        lines.push("    | ImportScriptFlow;");
+        lines.push("");
+
+        return lines.join("\n");
     }
 
     getDynamicGrammarText(): string {

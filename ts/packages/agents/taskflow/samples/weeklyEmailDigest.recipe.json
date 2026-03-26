@@ -1,20 +1,23 @@
 {
-  "name": "weeklyEmailDigest",
+  "version": 1,
+  "actionName": "weeklyEmailDigest",
   "description": "Fetch recent emails and send a digest summary to yourself",
-  "parameters": {
-    "timePeriod": {
+  "parameters": [
+    {
+      "name": "timePeriod",
       "type": "string",
       "required": false,
       "default": "this week",
       "description": "Time period to summarize (e.g. 'this week', 'today', 'last 3 days')"
     },
-    "focus": {
+    {
+      "name": "focus",
       "type": "string",
       "required": false,
       "default": "personal and work emails; skip promotional, marketing, and automated messages",
       "description": "What to focus on or exclude in the digest"
     }
-  },
+  ],
   "steps": [
     {
       "id": "emails",
@@ -44,7 +47,7 @@
       "schemaName": "email",
       "actionName": "sendEmail",
       "parameters": {
-        "subject": "Email digest — ${timePeriod}",
+        "subject": "Email digest \u2014 ${timePeriod}",
         "body": "${digest.text}",
         "to": ["me"],
         "genContent": {
@@ -52,5 +55,16 @@
         }
       }
     }
-  ]
+  ],
+  "grammarPatterns": [
+    "send (me)? (a)? (weekly)? email digest (for)? $(timePeriod:wildcard)",
+    "give me (my)? (weekly)? email digest (for)? $(timePeriod:wildcard)",
+    "email digest (for)? $(timePeriod:wildcard)",
+    "summarize (my)? (recent)? emails (for)? $(timePeriod:wildcard)",
+    "(weekly)? email digest"
+  ],
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-03-25T00:00:00Z"
+  }
 }

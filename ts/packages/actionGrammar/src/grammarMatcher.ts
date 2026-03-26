@@ -1861,11 +1861,8 @@ export function matchGrammarCompletion(
     let openWildcard = false;
 
     // Whether a findPartialKeywordInWildcard match determined the
-    // backed-up position.  When true, range candidate processing
-    // is skipped because the partial keyword position reflects a
-    // multi-word keyword boundary that a forward-mode evaluation
-    // can't reconstruct (the wildcard would greedily absorb the
-    // already-matched keyword words).
+    // backed-up position.  Used together with openWildcard to
+    // derive rangeCandidateGateOpen after the main loop.
     let partialKeywordBackup = false;
 
     // Whether backward actually collected a backed-up candidate (via
@@ -2088,6 +2085,7 @@ export function matchGrammarCompletion(
                 // position instead of backing up to the wildcard start.
                 // The partial keyword position has a higher
                 // matchedPrefixLength and is more useful to the user.
+                let partialKeywordForThisState = false;
                 if (
                     savedPendingWildcard?.valueId !== undefined &&
                     nextPart.type === "string"
@@ -2107,6 +2105,7 @@ export function matchGrammarCompletion(
                         openWildcard = true;
                         partialKeywordBackup = true;
                         backwardEmitted = true;
+                        partialKeywordForThisState = true;
                     } else {
                         collectBackwardCandidate(
                             preFinalizeState ?? state,
@@ -2122,11 +2121,14 @@ export function matchGrammarCompletion(
                 // Save a range candidate for the wildcard-nextPart
                 // split — the wildcard end is flexible and may match
                 // the final maxPrefixLength determined by other rules.
-                // Skip when partialKeywordBackup already found the
-                // optimal position.
+                // Skip only for the state where
+                // findPartialKeywordInWildcard already found the
+                // optimal position — other alternatives still need
+                // their range candidates so Phase B can contribute
+                // their keywords at the settled maxPrefixLength.
                 if (
                     savedPendingWildcard?.valueId !== undefined &&
-                    !partialKeywordBackup
+                    !partialKeywordForThisState
                 ) {
                     if (nextPart.type === "string") {
                         rangeCandidates.push({
@@ -2345,19 +2347,26 @@ export function matchGrammarCompletion(
     // the completion — exactly what the old forward re-invocation
     // would have done for that rule's wildcard-keyword boundary.
     //
-    // Gating: range candidates are only processed under the same
-    // conditions the old retrigger required — backward actually
-    // backed up, no openWildcard (ambiguous boundary would cause
-    // forward to re-parse with different greedy wildcards), and no
-    // partialKeywordBackup (forward can't reconstruct the keyword
-    // word boundary because the wildcard absorbs the consumed words).
-    if (
+    // Gating: range candidates are processed when backward backed
+    // up and trailing text remains.
+    //
+    // rangeCandidateGateOpen: the backed-up position is usable for
+    // range candidate processing.  True when either:
+    //  (a) the position is definite (!openWildcard) — no wildcard
+    //      boundary ambiguity; forward re-parsing would land at
+    //      the same position, or
+    //  (b) the position is anchored by a partial keyword
+    //      (partialKeywordBackup) — the keyword fragment pins the
+    //      position even though a wildcard boundary is open.
+    //
+    // Invariant: partialKeywordBackup implies openWildcard.
+    const rangeCandidateGateOpen = !openWildcard || partialKeywordBackup;
+    const processRangeCandidates =
         direction === "backward" &&
         backwardEmitted &&
         maxPrefixLength < prefix.length &&
-        !partialKeywordBackup &&
-        !openWildcard
-    ) {
+        rangeCandidateGateOpen;
+    if (processRangeCandidates) {
         for (const c of rangeCandidates) {
             if (maxPrefixLength <= c.wildcardStart) continue;
             if (
@@ -2458,13 +2467,7 @@ export function matchGrammarCompletion(
     //
     // Guard: if minPrefixLength filtered out all candidates, the
     // result is empty regardless of direction → not sensitive.
-    if (
-        direction === "backward" &&
-        backwardEmitted &&
-        maxPrefixLength < prefix.length &&
-        !partialKeywordBackup &&
-        !openWildcard
-    ) {
+    if (processRangeCandidates) {
         directionSensitive =
             maxPrefixLength > 0 &&
             (completions.size > 0 || properties.length > 0);

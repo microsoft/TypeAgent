@@ -2475,28 +2475,19 @@ importers:
 
   packages/agents/taskflow:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.12
-        version: 0.2.12(zod@4.3.6)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      '@typeagent/agent-server-client':
-        specifier: workspace:*
-        version: link:../../agentServer/client
-      '@typeagent/dispatcher-types':
-        specifier: workspace:*
-        version: link:../../dispatcher/types
-      html-to-text:
-        specifier: ^9.0.5
-        version: 9.0.5
+      debug:
+        specifier: ^4.3.4
+        version: 4.4.3(supports-color@8.1.1)
     devDependencies:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
-      '@types/html-to-text':
-        specifier: ^9.0.4
-        version: 9.0.4
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       action-grammar-compiler:
         specifier: workspace:*
         version: link:../../actionGrammarCompiler

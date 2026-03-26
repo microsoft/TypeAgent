@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "actionName": "dailyAgendaEmail",
+  "description": "Send yourself an email with today's calendar events",
+  "parameters": [],
+  "steps": [
+    {
+      "id": "events",
+      "schemaName": "calendar",
+      "actionName": "findTodaysEvents",
+      "parameters": {}
+    },
+    {
+      "id": "formatted",
+      "schemaName": "utility",
+      "actionName": "llmTransform",
+      "parameters": {
+        "input": "${events.text}",
+        "prompt": "Format these calendar events as a clean daily agenda with times and titles. Use bullet points.",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    },
+    {
+      "id": "sent",
+      "schemaName": "email",
+      "actionName": "sendEmail",
+      "parameters": {
+        "subject": "Daily Agenda",
+        "body": "${formatted.text}",
+        "to": ["me"],
+        "genContent": { "generateBody": false }
+      }
+    }
+  ],
+  "grammarPatterns": [
+    "send (me)? (my)? daily agenda (email)?",
+    "email (me)? today's schedule"
+  ],
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-03-25T00:00:00Z"
+  }
+}

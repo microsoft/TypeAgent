@@ -217,6 +217,7 @@ function extractRecordedActionName(): string | undefined {
 const internalCommandLabels: Record<string, string> = {
     __save_recording__: "Yes, save the recording",
     __discard_recording__: "Discard recording",
+    __cancel_recording__: "Cancel recording",
 };
 
 function handleInternalCommand(text: string): boolean {
@@ -258,6 +259,17 @@ function handleInternalCommand(text: string): boolean {
             { type: "text", content: "Recording discarded." },
             "browser",
         );
+        return true;
+    }
+    if (text === "__cancel_recording__") {
+        rpc.invoke("chatPanelStopRecording")
+            .then(() => {
+                chatPanel.addAgentMessage(
+                    { type: "text", content: "Recording cancelled." },
+                    "browser",
+                );
+            })
+            .catch(() => {});
         return true;
     }
     return false;
@@ -344,8 +356,13 @@ function addContextualFollowUps(command: string) {
                 if (result?.success) {
                     chatPanel.addFollowUpButtons([
                         {
-                            label: "Stop Recording",
+                            label: "Save recording",
                             command: "@browser stop recording",
+                        },
+                        {
+                            label: "Cancel recording",
+                            command: "__cancel_recording__",
+                            displayText: "Cancel recording",
                         },
                     ]);
                 }
