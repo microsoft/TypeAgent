@@ -603,7 +603,9 @@ input `"play"`:
   after a keyword "commits" the match position — the user has moved
   past the boundary. Both directions agree on the committed position.
   For example, `"play "` (with space) offers `"music"` for both
-  directions. Exception: in `[spacing=none]` mode, whitespace is not a
+  directions. (This is a consequence of the `directionSensitive`
+  biconditional — see invariant #3 in `completion.md`.)
+  Exception: in `[spacing=none]` mode, whitespace is not a
   separator, so `directionSensitive` is always `true` when any word has
   been fully matched — trailing spaces do not commit.
 
@@ -618,6 +620,14 @@ input `"play"`:
   populate the completion list with domain-specific values (e.g., song
   titles, contact names). When the grammar offers only keyword completions
   (no wildcards), `properties` is empty.
+
+  `properties` is a grammar-matcher concept. At the dispatcher layer,
+  `properties` entries have been consumed via `getActionCompletion()`
+  and `closedSet` is determined by `computeClosedSet()` independently —
+  so the grammar-matcher invariant `closedSet=false ↔ properties non-empty`
+  does not hold at the dispatcher level (e.g., free-form text has
+  `closedSet=false` with no `properties`).
+
 - `separatorMode` — determined by the grammar rule's `[spacing=...]`
   annotation (see [Spacing modes](#spacing-modes) above). Special cases:
   - When `matchedPrefixLength=0` (nothing consumed), `separatorMode` is
@@ -638,22 +648,22 @@ input `"play"`:
   direction does _not_ matter" above. The flag is evaluated at
   `matchedPrefixLength` rather than at the full input. When backward
   backs up (`backwardEmitted=true` and `maxPrefixLength < prefix.length`),
-  `directionSensitive` is recomputed for the backed-up position using
-  a heuristic: at `P > 0`, at least one keyword was matched before the
-  completion point, so `directionSensitive` is `true`; at `P = 0`,
-  nothing was matched, so it is `false`. This recomputation is skipped
-  when `partialKeywordBackup` or `openWildcard` is set (the backed-up
-  position is structurally pinned). When backward falls through to
-  forward behavior (`backwardEmitted=false`), the trailing-separator
-  advancement is applied normally and `directionSensitive` reflects
-  the forward-only evaluation.
+  `directionSensitive` is recomputed for the backed-up position: at
+  `P > 0`, at least one keyword was matched before the completion point,
+  so `directionSensitive` is `true`; at `P = 0`, nothing was matched, so
+  it is `false`. When backward falls through to forward behavior
+  (`backwardEmitted=false`), the trailing-separator advancement is
+  applied normally and `directionSensitive` reflects the forward-only
+  evaluation.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary — see `completion.md` [`openWildcard`] for the full
   definition (definite vs. ambiguous positions, persistence semantics,
   merge rule).
 
 See `completion.md` for full definitions of how these metadata fields
-flow through the cache, dispatcher, and shell layers.
+flow through the cache, dispatcher, and shell layers, and
+`completion.md` § Invariants for the full catalog of correctness
+invariants, their user-visible impact, and which tests verify them.
 
 ### Entity registry
 

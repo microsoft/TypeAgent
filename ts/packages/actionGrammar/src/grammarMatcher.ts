@@ -1478,6 +1478,8 @@ export type GrammarCompletionProperty = {
     propertyNames: string[];
 };
 
+// See docs/architecture/completion.md § Invariants for the full catalog of
+// correctness invariants on these fields and their user-visible impact.
 export type GrammarCompletionResult = {
     completions: string[];
     properties?: GrammarCompletionProperty[] | undefined;
@@ -2457,17 +2459,19 @@ export function matchGrammarCompletion(
     // the *full* prefix length — but when backward backed up, the
     // effective completion position is maxPrefixLength (< prefix.
     // length), and directionSensitive must reflect THAT position.
-    // The old retrigger got this for free: its forward call at P
-    // naturally evaluated directionSensitive at P.
     //
-    // Heuristic: at P > 0 at least one keyword was matched before
-    // the completion point, so hasPartToReconsider is true in a
+    // At P > 0 at least one keyword was matched before the
+    // completion point, so hasPartToReconsider is true in a
     // forward pass at P → directionSensitive.  At P = 0 nothing
     // was matched → not direction-sensitive.
     //
     // Guard: if minPrefixLength filtered out all candidates, the
     // result is empty regardless of direction → not sensitive.
-    if (processRangeCandidates) {
+    if (
+        direction === "backward" &&
+        backwardEmitted &&
+        maxPrefixLength < prefix.length
+    ) {
         directionSensitive =
             maxPrefixLength > 0 &&
             (completions.size > 0 || properties.length > 0);
