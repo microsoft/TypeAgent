@@ -948,7 +948,7 @@ describeForEachCompletion(
                 // backward main loop: backward backs up to "now" which
                 // follows a captured wildcard (afterWildcard=true).
                 const g = [
-                    `entity TrackName;`,
+                    `import { TrackName };`,
                     `<Start> = play $(track:TrackName) now -> { actionName: "play", parameters: { track } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
