@@ -530,9 +530,17 @@ overlaps. See `actionGrammar.md` "Why direction matters" for detailed
 examples and the Option A/B design trade-off.
 
 **When `directionSensitive=false`:** Nothing was fully matched
-(partial/dirty), or a trailing separator commits the position. See
-`actionGrammar.md` "When direction does _not_ matter" for the full
-list, including the `[spacing=none]` exception.
+(partial/dirty), or a trailing separator commits the position and
+backward does not back up past it. Note: backward _can_ back up
+past trailing whitespace when a wildcard precedes the next keyword
+— the wildcard absorbs the space, so backward re-enters the
+wildcard and the results differ (→ `directionSensitive=true`).
+See `actionGrammar.md` "When direction does _not_ matter" for the
+full list, including the `[spacing=none]` exception.
+
+The flag is a **biconditional**: `directionSensitive=true` if and only
+if forward and backward produce different results. There are no false
+positives (see invariant #3).
 
 **Examples:** The table below shows `directionSensitive` for various
 inputs. The general pattern: `true` when a part is fully matched with
@@ -671,6 +679,63 @@ Anchor sliding preserves the trie and metadata so the menu re-appears at
 the next whitespace boundary. Recovery is automatic: when the user eventually
 types the keyword and it uniquely matches (trigger B1), the session
 re-fetches for the next grammar part.
+
+---
+
+## Invariants
+
+The completion metadata fields must satisfy several invariants across the
+pipeline. Violations produce user-visible bugs — wrong completions, stale
+menus, or mispositioned insertions. The invariants are automatically
+checked by the `withInvariantChecks` wrapper in
+`packages/actionGrammar/test/testUtils.ts`, which runs on every completion
+test.
+
+### Per-result invariants (grammar matcher layer)
+
+| #   | Invariant                                                                                                                                       | Impact if violated                                                                                                                                                         |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `matchedPrefixLength` ∈ [`minPrefixLength`, `prefix.length`]                                                                                    | Completions inserted at wrong position in the input.                                                                                                                       |
+| 2   | `closedSet=false` ↔ `properties` is non-empty (grammar matcher layer only — see `actionGrammar.md` [properties](#metadata-produced) for scope) | **False `true`:** shell uses "accept" policy and never re-fetches — user misses entity completions. **False `false`:** unnecessary re-fetches (perf cost, no visible bug). |
+
+### Cross-direction invariants
+
+| #   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Impact if violated                                                                                                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 3   | `directionSensitive` ↔ `backward(input)` differs from `forward(input)` (biconditional: `directionSensitive=false` → results identical, AND results identical → `directionSensitive=false`). This subsumes the trailing-separator-commits property: when trailing whitespace commits the position, forward and backward agree, so `directionSensitive` must be `false`. When backward backs up past trailing whitespace (e.g., into a wildcard), the results differ and `directionSensitive=true` is correct. | **False negative (`false` when results differ):** stale menu after backspace — shell skips re-fetch. **False positive (`true` when results are identical):** unnecessary re-fetch on direction change (perf cost). |
+| 4   | Two-pass backward equivalence: `backward(input)` = `forward(input[0..P])` where _P_ = `backward.matchedPrefixLength`. Applies when backward differs from forward, `openWildcard=false`, and no `minPrefixLength`.                                                                                                                                                                                                                                                                                             | Backspacing shows different completions than forward-typing to the same position — the menu is inconsistent depending on how the user arrived at that input.                                                       |
+| 5   | Non-lossy backward: when backing up past a shared prefix (e.g., `"play"` matching `play music \| play video`), backward must show ALL alternatives at the backed-up position, not just the branch that was matched.                                                                                                                                                                                                                                                                                           | User sees only one completion branch when backspacing at a fork — other valid alternatives are silently lost.                                                                                                      |
+
+### Field-specific invariants
+
+| #   | Field                | Invariant                                                                                                                                                                                                                                             | Impact if violated                                                                                                                                                    |
+| --- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 7   | `separatorMode`      | `undefined` when both `completions` and `properties` are empty.                                                                                                                                                                                       | Shell consults a meaningless separator mode for a position with nothing to complete — can cause phantom menu show/hide.                                               |
+| 8   | `separatorMode`      | `"optional"` when `matchedPrefixLength=0` (nothing consumed) or when trailing whitespace was consumed.                                                                                                                                                | Menu requires a separator where none is needed, or allows fused display (e.g., `"playmusic"` instead of `"play music"`).                                              |
+| 9   | `separatorMode`      | `"none"` for `[spacing=none]` rules.                                                                                                                                                                                                                  | Tokens incorrectly separated in a grammar designed for direct adjacency.                                                                                              |
+| 10  | `closedSet`          | `true` when all completions are grammar keywords (no entity/wildcard values).                                                                                                                                                                         | Shell re-fetches for a finite keyword set (perf cost) or, worse, accepts prematurely for an open set.                                                                 |
+| 11  | `openWildcard`       | `true` only at ambiguous wildcard boundaries (Category 2 forward after wildcard finalized at EOI, or backward at keyword after captured wildcard).                                                                                                    | **False `true`:** anchor slides when it shouldn't — completions appear at wrong position. **False `false`:** menu disappears at wildcard boundary instead of sliding. |
+| 12  | `directionSensitive` | `true` ↔ forward and backward produce different results (see #3). Concretely: `true` when a part was fully matched with no trailing separator; `false` when partial/dirty, or when trailing separator commits and backward does not back up past it. | No false positives or false negatives — enforced as a biconditional by #3.                                                                                            |
+
+### Merge invariants (cache / dispatcher layers)
+
+| #   | Invariant                                                                                                 | Impact if violated                                                                             |
+| --- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 13  | `matchedPrefixLength`: keep longest across sources; discard shorter.                                      | Completions anchored at wrong position when multiple grammars/agents contribute.               |
+| 14  | `closedSet`: AND-merge (closed only if ALL sources are closed).                                           | Premature "accept" when one source is open — user misses completions from that source.         |
+| 15  | `separatorMode`: strongest requirement wins (`"space"` > `"spacePunctuation"` > `"optional"` > `"none"`). | Fused display if a weak mode wins over a strong one, or unnecessary separation if the reverse. |
+| 16  | `directionSensitive`: OR-merge (sensitive if ANY source is sensitive).                                    | Skipped re-fetch when one source's results differ by direction.                                |
+| 17  | `openWildcard`: OR-merge (open if ANY source has ambiguous boundary).                                     | Anchor doesn't slide when one source's position is ambiguous — menu disappears.                |
+
+### Known gaps
+
+- **Category 2 forward for number-variable next-parts:** When the prefix
+  is exhausted at a `VarNumberPart`, the forward path does not call
+  `updateMaxPrefixLength` or collect a property completion. This causes
+  `forward("set volume")` to report `matchedPrefixLength=0` instead of
+  `10` for grammar `set volume $(n:number) percent`. The backward path
+  handles this correctly. The two-pass invariant check skips this case
+  (when `forwardAtP.matchedPrefixLength < P`).
 
 ---
 
