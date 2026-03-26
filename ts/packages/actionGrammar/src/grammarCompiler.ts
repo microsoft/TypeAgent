@@ -81,7 +81,7 @@ type CompileContext = {
     exportedNames: Set<string>; // Only rules with export keyword are importable
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
     importedTypeNames: Map<string, number | undefined>; // All imported type names with positions (source-less entity imports + .ts type imports)
-    usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
+    usedImportedTypes: Set<string>; // Imported types actually referenced in variables (entity + .ts type imports)
     resolvedTypes: Map<string, SchemaTypeDefinition>; // Parsed schema types resolved via SchemaLoader
     hasStarImport: boolean; // Indicates if there's a star import
     currentDefinition?: string | undefined;
@@ -95,12 +95,9 @@ function createImportCompileContext(
     fileLoader: FileLoader,
     grammarFileMap: Map<string, CompileContext>,
     referencingFileName: string,
-    importStmt: ImportStatement,
+    source: string,
 ): CompileContext {
-    const fullPath = fileLoader.resolvePath(
-        importStmt.source!,
-        referencingFileName,
-    );
+    const fullPath = fileLoader.resolvePath(source, referencingFileName);
     if (grammarFileMap.has(fullPath)) {
         return grammarFileMap.get(fullPath)!;
     }
@@ -208,7 +205,7 @@ function createCompileContext(
                     fileUtils,
                     grammarFileMap,
                     fullPath,
-                    importStmt,
+                    importStmt.source,
                 );
 
                 const ruleNames =
@@ -255,10 +252,10 @@ function createCompileContext(
                             // Resolve relative source path against the grammar file
                             const resolvedSource = fileUtils
                                 ? fileUtils.resolvePath(
-                                      importStmt.source!,
+                                      importStmt.source,
                                       fullPath,
                                   )
-                                : importStmt.source!;
+                                : importStmt.source;
                             const def = schemaLoader(name, resolvedSource);
                             if (def !== undefined) {
                                 if (!def.exported) {
