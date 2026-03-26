@@ -3252,6 +3252,25 @@ describeForEachCompletion(
                     directionSensitive: true,
                 });
             });
+
+            it("backward on 'play first penguin z' does not trigger partialKeywordBackup", () => {
+                // "z" doesn't prefix any keyword — no partial keyword
+                // match, so backward falls back to collecting a
+                // regular backward candidate (wildcard start backup).
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play first penguin z",
+                    undefined,
+                    "backward",
+                );
+                expectMetadata(result, {
+                    completions: ["song", "the", "track"],
+                    sortCompletions: true,
+                    matchedPrefixLength: 4,
+                    openWildcard: false,
+                    directionSensitive: true,
+                });
+            });
         });
 
         describe("partialKeywordBackup with PlayTrackNumberCommand + PlaySpecificTrack", () => {

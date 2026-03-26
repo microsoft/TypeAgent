@@ -2358,6 +2358,8 @@ export function matchGrammarCompletion(
     //  (b) the position is anchored by a partial keyword
     //      (partialKeywordBackup) — the keyword fragment pins the
     //      position even though a wildcard boundary is open.
+    //
+    // Invariant: partialKeywordBackup implies openWildcard.
     const rangeCandidateGateOpen = !openWildcard || partialKeywordBackup;
     const processRangeCandidates =
         direction === "backward" &&
