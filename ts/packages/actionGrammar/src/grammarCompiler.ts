@@ -708,7 +708,18 @@ function createNamedGrammarRules(
             }
 
             // Collect all leaf value nodes from the rule tree,
-            // including those in sub-rules referenced via RulesPart
+            // including those in sub-rules referenced via RulesPart.
+            //
+            // Why per-leaf instead of deriving the whole rule's type and doing
+            // a single isTypeAssignable check?  Semantically equivalent, but
+            // per-leaf validation yields much better diagnostics:
+            //   1. Source positions — each leaf carries a pos, so errors point
+            //      to the specific -> expression, not just the rule name.
+            //   2. Structural detail — object leaves get field-level messages
+            //      (missing required property, extraneous property, type mismatch).
+            //   3. Per-alternative isolation — if one of N alternatives is wrong,
+            //      the error identifies that alternative rather than failing the
+            //      whole union.
             const leafValues = collectLeafValues(
                 record.grammarRules,
                 context.valuePositions,
@@ -775,7 +786,6 @@ function createNamedGrammarRules(
                                 leaf.value,
                                 expectedType,
                                 varTypes,
-                                context.resolvedTypes,
                                 "",
                                 leafExprTypes.get(leaf.value),
                             );
