@@ -17,11 +17,19 @@ export interface TaskFlowIndex {
     lastModified: string;
 }
 
+export interface FlowParameterMeta {
+    name: string;
+    type: "string" | "number" | "boolean";
+    required: boolean;
+    description: string;
+}
+
 export interface TaskFlowIndexEntry {
     actionName: string;
     description: string;
     flowPath: string;
     grammarRuleText: string;
+    parameters: FlowParameterMeta[];
     created: string;
     updated: string;
     source: "reasoning" | "manual" | "seed";
@@ -66,13 +74,11 @@ export function generateGrammarRuleText(
             (m) => m[1],
         );
         const paramJson =
-            captures.length > 0
-                ? `{ flowName: "${actionName}", ${captures.join(", ")} }`
-                : `{ flowName: "${actionName}" }`;
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
 
         rules.push(
             `<${actionName}> [spacing=optional] = ${pattern}` +
-                ` -> { actionName: "executeTaskFlow", parameters: ${paramJson} };`,
+                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
         );
     }
 
@@ -166,12 +172,20 @@ export class TaskFlowStore {
             recipe.grammarPatterns,
         );
 
+        const paramMeta: FlowParameterMeta[] = recipe.parameters.map((p) => ({
+            name: p.name,
+            type: p.type,
+            required: p.required,
+            description: p.description,
+        }));
+
         const now = new Date().toISOString();
         this.index.flows[actionName] = {
             actionName,
             description: recipe.description,
             flowPath,
             grammarRuleText,
+            parameters: paramMeta,
             created: now,
             updated: now,
             source,
@@ -348,21 +362,11 @@ export class TaskFlowStore {
     // ── Dynamic schema ─────────────────────────────────────────────────
 
     generateDynamicSchemaText(): string {
-        const flowNames = Object.values(this.index.flows)
-            .filter((e) => e.enabled)
-            .map((e) => e.actionName);
+        const enabledFlows = Object.values(this.index.flows).filter(
+            (e) => e.enabled,
+        );
 
-        const flowNameType =
-            flowNames.length > 0
-                ? flowNames.map((n) => `"${n}"`).join(" | ")
-                : "string";
-
-        const flowDescriptions = Object.values(this.index.flows)
-            .filter((e) => e.enabled)
-            .map((e) => `//   - "${e.actionName}": ${e.description}`)
-            .join("\n");
-
-        return [
+        const lines: string[] = [
             "// Lists all registered task flows",
             "export type ListTaskFlows = {",
             '    actionName: "listTaskFlows";',
@@ -375,24 +379,54 @@ export class TaskFlowStore {
             "        name: string;",
             "    };",
             "};",
-            "",
-            "// Execute a registered task flow by name with parameters",
-            "// Available flows:",
-            flowDescriptions,
-            "export type ExecuteTaskFlow = {",
-            '    actionName: "executeTaskFlow";',
-            "    parameters: {",
-            `        flowName: ${flowNameType};`,
-            "        [key: string]: unknown;",
-            "    };",
-            "};",
-            "",
-            "export type TaskFlowActions =",
-            "    | ListTaskFlows",
-            "    | DeleteTaskFlow",
-            "    | ExecuteTaskFlow;",
-            "",
-        ].join("\n");
+        ];
+
+        // Generate per-flow action types with unique actionNames
+        const flowTypeNames: string[] = [];
+        for (const entry of enabledFlows) {
+            const typeName =
+                entry.actionName.charAt(0).toUpperCase() +
+                entry.actionName.slice(1) +
+                "Action";
+            flowTypeNames.push(typeName);
+
+            lines.push("");
+            lines.push(`// ${entry.description}`);
+            lines.push(`export type ${typeName} = {`);
+            lines.push(`    actionName: "${entry.actionName}";`);
+
+            if ((entry.parameters ?? []).length > 0) {
+                lines.push("    parameters: {");
+                for (const p of entry.parameters ?? []) {
+                    const tsType =
+                        p.type === "number"
+                            ? "number"
+                            : p.type === "boolean"
+                              ? "boolean"
+                              : "string";
+                    const opt = p.required ? "" : "?";
+                    if (p.description) {
+                        lines.push(`        // ${p.description}`);
+                    }
+                    lines.push(`        ${p.name}${opt}: ${tsType};`);
+                }
+                lines.push("    };");
+            }
+
+            lines.push("};");
+        }
+
+        lines.push("");
+        lines.push("export type TaskFlowActions =");
+        lines.push("    | ListTaskFlows");
+        lines.push("    | DeleteTaskFlow");
+        for (const typeName of flowTypeNames) {
+            lines.push(`    | ${typeName}`);
+        }
+        lines.push(";");
+        lines.push("");
+
+        return lines.join("\n");
     }
 
     // ── Internal ───────────────────────────────────────────────────────

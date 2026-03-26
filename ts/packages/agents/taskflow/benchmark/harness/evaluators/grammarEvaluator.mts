@@ -15,20 +15,18 @@ export function evaluateGrammarMatch(
     const results: EvaluationResult[] = [];
     const expected = utterance.expected;
 
-    // Check if the right flow was matched
     if (expected.matchedFlow !== undefined) {
         const actualFlow = extractFlowName(commandResult, trace);
         if (expected.matchedFlow === null) {
-            // Negative test: should NOT match any scriptflow
             results.push({
                 passed:
-                    actualFlow === null || trace.matchedAgent !== "scriptflow",
+                    actualFlow === null || trace.matchedAgent !== "taskflow",
                 component: "grammar",
-                expected: "no scriptflow match",
+                expected: "no taskflow match",
                 actual: actualFlow ?? "no match",
                 message:
-                    actualFlow && trace.matchedAgent === "scriptflow"
-                        ? `Expected no scriptflow match but matched '${actualFlow}'`
+                    actualFlow && trace.matchedAgent === "taskflow"
+                        ? `Expected no taskflow match but matched '${actualFlow}'`
                         : undefined,
             });
         } else {
@@ -47,7 +45,6 @@ export function evaluateGrammarMatch(
         }
     }
 
-    // Check extracted parameters
     if (
         expected.extractedParams &&
         Object.keys(expected.extractedParams).length > 0
@@ -56,29 +53,12 @@ export function evaluateGrammarMatch(
         for (const [key, expectedValue] of Object.entries(
             expected.extractedParams,
         )) {
-            // Per-flow types: params are named directly on the action
             let actualValue = findParamCaseInsensitive(actualParams, key);
-            // Legacy fallback: flowArgs (single wildcard capture)
             if (actualValue === undefined) {
                 actualValue = findParamCaseInsensitive(
                     actualParams,
                     "flowArgs",
                 );
-            }
-            // Legacy fallback: flowParametersJson (LLM translation)
-            if (actualValue === undefined) {
-                const fpJson = findParamCaseInsensitive(
-                    actualParams,
-                    "flowParametersJson",
-                );
-                if (typeof fpJson === "string") {
-                    try {
-                        const parsed = JSON.parse(fpJson);
-                        actualValue = findParamCaseInsensitive(parsed, key);
-                    } catch {
-                        /* ignore */
-                    }
-                }
             }
             const matches = normalizedEqual(actualValue, expectedValue);
             results.push({
@@ -103,24 +83,21 @@ function extractFlowName(
     if (trace.matchedAction) return trace.matchedAction;
     const result = commandResult as any;
 
-    // CommandResult.actions[] from the dispatcher (collectCommandResult: true)
-    // Each action is { schemaName, actionName, parameters }
     const firstAction = result?.actions?.[0];
     if (firstAction) {
-        // Per-flow action types: actionName IS the flow name
-        if (firstAction.schemaName === "scriptflow") {
-            return firstAction.actionName;
-        }
-        // Legacy: executeScriptFlow with flowName param
+        // TaskFlow routes through executeTaskFlow with flowName param
         if (firstAction.parameters?.flowName) {
             return firstAction.parameters.flowName;
+        }
+        if (firstAction.schemaName === "taskflow") {
+            return firstAction.actionName;
         }
         return firstAction.actionName ?? null;
     }
 
-    if (result?.action?.actionName) return result.action.actionName;
     if (result?.action?.parameters?.flowName)
         return result.action.parameters.flowName;
+    if (result?.action?.actionName) return result.action.actionName;
     return null;
 }
 
@@ -131,7 +108,6 @@ function extractParams(
     if (trace.extractedParams) return trace.extractedParams;
     const result = commandResult as any;
 
-    // CommandResult.actions[] — extract parameters from the first action
     const firstAction = result?.actions?.[0];
     if (firstAction?.parameters) return firstAction.parameters;
     if (result?.action?.parameters) return result.action.parameters;
@@ -153,19 +129,14 @@ function normalizedEqual(actual: unknown, expected: unknown): boolean {
     if (actual === expected) return true;
     if (actual === undefined || actual === null) return false;
 
-    // String comparison: case-insensitive, normalize path separators
     if (typeof actual === "string" && typeof expected === "string") {
-        const normActual = actual.replace(/\\/g, "/").toLowerCase().trim();
-        const normExpected = expected.replace(/\\/g, "/").toLowerCase().trim();
-        return normActual === normExpected;
+        return actual.toLowerCase().trim() === expected.toLowerCase().trim();
     }
 
-    // Number comparison
     if (typeof actual === "number" && typeof expected === "number") {
         return actual === expected;
     }
 
-    // Coerce string to number
     if (typeof actual === "string" && typeof expected === "number") {
         return parseFloat(actual) === expected;
     }

@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "actionName": "searchAndList",
+  "description": "Search the web for a topic and create a list of key findings",
+  "parameters": [
+    {
+      "name": "topic",
+      "type": "string",
+      "required": true,
+      "description": "Topic to search for"
+    },
+    {
+      "name": "maxItems",
+      "type": "number",
+      "required": false,
+      "default": 5,
+      "description": "Maximum items in list"
+    }
+  ],
+  "steps": [
+    {
+      "id": "results",
+      "schemaName": "utility",
+      "actionName": "webSearch",
+      "parameters": { "query": "${topic}", "numResults": "${maxItems}" }
+    },
+    {
+      "id": "summary",
+      "schemaName": "utility",
+      "actionName": "llmTransform",
+      "parameters": {
+        "input": "${results.text}",
+        "prompt": "Extract the top ${maxItems} key findings as a bullet list. Return one finding per line.",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    },
+    {
+      "id": "list",
+      "schemaName": "list",
+      "actionName": "createList",
+      "parameters": { "listName": "${topic} findings" }
+    }
+  ],
+  "grammarPatterns": [
+    "search for $(topic:wildcard) and make a list",
+    "research $(topic:wildcard) and list the findings"
+  ],
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-03-25T00:00:00Z"
+  }
+}

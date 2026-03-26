@@ -1013,10 +1013,24 @@ async function saveScriptRecipesAsActiveFlows(
         await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
         await storage.write(scriptPath, recipe.script.body);
 
-        // Generate grammar rule text
+        // Generate grammar rule text — use flow's own actionName
         const grammarRuleText = generateGrammarRuleTextForRecipe(
             actionName,
             recipe.grammarPatterns,
+        );
+
+        const parametersMeta = recipe.parameters.map(
+            (p: {
+                name: string;
+                type: string;
+                required: boolean;
+                description: string;
+            }) => ({
+                name: p.name,
+                type: p.type,
+                required: p.required,
+                description: p.description,
+            }),
         );
 
         const now = new Date().toISOString();
@@ -1027,6 +1041,7 @@ async function saveScriptRecipesAsActiveFlows(
             flowPath,
             scriptPath,
             grammarRuleText,
+            parameters: parametersMeta,
             created: now,
             updated: now,
             source: "reasoning",
@@ -1058,17 +1073,17 @@ function generateGrammarRuleTextForRecipe(
         const ruleName = pattern.isAlias
             ? `${actionName}Alias${++aliasIndex}`
             : actionName;
-        const rewritten = pattern.pattern.replace(
-            /\$\(\w+:wildcard\)/g,
-            "$(flowArgs:wildcard)",
+
+        // Preserve named captures — use flow's own actionName
+        const captures = [...pattern.pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
+            (m) => m[1],
         );
-        const hasArgs = rewritten.includes("$(flowArgs:wildcard)");
-        const paramJson = hasArgs
-            ? `{ flowName: "${actionName}", flowArgs }`
-            : `{ flowName: "${actionName}" }`;
+        const paramJson =
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
+
         rules.push(
-            `<${ruleName}> [spacing=optional] = ${rewritten}` +
-                ` -> { actionName: "executeScriptFlow", parameters: ${paramJson} };`,
+            `<${ruleName}> [spacing=optional] = ${pattern.pattern}` +
+                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
         );
     }
     return rules.join("\n");
@@ -1185,22 +1200,27 @@ async function saveTaskFlowRecipeToInstanceStorage(
     const flowPath = `flows/${actionName}.flow.json`;
     await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
 
-    // Generate grammar rule text — preserve named captures for TaskFlow
+    // Generate grammar rule text — use flow's own actionName (not executeTaskFlow)
     const grammarRules: string[] = [];
     for (const pattern of recipe.grammarPatterns) {
         const captures = [...pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
             (m) => m[1],
         );
         const paramJson =
-            captures.length > 0
-                ? `{ flowName: "${actionName}", ${captures.join(", ")} }`
-                : `{ flowName: "${actionName}" }`;
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
         grammarRules.push(
             `<${actionName}> [spacing=optional] = ${pattern}` +
-                ` -> { actionName: "executeTaskFlow", parameters: ${paramJson} };`,
+                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
         );
     }
     const grammarRuleText = grammarRules.join("\n");
+
+    const parametersMeta = recipe.parameters.map((p) => ({
+        name: p.name,
+        type: p.type,
+        required: p.required,
+        description: p.description,
+    }));
 
     const now = new Date().toISOString();
     index.flows[actionName] = {
@@ -1208,6 +1228,7 @@ async function saveTaskFlowRecipeToInstanceStorage(
         description: recipe.description,
         flowPath,
         grammarRuleText,
+        parameters: parametersMeta,
         created: now,
         updated: now,
         source: "reasoning",

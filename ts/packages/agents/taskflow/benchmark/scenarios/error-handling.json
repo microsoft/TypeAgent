@@ -1,0 +1,57 @@
+[
+  {
+    "id": "err-01",
+    "category": "error-handling",
+    "description": "Unknown flow name returns error",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "execute task flow nonExistentFlow",
+        "expected": {
+          "routedTo": "grammar",
+          "execution": {
+            "shouldSucceed": false,
+            "outputContains": ["Unknown"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "err-02",
+    "category": "error-handling",
+    "description": "Delete non-existent flow returns error",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "delete task flow doesNotExist",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "deleteTaskFlow",
+          "execution": {
+            "shouldSucceed": false,
+            "outputContains": ["not found"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "err-03",
+    "category": "error-handling",
+    "description": "List flows when store is empty still succeeds",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  }
+]

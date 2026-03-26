@@ -1078,14 +1078,19 @@ async function saveTaskFlowRecipeToStorage(
             (m) => m[1],
         );
         const paramJson =
-            captures.length > 0
-                ? `{ flowName: "${actionName}", ${captures.join(", ")} }`
-                : `{ flowName: "${actionName}" }`;
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
         grammarRules.push(
             `<${actionName}> [spacing=optional] = ${pattern}` +
-                ` -> { actionName: "executeTaskFlow", parameters: ${paramJson} };`,
+                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
         );
     }
+
+    const parametersMeta = recipe.parameters.map((p) => ({
+        name: p.name,
+        type: p.type,
+        required: p.required,
+        description: p.description,
+    }));
 
     const now = new Date().toISOString();
     index.flows[actionName] = {
@@ -1093,6 +1098,7 @@ async function saveTaskFlowRecipeToStorage(
         description: recipe.description,
         flowPath,
         grammarRuleText: grammarRules.join("\n"),
+        parameters: parametersMeta,
         created: now,
         updated: now,
         source: "reasoning",

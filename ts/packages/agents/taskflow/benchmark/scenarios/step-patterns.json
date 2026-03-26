@@ -1,0 +1,94 @@
+[
+  {
+    "id": "sp-01",
+    "category": "step-patterns",
+    "description": "Pattern A: JSON data flows between steps (webFetch -> llmTransform(parseJson) -> createPlaylist)",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "create 5 jazz songs playlist for this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["playlist"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sp-02",
+    "category": "step-patterns",
+    "description": "Pattern B: Nested object parameter interpolation (findEmail with messageRef.receivedDateTime.dayRange)",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "email digest for this week",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "weeklyEmailDigest",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sp-03",
+    "category": "step-patterns",
+    "description": "Pattern C: Array element interpolation (playTrack with artists=[\"${step.data.artist}\"])",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "play the most popular kpop song this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "playPopularKpopSong",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sp-04",
+    "category": "step-patterns",
+    "description": "Pattern D: webSearch -> llmTransform -> createList (fixture: searchAndList)",
+    "setup": { "requiredFlows": ["searchAndList"] },
+    "utterances": [
+      {
+        "text": "search for TypeScript best practices and make a list",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "searchAndList",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["findings"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sp-05",
+    "category": "step-patterns",
+    "description": "Pattern E: findTodaysEvents -> llmTransform -> sendEmail (fixture: dailyAgendaEmail)",
+    "setup": { "requiredFlows": ["dailyAgendaEmail"] },
+    "utterances": [
+      {
+        "text": "send me my daily agenda email",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "dailyAgendaEmail",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  }
+]
