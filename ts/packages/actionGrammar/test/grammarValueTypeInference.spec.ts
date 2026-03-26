@@ -571,3 +571,302 @@ describe("Structural type equality and union derivation", () => {
         expect(errors[0]).toContain("'turbo'");
     });
 });
+
+// ── Strict conformance tests ──────────────────────────────────────────────────
+// Verify the design principle: every possible runtime value of an inferred type
+// must be a valid value of the expected type.  Sound narrowing (e.g. true→boolean)
+// is accepted; unsound widening (e.g. boolean→true, string→string-union) is rejected.
+
+describe("Strict conformance — boolean literal types", () => {
+    // Schema with a field typed as the literal `true`
+    const TrueActionDef = SchemaCreator.intf(
+        "TrueAction",
+        SchemaCreator.obj({
+            actionName: SchemaCreator.field(SchemaCreator.string("act")),
+            flag: SchemaCreator.field(SchemaCreator.true_()),
+        }),
+        undefined,
+        true,
+    );
+    // Schema with a field typed as the literal `false`
+    const FalseActionDef = SchemaCreator.intf(
+        "FalseAction",
+        SchemaCreator.obj({
+            actionName: SchemaCreator.field(SchemaCreator.string("act")),
+            flag: SchemaCreator.field(SchemaCreator.false_()),
+        }),
+        undefined,
+        true,
+    );
+    // Schema with a field typed as plain `boolean`
+    const BoolActionDef = SchemaCreator.intf(
+        "BoolAction",
+        SchemaCreator.obj({
+            actionName: SchemaCreator.field(SchemaCreator.string("act")),
+            flag: SchemaCreator.field(SchemaCreator.boolean()),
+        }),
+        undefined,
+        true,
+    );
+    const loader: SchemaLoader = (typeName) => {
+        if (typeName === "TrueAction") return TrueActionDef;
+        if (typeName === "FalseAction") return FalseActionDef;
+        if (typeName === "BoolAction") return BoolActionDef;
+        return undefined;
+    };
+
+    // ── Sound narrowing (accepted) ────────────────────────────────────────
+
+    it("true literal accepted for boolean field", () => {
+        const grammarText = `
+            import { BoolAction } from "schema.ts";
+            <Start> : BoolAction = go -> { actionName: "act", flag: true };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    it("false literal accepted for boolean field", () => {
+        const grammarText = `
+            import { BoolAction } from "schema.ts";
+            <Start> : BoolAction = go -> { actionName: "act", flag: false };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    it("true literal accepted for true field", () => {
+        const grammarText = `
+            import { TrueAction } from "schema.ts";
+            <Start> : TrueAction = go -> { actionName: "act", flag: true };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    it("false literal accepted for false field", () => {
+        const grammarText = `
+            import { FalseAction } from "schema.ts";
+            <Start> : FalseAction = go -> { actionName: "act", flag: false };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    // ── Unsound widening (rejected) ───────────────────────────────────────
+
+    it("false literal rejected for true field", () => {
+        const grammarText = `
+            import { TrueAction } from "schema.ts";
+            <Start> : TrueAction = go -> { actionName: "act", flag: false };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("true");
+        expect(errors[0]).toContain("false");
+    });
+
+    it("true literal rejected for false field", () => {
+        const grammarText = `
+            import { FalseAction } from "schema.ts";
+            <Start> : FalseAction = go -> { actionName: "act", flag: true };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("false");
+        expect(errors[0]).toContain("true");
+    });
+
+    // ── Variable conformance ──────────────────────────────────────────────
+
+    it("boolean variable rejected for true field", () => {
+        // A bare boolean capture could produce false at runtime — not
+        // conformant to a field typed as `true`.
+        const grammarText = `
+            import { TrueAction } from "schema.ts";
+            <Start> : TrueAction = go $(f:<BoolRule>) -> { actionName: "act", flag: f };
+            <BoolRule> = yes -> true | no -> false;
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("true");
+    });
+
+    it("boolean variable rejected for false field", () => {
+        const grammarText = `
+            import { FalseAction } from "schema.ts";
+            <Start> : FalseAction = go $(f:<BoolRule>) -> { actionName: "act", flag: f };
+            <BoolRule> = yes -> true | no -> false;
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("false");
+    });
+
+    it("boolean variable accepted for boolean field", () => {
+        const grammarText = `
+            import { BoolAction } from "schema.ts";
+            <Start> : BoolAction = go $(f:<BoolRule>) -> { actionName: "act", flag: f };
+            <BoolRule> = yes -> true | no -> false;
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+});
+
+describe("Strict conformance — string / string-union", () => {
+    // Schema with a field typed as a string enum
+    const ModeActionDef = SchemaCreator.intf(
+        "ModeAction",
+        SchemaCreator.obj({
+            actionName: SchemaCreator.field(SchemaCreator.string("setMode")),
+            mode: SchemaCreator.field(SchemaCreator.string("fast", "slow")),
+        }),
+        undefined,
+        true,
+    );
+    // Schema with a plain string field
+    const LabelActionDef = SchemaCreator.intf(
+        "LabelAction",
+        SchemaCreator.obj({
+            actionName: SchemaCreator.field(SchemaCreator.string("label")),
+            text: SchemaCreator.field(SchemaCreator.string()),
+        }),
+        undefined,
+        true,
+    );
+    const loader: SchemaLoader = (typeName) => {
+        if (typeName === "ModeAction") return ModeActionDef;
+        if (typeName === "LabelAction") return LabelActionDef;
+        return undefined;
+    };
+
+    // ── Sound narrowing (accepted) ────────────────────────────────────────
+
+    it("string-union literal accepted for plain string field", () => {
+        const grammarText = `
+            import { LabelAction } from "schema.ts";
+            <Start> : LabelAction = go -> { actionName: "label", text: "hello" };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    it("sub-rule producing string-union accepted for plain string field", () => {
+        const grammarText = `
+            import { LabelAction } from "schema.ts";
+            <Start> : LabelAction = $(t:<Words>) -> { actionName: "label", text: t };
+            <Words> = hello | world;
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    it("matching string-union sub-rule accepted for enum field", () => {
+        // <Mode> = fast | slow implicitly derives as string-union(["fast", "slow"])
+        // which matches the declared enum exactly.
+        const grammarText = `
+            import { ModeAction } from "schema.ts";
+            <Start> : ModeAction = set $(m:<Mode>) -> { actionName: "setMode", mode: m };
+            <Mode> = fast | slow;
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    it("matching string-union sub-rule with explicit values also accepted", () => {
+        // Explicit -> "fast" values also work (both infer the same type).
+        const grammarText = `
+            import { ModeAction } from "schema.ts";
+            <Start> : ModeAction = set $(m:<Mode>) -> { actionName: "setMode", mode: m };
+            <Mode> = fast -> "fast" | slow -> "slow";
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(0);
+    });
+
+    // ── Unsound widening (rejected) ───────────────────────────────────────
+
+    it("bare string variable rejected for string-union field", () => {
+        // A wildcard string capture could produce any value — not
+        // guaranteed to be "fast" or "slow".
+        const grammarText = `
+            import { ModeAction } from "schema.ts";
+            <Start> : ModeAction = set $(m:string) -> { actionName: "setMode", mode: m };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("string");
+    });
+
+    it("wildcard variable rejected for string-union field", () => {
+        const grammarText = `
+            import { ModeAction } from "schema.ts";
+            <Start> : ModeAction = set $(m:wildcard) -> { actionName: "setMode", mode: m };
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("string");
+    });
+
+    it("wrong string-union sub-rule rejected for enum field", () => {
+        // <Mode> = fast | turbo derives as string-union(["fast", "turbo"]).
+        // "turbo" is not in the declared enum ["fast", "slow"].
+        const grammarText = `
+            import { ModeAction } from "schema.ts";
+            <Start> : ModeAction = set $(m:<Mode>) -> { actionName: "setMode", mode: m };
+            <Mode> = fast | turbo;
+        `;
+        const errors: string[] = [];
+        loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+            schemaLoader: loader,
+        });
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("'turbo'");
+    });
+});

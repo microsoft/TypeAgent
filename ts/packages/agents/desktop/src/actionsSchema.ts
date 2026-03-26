@@ -67,7 +67,7 @@ export type MaximizeWindowAction = {
 export type MinimizeWindowAction = {
     actionName: "minimize";
     parameters: {
-        name: KnownPrograms;
+        name: KnownPrograms | string; // The name of the software application
     };
 };
 
@@ -75,7 +75,7 @@ export type MinimizeWindowAction = {
 export type SwitchToWindowAction = {
     actionName: "switchTo";
     parameters: {
-        name: KnownPrograms;
+        name: KnownPrograms | string; // The name of the software application
     };
 };
 
@@ -83,8 +83,8 @@ export type SwitchToWindowAction = {
 export type TileWindowsAction = {
     actionName: "tile";
     parameters: {
-        leftWindow: KnownPrograms;
-        rightWindow: KnownPrograms;
+        leftWindow: KnownPrograms | string; // The name of the software application
+        rightWindow: KnownPrograms | string; // The name of the software application
     };
 };
 
