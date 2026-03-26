@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { isDeepStrictEqual } from "node:util";
 import {
     matchGrammar,
     matchGrammarCompletion,
@@ -181,17 +182,13 @@ export function describeForEachCompletion(
 
 /**
  * Check whether two completion results are deeply equal without throwing.
+ * Uses Node's built-in deep equality so this works outside a Jest context.
  */
 function completionResultsEqual(
     a: GrammarCompletionResult,
     b: GrammarCompletionResult,
 ): boolean {
-    try {
-        expect(a).toEqual(b);
-        return true;
-    } catch {
-        return false;
-    }
+    return isDeepStrictEqual(a, b);
 }
 
 /**
@@ -239,12 +236,10 @@ function assertSingleResultInvariants(
 /**
  * Assert cross-direction invariants between forward and backward results.
  *
- * Invariants checked:
- * 1. directionSensitive ↔ results differ (biconditional):
- *    1a. directionSensitive=false → backward equals forward
- *    1b. forward equals backward → directionSensitive=false
- * 2. Two-pass backward equivalence: when backward differs and
- *    openWildcard=false, backward equals forward(input[0..P])
+ * Invariants checked (see completion.md § Invariants):
+ * - #3: directionSensitive ↔ results differ (biconditional)
+ * - #4: Two-pass backward equivalence: when backward differs and
+ *       openWildcard=false, backward equals forward(input[0..P])
  */
 function assertCrossDirectionInvariants(
     forward: GrammarCompletionResult,
@@ -254,7 +249,7 @@ function assertCrossDirectionInvariants(
     grammar: Grammar,
     baseFn: TestCompletionFn,
 ): void {
-    // 1. directionSensitive ↔ results differ (biconditional)
+    // #3: directionSensitive ↔ results differ (biconditional)
     const resultsIdentical = completionResultsEqual(forward, backward);
     if (forward.directionSensitive && resultsIdentical) {
         throw new Error(
@@ -275,7 +270,7 @@ function assertCrossDirectionInvariants(
         }
     }
 
-    // 2. Two-pass backward equivalence
+    // #4: Two-pass backward equivalence
     //    Skip when:
     //    - backward didn't actually back up (results identical)
     //    - backward.openWildcard=true (ambiguous wildcard boundary)
@@ -290,9 +285,8 @@ function assertCrossDirectionInvariants(
         const forwardAtP = baseFn(grammar, truncated, undefined, "forward");
         // Only check when forward consumed the full truncated prefix.
         // When forwardAtP.matchedPrefixLength < P, the forward path has
-        // a known gap (e.g., Category 2 for number-variable next parts
-        // doesn't update maxPrefixLength) and can't reproduce backward's
-        // position — the comparison would be invalid.
+        // a known gap (see completion.md § Known gaps) and can't
+        // reproduce backward's position — the comparison would be invalid.
         if ((forwardAtP.matchedPrefixLength ?? 0) >= P || P === 0) {
             try {
                 expect(backward).toEqual(forwardAtP);

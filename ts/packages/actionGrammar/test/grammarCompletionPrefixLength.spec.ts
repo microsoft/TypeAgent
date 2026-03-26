@@ -934,6 +934,46 @@ describeForEachCompletion(
                 });
             });
 
+            describe("directionSensitive recompute at backed-up position (regression)", () => {
+                // Regression: the directionSensitive recompute for
+                // backed-up positions must run independently of
+                // range-candidate processing. The old code gated both
+                // on processRangeCandidates (which included
+                // rangeCandidateGateOpen = !openWildcard ||
+                // partialKeywordBackup). When openWildcard=true and no
+                // partial keyword backup, the recompute was skipped,
+                // leaving a potentially stale directionSensitive.
+                //
+                // This grammar produces openWildcard=true in the
+                // backward main loop: backward backs up to "now" which
+                // follows a captured wildcard (afterWildcard=true).
+                const g = [
+                    `entity TrackName;`,
+                    `<Start> = play $(track:TrackName) now -> { actionName: "play", parameters: { track } };`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("backward backs up to 'now' with openWildcard=true", () => {
+                    const bwd = matchGrammarCompletion(
+                        grammar,
+                        "play Hello now",
+                        undefined,
+                        "backward",
+                    );
+                    // Backward: backs up to "now" (mpl=10, after "play Hello").
+                    // afterWildcard=true → openWildcard=true.
+                    // Forward would show "now" at mpl=14 (greedy wildcard).
+                    // Results differ → directionSensitive must be true.
+                    // Invariant #3 validated by the wrapper.
+                    expectMetadata(bwd, {
+                        completions: ["now"],
+                        matchedPrefixLength: 10,
+                        directionSensitive: true,
+                        openWildcard: true,
+                    });
+                });
+            });
+
             describe("backward on partial input backs up to first word", () => {
                 const g = `<Start> = play music -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);

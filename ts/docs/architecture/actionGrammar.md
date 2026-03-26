@@ -648,15 +648,13 @@ input `"play"`:
   direction does _not_ matter" above. The flag is evaluated at
   `matchedPrefixLength` rather than at the full input. When backward
   backs up (`backwardEmitted=true` and `maxPrefixLength < prefix.length`),
-  `directionSensitive` is recomputed for the backed-up position using
-  a heuristic: at `P > 0`, at least one keyword was matched before the
-  completion point, so `directionSensitive` is `true`; at `P = 0`,
-  nothing was matched, so it is `false`. This recomputation is skipped
-  when `partialKeywordBackup` or `openWildcard` is set (the backed-up
-  position is structurally pinned). When backward falls through to
-  forward behavior (`backwardEmitted=false`), the trailing-separator
-  advancement is applied normally and `directionSensitive` reflects
-  the forward-only evaluation.
+  `directionSensitive` is recomputed for the backed-up position: at
+  `P > 0`, at least one keyword was matched before the completion point,
+  so `directionSensitive` is `true`; at `P = 0`, nothing was matched, so
+  it is `false`. When backward falls through to forward behavior
+  (`backwardEmitted=false`), the trailing-separator advancement is
+  applied normally and `directionSensitive` reflects the forward-only
+  evaluation.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary — see `completion.md` [`openWildcard`] for the full
   definition (definite vs. ambiguous positions, persistence semantics,

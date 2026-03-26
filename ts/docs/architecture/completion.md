@@ -686,46 +686,107 @@ re-fetches for the next grammar part.
 
 The completion metadata fields must satisfy several invariants across the
 pipeline. Violations produce user-visible bugs — wrong completions, stale
-menus, or mispositioned insertions. The invariants are automatically
-checked by the `withInvariantChecks` wrapper in
-`packages/actionGrammar/test/testUtils.ts`, which runs on every completion
-test.
+menus, or mispositioned insertions.
+
+**Quick reference — symptom → invariants to check:**
+
+| Symptom                                  | Check          |
+| ---------------------------------------- | -------------- |
+| Wrong or missing completions             | #2, #5, #7, #9 |
+| Completions at wrong position            | #1, #7, #8     |
+| Stale menu after backspace               | #3             |
+| Inconsistent menu (forward vs. backward) | #4, #5         |
+| Unnecessary re-fetches (perf)            | #3, #11        |
+| Wrong separator behavior                 | #6, #10        |
+| Menu disappears at wildcard boundary     | #7, #12        |
 
 ### Per-result invariants (grammar matcher layer)
 
-| #   | Invariant                                                                                                                                       | Impact if violated                                                                                                                                                         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `matchedPrefixLength` ∈ [`minPrefixLength`, `prefix.length`]                                                                                    | Completions inserted at wrong position in the input.                                                                                                                       |
-| 2   | `closedSet=false` ↔ `properties` is non-empty (grammar matcher layer only — see `actionGrammar.md` [properties](#metadata-produced) for scope) | **False `true`:** shell uses "accept" policy and never re-fetches — user misses entity completions. **False `false`:** unnecessary re-fetches (perf cost, no visible bug). |
+Automatically checked by the `withInvariantChecks` wrapper in
+`packages/actionGrammar/test/testUtils.ts` (grammar variant only).
+
+**#1 — `matchedPrefixLength` bounds.**
+`matchedPrefixLength` ∈ [`minPrefixLength`, `prefix.length`].
+_Impact:_ Completions inserted at wrong position in the input.
+
+**#2 — `closedSet` ↔ `properties` consistency** (grammar matcher layer
+only — see `actionGrammar.md` [properties](#metadata-produced) for scope).
+`closedSet=false` ↔ `properties` is non-empty.
+_Impact:_ False `true` → shell uses "accept" policy and never re-fetches —
+user misses entity completions. False `false` → unnecessary re-fetches
+(perf cost, no visible bug).
 
 ### Cross-direction invariants
 
-| #   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Impact if violated                                                                                                                                                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 3   | `directionSensitive` ↔ `backward(input)` differs from `forward(input)` (biconditional: `directionSensitive=false` → results identical, AND results identical → `directionSensitive=false`). This subsumes the trailing-separator-commits property: when trailing whitespace commits the position, forward and backward agree, so `directionSensitive` must be `false`. When backward backs up past trailing whitespace (e.g., into a wildcard), the results differ and `directionSensitive=true` is correct. | **False negative (`false` when results differ):** stale menu after backspace — shell skips re-fetch. **False positive (`true` when results are identical):** unnecessary re-fetch on direction change (perf cost). |
-| 4   | Two-pass backward equivalence: `backward(input)` = `forward(input[0..P])` where _P_ = `backward.matchedPrefixLength`. Applies when backward differs from forward, `openWildcard=false`, and no `minPrefixLength`.                                                                                                                                                                                                                                                                                             | Backspacing shows different completions than forward-typing to the same position — the menu is inconsistent depending on how the user arrived at that input.                                                       |
-| 5   | Non-lossy backward: when backing up past a shared prefix (e.g., `"play"` matching `play music \| play video`), backward must show ALL alternatives at the backed-up position, not just the branch that was matched.                                                                                                                                                                                                                                                                                           | User sees only one completion branch when backspacing at a fork — other valid alternatives are silently lost.                                                                                                      |
+Invariants #3 and #4 are automatically checked by `withInvariantChecks`
+(grammar variant only). #5 is verified by individual test expectations.
+
+**#3 — `directionSensitive` biconditional.**
+`directionSensitive` ↔ `backward(input)` differs from `forward(input)`.
+Both directions of the biconditional are enforced:
+`directionSensitive=false` → results identical, AND results identical →
+`directionSensitive=false`. This subsumes the trailing-separator-commits
+property: when trailing whitespace commits the position, forward and
+backward agree, so `directionSensitive` must be `false`. When backward
+backs up past trailing whitespace (e.g., into a wildcard), the results
+differ and `directionSensitive=true` is correct.
+_Impact:_ False negative (`false` when results differ) → stale menu after
+backspace — shell skips re-fetch. False positive (`true` when results are
+identical) → unnecessary re-fetch on direction change (perf cost).
+
+**#4 — Two-pass backward equivalence.**
+`backward(input)` = `forward(input[0..P])` where _P_ =
+`backward.matchedPrefixLength`. Applies when backward differs from
+forward, `openWildcard=false`, and no `minPrefixLength`.
+_Impact:_ Backspacing shows different completions than forward-typing to
+the same position — the menu is inconsistent depending on how the user
+arrived at that input.
+
+**#5 — Non-lossy backward.**
+When backing up past a shared prefix (e.g., `"play"` matching
+`play music | play video`), backward must show ALL alternatives at the
+backed-up position, not just the branch that was matched.
+_Impact:_ User sees only one completion branch when backspacing at a fork —
+other valid alternatives are silently lost.
 
 ### Field-specific invariants
 
-| #   | Field                | Invariant                                                                                                                                                                                                                                             | Impact if violated                                                                                                                                                    |
-| --- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 7   | `separatorMode`      | `undefined` when both `completions` and `properties` are empty.                                                                                                                                                                                       | Shell consults a meaningless separator mode for a position with nothing to complete — can cause phantom menu show/hide.                                               |
-| 8   | `separatorMode`      | `"optional"` when `matchedPrefixLength=0` (nothing consumed) or when trailing whitespace was consumed.                                                                                                                                                | Menu requires a separator where none is needed, or allows fused display (e.g., `"playmusic"` instead of `"play music"`).                                              |
-| 9   | `separatorMode`      | `"none"` for `[spacing=none]` rules.                                                                                                                                                                                                                  | Tokens incorrectly separated in a grammar designed for direct adjacency.                                                                                              |
-| 10  | `closedSet`          | `true` when all completions are grammar keywords (no entity/wildcard values).                                                                                                                                                                         | Shell re-fetches for a finite keyword set (perf cost) or, worse, accepts prematurely for an open set.                                                                 |
-| 11  | `openWildcard`       | `true` only at ambiguous wildcard boundaries (Category 2 forward after wildcard finalized at EOI, or backward at keyword after captured wildcard).                                                                                                    | **False `true`:** anchor slides when it shouldn't — completions appear at wrong position. **False `false`:** menu disappears at wildcard boundary instead of sliding. |
-| 12  | `directionSensitive` | `true` ↔ forward and backward produce different results (see #3). Concretely: `true` when a part was fully matched with no trailing separator; `false` when partial/dirty, or when trailing separator commits and backward does not back up past it. | No false positives or false negatives — enforced as a biconditional by #3.                                                                                            |
+**#6 — `separatorMode` = `"none"` for `[spacing=none]` rules.**
+_Impact:_ Tokens incorrectly separated in a grammar designed for direct
+adjacency.
+
+**#7 — `openWildcard` correctness.**
+`true` only at ambiguous wildcard boundaries (Category 2 forward after
+wildcard finalized at EOI, or backward at keyword after captured wildcard).
+_Impact:_ False `true` → anchor slides when it shouldn't — completions
+appear at wrong position. False `false` → menu disappears at wildcard
+boundary instead of sliding.
 
 ### Merge invariants (cache / dispatcher layers)
 
-| #   | Invariant                                                                                                 | Impact if violated                                                                             |
-| --- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| 13  | `matchedPrefixLength`: keep longest across sources; discard shorter.                                      | Completions anchored at wrong position when multiple grammars/agents contribute.               |
-| 14  | `closedSet`: AND-merge (closed only if ALL sources are closed).                                           | Premature "accept" when one source is open — user misses completions from that source.         |
-| 15  | `separatorMode`: strongest requirement wins (`"space"` > `"spacePunctuation"` > `"optional"` > `"none"`). | Fused display if a weak mode wins over a strong one, or unnecessary separation if the reverse. |
-| 16  | `directionSensitive`: OR-merge (sensitive if ANY source is sensitive).                                    | Skipped re-fetch when one source's results differ by direction.                                |
-| 17  | `openWildcard`: OR-merge (open if ANY source has ambiguous boundary).                                     | Anchor doesn't slide when one source's position is ambiguous — menu disappears.                |
+**#8 — `matchedPrefixLength`: longest wins.**
+Keep longest across sources; discard shorter.
+_Impact:_ Completions anchored at wrong position when multiple
+grammars/agents contribute.
+
+**#9 — `closedSet`: AND-merge.**
+Closed only if ALL sources are closed.
+_Impact:_ Premature "accept" when one source is open — user misses
+completions from that source.
+
+**#10 — `separatorMode`: strongest requirement wins.**
+`"space"` > `"spacePunctuation"` > `"optional"` > `"none"`.
+_Impact:_ Fused display if a weak mode wins over a strong one, or
+unnecessary separation if the reverse.
+
+**#11 — `directionSensitive`: OR-merge.**
+Sensitive if ANY source is sensitive.
+_Impact:_ Skipped re-fetch when one source's results differ by direction.
+
+**#12 — `openWildcard`: OR-merge.**
+Open if ANY source has ambiguous boundary.
+_Impact:_ Anchor doesn't slide when one source's position is ambiguous —
+menu disappears.
 
 ### Known gaps
 
