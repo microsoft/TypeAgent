@@ -3197,5 +3197,135 @@ describeForEachCompletion(
                 });
             });
         });
+
+        describe("partialKeywordBackup with multiple alternatives (player-like grammar)", () => {
+            // Reproduces the issue where findPartialKeywordInWildcard
+            // succeeds for one alternative ("by") but blocks other
+            // alternatives ("from", "track", "song") from contributing
+            // completions at the same position.
+            const g = [
+                `entity TrackName, ArtistName, AlbumName;`,
+                `<Start> = play $(trackName:<TrackPhrase>) by $(artist:ArtistName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } };`,
+                `<Start> = play $(trackName:<TrackPhrase>) from (the)? album $(albumName:AlbumName) -> { actionName: "playTrack", parameters: { trackName, albumName } };`,
+                `<Start> = play $(trackName:<TrackPhrase>) by $(artist:ArtistName) from (the)? album $(albumName:AlbumName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist], albumName } };`,
+                `<TrackPhrase> = $(trackName:<TrackName>) -> trackName;`,
+                `<TrackPhrase> = the <TrackTerm> $(trackName:<TrackName>) -> trackName;`,
+                `<TrackPhrase> = <TrackTerm> $(trackName:<TrackName>) -> trackName;`,
+                `<TrackPhrase> = $(trackName:<TrackName>) <TrackTerm> -> trackName;`,
+                `<TrackTerm> = track | song;`,
+                `<TrackName> = $(x:wildcard);`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("backward on 'play first penguin b' shows all keyword alternatives", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play first penguin b",
+                    undefined,
+                    "backward",
+                );
+                // "b" partially matches "by" via
+                // findPartialKeywordInWildcard. All keywords that
+                // could follow the wildcard track phrase at position 19
+                // should appear: "by", "from", "track", "song".
+                expectMetadata(result, {
+                    completions: ["by", "from", "song", "track"],
+                    sortCompletions: true,
+                    matchedPrefixLength: 19,
+                    openWildcard: true,
+                    directionSensitive: true,
+                });
+            });
+
+            it("forward on 'play first penguin ' shows all keyword alternatives", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play first penguin ",
+                    undefined,
+                    "forward",
+                );
+                expectMetadata(result, {
+                    completions: ["by", "from", "song", "track"],
+                    sortCompletions: true,
+                    matchedPrefixLength: 19,
+                    openWildcard: true,
+                    directionSensitive: true,
+                });
+            });
+
+            it("backward on 'play first penguin z' does not trigger partialKeywordBackup", () => {
+                // "z" doesn't prefix any keyword — no partial keyword
+                // match, so backward falls back to collecting a
+                // regular backward candidate (wildcard start backup).
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play first penguin z",
+                    undefined,
+                    "backward",
+                );
+                expectMetadata(result, {
+                    completions: ["song", "the", "track"],
+                    sortCompletions: true,
+                    matchedPrefixLength: 4,
+                    openWildcard: false,
+                    directionSensitive: true,
+                });
+            });
+        });
+
+        describe("partialKeywordBackup with PlayTrackNumberCommand + PlaySpecificTrack", () => {
+            // Full player-like grammar including both rule families.
+            // Tests whether PlayTrackNumberCommand's (<Item>)?
+            // alternatives also contribute at the backed-up position.
+            const g = [
+                `entity Ordinal, Cardinal, TrackName, ArtistName, AlbumName;`,
+                // PlayTrackNumberCommand
+                `<Start> = play (the)? $(n:Ordinal) (<Item>)? -> { actionName: "playFromCurrentTrackList", parameters: { trackNumber: n } };`,
+                `<Item> = one | cut | <TrackTerm>;`,
+                // PlaySpecificTrack (simplified)
+                `<Start> = play $(trackName:<TrackPhrase>) by $(artist:ArtistName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } };`,
+                `<Start> = play $(trackName:<TrackPhrase>) from (the)? album $(albumName:AlbumName) -> { actionName: "playTrack", parameters: { trackName, albumName } };`,
+                `<TrackPhrase> = $(trackName:<TrackName>) -> trackName;`,
+                `<TrackPhrase> = $(trackName:<TrackName>) <TrackTerm> -> trackName;`,
+                `<TrackTerm> = track | song;`,
+                `<TrackName> = $(x:wildcard);`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("forward on 'play first penguin' includes both rule families", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play first penguin",
+                    undefined,
+                    "forward",
+                );
+                expectMetadata(result, {
+                    completions: ["by", "cut", "from", "one", "song", "track"],
+                    sortCompletions: true,
+                    matchedPrefixLength: 18,
+                    directionSensitive: true,
+                    openWildcard: true,
+                });
+            });
+
+            it("backward on 'play first penguin b' includes both rule families", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play first penguin b",
+                    undefined,
+                    "backward",
+                );
+                // All keywords from both rule families appear at
+                // position 19 via range candidates, including "one"
+                // and "cut" from PlayTrackNumberCommand's (<Item>)?.
+                expectMetadata(result, {
+                    completions: ["by", "cut", "from", "one", "song", "track"],
+                    sortCompletions: true,
+                    matchedPrefixLength: 19,
+                    directionSensitive: true,
+                    openWildcard: true,
+                });
+            });
+        });
     },
 );
