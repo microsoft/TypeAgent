@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { isDeepStrictEqual } from "node:util";
+import { matchGrammar } from "../src/grammarMatcher.js";
 import {
-    matchGrammar,
     matchGrammarCompletion,
     type GrammarCompletionResult,
-} from "../src/grammarMatcher.js";
+} from "../src/grammarCompletion.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchGrammarWithNFA } from "../src/nfaMatcher.js";
 import { tokenizeRequest } from "../src/nfaMatcher.js";
@@ -149,7 +150,7 @@ export function createTestCompletion(
 ): TestCompletionFn {
     switch (variant) {
         case "grammar":
-            return matchGrammarCompletion;
+            return withInvariantChecks(matchGrammarCompletion);
         case "nfa":
             return testCompletionNFA;
         case "dfa":
@@ -158,7 +159,7 @@ export function createTestCompletion(
 }
 
 const completionVariants: CompletionVariant[] = ["grammar"];
-// TODO: Enable "nfa" and "dfa" variants once they match grammarMatcher completion behavior.
+// TODO: Enable "nfa" and "dfa" variants once they match grammarCompletion behavior.
 // const completionVariants: CompletionVariant[] = ["grammar", "nfa", "dfa"];
 
 /**
@@ -173,6 +174,177 @@ export function describeForEachCompletion(
     describe.each(completionVariants)(`${name} [%s]`, (variant) => {
         fn(createTestCompletion(variant), variant);
     });
+}
+
+// ---------------------------------------------------------------------------
+// Completion invariant checking (dual-direction wrapper)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether two completion results are deeply equal without throwing.
+ * Uses Node's built-in deep equality so this works outside a Jest context.
+ */
+function completionResultsEqual(
+    a: GrammarCompletionResult,
+    b: GrammarCompletionResult,
+): boolean {
+    return isDeepStrictEqual(a, b);
+}
+
+/**
+ * Assert invariants that must hold for any single completion result.
+ *
+ * Invariants checked:
+ * 1. matchedPrefixLength ∈ [minPrefixLength ?? 0, prefix.length]
+ * 2. closedSet=false ↔ properties is non-empty
+ */
+function assertSingleResultInvariants(
+    result: GrammarCompletionResult,
+    prefix: string,
+    direction: string,
+    minPrefixLength?: number,
+): void {
+    const mpl = result.matchedPrefixLength ?? 0;
+    const ctx = `[${direction} prefix="${prefix}"]`;
+
+    // 1. matchedPrefixLength bounds
+    if (mpl < (minPrefixLength ?? 0)) {
+        throw new Error(
+            `Invariant: matchedPrefixLength (${mpl}) < minPrefixLength (${minPrefixLength ?? 0}) ${ctx}`,
+        );
+    }
+    if (mpl > prefix.length) {
+        throw new Error(
+            `Invariant: matchedPrefixLength (${mpl}) > prefix.length (${prefix.length}) ${ctx}`,
+        );
+    }
+
+    // 2. closedSet ↔ properties consistency
+    const hasProperties = (result.properties?.length ?? 0) > 0;
+    if (hasProperties && result.closedSet !== false) {
+        throw new Error(
+            `Invariant: properties present but closedSet=${result.closedSet} (should be false) ${ctx}`,
+        );
+    }
+    if (result.closedSet === false && !hasProperties) {
+        throw new Error(
+            `Invariant: closedSet=false but properties is empty ${ctx}`,
+        );
+    }
+}
+
+/**
+ * Assert cross-direction invariants between forward and backward results.
+ *
+ * Invariants checked (see completion.md § Invariants):
+ * - #3: directionSensitive ↔ results differ (biconditional)
+ * - #4: Two-pass backward equivalence: when backward differs and
+ *       openWildcard=false, backward equals forward(input[0..P])
+ */
+function assertCrossDirectionInvariants(
+    forward: GrammarCompletionResult,
+    backward: GrammarCompletionResult,
+    prefix: string,
+    minPrefixLength: number | undefined,
+    grammar: Grammar,
+    baseFn: TestCompletionFn,
+): void {
+    // #3: directionSensitive ↔ results differ (biconditional)
+    const resultsIdentical = completionResultsEqual(forward, backward);
+    if (forward.directionSensitive && resultsIdentical) {
+        throw new Error(
+            `Invariant: directionSensitive=true but forward=backward ` +
+                `(prefix="${prefix}") — false positive`,
+        );
+    }
+    if (!forward.directionSensitive && !resultsIdentical) {
+        // Use expect() to get the jest diff in the error message.
+        try {
+            expect(backward).toEqual(forward);
+        } catch (e) {
+            const err = e as Error;
+            err.message =
+                `Invariant: directionSensitive=false but forward≠backward ` +
+                `(prefix="${prefix}") — false negative\n\n${err.message}`;
+            throw err;
+        }
+    }
+
+    // #4: Two-pass backward equivalence
+    //    Skip when:
+    //    - backward didn't actually back up (results identical)
+    //    - backward.openWildcard=true (ambiguous wildcard boundary)
+    //    - minPrefixLength specified (can filter backward below equivalence)
+    if (
+        !resultsIdentical &&
+        !backward.openWildcard &&
+        minPrefixLength === undefined
+    ) {
+        const P = backward.matchedPrefixLength ?? 0;
+        const truncated = prefix.substring(0, P);
+        const forwardAtP = baseFn(grammar, truncated, undefined, "forward");
+        // Only check when forward consumed the full truncated prefix.
+        // When forwardAtP.matchedPrefixLength < P, the forward path has
+        // a known gap (see completion.md § Known gaps) and can't
+        // reproduce backward's position — the comparison would be invalid.
+        if ((forwardAtP.matchedPrefixLength ?? 0) >= P || P === 0) {
+            try {
+                expect(backward).toEqual(forwardAtP);
+            } catch (e) {
+                const err = e as Error;
+                err.message =
+                    `Invariant: two-pass backward equivalence violated ` +
+                    `(prefix="${prefix}", P=${P})\n` +
+                    `backward(input) should equal forward(input[0..${P}]="${truncated}")\n\n` +
+                    `${err.message}`;
+                throw err;
+            }
+        }
+    }
+}
+
+/**
+ * Wrap a completion function with automatic invariant checking.
+ *
+ * Every call runs both forward and backward internally, asserts
+ * single-result and cross-direction invariants, then returns the
+ * result for the requested direction.
+ */
+function withInvariantChecks(baseFn: TestCompletionFn): TestCompletionFn {
+    return (
+        grammar: Grammar,
+        prefix: string,
+        minPrefixLength?: number,
+        direction?: "forward" | "backward",
+    ): GrammarCompletionResult => {
+        const requestedDirection = direction ?? "forward";
+        const forward = baseFn(grammar, prefix, minPrefixLength, "forward");
+        const backward = baseFn(grammar, prefix, minPrefixLength, "backward");
+
+        assertSingleResultInvariants(
+            forward,
+            prefix,
+            "forward",
+            minPrefixLength,
+        );
+        assertSingleResultInvariants(
+            backward,
+            prefix,
+            "backward",
+            minPrefixLength,
+        );
+
+        assertCrossDirectionInvariants(
+            forward,
+            backward,
+            prefix,
+            minPrefixLength,
+            grammar,
+            baseFn,
+        );
+
+        return requestedDirection === "backward" ? backward : forward;
+    };
 }
 
 /**

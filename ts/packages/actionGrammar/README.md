@@ -88,7 +88,8 @@ LLM-powered grammar generation from schemas and examples:
 | `grammarRuleParser.ts`     | Recursive descent parser for `.agr` files                                 |
 | `grammarCompiler.ts`       | Compiles parsed rules into the in-memory `Grammar` representation         |
 | `grammarTypes.ts`          | Types for in-memory and serialized grammar representations                |
-| `grammarMatcher.ts`        | Recursive backtracking matcher and completion system                      |
+| `grammarMatcher.ts`        | Recursive backtracking matcher                                            |
+| `grammarCompletion.ts`     | Completion system (partial-match completions from grammar rules)          |
 | `nfaCompiler.ts`           | Compiles `Grammar` → token-based NFA with slot-based variable capture     |
 | `nfaInterpreter.ts`        | Parallel NFA execution with priority ranking                              |
 | `dfaCompiler.ts`           | NFA→DFA subset construction                                               |
@@ -133,6 +134,7 @@ Key test suites:
 - `grammarMatcherBasic.spec.ts` — Core recursive backtracking behavior
 - `grammarMatcherVariables.spec.ts` — Variable capture and value expressions
 - `grammarMatcherSpacingBasic.spec.ts` — Spacing mode handling
+- `grammarCompletionKeywordSpacePunct.spec.ts` — Completion with keyword spacing and punctuation
 - `nfa.spec.ts` — NFA builder and compilation
 - `nfaDfaParity.spec.ts` — NFA/DFA equivalence verification
 - `nfaPriority.spec.ts` — Match priority and ranking

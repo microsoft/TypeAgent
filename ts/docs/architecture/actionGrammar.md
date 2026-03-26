@@ -402,9 +402,10 @@ on ambiguous grammars with long inputs. No built-in priority ranking.
 
 #### Completion matching (`matchGrammarCompletion`)
 
-`matchGrammarCompletion(grammar, prefix, minPrefixLength, direction)` runs
-a partial match against an incomplete input prefix and returns the set of
-valid next-tokens, enabling real-time autocompletion.
+`grammarCompletion.ts` provides `matchGrammarCompletion(grammar, prefix,
+minPrefixLength, direction)` which runs a partial match against an
+incomplete input prefix and returns the set of valid next-tokens,
+enabling real-time autocompletion.
 
 `minPrefixLength` controls the minimum number of characters that must be
 matched before completions are offered. When set to a value greater than
@@ -603,7 +604,9 @@ input `"play"`:
   after a keyword "commits" the match position — the user has moved
   past the boundary. Both directions agree on the committed position.
   For example, `"play "` (with space) offers `"music"` for both
-  directions. Exception: in `[spacing=none]` mode, whitespace is not a
+  directions. (This is a consequence of the `directionSensitive`
+  biconditional — see invariant #3 in `completion.md`.)
+  Exception: in `[spacing=none]` mode, whitespace is not a
   separator, so `directionSensitive` is always `true` when any word has
   been fully matched — trailing spaces do not commit.
 
@@ -618,6 +621,14 @@ input `"play"`:
   populate the completion list with domain-specific values (e.g., song
   titles, contact names). When the grammar offers only keyword completions
   (no wildcards), `properties` is empty.
+
+  `properties` is a grammar-matcher concept. At the dispatcher layer,
+  `properties` entries have been consumed via `getActionCompletion()`
+  and `closedSet` is determined by `computeClosedSet()` independently —
+  so the grammar-matcher invariant `closedSet=false ↔ properties non-empty`
+  does not hold at the dispatcher level (e.g., free-form text has
+  `closedSet=false` with no `properties`).
+
 - `separatorMode` — determined by the grammar rule's `[spacing=...]`
   annotation (see [Spacing modes](#spacing-modes) above). Special cases:
   - When `matchedPrefixLength=0` (nothing consumed), `separatorMode` is
@@ -638,22 +649,22 @@ input `"play"`:
   direction does _not_ matter" above. The flag is evaluated at
   `matchedPrefixLength` rather than at the full input. When backward
   backs up (`backwardEmitted=true` and `maxPrefixLength < prefix.length`),
-  `directionSensitive` is recomputed for the backed-up position using
-  a heuristic: at `P > 0`, at least one keyword was matched before the
-  completion point, so `directionSensitive` is `true`; at `P = 0`,
-  nothing was matched, so it is `false`. This recomputation is skipped
-  when `partialKeywordBackup` or `openWildcard` is set (the backed-up
-  position is structurally pinned). When backward falls through to
-  forward behavior (`backwardEmitted=false`), the trailing-separator
-  advancement is applied normally and `directionSensitive` reflects
-  the forward-only evaluation.
+  `directionSensitive` is recomputed for the backed-up position: at
+  `P > 0`, at least one keyword was matched before the completion point,
+  so `directionSensitive` is `true`; at `P = 0`, nothing was matched, so
+  it is `false`. When backward falls through to forward behavior
+  (`backwardEmitted=false`), the trailing-separator advancement is
+  applied normally and `directionSensitive` reflects the forward-only
+  evaluation.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary — see `completion.md` [`openWildcard`] for the full
   definition (definite vs. ambiguous positions, persistence semantics,
   merge rule).
 
 See `completion.md` for full definitions of how these metadata fields
-flow through the cache, dispatcher, and shell layers.
+flow through the cache, dispatcher, and shell layers, and
+`completion.md` § Invariants for the full catalog of correctness
+invariants, their user-visible impact, and which tests verify them.
 
 ### Entity registry
 
@@ -780,21 +791,32 @@ this because the output is ambiguous.
 
 ### Design Principles
 
-1. **Statically-Typed Expressions** — every node has a known compile-time
+1. **Strict Conformance** — the purpose of type checking is to ensure
+   that values produced by the grammar conform to the types declared in
+   the schema. If an inferred type is deemed assignable to an expected
+   type, then every possible runtime value of the inferred type must be
+   a valid value of the expected type. Widening directions that are sound
+   are permitted (e.g. `string-union` → `string`, `true`/`false` →
+   `boolean`), while unsound widenings are rejected (e.g. bare `string`
+   → `string-union`, bare `boolean` → `true`/`false`). When the grammar
+   needs a value that conforms to a narrow type (such as a string enum),
+   it must use a sub-rule or literal that produces a matching value — a
+   bare wildcard capture is not sufficient.
+2. **Statically-Typed Expressions** — every node has a known compile-time
    type. Union types (e.g. `string | number` from `??`) are valid
    statically-known types.
-2. **No Implicit Coercion** — operators require explicitly compatible types.
+3. **No Implicit Coercion** — operators require explicitly compatible types.
    JavaScript's implicit type coercion rules are rejected.
-3. **Operators Do One Thing** — `+` is add or concat (not both at once),
+4. **Operators Do One Thing** — `+` is add or concat (not both at once),
    `&&`/`||` are boolean logic, `!` is boolean negation, ternary test must
    be boolean. `typeof` provides runtime type discrimination.
-4. **Honest Types for Optional Captures** — `$(x:type)?` produces
+5. **Honest Types for Optional Captures** — `$(x:type)?` produces
    `T | undefined`, reflecting runtime behavior.
-5. **Purpose-Built Operators for Nullability** — `??` and `?.` handle
+6. **Purpose-Built Operators for Nullability** — `??` and `?.` handle
    `T | undefined` from optional captures.
-6. **Closed Method Surface** — every whitelisted method has a known return
+7. **Closed Method Surface** — every whitelisted method has a known return
    type; unusable methods (callbacks, iterators) are excluded.
-7. **Errors Suggest Alternatives** — every restriction error tells the user
+8. **Errors Suggest Alternatives** — every restriction error tells the user
    what to do instead.
 
 ### Expression Type Restriction Table

@@ -313,8 +313,9 @@ describe("String literal and string-union validation", () => {
         expect(errors[0]).toContain("'turbo'");
     });
 
-    it("plain string variable accepted for string-union field", () => {
-        // A string variable could match at runtime — no compile-time error.
+    it("plain string variable rejected for string-union field", () => {
+        // A bare string capture cannot guarantee it produces one of the
+        // declared enum values — must use a sub-rule that narrows the type.
         const grammarText = `
             import { ModeAction } from "schema.ts";
             <Start> : ModeAction = set mode $(m:string) -> { actionName: "setMode", mode: m };
@@ -323,7 +324,8 @@ describe("String literal and string-union validation", () => {
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: modeLoader,
         });
-        expect(errors.length).toBe(0);
+        expect(errors.length).toBe(1);
+        expect(errors[0]).toContain("string");
     });
 
     it("number variable rejected for string-union field", () => {

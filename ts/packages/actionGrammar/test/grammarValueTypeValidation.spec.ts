@@ -573,4 +573,58 @@ describe("Value type validation", () => {
             expect(errors[0]).not.toContain("(1,1)");
         });
     });
+
+    describe("optional capture undefined conformance", () => {
+        it("optional variable rejected for required field", () => {
+            // $(name:string)? produces string | undefined.
+            // Using it directly for a required string field should error.
+            const grammarText = `
+                import { PlayAction } from "schema.ts";
+                <Start> : PlayAction = play $(track:string)? -> { actionName: "play", trackName: track };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("undefined");
+        });
+
+        it("non-optional variable accepted for required field", () => {
+            const grammarText = `
+                import { PlayAction } from "schema.ts";
+                <Start> : PlayAction = play $(track:string) -> { actionName: "play", trackName: track };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: mockSchemaLoader,
+            });
+            expect(errors.length).toBe(0);
+        });
+
+        it("optional variable accepted for optional field", () => {
+            const OptActionDef = SchemaCreator.intf(
+                "OptAction",
+                SchemaCreator.obj({
+                    actionName: SchemaCreator.field(
+                        SchemaCreator.string("test"),
+                    ),
+                    label: SchemaCreator.optional(SchemaCreator.string()),
+                }),
+                undefined,
+                true,
+            );
+            const loader: SchemaLoader = (typeName) =>
+                typeName === "OptAction" ? OptActionDef : undefined;
+            const grammarText = `
+                import { OptAction } from "schema.ts";
+                <Start> : OptAction = test $(name:string)? -> { actionName: "test", label: name };
+            `;
+            const errors: string[] = [];
+            loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
+                schemaLoader: loader,
+            });
+            expect(errors.length).toBe(0);
+        });
+    });
 });
