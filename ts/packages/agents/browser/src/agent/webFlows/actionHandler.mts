@@ -396,10 +396,24 @@ async function handleGenerateWebFlow(
         `Generating WebFlow from trace "${traceId}" (${trace.steps.length} steps)`,
     );
 
-    const flow = await generateWebFlowFromTrace(trace, {
-        ...(name && { suggestedName: name }),
-        ...(description && { description }),
-    });
+    // Build existing flows context for dedup-aware generation
+    const store = await getStore(context);
+    const existingFlows = store.getIndex().flows
+        ? Object.entries(store.getIndex().flows).map(([n, e]) => ({
+              name: n,
+              description: e.description,
+              parameters: (e.parameters ?? []).map((p) => p.name),
+          }))
+        : [];
+
+    const flow = await generateWebFlowFromTrace(
+        trace,
+        {
+            ...(name && { suggestedName: name }),
+            ...(description && { description }),
+        },
+        existingFlows,
+    );
 
     if (!flow) {
         return {
@@ -409,8 +423,7 @@ async function handleGenerateWebFlow(
         };
     }
 
-    // Save the generated flow
-    const store = await getStore(context);
+    // Save the generated flow (store already fetched above for dedup context)
     await store.save(flow);
     debug(`Saved generated WebFlow: ${flow.name}`);
 
@@ -467,6 +480,21 @@ async function handleGenerateWebFlowFromRecording(
         };
     }
 
+    // Filter noop recordings (fewer than 2 meaningful actions)
+    const meaningfulActions = recordingData.actions.filter(
+        (a: any) =>
+            a.type !== "scroll" &&
+            a.type !== "pageLoad" &&
+            a.type !== "navigation",
+    );
+    if (meaningfulActions.length < 2) {
+        return {
+            displayText:
+                "Recording too short — fewer than 2 meaningful actions captured. Try recording a more complete interaction.",
+            data: { success: false, error: "noop_recording" },
+        };
+    }
+
     debug(`Normalizing recording: ${recordingData.actions.length} raw actions`);
     const trace = normalizeRecording(recordingData);
 
@@ -487,10 +515,25 @@ async function handleGenerateWebFlowFromRecording(
     debug(
         `Generating WebFlow from recording (${trace.steps.length} normalized steps)`,
     );
-    const flow = await generateWebFlowFromTrace(trace, {
-        ...(name && { suggestedName: name }),
-        description,
-    });
+
+    // Build existing flows context for dedup-aware generation
+    const store = await getStore(context);
+    const existingFlows = Object.entries(store.getIndex().flows).map(
+        ([n, e]) => ({
+            name: n,
+            description: e.description,
+            parameters: (e.parameters ?? []).map((p) => p.name),
+        }),
+    );
+
+    const flow = await generateWebFlowFromTrace(
+        trace,
+        {
+            ...(name && { suggestedName: name }),
+            description,
+        },
+        existingFlows,
+    );
 
     if (!flow) {
         return {
@@ -507,7 +550,6 @@ async function handleGenerateWebFlowFromRecording(
         ...(traceId && { traceId }),
     };
 
-    const store = await getStore(context);
     await store.save(flow);
     debug(`Saved WebFlow from recording: ${flow.name}`);
 

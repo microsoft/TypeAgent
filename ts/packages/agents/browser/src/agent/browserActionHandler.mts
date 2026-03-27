@@ -138,6 +138,10 @@ import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
 const debug = registerDebug("typeagent:browser:action");
 const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 
+// Module-level reference to WebFlowStore for getDynamicGrammar/getDynamicSchema callbacks
+let _webFlowStore: any | undefined;
+let _webFlowStoreInitializing: Promise<void> | undefined;
+
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
 const MAX_RETRY_CYCLES = 2;
@@ -265,6 +269,21 @@ export function instantiate(): AppAgent {
         executeAction: executeBrowserAction,
         resolveEntity,
         getDynamicDisplay: getDynamicDisplayImpl,
+        async getDynamicGrammar(_context, schemaName) {
+            if (schemaName !== "browser.webFlows") return undefined;
+            if (!_webFlowStore) return undefined;
+            const text = _webFlowStore.getDynamicGrammarText();
+            if (!text) return undefined;
+            return { format: "agr" as const, content: text };
+        },
+        async getDynamicSchema(_context, schemaName) {
+            if (schemaName !== "browser.webFlows") return undefined;
+            if (!_webFlowStore) return undefined;
+            return {
+                format: "ts" as const,
+                content: _webFlowStore.generateDynamicSchemaText(),
+            };
+        },
         ...getCommandInterface(handlers),
     };
 }
@@ -312,30 +331,46 @@ async function updateBrowserContext(
     context: SessionContext<BrowserActionContext>,
     schemaName: string,
 ): Promise<void> {
+    // Initialize WebFlowStore for any browser schema activation.
+    // Use a shared promise to prevent concurrent initialization from
+    // parallel updateAction calls for different sub-schemas.
+    if (enable && !_webFlowStore && context.instanceStorage) {
+        if (!_webFlowStoreInitializing) {
+            _webFlowStoreInitializing = (async () => {
+                try {
+                    const { WebFlowStore } = await import(
+                        "./webFlows/store/webFlowStore.mjs"
+                    );
+                    const store = new WebFlowStore(context.instanceStorage);
+                    await store.initialize();
+
+                    const { ensureSampleFlowsRegistered } = await import(
+                        "./webFlows/actionHandler.mjs"
+                    );
+                    await ensureSampleFlowsRegistered(store);
+
+                    context.agentContext.webFlowStore = store;
+                    _webFlowStore = store;
+
+                    const names = await store.getFlowNames();
+                    debug(
+                        `WebFlowStore initialized: ${names.length} flows seeded`,
+                    );
+                } catch (error) {
+                    debug("Failed to initialize WebFlowStore:", error);
+                }
+            })();
+        }
+        await _webFlowStoreInitializing;
+    }
+
     if (schemaName !== "browser") {
-        // REVIEW: ignore sub-translator updates.
         return;
     }
     if (enable) {
         await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
-        }
-
-        // Initialize WebFlowStore (uses instance storage for cross-session persistence)
-        if (!context.agentContext.webFlowStore && context.instanceStorage) {
-            try {
-                const { WebFlowStore } = await import(
-                    "./webFlows/store/webFlowStore.mjs"
-                );
-                context.agentContext.webFlowStore = new WebFlowStore(
-                    context.instanceStorage,
-                );
-                await context.agentContext.webFlowStore.initialize();
-                debug("WebFlowStore initialized successfully");
-            } catch (error) {
-                debug("Failed to initialize WebFlowStore:", error);
-            }
         }
 
         // Load the website index from disk
