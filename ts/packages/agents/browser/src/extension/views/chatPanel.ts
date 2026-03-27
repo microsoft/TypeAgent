@@ -213,14 +213,6 @@ function extractRecordedActionName(): string | undefined {
     return undefined;
 }
 
-// Map internal command markers to friendly display labels
-const internalCommandLabels: Record<string, string> = {
-    __save_recording__: "Yes, save the recording",
-    __discard_recording__: "Discard recording",
-    __cancel_recording__: "Cancel recording",
-    __save_and_stop_recording__: "Save recording",
-};
-
 function handleInternalCommand(text: string): boolean {
     if (text === "__save_recording__") {
         rpc.invoke("chatPanelCreateWebFlowFromRecording", {
