@@ -87,9 +87,12 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <RuleRefExpr> ::= <RuleName>
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" | ")*" | ")+" )
  *
- *   <Value> = BooleanValue | NumberValue | StringValue | ObjectValue | ArrayValue | VarReference
+ *   // ── Value (basic mode: enableExpressions=false) ──────────────────────────
+ *   <Value> = <BooleanValue> | <NumberValue> | <StringValue>
+ *           | <ObjectValue> | <ArrayValue> | <VarReference>
  *   <ArrayValue> = "[" (<Value> ("," <Value>)* ","?)? "]"
- *   <ObjectValue> = "{" (<ObjectProperty> ("," <ObjectProperty>)* ","?)? "}"
+ *   <ObjectValue> = "{" (<ObjectElement> ("," <ObjectElement>)* ","?)? "}"
+ *   <ObjectElement> = <ObjectProperty> | <SpreadElement>
  *   <ObjectProperty> = <ObjectPropertyFull> | <ObjectPropertyShort>
  *   <ObjectPropertyFull> = <ObjectPropertyName> ":" <Value>
  *   <ObjectPropertyShort> = <VarReference>
@@ -98,6 +101,61 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <NumberValue> = <NumberLiteral>
  *   <StringValue> = <StringLiteral>
  *   <VarReference> = <VarName>
+ *
+ *   // ── Value expressions (enableExpressions=true) ───────────────────────────
+ *   // When enableExpressions is true, the <Value> position (after "->")
+ *   // supports full JavaScript-like expressions with operator precedence.
+ *   // In this mode <Value> is replaced by <ValueExpr>.
+ *   //
+ *   // Operator precedence (lowest → highest):
+ *   //   1. Ternary              ? :
+ *   //   2. Nullish coalescing   ??    (cannot mix with || && without parens)
+ *   //   3. Logical OR           ||
+ *   //   4. Logical AND          &&
+ *   //   5. Equality             === !==
+ *   //   6. Comparison           < > <= >=
+ *   //   7. Additive             + -
+ *   //   8. Multiplicative       * / %
+ *   //   9. Unary                - ! typeof
+ *   //  10. Postfix              . ?. [] ?.[] ?.()
+ *   //  11. Primary              literals, identifiers, objects, arrays,
+ *   //                           template literals, (expr), ...expr
+ *   //
+ *   <ValueExpr> ::= <TernaryExpr>
+ *   <TernaryExpr> ::= <ShortCircuitExpr> ( "?" <TernaryExpr> ":" <TernaryExpr> )?
+ *
+ *   <ShortCircuitExpr> ::= <NullishExpr> | <LogicalExpr>
+ *   // Nullish and logical families cannot be mixed without parentheses.
+ *   <NullishExpr> ::= <EqualityExpr> ( "??" <EqualityExpr> )*
+ *   <LogicalExpr> ::= <LogicalAndExpr> ( "||" <LogicalAndExpr> )*
+ *   <LogicalAndExpr> ::= <EqualityExpr> ( "&&" <EqualityExpr> )*
+ *
+ *   <EqualityExpr> ::= <ComparisonExpr> ( ("===" | "!==") <ComparisonExpr> )*
+ *   <ComparisonExpr> ::= <AdditiveExpr> ( ("<" | ">" | "<=" | ">=") <AdditiveExpr> )*
+ *   <AdditiveExpr> ::= <MultiplicativeExpr> ( ("+" | "-") <MultiplicativeExpr> )*
+ *   <MultiplicativeExpr> ::= <UnaryExpr> ( ("*" | "/" | "%") <UnaryExpr> )*
+ *   <UnaryExpr> ::= ("-" | "!" | "typeof") <UnaryExpr> | <PostfixExpr>
+ *
+ *   <PostfixExpr> ::= <PrimaryExpr> <PostfixOp>*
+ *   <PostfixOp> ::= "." <Identifier> ( "(" <ArgList> ")" )?    // member access / method call
+ *                  | "?." <Identifier> ( "(" <ArgList> ")" )?   // optional member / method
+ *                  | "?." "[" <ValueExpr> "]"                   // optional computed access
+ *                  | "?." "(" <ArgList> ")"                     // optional call
+ *                  | "[" <ValueExpr> "]"                        // computed member access
+ *
+ *   <PrimaryExpr> ::= <SpreadElement>
+ *                    | <TemplateLiteral>
+ *                    | "(" <ValueExpr> ")"              // grouped expression
+ *                    | <ObjectValue>
+ *                    | <ArrayValue>
+ *                    | <StringLiteral>
+ *                    | <BooleanValue>
+ *                    | <Identifier>                     // variable reference
+ *                    | <NumberLiteral>
+ *
+ *   <SpreadElement> ::= "..." <ValueExpr>
+ *   <TemplateLiteral> ::= "`" ( <TemplateChars> | "${" <ValueExpr> "}" )* "`"
+ *   <ArgList> ::= <ValueExpr> ( "," <ValueExpr> )*
  *
  *   <VarName> = <Identifier>
  *   <TypeName> = <Identifier>

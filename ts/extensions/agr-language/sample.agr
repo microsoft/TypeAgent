@@ -4,15 +4,30 @@
 // Sample Action Grammar file demonstrating syntax highlighting
 // This file shows all the major syntax elements
 
-// Import syntax
+/* Block comment:
+   The grammar supports both line comments (//) and block comments.
+*/
+
+// ─── Import syntax ────────────────────────────────────────────────────────────
+
+// Named imports from .agr files
 import { Cardinal, TrackName, ArtistName } from "./base.agr";
+
+// Wildcard import from .agr files
 import * from "./shared.agr";
+
+// Imports from .ts schema files
 import { GreetAction, PlayAction, PauseAction } from "./schema.ts";
 
-// Simple rule definition
+// Source-less entity imports (no "from" clause — built-in entities)
+import { Ordinal, CalendarDate };
+
+// ─── Simple rule definition ───────────────────────────────────────────────────
+
 <Start> = <Greeting> | <Command>;
 
-// Rule with captures and value type annotation
+// ─── Rule with value type annotation ──────────────────────────────────────────
+
 <Greeting> : GreetAction =
     hello $(name:PersonName) -> {
         actionName: "greet",
@@ -22,7 +37,8 @@ import { GreetAction, PlayAction, PauseAction } from "./schema.ts";
     }
   | hi there -> { actionName: "greet" };
 
-// Rule with optional elements (union value type)
+// ─── Union value type annotation ──────────────────────────────────────────────
+
 <Command> : PlayAction | PauseAction =
     play (the)? $(track:TrackName)
     by $(artist:ArtistName) -> {
@@ -34,7 +50,25 @@ import { GreetAction, PlayAction, PauseAction } from "./schema.ts";
     }
   | pause (the)? music? -> { actionName: "pause" };
 
-// Rule with multiple patterns
+// ─── Exported rule ────────────────────────────────────────────────────────────
+
+export <PublicRule> = hello | goodbye;
+
+// ─── Spacing annotations ─────────────────────────────────────────────────────
+
+<Hashtag> [spacing=none] = \# $(tag:word) -> { actionName: "hashtag", parameters: { tag } };
+
+<SearchPhrase> [spacing=required] = search for $(query:string) -> {
+    actionName: "search",
+    parameters: { query }
+};
+
+<CJKMixed> [spacing=auto] = $(text:string) -> text;
+
+<Adjacent> [spacing=optional] = $(a:word) $(b:word) -> { a, b };
+
+// ─── Multiple patterns with bare results ─────────────────────────────────────
+
 <Volume> =
     (turn | set) (the)? volume to $(level:number) -> {
         actionName: "setVolume",
@@ -43,7 +77,7 @@ import { GreetAction, PlayAction, PauseAction } from "./schema.ts";
   | volume up -> { actionName: "volumeUp" }
   | volume down -> { actionName: "volumeDown" };
 
-// Bare -> results (non-object): string literal, number, or variable reference
+// Bare -> results: string literal, number, or variable reference
 <PromptSpec> = (
     ('ask me' | 'confirm' | 'please confirm') -> "true" |
     ("don't ask" | 'without asking' | 'skip') -> "false"
@@ -55,7 +89,8 @@ import { GreetAction, PlayAction, PauseAction } from "./schema.ts";
     'all' -> "all"
 );
 
-// Numeric patterns
+// ─── Numeric patterns ────────────────────────────────────────────────────────
+
 <Cardinal> =
     $(x:number)
   | one -> 1
@@ -64,14 +99,25 @@ import { GreetAction, PlayAction, PauseAction } from "./schema.ts";
   | four -> 4
   | five -> 5;
 
-// String type references
+// ─── Entity type captures ────────────────────────────────────────────────────
+
+<ScheduleEvent> =
+    schedule $(desc:string) on $(date:CalendarDate) -> {
+        actionName: "schedule",
+        parameters: { description: desc, date }
+    };
+
+<PlayNth> =
+    play (the)? $(n:Ordinal) (track | song)? -> {
+        actionName: "playFromQueue",
+        parameters: { trackNumber: n }
+    };
+
+// ─── Capture with rule references ─────────────────────────────────────────────
+
 <TrackName> = $(x:string);
 <ArtistName> = $(x:string);
 <PersonName> = $(x:string);
-
-// Complex nested rule
-<PlayCommand> =
-    <PlayTrack> | <PlayAlbum> | <PlayArtist>;
 
 <PlayTrack> =
     play track $(n:<Cardinal>) -> {
@@ -96,7 +142,83 @@ import { GreetAction, PlayAction, PauseAction } from "./schema.ts";
 
 <AlbumName> = $(x:string);
 
-// Operators demonstration
+// ─── Spread operator in values ────────────────────────────────────────────────
+
+<MergeAction> =
+    merge $(src:string) into $(dest:string) -> {
+        actionName: "merge",
+        parameters: { ...src, destination: dest }
+    };
+
+// ─── Escape sequences in string expressions ──────────────────────────────────
+
+<Status> = (what('s | is) | show) (playing | status)?
+    -> { actionName: "status" };
+
+<EscapeDemo> = hello\ world -> "hello world";
+
+// ─── Operators and grouping ──────────────────────────────────────────────────
+
 <Operators> =
     one? two* three+ four  // optional, zero-or-more, one-or-more
-  | (first | second | third)  // alternation with grouping;
+  | (first | second | third)  // alternation with grouping
+  | (item)+ // one-or-more group
+  | (prefix)* suffix; // zero-or-more group
+
+// ─── Optional capture quantifiers ────────────────────────────────────────────
+
+<ItemList> =
+    add $(item:word)+ to $(list:string) -> {
+        actionName: "addItems",
+        parameters: { items: [item], listName: list }
+    };
+
+// ─── Value expressions (enableExpressions mode) ──────────────────────────────
+
+// Ternary operator
+<Toggle> =
+    toggle $(flag:word) -> flag === "on" ? true : false;
+
+// Logical and nullish coalescing operators
+<Fallback> =
+    set $(key:word) to $(val:string) -> {
+        actionName: "set",
+        parameters: {
+            key,
+            value: val ?? "default",
+            enabled: val !== "" && val !== "off"
+        }
+    };
+
+// Arithmetic and comparison in values
+<Repeat> =
+    repeat $(n:number) times -> {
+        actionName: "repeat",
+        parameters: {
+            count: n,
+            doubled: n * 2,
+            isMany: n > 5 || n === 0
+        }
+    };
+
+// Member access and optional chaining
+<Lookup> =
+    lookup $(obj:word) -> obj.value?.name;
+
+// Template literals
+<Greet> =
+    greet $(name:string) -> `Hello, ${name}!`;
+
+// Unary operators
+<Negate> =
+    negate $(x:number) -> -x;
+
+<Check> =
+    check $(val:word) -> !val ? "empty" : typeof val;
+
+// Method calls and computed access
+<Transform> =
+    transform $(data:word) -> data.items[0]?.toString();
+
+/* End of sample — this block comment demonstrates
+   that multi-line block comments are highlighted. */
