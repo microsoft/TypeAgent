@@ -101,7 +101,7 @@ export async function handleContextMenuClick(
 
     switch (info.menuItemId) {
         case "discoverPageActions": {
-            await openChatAndInjectCommand(tab.id!, "@browser discover");
+            await openChatAndInjectCommand(tab.id!, "@browser actions discover");
             break;
         }
         case "manageMacros": {

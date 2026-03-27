@@ -2938,7 +2938,7 @@ class RecordActionHandler implements CommandHandler {
             context.actionIO.setDisplay({
                 type: "text",
                 content:
-                    "Please provide a name for the action. Example: @browser record Search for products",
+                    "Please provide a name for the action. Example: @browser actions record Search for products",
             });
             return;
         }
@@ -3366,13 +3366,19 @@ export const handlers: CommandHandlerTable = {
         },
         extractKnowledge: new ExtractKnowledgeHandler(),
         ask: new AskAboutPageHandler(),
-        discover: new DiscoverActionsHandler(),
-        author: new StartAuthoringHandler(),
-        record: new RecordActionHandler(),
-        stop: {
-            description: "Stop operations",
+        actions: {
+            description: "Manage page actions (discover, record, author)",
+            defaultSubCommand: "discover",
             commands: {
-                recording: new StopRecordingHandler(),
+                discover: new DiscoverActionsHandler(),
+                record: new RecordActionHandler(),
+                stop: {
+                    description: "Stop operations",
+                    commands: {
+                        recording: new StopRecordingHandler(),
+                    },
+                },
+                author: new StartAuthoringHandler(),
             },
         },
         search: new SearchProviderCommandHandlerTable(),

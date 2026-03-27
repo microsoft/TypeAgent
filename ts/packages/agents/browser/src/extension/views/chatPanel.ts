@@ -202,11 +202,11 @@ function initialize() {
 let lastRecordedActionName = "Recorded Action";
 
 function extractRecordedActionName(): string | undefined {
-    // Look through command history for the last @browser record command
+    // Look through command history for the last @browser actions record command
     for (let i = 0; i < (chatPanel as any).commandHistory?.length || 0; i++) {
         const cmd = (chatPanel as any).commandHistory[i];
-        if (cmd && cmd.toLowerCase().startsWith("@browser record")) {
-            const name = cmd.substring("@browser record".length).trim();
+        if (cmd && cmd.toLowerCase().startsWith("@browser actions record")) {
+            const name = cmd.substring("@browser actions record".length).trim();
             if (name) return name;
         }
     }
@@ -218,6 +218,7 @@ const internalCommandLabels: Record<string, string> = {
     __save_recording__: "Yes, save the recording",
     __discard_recording__: "Discard recording",
     __cancel_recording__: "Cancel recording",
+    __save_and_stop_recording__: "Save recording",
 };
 
 function handleInternalCommand(text: string): boolean {
@@ -270,6 +271,64 @@ function handleInternalCommand(text: string): boolean {
                 );
             })
             .catch(() => {});
+        return true;
+    }
+    if (text === "__save_and_stop_recording__") {
+        lastRecordedActionName =
+            extractRecordedActionName() || "Recorded Action";
+        chatPanel.showStatus("Saving action...");
+
+        rpc.invoke("chatPanelStopRecording")
+            .then((stopResult: any) => {
+                if (!stopResult?.success || stopResult.stepCount === 0) {
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content:
+                                stopResult?.stepCount === 0
+                                    ? "No steps were recorded."
+                                    : `Recording failed: ${stopResult?.error || "Unknown error"}`,
+                            kind: "warning",
+                        },
+                        "browser",
+                    );
+                    chatPanel.setEnabled(true);
+                    chatPanel.focus();
+                    return;
+                }
+
+                return rpc.invoke("chatPanelCreateWebFlowFromRecording", {
+                    actionName: lastRecordedActionName,
+                    actionDescription: `Recorded action: ${lastRecordedActionName}`,
+                });
+            })
+            .then((saveResult: any) => {
+                if (!saveResult) return;
+                if (saveResult.success) {
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content: `Action "${saveResult.flowName}" saved as a reusable WebFlow!`,
+                            kind: "success",
+                        },
+                        "browser",
+                    );
+                } else {
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content: `Failed to save: ${saveResult?.error || "Unknown error"}`,
+                            kind: "error",
+                        },
+                        "browser",
+                    );
+                }
+                chatPanel.setEnabled(true);
+                chatPanel.focus();
+            })
+            .catch(() => {
+                chatPanel.setEnabled(true);
+            });
         return true;
     }
     return false;
@@ -330,15 +389,15 @@ function handleUserMessage(text: string, attachments?: string[]) {
 function addContextualFollowUps(command: string) {
     const normalized = command.toLowerCase().trim();
 
-    if (normalized.includes("@browser discover")) {
+    if (normalized.includes("@browser actions discover")) {
         chatPanel.addFollowUpButtons([
             {
                 label: "Record New Action",
-                command: "@browser record New Action",
+                command: "@browser actions record New Action",
             },
             // {
             //     label: "Create Action (describe)",
-            //     command: "@browser author",
+            //     command: "@browser actions author",
             // ,
         ]);
     } else if (normalized.startsWith("@browser ask")) {
@@ -349,7 +408,7 @@ function addContextualFollowUps(command: string) {
                 command: "@browser extractKnowledge",
             },
         ]);
-    } else if (normalized.startsWith("@browser record")) {
+    } else if (normalized.startsWith("@browser actions record")) {
         // Start recording via service worker and show controls
         rpc.invoke("chatPanelStartRecording")
             .then((result: any) => {
@@ -357,7 +416,8 @@ function addContextualFollowUps(command: string) {
                     chatPanel.addFollowUpButtons([
                         {
                             label: "Save recording",
-                            command: "@browser stop recording",
+                            command: "__save_and_stop_recording__",
+                            displayText: "Save recording",
                         },
                         {
                             label: "Cancel recording",
@@ -368,7 +428,7 @@ function addContextualFollowUps(command: string) {
                 }
             })
             .catch(() => {});
-    } else if (normalized.includes("@browser stop recording")) {
+    } else if (normalized.includes("@browser actions stop recording")) {
         // Stop recording and offer to save
         rpc.invoke("chatPanelStopRecording")
             .then((result: any) => {
