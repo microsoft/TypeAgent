@@ -113,13 +113,13 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(grammar, "hello, world");
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 12,
-                    separatorMode: undefined,
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -136,7 +136,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 6,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -210,13 +210,13 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(grammar, "hello,world");
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 11,
-                    separatorMode: undefined,
+                    completions: [",world"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -291,13 +291,13 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(grammar, "hello . world");
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 13,
-                    separatorMode: undefined,
+                    completions: ["world"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -399,16 +399,16 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "hello world next",
                 );
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 16,
-                    separatorMode: undefined,
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -1170,15 +1170,15 @@ describeForEachCompletion(
             it("matchedPrefixLength includes comma when typed", () => {
                 // "hello," — comma starts the keyword
                 const result = matchGrammarCompletion(grammar, "hello,d");
-                // Wildcard absorbs all input → mpl = input length
-                // requiresSeparator("d", ",", auto) → comma is punct → "optional"
-                // Wildcard to reconsider → direction-sensitive
+                // Forward findPartialKeywordInWildcard finds ",d" at
+                // position 5 as partial of ",done" → mpl=5.
+                // requiresSeparator("o", ",", auto) → comma is punct → "optional"
                 expectMetadata(result, {
                     completions: [",done"],
-                    matchedPrefixLength: 7,
+                    matchedPrefixLength: 5,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1859,16 +1859,16 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "hello, world! thanks.",
                 );
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 21,
-                    separatorMode: undefined,
+                    completions: ["thanks."],
+                    matchedPrefixLength: 13,
+                    separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -1899,13 +1899,13 @@ describeForEachCompletion(
                 // Wildcard boundary pinned at partial keyword → openWildcard
                 // findPartialKeywordInWildcard: position=4 ("hel" starts after " ")
                 // requiresSeparator(" ", "h", auto) → "optional"
-                // Backward differs from forward → direction-sensitive
+                // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1919,44 +1919,38 @@ describeForEachCompletion(
                     "forward",
                 );
                 // Wildcard finalized at EOI → openWildcard
-                // Wildcard absorbs all input → mpl = input length
-                // requiresSeparator("l", "h", auto) → both Latin → "spacePunctuation"
+                // Forward now uses findPartialKeywordInWildcard → mpl = partial keyword position
+                // findPartialKeywordInWildcard: position=4 ("hel" starts after " ")
+                // requiresSeparator(" ", "h", auto) → "optional"
                 expectMetadata(result, {
                     completions: ["hello,"],
-                    matchedPrefixLength: 7,
-                    separatorMode: "spacePunctuation",
+                    matchedPrefixLength: 4,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
             });
 
-            // NOTE: Expected behavior under exhaustive matching.
-            // The wildcard greedily absorbs "foo hello," including the
-            // first keyword word.  matchStringPartWithWildcard requires
-            // ALL segments ["hello,", "world"] to match at once, so the
-            // partial match (only "hello," present) is not detected.
-            // The code falls to Category 2 which offers "hello," (first
-            // unmatched word) instead of "world" (second word).
-            //
-            // TODO: A planned non-exhaustive match mode that stops
-            // exploring longer wildcard alternatives once a full match
-            // is found would allow this to return ["world"] instead.
-            it("forward on 'foo hello,' — exhaustive match offers 'hello,' (longer wildcard absorbs keyword)", () => {
+            // The wildcard absorbs all input (including "hello,") via
+            // finalizeState.  findPartialKeywordInWildcard detects the
+            // full first keyword word "hello," at EOI and returns the
+            // next keyword word "world" as the completion.  Forward
+            // accepts this via the <= state.index gate.
+            it("forward on 'foo hello,' — full first keyword word at EOI offers 'world'", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "foo hello,",
                     undefined,
                     "forward",
                 );
-                // Under exhaustive matching: ["hello,"] (wildcard absorbed all input)
-                // Under non-exhaustive matching: would be ["world"]
-                // Wildcard absorbs all input → mpl = input length
-                // requiresSeparator(",", "h", auto) → comma is punct → "optional"
-                // Wildcard to reconsider → direction-sensitive
+                // "hello," fully matched as keyword word 0 → next word "world"
+                // Wildcard absorbs all input → openWildcard
+                // requiresSeparator(",", "w", auto) → comma is punct → "optional"
+                // Backward would differ (backs up past wildcard) → direction-sensitive
                 expectMetadata(result, {
-                    completions: ["hello,"],
+                    completions: ["world"],
                     matchedPrefixLength: 10,
                     separatorMode: "optional",
                     closedSet: true,
@@ -1987,7 +1981,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 6,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2477,15 +2471,16 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions after exact match 'hello world'", () => {
+            it("exact match backs up to last term 'hello world'", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the single escaped-space
+                // keyword "hello world".
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 11,
-                    separatorMode: undefined,
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2701,13 +2696,13 @@ describeForEachCompletion(
                 );
                 // Backward partial keyword found in wildcard tail
                 // requiresSeparator(" ", "h", auto) → "optional"
-                // Backward differs from forward → direction-sensitive
+                // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -2797,12 +2792,13 @@ describeForEachCompletion(
                 );
                 // ",wor" is a partial prefix of ",world"
                 // candidateStart at position 4 (the comma) — prefix[3]=" " is separator ✓
+                // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -2820,12 +2816,13 @@ describeForEachCompletion(
                 // needed between wildcard content and keyword. The comma
                 // at candidateStart=3 is accepted, and ",wor" is a partial
                 // prefix of ",world".
+                // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -2833,16 +2830,15 @@ describeForEachCompletion(
 
             it("forward on 'foo ,world' offers 'done' after matched keyword", () => {
                 const result = matchGrammarCompletion(grammar, "foo ,world");
-                // Wildcard captures "foo", ",world" matched → next is "done"
-                // But under exhaustive matching, wildcard may also
-                // absorb ",world" → still offers ",world"
-                // Wildcard absorbs all input → mpl = input length
-                // requiresSeparator("d", ",", auto) → "optional"
+                // ",world" fully matched as keyword word 0 → next word "done"
+                // findPartialKeywordInWildcard detects full keyword word at EOI
+                // Wildcard absorbs all input → openWildcard
+                // requiresSeparator("d", "d", auto) → "spacePunctuation"
+                // Backward would differ → direction-sensitive
                 expectMetadata(result, {
-                    completions: [",world"],
-                    sortCompletions: true,
+                    completions: ["done"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optional",
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -2875,23 +2871,30 @@ describeForEachCompletion(
                 });
             });
 
-            it("backward on 'foo ,' finds full match of ',' → offers 'world'", () => {
+            it("backward on 'foo ,' backs up to wildcard", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "foo ,",
                     undefined,
                     "backward",
                 );
-                // "," is a full match of the first word → next word is "world"
-                // Full match of "," → next word "world" offered at mpl=5
+                // "," fully matched as keyword word 0 at EOI —
+                // the partial keyword position equals state.index,
+                // so backward falls through to
+                // collectBackwardCandidate which backs up to the
+                // wildcard start.
                 expectMetadata(result, {
-                    completions: ["world"],
-                    matchedPrefixLength: 5,
+                    completions: [],
+                    matchedPrefixLength: 0,
                     separatorMode: "optional",
-                    closedSet: true,
-                    directionSensitive: true,
-                    openWildcard: true,
-                    properties: [],
+                    closedSet: false,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            propertyNames: [""],
+                        },
+                    ],
                 });
             });
         });
@@ -2935,12 +2938,13 @@ describeForEachCompletion(
                 // (space is not a word-boundary script), so no separator is
                 // needed. candidateStart=3 (the space) is accepted.
                 // textToCheck=" do" is a partial prefix of " done".
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: [" done"],
                     matchedPrefixLength: 3,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -2981,12 +2985,13 @@ describeForEachCompletion(
                 );
                 // "hel" is partial prefix of "hello " (segment includes
                 // trailing space)
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["hello "],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -3026,12 +3031,13 @@ describeForEachCompletion(
                 );
                 // "-do" partially matches "-done". candidateStart at
                 // position 4 ("-"): prefix[3]=" " is separator ✓
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -3048,12 +3054,13 @@ describeForEachCompletion(
                 // (hyphen is not a word-boundary script), so no separator is
                 // needed. candidateStart=3 (the hyphen) is accepted.
                 // "-do" is a partial prefix of "-done".
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -3093,12 +3100,13 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "don" is partial prefix of "done!"
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -3114,12 +3122,13 @@ describeForEachCompletion(
                 // "done" is NOT a full match of "done!" — the segment
                 // includes the exclamation mark. So "done" is a partial
                 // prefix of "done!".
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -3148,12 +3157,13 @@ describeForEachCompletion(
                 );
                 // "hello" is partial prefix of "hello world" (single
                 // segment includes the space)
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -3168,12 +3178,13 @@ describeForEachCompletion(
                 );
                 // "hello " is partial prefix of "hello world" (space
                 // included in single segment)
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -3187,12 +3198,13 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "hello w" is partial prefix of "hello world"
+                // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });

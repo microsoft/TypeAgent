@@ -82,16 +82,36 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completion for exact full match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "first second third",
                 );
-                expect(result.completions).toHaveLength(0);
-                // Exact match records the full consumed length.
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    matchedPrefixLength: 18,
-                    separatorMode: undefined,
+                    completions: ["third"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
+            });
+
+            it("backward: exact match also backs up to last term", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "first second third",
+                    undefined,
+                    "backward",
+                );
+                // Category 1 is direction-agnostic — backward
+                // produces the same result as forward.
+                expectMetadata(result, {
+                    completions: ["third"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -109,7 +129,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 12,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -222,18 +242,18 @@ describeForEachCompletion(
                 });
             });
 
-            it("alternative still offered even when one rule matches exactly", () => {
+            it("exact match backs up and shows alternatives", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "prefix suffix_x",
                 );
-                // Rule 1 (suffix_x) matches exactly at length 15.
-                // Rule 2's "suffix_y" at prefixLength 6 is filtered out
-                // because a longer match exists.
-                expect(result.completions).toHaveLength(0);
+                // Rule 1 (suffix_x) matches exactly and backs up to
+                // position 6 (after "prefix"). Both suffix_x and suffix_y
+                // are offered at this position.
                 expectMetadata(result, {
-                    matchedPrefixLength: 15,
-                    separatorMode: undefined,
+                    completions: ["suffix_x", "suffix_y"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -334,15 +354,16 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completion for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "set volume 50 percent",
                 );
-                expect(result.completions).toHaveLength(0);
+                // Exact match backs up to last term "percent".
                 expectMetadata(result, {
-                    matchedPrefixLength: 21,
-                    separatorMode: undefined,
+                    completions: ["percent"],
+                    matchedPrefixLength: 13,
+                    separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -388,7 +409,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -404,7 +425,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -423,12 +444,14 @@ describeForEachCompletion(
                 });
             });
 
-            it("closedSet=true for exact match (no completions)", () => {
+            it("exact match backs up and shows all alternatives", () => {
                 const result = matchGrammarCompletion(grammar, "play rock");
-                expect(result.completions).toHaveLength(0);
+                // Exact match backs up to position 4 (after "play"),
+                // showing all alternatives: rock, pop, jazz.
                 expectMetadata(result, {
-                    matchedPrefixLength: 9,
-                    separatorMode: undefined,
+                    completions: ["rock", "pop", "jazz"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: false,
@@ -683,7 +706,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 5,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1093,10 +1116,10 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play Never b");
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    matchedPrefixLength: 11,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1114,7 +1137,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 11,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1127,10 +1150,10 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 23,
-                    separatorMode: "spacePunctuation",
+                    matchedPrefixLength: 22,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1148,104 +1171,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 22,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
-                    openWildcard: true,
-                    properties: [],
-                });
-            });
-        });
-
-        describe("partial multi-word keyword after wildcard — 'played by'", () => {
-            const g = [
-                `<Start> = play $(name) played by $(artist) -> { name, artist };`,
-            ].join("\n");
-            const grammar = loadGrammarRules("test.grammar", g);
-
-            it("backward: partial first keyword word offers 'played'", () => {
-                const result = matchGrammarCompletion(
-                    grammar,
-                    "play Never p",
-                    undefined,
-                    "backward",
-                );
-                expect(result.completions).toContain("played");
-                expectMetadata(result, {
-                    matchedPrefixLength: 11,
-                    separatorMode: "optional",
-                    closedSet: true,
-                    directionSensitive: true,
-                    openWildcard: true,
-                    properties: [],
-                });
-            });
-
-            it("backward: full first keyword word offers 'by'", () => {
-                const result = matchGrammarCompletion(
-                    grammar,
-                    "play Never played",
-                    undefined,
-                    "backward",
-                );
-                expect(result.completions).toContain("by");
-                expectMetadata(result, {
-                    matchedPrefixLength: 17,
-                    separatorMode: "spacePunctuation",
-                    closedSet: true,
-                    directionSensitive: true,
-                    openWildcard: true,
-                    properties: [],
-                });
-            });
-
-            it("backward: full first keyword word + partial second offers 'by'", () => {
-                const result = matchGrammarCompletion(
-                    grammar,
-                    "play Never played b",
-                    undefined,
-                    "backward",
-                );
-                expect(result.completions).toContain("by");
-                expectMetadata(result, {
-                    matchedPrefixLength: 18,
-                    separatorMode: "optional",
-                    closedSet: true,
-                    directionSensitive: true,
-                    openWildcard: true,
-                    properties: [],
-                });
-            });
-
-            it("backward: multi-word wildcard + full first keyword word + partial second", () => {
-                const result = matchGrammarCompletion(
-                    grammar,
-                    "play my song played b",
-                    undefined,
-                    "backward",
-                );
-                expect(result.completions).toContain("by");
-                expectMetadata(result, {
-                    matchedPrefixLength: 20,
-                    separatorMode: "optional",
-                    closedSet: true,
-                    directionSensitive: true,
-                    openWildcard: true,
-                    properties: [],
-                });
-            });
-
-            it("backward: multi-word wildcard + full first keyword word offers 'by'", () => {
-                const result = matchGrammarCompletion(
-                    grammar,
-                    "play my song played",
-                    undefined,
-                    "backward",
-                );
-                expect(result.completions).toContain("by");
-                expectMetadata(result, {
-                    matchedPrefixLength: 19,
-                    separatorMode: "spacePunctuation",
-                    closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1270,7 +1196,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 9,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1288,7 +1214,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 9,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1306,7 +1232,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 13,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });

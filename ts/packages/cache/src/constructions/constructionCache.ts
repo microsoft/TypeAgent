@@ -103,10 +103,62 @@ export type CompletionResult = {
     openWildcard?: boolean | undefined;
 };
 
+/** The matched prefix reached end-of-input via an open wildcard. */
+export function isEoiWildcard(
+    matchedLen: number,
+    prefixLength: number,
+    openWildcard: boolean | undefined,
+): boolean {
+    return matchedLen >= prefixLength && !!openWildcard;
+}
+
+/** The matched prefix stops before end-of-input (trailing text filters completions). */
+export function anchorsInsideInput(
+    matchedLen: number,
+    prefixLength: number,
+): boolean {
+    return matchedLen > 0 && matchedLen < prefixLength;
+}
+
+/**
+ * When two results have different matchedPrefixLengths, determine
+ * whether the candidate should be preferred over the incumbent.
+ *
+ * The normal rule is "longer wins", with one exception: a longer
+ * result at end-of-input with an open wildcard is displaced by a
+ * shorter result that anchors inside the input (the trailing text
+ * filters the shorter result's completions, making it more
+ * informative).
+ *
+ * Returns true when the candidate should replace the incumbent.
+ */
+export function shouldPreferNewResult(
+    currentLen: number,
+    currentOpenWildcard: boolean | undefined,
+    candidateLen: number,
+    candidateOpenWildcard: boolean | undefined,
+    prefixLength: number,
+): boolean {
+    if (candidateLen > currentLen) {
+        // Longer wins unless it's EOI wildcard displacing an anchored result.
+        return !(
+            isEoiWildcard(candidateLen, prefixLength, candidateOpenWildcard) &&
+            anchorsInsideInput(currentLen, prefixLength)
+        );
+    }
+    // candidateLen < currentLen (the equal case was handled by the caller).
+    // Shorter candidate wins only when anchored and current is EOI wildcard.
+    return (
+        anchorsInsideInput(candidateLen, prefixLength) &&
+        isEoiWildcard(currentLen, prefixLength, currentOpenWildcard)
+    );
+}
+
 // Architecture: docs/architecture/completion.md — §2 Cache Layer
 export function mergeCompletionResults(
     first: CompletionResult | undefined,
     second: CompletionResult | undefined,
+    prefixLength: number,
 ): CompletionResult | undefined {
     if (first === undefined) {
         return second;
@@ -117,13 +169,24 @@ export function mergeCompletionResults(
     // Eagerly discard shorter-prefix completions — consistent with the
     // grammar matcher's approach.  Only the source(s) with the longest
     // matchedPrefixLength contribute completions.
+    //
+    // Exception: when the longer result is at end-of-input with an open
+    // wildcard (the wildcard absorbed all remaining text), a shorter
+    // result that anchors inside the input is more informative — the
+    // trailing text acts as a filter for the shorter result's
+    // completions.  In that case, keep the shorter result.
     const firstLen = first.matchedPrefixLength ?? 0;
     const secondLen = second.matchedPrefixLength ?? 0;
-    if (firstLen > secondLen) {
-        return first;
-    }
-    if (secondLen > firstLen) {
-        return second;
+    if (firstLen !== secondLen) {
+        return shouldPreferNewResult(
+            firstLen,
+            first.openWildcard,
+            secondLen,
+            second.openWildcard,
+            prefixLength,
+        )
+            ? second
+            : first;
     }
     // Same prefix length — merge completions from both sources.
     const matchedPrefixLength =

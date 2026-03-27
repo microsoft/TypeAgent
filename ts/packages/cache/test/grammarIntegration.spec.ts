@@ -828,6 +828,62 @@ describe("Grammar Integration", () => {
         });
     });
 
+    describe("Cross-grammar merge: anchored partial keyword vs EOI wildcard", () => {
+        it("should prefer anchored partial keyword over EOI wildcard from another grammar", () => {
+            // Grammar 1: player — has a "by" keyword after a wildcard
+            const playerGrammarText = `<Start> = <play>;
+<play> = play $(trackName:<TrackPhrase>) by $(artist:string) -> {
+    actionName: "play",
+    parameters: {
+        trackName,
+        artist
+    }
+};
+<TrackPhrase> = $(trackName:string) <TrackTerm> | $(trackName:string);
+<TrackTerm> = track | song;`;
+
+            // Grammar 2: localPlayer — wildcard absorbs everything
+            const localPlayerGrammarText = `<Start> = <play>;
+<play> = play $(n:string) <TrackTerm> -> {
+    actionName: "localPlay",
+    parameters: {
+        n
+    }
+};
+<TrackTerm> = track | song;`;
+
+            const playerGrammar = loadGrammarRules("player", playerGrammarText);
+            const localPlayerGrammar = loadGrammarRules(
+                "localPlayer",
+                localPlayerGrammarText,
+            );
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
+
+            cache.grammarStore.addGrammar("player", playerGrammar);
+            cache.grammarStore.addGrammar("localPlayer", localPlayerGrammar);
+
+            cache.configureGrammarGeneration(undefined, undefined, false);
+
+            const namespaceKeys = cache.getNamespaceKeys(
+                ["player", "localPlayer"],
+                undefined,
+            );
+
+            const prefix = "play This Train b";
+            const completions = cache.completion(prefix, { namespaceKeys });
+            expect(completions).toBeDefined();
+
+            // The partial keyword "by" anchors at position 16 (before "b"),
+            // NOT at 17 (EOI where localPlayer's wildcard absorbs everything)
+            expect(completions!.matchedPrefixLength).toBe(16);
+            expect(completions!.completions).toContain("by");
+        });
+    });
+
     describeIf(
         "Grammar Generation via populateCache",
         () => hasTestKeys(),

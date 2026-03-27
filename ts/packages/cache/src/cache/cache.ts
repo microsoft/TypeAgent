@@ -638,6 +638,10 @@ export class AgentCache {
             options,
             direction,
         );
-        return mergeCompletionResults(storeCompletion, grammarCompletion);
+        return mergeCompletionResults(
+            storeCompletion,
+            grammarCompletion,
+            requestPrefix.length,
+        );
     }
 }

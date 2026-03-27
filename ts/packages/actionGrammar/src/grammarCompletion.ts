@@ -146,10 +146,12 @@ function matchKeywordWordsFrom(
         }
     }
 
+    // Partial prefix of the next word, or separator-only remainder
+    // after a fully matched word (textToCheck="" ⇒ consumed-to-EOI).
     if (
-        textToCheck.length > 0 &&
         textToCheck.length < word.length &&
-        word.toLowerCase().startsWith(textToCheck.toLowerCase())
+        word.toLowerCase().startsWith(textToCheck.toLowerCase()) &&
+        (textToCheck.length > 0 || matchedWords > 0)
     ) {
         return {
             position: prefix.length - textToCheck.length,
@@ -165,8 +167,11 @@ function matchKeywordWordsFrom(
 // the partial keyword starts (i.e. the first non-separator character after
 // the last separator), or undefined if no partial keyword is found.
 //
-// Used in Category 2 backward to offer the keyword at the partial keyword
-// position instead of backing up to the wildcard start.
+// Used in both directions:
+//   - Forward Category 2: determines the Phase B anchor position for
+//     deferred wildcard-at-EOI candidates (see forwardPartialKeyword).
+//   - Backward Category 2: offers the keyword at the partial keyword
+//     position instead of backing up to the wildcard start.
 //
 // Handles both single-word and multi-word keyword parts.  For a keyword
 // like ["played", "by"], the function recognizes:
@@ -435,6 +440,14 @@ function tryPartialStringMatch(
  *      - String part → literal keyword completion (e.g. "music").
  *      - Wildcard / number → property completion (handled elsewhere).
  *
+ *    **Wildcard-at-EOI deferral:** when a pending wildcard absorbed all
+ *    input to end-of-string, forward string-part candidates are *not*
+ *    processed inline.  Instead they are saved to `forwardEoiCandidates`
+ *    and instantiated in Phase B at the appropriate anchor position
+ *    (partial keyword position or `prefix.length`).  This prevents
+ *    wildcard-at-EOI states from pushing `maxPrefixLength` past
+ *    more-meaningful candidates.  See the Phase B EOI block.
+ *
  * 3. **Partial match, NOT finalized** — either:
  *      a. A pending wildcard could not be finalized (trailing text is only
  *         separators with no wildcard content) → collect a property
@@ -482,15 +495,19 @@ type FixedCandidate =
     | {
           kind: "string";
           completionText: string;
-          needsSep: boolean;
           spacingMode: CompiledSpacingMode;
+          openWildcard: boolean;
+          partialKeywordBackup: boolean;
+          partialKeywordAgrees: boolean;
       }
     | {
           kind: "property";
           valueId: number;
           state: MatchState;
-          needsSep: boolean;
           spacingMode: CompiledSpacingMode;
+          openWildcard: boolean;
+          partialKeywordBackup: boolean;
+          partialKeywordAgrees: boolean;
       };
 
 type RangeCandidate =
@@ -507,6 +524,21 @@ type RangeCandidate =
           state: MatchState;
           spacingMode: CompiledSpacingMode;
       };
+
+// Forward partial keyword anchor: when
+// findPartialKeywordInWildcard finds a partial keyword at
+// position P < state.index inside a wildcard-at-EOI state,
+// the result is saved here.  Phase B uses position to anchor
+// and completionWord to emit the completion (tryPartialStringMatch
+// at the anchor position cannot reproduce multi-word keyword
+// results — e.g. for keyword ["played","by"], the partial
+// keyword "by" is found at position 18 from candidateStart=11,
+// but tryPartialStringMatch at 18 returns "played" instead).
+type ForwardPartialKeywordCandidate = {
+    position: number;
+    completionWord: string;
+    spacingMode: CompiledSpacingMode;
+};
 
 // Callers pass either a literal char ("a" for property candidates) or
 // completionText[0] from tryPartialStringMatch, which always returns
@@ -574,21 +606,33 @@ export function matchGrammarCompletion(
     //     the same conditions the old retrigger required.
     //
     // Phase B also handles:
+    //  • Forward EOI candidate instantiation at the appropriate
+    //    anchor (partial keyword position or prefix.length).
     //  • Global string deduplication via Set.
     //  • Range candidate gating (only under retrigger conditions).
     //  • Trailing-separator advancement (forward only).
     //  • directionSensitive recomputation for backed-up positions.
     const fixedCandidates: FixedCandidate[] = [];
     const rangeCandidates: RangeCandidate[] = [];
-    let separatorMode: SeparatorMode | undefined;
-
-    // Whether the accumulated completions form a closed set — if the
-    // user types something not listed, no further completions can exist
-    // beyond it.  Starts true and is set to false when property/wildcard
-    // candidates are collected (entity values are external to the grammar).
-    // Reset to true whenever maxPrefixLength advances (old candidates are
-    // discarded, new batch starts fresh).
-    let closedSet: boolean = true;
+    // Forward partial keyword: see ForwardPartialKeywordCandidate.
+    let forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined;
+    // Forward EOI candidates: when a wildcard absorbed all input
+    // (state.index >= prefix.length) and the next part is a string,
+    // the candidate is deferred here instead of being processed
+    // inline.  States where findPartialKeywordInWildcard found a
+    // partial keyword are NOT added here (tryPartialStringMatch
+    // at the anchor can't reproduce multi-word results); only
+    // the anchor position is saved in forwardPartialKeyword.
+    //
+    // Phase B fires when this array is non-empty OR
+    // forwardPartialKeyword is set, and instantiates candidates at
+    // the appropriate anchor:
+    //   - partial keyword position (if one exists)
+    //   - prefix.length (otherwise)
+    // Only "wildcardString" items are added/consumed; the broader
+    // RangeCandidate type is kept for structural uniformity with
+    // rangeCandidates.
+    const forwardEoiCandidates: RangeCandidate[] = [];
 
     // Track the furthest point the grammar consumed across all
     // states (including exact matches).  This tells the caller where
@@ -599,16 +643,6 @@ export function matchGrammarCompletion(
     // Whether direction influenced the accumulated results.  Reset
     // whenever maxPrefixLength advances (old candidates discarded).
     let directionSensitive = false;
-
-    // Whether the matchedPrefixLength position is ambiguous — see
-    // the openWildcard comment on GrammarCompletionResult for the
-    // full definition of definite vs ambiguous positions.
-    let openWildcard = false;
-
-    // Whether a findPartialKeywordInWildcard match determined the
-    // backed-up position.  Used together with openWildcard to
-    // derive rangeCandidateGateOpen after the main loop.
-    let partialKeywordBackup = false;
 
     // Whether backward actually collected a backed-up candidate (via
     // collectBackwardCandidate or findPartialKeywordInWildcard).  When
@@ -633,11 +667,7 @@ export function matchGrammarCompletion(
         if (prefixLength > maxPrefixLength) {
             maxPrefixLength = prefixLength;
             fixedCandidates.length = 0;
-            separatorMode = undefined;
-            closedSet = true;
             directionSensitive = false;
-            openWildcard = false;
-            partialKeywordBackup = false;
         }
     }
 
@@ -649,21 +679,18 @@ export function matchGrammarCompletion(
         state: MatchState,
         valueId: number,
         prefixPosition: number,
+        candidateOpenWildcard: boolean = false,
     ): void {
         updateMaxPrefixLength(prefixPosition);
         if (prefixPosition !== maxPrefixLength) return;
-        const candidateNeedsSep = computeNeedsSep(
-            prefix,
-            prefixPosition,
-            "a",
-            state.spacingMode,
-        );
         fixedCandidates.push({
             kind: "property",
             valueId,
             state: { ...state },
-            needsSep: candidateNeedsSep,
             spacingMode: state.spacingMode,
+            openWildcard: candidateOpenWildcard,
+            partialKeywordBackup: false,
+            partialKeywordAgrees: false,
         });
     }
 
@@ -674,20 +701,19 @@ export function matchGrammarCompletion(
         state: MatchState,
         candidatePrefixLength: number,
         completionText: string,
+        candidateOpenWildcard: boolean = false,
+        candidatePartialKeywordBackup: boolean = false,
+        candidatePartialKeywordAgrees: boolean = false,
     ): void {
         updateMaxPrefixLength(candidatePrefixLength);
         if (candidatePrefixLength !== maxPrefixLength) return;
-        const candidateNeedsSep = computeNeedsSep(
-            prefix,
-            candidatePrefixLength,
-            completionText[0],
-            state.spacingMode,
-        );
         fixedCandidates.push({
             kind: "string",
             completionText,
-            needsSep: candidateNeedsSep,
             spacingMode: state.spacingMode,
+            openWildcard: candidateOpenWildcard,
+            partialKeywordBackup: candidatePartialKeywordBackup,
+            partialKeywordAgrees: candidatePartialKeywordAgrees,
         });
     }
 
@@ -697,13 +723,13 @@ export function matchGrammarCompletion(
     // the last matched part via tryPartialStringMatch (for strings)
     // or collectPropertyCandidate (for numbers).
     //
-    // Sets openWildcard=true when backing up to a part that was
-    // matched after a captured wildcard (afterWildcard) — that
-    // position is ambiguous because the wildcard could extend.
-    function collectBackwardCandidate(
+    // Tags the candidate with openWildcard when backing up to a part
+    // that was matched after a captured wildcard (afterWildcard) —
+    // that position is ambiguous because the wildcard could extend.
+    function tryCollectBackwardCandidate(
         state: MatchState,
         savedWildcard: PendingWildcard | undefined,
-    ): void {
+    ): boolean {
         const wildcardStart = savedWildcard?.start;
         const partStart = state.lastMatchedPartInfo?.start;
         if (
@@ -717,7 +743,7 @@ export function matchGrammarCompletion(
                 savedWildcard.valueId,
                 savedWildcard.start,
             );
-            backwardEmitted = true;
+            return true;
         } else if (state.lastMatchedPartInfo !== undefined) {
             const info = state.lastMatchedPartInfo;
             if (info.type === "string") {
@@ -733,24 +759,25 @@ export function matchGrammarCompletion(
                         state,
                         backResult.consumedLength,
                         backResult.remainingText,
+                        info.afterWildcard,
                     );
-                    backwardEmitted = true;
-                    if (info.afterWildcard) {
-                        openWildcard = true;
-                    }
+                    return true;
                 } else {
                     updateMaxPrefixLength(state.index);
                 }
             } else {
                 // Number part — offer property completion for the
                 // number slot so the user can re-enter a value.
-                collectPropertyCandidate(state, info.valueId, info.start);
-                backwardEmitted = true;
-                if (info.afterWildcard) {
-                    openWildcard = true;
-                }
+                collectPropertyCandidate(
+                    state,
+                    info.valueId,
+                    info.start,
+                    info.afterWildcard,
+                );
+                return true;
             }
         }
+        return false;
     }
 
     // --- Main loop: process every pending state ---
@@ -800,18 +827,26 @@ export function matchGrammarCompletion(
 
             // --- Category 1: Exact match ---
             // All parts matched AND prefix was fully consumed.
+            // Back up to the last matched term (string keyword,
+            // number, or wildcard).  Both directions get the same
+            // result — no direction-specific handling needed.
             if (matched) {
-                if (direction === "backward" && hasPartToReconsider) {
-                    collectBackwardCandidate(
+                if (
+                    state.lastMatchedPartInfo !== undefined ||
+                    savedPendingWildcard?.valueId !== undefined
+                ) {
+                    // Category 1 is direction-agnostic — don't update
+                    // backwardEmitted, which gates post-loop behaviors
+                    // (trailing-separator advancement,
+                    // directionSensitive recomputation).
+                    // Return value intentionally ignored.
+                    tryCollectBackwardCandidate(
                         preFinalizeState ?? state,
                         savedPendingWildcard,
                     );
                 } else {
                     debugCompletion("Matched. Nothing to complete.");
                     updateMaxPrefixLength(state.index);
-                }
-                if (hasPartToReconsider) {
-                    directionSensitive = true;
                 }
                 continue;
             }
@@ -821,6 +856,16 @@ export function matchGrammarCompletion(
             // match the next part against the (exhausted) prefix.
             // That next part is what we offer as a completion.
             const nextPart = state.parts[state.partIndex];
+
+            // Track whether findPartialKeywordInWildcard produced a
+            // result that forward would also use (position strictly
+            // inside the wildcard, i.e. < state.index).  When both
+            // directions agree, the state is not direction-sensitive.
+            // When the partial keyword position equals state.index
+            // (the wildcard absorbed a complete first keyword word),
+            // forward uses it but backward falls through to
+            // collectBackwardCandidate, so the directions differ.
+            let partialKeywordAgreesWithForward = false;
 
             if (direction === "backward" && hasPartToReconsider) {
                 // When a wildcard absorbed text ending with a partial
@@ -840,27 +885,34 @@ export function matchGrammarCompletion(
                         nextPart,
                         state.spacingMode,
                     );
-                    if (partialResult !== undefined) {
+                    if (
+                        partialResult !== undefined &&
+                        partialResult.position < state.index
+                    ) {
                         collectStringCandidate(
                             state,
                             partialResult.position,
                             partialResult.completionWord,
+                            /* openWildcard */ true,
+                            /* partialKeywordBackup */ true,
+                            /* partialKeywordAgrees */ true,
                         );
-                        openWildcard = true;
-                        partialKeywordBackup = true;
                         backwardEmitted = true;
                         partialKeywordForThisState = true;
+                        partialKeywordAgreesWithForward = true;
                     } else {
-                        collectBackwardCandidate(
-                            preFinalizeState ?? state,
-                            savedPendingWildcard,
-                        );
+                        backwardEmitted =
+                            tryCollectBackwardCandidate(
+                                preFinalizeState ?? state,
+                                savedPendingWildcard,
+                            ) || backwardEmitted;
                     }
                 } else {
-                    collectBackwardCandidate(
-                        preFinalizeState ?? state,
-                        savedPendingWildcard,
-                    );
+                    backwardEmitted =
+                        tryCollectBackwardCandidate(
+                            preFinalizeState ?? state,
+                            savedPendingWildcard,
+                        ) || backwardEmitted;
                 }
                 // Save a range candidate for the wildcard-nextPart
                 // split — the wildcard end is flexible and may match
@@ -898,28 +950,93 @@ export function matchGrammarCompletion(
                         });
                     }
                 }
+                // When findPartialKeywordInWildcard resolved this
+                // state AND the result backs up into the wildcard
+                // (position < state.index), forward would also
+                // find the same result.  Skip directionSensitive.
+                if (!partialKeywordAgreesWithForward) {
+                    directionSensitive = true;
+                }
             } else {
                 debugCompletion(
                     `Completing ${nextPart.type} part ${state.name}`,
                 );
                 if (nextPart.type === "string") {
-                    const partial = tryPartialStringMatch(
-                        nextPart,
-                        prefix,
-                        state.index,
-                        state.spacingMode,
-                        direction,
-                    );
-                    if (partial !== undefined) {
-                        collectStringCandidate(
-                            state,
-                            partial.consumedLength,
-                            partial.remainingText,
+                    if (
+                        savedPendingWildcard?.valueId !== undefined &&
+                        state.index >= prefix.length
+                    ) {
+                        // Wildcard absorbed all input to EOI.
+                        // Check for a partial keyword to determine
+                        // the Phase B anchor, then defer.
+                        const partialResult = findPartialKeywordInWildcard(
+                            prefix,
+                            savedPendingWildcard.start,
+                            nextPart,
+                            state.spacingMode,
                         );
-                        if (partial.directionSensitive) {
-                            directionSensitive = true;
-                            if (direction === "backward") {
-                                backwardEmitted = true;
+                        let partialKeywordForThisState = false;
+                        if (
+                            partialResult !== undefined &&
+                            partialResult.position <= state.index
+                        ) {
+                            if (
+                                forwardPartialKeyword === undefined ||
+                                partialResult.position >
+                                    forwardPartialKeyword.position
+                            ) {
+                                forwardPartialKeyword = {
+                                    position: partialResult.position,
+                                    completionWord:
+                                        partialResult.completionWord,
+                                    spacingMode: state.spacingMode,
+                                };
+                            }
+                            // Only mark as agreeing when the partial
+                            // keyword is strictly inside the wildcard.
+                            // At position === state.index (full keyword
+                            // word at EOI), backward rejects the result
+                            // and falls through to collectBackwardCandidate,
+                            // so the directions differ.
+                            if (partialResult.position < state.index) {
+                                partialKeywordAgreesWithForward = true;
+                            }
+                            partialKeywordForThisState = true;
+                        }
+                        // Defer to Phase B.  Skip when
+                        // findPartialKeywordInWildcard resolved
+                        // this state — Phase B adds the correct
+                        // multi-word completionWord explicitly;
+                        // tryPartialStringMatch at the anchor
+                        // can't reproduce it.
+                        if (!partialKeywordForThisState) {
+                            forwardEoiCandidates.push({
+                                kind: "wildcardString",
+                                wildcardStart: savedPendingWildcard.start,
+                                nextPart,
+                                spacingMode: state.spacingMode,
+                            });
+                        }
+                    } else {
+                        const partial = tryPartialStringMatch(
+                            nextPart,
+                            prefix,
+                            state.index,
+                            state.spacingMode,
+                            direction,
+                        );
+                        if (partial !== undefined) {
+                            collectStringCandidate(
+                                state,
+                                partial.consumedLength,
+                                partial.remainingText,
+                                savedPendingWildcard?.valueId !== undefined,
+                            );
+                            if (partial.directionSensitive) {
+                                directionSensitive = true;
+                                if (direction === "backward") {
+                                    backwardEmitted = true;
+                                }
                             }
                         }
                     }
@@ -928,15 +1045,9 @@ export function matchGrammarCompletion(
                         `No completion for ${nextPart.type} part (handled by Category 3a or matchState expansion)`,
                     );
                 }
-                // A keyword completion at a position reached by
-                // finalizing a wildcard at end-of-input: the position
-                // is ambiguous (the wildcard could absorb more text).
-                if (savedPendingWildcard?.valueId !== undefined) {
-                    openWildcard = true;
+                if (hasPartToReconsider && !partialKeywordAgreesWithForward) {
+                    directionSensitive = true;
                 }
-            }
-            if (hasPartToReconsider) {
-                directionSensitive = true;
             }
             // Note: non-string next parts (wildcard, number, rules) in
             // Category 2 don't produce completions here — wildcards are
@@ -976,7 +1087,9 @@ export function matchGrammarCompletion(
                     // instead of offering property completion for the
                     // unfilled wildcard — the user hasn't started
                     // typing into the unfilled slot yet.
-                    collectBackwardCandidate(state, undefined);
+                    backwardEmitted =
+                        tryCollectBackwardCandidate(state, undefined) ||
+                        backwardEmitted;
                 } else {
                     // Forward (or backward with nothing to
                     // reconsider): report a property completion
@@ -1047,20 +1160,42 @@ export function matchGrammarCompletion(
     // completion text at the same maxPrefixLength.  Showing
     // duplicates in the menu is unhelpful, so we deduplicate
     // globally.
-    //
-    // closedSet carries forward from Phase A's last
-    // updateMaxPrefixLength call (starts true).  Phase B only
-    // sets it to false (when property candidates survive); it
-    // is never reset to true here.
     const completions = new Set<string>();
     const properties: GrammarCompletionProperty[] = [];
 
+    // Derive output fields from surviving fixed candidates — only
+    // candidates at the final maxPrefixLength contribute.  The
+    // implicit reset when updateMaxPrefixLength clears fixedCandidates
+    // is automatic (no surviving candidate ⇒ default value).
+    // separatorMode, closedSet, and openWildcard may be updated by
+    // range candidates and forward EOI candidates below.
+    let separatorMode: SeparatorMode | undefined;
+    let closedSet = true;
+    let openWildcard = false;
+    let partialKeywordBackup = false;
+    let partialKeywordAgrees = false;
+
     for (const c of fixedCandidates) {
+        if (c.openWildcard) {
+            openWildcard = true;
+        }
+        if (c.partialKeywordBackup) {
+            partialKeywordBackup = true;
+        }
+        if (c.partialKeywordAgrees) {
+            partialKeywordAgrees = true;
+        }
         if (c.kind === "string") {
             completions.add(c.completionText);
+            const needsSep = computeNeedsSep(
+                prefix,
+                maxPrefixLength,
+                c.completionText[0],
+                c.spacingMode,
+            );
             separatorMode = mergeSeparatorMode(
                 separatorMode,
-                c.needsSep,
+                needsSep,
                 c.spacingMode,
             );
         } else {
@@ -1071,9 +1206,15 @@ export function matchGrammarCompletion(
             if (completionProperty !== undefined) {
                 properties.push(completionProperty);
                 closedSet = false;
+                const needsSep = computeNeedsSep(
+                    prefix,
+                    maxPrefixLength,
+                    "a",
+                    c.spacingMode,
+                );
                 separatorMode = mergeSeparatorMode(
                     separatorMode,
-                    c.needsSep,
+                    needsSep,
                     c.spacingMode,
                 );
             }
@@ -1174,6 +1315,135 @@ export function matchGrammarCompletion(
         }
     }
 
+    // Forward EOI candidate instantiation and partial keyword recovery.
+    //
+    // Category 2 wildcard-at-EOI string candidates are deferred
+    // during Phase A (forwardEoiCandidates).  The wildcard boundary
+    // is ambiguous, so Phase A never pushes maxPrefixLength for
+    // them; Phase B decides the final anchor.
+    //
+    // Phase B operates in one of three modes:
+    //
+    //   Clear + anchor at partial keyword position P:
+    //     findPartialKeywordInWildcard found a partial keyword at
+    //     P < prefix.length.  Reset everything and anchor there.
+    //
+    //   Clear + anchor at prefix.length (displace):
+    //     maxPrefixLength < prefix.length means only weaker
+    //     candidates (e.g. Category 3b) survived Phase A.  Replace
+    //     them with EOI instantiations at prefix.length.
+    //
+    //   Merge at prefix.length:
+    //     maxPrefixLength is already at prefix.length — legitimate
+    //     candidates (e.g. property completions for a wildcard slot
+    //     following a matched keyword) exist at that position.
+    //     Preserve them and add EOI instantiations alongside.
+    const hasPartialKeyword =
+        forwardPartialKeyword !== undefined &&
+        forwardPartialKeyword.position <= prefix.length;
+    if (
+        // Defensive: forwardEoiCandidates is only populated in the
+        // forward direction, but the guard makes the intent explicit.
+        direction !== "backward" &&
+        (forwardEoiCandidates.length > 0 || hasPartialKeyword)
+    ) {
+        // anchor is what becomes matchedPrefixLength for these candidates.
+        const anchor = hasPartialKeyword
+            ? forwardPartialKeyword!.position
+            : prefix.length;
+
+        // Clear when the anchor differs from the current
+        // maxPrefixLength (partial keyword recovery or displacing
+        // weaker candidates).  When the anchor matches
+        // maxPrefixLength (already at prefix.length), merge by
+        // keeping existing candidates.
+        if (anchor !== maxPrefixLength) {
+            debugCompletion(
+                `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `prefix.length=${anchor} (displace)`}`,
+            );
+            completions.clear();
+            properties.length = 0;
+            maxPrefixLength = anchor;
+            closedSet = true;
+            separatorMode = undefined;
+            openWildcard = false;
+            // At the partial keyword anchor (< prefix.length) both
+            // directions agree.  At prefix.length (displacement or
+            // full keyword word at EOI) backward may differ.
+            directionSensitive = anchor >= prefix.length;
+        } else {
+            debugCompletion(`Phase B: merge at prefix.length=${anchor}`);
+        }
+
+        // Wildcard boundary is ambiguous when Phase B is
+        // actually instantiating candidates (partial keyword or
+        // deferred EOI candidates).
+        if (hasPartialKeyword || forwardEoiCandidates.length > 0) {
+            openWildcard = true;
+        }
+
+        // Add the partial keyword itself when it determined
+        // the anchor.  tryPartialStringMatch at the anchor
+        // position cannot reproduce multi-word keyword results
+        // (e.g. "by" from ["played","by"]), so we use the
+        // saved completionWord directly.
+        if (hasPartialKeyword) {
+            const fpk = forwardPartialKeyword!;
+            completions.add(fpk.completionWord);
+            const fpkNeedsSep = computeNeedsSep(
+                prefix,
+                anchor,
+                fpk.completionWord[0],
+                fpk.spacingMode,
+            );
+            separatorMode = mergeSeparatorMode(
+                separatorMode,
+                fpkNeedsSep,
+                fpk.spacingMode,
+            );
+        }
+
+        // Instantiate deferred EOI candidates at the anchor.
+        for (const c of forwardEoiCandidates) {
+            if (c.kind !== "wildcardString") continue;
+            if (anchor <= c.wildcardStart) continue;
+            if (
+                getWildcardStr(
+                    prefix,
+                    c.wildcardStart,
+                    anchor,
+                    c.spacingMode,
+                ) === undefined
+            ) {
+                continue;
+            }
+            const partial = tryPartialStringMatch(
+                c.nextPart,
+                prefix,
+                anchor,
+                c.spacingMode,
+                "forward",
+            );
+            if (
+                partial !== undefined &&
+                !completions.has(partial.remainingText)
+            ) {
+                completions.add(partial.remainingText);
+                const candidateNeedsSep = computeNeedsSep(
+                    prefix,
+                    anchor,
+                    partial.remainingText[0],
+                    c.spacingMode,
+                );
+                separatorMode = mergeSeparatorMode(
+                    separatorMode,
+                    candidateNeedsSep,
+                    c.spacingMode,
+                );
+            }
+        }
+    }
+
     // Advance past trailing separators so the reported prefix length
     // includes any trailing whitespace the user typed.  This makes
     // completion trailing-space-sensitive: "play music " reports
@@ -1195,28 +1465,74 @@ export function matchGrammarCompletion(
         }
     }
 
+    const midPosition = maxPrefixLength > 0 && maxPrefixLength < prefix.length;
+    const hasCompletions = completions.size > 0 || properties.length > 0;
     // Recompute directionSensitive for the backed-up case.
+    if (direction === "backward") {
+        // During the main loop, directionSensitive is accumulated at
+        // the *full* prefix length — but when backward backed up, the
+        // effective completion position is maxPrefixLength (< prefix.
+        // length), and directionSensitive must reflect THAT position.
+        //
+        // At P > 0 at least one keyword was matched before the
+        // completion point, so hasPartToReconsider is true in a
+        // forward pass at P → directionSensitive.  At P = 0 nothing
+        // was matched → not direction-sensitive.
+        //
+        // Guard: if minPrefixLength filtered out all candidates, the
+        // result is empty regardless of direction → not sensitive.
+        //
+        // Skip when partialKeywordAgrees: both directions used
+        // findPartialKeywordInWildcard and produced the same result,
+        // so the per-state directionSensitive (already computed in the
+        // main loop) is correct — don't override it.
+        if (
+            backwardEmitted &&
+            maxPrefixLength < prefix.length &&
+            !partialKeywordAgrees
+        ) {
+            directionSensitive = maxPrefixLength > 0 && hasCompletions;
+        }
+
+        // When a partial keyword backup agrees with forward AND range
+        // candidates contributed additional completions at the same
+        // position, the forward path also anchored those competing
+        // candidates at the partial keyword position (via the forward
+        // EOI candidate instantiation in Phase B).  Both directions
+        // produced the same set at the same anchor → not
+        // direction-sensitive.
+        //
+        // Without this, per-state directionSensitive=true from the
+        // backward collectBackwardCandidate path survives the post-loop
+        // recomputation (which is skipped when partialKeywordAgrees)
+        // and incorrectly claims the directions differ.
+        if (partialKeywordAgrees && processRangeCandidates) {
+            directionSensitive = false;
+        }
+    }
+
+    // Position-local directionSensitive recomputation.
     //
-    // During the main loop, directionSensitive is accumulated at
-    // the *full* prefix length — but when backward backed up, the
-    // effective completion position is maxPrefixLength (< prefix.
-    // length), and directionSensitive must reflect THAT position.
+    // The main loop accumulates directionSensitive against the *full*
+    // prefix — e.g. tryPartialStringMatch sees a separator after the
+    // keyword in the full input and reports couldBackUp=false.  But
+    // the correct semantics is position-local: would
+    // backward(input[0..P]) differ from forward(input[0..P])?
     //
-    // At P > 0 at least one keyword was matched before the
-    // completion point, so hasPartToReconsider is true in a
-    // forward pass at P → directionSensitive.  At P = 0 nothing
-    // was matched → not direction-sensitive.
+    // At any 0 < P < prefix.length, the truncated input ends right
+    // at the keyword boundary.  backward(input[0..P]) always backs
+    // up because nextNonSeparatorIndex(input[0..P], endIndex) equals
+    // endIndex (end of string) — so the last keyword is uncommitted.
     //
-    // Guard: if minPrefixLength filtered out all candidates, the
-    // result is empty regardless of direction → not sensitive.
-    if (
-        direction === "backward" &&
-        backwardEmitted &&
-        maxPrefixLength < prefix.length
-    ) {
-        directionSensitive =
-            maxPrefixLength > 0 &&
-            (completions.size > 0 || properties.length > 0);
+    // After trailing-separator advancement P === prefix.length
+    // (separators consumed to end of input).  In that case
+    // backward(input[0..P]) matches the full input — no special
+    // recomputation needed.  The guard P < prefix.length excludes it.
+    //
+    // Skip when openWildcard — Phase B already computed the correct
+    // value for partial-keyword / EOI-wildcard anchors.
+    if (midPosition && !openWildcard && hasCompletions) {
+        directionSensitive = true;
     }
 
     const result: GrammarCompletionResult = {

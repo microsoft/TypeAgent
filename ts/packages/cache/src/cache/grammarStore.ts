@@ -24,6 +24,7 @@ import {
     CompletionProperty,
     CompletionResult,
     MatchOptions,
+    shouldPreferNewResult,
 } from "../constructions/constructionCache.js";
 import { MatchResult, GrammarStore } from "./types.js";
 import { getSchemaNamespaceKey, splitSchemaNamespaceKey } from "./cache.js";
@@ -360,8 +361,17 @@ export class GrammarStoreImpl implements GrammarStore {
                     direction,
                 );
                 const partialPrefixLength = partial.matchedPrefixLength ?? 0;
-                if (partialPrefixLength > matchedPrefixLength) {
-                    // Longer prefix — discard shorter-match results.
+                if (partialPrefixLength !== matchedPrefixLength) {
+                    const adopt = shouldPreferNewResult(
+                        matchedPrefixLength,
+                        openWildcard,
+                        partialPrefixLength,
+                        partial.openWildcard,
+                        requestPrefix.length,
+                    );
+
+                    if (!adopt) continue;
+
                     matchedPrefixLength = partialPrefixLength;
                     completions.length = 0;
                     properties.length = 0;

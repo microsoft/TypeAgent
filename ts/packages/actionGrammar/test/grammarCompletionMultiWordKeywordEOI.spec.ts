@@ -1,0 +1,313 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { loadGrammarRules } from "../src/grammarLoader.js";
+import { describeForEachCompletion, expectMetadata } from "./testUtils.js";
+
+describeForEachCompletion(
+    "Grammar Completion - multi-word keyword fully matched first word at EOI",
+    (matchGrammarCompletion) => {
+        // Reproduces a bug where a wildcard-at-EOI absorbs a keyword that
+        // the grammar should recognize.
+        //
+        // Grammar:
+        //   <Start> = play something good -> 1
+        //           | play $(x:string) played by -> 2;
+        //
+        // Input: "play something played"
+        //
+        // Expected: Alternative 2 matches with x="something" and
+        //   "played" consumed as the first keyword word.  The completion
+        //   should offer "by" (the second keyword word).
+        //
+        // Bug: findPartialKeywordInWildcard returns position=prefix.length
+        //   for the "consumed to EOI with more words remaining" case, but
+        //   the forward code requires position < state.index — which fails
+        //   when they're equal.  The result falls through to Phase B's
+        //   tryPartialStringMatch at EOI, which naively offers "played"
+        //   instead of "by".
+        const g = [
+            `<Start> = play something good -> 1 | play $(x:string) played by -> 2;`,
+        ].join("\n");
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        it('forward: "play something played" — should offer "by", not "played"', () => {
+            // Buggy result:
+            //   completions: ["played"], matchedPrefixLength: 21,
+            //   separatorMode: "spacePunctuation", openWildcard: true
+            //
+            // Correct: "played" is keyword word 0, fully matched to EOI.
+            // The completion should be "by" (keyword word 1) at
+            // matchedPrefixLength=21.
+            const result = matchGrammarCompletion(
+                grammar,
+                "play something played",
+                undefined,
+                "forward",
+            );
+            expectMetadata(result, {
+                completions: ["by"],
+                matchedPrefixLength: 21,
+                separatorMode: "spacePunctuation",
+                closedSet: true,
+                directionSensitive: true,
+                openWildcard: true,
+                properties: [],
+            });
+        });
+
+        it('forward: "play something play" — partial first keyword word, should offer "played"', () => {
+            // "play" is a partial prefix of "played" — this correctly
+            // offers "played" via findPartialKeywordInWildcard at
+            // position 15 (start of "play"), which is < state.index.
+            const result = matchGrammarCompletion(
+                grammar,
+                "play something play",
+                undefined,
+                "forward",
+            );
+            expectMetadata(result, {
+                completions: ["played"],
+                matchedPrefixLength: 15,
+                separatorMode: "optional",
+                closedSet: true,
+                directionSensitive: false,
+                openWildcard: true,
+                properties: [],
+            });
+        });
+
+        it('forward: "play something played " — first keyword word + space, should offer "by"', () => {
+            // Buggy result:
+            //   completions: ["played"], matchedPrefixLength: 22,
+            //   separatorMode: "optional", openWildcard: true
+            //
+            // Correct: "played " with trailing space — the first keyword
+            // word was fully matched.  Should offer "by" at
+            // matchedPrefixLength=22.
+            const result = matchGrammarCompletion(
+                grammar,
+                "play something played ",
+                undefined,
+                "forward",
+            );
+            expectMetadata(result, {
+                completions: ["by"],
+                matchedPrefixLength: 22,
+                separatorMode: "optional",
+                closedSet: true,
+                directionSensitive: true,
+                openWildcard: true,
+                properties: [],
+            });
+        });
+        describe("plain wildcard grammar", () => {
+            const g2 = [
+                `<Start> = play $(name) played by $(artist) -> { name, artist };`,
+            ].join("\n");
+            const grammar2 = loadGrammarRules("test.grammar", g2);
+
+            it('forward: "play Never played " — trailing space offers "by"', () => {
+                const result = matchGrammarCompletion(
+                    grammar2,
+                    "play Never played ",
+                    undefined,
+                    "forward",
+                );
+                expectMetadata(result, {
+                    completions: ["by"],
+                    matchedPrefixLength: 18,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
+            });
+
+            it("forward: full first keyword word + partial second offers 'by'", () => {
+                const result = matchGrammarCompletion(
+                    grammar2,
+                    "play Never played b",
+                    undefined,
+                    "forward",
+                );
+                expect(result.completions).toContain("by");
+                expectMetadata(result, {
+                    matchedPrefixLength: 18,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: true,
+                    properties: [],
+                });
+            });
+
+            it("backward: trailing space after full first keyword word backs up to wildcard", () => {
+                const result = matchGrammarCompletion(
+                    grammar2,
+                    "play Never played ",
+                    undefined,
+                    "backward",
+                );
+                // Trailing space is inside the wildcard content, not
+                // after a committed keyword boundary — backward still
+                // backs up to the wildcard start.
+                expect(result.properties).toBeDefined();
+                expect(result.properties!.length).toBeGreaterThan(0);
+                expectMetadata(result, {
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                });
+            });
+
+            it("backward: partial first keyword word offers 'played'", () => {
+                const result = matchGrammarCompletion(
+                    grammar2,
+                    "play Never p",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("played");
+                expectMetadata(result, {
+                    matchedPrefixLength: 11,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: true,
+                    properties: [],
+                });
+            });
+
+            it("backward: full first keyword word at EOI backs up to wildcard", () => {
+                const result = matchGrammarCompletion(
+                    grammar2,
+                    "play Never played",
+                    undefined,
+                    "backward",
+                );
+                // Full keyword word at EOI — the partial keyword
+                // position equals state.index, so backward falls
+                // through to collectBackwardCandidate which backs
+                // up to the wildcard start.
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            match: {},
+                            propertyNames: ["name"],
+                        },
+                    ],
+                });
+            });
+
+            it("backward: full first keyword word + partial second offers 'by'", () => {
+                const result = matchGrammarCompletion(
+                    grammar2,
+                    "play Never played b",
+                    undefined,
+                    "backward",
+                );
+                expect(result.completions).toContain("by");
+                expectMetadata(result, {
+                    matchedPrefixLength: 18,
+                    separatorMode: "optional",
+                    closedSet: true,
+                    directionSensitive: false,
+                    openWildcard: true,
+                    properties: [],
+                });
+            });
+        });
+
+        describe("3-word keyword — two words consumed at EOI", () => {
+            const g3 = [
+                `<Start> = play $(name) played by someone $(extra) -> { name, extra };`,
+            ].join("\n");
+            const grammar3 = loadGrammarRules("test.grammar", g3);
+
+            it('forward: "play Never played by" — offers "someone"', () => {
+                const result = matchGrammarCompletion(
+                    grammar3,
+                    "play Never played by",
+                    undefined,
+                    "forward",
+                );
+                expectMetadata(result, {
+                    completions: ["someone"],
+                    matchedPrefixLength: 20,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
+            });
+
+            it('backward: "play Never played by" — backs up to wildcard', () => {
+                const result = matchGrammarCompletion(
+                    grammar3,
+                    "play Never played by",
+                    undefined,
+                    "backward",
+                );
+                // Two keyword words consumed to EOI — the partial
+                // keyword position equals state.index, so backward
+                // falls through to collectBackwardCandidate which
+                // backs up to the wildcard start.
+                expectMetadata(result, {
+                    completions: [],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            match: {},
+                            propertyNames: ["name"],
+                        },
+                    ],
+                });
+            });
+        });
+
+        describe("consumed-to-EOI edge case (matchKeywordWordsFrom textToCheck='')", () => {
+            // Minimal grammar isolating the edge case where the first
+            // keyword word is fully consumed to end-of-input with a
+            // second word remaining.  matchKeywordWordsFrom must
+            // return the second word as completionWord even though
+            // the remaining text after the first word is empty.
+            const gMinimal = [
+                `<Start> = go $(dest:string) arrived safely -> { dest };`,
+            ].join("\n");
+            const grammarMinimal = loadGrammarRules("test.grammar", gMinimal);
+
+            it('forward: "go home arrived" — first keyword word consumed to EOI, offers "safely"', () => {
+                const result = matchGrammarCompletion(
+                    grammarMinimal,
+                    "go home arrived",
+                    undefined,
+                    "forward",
+                );
+                expectMetadata(result, {
+                    completions: ["safely"],
+                    matchedPrefixLength: 15,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
+            });
+        });
+    },
+);
