@@ -7,6 +7,9 @@ import {
 } from "../src/constructions/constructionCache.js";
 
 describe("mergeCompletionResults", () => {
+    // Infinity as prefixLength disables the EOI-wildcard preference
+    // logic (matchedLen >= Infinity is never true), letting tests
+    // exercise merge behavior without EOI guard interference.
     describe("matchedPrefixLength merging", () => {
         it("returns undefined when both are undefined", () => {
             const result = mergeCompletionResults(

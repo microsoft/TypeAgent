@@ -175,14 +175,14 @@ The user types `play Never` (free-form, no `@` prefix).
 Using the same `play <song> by <artist>` rule, here is what category
 the grammar matcher assigns at different input states:
 
-| User input       | Category     | Why                                                             |
-| ---------------- | ------------ | --------------------------------------------------------------- |
-| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)            |
-| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                      |
-| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                     |
-| `play Never b`   | 2 — Clean    | Partial keyword detected in wildcard; see `actionGrammar.md` §6 |
-| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                    |
-| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                  |
+| User input       | Category     | Why                                                                                          |
+| ---------------- | ------------ | -------------------------------------------------------------------------------------------- |
+| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)                                         |
+| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                                                   |
+| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                                                  |
+| `play Never b`   | 2 — Clean    | Partial keyword `"b"` → `"by"` via `findPartialKeywordInWildcard`; see `actionGrammar.md` §6 |
+| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                                                 |
+| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                                               |
 
 ---
 
@@ -235,8 +235,8 @@ Merges results from two sources:
   not, `undefined` is treated as `0` — defined wins unless both are `0`.
   When both are `undefined`, the merged result preserves `undefined`.
   **EOI guard:** when the longer result comes from a wildcard-at-EOI
-  state (`openWildcard=true`, `matchedPrefixLength === prefixLength`,
-  `closedSet=true`, keyword-only completions) and the shorter result
+  state (`openWildcard=true`, `matchedPrefixLength === prefixLength`)
+  and the shorter result
   anchors inside the input (`matchedPrefixLength < prefixLength`),
   the shorter result is preferred. This prevents a grammar whose
   wildcard consumed to EOI from displacing a more-meaningful anchored
@@ -702,7 +702,7 @@ menus, or mispositioned insertions.
 | ---------------------------------------- | -------------- |
 | Wrong or missing completions             | #2, #5, #7, #9 |
 | Completions at wrong position            | #1, #7, #8     |
-| Stale menu after backspace               | #3             |
+| Stale menu after backspace               | #3a–c          |
 | Inconsistent menu (forward vs. backward) | #4, #5         |
 | Unnecessary re-fetches (perf)            | #3, #11        |
 | Wrong separator behavior                 | #6, #10        |
@@ -726,34 +726,52 @@ user misses entity completions. False `false` → unnecessary re-fetches
 
 ### Cross-direction invariants
 
-Invariants #3 and #4 are automatically checked by `withInvariantChecks`
-(grammar variant only). #5 is verified by individual test expectations.
+Invariants #3–#5 are automatically checked by `assertCrossDirectionInvariants`
+in `withInvariantChecks` (grammar variant only). The test uses a local
+numbering scheme (#1–#5) for its five cross-direction checks; the mapping
+to doc invariant numbers is:
 
-**#3 — `directionSensitive` biconditional.**
-`directionSensitive` ↔ `backward(input)` differs from `forward(input)`.
-Both directions of the biconditional are enforced:
-`directionSensitive=false` → results identical, AND results identical →
-`directionSensitive=false`. This subsumes the trailing-separator-commits
-property: when trailing whitespace commits the position, forward and
-backward agree, so `directionSensitive` must be `false`. When backward
-backs up past trailing whitespace (e.g., into a wildcard), the results
-differ and `directionSensitive=true` is correct.
-_Impact:_ False negative (`false` when results differ) → stale menu after
-backspace — shell skips re-fetch. False positive (`true` when results are
-identical) → unnecessary re-fetch on direction change (perf cost).
+| Test # | Doc # | Summary                                                 |
+| ------ | ----- | ------------------------------------------------------- |
+| Test 1 | #3a   | equal `matchedPrefixLength` → identical results         |
+| Test 2 | #3b   | !fwd.directionSensitive → backward on truncated = fwd   |
+| Test 3 | #3c   | !bwd.directionSensitive → forward on truncated = bwd    |
+| Test 4 | #4    | fwd.directionSensitive → backward of truncated backs up |
+| Test 5 | #5    | bwd.directionSensitive → forward reaches bwd position   |
 
-**#4 — Two-pass backward equivalence.**
-`backward(input)` = `forward(input[0..P])` where _P_ =
-`backward.matchedPrefixLength`. Applies when backward differs from
-forward, `openWildcard=false`, and no `minPrefixLength`.
+**#3 — `directionSensitive` consistency (decomposed).**
+
+_#3a — Equal consumption → identical results._
+`forward.matchedPrefixLength === backward.matchedPrefixLength` →
+`forward` deep-equals `backward`.
+_Impact:_ False negative → stale menu after backspace.
+
+_#3b — Forward not direction-sensitive → backward on truncated agrees._
+`!forward.directionSensitive` →
+`forward === completion(input[0..fwd.mpl], "backward")`.
+Skipped when `forward.openWildcard` (ambiguous boundary).
+_Impact:_ False negative → stale menu; false positive → unnecessary
+re-fetch.
+
+_#3c — Backward not direction-sensitive → forward on truncated agrees._
+`!backward.directionSensitive` →
+`backward === completion(input[0..bwd.mpl], "forward")`.
+Skipped when `backward.openWildcard` (ambiguous boundary).
+_Impact:_ Same as #3b.
+
+**#4 — Forward direction-sensitive → backward backs up.**
+`forward.directionSensitive` →
+`completion(input[0..fwd.mpl], "backward").matchedPrefixLength < fwd.mpl`.
+Skipped when `forward.openWildcard`.
 _Impact:_ Backspacing shows different completions than forward-typing to
 the same position — the menu is inconsistent depending on how the user
 arrived at that input.
 
-**#5 — Non-lossy backward.**
-When backing up past a shared prefix (e.g., `"play"` matching
-`play music | play video`), backward must show ALL alternatives at the
-backed-up position, not just the branch that was matched.
+**#5 — Backward direction-sensitive → forward reaches backward's position.**
+When `fwd.mpl ≠ bwd.mpl` and `backward.directionSensitive`:
+`completion(input[0..bwd.mpl], "forward").matchedPrefixLength ≥ bwd.mpl`.
+Confirms that backward's backed-up position is reachable from forward.
+Skipped when `backward.openWildcard`.
 _Impact:_ User sees only one completion branch when backspacing at a fork —
 other valid alternatives are silently lost.
 

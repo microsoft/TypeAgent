@@ -146,7 +146,7 @@ export function shouldPreferNewResult(
             anchorsInsideInput(currentLen, prefixLength)
         );
     }
-    // currentLen > candidateLen (caller ensures they're not equal)
+    // candidateLen < currentLen (the equal case was handled by the caller).
     // Shorter candidate wins only when anchored and current is EOI wildcard.
     return (
         anchorsInsideInput(candidateLen, prefixLength) &&
