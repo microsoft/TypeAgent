@@ -493,7 +493,6 @@ type FixedCandidate =
     | {
           kind: "string";
           completionText: string;
-          needsSep: boolean;
           spacingMode: CompiledSpacingMode;
           openWildcard: boolean;
           partialKeywordBackup: boolean;
@@ -503,7 +502,6 @@ type FixedCandidate =
           kind: "property";
           valueId: number;
           state: MatchState;
-          needsSep: boolean;
           spacingMode: CompiledSpacingMode;
           openWildcard: boolean;
           partialKeywordBackup: boolean;
@@ -688,17 +686,10 @@ export function matchGrammarCompletion(
     ): void {
         updateMaxPrefixLength(prefixPosition);
         if (prefixPosition !== maxPrefixLength) return;
-        const candidateNeedsSep = computeNeedsSep(
-            prefix,
-            prefixPosition,
-            "a",
-            state.spacingMode,
-        );
         fixedCandidates.push({
             kind: "property",
             valueId,
             state: { ...state },
-            needsSep: candidateNeedsSep,
             spacingMode: state.spacingMode,
             openWildcard: candidateOpenWildcard,
             partialKeywordBackup: false,
@@ -719,16 +710,9 @@ export function matchGrammarCompletion(
     ): void {
         updateMaxPrefixLength(candidatePrefixLength);
         if (candidatePrefixLength !== maxPrefixLength) return;
-        const candidateNeedsSep = computeNeedsSep(
-            prefix,
-            candidatePrefixLength,
-            completionText[0],
-            state.spacingMode,
-        );
         fixedCandidates.push({
             kind: "string",
             completionText,
-            needsSep: candidateNeedsSep,
             spacingMode: state.spacingMode,
             openWildcard: candidateOpenWildcard,
             partialKeywordBackup: candidatePartialKeywordBackup,
@@ -1196,9 +1180,15 @@ export function matchGrammarCompletion(
         }
         if (c.kind === "string") {
             completions.add(c.completionText);
+            const needsSep = computeNeedsSep(
+                prefix,
+                maxPrefixLength,
+                c.completionText[0],
+                c.spacingMode,
+            );
             separatorMode = mergeSeparatorMode(
                 separatorMode,
-                c.needsSep,
+                needsSep,
                 c.spacingMode,
             );
         } else {
@@ -1209,9 +1199,15 @@ export function matchGrammarCompletion(
             if (completionProperty !== undefined) {
                 properties.push(completionProperty);
                 closedSet = false;
+                const needsSep = computeNeedsSep(
+                    prefix,
+                    maxPrefixLength,
+                    "a",
+                    c.spacingMode,
+                );
                 separatorMode = mergeSeparatorMode(
                     separatorMode,
-                    c.needsSep,
+                    needsSep,
                     c.spacingMode,
                 );
             }
