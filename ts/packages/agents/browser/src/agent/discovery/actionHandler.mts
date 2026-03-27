@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
+import { SessionContext } from "@typeagent/agent-sdk";
 import {
     BrowserActionContext,
     getBrowserControl,
@@ -16,8 +16,6 @@ import {
     generateActionSchema,
 } from "@typeagent/action-schema";
 import { SchemaCreator as sc } from "@typeagent/action-schema";
-import path from "path";
-import { fileURLToPath } from "url";
 import { UserActionsList } from "./schema/userActionsPool.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
 import {
@@ -27,7 +25,6 @@ import {
     GetAllWebFlows,
     DeleteWebFlow,
 } from "./schema/discoveryActions.mjs";
-import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
 import registerDebug from "debug";
 import { WebFlowStore } from "../webFlows/store/webFlowStore.mjs";
 import { WebFlowDefinition, WebFlowParameter } from "../webFlows/types.js";
@@ -482,58 +479,6 @@ async function handleGetPageSummary(
     };
 }
 
-async function handleRegisterAuthoringAgent(
-    action: any,
-    ctx: DiscoveryActionHandlerContext,
-): Promise<DiscoveryActionResult> {
-    const packageRoot = path.join("..", "..", "..");
-    const schemaFilePath = fileURLToPath(
-        new URL(
-            path.join(
-                packageRoot,
-                "./src/agent/discovery/schema/authoringActions.mts",
-            ),
-            import.meta.url,
-        ),
-    );
-
-    const agentName = `actionAuthor`;
-    const schemaDescription = `A schema that enables authoring new actions for the web automation plans`;
-
-    const manifest: AppAgentManifest = {
-        emojiChar: "🧑‍🔧",
-        description: schemaDescription,
-        schema: {
-            description: schemaDescription,
-            schemaType: "PlanAuthoringActions",
-            schemaFile: schemaFilePath,
-            cached: false,
-        },
-    };
-
-    // register agent after request is processed to avoid a deadlock
-    setTimeout(async () => {
-        try {
-            await ctx.sessionContext.removeDynamicAgent(agentName);
-        } catch {}
-
-        await ctx.sessionContext.addDynamicAgent(
-            agentName,
-            manifest,
-            createSchemaAuthoringAgent(
-                ctx.browser,
-                ctx.agent,
-                ctx.sessionContext,
-            ),
-        );
-    }, 1000);
-
-    return {
-        displayText: "OK",
-        entities: ctx.entities.getEntities(),
-    };
-}
-
 async function handleRegisterSiteSchema(
     action: any,
     ctx: DiscoveryActionHandlerContext,
@@ -793,12 +738,6 @@ export async function handleSchemaDiscoveryAction(
             break;
         case "registerPageDynamicAgent":
             result = await handleRegisterSiteSchema(action, discoveryContext);
-            break;
-        case "startAuthoringSession":
-            result = await handleRegisterAuthoringAgent(
-                action,
-                discoveryContext,
-            );
             break;
         case "createWebFlowFromRecording":
             result = await handleCreateWebFlowFromRecording(

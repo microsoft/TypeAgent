@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { sendActionToAgent } from "./websocket";
-import { setChatPanelRpc } from "./dispatcherConnection";
 
 // RPC send function — set after RPC server is created in index.ts
 let rpcSendFn: ((name: string, ...args: any[]) => void) | undefined;
@@ -101,7 +100,10 @@ export async function handleContextMenuClick(
 
     switch (info.menuItemId) {
         case "discoverPageActions": {
-            await openChatAndInjectCommand(tab.id!, "@browser discover");
+            await openChatAndInjectCommand(
+                tab.id!,
+                "@browser actions discover",
+            );
             break;
         }
         case "manageMacros": {
@@ -126,7 +128,7 @@ export async function handleContextMenuClick(
             break;
         }
         case "sidepanel-registerAgent": {
-            const schemaResult = await sendActionToAgent({
+            await sendActionToAgent({
                 actionName: "registerPageDynamicAgent",
                 parameters: {},
             });
