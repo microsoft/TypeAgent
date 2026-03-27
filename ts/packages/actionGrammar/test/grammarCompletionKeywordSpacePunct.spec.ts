@@ -113,15 +113,15 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(grammar, "hello, world");
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 12,
-                    separatorMode: undefined,
+                    completions: ["world"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -210,15 +210,15 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(grammar, "hello,world");
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 11,
-                    separatorMode: undefined,
+                    completions: [",world"],
+                    matchedPrefixLength: 5,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -291,15 +291,15 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(grammar, "hello . world");
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 13,
-                    separatorMode: undefined,
+                    completions: ["world"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -399,18 +399,18 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "hello world next",
                 );
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 16,
-                    separatorMode: undefined,
+                    completions: ["next"],
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1859,18 +1859,18 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "hello, world! thanks.",
                 );
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 21,
-                    separatorMode: undefined,
+                    completions: ["thanks."],
+                    matchedPrefixLength: 13,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2471,15 +2471,16 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completions after exact match 'hello world'", () => {
+            it("exact match backs up to last term 'hello world'", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
-                // Exact match forward: no completion emitted → separatorMode not set
+                // Exact match backs up to the single escaped-space
+                // keyword "hello world".
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 11,
-                    separatorMode: undefined,
+                    completions: ["hello world"],
+                    matchedPrefixLength: 0,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });

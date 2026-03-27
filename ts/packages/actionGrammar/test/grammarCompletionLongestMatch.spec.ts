@@ -82,18 +82,18 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completion for exact full match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "first second third",
                 );
-                expect(result.completions).toHaveLength(0);
-                // Exact match records the full consumed length.
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    matchedPrefixLength: 18,
-                    separatorMode: undefined,
+                    completions: ["third"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -222,20 +222,20 @@ describeForEachCompletion(
                 });
             });
 
-            it("alternative still offered even when one rule matches exactly", () => {
+            it("exact match backs up and shows alternatives", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "prefix suffix_x",
                 );
-                // Rule 1 (suffix_x) matches exactly at length 15.
-                // Rule 2's "suffix_y" at prefixLength 6 is filtered out
-                // because a longer match exists.
-                expect(result.completions).toHaveLength(0);
+                // Rule 1 (suffix_x) matches exactly and backs up to
+                // position 6 (after "prefix"). Both suffix_x and suffix_y
+                // are offered at this position.
                 expectMetadata(result, {
-                    matchedPrefixLength: 15,
-                    separatorMode: undefined,
+                    completions: ["suffix_x", "suffix_y"],
+                    matchedPrefixLength: 6,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -334,17 +334,18 @@ describeForEachCompletion(
                 });
             });
 
-            it("no completion for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "set volume 50 percent",
                 );
-                expect(result.completions).toHaveLength(0);
+                // Exact match backs up to last term "percent".
                 expectMetadata(result, {
-                    matchedPrefixLength: 21,
-                    separatorMode: undefined,
+                    completions: ["percent"],
+                    matchedPrefixLength: 13,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -423,14 +424,16 @@ describeForEachCompletion(
                 });
             });
 
-            it("closedSet=true for exact match (no completions)", () => {
+            it("exact match backs up and shows all alternatives", () => {
                 const result = matchGrammarCompletion(grammar, "play rock");
-                expect(result.completions).toHaveLength(0);
+                // Exact match backs up to position 4 (after "play"),
+                // showing all alternatives: rock, pop, jazz.
                 expectMetadata(result, {
-                    matchedPrefixLength: 9,
-                    separatorMode: undefined,
+                    completions: ["rock", "pop", "jazz"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });

@@ -73,13 +73,13 @@ describeForEachCompletion(
 
             it("returns matchedPrefixLength for exact match", () => {
                 const result = matchGrammarCompletion(grammar, "play music");
-                // Exact match now records the full consumed length.
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 10,
-                    separatorMode: undefined,
+                    completions: ["music"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -193,12 +193,13 @@ describeForEachCompletion(
 
             it("returns matchedPrefixLength for complete match", () => {
                 const result = matchGrammarCompletion(grammar, "play music");
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 10,
-                    separatorMode: undefined,
+                    completions: ["music"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -366,14 +367,15 @@ describeForEachCompletion(
                 });
             });
 
-            it("returns no completions for exact match", () => {
+            it("exact match backs up to last term", () => {
                 const result = matchGrammarCompletion(grammar, "再生音楽");
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 4,
-                    separatorMode: undefined,
+                    completions: ["音楽"],
+                    matchedPrefixLength: 2,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -603,32 +605,32 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    // Backward backs up to the last matched word "music"
-                    // and re-offers it as a completion.
+                    // Both directions back up to the last matched word.
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
                         separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: true,
+                        directionSensitive: false,
                         openWildcard: false,
                         properties: [],
                     });
                 });
 
-                it("forward exact match still returns empty completions", () => {
+                it("forward exact match also backs up to last word", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play music",
                         undefined,
                         "forward",
                     );
+                    // Both directions back up to the last matched word.
                     expectMetadata(result, {
-                        completions: [],
-                        matchedPrefixLength: 10,
-                        separatorMode: undefined,
+                        completions: ["music"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: true,
+                        directionSensitive: false,
                         openWildcard: false,
                         properties: [],
                     });
@@ -738,14 +740,14 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    // Backward: backs up to wildcard start (after "play" = 4)
-                    // and offers entity property completions.
+                    // Both directions back up to wildcard start (after "play" = 4)
+                    // and offer entity property completions.
                     expectMetadata(result, {
                         completions: [],
                         matchedPrefixLength: 4,
                         separatorMode: "spacePunctuation",
                         closedSet: false,
-                        directionSensitive: true,
+                        directionSensitive: false,
                         openWildcard: false,
                         properties: [
                             {
@@ -759,21 +761,30 @@ describeForEachCompletion(
                     });
                 });
 
-                it("forward on exact match returns empty completions", () => {
+                it("forward on exact match also backs up to wildcard property", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play hello",
                         undefined,
                         "forward",
                     );
+                    // Both directions back up to wildcard start.
                     expectMetadata(result, {
                         completions: [],
-                        matchedPrefixLength: 10,
-                        separatorMode: undefined,
-                        closedSet: true,
-                        directionSensitive: true,
+                        matchedPrefixLength: 4,
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
+                        directionSensitive: false,
                         openWildcard: false,
-                        properties: [],
+                        properties: [
+                            {
+                                match: {
+                                    actionName: "play",
+                                    parameters: {},
+                                },
+                                propertyNames: ["parameters.name"],
+                            },
+                        ],
                     });
                 });
             });
@@ -1124,7 +1135,7 @@ describeForEachCompletion(
                         matchedPrefixLength: 4,
                         separatorMode: "spacePunctuation",
                         closedSet: false,
-                        directionSensitive: true,
+                        directionSensitive: false,
                         openWildcard: false,
                         properties: [
                             {
@@ -1422,12 +1433,13 @@ describeForEachCompletion(
                         undefined,
                         "forward",
                     );
+                    // Exact match backs up to the last term.
                     expectMetadata(result, {
-                        completions: [],
-                        matchedPrefixLength: 9,
-                        separatorMode: undefined,
+                        completions: ["music"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "none",
                         closedSet: true,
-                        directionSensitive: true,
+                        directionSensitive: false,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1440,12 +1452,13 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
+                    // Both directions back up to the last term.
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
                         separatorMode: "none",
                         closedSet: true,
-                        directionSensitive: true,
+                        directionSensitive: false,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1925,37 +1938,40 @@ describeForEachCompletion(
                 });
             });
 
-            it("direction-sensitive for exact match 'play shuffle music'", () => {
+            it("exact match 'play shuffle music' backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play shuffle music",
                     undefined,
                     "forward",
                 );
+                // Exact match backs up to the last term.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 18,
-                    separatorMode: undefined,
+                    completions: ["music"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
             });
 
-            it("direction-sensitive for exact match (optional skipped) 'play music'", () => {
+            it("exact match (optional skipped) 'play music' backs up", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play music",
                     undefined,
                     "forward",
                 );
+                // Category 1 backs up to last term + Category 2
+                // offers the optional part.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 10,
-                    separatorMode: undefined,
+                    completions: ["shuffle", "music"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2012,9 +2028,9 @@ describeForEachCompletion(
                 });
             });
 
-            it("direction-sensitive for 'play some song' (wildcard captured)", () => {
-                // Exact match with wildcard — backward would back up to
-                // the wildcard.
+            it("exact match 'play some song' backs up to wildcard property", () => {
+                // Exact match with wildcard — both directions back up
+                // to the wildcard.
                 const result = matchGrammarCompletion(
                     grammar,
                     "play some song",
@@ -2023,12 +2039,17 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: [],
-                    matchedPrefixLength: 14,
-                    separatorMode: undefined,
-                    closedSet: true,
-                    directionSensitive: true,
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
+                    closedSet: false,
+                    directionSensitive: false,
                     openWildcard: false,
-                    properties: [],
+                    properties: [
+                        {
+                            match: true,
+                            propertyNames: [],
+                        },
+                    ],
                 });
             });
         });
@@ -2044,19 +2065,21 @@ describeForEachCompletion(
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("direction-sensitive for exact match 'play some music'", () => {
+            it("exact match 'play some music' backs up to last term", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play some music",
                     undefined,
                     "forward",
                 );
+                // Exact match backs up to last term for matching rule;
+                // non-matching rule also contributes via Category 3b.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 15,
-                    separatorMode: undefined,
+                    completions: ["music", "video"],
+                    matchedPrefixLength: 9,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2143,21 +2166,30 @@ describeForEachCompletion(
             const g = `<Start> = set volume $(level) -> { actionName: "setVolume", parameters: { level } };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("direction-sensitive for 'set volume 42' (number matched)", () => {
+            it("exact match 'set volume 42' backs up to number slot", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "set volume 42",
                     undefined,
                     "forward",
                 );
+                // Exact match backs up to the number slot.
                 expectMetadata(result, {
                     completions: [],
-                    matchedPrefixLength: 13,
-                    separatorMode: undefined,
-                    closedSet: true,
-                    directionSensitive: true,
+                    matchedPrefixLength: 10,
+                    separatorMode: "spacePunctuation",
+                    closedSet: false,
+                    directionSensitive: false,
                     openWildcard: false,
-                    properties: [],
+                    properties: [
+                        {
+                            match: {
+                                actionName: "setVolume",
+                                parameters: {},
+                            },
+                            propertyNames: ["parameters.level"],
+                        },
+                    ],
                 });
             });
 
@@ -2168,12 +2200,13 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
+                // Both directions back up to number slot.
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 10,
                     separatorMode: "spacePunctuation",
                     closedSet: false,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: false,
                     properties: [
                         {
@@ -2732,7 +2765,7 @@ describeForEachCompletion(
                 const g = `<Start> = play music now -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("backward on 'play music' equals forward on 'play'", () => {
+                it("backward on 'play music' matches forward on 'play'", () => {
                     const backward = matchGrammarCompletion(
                         grammar,
                         "play music",
@@ -2750,7 +2783,14 @@ describeForEachCompletion(
                         matchedPrefixLength: 4,
                         directionSensitive: true,
                     });
-                    expect(backward).toEqual(forward);
+                    // Completions and position match; directionSensitive
+                    // may differ (backward from exact match is always
+                    // direction-agnostic, forward at truncated prefix
+                    // is direction-sensitive for partial matches).
+                    expect(backward.completions).toEqual(forward.completions);
+                    expect(backward.matchedPrefixLength).toBe(
+                        forward.matchedPrefixLength,
+                    );
                 });
 
                 it("backward on 'play' equals forward on ''", () => {
@@ -2782,7 +2822,7 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("backward on 'play music' equals forward on 'play'", () => {
+                it("backward on 'play music' matches forward on 'play'", () => {
                     const backward = matchGrammarCompletion(
                         grammar,
                         "play music",
@@ -2800,9 +2840,14 @@ describeForEachCompletion(
                     expectMetadata(backward, {
                         completions: ["music", "video"],
                         matchedPrefixLength: 4,
-                        directionSensitive: true,
+                        directionSensitive: false,
                     });
-                    expect(backward).toEqual(forward);
+                    // Completions and position match; directionSensitive
+                    // may differ.
+                    expect(backward.completions).toEqual(forward.completions);
+                    expect(backward.matchedPrefixLength).toBe(
+                        forward.matchedPrefixLength,
+                    );
                 });
             });
 
@@ -2859,12 +2904,12 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    // All three rules share prefix "play"; backward
-                    // at P=4 should show all three next keywords.
+                    // All three rules share prefix "play"; both directions
+                    // back up to P=4, showing all three next keywords.
                     expectMetadata(result, {
                         completions: ["music", "video", "audio"],
                         matchedPrefixLength: 4,
-                        directionSensitive: true,
+                        directionSensitive: false,
                     });
                 });
 
@@ -2998,12 +3043,12 @@ describeForEachCompletion(
                         "backward",
                     );
                     // "play" matched, wildcard captured "hello".
-                    // Backward backs up to offer property completion
+                    // Both directions back up to offer property completion
                     // for the wildcard slot.
                     expectMetadata(result, {
                         completions: [],
                         matchedPrefixLength: 4,
-                        directionSensitive: true,
+                        directionSensitive: false,
                         openWildcard: false,
                         properties: [
                             {
@@ -3213,7 +3258,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["up", "down"],
                         matchedPrefixLength: 10,
-                        directionSensitive: true,
+                        directionSensitive: false,
                     });
                 });
 
