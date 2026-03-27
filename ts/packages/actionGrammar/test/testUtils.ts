@@ -236,10 +236,23 @@ function assertSingleResultInvariants(
 /**
  * Assert cross-direction invariants between forward and backward results.
  *
- * Invariants checked (see completion.md § Invariants):
- * - #3: directionSensitive ↔ results differ (biconditional)
- * - #4: Two-pass backward equivalence: when backward differs and
- *       openWildcard=false, backward equals forward(input[0..P])
+ * On the original input we can only assert one thing:
+ *
+ * - #1: forward.matchedPrefixLength === backward.matchedPrefixLength →
+ *       forward deep-equals backward (equal consumption → identical)
+ *
+ * The remaining invariants are cross-query checks on *truncated* input:
+ *
+ * - #2: !forward.directionSensitive →
+ *       forward === completion(input[0..fwd.mpl], "backward")
+ * - #3: !backward.directionSensitive →
+ *       backward === completion(input[0..bwd.mpl], "forward")
+ * - #4: forward.directionSensitive →
+ *       completion(input[0..fwd.mpl], "backward").mpl < fwd.mpl
+ *       (backward of truncated backs up)
+ * - #5: fwd.mpl ≠ bwd.mpl AND backward.directionSensitive →
+ *       completion(input[0..bwd.mpl], "forward").mpl ≥ bwd.mpl
+ *       (forward reaches backward's position on truncated input)
  */
 function assertCrossDirectionInvariants(
     forward: GrammarCompletionResult,
@@ -249,56 +262,117 @@ function assertCrossDirectionInvariants(
     grammar: Grammar,
     baseFn: TestCompletionFn,
 ): void {
-    // #3: directionSensitive ↔ results differ (biconditional)
-    const resultsIdentical = completionResultsEqual(forward, backward);
-    if (forward.directionSensitive && resultsIdentical) {
-        throw new Error(
-            `Invariant: directionSensitive=true but forward=backward ` +
-                `(prefix="${prefix}") — false positive`,
-        );
-    }
-    if (!forward.directionSensitive && !resultsIdentical) {
-        // Use expect() to get the jest diff in the error message.
+    const fwdMpl = forward.matchedPrefixLength ?? 0;
+    const bwdMpl = backward.matchedPrefixLength ?? 0;
+
+    // #1: equal matchedPrefixLength → identical results
+    //     If both directions consumed the same amount, all fields must agree.
+    if (fwdMpl === bwdMpl && !completionResultsEqual(forward, backward)) {
         try {
             expect(backward).toEqual(forward);
         } catch (e) {
             const err = e as Error;
             err.message =
-                `Invariant: directionSensitive=false but forward≠backward ` +
-                `(prefix="${prefix}") — false negative\n\n${err.message}`;
+                `Invariant #1: forward.matchedPrefixLength === backward.matchedPrefixLength ` +
+                `(${fwdMpl}) but results differ (prefix="${prefix}")\n\n${err.message}`;
             throw err;
         }
     }
 
-    // #4: Two-pass backward equivalence
-    //    Skip when:
-    //    - backward didn't actually back up (results identical)
-    //    - backward.openWildcard=true (ambiguous wildcard boundary)
-    //    - minPrefixLength specified (can filter backward below equivalence)
-    if (
-        !resultsIdentical &&
-        !backward.openWildcard &&
-        minPrefixLength === undefined
-    ) {
-        const P = backward.matchedPrefixLength ?? 0;
-        const truncated = prefix.substring(0, P);
-        const forwardAtP = baseFn(grammar, truncated, undefined, "forward");
-        // Only check when forward consumed the full truncated prefix.
-        // When forwardAtP.matchedPrefixLength < P, the forward path has
-        // a known gap (see completion.md § Known gaps) and can't
-        // reproduce backward's position — the comparison would be invalid.
-        if ((forwardAtP.matchedPrefixLength ?? 0) >= P || P === 0) {
+    // Cross-query invariants compare with a fresh completion on a
+    // truncated prefix.  Skip when minPrefixLength is specified
+    // because filtering can change which candidates survive.
+    if (minPrefixLength !== undefined) return;
+
+    // #2: !forward.directionSensitive →
+    //     forward === completion(input[0..fwd.mpl], "backward")
+    //     When forward says direction doesn't matter at its position,
+    //     backward on the truncated input should produce the same result.
+    if (!forward.directionSensitive && !forward.openWildcard) {
+        const truncated = prefix.substring(0, fwdMpl);
+        const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
+        if (!completionResultsEqual(forward, backwardAtFwd)) {
             try {
-                expect(backward).toEqual(forwardAtP);
+                expect(backwardAtFwd).toEqual(forward);
             } catch (e) {
                 const err = e as Error;
                 err.message =
-                    `Invariant: two-pass backward equivalence violated ` +
-                    `(prefix="${prefix}", P=${P})\n` +
-                    `backward(input) should equal forward(input[0..${P}]="${truncated}")\n\n` +
-                    `${err.message}`;
+                    `Invariant #2: forward.directionSensitive=false but ` +
+                    `forward ≠ completion(input[0..${fwdMpl}]="${truncated}", "backward") ` +
+                    `(prefix="${prefix}")\n\n${err.message}`;
                 throw err;
             }
+        }
+    }
+
+    // #3: !backward.directionSensitive →
+    //     backward === completion(input[0..bwd.mpl], "forward")
+    //     When backward says direction doesn't matter at its position,
+    //     forward on the truncated input should produce the same result.
+    if (!backward.directionSensitive && !backward.openWildcard) {
+        const truncated = prefix.substring(0, bwdMpl);
+        const forwardAtBwd = baseFn(grammar, truncated, undefined, "forward");
+        // Guard: only check when forward can reach backward's position.
+        // When forwardAtBwd.mpl < bwdMpl, the forward path has a known
+        // gap and can't reproduce backward's position.
+        if ((forwardAtBwd.matchedPrefixLength ?? 0) >= bwdMpl || bwdMpl === 0) {
+            if (!completionResultsEqual(backward, forwardAtBwd)) {
+                try {
+                    expect(forwardAtBwd).toEqual(backward);
+                } catch (e) {
+                    const err = e as Error;
+                    err.message =
+                        `Invariant #3: backward.directionSensitive=false but ` +
+                        `backward ≠ completion(input[0..${bwdMpl}]="${truncated}", "forward") ` +
+                        `(prefix="${prefix}")\n\n${err.message}`;
+                    throw err;
+                }
+            }
+        }
+    }
+
+    // #4: forward.directionSensitive →
+    //     completion(input[0..fwd.mpl], "backward").mpl < fwd.mpl
+    //     When forward says direction matters, backward on the truncated
+    //     input should back up to a shorter position.
+    if (forward.directionSensitive && fwdMpl > 0 && !forward.openWildcard) {
+        const truncated = prefix.substring(0, fwdMpl);
+        const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
+        const backwardAtFwdMpl = backwardAtFwd.matchedPrefixLength ?? 0;
+        if (backwardAtFwdMpl >= fwdMpl) {
+            throw new Error(
+                `Invariant #4: forward.directionSensitive=true but ` +
+                    `completion(input[0..${fwdMpl}]="${truncated}", "backward").matchedPrefixLength ` +
+                    `(${backwardAtFwdMpl}) ≥ forward.matchedPrefixLength (${fwdMpl}) ` +
+                    `(prefix="${prefix}") — backward should back up`,
+            );
+        }
+    }
+
+    // #5: fwdMpl ≠ bwdMpl AND backward.directionSensitive →
+    //     completion(input[0..bwd.mpl], "forward").mpl ≥ bwd.mpl
+    //     When backward backs up to a different position and says direction
+    //     matters there, forward on the truncated input should consume at
+    //     least to backward's position (confirming it's reachable).
+    if (
+        fwdMpl !== bwdMpl &&
+        backward.directionSensitive &&
+        !backward.openWildcard
+    ) {
+        const truncated = prefix.substring(0, bwdMpl);
+        const forwardAtBwd = baseFn(grammar, truncated, undefined, "forward");
+        const forwardAtBwdMpl = forwardAtBwd.matchedPrefixLength ?? 0;
+        // Guard: skip when forward can't reach backward's position
+        // at all (mpl=0).  This is a known gap — e.g. number-variable
+        // at EOI where forward doesn't call updateMaxPrefixLength.
+        // See completion.md § Known gaps.
+        if (forwardAtBwdMpl < bwdMpl && forwardAtBwdMpl > 0) {
+            throw new Error(
+                `Invariant #5: backward.directionSensitive=true but ` +
+                    `completion(input[0..${bwdMpl}]="${truncated}", "forward").matchedPrefixLength ` +
+                    `(${forwardAtBwdMpl}) < backward.matchedPrefixLength (${bwdMpl}) ` +
+                    `(prefix="${prefix}") — forward should reach backward's position`,
+            );
         }
     }
 }

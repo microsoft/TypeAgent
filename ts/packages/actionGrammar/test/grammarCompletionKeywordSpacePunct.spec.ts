@@ -121,7 +121,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 6,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -136,7 +136,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 6,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -218,7 +218,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 5,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -299,7 +299,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 7,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -410,7 +410,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 11,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1870,7 +1870,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 13,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1981,7 +1981,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 6,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });

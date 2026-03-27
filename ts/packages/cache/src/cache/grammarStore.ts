@@ -21,11 +21,10 @@ const debug = registerDebug("typeagent:cache:grammarStore");
 import { CompletionDirection, SeparatorMode } from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
-    anchorsInsideInput,
     CompletionProperty,
     CompletionResult,
-    isEoiWildcard,
     MatchOptions,
+    shouldPreferNewResult,
 } from "../constructions/constructionCache.js";
 import { MatchResult, GrammarStore } from "./types.js";
 import { getSchemaNamespaceKey, splitSchemaNamespaceKey } from "./cache.js";
@@ -363,51 +362,23 @@ export class GrammarStoreImpl implements GrammarStore {
                 );
                 const partialPrefixLength = partial.matchedPrefixLength ?? 0;
                 if (partialPrefixLength !== matchedPrefixLength) {
-                    const prefixLen = requestPrefix.length;
-                    const newIsEoi = isEoiWildcard(
-                        partialPrefixLength,
-                        prefixLen,
-                        partial.openWildcard,
-                    );
-                    const existingIsEoi = isEoiWildcard(
+                    const adopt = shouldPreferNewResult(
                         matchedPrefixLength,
-                        prefixLen,
                         openWildcard,
-                    );
-                    const newAnchors = anchorsInsideInput(
                         partialPrefixLength,
-                        prefixLen,
-                    );
-                    const existingAnchors = anchorsInsideInput(
-                        matchedPrefixLength,
-                        prefixLen,
+                        partial.openWildcard,
+                        requestPrefix.length,
                     );
 
-                    // Don't let an EOI open-wildcard result displace
-                    // a shorter result that anchors inside the input —
-                    // the trailing text filters the shorter result's
-                    // completions, making it more informative.
-                    if (
-                        partialPrefixLength > matchedPrefixLength &&
-                        newIsEoi &&
-                        existingAnchors
-                    ) {
-                        continue;
-                    }
+                    if (!adopt) continue;
 
-                    const adopt =
-                        partialPrefixLength > matchedPrefixLength ||
-                        (newAnchors && existingIsEoi);
-
-                    if (adopt) {
-                        matchedPrefixLength = partialPrefixLength;
-                        completions.length = 0;
-                        properties.length = 0;
-                        separatorMode = undefined;
-                        closedSet = undefined;
-                        directionSensitive = false;
-                        openWildcard = false;
-                    }
+                    matchedPrefixLength = partialPrefixLength;
+                    completions.length = 0;
+                    properties.length = 0;
+                    separatorMode = undefined;
+                    closedSet = undefined;
+                    directionSensitive = false;
+                    openWildcard = false;
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);

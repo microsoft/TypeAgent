@@ -120,11 +120,45 @@ export function anchorsInsideInput(
     return matchedLen > 0 && matchedLen < prefixLength;
 }
 
+/**
+ * When two results have different matchedPrefixLengths, determine
+ * whether the candidate should be preferred over the incumbent.
+ *
+ * The normal rule is "longer wins", with one exception: a longer
+ * result at end-of-input with an open wildcard is displaced by a
+ * shorter result that anchors inside the input (the trailing text
+ * filters the shorter result's completions, making it more
+ * informative).
+ *
+ * Returns true when the candidate should replace the incumbent.
+ */
+export function shouldPreferNewResult(
+    currentLen: number,
+    currentOpenWildcard: boolean | undefined,
+    candidateLen: number,
+    candidateOpenWildcard: boolean | undefined,
+    prefixLength: number,
+): boolean {
+    if (candidateLen > currentLen) {
+        // Longer wins unless it's EOI wildcard displacing an anchored result.
+        return !(
+            isEoiWildcard(candidateLen, prefixLength, candidateOpenWildcard) &&
+            anchorsInsideInput(currentLen, prefixLength)
+        );
+    }
+    // currentLen > candidateLen (caller ensures they're not equal)
+    // Shorter candidate wins only when anchored and current is EOI wildcard.
+    return (
+        anchorsInsideInput(candidateLen, prefixLength) &&
+        isEoiWildcard(currentLen, prefixLength, currentOpenWildcard)
+    );
+}
+
 // Architecture: docs/architecture/completion.md — §2 Cache Layer
 export function mergeCompletionResults(
     first: CompletionResult | undefined,
     second: CompletionResult | undefined,
-    prefixLength?: number,
+    prefixLength: number,
 ): CompletionResult | undefined {
     if (first === undefined) {
         return second;
@@ -143,25 +177,16 @@ export function mergeCompletionResults(
     // completions.  In that case, keep the shorter result.
     const firstLen = first.matchedPrefixLength ?? 0;
     const secondLen = second.matchedPrefixLength ?? 0;
-    if (firstLen > secondLen) {
-        if (
-            prefixLength !== undefined &&
-            isEoiWildcard(firstLen, prefixLength, first.openWildcard) &&
-            anchorsInsideInput(secondLen, prefixLength)
-        ) {
-            return second;
-        }
-        return first;
-    }
-    if (secondLen > firstLen) {
-        if (
-            prefixLength !== undefined &&
-            isEoiWildcard(secondLen, prefixLength, second.openWildcard) &&
-            anchorsInsideInput(firstLen, prefixLength)
-        ) {
-            return first;
-        }
-        return second;
+    if (firstLen !== secondLen) {
+        return shouldPreferNewResult(
+            firstLen,
+            first.openWildcard,
+            secondLen,
+            second.openWildcard,
+            prefixLength,
+        )
+            ? second
+            : first;
     }
     // Same prefix length — merge completions from both sources.
     const matchedPrefixLength =

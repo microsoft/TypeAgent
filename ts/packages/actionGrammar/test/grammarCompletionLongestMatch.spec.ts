@@ -93,7 +93,27 @@ describeForEachCompletion(
                     matchedPrefixLength: 12,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
+                    openWildcard: false,
+                    properties: [],
+                });
+            });
+
+            it("backward: exact match also backs up to last term", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "first second third",
+                    undefined,
+                    "backward",
+                );
+                // Category 1 is direction-agnostic — backward
+                // produces the same result as forward.
+                expectMetadata(result, {
+                    completions: ["third"],
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -109,7 +129,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 12,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -235,7 +255,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 6,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -345,7 +365,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 13,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -389,7 +409,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -405,7 +425,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -433,7 +453,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -686,7 +706,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 5,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });

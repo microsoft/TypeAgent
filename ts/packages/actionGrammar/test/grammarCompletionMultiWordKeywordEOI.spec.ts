@@ -279,5 +279,35 @@ describeForEachCompletion(
                 });
             });
         });
+
+        describe("consumed-to-EOI edge case (matchKeywordWordsFrom textToCheck='')", () => {
+            // Minimal grammar isolating the edge case where the first
+            // keyword word is fully consumed to end-of-input with a
+            // second word remaining.  matchKeywordWordsFrom must
+            // return the second word as completionWord even though
+            // the remaining text after the first word is empty.
+            const gMinimal = [
+                `<Start> = go $(dest:string) arrived safely -> { dest };`,
+            ].join("\n");
+            const grammarMinimal = loadGrammarRules("test.grammar", gMinimal);
+
+            it('forward: "go home arrived" — first keyword word consumed to EOI, offers "safely"', () => {
+                const result = matchGrammarCompletion(
+                    grammarMinimal,
+                    "go home arrived",
+                    undefined,
+                    "forward",
+                );
+                expectMetadata(result, {
+                    completions: ["safely"],
+                    matchedPrefixLength: 15,
+                    separatorMode: "spacePunctuation",
+                    closedSet: true,
+                    directionSensitive: true,
+                    openWildcard: true,
+                    properties: [],
+                });
+            });
+        });
     },
 );

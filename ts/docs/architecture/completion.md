@@ -175,14 +175,14 @@ The user types `play Never` (free-form, no `@` prefix).
 Using the same `play <song> by <artist>` rule, here is what category
 the grammar matcher assigns at different input states:
 
-| User input       | Category     | Why                                                                                                                                                                                                                                                                                                                                                                                   |
-| ---------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)                                                                                                                                                                                                                                                                                                                                  |
-| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                                                                                                                                                                                                                                                                                                                                            |
-| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                                                                                                                                                                                                                                                                                                                                           |
-| `play Never b`   | 2 — Clean    | Wildcard absorbs `"Never b"`, then `findPartialKeywordInWildcard()` detects `"b"` as a prefix of keyword `"by"` and offers it as a completion at the partial keyword position (after `"Never "`). In forward, the candidate is deferred (not processed inline) and instantiated in Phase B at the partial keyword anchor. In backward, it is collected as a fixed candidate directly. |
-| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                                                                                                                                                                                                                                                                                                                                          |
-| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                                                                                                                                                                                                                                                                                                                                        |
+| User input       | Category     | Why                                                             |
+| ---------------- | ------------ | --------------------------------------------------------------- |
+| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)            |
+| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                      |
+| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                     |
+| `play Never b`   | 2 — Clean    | Partial keyword detected in wildcard; see `actionGrammar.md` §6 |
+| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                    |
+| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                  |
 
 ---
 

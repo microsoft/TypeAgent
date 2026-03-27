@@ -9,7 +9,11 @@ import {
 describe("mergeCompletionResults", () => {
     describe("matchedPrefixLength merging", () => {
         it("returns undefined when both are undefined", () => {
-            const result = mergeCompletionResults(undefined, undefined);
+            const result = mergeCompletionResults(
+                undefined,
+                undefined,
+                Infinity,
+            );
             expect(result).toBeUndefined();
         });
 
@@ -18,7 +22,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["a"],
                 matchedPrefixLength: 5,
             };
-            const result = mergeCompletionResults(first, undefined);
+            const result = mergeCompletionResults(first, undefined, Infinity);
             expect(result).toBe(first);
         });
 
@@ -27,7 +31,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 3,
             };
-            const result = mergeCompletionResults(undefined, second);
+            const result = mergeCompletionResults(undefined, second, Infinity);
             expect(result).toBe(second);
         });
 
@@ -40,7 +44,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 10,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(10);
             expect(result.completions).toEqual(["b"]);
         });
@@ -54,7 +58,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 3,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(12);
             expect(result.completions).toEqual(["a"]);
         });
@@ -68,7 +72,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 5,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(5);
             expect(result.completions).toEqual(["a", "b"]);
         });
@@ -80,7 +84,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["b"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBeUndefined();
             expect(result.completions).toEqual(["a", "b"]);
         });
@@ -93,7 +97,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["b"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(7);
             expect(result.completions).toEqual(["a"]);
         });
@@ -106,7 +110,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 4,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(4);
             expect(result.completions).toEqual(["b"]);
         });
@@ -120,7 +124,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["c", "d"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.completions).toEqual(["a", "b", "c", "d"]);
         });
 
@@ -131,7 +135,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["c"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.completions).toEqual(["c"]);
         });
     });
@@ -154,7 +158,7 @@ describe("mergeCompletionResults", () => {
                 completions: [],
                 properties: [prop2],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toEqual([prop1, prop2]);
         });
 
@@ -170,7 +174,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: [],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toBe(first.properties);
         });
 
@@ -186,7 +190,7 @@ describe("mergeCompletionResults", () => {
                 completions: [],
                 properties: [prop2],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toBe(second.properties);
         });
 
@@ -197,7 +201,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: [],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toBeUndefined();
         });
     });
@@ -206,7 +210,7 @@ describe("mergeCompletionResults", () => {
         it("returns undefined when neither has separatorMode", () => {
             const first: CompletionResult = { completions: ["a"] };
             const second: CompletionResult = { completions: ["b"] };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBeUndefined();
         });
 
@@ -216,7 +220,7 @@ describe("mergeCompletionResults", () => {
                 separatorMode: "spacePunctuation",
             };
             const second: CompletionResult = { completions: ["b"] };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBe("spacePunctuation");
         });
 
@@ -226,7 +230,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 separatorMode: "spacePunctuation",
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBe("spacePunctuation");
         });
 
@@ -239,7 +243,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 separatorMode: "optional",
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBe("spacePunctuation");
         });
 
@@ -248,7 +252,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 separatorMode: "spacePunctuation",
             };
-            const result = mergeCompletionResults(undefined, second);
+            const result = mergeCompletionResults(undefined, second, Infinity);
             expect(result).toBe(second);
             expect(result!.separatorMode).toBe("spacePunctuation");
         });
@@ -258,7 +262,7 @@ describe("mergeCompletionResults", () => {
         it("returns undefined when neither has closedSet", () => {
             const first: CompletionResult = { completions: ["a"] };
             const second: CompletionResult = { completions: ["b"] };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBeUndefined();
         });
 
@@ -271,7 +275,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: true,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBe(true);
         });
 
@@ -284,7 +288,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: false,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBe(false);
         });
 
@@ -297,7 +301,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: true,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBe(false);
         });
 
@@ -310,7 +314,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: false,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBe(false);
         });
 
@@ -322,7 +326,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["b"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             // undefined treated as false → true && false = false
             expect(result.closedSet).toBe(false);
         });
@@ -335,7 +339,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: true,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             // undefined treated as false → false && true = false
             expect(result.closedSet).toBe(false);
         });
@@ -345,7 +349,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: true,
             };
-            const result = mergeCompletionResults(undefined, second);
+            const result = mergeCompletionResults(undefined, second, Infinity);
             expect(result).toBe(second);
             expect(result!.closedSet).toBe(true);
         });
@@ -355,7 +359,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["a"],
                 closedSet: false,
             };
-            const result = mergeCompletionResults(first, undefined);
+            const result = mergeCompletionResults(first, undefined, Infinity);
             expect(result).toBe(first);
             expect(result!.closedSet).toBe(false);
         });
@@ -438,23 +442,6 @@ describe("mergeCompletionResults", () => {
                 openWildcard: false,
             };
             const result = mergeCompletionResults(anchored, eoi, 17)!;
-            expect(result.completions).toEqual(["track"]);
-            expect(result.matchedPrefixLength).toBe(17);
-        });
-
-        it("falls back to normal merge when prefixLength is not provided", () => {
-            const anchored: CompletionResult = {
-                completions: ["by"],
-                matchedPrefixLength: 16,
-                openWildcard: true,
-            };
-            const eoi: CompletionResult = {
-                completions: ["track"],
-                matchedPrefixLength: 17,
-                openWildcard: true,
-            };
-            // No prefixLength — normal "longer wins"
-            const result = mergeCompletionResults(anchored, eoi)!;
             expect(result.completions).toEqual(["track"]);
             expect(result.matchedPrefixLength).toBe(17);
         });
