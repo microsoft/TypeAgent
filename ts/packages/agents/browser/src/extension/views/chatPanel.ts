@@ -395,10 +395,6 @@ function addContextualFollowUps(command: string) {
                 label: "Record New Action",
                 command: "@browser actions record New Action",
             },
-            // {
-            //     label: "Create Action (describe)",
-            //     command: "@browser actions author",
-            // ,
         ]);
     } else if (normalized.startsWith("@browser ask")) {
         // After a Q&A answer, offer to extract full knowledge

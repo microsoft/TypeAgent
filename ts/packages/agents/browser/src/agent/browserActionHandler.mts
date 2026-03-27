@@ -2879,45 +2879,6 @@ async function handleDownloadImage(
     }
 }
 
-class StartAuthoringHandler implements CommandHandlerNoParams {
-    public readonly description =
-        "Start an interactive session to create a new web automation action by describing it";
-    public async run(context: ActionContext<BrowserActionContext>) {
-        const agentContext = context.sessionContext.agentContext;
-        if (!agentContext.browserControl) {
-            displayError("No browser connection available.", context);
-            return;
-        }
-
-        context.actionIO.appendDisplay(
-            "Starting authoring session...",
-            "temporary",
-        );
-
-        try {
-            const result = await handleSchemaDiscoveryAction(
-                {
-                    actionName: "startAuthoringSession",
-                    parameters: {},
-                } as any,
-                context.sessionContext,
-            );
-
-            context.actionIO.setDisplay({
-                type: "markdown",
-                content:
-                    result.displayText ||
-                    "Authoring session started. Describe the action you want to create.",
-            });
-        } catch (error: any) {
-            displayError(
-                `Failed to start authoring: ${error?.message || error}`,
-                context,
-            );
-        }
-    }
-}
-
 class RecordActionHandler implements CommandHandler {
     public readonly description =
         "Record a new browser action by capturing user interactions";
@@ -3378,7 +3339,6 @@ export const handlers: CommandHandlerTable = {
                         recording: new StopRecordingHandler(),
                     },
                 },
-                author: new StartAuthoringHandler(),
             },
         },
         search: new SearchProviderCommandHandlerTable(),

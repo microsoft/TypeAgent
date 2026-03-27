@@ -8,8 +8,7 @@ import {
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
 import { NavigationLink } from "./schema/pageComponents.mjs";
-import { setupAuthoringActions } from "./authoringUtilities.mjs";
-import { BrowserActionContext } from "../browserActions.mjs";
+import { BrowserActionContext, getCurrentPageScreenshot } from "../browserActions.mjs";
 import { handleWebFlowAction } from "../webFlows/actionHandler.mjs";
 import registerDebug from "debug";
 
@@ -17,25 +16,67 @@ const debug = registerDebug(
     "typeagent:browser:discover:tempAgentActionHandler",
 );
 
-// Context interface for temp agent action handler functions
 interface TempAgentActionHandlerContext {
     browser: BrowserControl;
     agent: any;
     sessionContext: SessionContext<BrowserActionContext>;
-    actionUtils: ReturnType<typeof setupAuthoringActions>;
+}
+
+async function getComponentFromPage(
+    ctx: TempAgentActionHandlerContext,
+    componentType: string,
+    selectionCondition?: string,
+) {
+    const htmlFragments = await ctx.browser.getHtmlFragments();
+    let screenshot = "";
+    try {
+        screenshot = await getCurrentPageScreenshot(ctx.browser);
+    } catch (error) {
+        console.warn(
+            "Screenshot capture failed, continuing without screenshot:",
+            (error as Error)?.message,
+        );
+    }
+    const screenshots = screenshot ? [screenshot] : [];
+
+    const response = await ctx.agent.getPageComponentSchema(
+        componentType,
+        selectionCondition,
+        htmlFragments,
+        screenshots,
+    );
+
+    if (!response.success) {
+        console.error(`Attempt to get ${componentType} failed`);
+        console.error(response.message);
+        return;
+    }
+
+    return response.data;
+}
+
+async function followLink(
+    ctx: TempAgentActionHandlerContext,
+    linkSelector: string | undefined,
+) {
+    if (!linkSelector) return;
+    await ctx.browser.clickOn(linkSelector);
+    await ctx.browser.awaitPageInteraction();
+    await ctx.browser.awaitPageLoad();
 }
 
 async function handleNavigateToPage(
     action: NavigateToPage,
     ctx: TempAgentActionHandlerContext,
 ): Promise<void> {
-    const link = (await ctx.actionUtils.getComponentFromPage(
+    const link = (await getComponentFromPage(
+        ctx,
         "NavigationLink",
         `link text ${action.parameters.keywords}`,
     )) as NavigationLink;
     debug(link);
 
-    await ctx.actionUtils.followLink(link?.linkCssSelector);
+    await followLink(ctx, link?.linkCssSelector);
 }
 
 async function handleBrowseProductCategory(
@@ -45,13 +86,14 @@ async function handleBrowseProductCategory(
     let linkText = action.parameters?.categoryName
         ? `link text ${action.parameters.categoryName}`
         : "";
-    const link = (await ctx.actionUtils.getComponentFromPage(
+    const link = (await getComponentFromPage(
+        ctx,
         "NavigationLink",
         linkText,
     )) as NavigationLink;
     debug(link);
 
-    await ctx.actionUtils.followLink(link?.linkCssSelector);
+    await followLink(ctx, link?.linkCssSelector);
 }
 
 export function createTempAgentForSchema(
@@ -59,12 +101,10 @@ export function createTempAgentForSchema(
     agent: any,
     context: SessionContext<BrowserActionContext>,
 ): AppAgent {
-    const actionUtils = setupAuthoringActions(browser, agent, context);
     const ctx: TempAgentActionHandlerContext = {
         browser,
         agent,
         sessionContext: context,
-        actionUtils,
     };
 
     return {
