@@ -24,24 +24,24 @@ import { BrowserActions } from "./browserActionSchema.mts";
              | visit $(site:wildcard) -> { actionName: "openWebPage", parameters: { site } };
 
 // ===== Close Page =====
-<ClosePage> = close (the)? (web)? page -> { actionName: "closeWebPage", parameters: {} }
-              | close (the)? tab -> { actionName: "closeWebPage", parameters: {} }
-              | close all (web)? pages -> { actionName: "closeAllWebPages", parameters: {} }
-              | close all tabs -> { actionName: "closeAllWebPages", parameters: {} };
+<ClosePage> = close (the)? (web)? page -> { actionName: "closeWebPage" }
+              | close (the)? tab -> { actionName: "closeWebPage" }
+              | close all (web)? pages -> { actionName: "closeAllWebPages" }
+              | close all tabs -> { actionName: "closeAllWebPages" };
 
 // ===== Navigation =====
-<Navigation> = go back -> { actionName: "goBack", parameters: {} }
-               | back -> { actionName: "goBack", parameters: {} }
-               | go forward -> { actionName: "goForward", parameters: {} }
-               | forward -> { actionName: "goForward", parameters: {} }
-               | reload (the)? page -> { actionName: "reloadPage", parameters: {} }
-               | refresh (the)? page -> { actionName: "reloadPage", parameters: {} };
+<Navigation> = go back -> { actionName: "goBack" }
+               | back -> { actionName: "goBack" }
+               | go forward -> { actionName: "goForward" }
+               | forward -> { actionName: "goForward" }
+               | reload (the)? page -> { actionName: "reloadPage" }
+               | refresh (the)? page -> { actionName: "reloadPage" };
 
 // ===== Scrolling =====
-<Scrolling> = scroll down -> { actionName: "scrollDown", parameters: {} }
-              | scroll up -> { actionName: "scrollUp", parameters: {} }
-              | page down -> { actionName: "scrollDown", parameters: {} }
-              | page up -> { actionName: "scrollUp", parameters: {} };
+<Scrolling> = scroll down -> { actionName: "scrollDown" }
+              | scroll up -> { actionName: "scrollUp" }
+              | page down -> { actionName: "scrollDown" }
+              | page up -> { actionName: "scrollUp" };
 
 // ===== Follow Link =====
 <FollowLink> = follow (the)? link $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords } }
@@ -49,21 +49,21 @@ import { BrowserActions } from "./browserActionSchema.mts";
                | click (on)? $(keywords:wildcard) -> { actionName: "followLinkByText", parameters: { keywords } };
 
 // ===== Tab Control =====
-<TabControl> = switch to tab $(n:number) -> { actionName: "changeTabs", parameters: { tabNumber: n } }
-               | go to tab $(n:number) -> { actionName: "changeTabs", parameters: { tabNumber: n } }
-               | next tab -> { actionName: "changeTabs", parameters: { tabNumber: 0 } };
+<TabControl> = switch to tab $(tabDescription:wildcard) -> { actionName: "changeTab", parameters: { tabDescription } }
+               | go to tab $(tabDescription:wildcard) -> { actionName: "changeTab", parameters: { tabDescription } }
+               | next tab -> { actionName: "changeTab", parameters: { tabDescription: "next" } };
 
 // ===== Zoom =====
-<Zoom> = zoom in -> { actionName: "zoomIn", parameters: {} }
-         | zoom out -> { actionName: "zoomOut", parameters: {} }
-         | reset zoom -> { actionName: "zoomReset", parameters: {} };
+<Zoom> = zoom in -> { actionName: "zoomIn" }
+         | zoom out -> { actionName: "zoomOut" }
+         | reset zoom -> { actionName: "zoomReset" };
 
 // ===== Read Page =====
-<ReadPage> = read (the)? page -> { actionName: "readPageContent", parameters: {} }
-             | read (the)? page (out loud)? -> { actionName: "readPageContent", parameters: {} }
-             | stop reading -> { actionName: "stopReadPageContent", parameters: {} };
+<ReadPage> = read (the)? page -> { actionName: "readPageContent" }
+             | read (the)? page (out loud)? -> { actionName: "readPageContent" }
+             | stop reading -> { actionName: "stopReadPageContent" };
 
 // ===== Screenshot =====
-<Screenshot> = take (a)? screenshot -> { actionName: "captureScreenshot", parameters: {} }
-               | capture (the)? screen -> { actionName: "captureScreenshot", parameters: {} }
-               | screenshot -> { actionName: "captureScreenshot", parameters: {} };
+<Screenshot> = take (a)? screenshot -> { actionName: "captureScreenshot" }
+               | capture (the)? screen -> { actionName: "captureScreenshot" }
+               | screenshot -> { actionName: "captureScreenshot" };

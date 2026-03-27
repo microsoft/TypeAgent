@@ -1,31 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    ActionResult,
-    AppAgent,
-    AppAgentManifest,
-    TypeAgentAction,
-} from "@typeagent/agent-sdk";
 import { WebAgent, WebAgentContext } from "../WebAgentContext";
 import {
     ContinuationState,
     continuationStorage,
-    registrationStorage,
 } from "../../contentScript/webAgentStorage";
 import { createBrowserAdapter } from "./webFlowBrowserAdapter";
 import { getWebFlowsForDomain, WebFlowDefinitionTransport } from "./webFlowRpc";
 import { isWebFlowRefreshMessage } from "../../../common/webAgentMessageTypes.mjs";
-
-declare global {
-    interface Window {
-        registerTypeAgent?: (
-            name: string,
-            manifest: AppAgentManifest,
-            agent: AppAgent,
-        ) => Promise<void>;
-    }
-}
 
 interface WebFlowParameter {
     type: "string" | "number" | "boolean";
@@ -50,13 +33,22 @@ interface WebFlowExecutionResult {
     };
 }
 
+/**
+ * WebFlowAgent runs in the browser extension's MAIN world.
+ *
+ * With the global schema migration, grammar matching and action dispatch are
+ * handled server-side via getDynamicGrammar/getDynamicSchema on the browser
+ * agent. This agent now only handles:
+ * - Caching flows locally for continuation support
+ * - Listening for server refresh messages to update the local cache
+ * - Executing continuations (multi-page flows) in the MAIN world
+ */
 export class WebFlowAgent implements WebAgent {
     name = "webflow";
     urlPatterns = [/^https?:\/\//];
 
     private context: WebAgentContext | null = null;
     private flowsByName: Map<string, WebFlowDefinitionTransport> = new Map();
-    private registeredHost: string | null = null;
     private cachedLastUpdated: string | null = null;
     private refreshListenerAttached = false;
 
@@ -84,41 +76,8 @@ export class WebFlowAgent implements WebAgent {
             return;
         }
 
-        // If already registered for this host, check cache freshness
-        if (this.registeredHost === hostname && this.cachedLastUpdated) {
-            const response = await getWebFlowsForDomain(
-                hostname,
-                this.cachedLastUpdated,
-            );
-            if (response.notModified) {
-                console.log(`[WebFlowAgent] Cache still valid for ${hostname}`);
-                return;
-            }
-            // Cache is stale — fall through to re-register
-            console.log(
-                `[WebFlowAgent] Cache stale for ${hostname}, re-fetching`,
-            );
-            await this.registerForHost(
-                hostname,
-                response.flows,
-                response.lastUpdated,
-            );
-            return;
-        }
-
-        await context.awaitPageReady({ stabilityMs: 300, timeoutMs: 2000 });
-
-        const response = await getWebFlowsForDomain(hostname);
-        if (response.flows.length === 0) {
-            console.log(`[WebFlowAgent] No flows found for ${hostname}`);
-            return;
-        }
-
-        await this.registerForHost(
-            hostname,
-            response.flows,
-            response.lastUpdated,
-        );
+        // Cache flows locally for continuation support
+        await this.fetchAndCacheFlows(hostname);
     }
 
     async handleContinuation(
@@ -134,52 +93,30 @@ export class WebFlowAgent implements WebAgent {
 
         this.context = context;
         const data = continuation.data as WebFlowContinuationData;
-        const flow = this.flowsByName.get(data.flowName);
+        let flow = this.flowsByName.get(data.flowName);
 
         if (!flow) {
             // Flow not loaded yet — try fetching for current domain
             const url = context.getCurrentUrl();
             try {
                 const hostname = new URL(url).hostname;
-                const response = await getWebFlowsForDomain(hostname);
-                if (response.flows.length > 0) {
-                    this.flowsByName = new Map(
-                        response.flows.map((f) => [f.name, f]),
-                    );
-                }
+                await this.fetchAndCacheFlows(hostname);
             } catch {
                 // ignore
             }
+            flow = this.flowsByName.get(data.flowName);
+        }
 
-            const retryFlow = this.flowsByName.get(data.flowName);
-            if (!retryFlow) {
-                console.error(
-                    `[WebFlowAgent] Continuation flow not found: ${data.flowName}`,
-                );
-                await context.notify(
-                    `Flow "${data.flowName}" not found for continuation`,
-                );
-                return;
-            }
-
-            await this.executeContinuationStep(
-                retryFlow,
-                data,
-                continuation,
-                context,
+        if (!flow) {
+            console.error(
+                `[WebFlowAgent] Continuation flow not found: ${data.flowName}`,
+            );
+            await context.notify(
+                `Flow "${data.flowName}" not found for continuation`,
             );
             return;
         }
 
-        await this.executeContinuationStep(flow, data, continuation, context);
-    }
-
-    private async executeContinuationStep(
-        flow: WebFlowDefinitionTransport,
-        data: WebFlowContinuationData,
-        continuation: ContinuationState,
-        context: WebAgentContext,
-    ): Promise<void> {
         console.log(
             `[WebFlowAgent] Handling continuation: flow=${data.flowName}, step=${continuation.step}`,
         );
@@ -215,10 +152,6 @@ export class WebFlowAgent implements WebAgent {
         }
     }
 
-    /**
-     * Called by the refresh event listener when the server signals
-     * that flows have changed (e.g., after discovery or recording).
-     */
     private async handleRefresh(): Promise<void> {
         if (!this.context) return;
 
@@ -230,119 +163,27 @@ export class WebFlowAgent implements WebAgent {
             return;
         }
 
-        console.log(`[WebFlowAgent] Refreshing flows for ${hostname}`);
-
-        // Force re-fetch (no ifModifiedSince)
-        const response = await getWebFlowsForDomain(hostname);
-        if (response.flows.length === 0 && this.registeredHost === hostname) {
-            console.log(
-                `[WebFlowAgent] No flows after refresh for ${hostname}`,
-            );
-            return;
-        }
-
-        await this.registerForHost(
-            hostname,
-            response.flows,
-            response.lastUpdated,
-        );
+        console.log(`[WebFlowAgent] Refreshing flow cache for ${hostname}`);
+        await this.fetchAndCacheFlows(hostname);
     }
 
-    private async registerForHost(
-        hostname: string,
-        flows: WebFlowDefinitionTransport[],
-        lastUpdated: string,
-    ): Promise<void> {
-        this.flowsByName = new Map(flows.map((f) => [f.name, f]));
-        this.cachedLastUpdated = lastUpdated;
-
-        const schema = buildSchemaFromFlows(flows);
-        const agentName = hostname.replace(/\./g, "_");
-
-        const manifest: AppAgentManifest = {
-            emojiChar: "🔄",
-            description: `WebFlow actions for ${hostname}`,
-            schema: {
-                description: `Dynamic actions for ${hostname}`,
-                schemaType: "DynamicUserPageActions",
-                schemaFile: { content: schema, format: "ts" },
-            },
-        };
-
-        if (!window.registerTypeAgent) {
-            console.error("[WebFlowAgent] registerTypeAgent not available");
-            return;
-        }
-
+    private async fetchAndCacheFlows(hostname: string): Promise<void> {
         try {
+            const response = await getWebFlowsForDomain(
+                hostname,
+                this.cachedLastUpdated ?? undefined,
+            );
+            if (response.notModified) {
+                return;
+            }
+            this.flowsByName = new Map(response.flows.map((f) => [f.name, f]));
+            this.cachedLastUpdated = response.lastUpdated;
             console.log(
-                `[WebFlowAgent] Registering ${agentName} with ${flows.length} flows`,
+                `[WebFlowAgent] Cached ${response.flows.length} flows for ${hostname}`,
             );
-            await window.registerTypeAgent(
-                agentName,
-                manifest,
-                this.createAppAgent(),
-            );
-            registrationStorage.markRegistered(agentName);
-            this.registeredHost = hostname;
-            console.log(`[WebFlowAgent] Registered ${agentName}`);
         } catch (error) {
-            console.error("[WebFlowAgent] Registration failed:", error);
+            console.error("[WebFlowAgent] Failed to fetch flows:", error);
         }
-    }
-
-    private createAppAgent(): AppAgent {
-        const agent = this;
-        return {
-            async executeAction(
-                action: TypeAgentAction<any>,
-            ): Promise<ActionResult | undefined> {
-                console.log(
-                    `[WebFlowAgent] executeAction: ${action.actionName}`,
-                );
-                const flow = agent.flowsByName.get(action.actionName);
-                if (!flow) {
-                    return {
-                        entities: [],
-                        displayContent: `Unknown action: ${action.actionName}`,
-                    };
-                }
-
-                try {
-                    const params = action.parameters ?? {};
-                    const result =
-                        (await agent.executeFlow(flow, params)) ?? {};
-
-                    if (result.continuation) {
-                        await agent.storeContinuation(
-                            flow.name,
-                            params,
-                            result.continuation.step,
-                            result.continuation.data ?? {},
-                        );
-                        console.log(
-                            `[WebFlowAgent] Stored continuation: step=${result.continuation.step}`,
-                        );
-                    }
-
-                    return {
-                        entities: [],
-                        displayContent: result.message ?? "Done",
-                    };
-                } catch (error) {
-                    const msg =
-                        error instanceof Error ? error.message : String(error);
-                    console.error(
-                        `[WebFlowAgent] Flow execution failed:`,
-                        error,
-                    );
-                    return {
-                        entities: [],
-                        displayContent: `Error: ${msg}`,
-                    };
-                }
-            },
-        };
     }
 
     private async storeContinuation(
@@ -415,37 +256,4 @@ function resolveParams(
         }
     }
     return resolved;
-}
-
-function buildSchemaFromFlows(flows: WebFlowDefinitionTransport[]): string {
-    const types = flows.map((flow) => {
-        const paramEntries = Object.entries(flow.parameters);
-        const typeName = flow.name.charAt(0).toUpperCase() + flow.name.slice(1);
-
-        if (paramEntries.length === 0) {
-            return `// ${flow.description}\nexport type ${typeName} = {\n    actionName: "${flow.name}";\n};`;
-        }
-
-        const paramLines = paramEntries
-            .map(([k, v]) => {
-                const optional = v.required ? "" : "?";
-                const comment =
-                    v.valueOptions && v.valueOptions.length > 0
-                        ? ` // Valid options: ${v.valueOptions.join(", ")}`
-                        : "";
-                return `        ${k}${optional}: ${v.type};${comment}`;
-            })
-            .join("\n");
-
-        return `// ${flow.description}\nexport type ${typeName} = {\n    actionName: "${flow.name}";\n    parameters: {\n${paramLines}\n    };\n};`;
-    });
-
-    const unionMembers = flows
-        .map((f) => f.name.charAt(0).toUpperCase() + f.name.slice(1))
-        .join("\n    | ");
-
-    return (
-        types.join("\n\n") +
-        `\n\nexport type DynamicUserPageActions =\n    | ${unionMembers};\n`
-    );
 }

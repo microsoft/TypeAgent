@@ -69,9 +69,16 @@ function createModel(modelName?: string): TypeChatLanguageModel {
  * Uses an LLM to parameterize concrete values, generalize the step sequence,
  * add robustness, and produce grammar patterns.
  */
+export interface ExistingFlowContext {
+    name: string;
+    description: string;
+    parameters: string[];
+}
+
 export async function generateWebFlowFromTrace(
     trace: BrowserReasoningTrace,
     options: ScriptGenerationOptions = {},
+    existingFlows?: ExistingFlowContext[],
 ): Promise<WebFlowDefinition | null> {
     try {
         const schemas = await getSchemas();
@@ -80,6 +87,7 @@ export async function generateWebFlowFromTrace(
             options,
             schemas.browserApiSchema,
             schemas.generationSchema,
+            existingFlows,
         );
 
         const model = createModel(options.model);
@@ -170,6 +178,7 @@ function buildScriptGenerationPrompt(
     options: ScriptGenerationOptions,
     browserApiSchema: string,
     generationSchema: string,
+    existingFlows?: ExistingFlowContext[],
 ): string {
     const stepsDescription = trace.steps
         .map((step) => {
@@ -202,7 +211,16 @@ EXECUTION TRACE:
 ${stepsDescription}
 ${pageHtmlSection}
 
-Generate a WebFlowGenerationResult that turns this trace into a reusable, parameterized script.
+${
+    existingFlows?.length
+        ? `EXISTING FLOWS for this domain (check for overlap before creating a new flow):
+${existingFlows.map((f) => `  - ${f.name}: ${f.description} [params: ${f.parameters.join(", ") || "none"}]`).join("\n")}
+
+If your recording overlaps with an existing flow (same purpose, similar parameters), generate a SUPERSET
+flow that includes ALL parameters from both the existing flow and the new recording. Use the existing
+flow's name. Any new parameters should be optional with sensible defaults.\n`
+        : ""
+}Generate a WebFlowGenerationResult that turns this trace into a reusable, parameterized script.
 
 The script's \`browser\` parameter implements the following TypeScript interface. Use ONLY these methods in the generated script:
 
