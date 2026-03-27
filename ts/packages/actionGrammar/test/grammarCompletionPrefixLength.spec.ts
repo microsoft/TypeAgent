@@ -2952,22 +2952,33 @@ describeForEachCompletion(
                     });
                 });
 
-                it("backward on 'play hello right' finds partial keyword 'now'", () => {
+                it("backward on 'play hello right' backs up to wildcard", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play hello right",
                         undefined,
                         "backward",
                     );
-                    // The wildcard absorbed "hello right", but
-                    // findPartialKeywordInWildcard sees "right" as the
-                    // first word of the keyword "right now" and offers
-                    // "now" at P=16 (closest to cursor principle).
+                    // Full keyword word "right" at EOI — the partial
+                    // keyword position equals state.index, so backward
+                    // falls through to collectBackwardCandidate which
+                    // backs up to the wildcard start.
                     expectMetadata(result, {
-                        completions: ["now"],
-                        matchedPrefixLength: 16,
-                        openWildcard: true,
+                        completions: [],
+                        matchedPrefixLength: 4,
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
                         directionSensitive: true,
+                        openWildcard: false,
+                        properties: [
+                            {
+                                match: {
+                                    actionName: "play",
+                                    parameters: {},
+                                },
+                                propertyNames: ["parameters.name"],
+                            },
+                        ],
                     });
                 });
             });

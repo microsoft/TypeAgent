@@ -146,10 +146,12 @@ function matchKeywordWordsFrom(
         }
     }
 
+    // Partial prefix of the next word, or separator-only remainder
+    // after a fully matched word (textToCheck="" ⇒ consumed-to-EOI).
     if (
-        textToCheck.length > 0 &&
         textToCheck.length < word.length &&
-        word.toLowerCase().startsWith(textToCheck.toLowerCase())
+        word.toLowerCase().startsWith(textToCheck.toLowerCase()) &&
+        (textToCheck.length > 0 || matchedWords > 0)
     ) {
         return {
             position: prefix.length - textToCheck.length,
@@ -868,9 +870,8 @@ export function matchGrammarCompletion(
             // directions agree, the state is not direction-sensitive.
             // When the partial keyword position equals state.index
             // (the wildcard absorbed a complete first keyword word),
-            // forward would NOT use it (tryPartialStringMatch gives
-            // the first keyword word instead), so the directions
-            // differ and it IS direction-sensitive.
+            // forward uses it but backward falls through to
+            // collectBackwardCandidate, so the directions differ.
             let partialKeywordAgreesWithForward = false;
 
             if (direction === "backward" && hasPartToReconsider) {
@@ -891,20 +892,21 @@ export function matchGrammarCompletion(
                         nextPart,
                         state.spacingMode,
                     );
-                    if (partialResult !== undefined) {
+                    if (
+                        partialResult !== undefined &&
+                        partialResult.position < state.index
+                    ) {
                         collectStringCandidate(
                             state,
                             partialResult.position,
                             partialResult.completionWord,
                             true,
                             true,
-                            partialResult.position < state.index,
+                            true,
                         );
                         backwardEmitted = true;
                         partialKeywordForThisState = true;
-                        if (partialResult.position < state.index) {
-                            partialKeywordAgreesWithForward = true;
-                        }
+                        partialKeywordAgreesWithForward = true;
                     } else {
                         collectBackwardCandidate(
                             preFinalizeState ?? state,
@@ -981,7 +983,7 @@ export function matchGrammarCompletion(
                         let partialKeywordForThisState = false;
                         if (
                             partialResult !== undefined &&
-                            partialResult.position < state.index
+                            partialResult.position <= state.index
                         ) {
                             if (
                                 forwardPartialKeyword === undefined ||
@@ -995,7 +997,15 @@ export function matchGrammarCompletion(
                                     spacingMode: state.spacingMode,
                                 };
                             }
-                            partialKeywordAgreesWithForward = true;
+                            // Only mark as agreeing when the partial
+                            // keyword is strictly inside the wildcard.
+                            // At position === state.index (full keyword
+                            // word at EOI), backward rejects the result
+                            // and falls through to collectBackwardCandidate,
+                            // so the directions differ.
+                            if (partialResult.position < state.index) {
+                                partialKeywordAgreesWithForward = true;
+                            }
                             partialKeywordForThisState = true;
                         }
                         // Defer to Phase B.  Skip when
@@ -1334,7 +1344,7 @@ export function matchGrammarCompletion(
     //     Preserve them and add EOI instantiations alongside.
     const hasPartialKeyword =
         forwardPartialKeyword !== undefined &&
-        forwardPartialKeyword.position < prefix.length;
+        forwardPartialKeyword.position <= prefix.length;
     if (
         direction !== "backward" &&
         (forwardEoiCandidates.length > 0 ||
@@ -1357,10 +1367,10 @@ export function matchGrammarCompletion(
             closedSet = true;
             separatorMode = undefined;
             openWildcard = false;
-            // At the partial keyword anchor both directions agree.
-            // When displacing to prefix.length the wildcard can be
-            // reconsidered → directions differ.
-            directionSensitive = !hasPartialKeyword;
+            // At the partial keyword anchor (< prefix.length) both
+            // directions agree.  At prefix.length (displacement or
+            // full keyword word at EOI) backward may differ.
+            directionSensitive = anchor >= prefix.length;
         }
 
         // Wildcard boundary is ambiguous only when Phase B is

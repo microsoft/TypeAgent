@@ -1933,31 +1933,24 @@ describeForEachCompletion(
                 });
             });
 
-            // NOTE: Expected behavior under exhaustive matching.
-            // The wildcard greedily absorbs "foo hello," including the
-            // first keyword word.  matchStringPartWithWildcard requires
-            // ALL segments ["hello,", "world"] to match at once, so the
-            // partial match (only "hello," present) is not detected.
-            // The code falls to Category 2 which offers "hello," (first
-            // unmatched word) instead of "world" (second word).
-            //
-            // TODO: A planned non-exhaustive match mode that stops
-            // exploring longer wildcard alternatives once a full match
-            // is found would allow this to return ["world"] instead.
-            it("forward on 'foo hello,' — exhaustive match offers 'hello,' (longer wildcard absorbs keyword)", () => {
+            // The wildcard absorbs all input (including "hello,") via
+            // finalizeState.  findPartialKeywordInWildcard detects the
+            // full first keyword word "hello," at EOI and returns the
+            // next keyword word "world" as the completion.  Forward
+            // accepts this via the <= state.index gate.
+            it("forward on 'foo hello,' — full first keyword word at EOI offers 'world'", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "foo hello,",
                     undefined,
                     "forward",
                 );
-                // Under exhaustive matching: ["hello,"] (wildcard absorbed all input)
-                // Under non-exhaustive matching: would be ["world"]
-                // Wildcard absorbs all input → mpl = input length
-                // requiresSeparator(",", "h", auto) → comma is punct → "optional"
-                // Wildcard to reconsider → direction-sensitive
+                // "hello," fully matched as keyword word 0 → next word "world"
+                // Wildcard absorbs all input → openWildcard
+                // requiresSeparator(",", "w", auto) → comma is punct → "optional"
+                // Backward would differ (backs up past wildcard) → direction-sensitive
                 expectMetadata(result, {
-                    completions: ["hello,"],
+                    completions: ["world"],
                     matchedPrefixLength: 10,
                     separatorMode: "optional",
                     closedSet: true,
@@ -2836,16 +2829,15 @@ describeForEachCompletion(
 
             it("forward on 'foo ,world' offers 'done' after matched keyword", () => {
                 const result = matchGrammarCompletion(grammar, "foo ,world");
-                // Wildcard captures "foo", ",world" matched → next is "done"
-                // But under exhaustive matching, wildcard may also
-                // absorb ",world" → still offers ",world"
-                // Wildcard absorbs all input → mpl = input length
-                // requiresSeparator("d", ",", auto) → "optional"
+                // ",world" fully matched as keyword word 0 → next word "done"
+                // findPartialKeywordInWildcard detects full keyword word at EOI
+                // Wildcard absorbs all input → openWildcard
+                // requiresSeparator("d", "d", auto) → "spacePunctuation"
+                // Backward would differ → direction-sensitive
                 expectMetadata(result, {
-                    completions: [",world"],
-                    sortCompletions: true,
+                    completions: ["done"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optional",
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -2878,23 +2870,30 @@ describeForEachCompletion(
                 });
             });
 
-            it("backward on 'foo ,' finds full match of ',' → offers 'world'", () => {
+            it("backward on 'foo ,' backs up to wildcard", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "foo ,",
                     undefined,
                     "backward",
                 );
-                // "," is a full match of the first word → next word is "world"
-                // Full match of "," → next word "world" offered at mpl=5
+                // "," fully matched as keyword word 0 at EOI —
+                // the partial keyword position equals state.index,
+                // so backward falls through to
+                // collectBackwardCandidate which backs up to the
+                // wildcard start.
                 expectMetadata(result, {
-                    completions: ["world"],
-                    matchedPrefixLength: 5,
+                    completions: [],
+                    matchedPrefixLength: 0,
                     separatorMode: "optional",
-                    closedSet: true,
-                    directionSensitive: true,
-                    openWildcard: true,
-                    properties: [],
+                    closedSet: false,
+                    directionSensitive: false,
+                    openWildcard: false,
+                    properties: [
+                        {
+                            propertyNames: [""],
+                        },
+                    ],
                 });
             });
         });
