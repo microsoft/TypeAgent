@@ -24,9 +24,7 @@ import {
     ScreenshotToolbar,
     ScreenshotAction,
 } from "./components/ScreenshotToolbar";
-import {
-    AnnotationManager,
-} from "./core/annotationManager";
+import { AnnotationManager } from "./core/annotationManager";
 import { PDFJSHighlightManager } from "./core/pdfJSHighlightManager";
 
 import "./pdf-viewer.css";
@@ -401,8 +399,12 @@ export class TypeAgentPDFViewerApp {
                 type: "note",
                 selection,
                 content: noteData.content,
-                ...(noteData.blockquoteContent !== undefined && { blockquoteContent: noteData.blockquoteContent }),
-                ...(noteData.screenshotData !== undefined && { screenshotData: noteData.screenshotData }),
+                ...(noteData.blockquoteContent !== undefined && {
+                    blockquoteContent: noteData.blockquoteContent,
+                }),
+                ...(noteData.screenshotData !== undefined && {
+                    screenshotData: noteData.screenshotData,
+                }),
             });
             this.selectionManager?.clearSelection();
             console.log("✅ Note created successfully");
@@ -425,8 +427,12 @@ export class TypeAgentPDFViewerApp {
                 type: "question",
                 selection,
                 content,
-                ...(questionData.blockquoteContent !== undefined && { blockquoteContent: questionData.blockquoteContent }),
-                ...(questionData.screenshotData !== undefined && { screenshotData: questionData.screenshotData }),
+                ...(questionData.blockquoteContent !== undefined && {
+                    blockquoteContent: questionData.blockquoteContent,
+                }),
+                ...(questionData.screenshotData !== undefined && {
+                    screenshotData: questionData.screenshotData,
+                }),
             });
             this.selectionManager?.clearSelection();
             console.log(

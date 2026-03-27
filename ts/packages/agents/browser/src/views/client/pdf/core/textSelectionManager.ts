@@ -275,7 +275,8 @@ export class TextSelectionManager {
                 );
                 return pageAttr ? parseInt(pageAttr) : -1;
             }
-            element = ((element as Element).parentElement || element.parentNode) as Node;
+            element = ((element as Element).parentElement ||
+                element.parentNode) as Node;
         }
 
         return -1;

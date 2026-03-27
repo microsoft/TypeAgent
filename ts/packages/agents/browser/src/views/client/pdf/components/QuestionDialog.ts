@@ -401,10 +401,16 @@ export class QuestionDialog {
 
         const questionData: QuestionData = {
             question,
-            ...(this.currentSelection?.text !== undefined && { selectedText: this.currentSelection.text }),
-            ...(this.currentScreenshot ? { screenshotData: this.currentScreenshot } : {}),
+            ...(this.currentSelection?.text !== undefined && {
+                selectedText: this.currentSelection.text,
+            }),
+            ...(this.currentScreenshot
+                ? { screenshotData: this.currentScreenshot }
+                : {}),
             ...(context ? { context } : {}),
-            ...(this.currentSelection?.text !== undefined && { blockquoteContent: this.currentSelection.text }),
+            ...(this.currentSelection?.text !== undefined && {
+                blockquoteContent: this.currentSelection.text,
+            }),
         };
 
         try {

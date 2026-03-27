@@ -8,7 +8,10 @@ import {
     NavigateToPage,
 } from "./schema/userActionsPool.mjs";
 import { NavigationLink } from "./schema/pageComponents.mjs";
-import { BrowserActionContext, getCurrentPageScreenshot } from "../browserActions.mjs";
+import {
+    BrowserActionContext,
+    getCurrentPageScreenshot,
+} from "../browserActions.mjs";
 import { handleWebFlowAction } from "../webFlows/actionHandler.mjs";
 import registerDebug from "debug";
 
