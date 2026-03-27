@@ -360,4 +360,103 @@ describe("mergeCompletionResults", () => {
             expect(result!.closedSet).toBe(false);
         });
     });
+
+    describe("open wildcard at EOI — prefer anchored result", () => {
+        it("keeps shorter anchored result when longer is openWildcard at EOI", () => {
+            const anchored: CompletionResult = {
+                completions: ["by"],
+                matchedPrefixLength: 16,
+                openWildcard: true,
+            };
+            const eoi: CompletionResult = {
+                completions: ["track", "song"],
+                matchedPrefixLength: 17,
+                openWildcard: true,
+            };
+            // prefixLength=17: eoi is at EOI, anchored is inside input
+            const result = mergeCompletionResults(anchored, eoi, 17)!;
+            expect(result.completions).toEqual(["by"]);
+            expect(result.matchedPrefixLength).toBe(16);
+        });
+
+        it("keeps shorter anchored result regardless of argument order", () => {
+            const anchored: CompletionResult = {
+                completions: ["by"],
+                matchedPrefixLength: 16,
+                openWildcard: true,
+            };
+            const eoi: CompletionResult = {
+                completions: ["track", "song"],
+                matchedPrefixLength: 17,
+                openWildcard: true,
+            };
+            // Reversed argument order
+            const result = mergeCompletionResults(eoi, anchored, 17)!;
+            expect(result.completions).toEqual(["by"]);
+            expect(result.matchedPrefixLength).toBe(16);
+        });
+
+        it("still prefers longer when both are below EOI", () => {
+            const shorter: CompletionResult = {
+                completions: ["a"],
+                matchedPrefixLength: 5,
+                openWildcard: true,
+            };
+            const longer: CompletionResult = {
+                completions: ["b"],
+                matchedPrefixLength: 10,
+                openWildcard: true,
+            };
+            const result = mergeCompletionResults(shorter, longer, 20)!;
+            expect(result.completions).toEqual(["b"]);
+            expect(result.matchedPrefixLength).toBe(10);
+        });
+
+        it("still prefers longer when longer is at EOI but shorter has no completions", () => {
+            const shorter: CompletionResult = {
+                completions: [],
+                matchedPrefixLength: 0,
+            };
+            const eoi: CompletionResult = {
+                completions: ["track"],
+                matchedPrefixLength: 17,
+                openWildcard: true,
+            };
+            const result = mergeCompletionResults(shorter, eoi, 17)!;
+            expect(result.completions).toEqual(["track"]);
+            expect(result.matchedPrefixLength).toBe(17);
+        });
+
+        it("still prefers longer when openWildcard is false", () => {
+            const anchored: CompletionResult = {
+                completions: ["by"],
+                matchedPrefixLength: 16,
+            };
+            const eoi: CompletionResult = {
+                completions: ["track"],
+                matchedPrefixLength: 17,
+                openWildcard: false,
+            };
+            const result = mergeCompletionResults(anchored, eoi, 17)!;
+            expect(result.completions).toEqual(["track"]);
+            expect(result.matchedPrefixLength).toBe(17);
+        });
+
+        it("falls back to normal merge when prefixLength is not provided", () => {
+            const anchored: CompletionResult = {
+                completions: ["by"],
+                matchedPrefixLength: 16,
+                openWildcard: true,
+            };
+            const eoi: CompletionResult = {
+                completions: ["track"],
+                matchedPrefixLength: 17,
+                openWildcard: true,
+            };
+            // No prefixLength — normal "longer wins"
+            const result = mergeCompletionResults(anchored, eoi)!;
+            expect(result.completions).toEqual(["track"]);
+            expect(result.matchedPrefixLength).toBe(17);
+        });
+    });
 });

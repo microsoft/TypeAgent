@@ -3273,7 +3273,7 @@ describeForEachCompletion(
                     sortCompletions: true,
                     matchedPrefixLength: 19,
                     openWildcard: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                 });
             });
 
@@ -3362,9 +3362,65 @@ describeForEachCompletion(
                     completions: ["by", "cut", "from", "one", "song", "track"],
                     sortCompletions: true,
                     matchedPrefixLength: 19,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                 });
+            });
+        });
+        describe("full player grammar — play This Train b", () => {
+            // Exact replica of the real playerSchema.agr grammar
+            // (minus import/type annotation).  Verifies that the
+            // partial keyword recovery works end-to-end with all
+            // competing alternatives.
+            const g = [
+                `import { Ordinal, Cardinal };`,
+                `<Start> = <Pause> | <Resume> | <Next> | <PlayCommand> | <SelectDevice>;`,
+                `<Pause> = pause -> { actionName: "pause" }`,
+                `       | pause music -> { actionName: "pause" }`,
+                `       | pause the music -> { actionName: "pause" };`,
+                `<Resume> = resume -> { actionName: "resume" }`,
+                `         | resume music -> { actionName: "resume" }`,
+                `         | resume the music -> { actionName: "resume" };`,
+                `<Next> = next -> { actionName: "next" }`,
+                `       | skip -> { actionName: "next" }`,
+                `       | skip <TrackTerm> -> { actionName: "next" };`,
+                `<PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>;`,
+                `<PlayTrackNumberCommand> = play (the)? $(n:Ordinal) (<Item>)? -> { actionName: "playFromCurrentTrackList", parameters: { trackNumber: n } }`,
+                `| play track $(n:Cardinal) -> { actionName: "playFromCurrentTrackList", parameters: { trackNumber: n } }`,
+                `| play track #$(n:number) -> { actionName: "playFromCurrentTrackList", parameters: { trackNumber: n } };`,
+                `<Item> = one | cut | <TrackTerm>;`,
+                `<TrackTerm> = track | song;`,
+                `<TrackPhrase> = $(trackName:<TrackName>) -> trackName`,
+                `             | the <TrackTerm> $(trackName:<TrackName>) -> trackName`,
+                `             | <TrackTerm> $(trackName:<TrackName>) -> trackName`,
+                `             | $(trackName:<TrackName>) <TrackTerm> -> trackName;`,
+                `<PlaySpecificTrack> = play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } }`,
+                `| play $(trackName:<TrackPhrase>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName, albumName } }`,
+                `| play $(trackName:<TrackPhrase>) by $(artist:<ArtistName>) from (the)? album $(albumName:<AlbumName>) -> { actionName: "playTrack", parameters: { trackName, artists: [artist], albumName } };`,
+                `<SelectDevice> = select $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }`,
+                `| select (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } }`,
+                `| switch to $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }`,
+                `| switch to (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } }`,
+                `| use (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } }`,
+                `| use device $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }`,
+                `| play on $(deviceName:<DeviceName>) -> { actionName: "selectDevice", parameters: { deviceName } }`,
+                `| play on (the)? $(deviceName:<DeviceName>) device -> { actionName: "selectDevice", parameters: { deviceName } };`,
+                `<TrackName> = $(x:wildcard);`,
+                `<ArtistName> = $(x:wildcard);`,
+                `<AlbumName> = $(x:wildcard);`,
+                `<DeviceName> = $(x:wildcard);`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("forward on 'play This Train b' anchors at partial keyword", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play This Train b",
+                    undefined,
+                    "forward",
+                );
+                expect(result.completions).toContain("by");
+                expect(result.matchedPrefixLength).toBe(16);
             });
         });
     },

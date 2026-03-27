@@ -413,7 +413,11 @@ export class ConstructionStoreImpl implements ConstructionStore {
             direction,
         );
 
-        return mergeCompletionResults(cacheCompletion, builtInCompletion);
+        return mergeCompletionResults(
+            cacheCompletion,
+            builtInCompletion,
+            requestPrefix.length,
+        );
     }
 
     public async prune(filter: (namespaceKey: string) => boolean) {

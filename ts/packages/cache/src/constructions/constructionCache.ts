@@ -103,10 +103,28 @@ export type CompletionResult = {
     openWildcard?: boolean | undefined;
 };
 
+/** The matched prefix reached end-of-input via an open wildcard. */
+export function isEoiWildcard(
+    matchedLen: number,
+    prefixLength: number,
+    openWildcard: boolean | undefined,
+): boolean {
+    return matchedLen >= prefixLength && !!openWildcard;
+}
+
+/** The matched prefix stops before end-of-input (trailing text filters completions). */
+export function anchorsInsideInput(
+    matchedLen: number,
+    prefixLength: number,
+): boolean {
+    return matchedLen > 0 && matchedLen < prefixLength;
+}
+
 // Architecture: docs/architecture/completion.md — §2 Cache Layer
 export function mergeCompletionResults(
     first: CompletionResult | undefined,
     second: CompletionResult | undefined,
+    prefixLength?: number,
 ): CompletionResult | undefined {
     if (first === undefined) {
         return second;
@@ -117,12 +135,32 @@ export function mergeCompletionResults(
     // Eagerly discard shorter-prefix completions — consistent with the
     // grammar matcher's approach.  Only the source(s) with the longest
     // matchedPrefixLength contribute completions.
+    //
+    // Exception: when the longer result is at end-of-input with an open
+    // wildcard (the wildcard absorbed all remaining text), a shorter
+    // result that anchors inside the input is more informative — the
+    // trailing text acts as a filter for the shorter result's
+    // completions.  In that case, keep the shorter result.
     const firstLen = first.matchedPrefixLength ?? 0;
     const secondLen = second.matchedPrefixLength ?? 0;
     if (firstLen > secondLen) {
+        if (
+            prefixLength !== undefined &&
+            isEoiWildcard(firstLen, prefixLength, first.openWildcard) &&
+            anchorsInsideInput(secondLen, prefixLength)
+        ) {
+            return second;
+        }
         return first;
     }
     if (secondLen > firstLen) {
+        if (
+            prefixLength !== undefined &&
+            isEoiWildcard(secondLen, prefixLength, second.openWildcard) &&
+            anchorsInsideInput(firstLen, prefixLength)
+        ) {
+            return first;
+        }
         return second;
     }
     // Same prefix length — merge completions from both sources.

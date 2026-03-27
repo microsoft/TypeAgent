@@ -1093,10 +1093,10 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play Never b");
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    matchedPrefixLength: 11,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1114,7 +1114,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 11,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1127,10 +1127,10 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 23,
-                    separatorMode: "spacePunctuation",
+                    matchedPrefixLength: 22,
+                    separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1148,7 +1148,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 22,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1173,7 +1173,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 11,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1209,7 +1209,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 18,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1227,7 +1227,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 20,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1270,7 +1270,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 9,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1288,7 +1288,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 9,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1306,7 +1306,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 13,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: true,
+                    directionSensitive: false,
                     openWildcard: true,
                     properties: [],
                 });
