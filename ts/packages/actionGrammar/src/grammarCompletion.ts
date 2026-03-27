@@ -366,7 +366,7 @@ function tryPartialStringMatch(
     | {
           consumedLength: number;
           remainingText: string;
-          directionSensitive: boolean;
+          couldBackUp: boolean;
       }
     | undefined {
     const words = part.value;
@@ -388,7 +388,7 @@ function tryPartialStringMatch(
         return {
             consumedLength: prevEndIndex,
             remainingText: words[matchedWords - 1],
-            directionSensitive: true,
+            couldBackUp: true,
         };
     }
     // Forward (default), or backward with no words fully matched
@@ -401,7 +401,7 @@ function tryPartialStringMatch(
     return {
         consumedLength: endIndex,
         remainingText: words[matchedWords],
-        directionSensitive: couldBackUp,
+        couldBackUp,
     };
 }
 
@@ -611,7 +611,6 @@ export function matchGrammarCompletion(
     //  • Global string deduplication via Set.
     //  • Range candidate gating (only under retrigger conditions).
     //  • Trailing-separator advancement (forward only).
-    //  • directionSensitive recomputation for backed-up positions.
     const fixedCandidates: FixedCandidate[] = [];
     const rangeCandidates: RangeCandidate[] = [];
     // Forward partial keyword: see ForwardPartialKeywordCandidate.
@@ -640,22 +639,11 @@ export function matchGrammarCompletion(
     // whitespace (which breaks for CJK and other non-space scripts).
     let maxPrefixLength = minPrefixLength ?? 0;
 
-    // Whether direction influenced the accumulated results.  Reset
-    // whenever maxPrefixLength advances (old candidates discarded).
-    let directionSensitive = false;
-
     // Whether backward actually collected a backed-up candidate (via
     // collectBackwardCandidate or findPartialKeywordInWildcard).  When
     // false, backward fell through to forward behavior — range
-    // candidate processing, the trailing-separator-advancement guard,
-    // and the directionSensitive override are all skipped so the
-    // result is identical to forward.
-    //
-    // Invariant: these three post-loop behaviors always coincide
-    // because they all depend on the same condition — backward
-    // produced a backed-up position different from forward.  When
-    // backward falls through (no backup), the result must be
-    // identical to forward, so none of the three should fire.
+    // candidate processing and the trailing-separator-advancement
+    // guard are skipped so the result is identical to forward.
     let backwardEmitted = false;
 
     // Helper: update maxPrefixLength.  When it increases, all previously
@@ -667,7 +655,6 @@ export function matchGrammarCompletion(
         if (prefixLength > maxPrefixLength) {
             maxPrefixLength = prefixLength;
             fixedCandidates.length = 0;
-            directionSensitive = false;
         }
     }
 
@@ -837,8 +824,7 @@ export function matchGrammarCompletion(
                 ) {
                     // Category 1 is direction-agnostic — don't update
                     // backwardEmitted, which gates post-loop behaviors
-                    // (trailing-separator advancement,
-                    // directionSensitive recomputation).
+                    // (trailing-separator advancement).
                     // Return value intentionally ignored.
                     tryCollectBackwardCandidate(
                         preFinalizeState ?? state,
@@ -865,7 +851,6 @@ export function matchGrammarCompletion(
             // (the wildcard absorbed a complete first keyword word),
             // forward uses it but backward falls through to
             // collectBackwardCandidate, so the directions differ.
-            let partialKeywordAgreesWithForward = false;
 
             if (direction === "backward" && hasPartToReconsider) {
                 // When a wildcard absorbed text ending with a partial
@@ -899,7 +884,6 @@ export function matchGrammarCompletion(
                         );
                         backwardEmitted = true;
                         partialKeywordForThisState = true;
-                        partialKeywordAgreesWithForward = true;
                     } else {
                         backwardEmitted =
                             tryCollectBackwardCandidate(
@@ -950,13 +934,6 @@ export function matchGrammarCompletion(
                         });
                     }
                 }
-                // When findPartialKeywordInWildcard resolved this
-                // state AND the result backs up into the wildcard
-                // (position < state.index), forward would also
-                // find the same result.  Skip directionSensitive.
-                if (!partialKeywordAgreesWithForward) {
-                    directionSensitive = true;
-                }
             } else {
                 debugCompletion(
                     `Completing ${nextPart.type} part ${state.name}`,
@@ -992,15 +969,6 @@ export function matchGrammarCompletion(
                                     spacingMode: state.spacingMode,
                                 };
                             }
-                            // Only mark as agreeing when the partial
-                            // keyword is strictly inside the wildcard.
-                            // At position === state.index (full keyword
-                            // word at EOI), backward rejects the result
-                            // and falls through to collectBackwardCandidate,
-                            // so the directions differ.
-                            if (partialResult.position < state.index) {
-                                partialKeywordAgreesWithForward = true;
-                            }
                             partialKeywordForThisState = true;
                         }
                         // Defer to Phase B.  Skip when
@@ -1032,8 +1000,7 @@ export function matchGrammarCompletion(
                                 partial.remainingText,
                                 savedPendingWildcard?.valueId !== undefined,
                             );
-                            if (partial.directionSensitive) {
-                                directionSensitive = true;
+                            if (partial.couldBackUp) {
                                 if (direction === "backward") {
                                     backwardEmitted = true;
                                 }
@@ -1044,9 +1011,6 @@ export function matchGrammarCompletion(
                     debugCompletion(
                         `No completion for ${nextPart.type} part (handled by Category 3a or matchState expansion)`,
                     );
-                }
-                if (hasPartToReconsider && !partialKeywordAgreesWithForward) {
-                    directionSensitive = true;
                 }
             }
             // Note: non-string next parts (wildcard, number, rules) in
@@ -1102,9 +1066,6 @@ export function matchGrammarCompletion(
                         pendingWildcard.start,
                     );
                 }
-                if (canReconsider3a) {
-                    directionSensitive = true;
-                }
             } else if (!matched) {
                 // --- Category 3b: Completion after consumed prefix ---
                 // The grammar stopped at a string part it could not
@@ -1134,8 +1095,7 @@ export function matchGrammarCompletion(
                             partial.consumedLength,
                             partial.remainingText,
                         );
-                        if (partial.directionSensitive) {
-                            directionSensitive = true;
+                        if (partial.couldBackUp) {
                             if (direction === "backward") {
                                 backwardEmitted = true;
                             }
@@ -1367,10 +1327,6 @@ export function matchGrammarCompletion(
             closedSet = true;
             separatorMode = undefined;
             openWildcard = false;
-            // At the partial keyword anchor (< prefix.length) both
-            // directions agree.  At prefix.length (displacement or
-            // full keyword word at EOI) backward may differ.
-            directionSensitive = anchor >= prefix.length;
         } else {
             debugCompletion(`Phase B: merge at prefix.length=${anchor}`);
         }
@@ -1390,6 +1346,13 @@ export function matchGrammarCompletion(
         if (hasPartialKeyword) {
             const fpk = forwardPartialKeyword!;
             completions.add(fpk.completionWord);
+            // When the partial keyword position is strictly inside
+            // the wildcard (< prefix.length), the backward path
+            // would also find it via findPartialKeywordInWildcard
+            // at the same position — the directions agree.
+            if (fpk.position < prefix.length) {
+                partialKeywordAgrees = true;
+            }
             const fpkNeedsSep = computeNeedsSep(
                 prefix,
                 anchor,
@@ -1457,83 +1420,47 @@ export function matchGrammarCompletion(
     // the backed-up position P is where backward intentionally wants
     // completions to anchor.  Advancing P past trailing separators
     // would move the anchor forward, defeating the backup.
+    let trailingSepAdvanced = false;
     if (!backwardEmitted) {
         const advanced = consumeTrailingSeparators(prefix, maxPrefixLength);
         if (advanced > maxPrefixLength) {
             maxPrefixLength = advanced;
             separatorMode = "optional";
+            trailingSepAdvanced = true;
         }
     }
 
+    // --- Compute directionSensitive ---
+    //
+    // Would completion(input[0..P], "backward") produce a different
+    // result than completion(input[0..P], "forward")?
+    //
+    // The separator is the universal "commit" mechanism.  Once
+    // input[0..P] ends with a separator after the last matched item,
+    // the position is committed and both directions agree.  Without
+    // that separator (including "none" mode where separators don't
+    // exist), backward has the option to reconsider.
+    //
+    // Decision tree:
+    //   openWildcard   → !partialKeywordAgrees (directions differ
+    //                     unless both found the same partial keyword)
+    //   P = minPrefixLength → false (nothing was matched beyond the
+    //                     caller's floor, backward has nothing to
+    //                     reconsider)
+    //   midPosition    → true (truncated input ends at keyword
+    //                     boundary with no trailing separator —
+    //                     backward always backs up)
+    //   P = prefix.length → !trailingSepAdvanced (a trailing separator
+    //                     committed the position → not sensitive;
+    //                     no trailing sep → sensitive)
     const midPosition = maxPrefixLength > 0 && maxPrefixLength < prefix.length;
-    const hasCompletions = completions.size > 0 || properties.length > 0;
-    // Recompute directionSensitive for the backed-up case.
-    if (direction === "backward") {
-        // During the main loop, directionSensitive is accumulated at
-        // the *full* prefix length — but when backward backed up, the
-        // effective completion position is maxPrefixLength (< prefix.
-        // length), and directionSensitive must reflect THAT position.
-        //
-        // At P > 0 at least one keyword was matched before the
-        // completion point, so hasPartToReconsider is true in a
-        // forward pass at P → directionSensitive.  At P = 0 nothing
-        // was matched → not direction-sensitive.
-        //
-        // Guard: if minPrefixLength filtered out all candidates, the
-        // result is empty regardless of direction → not sensitive.
-        //
-        // Skip when partialKeywordAgrees: both directions used
-        // findPartialKeywordInWildcard and produced the same result,
-        // so the per-state directionSensitive (already computed in the
-        // main loop) is correct — don't override it.
-        if (
-            backwardEmitted &&
-            maxPrefixLength < prefix.length &&
-            !partialKeywordAgrees
-        ) {
-            directionSensitive = maxPrefixLength > 0 && hasCompletions;
-        }
-
-        // When a partial keyword backup agrees with forward AND range
-        // candidates contributed additional completions at the same
-        // position, the forward path also anchored those competing
-        // candidates at the partial keyword position (via the forward
-        // EOI candidate instantiation in Phase B).  Both directions
-        // produced the same set at the same anchor → not
-        // direction-sensitive.
-        //
-        // Without this, per-state directionSensitive=true from the
-        // backward collectBackwardCandidate path survives the post-loop
-        // recomputation (which is skipped when partialKeywordAgrees)
-        // and incorrectly claims the directions differ.
-        if (partialKeywordAgrees && processRangeCandidates) {
-            directionSensitive = false;
-        }
-    }
-
-    // Position-local directionSensitive recomputation.
-    //
-    // The main loop accumulates directionSensitive against the *full*
-    // prefix — e.g. tryPartialStringMatch sees a separator after the
-    // keyword in the full input and reports couldBackUp=false.  But
-    // the correct semantics is position-local: would
-    // backward(input[0..P]) differ from forward(input[0..P])?
-    //
-    // At any 0 < P < prefix.length, the truncated input ends right
-    // at the keyword boundary.  backward(input[0..P]) always backs
-    // up because nextNonSeparatorIndex(input[0..P], endIndex) equals
-    // endIndex (end of string) — so the last keyword is uncommitted.
-    //
-    // After trailing-separator advancement P === prefix.length
-    // (separators consumed to end of input).  In that case
-    // backward(input[0..P]) matches the full input — no special
-    // recomputation needed.  The guard P < prefix.length excludes it.
-    //
-    // Skip when openWildcard — Phase B already computed the correct
-    // value for partial-keyword / EOI-wildcard anchors.
-    if (midPosition && !openWildcard && hasCompletions) {
-        directionSensitive = true;
-    }
+    const directionSensitive = openWildcard
+        ? !partialKeywordAgrees
+        : maxPrefixLength === (minPrefixLength ?? 0)
+          ? false
+          : midPosition
+            ? true
+            : !trailingSepAdvanced;
 
     const result: GrammarCompletionResult = {
         completions: [...completions],
