@@ -356,17 +356,24 @@ export function compileGrammar(
         );
     }
 
-    // Collect all imported .ts types used as variable types across all contexts
-    const usedImportedTypes = new Set<string>();
+    // TODO: Find a better way to discover entities instead of deriving them
+    // from import statements.
+    // Collect entity names from two sources:
+    // 1. Source-less imports: import { Ordinal, Cardinal };
+    // 2. Imported .ts types used as variable types across all contexts
+    const allEntities = new Set<string>();
+    for (const name of context.importedTypeNames.keys()) {
+        allEntities.add(name);
+    }
     for (const [, compileContext] of context.grammarFileMap) {
         for (const t of compileContext.usedImportedTypes) {
-            usedImportedTypes.add(t);
+            allEntities.add(t);
         }
     }
 
     const grammar: Grammar = { rules: grammarRules };
-    if (usedImportedTypes.size > 0) {
-        grammar.entities = Array.from(usedImportedTypes);
+    if (allEntities.size > 0) {
+        grammar.entities = Array.from(allEntities);
     }
     return grammar;
 }

@@ -316,7 +316,6 @@ export type ImportStatement = {
 
 // Grammar Parse Result (includes imports)
 export type GrammarParseResult = {
-    entities: string[]; // Entity types this grammar depends on (derived from source-less imports)
     imports: ImportStatement[]; // Import statements (includes source-less entity imports)
     definitions: RuleDefinition[];
     leadingComments?: Comment[] | undefined; // comments at top of file before first item
@@ -1459,15 +1458,7 @@ class GrammarRuleParser implements ValueExprParserContext {
                 "Expected rule definition or 'import' statement",
             );
         }
-        // Derive entity names from source-less imports
-        const entities: string[] = [];
-        for (const imp of imports) {
-            if (imp.source === undefined && imp.names !== "*") {
-                entities.push(...imp.names.map((n) => n.name));
-            }
-        }
         return {
-            entities,
             imports,
             definitions,
             leadingComments,
