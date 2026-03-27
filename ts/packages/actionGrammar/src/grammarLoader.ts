@@ -55,17 +55,6 @@ function parseAndCompileGrammar(
         parseResult.imports,
         options?.schemaLoader,
     );
-    if (errors.length === 0) {
-        // Merge entity names from source-less imports (parseResult.entities)
-        // with entity names discovered by the compiler (grammar.entities,
-        // which contains imported .ts types used as variable types).
-        const allEntities = grammar.entities
-            ? [...parseResult.entities, ...grammar.entities]
-            : parseResult.entities;
-        if (allEntities.length > 0) {
-            grammar.entities = allEntities;
-        }
-    }
     return grammar;
 }
 
