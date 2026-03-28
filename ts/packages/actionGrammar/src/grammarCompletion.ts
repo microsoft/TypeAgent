@@ -498,7 +498,6 @@ type FixedCandidate =
           spacingMode: CompiledSpacingMode;
           openWildcard: boolean;
           partialKeywordBackup: boolean;
-          partialKeywordAgrees: boolean;
       }
     | {
           kind: "property";
@@ -507,7 +506,6 @@ type FixedCandidate =
           spacingMode: CompiledSpacingMode;
           openWildcard: boolean;
           partialKeywordBackup: boolean;
-          partialKeywordAgrees: boolean;
       };
 
 type RangeCandidate =
@@ -677,7 +675,6 @@ export function matchGrammarCompletion(
             spacingMode: state.spacingMode,
             openWildcard: candidateOpenWildcard,
             partialKeywordBackup: false,
-            partialKeywordAgrees: false,
         });
     }
 
@@ -690,7 +687,6 @@ export function matchGrammarCompletion(
         completionText: string,
         candidateOpenWildcard: boolean = false,
         candidatePartialKeywordBackup: boolean = false,
-        candidatePartialKeywordAgrees: boolean = false,
     ): void {
         updateMaxPrefixLength(candidatePrefixLength);
         if (candidatePrefixLength !== maxPrefixLength) return;
@@ -700,7 +696,6 @@ export function matchGrammarCompletion(
             spacingMode: state.spacingMode,
             openWildcard: candidateOpenWildcard,
             partialKeywordBackup: candidatePartialKeywordBackup,
-            partialKeywordAgrees: candidatePartialKeywordAgrees,
         });
     }
 
@@ -880,7 +875,6 @@ export function matchGrammarCompletion(
                             partialResult.completionWord,
                             /* openWildcard */ true,
                             /* partialKeywordBackup */ true,
-                            /* partialKeywordAgrees */ true,
                         );
                         backwardEmitted = true;
                         partialKeywordForThisState = true;
@@ -1133,7 +1127,6 @@ export function matchGrammarCompletion(
     let closedSet = true;
     let openWildcard = false;
     let partialKeywordBackup = false;
-    let partialKeywordAgrees = false;
 
     for (const c of fixedCandidates) {
         if (c.openWildcard) {
@@ -1141,9 +1134,6 @@ export function matchGrammarCompletion(
         }
         if (c.partialKeywordBackup) {
             partialKeywordBackup = true;
-        }
-        if (c.partialKeywordAgrees) {
-            partialKeywordAgrees = true;
         }
         if (c.kind === "string") {
             completions.add(c.completionText);
@@ -1257,7 +1247,6 @@ export function matchGrammarCompletion(
                 );
                 if (completionProperty !== undefined) {
                     properties.push(completionProperty);
-                    closedSet = false;
                     const candidateNeedsSep = computeNeedsSep(
                         prefix,
                         maxPrefixLength,
@@ -1270,6 +1259,7 @@ export function matchGrammarCompletion(
                         c.spacingMode,
                     );
                     openWildcard = true;
+                    closedSet = false;
                 }
             }
         }
@@ -1346,13 +1336,6 @@ export function matchGrammarCompletion(
         if (hasPartialKeyword) {
             const fpk = forwardPartialKeyword!;
             completions.add(fpk.completionWord);
-            // When the partial keyword position is strictly inside
-            // the wildcard (< prefix.length), the backward path
-            // would also find it via findPartialKeywordInWildcard
-            // at the same position — the directions agree.
-            if (fpk.position < prefix.length) {
-                partialKeywordAgrees = true;
-            }
             const fpkNeedsSep = computeNeedsSep(
                 prefix,
                 anchor,
@@ -1442,8 +1425,8 @@ export function matchGrammarCompletion(
     // exist), backward has the option to reconsider.
     //
     // Decision tree:
-    //   openWildcard   → !partialKeywordAgrees (directions differ
-    //                     unless both found the same partial keyword)
+    //   openWildcard   → true (wildcard boundary is ambiguous;
+    //                     backward can always reconsider)
     //   P = minPrefixLength → false (nothing was matched beyond the
     //                     caller's floor, backward has nothing to
     //                     reconsider)
@@ -1455,7 +1438,7 @@ export function matchGrammarCompletion(
     //                     no trailing sep → sensitive)
     const midPosition = maxPrefixLength > 0 && maxPrefixLength < prefix.length;
     const directionSensitive = openWildcard
-        ? !partialKeywordAgrees
+        ? true
         : maxPrefixLength === (minPrefixLength ?? 0)
           ? false
           : midPosition

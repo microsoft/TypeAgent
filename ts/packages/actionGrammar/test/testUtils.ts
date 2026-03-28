@@ -279,17 +279,11 @@ function assertCrossDirectionInvariants(
         }
     }
 
-    // Cross-query invariants truncate the prefix to input[0..mpl]
-    // and requery.  This is structurally invalid when openWildcard is
-    // true: truncating to the ambiguous wildcard boundary removes the
-    // content that determined the anchor, producing a fundamentally
-    // different query.
-
     // #2: !forward.directionSensitive →
     //     forward === completion(input[0..fwd.mpl], "backward")
     //     When forward says direction doesn't matter at its position,
     //     backward on the truncated input should produce the same result.
-    if (!forward.directionSensitive && !forward.openWildcard) {
+    if (!forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
         const backwardAtFwd = baseFn(
             grammar,
@@ -315,7 +309,7 @@ function assertCrossDirectionInvariants(
     //     backward === completion(input[0..bwd.mpl], "forward")
     //     When backward says direction doesn't matter at its position,
     //     forward on the truncated input should produce the same result.
-    if (!backward.directionSensitive && !backward.openWildcard) {
+    if (!backward.directionSensitive) {
         const truncated = prefix.substring(0, bwdMpl);
         const forwardAtBwd = baseFn(
             grammar,
@@ -346,7 +340,7 @@ function assertCrossDirectionInvariants(
     //     completion(input[0..fwd.mpl], "backward").mpl < fwd.mpl
     //     When forward says direction matters, backward on the truncated
     //     input should back up to a shorter position.
-    if (forward.directionSensitive && fwdMpl > 0 && !forward.openWildcard) {
+    if (forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
         const backwardAtFwd = baseFn(
             grammar,
@@ -370,11 +364,7 @@ function assertCrossDirectionInvariants(
     //     When backward backs up to a different position and says direction
     //     matters there, forward on the truncated input should consume at
     //     least to backward's position (confirming it's reachable).
-    if (
-        fwdMpl !== bwdMpl &&
-        backward.directionSensitive &&
-        !backward.openWildcard
-    ) {
+    if (fwdMpl !== bwdMpl && backward.directionSensitive) {
         const truncated = prefix.substring(0, bwdMpl);
         const forwardAtBwd = baseFn(
             grammar,

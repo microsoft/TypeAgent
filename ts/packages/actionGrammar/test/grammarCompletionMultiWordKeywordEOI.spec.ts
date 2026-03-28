@@ -71,7 +71,7 @@ describeForEachCompletion(
                 matchedPrefixLength: 15,
                 separatorMode: "optional",
                 closedSet: true,
-                directionSensitive: false,
+                directionSensitive: true,
                 openWildcard: true,
                 properties: [],
             });
@@ -137,7 +137,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 18,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
@@ -176,7 +176,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 11,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
@@ -221,7 +221,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 18,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
