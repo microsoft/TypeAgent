@@ -167,11 +167,13 @@ function matchKeywordWordsFrom(
 // the partial keyword starts (i.e. the first non-separator character after
 // the last separator), or undefined if no partial keyword is found.
 //
-// Used in both directions:
-//   - Forward Category 2: determines the Phase B anchor position for
-//     deferred wildcard-at-EOI candidates (see forwardPartialKeyword).
-//   - Backward Category 2: offers the keyword at the partial keyword
-//     position instead of backing up to the wildcard start.
+// Used in both directions (called from Phase B1, not inline in
+// Phase A):
+//   - Forward: determines the Phase B1 anchor position for deferred
+//     wildcard-at-EOI candidates (see forwardPartialKeyword).
+//   - Backward: collects a fixed candidate at the partial keyword
+//     position, which may advance maxPrefixLength and clear weaker
+//     fallback candidates from Phase A.
 //
 // Handles both single-word and multi-word keyword parts.  For a keyword
 // like ["played", "by"], the function recognizes:
@@ -449,12 +451,11 @@ function tryPartialStringMatch(
  *      - Wildcard / number → property completion (handled elsewhere).
  *
  *    **Wildcard-at-EOI deferral:** when a pending wildcard absorbed all
- *    input to end-of-string, forward string-part candidates are *not*
- *    processed inline.  Instead they are saved to `forwardEoiCandidates`
- *    and instantiated in Phase B at the appropriate anchor position
- *    (partial keyword position or `prefix.length`).  This prevents
- *    wildcard-at-EOI states from pushing `maxPrefixLength` past
- *    more-meaningful candidates.  See the Phase B EOI block.
+ *    input to end-of-string, string-part candidates are *not* processed
+ *    inline.  Instead, lightweight `WildcardEoiDescriptor`s are saved
+ *    for Phase B1 to resolve via `findPartialKeywordInWildcard`.  This
+ *    prevents wildcard-at-EOI states from pushing `maxPrefixLength`
+ *    past more-meaningful candidates.  See the Phase B1/B2 blocks.
  *
  * 3. **Partial match, NOT finalized** — either:
  *      a. A pending wildcard could not be finalized (trailing text is only
@@ -531,15 +532,27 @@ type RangeCandidate =
           spacingMode: CompiledSpacingMode;
       };
 
-// Forward partial keyword anchor: when
+// Lightweight descriptor for wildcard-at-EOI states whose
+// partial keyword scan is deferred to Phase B1.  Phase A pushes
+// one descriptor per wildcard-at-EOI string state (both forward
+// and backward).  Phase B1 runs findPartialKeywordInWildcard on
+// each descriptor, resolving it into either a partial keyword
+// anchor or a deferred candidate for Phase B2.
+type WildcardEoiDescriptor = {
+    wildcardStart: number;
+    nextPart: StringPart;
+    spacingMode: CompiledSpacingMode;
+};
+
+// Forward partial keyword anchor: populated by Phase B1 when
 // findPartialKeywordInWildcard finds a partial keyword at
-// position P < state.index inside a wildcard-at-EOI state,
-// the result is saved here.  Phase B uses position to anchor
-// and completionWord to emit the completion (tryPartialStringMatch
-// at the anchor position cannot reproduce multi-word keyword
-// results — e.g. for keyword ["played","by"], the partial
-// keyword "by" is found at position 18 from candidateStart=11,
-// but tryPartialStringMatch at 18 returns "played" instead).
+// position P inside a wildcard-at-EOI state.  Phase B2 uses
+// position to anchor and completionWord to emit the completion
+// (tryPartialStringMatch at the anchor position cannot reproduce
+// multi-word keyword results — e.g. for keyword ["played","by"],
+// the partial keyword "by" is found at position 18 from
+// candidateStart=11, but tryPartialStringMatch at 18 returns
+// "played" instead).
 type ForwardPartialKeywordCandidate = {
     position: number;
     completionWord: string;
@@ -611,33 +624,21 @@ export function matchGrammarCompletion(
     //     a flexible position.  Processed in Phase B only under
     //     the same conditions the old retrigger required.
     //
-    // Phase B also handles:
-    //  • Forward EOI candidate instantiation at the appropriate
-    //    anchor (partial keyword position or prefix.length).
-    //  • Global string deduplication via Set.
-    //  • Range candidate gating (only under retrigger conditions).
-    //  • Trailing-separator advancement (forward only).
+    // Phase B is split into two sub-phases:
+    //  B1 — Anchor resolution: runs findPartialKeywordInWildcard
+    //    on deferred wildcardEoiDescriptors, populating
+    //    forwardPartialKeyword / forwardEoiCandidates (forward) or
+    //    fixedCandidates / rangeCandidates (backward).
+    //  B2 — Materialization: converts surviving candidates into
+    //    the final completions[] and properties[] arrays.
+    //    Also handles EOI instantiation, range candidates,
+    //    trailing-separator advancement, and deduplication.
     const fixedCandidates: FixedCandidate[] = [];
     const rangeCandidates: RangeCandidate[] = [];
-    // Forward partial keyword: see ForwardPartialKeywordCandidate.
-    let forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined;
-    // Forward EOI candidates: when a wildcard absorbed all input
-    // (state.index >= prefix.length) and the next part is a string,
-    // the candidate is deferred here instead of being processed
-    // inline.  States where findPartialKeywordInWildcard found a
-    // partial keyword are NOT added here (tryPartialStringMatch
-    // at the anchor can't reproduce multi-word results); only
-    // the anchor position is saved in forwardPartialKeyword.
-    //
-    // Phase B fires when this array is non-empty OR
-    // forwardPartialKeyword is set, and instantiates candidates at
-    // the appropriate anchor:
-    //   - partial keyword position (if one exists)
-    //   - prefix.length (otherwise)
-    // Only "wildcardString" items are added/consumed; the broader
-    // RangeCandidate type is kept for structural uniformity with
-    // rangeCandidates.
-    const forwardEoiCandidates: RangeCandidate[] = [];
+    // Wildcard-at-EOI descriptors: Phase A pushes one descriptor
+    // per wildcard-at-EOI string state (both directions).  Phase
+    // B1 processes them via findPartialKeywordInWildcard.
+    const wildcardEoiDescriptors: WildcardEoiDescriptor[] = [];
 
     // Track the furthest point the grammar consumed across all
     // states (including exact matches).  This tells the caller where
@@ -646,10 +647,11 @@ export function matchGrammarCompletion(
     let maxPrefixLength = minPrefixLength ?? 0;
 
     // Whether backward actually collected a backed-up candidate (via
-    // collectBackwardCandidate or findPartialKeywordInWildcard).  When
-    // false, backward fell through to forward behavior — range
-    // candidate processing and the trailing-separator-advancement
-    // guard are skipped so the result is identical to forward.
+    // collectBackwardCandidate in Phase A or partial keyword resolution
+    // in Phase B1).  When false, backward fell through to forward
+    // behavior — range candidate processing and the trailing-separator-
+    // advancement guard are skipped so the result is identical to
+    // forward.
     let backwardEmitted = false;
 
     // Helper: update maxPrefixLength.  When it increases, all previously
@@ -686,25 +688,43 @@ export function matchGrammarCompletion(
         });
     }
 
-    // Helper: collect a literal string completion candidate at a
-    // given prefix position.  Updates maxPrefixLength; skips if
-    // position is below max.  Converted in Phase B.
-    function collectStringCandidate(
+    // Helper: try partial string match and collect the result as a
+    // literal string completion candidate.  Updates maxPrefixLength;
+    // skips if position is below max.  Used by Category 2 forward,
+    // Category 3b, and backward candidate collection.  Returns true
+    // if a partial match was found (the candidate may still be
+    // discarded by the maxPrefixLength filter).
+    function tryCollectStringCandidate(
         state: MatchState,
-        candidatePrefixLength: number,
-        completionText: string,
-        candidateOpenWildcard: boolean = false,
-        candidatePartialKeywordBackup: boolean = false,
-    ): void {
-        updateMaxPrefixLength(candidatePrefixLength);
-        if (candidatePrefixLength !== maxPrefixLength) return;
-        fixedCandidates.push({
-            kind: "string",
-            completionText,
-            spacingMode: state.spacingMode,
-            openWildcard: candidateOpenWildcard,
-            partialKeywordBackup: candidatePartialKeywordBackup,
-        });
+        part: StringPart,
+        candidateOpenWildcard: boolean,
+        startIndex: number,
+        dir: "forward" | "backward" | undefined,
+    ): boolean {
+        const partial = tryPartialStringMatch(
+            part,
+            prefix,
+            startIndex,
+            state.spacingMode,
+            dir,
+        );
+        if (partial !== undefined) {
+            updateMaxPrefixLength(partial.consumedLength);
+            if (partial.consumedLength === maxPrefixLength) {
+                fixedCandidates.push({
+                    kind: "string",
+                    completionText: partial.remainingText,
+                    spacingMode: state.spacingMode,
+                    openWildcard: candidateOpenWildcard,
+                    partialKeywordBackup: false,
+                });
+            }
+            if (partial.couldBackUp && dir === "backward") {
+                backwardEmitted = true;
+            }
+            return true;
+        }
+        return false;
     }
 
     // Helper: backward completion — back up to the last matched item
@@ -737,20 +757,15 @@ export function matchGrammarCompletion(
         } else if (state.lastMatchedPartInfo !== undefined) {
             const info = state.lastMatchedPartInfo;
             if (info.type === "string") {
-                const backResult = tryPartialStringMatch(
-                    info.part,
-                    prefix,
-                    info.start,
-                    state.spacingMode,
-                    "backward",
-                );
-                if (backResult !== undefined) {
-                    collectStringCandidate(
+                if (
+                    tryCollectStringCandidate(
                         state,
-                        backResult.consumedLength,
-                        backResult.remainingText,
+                        info.part,
                         info.afterWildcard,
-                    );
+                        info.start,
+                        "backward",
+                    )
+                ) {
                     return true;
                 } else {
                     updateMaxPrefixLength(state.index);
@@ -807,14 +822,6 @@ export function matchGrammarCompletion(
         // It returns true when the state is "clean" — all input was
         // consumed (or only trailing separators remain).
         if (finalizeState(state, prefix)) {
-            // Would backward produce different results than forward?
-            // True when the prefix was fully consumed and there is a
-            // matched part (string/number) or wildcard to back up to.
-            const hasPartToReconsider =
-                state.index >= prefix.length &&
-                (savedPendingWildcard?.valueId !== undefined ||
-                    state.lastMatchedPartInfo !== undefined);
-
             // --- Category 1: Exact match ---
             // All parts matched AND prefix was fully consumed.
             // Back up to the last matched term (string keyword,
@@ -846,170 +853,72 @@ export function matchGrammarCompletion(
             // That next part is what we offer as a completion.
             const nextPart = state.parts[state.partIndex];
 
-            // Track whether findPartialKeywordInWildcard produced a
-            // result that forward would also use (position strictly
-            // inside the wildcard, i.e. < state.index).  When both
-            // directions agree, the state is not direction-sensitive.
-            // When the partial keyword position equals state.index
-            // (the wildcard absorbed a complete first keyword word),
-            // forward uses it but backward falls through to
-            // collectBackwardCandidate, so the directions differ.
+            // Wildcard-at-EOI with a string next part: defer the
+            // partial keyword scan to Phase B1.  This applies to
+            // both directions under the same condition.
+            const deferredToEoi =
+                savedPendingWildcard?.valueId !== undefined &&
+                state.index >= prefix.length &&
+                nextPart.type === "string";
+            if (deferredToEoi) {
+                wildcardEoiDescriptors.push({
+                    wildcardStart: savedPendingWildcard.start,
+                    nextPart,
+                    spacingMode: state.spacingMode,
+                });
+            }
+
+            // Would backward produce different results than forward?
+            // True when the prefix was fully consumed and there is a
+            // matched part (string/number) or wildcard to back up to.
+            const hasPartToReconsider =
+                state.index >= prefix.length &&
+                (savedPendingWildcard?.valueId !== undefined ||
+                    state.lastMatchedPartInfo !== undefined);
 
             if (direction === "backward" && hasPartToReconsider) {
-                // When a wildcard absorbed text ending with a partial
-                // keyword prefix (e.g. "Never b" where "b" prefixes
-                // "by"), offer the keyword at the partial keyword
-                // position instead of backing up to the wildcard start.
-                // The partial keyword position has a higher
-                // matchedPrefixLength and is more useful to the user.
-                let partialKeywordForThisState = false;
+                // Backward: collect a fallback candidate (backs up
+                // to the wildcard start or last matched part).  If
+                // a partial keyword exists inside the wildcard, Phase
+                // B1 will find it and may clear this fallback in
+                // favor of a higher-position candidate.
+                backwardEmitted =
+                    tryCollectBackwardCandidate(
+                        preFinalizeState ?? state,
+                        savedPendingWildcard,
+                    ) || backwardEmitted;
+                // Range candidates for non-string next parts
+                // (wildcard/number) — these don't involve partial
+                // keyword scans so they're pushed directly.
                 if (
                     savedPendingWildcard?.valueId !== undefined &&
-                    nextPart.type === "string"
+                    (nextPart.type === "wildcard" || nextPart.type === "number")
                 ) {
-                    const partialResult = findPartialKeywordInWildcard(
-                        prefix,
-                        savedPendingWildcard.start,
-                        nextPart,
-                        state.spacingMode,
-                    );
-                    if (
-                        partialResult !== undefined &&
-                        partialResult.position < state.index
-                    ) {
-                        collectStringCandidate(
-                            state,
-                            partialResult.position,
-                            partialResult.completionWord,
-                            /* openWildcard */ true,
-                            /* partialKeywordBackup */ true,
-                        );
-                        backwardEmitted = true;
-                        partialKeywordForThisState = true;
-                    } else {
-                        backwardEmitted =
-                            tryCollectBackwardCandidate(
-                                preFinalizeState ?? state,
-                                savedPendingWildcard,
-                            ) || backwardEmitted;
-                    }
-                } else {
-                    backwardEmitted =
-                        tryCollectBackwardCandidate(
-                            preFinalizeState ?? state,
-                            savedPendingWildcard,
-                        ) || backwardEmitted;
-                }
-                // Save a range candidate for the wildcard-nextPart
-                // split — the wildcard end is flexible and may match
-                // the final maxPrefixLength determined by other rules.
-                // Skip only for the state where
-                // findPartialKeywordInWildcard already found the
-                // optimal position — other alternatives still need
-                // their range candidates so Phase B can contribute
-                // their keywords at the settled maxPrefixLength.
-                if (
-                    savedPendingWildcard?.valueId !== undefined &&
-                    !partialKeywordForThisState
-                ) {
-                    if (nextPart.type === "string") {
-                        rangeCandidates.push({
-                            kind: "wildcardString",
-                            wildcardStart: savedPendingWildcard.start,
-                            nextPart,
-                            spacingMode: state.spacingMode,
-                        });
-                    } else if (
-                        nextPart.type === "wildcard" ||
-                        nextPart.type === "number"
-                    ) {
-                        // preFinalizeState is always defined here:
-                        // the guard `savedPendingWildcard?.valueId !== undefined`
-                        // implies `savedPendingWildcard !== undefined`, which is
-                        // the same condition that created preFinalizeState.
-                        rangeCandidates.push({
-                            kind: "wildcardProperty",
-                            wildcardStart: savedPendingWildcard.start,
-                            valueId: savedPendingWildcard.valueId,
-                            state: preFinalizeState!,
-                            spacingMode: state.spacingMode,
-                        });
-                    }
+                    // preFinalizeState is always defined here:
+                    // the guard `savedPendingWildcard?.valueId !== undefined`
+                    // implies `savedPendingWildcard !== undefined`, which is
+                    // the same condition that created preFinalizeState.
+                    rangeCandidates.push({
+                        kind: "wildcardProperty",
+                        wildcardStart: savedPendingWildcard.start,
+                        valueId: savedPendingWildcard.valueId,
+                        state: preFinalizeState!,
+                        spacingMode: state.spacingMode,
+                    });
                 }
             } else {
                 debugCompletion(
                     `Completing ${nextPart.type} part ${state.name}`,
                 );
-                if (nextPart.type === "string") {
-                    if (
-                        savedPendingWildcard?.valueId !== undefined &&
-                        state.index >= prefix.length
-                    ) {
-                        // Wildcard absorbed all input to EOI.
-                        // Check for a partial keyword to determine
-                        // the Phase B anchor, then defer.
-                        const partialResult = findPartialKeywordInWildcard(
-                            prefix,
-                            savedPendingWildcard.start,
-                            nextPart,
-                            state.spacingMode,
-                        );
-                        let partialKeywordForThisState = false;
-                        if (
-                            partialResult !== undefined &&
-                            partialResult.position <= state.index
-                        ) {
-                            if (
-                                forwardPartialKeyword === undefined ||
-                                partialResult.position >
-                                    forwardPartialKeyword.position
-                            ) {
-                                forwardPartialKeyword = {
-                                    position: partialResult.position,
-                                    completionWord:
-                                        partialResult.completionWord,
-                                    spacingMode: state.spacingMode,
-                                };
-                            }
-                            partialKeywordForThisState = true;
-                        }
-                        // Defer to Phase B.  Skip when
-                        // findPartialKeywordInWildcard resolved
-                        // this state — Phase B adds the correct
-                        // multi-word completionWord explicitly;
-                        // tryPartialStringMatch at the anchor
-                        // can't reproduce it.
-                        if (!partialKeywordForThisState) {
-                            forwardEoiCandidates.push({
-                                kind: "wildcardString",
-                                wildcardStart: savedPendingWildcard.start,
-                                nextPart,
-                                spacingMode: state.spacingMode,
-                            });
-                        }
-                    } else {
-                        const partial = tryPartialStringMatch(
-                            nextPart,
-                            prefix,
-                            state.index,
-                            state.spacingMode,
-                            direction,
-                        );
-                        if (partial !== undefined) {
-                            collectStringCandidate(
-                                state,
-                                partial.consumedLength,
-                                partial.remainingText,
-                                savedPendingWildcard?.valueId !== undefined,
-                            );
-                            if (partial.couldBackUp) {
-                                if (direction === "backward") {
-                                    backwardEmitted = true;
-                                }
-                            }
-                        }
-                    }
-                } else {
+                if (nextPart.type === "string" && !deferredToEoi) {
+                    tryCollectStringCandidate(
+                        state,
+                        nextPart,
+                        savedPendingWildcard?.valueId !== undefined,
+                        state.index,
+                        direction,
+                    );
+                } else if (nextPart.type !== "string") {
                     debugCompletion(
                         `No completion for ${nextPart.type} part (handled by Category 3a or matchState expansion)`,
                     );
@@ -1084,31 +993,115 @@ export function matchGrammarCompletion(
                     currentPart !== undefined &&
                     currentPart.type === "string"
                 ) {
-                    const partial = tryPartialStringMatch(
+                    tryCollectStringCandidate(
+                        state,
                         currentPart,
-                        prefix,
+                        false,
                         state.index,
-                        state.spacingMode,
                         direction,
                     );
-                    if (partial !== undefined) {
-                        collectStringCandidate(
-                            state,
-                            partial.consumedLength,
-                            partial.remainingText,
-                        );
-                        if (partial.couldBackUp) {
-                            if (direction === "backward") {
-                                backwardEmitted = true;
-                            }
-                        }
-                    }
                 }
             }
         }
     }
 
-    // --- Phase B: Convert candidates to final completions/properties ---
+    // --- Phase B1: Resolve partial keyword anchors ---
+    //
+    // wildcardEoiDescriptors contains all wildcard-at-EOI string
+    // states from both directions.  findPartialKeywordInWildcard
+    // is called here (not in Phase A) so that the scan is decoupled
+    // from candidate discovery.
+    //
+    // For each descriptor, B1 either:
+    //   - Finds a partial keyword → records the best anchor for
+    //     forward (forwardPartialKeyword), or collects a fixed
+    //     candidate for backward.
+    //   - Does not find a partial keyword → defers to Phase B2 via
+    //     forwardEoiCandidates (forward) or rangeCandidates
+    //     (backward).
+
+    // Forward partial keyword: see ForwardPartialKeywordCandidate.
+    let forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined;
+    // Forward EOI candidates: wildcard-at-EOI string states where
+    // B1 did NOT find a partial keyword.  B2 instantiates them at
+    // the appropriate anchor:
+    //   - partial keyword position (if one exists from other states)
+    //   - prefix.length (otherwise)
+    const forwardEoiCandidates: Extract<
+        RangeCandidate,
+        { kind: "wildcardString" }
+    >[] = [];
+
+    for (const desc of wildcardEoiDescriptors) {
+        const partialResult = findPartialKeywordInWildcard(
+            prefix,
+            desc.wildcardStart,
+            desc.nextPart,
+            desc.spacingMode,
+        );
+        if (direction === "backward") {
+            if (
+                partialResult !== undefined &&
+                // Equivalent to the old `< state.index`: deferredToEoi
+                // guarantees state.index >= prefix.length, and
+                // state.index never exceeds prefix.length.
+                partialResult.position < prefix.length
+            ) {
+                // Partial keyword found strictly inside the prefix.
+                // Collect as a fixed candidate (may advance
+                // maxPrefixLength, clearing weaker fallback
+                // candidates from Phase A).
+                updateMaxPrefixLength(partialResult.position);
+                if (partialResult.position === maxPrefixLength) {
+                    fixedCandidates.push({
+                        kind: "string",
+                        completionText: partialResult.completionWord,
+                        spacingMode: desc.spacingMode,
+                        openWildcard: true,
+                        partialKeywordBackup: true,
+                    });
+                }
+                backwardEmitted = true;
+            } else {
+                // No useful partial keyword — create range
+                // candidate for Phase B2.
+                rangeCandidates.push({
+                    kind: "wildcardString",
+                    wildcardStart: desc.wildcardStart,
+                    nextPart: desc.nextPart,
+                    spacingMode: desc.spacingMode,
+                });
+            }
+        } else {
+            // Forward direction.
+            if (partialResult !== undefined) {
+                // Partial keyword found — update best anchor.
+                // Don't push to forwardEoiCandidates:
+                // tryPartialStringMatch at the anchor can't
+                // reproduce multi-word keyword results.
+                if (
+                    forwardPartialKeyword === undefined ||
+                    partialResult.position > forwardPartialKeyword.position
+                ) {
+                    forwardPartialKeyword = {
+                        position: partialResult.position,
+                        completionWord: partialResult.completionWord,
+                        spacingMode: desc.spacingMode,
+                    };
+                }
+            } else {
+                // No partial keyword — defer to Phase B2.
+                forwardEoiCandidates.push({
+                    kind: "wildcardString",
+                    wildcardStart: desc.wildcardStart,
+                    nextPart: desc.nextPart,
+                    spacingMode: desc.spacingMode,
+                });
+            }
+        }
+    }
+
+    // --- Phase B2: Convert candidates to final completions/properties ---
     //
     // Fixed candidates are converted directly — they are already
     // guaranteed to be at maxPrefixLength (candidates at shorter
@@ -1276,15 +1269,16 @@ export function matchGrammarCompletion(
     // Forward EOI candidate instantiation and partial keyword recovery.
     //
     // Category 2 wildcard-at-EOI string candidates are deferred
-    // during Phase A (forwardEoiCandidates).  The wildcard boundary
-    // is ambiguous, so Phase A never pushes maxPrefixLength for
-    // them; Phase B decides the final anchor.
+    // during Phase A (via wildcardEoiDescriptors) and resolved by
+    // Phase B1 into forwardPartialKeyword / forwardEoiCandidates.
+    // The wildcard boundary is ambiguous, so Phase A never pushes
+    // maxPrefixLength for them; Phase B1/B2 decides the final anchor.
     //
-    // Phase B operates in one of three modes:
+    // Phase B2 operates in one of three modes:
     //
     //   Clear + anchor at partial keyword position P:
-    //     findPartialKeywordInWildcard found a partial keyword at
-    //     P < prefix.length.  Reset everything and anchor there.
+    //     Phase B1 found a partial keyword at P < prefix.length.
+    //     Reset everything and anchor there.
     //
     //   Clear + anchor at prefix.length (displace):
     //     maxPrefixLength < prefix.length means only weaker
@@ -1359,7 +1353,6 @@ export function matchGrammarCompletion(
 
         // Instantiate deferred EOI candidates at the anchor.
         for (const c of forwardEoiCandidates) {
-            if (c.kind !== "wildcardString") continue;
             if (anchor <= c.wildcardStart) continue;
             if (
                 getWildcardStr(
