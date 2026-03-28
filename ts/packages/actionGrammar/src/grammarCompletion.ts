@@ -284,6 +284,12 @@ export type GrammarCompletionResult = {
     // True when the result would differ if queried with the opposite
     // direction.  When false, the caller can skip re-fetching on
     // direction change.
+    //
+    // Decision tree (see forward-backward-equivalence.md):
+    //   openWildcard        → true  (ambiguous boundary)
+    //   P = minPrefixLength → false (nothing matched beyond floor)
+    //   midPosition         → true  (keyword boundary, no trailing sep)
+    //   P = prefix.length   → !trailingSepAdvanced
     directionSensitive: boolean;
     // True when the completion's `matchedPrefixLength` position is
     // *ambiguous* — it could shift forward as the user types more.

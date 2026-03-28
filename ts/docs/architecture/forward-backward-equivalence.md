@@ -40,12 +40,18 @@ the last matched item.
 
 ## 3. P at a wildcard-keyword boundary (wildcard finalized at EOI, next part is string)
 
-| Separator Mode | Partial keyword inside wildcard?                        | Forward = Backward? | Why                                                                                                             |
-| -------------- | ------------------------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| non-`none`     | No partial keyword                                      | **No**              | Forward defers to Phase B (offers keyword at `prefix.length`); backward backs up to wildcard start              |
-| non-`none`     | Yes, at position Q < P                                  | **Yes**             | Both directions find the partial keyword via `findPartialKeywordInWildcard` at Q; `partialKeywordAgrees = true` |
-| non-`none`     | Yes, at position Q = P (full first keyword word at EOI) | **No**              | Forward uses it; backward rejects (requires Q < `state.index`) and falls through to `collectBackwardCandidate`  |
-| `none`         | Any                                                     | **No**              | `none` mode makes `couldBackUp` always true                                                                     |
+Wildcard boundaries are always ambiguous — the wildcard could absorb
+more text, moving the boundary forward. The grammar matcher sets
+`openWildcard=true` and `directionSensitive=true` unconditionally for
+these positions. The table below explains _why_ the directions always
+differ at these boundaries.
+
+| Separator Mode | Partial keyword inside wildcard?                        | Forward = Backward? | Why                                                                                                            |
+| -------------- | ------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| non-`none`     | No partial keyword                                      | **No**              | Forward defers to Phase B (offers keyword at `prefix.length`); backward backs up to wildcard start             |
+| non-`none`     | Yes, at position Q < P                                  | **No**              | Both find partial keyword at Q, but backward could also back up to wildcard start — position is ambiguous      |
+| non-`none`     | Yes, at position Q = P (full first keyword word at EOI) | **No**              | Forward uses it; backward rejects (requires Q < `state.index`) and falls through to `collectBackwardCandidate` |
+| `none`         | Any                                                     | **No**              | `none` mode makes `couldBackUp` always true                                                                    |
 
 ## 4. P inside a wildcard (no keyword boundary reached)
 
@@ -70,25 +76,27 @@ the last matched item.
 
 ## Decision Tree
 
+The `directionSensitive` flag in the grammar matcher is computed by the
+following decision tree. It is evaluated once, after all candidates are
+collected, using the final `maxPrefixLength` (P).
+
 ```
-Is P = 0?
-  └─ Yes → SAME (nothing to reconsider)
+openWildcard?
+  └─ Yes → DIFFERENT (wildcard boundary is ambiguous;
+           backward can always reconsider)
 
-Is P = input.length AND all parts matched (Category 1)?
-  └─ Yes → SAME (direction-agnostic)
+P = minPrefixLength (or 0 if unset)?
+  └─ Yes → SAME (nothing matched beyond the caller's floor;
+           backward has nothing to reconsider)
 
-Is spacingMode = "none"?
-  └─ Yes → DIFFERENT (couldBackUp is always true in "none" mode)
+P < input.length? (midPosition)
+  └─ Yes → DIFFERENT (truncated input ends at keyword boundary
+           with no trailing separator — backward always backs up)
 
-Is there a separator after the last matched item at P?
-  (nextNonSeparatorIndex(input[0..P], endIndex) > endIndex)
-  ├─ Yes (committed) → SAME
-  └─ No (uncommitted / at EOI) →
-      Is P at a wildcard-keyword boundary AND
-      findPartialKeywordInWildcard found a partial keyword
-      strictly inside the wildcard (position < P)?
-        ├─ Yes → SAME (partialKeywordAgrees = true)
-        └─ No → DIFFERENT (backward backs up)
+P = input.length:
+  └─ Trailing separator advanced P past last matched item?
+      ├─ Yes → SAME (separator commits the position)
+      └─ No → DIFFERENT (no separator — backward can reconsider)
 ```
 
 **Key insight:** The separator is the universal "commit" mechanism.
@@ -96,3 +104,14 @@ Once `input[0..P]` ends with a separator after the last matched item,
 the position is committed and both directions agree. Without that
 separator (including `none` mode where separators don't exist),
 backward has the option to reconsider — and the directions diverge.
+
+**Design choice — openWildcard → always true:** Even when both
+directions happen to find the same partial keyword at the same position
+(e.g. "play Never b" where both find "b"→"by" at position 11), the
+wildcard boundary is ambiguous. Truncating to `input[0..P]` removes
+the content that established the anchor, so
+`completion(input[0..P], "backward")` always diverges — confirming
+that the position is genuinely direction-sensitive under the cross-query
+definition (invariant #4). This also simplifies the implementation
+(no `partialKeywordAgrees` tracking needed) and enables unguarded
+cross-query invariant checking in tests.
