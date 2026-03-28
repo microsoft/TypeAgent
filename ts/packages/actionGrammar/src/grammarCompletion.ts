@@ -646,23 +646,28 @@ export function matchGrammarCompletion(
     // whitespace (which breaks for CJK and other non-space scripts).
     let maxPrefixLength = minPrefixLength ?? 0;
 
-    // Whether backward actually collected a backed-up candidate (via
-    // collectBackwardCandidate in Phase A or partial keyword resolution
-    // in Phase B1).  When false, backward fell through to forward
-    // behavior — range candidate processing and the trailing-separator-
-    // advancement guard are skipped so the result is identical to
-    // forward.
+    // Whether backward actually collected a backed-up candidate that
+    // survives at the current maxPrefixLength.  Reset when
+    // updateMaxPrefixLength clears fixedCandidates (a stale true
+    // from a cleared candidate would incorrectly block trailing-
+    // separator advancement for surviving forward-style candidates).
+    // When false, backward fell through to forward behavior —
+    // the trailing-separator-advancement guard is skipped so the
+    // result is identical to forward.
     let backwardEmitted = false;
 
     // Helper: update maxPrefixLength.  When it increases, all previously
     // accumulated fixed-point candidates from shorter matches are
-    // irrelevant — clear them.  Range candidates are NOT cleared
-    // because their valid position is a range that may include the
-    // new maxPrefixLength.
+    // irrelevant — clear them.  backwardEmitted is also reset so
+    // that a stale backward flag from a cleared candidate does not
+    // block trailing-separator advancement for surviving candidates.
+    // Range candidates are NOT cleared because their valid position
+    // is a range that may include the new maxPrefixLength.
     function updateMaxPrefixLength(prefixLength: number): void {
         if (prefixLength > maxPrefixLength) {
             maxPrefixLength = prefixLength;
             fixedCandidates.length = 0;
+            backwardEmitted = false;
         }
     }
 
@@ -1183,8 +1188,12 @@ export function matchGrammarCompletion(
     // the completion — exactly what the old forward re-invocation
     // would have done for that rule's wildcard-keyword boundary.
     //
-    // Gating: range candidates are processed when backward backed
-    // up and trailing text remains.
+    // Gating: range candidates are processed when backward has
+    // range candidates and trailing text remains.  The gate uses
+    // rangeCandidates.length directly (not backwardEmitted) because
+    // range candidates are never cleared — their existence is the
+    // natural signal, decoupled from whether a fixed backward
+    // candidate survived at maxPrefixLength.
     //
     // rangeCandidateGateOpen: the backed-up position is usable for
     // range candidate processing.  True when either:
@@ -1199,9 +1208,14 @@ export function matchGrammarCompletion(
     const rangeCandidateGateOpen = !openWildcard || partialKeywordBackup;
     const processRangeCandidates =
         direction === "backward" &&
-        backwardEmitted &&
+        rangeCandidates.length > 0 &&
         maxPrefixLength < prefix.length &&
         rangeCandidateGateOpen;
+    // Whether range candidate processing produced any completions
+    // or properties.  When true, the results are anchored at the
+    // current maxPrefixLength — trailing-separator advancement must
+    // be skipped to preserve that anchor.
+    let rangeCandidateEmitted = false;
     if (processRangeCandidates) {
         for (const c of rangeCandidates) {
             if (maxPrefixLength <= c.wildcardStart) continue;
@@ -1240,6 +1254,7 @@ export function matchGrammarCompletion(
                         c.spacingMode,
                     );
                     openWildcard = true;
+                    rangeCandidateEmitted = true;
                 }
             } else {
                 const completionProperty = getGrammarCompletionProperty(
@@ -1261,6 +1276,7 @@ export function matchGrammarCompletion(
                     );
                     openWildcard = true;
                     closedSet = false;
+                    rangeCandidateEmitted = true;
                 }
             }
         }
@@ -1281,15 +1297,19 @@ export function matchGrammarCompletion(
     //     Reset everything and anchor there.
     //
     //   Clear + anchor at prefix.length (displace):
-    //     maxPrefixLength < prefix.length means only weaker
-    //     candidates (e.g. Category 3b) survived Phase A.  Replace
-    //     them with EOI instantiations at prefix.length.
+    //     maxPrefixLength < prefix.length AND the gap between
+    //     maxPrefixLength and prefix.length contains non-separator
+    //     content — only weaker candidates (e.g. Category 3b)
+    //     survived Phase A.  Replace them with EOI instantiations
+    //     at prefix.length.
     //
     //   Merge at prefix.length:
-    //     maxPrefixLength is already at prefix.length — legitimate
-    //     candidates (e.g. property completions for a wildcard slot
-    //     following a matched keyword) exist at that position.
-    //     Preserve them and add EOI instantiations alongside.
+    //     maxPrefixLength is already at prefix.length, OR the gap
+    //     consists entirely of separator characters (trailing
+    //     whitespace/punctuation) — legitimate candidates (e.g.
+    //     Category 2 keyword matches or property completions for a
+    //     wildcard slot) exist at that position.  Preserve them and
+    //     add EOI instantiations alongside.
     const hasPartialKeyword =
         forwardPartialKeyword !== undefined &&
         forwardPartialKeyword.position <= prefix.length;
@@ -1304,12 +1324,29 @@ export function matchGrammarCompletion(
             ? forwardPartialKeyword!.position
             : prefix.length;
 
-        // Clear when the anchor differs from the current
-        // maxPrefixLength (partial keyword recovery or displacing
-        // weaker candidates).  When the anchor matches
-        // maxPrefixLength (already at prefix.length), merge by
-        // keeping existing candidates.
-        if (anchor !== maxPrefixLength) {
+        // Decide whether to clear existing candidates (displace)
+        // or keep them (merge).
+        //
+        // Displace: anchor differs from maxPrefixLength AND the
+        //   gap contains non-separator content — existing candidates
+        //   are weaker Category 3b fallbacks from shorter partial
+        //   matches.  Replace them with EOI instantiations.
+        //
+        // Merge: anchor matches maxPrefixLength, OR the gap between
+        //   maxPrefixLength and anchor consists entirely of separator
+        //   characters — existing candidates are legitimate Category 2
+        //   matches at EOI (e.g. "music" at mpl=14 for "play
+        //   beautiful " where anchor=15).  Keep them and add EOI
+        //   instantiations alongside.
+        //
+        // For partial keyword recovery (hasPartialKeyword), always
+        // displace — the anchor is at a sub-prefix position where
+        // the partial keyword was found.
+        const gapIsSeparatorOnly =
+            !hasPartialKeyword &&
+            maxPrefixLength > 0 &&
+            nextNonSeparatorIndex(prefix, maxPrefixLength) >= anchor;
+        if (anchor !== maxPrefixLength && !gapIsSeparatorOnly) {
             debugCompletion(
                 `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `prefix.length=${anchor} (displace)`}`,
             );
@@ -1320,6 +1357,15 @@ export function matchGrammarCompletion(
             separatorMode = undefined;
             openWildcard = false;
         } else {
+            if (gapIsSeparatorOnly) {
+                // Advance maxPrefixLength to include the trailing
+                // separator gap so it aligns with the anchor.
+                // The separator has been consumed, so demote
+                // separatorMode to "optional" — no additional
+                // separator is needed at the new position.
+                maxPrefixLength = anchor;
+                separatorMode = "optional";
+            }
             debugCompletion(`Phase B: merge at prefix.length=${anchor}`);
         }
 
@@ -1405,12 +1451,13 @@ export function matchGrammarCompletion(
     // trailing space is already consumed, so no additional separator
     // is required between the anchor and the completion text.
     //
-    // Skip advancement when backward backed up (backwardEmitted):
+    // Skip advancement when backward backed up (backwardEmitted)
+    // or range candidates produced results (rangeCandidateEmitted):
     // the backed-up position P is where backward intentionally wants
     // completions to anchor.  Advancing P past trailing separators
     // would move the anchor forward, defeating the backup.
     let trailingSepAdvanced = false;
-    if (!backwardEmitted) {
+    if (!backwardEmitted && !rangeCandidateEmitted) {
         const advanced = consumeTrailingSeparators(prefix, maxPrefixLength);
         if (advanced > maxPrefixLength) {
             maxPrefixLength = advanced;
