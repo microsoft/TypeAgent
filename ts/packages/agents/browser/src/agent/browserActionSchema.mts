@@ -24,15 +24,7 @@ export type BrowserActions =
     | OpenSearchResult
     | ChangeSearchProvider
     | SearchImageAction
-    | EnterTextInElement
-    | SetDropdownValue
-    | ClickOnElement
-    | AwaitPageLoad
-    | GetHTML
-    | GetElementByDescription
-    | IsPageStateMatched
-    | QueryPageContent
-    | DownloadImage;
+    | ExecuteAdHocScript;
 
 export type WebSearchResult = string;
 export type BrowserEntities = WebPageMoniker | WebSearchResult;
@@ -246,96 +238,17 @@ export type SearchImageAction = {
     };
 };
 
-export type EnterTextInElement = {
-    actionName: "enterTextInElement";
+// Execute an ad-hoc WebFlow script. The script must be a valid async function
+// using the WebFlow browser API (browser.click, browser.enterText, etc.).
+// Used by reasoning agents to perform browser interactions without a saved WebFlow.
+export type ExecuteAdHocScript = {
+    actionName: "executeAdHocScript";
     parameters: {
-        // the value to enter
-        value: string;
-        // the CSS selector for the element to enter text into
-        cssSelector: string;
-        // whether to submit the form after entering text
-        submitForm?: boolean;
-    };
-};
-
-export type SetDropdownValue = {
-    actionName: "setDropdownValue";
-    parameters: {
-        // the value to enter
-        optionLabel: string;
-        // the CSS selector for the element to enter text into
-        cssSelector: string;
-    };
-};
-
-export type ClickOnElement = {
-    actionName: "clickOnElement";
-    parameters: {
-        // the CSS selector for the element to click on
-        cssSelector: string;
-    };
-};
-
-export type AwaitPageLoad = {
-    actionName: "awaitPageLoad";
-};
-
-export type GetHTML = {
-    actionName: "getHTML";
-    parameters: {
-        fullHTML?: boolean;
-        downloadAsFile?: boolean;
-        extractText?: boolean;
-        useTimestampIds?: boolean;
-    };
-};
-
-// Find an element on the page using natural language description.
-// Uses LLM to understand page structure and locate the element.
-// Prefer this over parsing raw HTML when you don't know the CSS selector.
-export type GetElementByDescription = {
-    actionName: "getElementByDescription";
-    parameters: {
-        // Natural language description of the element to find
-        elementDescription: string;
-
-        // Optional hint about element type to narrow search
-        // Values: "button", "input", "link", "heading", "text", etc.
-        elementType?: string;
-    };
-};
-
-// Verify if the current page state matches an expected condition.
-// Uses LLM to understand page semantics and compare to expectation.
-// Prefer this over parsing raw HTML for state verification.
-export type IsPageStateMatched = {
-    actionName: "isPageStateMatched";
-    parameters: {
-        // Expected page state description in natural language
-        expectedStateDescription: string;
-    };
-};
-
-// Query page content to answer a question using LLM.
-// Extracts information from the page without needing to parse HTML.
-// Prefer this over parsing raw HTML for data extraction.
-export type QueryPageContent = {
-    actionName: "queryPageContent";
-    parameters: {
-        // Question about page content in natural language
-        query: string;
-    };
-};
-
-// Download an image from the current page to the local downloads folder.
-export type DownloadImage = {
-    actionName: "downloadImage";
-    parameters: {
-        // CSS selector to identify the image element
-        cssSelector?: string;
-        // Natural language description to find the image by alt text or title
-        imageDescription?: string;
-        // Filename to save the image as (defaults to image_<timestamp>.png)
-        filename?: string;
+        // The JavaScript source for an async function: async function execute(browser, params) { ... }
+        script: string;
+        // JSON-encoded parameters to pass to the script
+        params?: string;
+        // Execution timeout in milliseconds (default: 120000)
+        timeout?: number;
     };
 };

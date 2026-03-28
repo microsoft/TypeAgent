@@ -8,7 +8,7 @@ import { TraceCollectorOptions } from "./tracing/types.js";
 import { PlanGenerator } from "./planning/planGenerator.js";
 import { PlanSerializer } from "./planning/planSerializer.js";
 import { ExecutionPlan } from "./planning/types.js";
-import { WebRecipeGenerator } from "./recipeGenerator.js";
+import { WebFlowGenerator } from "./webFlowGenerator.js";
 import path from "path";
 
 /**
@@ -475,23 +475,29 @@ export class WebTaskAgent {
                 tracer.setPlanPaths(originalPlanPath);
             }
 
-            // STEP 2: Convert plan to recipe for flowInterpreter execution
-            const recipeGen = new WebRecipeGenerator();
-            const recipe = recipeGen.generate(originalPlan);
+            // STEP 2: Convert plan to WebFlow for store-based execution
+            let domain: string | undefined;
+            try {
+                domain = new URL(task.startingUrl).hostname;
+            } catch {
+                // invalid URL
+            }
 
-            if (recipe) {
+            const flowGen = new WebFlowGenerator();
+            const webFlow = flowGen.generate(originalPlan, domain);
+
+            if (webFlow) {
                 console.log(
-                    `[Recipe] Generated recipe: ${recipe.actionName} (${recipe.steps.length} steps)`,
+                    `[WebFlow] Generated: ${webFlow.name} (${webFlow.grammarPatterns.length} patterns)`,
                 );
 
-                // Save recipe for future grammar-based matching
-                const recipePath = path.join(
+                const flowPath = path.join(
                     traceDir,
-                    `${recipe.actionName}.recipe.json`,
+                    `${webFlow.name}.webflow.json`,
                 );
                 const fs = await import("node:fs/promises");
-                await fs.writeFile(recipePath, JSON.stringify(recipe, null, 2));
-                console.log(`[Recipe] Saved to: ${recipePath}`);
+                await fs.writeFile(flowPath, JSON.stringify(webFlow, null, 2));
+                console.log(`[WebFlow] Saved to: ${flowPath}`);
             }
 
             // Save plan to library for future use
@@ -554,199 +560,95 @@ You are a browser automation expert. Execute this task:
 
 Starting URL: ${task.startingUrl}
 
-# Available Browser Actions
+# Tool Categories
 
-You have access to browser action tools (via mcp__command-executor__). The available actions are defined by the following TypeScript schema:
+You have two categories of browser tools (via mcp__command-executor__):
 
-\`\`\`typescript
-// Open a web page
-export type OpenWebPage = {
-    actionName: "browser__openWebPage";
-    parameters: {
-        site: string; // URL to open
-        tab?: "new" | "current" | "existing"; // Optional: where to open (default: current)
-    };
-};
+## 1. WebFlow Tools — For performing actions on the page
 
-// Get the HTML content of the current page
-// ⚠️ USE AS LAST RESORT - Prefer semantic query actions (see below)
-// Returns HTML as text that you can read and analyze
-export type GetHTML = {
-    actionName: "browser__getHTML";
-    parameters?: {
-        fullHTML?: boolean; // Include complete HTML (default: false)
-        extractText?: boolean; // Extract text only (default: false)
-    };
-};
+Use these to discover and execute saved automation flows:
 
-// Click on an element using a CSS selector
-export type ClickOnElement = {
-    actionName: "browser__clickOnElement";
-    parameters: {
-        cssSelector: string; // CSS selector for the element to click
-    };
-};
+- **webflow__list** — List available WebFlow actions for the current domain.
+  Call this first to see what actions are available.
+  \`\`\`
+  webflow__list({ domain: "amazon.com" })
+  → Returns list of flows with names, descriptions, and parameters
+  \`\`\`
 
-// Type text into an input element
-export type EnterTextInElement = {
-    actionName: "browser__enterTextInElement";
-    parameters: {
-        cssSelector: string; // CSS selector for the input element
-        value: string; // Text to enter
-        submitForm?: boolean; // Submit the form after entering text (default: false)
-    };
-};
+- **webflow__execute** — Execute a WebFlow by name with parameters.
+  \`\`\`
+  webflow__execute({ flowName: "searchForProduct", parameters: '{"productName": "shoes"}' })
+  → Executes the saved automation flow
+  \`\`\`
 
-// Wait for the page to finish loading
-export type AwaitPageLoad = {
-    actionName: "browser__awaitPageLoad";
-};
+## 2. Draft Script Tool — For new interactions where no WebFlow exists
 
-// Scroll down on the current page
-export type ScrollDown = {
-    actionName: "browser__scrollDown";
-};
+- **webflow__run_draft** — Write and run a browser automation script on the fly.
 
-// Scroll up on the current page
-export type ScrollUp = {
-    actionName: "browser__scrollUp";
-};
+  The script must be an async function using the WebFlow browser API:
+  \`\`\`
+  webflow__run_draft({
+      script: "async function execute(browser, params) { await browser.enterText('#search', params.query); await browser.click('#go'); await browser.awaitPageLoad(); return { success: true }; }",
+      parameters: '{"query": "flights to Portland"}'
+  })
+  \`\`\`
 
-// Union of all available browser actions
-export type BrowserAction =
-    | OpenWebPage
-    | GetHTML
-    | ClickOnElement
-    | EnterTextInElement
-    | AwaitPageLoad
-    | ScrollDown
-    | ScrollUp;
-\`\`\`
+  Available browser API methods:
+  - browser.click(cssSelector) — Click an element
+  - browser.enterText(cssSelector, text) — Type into an input
+  - browser.enterTextOnPage(text, submitForm?) — Type at page scope
+  - browser.selectOption(cssSelector, value) — Select dropdown value
+  - browser.pressKey(key) — Press a key (e.g., "Enter", "Escape")
+  - browser.awaitPageLoad(timeout?) — Wait for page navigation
+  - browser.awaitPageInteraction(timeout?) — Wait for dynamic content
+  - browser.navigateTo(url) — Navigate to a URL
+  - browser.getCurrentUrl() — Get current URL
+  - browser.getPageText() — Get visible text content
+  - browser.captureScreenshot() — Take screenshot (returns data URL)
+  - browser.checkPageState(description) — Verify page state (LLM-based)
+  - browser.queryContent(question) — Ask about page content (LLM-based)
+  - browser.extractComponent(def, request?) — Extract structured data
+  - browser.followLink(cssSelector) — Click link and wait for navigation
+  - browser.clickAndWait(cssSelector) — Click and wait for page load
 
-# ⭐ BROWSER SEMANTIC QUERY ACTIONS (PREFER THESE)
+## 3. Navigation & Observation Tools — For exploring pages
 
-You have access to semantic query actions that use LLM to understand page content.
-These are CORE BROWSER ACTIONS and are MUCH BETTER than parsing raw HTML.
+- **browser__openWebPage** — Navigate to a URL: \`browser__openWebPage({ site: "https://example.com" })\`
+- **browser__captureScreenshot** — Take a screenshot to see the current page state
+- **browser__scrollDown / browser__scrollUp** — Scroll to reveal more content
+- **browser__followLinkByText** — Click a link by its visible text: \`browser__followLinkByText({ keywords: "Sign In" })\`
+- **browser__closeWebPage** — Close the current page
 
-**Semantic Query Actions** (available for ALL sites via typeagent_action):
+# Workflow
 
-1. **queryPageContent** - Extract ANY information from page ⭐ USE THIS FIRST
-   \`\`\`typescript
-   execute_command({
-     request: JSON.stringify({
-       tool: "typeagent_action",
-       parameters: {
-         agent: "browser",
-         action: "queryPageContent",
-         parameters: { query: "what is the product price?" },
-         naturalLanguage: "get product price"
-       }
-     })
-   })
-   // Returns: { answered: true, answerText: "$24.99", confidence: 0.9 }
-   \`\`\`
-   Examples:
-   - "how many items in stock?" → stock count
-   - "what is the product rating?" → rating value
-   - "is the item available?" → availability status
-   - "what is the total price?" → price
+1. **Navigate** to the starting URL with browser__openWebPage
+2. **Observe** the page with browser__captureScreenshot
+3. **Check** for saved WebFlows with webflow__list
+4. If a matching flow exists → **webflow__execute**
+5. If not → **Write a draft script** and run with webflow__run_draft
+6. **Verify** results with browser__captureScreenshot or browser.checkPageState
+7. **Iterate** as needed for multi-step tasks
 
-2. **getElementByDescription** - Find elements without CSS selectors ⭐ USE BEFORE getHTML
-   \`\`\`typescript
-   execute_command({
-     request: JSON.stringify({
-       tool: "typeagent_action",
-       parameters: {
-         agent: "browser",
-         action: "getElementByDescription",
-         parameters: {
-           elementDescription: "Add to Cart button",
-           elementType: "button"
-         },
-         naturalLanguage: "find add to cart button"
-       }
-     })
-   })
-   // Returns: { found: true, elementCssSelector: "#add-to-cart", elementText: "Add to Cart" }
-   \`\`\`
+# IMPORTANT RULES
 
-3. **isPageStateMatched** - Verify page state ⭐ USE FOR VALIDATION
-   \`\`\`typescript
-   execute_command({
-     request: JSON.stringify({
-       tool: "typeagent_action",
-       parameters: {
-         agent: "browser",
-         action: "isPageStateMatched",
-         parameters: { expectedStateDescription: "shopping cart page is displayed" },
-         naturalLanguage: "verify cart page"
-       }
-     })
-   })
-   // Returns: { matched: true, confidence: 0.95, explanation: "..." }
-   \`\`\`
+- **ALL web page interactions MUST go through webflow__run_draft or webflow__execute.**
+  Do NOT use execute_command for browser actions — it uses unreliable natural language matching.
+- webflow__run_draft gives you full control: exact CSS selectors, structured return values,
+  and the same sandboxed API as saved WebFlows.
+- For extracting data from a page, write a draft script using browser.queryContent() or browser.getPageText().
+- For filling forms, clicking buttons, or selecting options, write a draft script using
+  browser.enterText(), browser.click(), browser.selectOption(), etc.
+- Navigation tools (browser__openWebPage, browser__scrollDown, browser__captureScreenshot,
+  browser__followLinkByText) can be used directly — they don't modify page state.
 
-# Instructions
+# Tips for writing draft scripts
 
-1. **⭐ PREFER SEMANTIC QUERIES OVER RAW HTML**
-   - For ANY data extraction → Use queryPageContent FIRST
-   - To find elements → Use getElementByDescription FIRST
-   - To verify page state → Use isPageStateMatched
-   - Only use browser__getHTML as LAST RESORT if semantic queries fail
-   - Raw HTML is slower, harder to parse, and more fragile
-
-2. **When to use each approach:**
-   - Extracting data (prices, text, counts) → queryPageContent
-   - Finding element selectors → getElementByDescription
-   - Verifying state after actions → isPageStateMatched
-   - Complex multi-element interactions → getHTML (last resort)
-
-3. **Decision tree:**
-   a) Try queryPageContent for data extraction
-   b) If that fails (answered: false), try getElementByDescription
-   c) If that fails (found: false), then use browser__getHTML
-   d) For state validation, always use isPageStateMatched
-
-4. **Example workflow with semantic queries:**
-   a) browser__openWebPage({ site: "https://example.com" })
-   b) browser__awaitPageLoad()
-   c) execute_command({
-        request: JSON.stringify({
-          tool: "typeagent_action",
-          parameters: {
-            agent: "browser",
-            action: "getElementByDescription",
-            parameters: { elementDescription: "search input", elementType: "input" },
-            naturalLanguage: "find search box"
-          }
-        })
-      })
-      → Returns { found: true, elementCssSelector: "input[name='q']" }
-   d) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
-   e) browser__awaitPageLoad()
-   f) execute_command({
-        request: JSON.stringify({
-          tool: "typeagent_action",
-          parameters: {
-            agent: "browser",
-            action: "queryPageContent",
-            parameters: { query: "get titles and prices of first 5 products" },
-            naturalLanguage: "extract product list"
-          }
-        })
-      })
-      → Returns { answered: true, answerText: "[product data...]" }
-
-**Old workflow (ONLY if semantic queries fail):**
-   a) browser__openWebPage({ site: "https://example.com" })
-   b) browser__awaitPageLoad()
-   c) browser__getHTML() → Returns HTML content
-   d) Use Grep/Read to manually parse HTML and find search input selector
-   e) browser__clickOnElement({ cssSelector: "input[name='q']" })
-   f) browser__enterTextInElement({ cssSelector: "input[name='q']", value: "LED bulbs", submitForm: true })
-   g) browser__awaitPageLoad()
-   h) browser__getHTML() → Returns search results HTML
-   i) Use Grep/Read to manually parse HTML and extract product information
+- Use browser__captureScreenshot first to understand the page layout
+- Keep scripts focused — one logical step per script
+- Use browser.queryContent() to extract data from the page
+- Use browser.checkPageState() to verify results before proceeding
+- If you need to find a CSS selector, use browser.captureScreenshot() and reason about the page structure,
+  or use browser.getPageText() and look for landmarks near the target element
 
 ${this.getCategorySpecificGuidance(task.category)}
 
