@@ -120,9 +120,7 @@
     {
       "resources": [
         "offscreen/offscreen.html",
-        "offscreen/contentProcessor.js",
-        "offscreen/screenshotCapture.html",
-        "offscreen/screenshotCapture.js"
+        "offscreen/contentProcessor.js"
       ],
       "matches": ["<all_urls>"]
     }
@@ -141,8 +139,7 @@
     "contextMenus",
     "downloads",
     "sidePanel",
-    "offscreen",
-    "tabCapture"
+    "offscreen"
   ],
   "host_permissions": ["<all_urls>"],
   "icons": {

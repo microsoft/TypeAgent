@@ -71,7 +71,6 @@ const sharedScripts = {
     "sites/paleobiodb": "sites/paleobiodb.ts",
     "sites/webflow": "sites/webflow.ts",
     "offscreen/contentProcessor": "offscreen/contentProcessor.ts",
-    "offscreen/screenshotCapture": "offscreen/screenshotCapture.ts",
 };
 
 const electronOnlyScripts = {
@@ -152,10 +151,6 @@ function copyCommonStaticAssets(outDir) {
     copyFileSync(
         `${srcDir}/offscreen/offscreen.html`,
         `${outDir}/offscreen/offscreen.html`,
-    );
-    copyFileSync(
-        `${srcDir}/offscreen/screenshotCapture.html`,
-        `${outDir}/offscreen/screenshotCapture.html`,
     );
 
     mkdirSync(`${outDir}/sites`, { recursive: true });

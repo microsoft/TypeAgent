@@ -76,7 +76,7 @@ function setupEventListeners(): void {
     );
 
     // Browser action click
-    chrome.action?.onClicked.addListener(async (tab) => {
+    chrome.action?.onClicked.addListener(async (tab: any) => {
         try {
             const connected = await ensureWebsocketConnected();
             if (!connected) {
@@ -94,7 +94,7 @@ function setupEventListeners(): void {
     });
 
     // Tab activation
-    chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    chrome.tabs.onActivated.addListener(async (activeInfo: any) => {
         const targetTab = await chrome.tabs.get(activeInfo.tabId);
         await toggleSiteTranslator(targetTab);
     });
