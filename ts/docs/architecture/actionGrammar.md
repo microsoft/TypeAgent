@@ -447,15 +447,19 @@ are reported at `matchedPrefixLength=4`. The **caller** (shell trie or
 CLI) is responsible for filtering the completions against the remaining
 text `"mx"`. This applies equally to forward and backward directions.
 
-6. **Partial keyword detection in wildcards** (Category 2 backward only):
+6. **Partial keyword detection in wildcards** (Category 2, both directions):
    When a wildcard absorbs all remaining input and the next grammar part
-   is a keyword, `findPartialKeywordInWildcard()` checks whether the
-   wildcard text ends with a prefix of that keyword. For example, with
-   `play <song> by <artist>` and input `"play Never b"`, the wildcard
-   absorbs `"Never b"` but `"b"` is a prefix of `"by"`. Backward
-   completion offers `"by"` at the partial keyword position (after
-   `"Never "`), with `openWildcard=true`, instead of backing up to the
-   wildcard start. This handles multi-word keywords as well: for
+   is a keyword, Phase A defers the state (via `WildcardEoiDescriptor`)
+   to Phase B1, which calls `findPartialKeywordInWildcard()` to check
+   whether the wildcard text ends with a prefix of that keyword. For
+   example, with `play <song> by <artist>` and input `"play Never b"`,
+   the wildcard absorbs `"Never b"` but `"b"` is a prefix of `"by"`.
+   Phase B1 finds the partial keyword and (for backward) collects
+   `"by"` at the partial keyword position (after `"Never "`), with
+   `openWildcard=true`, instead of using the fallback wildcard-start
+   candidate from Phase A. For forward, Phase B1 records the partial
+   keyword anchor and Phase B2 uses it to emit the completion. This
+   handles multi-word keywords as well: for
    `play <song> played by <artist>` and input `"play Never played b"`,
    the function recognizes `"played b"` as a full match of the first
    keyword word plus a partial match of the second, and offers `"by"`.
@@ -508,25 +512,38 @@ To make backward non-lossy, the matcher uses **range candidates** —
 a single-pass approach that defers sibling-rule resolution to Phase B
 (the post-loop conversion step):
 
-1. **Main loop (backward):** For each state, `collectBackwardCandidate`
+1. **Phase A (main loop):** For each state, `collectBackwardCandidate`
    determines the backed-up position _P_ via `tryPartialStringMatch`
    or property completion. When a Category 2 state has a wildcard
-   preceding the next keyword part, the state also saves a
-   `RangeCandidate` recording the wildcard-start and next-part —
-   the wildcard's end position is flexible and will be resolved later.
-2. **Phase B (range candidate resolution):** After all rules have been
-   processed and `maxPrefixLength` is settled, range candidates are
-   evaluated. Each candidate checks whether `maxPrefixLength` falls
-   inside its valid range (`[wildcardStart+1, prefix.length]`) and
-   whether the wildcard text at that split is well-formed (via
+   preceding a non-string next part (wildcard/number), a
+   `RangeCandidate` is saved directly. When the next part is a string,
+   a lightweight `WildcardEoiDescriptor` is saved for Phase B1 instead
+   of running `findPartialKeywordInWildcard` inline. This applies to
+   both directions under the same condition.
+2. **Phase B1 (anchor resolution):** Runs
+   `findPartialKeywordInWildcard` on deferred `wildcardEoiDescriptors`.
+   For backward, a partial keyword found strictly inside the prefix is
+   collected as a fixed candidate (which may advance `maxPrefixLength`,
+   clearing weaker fallback candidates from Phase A); otherwise a range
+   candidate is created for Phase B2. For forward, the best partial
+   keyword anchor is recorded in `forwardPartialKeyword`; states
+   without a partial keyword are deferred to `forwardEoiCandidates`
+   for Phase B2.
+3. **Phase B2 (materialization):** Converts surviving candidates into
+   the final `completions[]` and `properties[]` arrays. Range
+   candidates are evaluated: each checks whether `maxPrefixLength`
+   falls inside its valid range (`[wildcardStart+1, prefix.length]`)
+   and whether the wildcard text at that split is well-formed (via
    `getWildcardStr`). If so, `tryPartialStringMatch` runs forward at
    `maxPrefixLength` to produce sibling completions — the same result
    the old two-pass re-invocation would have produced, but without a
-   second full traversal of the grammar.
+   second full traversal of the grammar. Phase B2 also handles forward
+   EOI candidate instantiation, trailing-separator advancement, and
+   global deduplication.
 
 **Correctness invariant — two-pass equivalence.** Let _P_ =
 `completion(input, backward).matchedPrefixLength`. The range-candidate
-resolution in Phase B must produce the same completions as
+resolution in Phase B2 must produce the same completions as
 `completion(input[0..P], forward)` — i.e., a single backward pass
 with range candidates is equivalent to the old two-pass approach
 (backward to find _P_, then forward at _P_ to collect siblings).
@@ -536,14 +553,14 @@ Range candidates are **skipped** when:
 
 - `backwardEmitted=false` — backward didn't back up (e.g., trailing
   separator committed the match), so the result already matches forward.
-- `openWildcard=true` — the backed-up position is at an ambiguous
-  wildcard boundary. Forward evaluation at the shorter input would
-  re-parse with fresh greedy wildcards that absorb different text,
-  producing an incorrect structural interpretation.
-- `partialKeywordBackup=true` — a multi-word keyword partial match
-  (via `findPartialKeywordInWildcard`) determined P. Forward can't
-  reconstruct the keyword-word boundary because the wildcard absorbs
-  the consumed words.
+- `openWildcard=true` **and** `partialKeywordBackup=false` — the
+  backed-up position is at an ambiguous wildcard boundary with no
+  partial keyword to pin it. Forward evaluation at the shorter input
+  would re-parse with fresh greedy wildcards that absorb different
+  text, producing an incorrect structural interpretation. (When
+  `partialKeywordBackup=true`, the keyword fragment pins the position
+  even though the wildcard boundary is open, so range candidates are
+  still processed.)
 
 This rule naturally handles three kinds of ambiguity:
 
@@ -664,12 +681,12 @@ more text, moving the boundary forward. The grammar matcher sets
 these positions. The table below explains _why_ the directions always
 differ at these boundaries.
 
-| Mode / Partial keyword?                          | Fwd = Bwd? | Why                                                               |
-| ------------------------------------------------ | ---------- | ----------------------------------------------------------------- |
-| non-`none` — no partial keyword                  | **No**     | Forward defers to Phase B; backward backs up to wildcard start    |
-| non-`none` — partial at Q < P                    | **No**     | Both find partial at Q, but backward can also back up — ambiguous |
-| non-`none` — partial at Q = P (full word at EOI) | **No**     | Forward uses it; backward rejects (Q < `state.index` required)    |
-| `none` — any                                     | **No**     | `couldBackUp` always true                                         |
+| Mode / Partial keyword?                          | Fwd = Bwd? | Why                                                                              |
+| ------------------------------------------------ | ---------- | -------------------------------------------------------------------------------- |
+| non-`none` — no partial keyword                  | **No**     | Forward defers to Phase B2; backward backs up to wildcard start                  |
+| non-`none` — partial at Q < P                    | **No**     | Both find partial at Q (via Phase B1), but backward can also back up — ambiguous |
+| non-`none` — partial at Q = P (full word at EOI) | **No**     | Forward uses it; backward rejects (Q < `state.index` required)                   |
+| `none` — any                                     | **No**     | `couldBackUp` always true                                                        |
 
 #### P inside a wildcard (no keyword boundary reached)
 

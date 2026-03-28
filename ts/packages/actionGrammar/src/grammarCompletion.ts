@@ -167,11 +167,13 @@ function matchKeywordWordsFrom(
 // the partial keyword starts (i.e. the first non-separator character after
 // the last separator), or undefined if no partial keyword is found.
 //
-// Used in both directions:
-//   - Forward Category 2: determines the Phase B anchor position for
-//     deferred wildcard-at-EOI candidates (see forwardPartialKeyword).
-//   - Backward Category 2: offers the keyword at the partial keyword
-//     position instead of backing up to the wildcard start.
+// Used in both directions (called from Phase B1, not inline in
+// Phase A):
+//   - Forward: determines the Phase B1 anchor position for deferred
+//     wildcard-at-EOI candidates (see forwardPartialKeyword).
+//   - Backward: collects a fixed candidate at the partial keyword
+//     position, which may advance maxPrefixLength and clear weaker
+//     fallback candidates from Phase A.
 //
 // Handles both single-word and multi-word keyword parts.  For a keyword
 // like ["played", "by"], the function recognizes:
@@ -686,53 +688,42 @@ export function matchGrammarCompletion(
         });
     }
 
-    // Helper: collect a literal string completion candidate at a
-    // given prefix position.  Updates maxPrefixLength; skips if
-    // position is below max.  Converted in Phase B.
-    function collectStringCandidate(
-        state: MatchState,
-        candidatePrefixLength: number,
-        completionText: string,
-        candidateOpenWildcard: boolean = false,
-        candidatePartialKeywordBackup: boolean = false,
-    ): void {
-        updateMaxPrefixLength(candidatePrefixLength);
-        if (candidatePrefixLength !== maxPrefixLength) return;
-        fixedCandidates.push({
-            kind: "string",
-            completionText,
-            spacingMode: state.spacingMode,
-            openWildcard: candidateOpenWildcard,
-            partialKeywordBackup: candidatePartialKeywordBackup,
-        });
-    }
-
     // Helper: try partial string match and collect the result as a
-    // string candidate.  Used by Category 2 forward and Category 3b.
-    // Returns true if a candidate was collected.
-    function tryCollectStringCompletion(
+    // literal string completion candidate.  Updates maxPrefixLength;
+    // skips if position is below max.  Used by Category 2 forward,
+    // Category 3b, and backward candidate collection.  Returns true
+    // if a candidate was collected.
+    function tryCollectStringCandidate(
         state: MatchState,
         part: StringPart,
-        candidateOpenWildcard: boolean = false,
-    ): void {
+        candidateOpenWildcard: boolean,
+        startIndex: number,
+        dir: "forward" | "backward" | undefined,
+    ): boolean {
         const partial = tryPartialStringMatch(
             part,
             prefix,
-            state.index,
+            startIndex,
             state.spacingMode,
-            direction,
+            dir,
         );
         if (partial !== undefined) {
-            collectStringCandidate(
-                state,
-                partial.consumedLength,
-                partial.remainingText,
-                candidateOpenWildcard,
-            );
-            if (partial.couldBackUp && direction === "backward") {
+            updateMaxPrefixLength(partial.consumedLength);
+            if (partial.consumedLength === maxPrefixLength) {
+                fixedCandidates.push({
+                    kind: "string",
+                    completionText: partial.remainingText,
+                    spacingMode: state.spacingMode,
+                    openWildcard: candidateOpenWildcard,
+                    partialKeywordBackup: false,
+                });
+            }
+            if (partial.couldBackUp && dir === "backward") {
                 backwardEmitted = true;
             }
+            return true;
         }
+        return false;
     }
 
     // Helper: backward completion — back up to the last matched item
@@ -765,20 +756,15 @@ export function matchGrammarCompletion(
         } else if (state.lastMatchedPartInfo !== undefined) {
             const info = state.lastMatchedPartInfo;
             if (info.type === "string") {
-                const backResult = tryPartialStringMatch(
-                    info.part,
-                    prefix,
-                    info.start,
-                    state.spacingMode,
-                    "backward",
-                );
-                if (backResult !== undefined) {
-                    collectStringCandidate(
+                if (
+                    tryCollectStringCandidate(
                         state,
-                        backResult.consumedLength,
-                        backResult.remainingText,
+                        info.part,
                         info.afterWildcard,
-                    );
+                        info.start,
+                        "backward",
+                    )
+                ) {
                     return true;
                 } else {
                     updateMaxPrefixLength(state.index);
@@ -924,10 +910,12 @@ export function matchGrammarCompletion(
                     `Completing ${nextPart.type} part ${state.name}`,
                 );
                 if (nextPart.type === "string" && !deferredToEoi) {
-                    tryCollectStringCompletion(
+                    tryCollectStringCandidate(
                         state,
                         nextPart,
                         savedPendingWildcard?.valueId !== undefined,
+                        state.index,
+                        direction,
                     );
                 } else if (nextPart.type !== "string") {
                     debugCompletion(
@@ -1004,7 +992,13 @@ export function matchGrammarCompletion(
                     currentPart !== undefined &&
                     currentPart.type === "string"
                 ) {
-                    tryCollectStringCompletion(state, currentPart);
+                    tryCollectStringCandidate(
+                        state,
+                        currentPart,
+                        false,
+                        state.index,
+                        direction,
+                    );
                 }
             }
         }
