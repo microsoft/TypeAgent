@@ -1,5 +1,14 @@
 # Completion Architecture
 
+> **Scope:** This document describes the cross-layer completion pipeline
+> — how completions flow from the grammar matcher through the cache,
+> dispatcher, agent SDK, shell, and CLI layers. It defines the metadata
+> contract (`startIndex`, `separatorMode`, `closedSet`,
+> `directionSensitive`, `openWildcard`), the shell state machine, and
+> correctness invariants. For the grammar language, compilation
+> pipeline, and grammar-level matching algorithms (categories, direction
+> semantics, equivalence analysis), see `actionGrammar.md`.
+
 ## Overview
 
 TypeAgent's completion system provides real-time, context-aware completions
@@ -546,25 +555,42 @@ wildcard and the results differ (→ `directionSensitive=true`).
 See `actionGrammar.md` "When direction does _not_ matter" for the
 full list, including the `[spacing=none]` exception.
 
-The flag is a **biconditional**: `directionSensitive=true` if and only
-if forward and backward produce different results. There are no false
-positives (see invariant #3).
+The flag is correct under the cross-query invariant definition:
+`directionSensitive=true` if and only if
+`completion(input[0..P], "backward")` differs from the forward result.
+For `openWildcard` positions, truncating to `input[0..P]` removes the
+content that established the anchor, so backward on the truncated input
+always diverges — even when both directions happen to agree on the
+original (longer) input. See invariant #4.
+
+**Decision tree** (evaluated once after all candidates are collected):
+
+```
+openWildcard        → true  (ambiguous boundary; backward can reconsider)
+P = minPrefixLength → false (nothing matched beyond caller's floor)
+midPosition         → true  (keyword boundary, no trailing separator)
+P = prefix.length   → !trailingSepAdvanced
+```
+
+See the "Forward/backward equivalence analysis" section in
+`actionGrammar.md` for the full position-by-position analysis.
 
 **Examples:** The table below shows `directionSensitive` for various
 inputs. The general pattern: `true` when a part is fully matched with
 no trailing separator; `false` when partial, committed by whitespace,
 or dirty.
 
-| Rule                   | Input        | `directionSensitive` | Why                                                           |
-| ---------------------- | ------------ | -------------------- | ------------------------------------------------------------- |
-| `play <song> by <a>`   | `play`       | `true`               | `"play"` fully matched, backward can reconsider               |
-| `play <song> by <a>`   | `play `      | `false`              | Trailing space commits                                        |
-| `play <song> by <a>`   | `play Never` | `true`               | `"Never"` in wildcard, keyword `"by"` next; no trailing space |
-| `play <song> by <a>`   | `pla`        | `false`              | Only partial match (Category 3b) — nothing to back up to      |
-| `play music`           | `play`       | `true`               | `"play"` fully matched, no trailing space                     |
-| `play music`           | `play `      | `false`              | Trailing space commits                                        |
-| `(play \| player) now` | `play`       | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`    |
-| `(play \| player) now` | `play `      | `false`              | Trailing space commits                                        |
+| Rule                   | Input          | `directionSensitive` | Why                                                           |
+| ---------------------- | -------------- | -------------------- | ------------------------------------------------------------- |
+| `play <song> by <a>`   | `play`         | `true`               | `"play"` fully matched, backward can reconsider               |
+| `play <song> by <a>`   | `play `        | `false`              | Trailing space commits                                        |
+| `play <song> by <a>`   | `play Never`   | `true`               | `"Never"` in wildcard, keyword `"by"` next; no trailing space |
+| `play <song> by <a>`   | `play Never b` | `true`               | `openWildcard=true` — wildcard boundary ambiguous             |
+| `play <song> by <a>`   | `pla`          | `false`              | Only partial match (Category 3b) — nothing to back up to      |
+| `play music`           | `play`         | `true`               | `"play"` fully matched, no trailing space                     |
+| `play music`           | `play `        | `false`              | Trailing space commits                                        |
+| `(play \| player) now` | `play`         | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`    |
+| `(play \| player) now` | `play `        | `false`              | Trailing space commits                                        |
 
 The dispatcher may additionally set `directionSensitive=true` at the
 command level — for example, when a subcommand name is both a valid
@@ -749,20 +775,17 @@ _Impact:_ False negative → stale menu after backspace.
 _#3b — Forward not direction-sensitive → backward on truncated agrees._
 `!forward.directionSensitive` →
 `forward === completion(input[0..fwd.mpl], "backward")`.
-Skipped when `forward.openWildcard` (ambiguous boundary).
 _Impact:_ False negative → stale menu; false positive → unnecessary
 re-fetch.
 
 _#3c — Backward not direction-sensitive → forward on truncated agrees._
 `!backward.directionSensitive` →
 `backward === completion(input[0..bwd.mpl], "forward")`.
-Skipped when `backward.openWildcard` (ambiguous boundary).
 _Impact:_ Same as #3b.
 
 **#4 — Forward direction-sensitive → backward backs up.**
 `forward.directionSensitive` →
 `completion(input[0..fwd.mpl], "backward").matchedPrefixLength < fwd.mpl`.
-Skipped when `forward.openWildcard`.
 _Impact:_ Backspacing shows different completions than forward-typing to
 the same position — the menu is inconsistent depending on how the user
 arrived at that input.
@@ -771,9 +794,14 @@ arrived at that input.
 When `fwd.mpl ≠ bwd.mpl` and `backward.directionSensitive`:
 `completion(input[0..bwd.mpl], "forward").matchedPrefixLength ≥ bwd.mpl`.
 Confirms that backward's backed-up position is reachable from forward.
-Skipped when `backward.openWildcard`.
 _Impact:_ User sees only one completion branch when backspacing at a fork —
 other valid alternatives are silently lost.
+
+Note: invariants #3b–#5 previously skipped `openWildcard` cases because
+truncating to an ambiguous wildcard boundary removed the content that
+established the anchor. With `openWildcard → directionSensitive=true`,
+#3b/#3c never fire for openWildcard (the guard is `!directionSensitive`),
+and #4/#5 validate correctly (backward on truncated does back up).
 
 ### Field-specific invariants
 

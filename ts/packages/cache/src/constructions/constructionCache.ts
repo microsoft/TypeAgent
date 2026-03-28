@@ -498,12 +498,10 @@ export class ConstructionCache {
         // are added (entity values are external).  Reset to true when
         // maxPrefixLength advances (old candidates discarded).
         let closedSet: boolean = true;
-        // Direction-sensitive when the opposite direction would produce
-        // different completions.  True when at least one construction
-        // at maxPrefixLength has matched parts to back up to and the
-        // prefix doesn't end with a commit signal (separator).
-        const noTrailingSeparator = !/[\s\p{P}]$/u.test(requestPrefix);
-        let directionSensitive = false;
+        // Whether at least one candidate at maxPrefixLength had a
+        // matched part to reconsider (partialPartCount >= 1).  Reset
+        // when maxPrefixLength advances.
+        let hasMatchedPart = false;
         const rejectReferences = options?.rejectReferences ?? true;
         const langTools = getLanguageTools("en");
 
@@ -514,7 +512,7 @@ export class ConstructionCache {
                 completionProperty.length = 0;
                 separatorMode = undefined;
                 closedSet = true;
-                directionSensitive = false;
+                hasMatchedPart = false;
             }
         }
 
@@ -553,8 +551,8 @@ export class ConstructionCache {
                 // Forward: exact match means nothing to complete.
                 if (partialPartCount === construction.parts.length) {
                     updateMaxPrefixLength(requestPrefix.length);
-                    if (noTrailingSeparator && partialPartCount >= 1) {
-                        directionSensitive = true;
+                    if (partialPartCount >= 1) {
+                        hasMatchedPart = true;
                     }
                     continue;
                 }
@@ -568,10 +566,9 @@ export class ConstructionCache {
                 continue; // Shorter than the best match — skip
             }
 
-            // Direction-sensitive when a matched part exists to back
-            // up to and the prefix has no trailing commit signal.
-            if (noTrailingSeparator && partialPartCount >= 1) {
-                directionSensitive = true;
+            // Track whether at least one candidate had matched parts.
+            if (partialPartCount >= 1) {
+                hasMatchedPart = true;
             }
 
             // --- Step 3: Offer literal completions from the part ---
@@ -668,6 +665,14 @@ export class ConstructionCache {
                 separatorMode = "optional";
             }
         }
+
+        // Compute directionSensitive.
+        //
+        // Direction-sensitive when: at least one candidate at
+        // maxPrefixLength had a matched part to reconsider, AND no
+        // trailing separator in the input commits the match.
+        const noTrailingSeparator = !/[\s\p{P}]$/u.test(requestPrefix);
+        const directionSensitive = hasMatchedPart && noTrailingSeparator;
 
         return {
             completions: requestText,

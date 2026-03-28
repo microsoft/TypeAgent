@@ -1119,7 +1119,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 11,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1137,7 +1137,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 11,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1153,7 +1153,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 22,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1171,7 +1171,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 22,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1196,7 +1196,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 9,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1214,7 +1214,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 9,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });
@@ -1232,7 +1232,7 @@ describeForEachCompletion(
                     matchedPrefixLength: 13,
                     separatorMode: "none",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                     properties: [],
                 });

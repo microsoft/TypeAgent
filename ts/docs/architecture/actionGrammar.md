@@ -1,5 +1,13 @@
 # Action Grammar — Architecture & Design
 
+> **Scope:** This document is the implementation reference for the
+> `actionGrammar` package — the grammar language (`.agr` syntax,
+> entities, spacing modes, value expressions), the compilation pipeline,
+> and the matching algorithms (full matching and completion matching).
+> For the cross-layer completion pipeline (cache → dispatcher → shell →
+> CLI), metadata contracts, and correctness invariants, see
+> `completion.md`.
+
 ## Overview
 
 The `action-grammar` package is TypeAgent's natural language understanding
@@ -609,6 +617,122 @@ input `"play"`:
   Exception: in `[spacing=none]` mode, whitespace is not a
   separator, so `directionSensitive` is always `true` when any word has
   been fully matched — trailing spaces do not commit.
+
+### Forward/backward equivalence analysis
+
+Given `input` and `matchPrefixLength` P, does
+`completion(input[0..P], "forward")` produce the same result as
+`completion(input[0..P], "backward")`?
+
+The answer depends on **where P lands** in the grammar structure, the
+**separator mode**, and whether there is a **trailing separator** after
+the last matched item.
+
+**Terminology:**
+
+- **Committed:** a separator character follows the last matched
+  word/wildcard in `input[0..P]`
+  (i.e. `nextNonSeparatorIndex(input[0..P], endIndex) > endIndex`).
+- **Uncommitted:** the last matched item runs to end-of-string with no
+  trailing separator.
+
+#### P at a keyword boundary (between parts)
+
+| Mode / Trailing sep                   | Fwd = Bwd? | Why                                                     |
+| ------------------------------------- | ---------- | ------------------------------------------------------- |
+| `required`/`auto` — committed         | **Yes**    | Separator commits; nothing to reconsider                |
+| `required`/`auto` — uncommitted (EOI) | **No**     | Backward re-offers keyword; forward offers next part    |
+| `optional`/`auto` (CJK) — committed   | **Yes**    | Separator commits                                       |
+| `optional`/`auto` (CJK) — uncommitted | **No**     | Backward backs up; forward advances                     |
+| `none`                                | **No**     | `couldBackUp` always true when `spacingMode === "none"` |
+
+#### P inside a multi-word keyword (between words of one keyword)
+
+| Mode / Trailing sep                   | Fwd = Bwd? | Why                                 |
+| ------------------------------------- | ---------- | ----------------------------------- |
+| `required`/`auto` — committed         | **Yes**    | Separator commits word K            |
+| `required`/`auto` — uncommitted (EOI) | **No**     | Backward backs up to `prevEndIndex` |
+| `optional` — committed                | **Yes**    | Separator commits                   |
+| `optional` — uncommitted              | **No**     | Backward reconsiders word K         |
+| `none`                                | **No**     | `couldBackUp` always true           |
+
+#### P at a wildcard-keyword boundary (wildcard finalized at EOI, next part is string)
+
+Wildcard boundaries are always ambiguous — the wildcard could absorb
+more text, moving the boundary forward. The grammar matcher sets
+`openWildcard=true` and `directionSensitive=true` unconditionally for
+these positions. The table below explains _why_ the directions always
+differ at these boundaries.
+
+| Mode / Partial keyword?                          | Fwd = Bwd? | Why                                                               |
+| ------------------------------------------------ | ---------- | ----------------------------------------------------------------- |
+| non-`none` — no partial keyword                  | **No**     | Forward defers to Phase B; backward backs up to wildcard start    |
+| non-`none` — partial at Q < P                    | **No**     | Both find partial at Q, but backward can also back up — ambiguous |
+| non-`none` — partial at Q = P (full word at EOI) | **No**     | Forward uses it; backward rejects (Q < `state.index` required)    |
+| `none` — any                                     | **No**     | `couldBackUp` always true                                         |
+
+#### P inside a wildcard (no keyword boundary reached)
+
+| What follows P?                             | Fwd = Bwd? | Why                                                              |
+| ------------------------------------------- | ---------- | ---------------------------------------------------------------- |
+| Non-separator text (Cat 3a)                 | **No**     | Forward: property completion; backward: backs up to last keyword |
+| Separator / nothing (wildcard just started) | **No**\*   | Backward reconsiders preceding keyword                           |
+
+\* When `lastMatchedPartInfo` exists.
+
+#### P = 0 (nothing matched)
+
+| Scenario                       | Fwd = Bwd? | Why                                                      |
+| ------------------------------ | ---------- | -------------------------------------------------------- |
+| Partial first keyword (Cat 3b) | **Yes**    | `couldBackUp = false`; backward falls through to forward |
+
+#### P = input.length, all parts matched (Category 1: exact match)
+
+| Scenario            | Fwd = Bwd? | Why                                                         |
+| ------------------- | ---------- | ----------------------------------------------------------- |
+| All parts satisfied | **Yes**    | Both use `tryCollectBackwardCandidate` — direction-agnostic |
+
+#### Decision tree
+
+The `directionSensitive` flag is computed by the following decision tree,
+evaluated once after all candidates are collected using the final
+`maxPrefixLength` (P).
+
+```
+openWildcard?
+  └─ Yes → DIFFERENT (wildcard boundary is ambiguous;
+           backward can always reconsider)
+
+P = minPrefixLength (or 0 if unset)?
+  └─ Yes → SAME (nothing matched beyond the caller's floor;
+           backward has nothing to reconsider)
+
+P < input.length? (midPosition)
+  └─ Yes → DIFFERENT (truncated input ends at keyword boundary
+           with no trailing separator — backward always backs up)
+
+P = input.length:
+  └─ Trailing separator advanced P past last matched item?
+      ├─ Yes → SAME (separator commits the position)
+      └─ No → DIFFERENT (no separator — backward can reconsider)
+```
+
+**Key insight:** The separator is the universal "commit" mechanism.
+Once `input[0..P]` ends with a separator after the last matched item,
+the position is committed and both directions agree. Without that
+separator (including `none` mode where separators don't exist),
+backward has the option to reconsider — and the directions diverge.
+
+**Design choice — openWildcard → always true:** Even when both
+directions happen to find the same partial keyword at the same position
+(e.g. "play Never b" where both find "b"→"by" at position 11), the
+wildcard boundary is ambiguous. Truncating to `input[0..P]` removes
+the content that established the anchor, so
+`completion(input[0..P], "backward")` always diverges — confirming
+that the position is genuinely direction-sensitive under the cross-query
+definition (invariant #4 in `completion.md`). This also simplifies the
+implementation (no `partialKeywordAgrees` tracking needed) and enables
+unguarded cross-query invariant checking in tests.
 
 **Metadata produced:**
 

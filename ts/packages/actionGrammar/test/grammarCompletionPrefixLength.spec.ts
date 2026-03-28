@@ -3329,7 +3329,7 @@ describeForEachCompletion(
                     sortCompletions: true,
                     matchedPrefixLength: 19,
                     openWildcard: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                 });
             });
 
@@ -3418,7 +3418,7 @@ describeForEachCompletion(
                     completions: ["by", "cut", "from", "one", "song", "track"],
                     sortCompletions: true,
                     matchedPrefixLength: 19,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: true,
                 });
             });

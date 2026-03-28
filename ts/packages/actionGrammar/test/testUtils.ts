@@ -279,18 +279,18 @@ function assertCrossDirectionInvariants(
         }
     }
 
-    // Cross-query invariants compare with a fresh completion on a
-    // truncated prefix.  Skip when minPrefixLength is specified
-    // because filtering can change which candidates survive.
-    if (minPrefixLength !== undefined) return;
-
     // #2: !forward.directionSensitive →
     //     forward === completion(input[0..fwd.mpl], "backward")
     //     When forward says direction doesn't matter at its position,
     //     backward on the truncated input should produce the same result.
-    if (!forward.directionSensitive && !forward.openWildcard) {
+    if (!forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
-        const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
+        const backwardAtFwd = baseFn(
+            grammar,
+            truncated,
+            minPrefixLength,
+            "backward",
+        );
         if (!completionResultsEqual(forward, backwardAtFwd)) {
             try {
                 expect(backwardAtFwd).toEqual(forward);
@@ -309,9 +309,14 @@ function assertCrossDirectionInvariants(
     //     backward === completion(input[0..bwd.mpl], "forward")
     //     When backward says direction doesn't matter at its position,
     //     forward on the truncated input should produce the same result.
-    if (!backward.directionSensitive && !backward.openWildcard) {
+    if (!backward.directionSensitive) {
         const truncated = prefix.substring(0, bwdMpl);
-        const forwardAtBwd = baseFn(grammar, truncated, undefined, "forward");
+        const forwardAtBwd = baseFn(
+            grammar,
+            truncated,
+            minPrefixLength,
+            "forward",
+        );
         // Guard: only check when forward can reach backward's position.
         // When forwardAtBwd.mpl < bwdMpl, the forward path has a known
         // gap and can't reproduce backward's position.
@@ -335,9 +340,14 @@ function assertCrossDirectionInvariants(
     //     completion(input[0..fwd.mpl], "backward").mpl < fwd.mpl
     //     When forward says direction matters, backward on the truncated
     //     input should back up to a shorter position.
-    if (forward.directionSensitive && fwdMpl > 0 && !forward.openWildcard) {
+    if (forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
-        const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
+        const backwardAtFwd = baseFn(
+            grammar,
+            truncated,
+            minPrefixLength,
+            "backward",
+        );
         const backwardAtFwdMpl = backwardAtFwd.matchedPrefixLength ?? 0;
         if (backwardAtFwdMpl >= fwdMpl) {
             throw new Error(
@@ -354,13 +364,14 @@ function assertCrossDirectionInvariants(
     //     When backward backs up to a different position and says direction
     //     matters there, forward on the truncated input should consume at
     //     least to backward's position (confirming it's reachable).
-    if (
-        fwdMpl !== bwdMpl &&
-        backward.directionSensitive &&
-        !backward.openWildcard
-    ) {
+    if (fwdMpl !== bwdMpl && backward.directionSensitive) {
         const truncated = prefix.substring(0, bwdMpl);
-        const forwardAtBwd = baseFn(grammar, truncated, undefined, "forward");
+        const forwardAtBwd = baseFn(
+            grammar,
+            truncated,
+            minPrefixLength,
+            "forward",
+        );
         const forwardAtBwdMpl = forwardAtBwd.matchedPrefixLength ?? 0;
         // Guard: skip when forward can't reach backward's position
         // at all (mpl=0).  This is a known gap — e.g. number-variable
