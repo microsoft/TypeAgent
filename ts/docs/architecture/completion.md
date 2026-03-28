@@ -1,5 +1,14 @@
 # Completion Architecture
 
+> **Scope:** This document describes the cross-layer completion pipeline
+> — how completions flow from the grammar matcher through the cache,
+> dispatcher, agent SDK, shell, and CLI layers. It defines the metadata
+> contract (`startIndex`, `separatorMode`, `closedSet`,
+> `directionSensitive`, `openWildcard`), the shell state machine, and
+> correctness invariants. For the grammar language, compilation
+> pipeline, and grammar-level matching algorithms (categories, direction
+> semantics, equivalence analysis), see `actionGrammar.md`.
+
 ## Overview
 
 TypeAgent's completion system provides real-time, context-aware completions
@@ -563,7 +572,8 @@ midPosition         → true  (keyword boundary, no trailing separator)
 P = prefix.length   → !trailingSepAdvanced
 ```
 
-See `forward-backward-equivalence.md` for the full analysis.
+See the "Forward/backward equivalence analysis" section in
+`actionGrammar.md` for the full position-by-position analysis.
 
 **Examples:** The table below shows `directionSensitive` for various
 inputs. The general pattern: `true` when a part is fully matched with

@@ -285,7 +285,7 @@ export type GrammarCompletionResult = {
     // direction.  When false, the caller can skip re-fetching on
     // direction change.
     //
-    // Decision tree (see forward-backward-equivalence.md):
+    // Decision tree (see actionGrammar.md § Forward/backward equivalence):
     //   openWildcard        → true  (ambiguous boundary)
     //   P = minPrefixLength → false (nothing matched beyond floor)
     //   midPosition         → true  (keyword boundary, no trailing sep)
