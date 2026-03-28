@@ -15,7 +15,6 @@ import { openai as ai } from "aiclient";
 import { fileURLToPath } from "node:url";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
-import { UserActionsList } from "./schema/userActionsPool.mjs";
 
 export type HtmlFragments = {
     frameId: string;
@@ -140,35 +139,23 @@ export async function createDiscoveryPageTranslator(
         | "GPT_5_MINI"
         | "GPT_5_2",
 ) {
-    const userActionsPoolSchema = await getSchemaFileContents(
-        "userActionsPool.mts",
-    );
-    const pageTypesSchema = await getSchemaFileContents("pageTypes.mts");
+    const pageSummarySchema = await getSchemaFileContents("pageSummary.mts");
 
     const agent = new SchemaDiscoveryAgent<SchemaDiscoveryActions>(
-        userActionsPoolSchema,
-        pageTypesSchema,
-        "UserPageActions",
+        pageSummarySchema,
         model,
     );
     return agent;
 }
 
 export class SchemaDiscoveryAgent<T extends object> {
-    pageTypesSchema: string;
-    userActionsPoolSchema: string;
+    defaultSchema: string;
 
     model: TypeChatLanguageModel;
     translator: TypeChatJsonTranslator<T>;
 
-    constructor(
-        userActionsPoolSchema: string,
-        pageTypesSchema: string,
-        schemaName: string,
-        fastModelName: string,
-    ) {
-        this.userActionsPoolSchema = userActionsPoolSchema;
-        this.pageTypesSchema = pageTypesSchema;
+    constructor(defaultSchema: string, fastModelName: string) {
+        this.defaultSchema = defaultSchema;
 
         const apiSettings = ai.azureApiSettingsFromEnv(
             ai.ModelType.Chat,
@@ -182,8 +169,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             ["schemaDiscovery"],
         );
         const validator = createTypeScriptJsonValidator<T>(
-            this.userActionsPoolSchema,
-            schemaName,
+            this.defaultSchema,
+            "PageDescription",
         );
         this.translator = createJsonTranslator(this.model, validator);
     }
@@ -237,7 +224,7 @@ export class SchemaDiscoveryAgent<T extends object> {
     }
 
     private getBootstrapTranslator(targetType: string, targetSchema?: string) {
-        const pageSchema = targetSchema ?? this.userActionsPoolSchema;
+        const pageSchema = targetSchema ?? this.defaultSchema;
 
         const validator = createTypeScriptJsonValidator(pageSchema, targetType);
         const bootstrapTranslator = createJsonTranslator(this.model, validator);
@@ -280,15 +267,14 @@ export class SchemaDiscoveryAgent<T extends object> {
     }
 
     async getCandidateUserActions(
-        userRequest?: string,
+        discoverySchema: string,
         fragments?: HtmlFragments[],
         screenshots?: string[],
         pageSummary?: string,
     ) {
-        // prompt - present html, optional screenshot and list of candidate actions
         const bootstrapTranslator = this.getBootstrapTranslator(
-            "UserActionsList",
-            this.userActionsPoolSchema,
+            "CandidateActionList",
+            discoverySchema,
         );
 
         const screenshotSection = getScreenshotPromptSection(
@@ -299,22 +285,10 @@ export class SchemaDiscoveryAgent<T extends object> {
         const prefixSection = getPrefixPromptSection();
         const suffixSection = getSuffixPromptSection();
         let requestSection = [];
-        if (userRequest) {
-            requestSection.push({
-                type: "text",
-                text: `
-            Here is  user request
-            '''
-            ${userRequest}
-            '''
-            `,
-            });
-        }
         if (pageSummary) {
             requestSection.push({
                 type: "text",
                 text: `
-               
             Here is a previously-generated summary of the page
             '''
             ${pageSummary}
@@ -330,10 +304,11 @@ export class SchemaDiscoveryAgent<T extends object> {
             {
                 type: "text",
                 text: `
-        Examine the layout information provided and determine the set of possible UserPageActions users can take on the page.
-        Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
-        If there are multiple UserPageActions of the same type, only return the first one in the output object.
-        
+        You are given a list of known user actions. Examine the page layout and content, then determine which of
+        these actions can actually be performed on THIS page. Only include actions that the page supports.
+        If none of the known actions apply, return an empty actions array.
+        Return a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+
         '''
         ${bootstrapTranslator.validator.getSchemaText()}
         '''
@@ -353,7 +328,7 @@ export class SchemaDiscoveryAgent<T extends object> {
     }
 
     async unifyUserActions(
-        candidateActions: UserActionsList,
+        candidateActions: { actions: any[] },
         pageDescription?: PageDescription,
         fragments?: HtmlFragments[],
         screenshots?: string[],
