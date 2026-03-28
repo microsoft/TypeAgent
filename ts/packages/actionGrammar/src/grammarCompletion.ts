@@ -692,7 +692,8 @@ export function matchGrammarCompletion(
     // literal string completion candidate.  Updates maxPrefixLength;
     // skips if position is below max.  Used by Category 2 forward,
     // Category 3b, and backward candidate collection.  Returns true
-    // if a candidate was collected.
+    // if a partial match was found (the candidate may still be
+    // discarded by the maxPrefixLength filter).
     function tryCollectStringCandidate(
         state: MatchState,
         part: StringPart,
@@ -1026,10 +1027,10 @@ export function matchGrammarCompletion(
     // the appropriate anchor:
     //   - partial keyword position (if one exists from other states)
     //   - prefix.length (otherwise)
-    // Only "wildcardString" items are added/consumed; the broader
-    // RangeCandidate type is kept for structural uniformity with
-    // rangeCandidates.
-    const forwardEoiCandidates: RangeCandidate[] = [];
+    const forwardEoiCandidates: Extract<
+        RangeCandidate,
+        { kind: "wildcardString" }
+    >[] = [];
 
     for (const desc of wildcardEoiDescriptors) {
         const partialResult = findPartialKeywordInWildcard(
@@ -1041,6 +1042,9 @@ export function matchGrammarCompletion(
         if (direction === "backward") {
             if (
                 partialResult !== undefined &&
+                // Equivalent to the old `< state.index`: deferredToEoi
+                // guarantees state.index >= prefix.length, and
+                // state.index never exceeds prefix.length.
                 partialResult.position < prefix.length
             ) {
                 // Partial keyword found strictly inside the prefix.
@@ -1349,7 +1353,6 @@ export function matchGrammarCompletion(
 
         // Instantiate deferred EOI candidates at the anchor.
         for (const c of forwardEoiCandidates) {
-            if (c.kind !== "wildcardString") continue;
             if (anchor <= c.wildcardStart) continue;
             if (
                 getWildcardStr(
