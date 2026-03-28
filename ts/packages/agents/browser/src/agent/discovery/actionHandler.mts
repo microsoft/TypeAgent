@@ -16,8 +16,6 @@ import {
     generateActionSchema,
 } from "@typeagent/action-schema";
 import { SchemaCreator as sc } from "@typeagent/action-schema";
-import { UserActionsList } from "./schema/userActionsPool.mjs";
-import { PageDescription } from "./schema/pageSummary.mjs";
 import {
     SchemaDiscoveryActions,
     CreateWebFlowFromRecording,
@@ -26,8 +24,7 @@ import {
     DeleteWebFlow,
 } from "./schema/discoveryActions.mjs";
 import registerDebug from "debug";
-import { WebFlowStore } from "../webFlows/store/webFlowStore.mjs";
-import { WebFlowDefinition, WebFlowParameter } from "../webFlows/types.js";
+import { WebFlowDefinition } from "../webFlows/types.js";
 import {
     normalizeRecording,
     RecordingData,
@@ -36,9 +33,7 @@ import {
     generateWebFlowFromTrace,
     ScriptGenerationOptions,
 } from "../webFlows/scriptGenerator.mjs";
-import { ensureSampleFlowsRegistered } from "../webFlows/actionHandler.mjs";
 import { sendWebFlowRefreshToClient } from "../browserActionHandler.mjs";
-import { addAllowDynamicAgentDomains } from "../webTypeAgent.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
 
@@ -90,6 +85,35 @@ async function handleFindUserActions(
     action: any,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
+    const url = await getBrowserControl(
+        ctx.sessionContext.agentContext,
+    ).getPageUrl();
+
+    // Get existing WebFlows for this domain
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    let candidateFlows: WebFlowDefinition[] = [];
+    if (webFlowStore && url) {
+        try {
+            const domain = new URL(url).hostname;
+            candidateFlows =
+                await webFlowStore.listForDomainWithDetails(domain);
+        } catch {
+            // URL parsing failed
+        }
+    }
+
+    if (candidateFlows.length === 0) {
+        return {
+            displayText:
+                "No actions configured. Record a new action to get started.",
+            entities: ctx.entities.getEntities(),
+            data: { actions: [] },
+        };
+    }
+
+    // Build a TypeScript schema from the candidate WebFlows for TypeChat
+    const discoverySchema = generateDiscoverySchema(candidateFlows);
+
     const htmlFragments = await ctx.browser.getHtmlFragments();
     let screenshot = "";
     try {
@@ -100,357 +124,114 @@ async function handleFindUserActions(
             (error as Error)?.message,
         );
     }
-    let pageSummary = "";
-
-    // Only include screenshot if it's not empty
     const screenshots = screenshot ? [screenshot] : [];
 
+    let pageSummary = "";
     const summaryResponse = await ctx.agent.getPageSummary(
         undefined,
         htmlFragments,
         screenshots,
     );
-
-    let schemaDescription =
-        "A schema that enables interactions with the current page";
     if (summaryResponse.success) {
         pageSummary =
             "Page summary: \n" + JSON.stringify(summaryResponse.data, null, 2);
-        schemaDescription += (summaryResponse.data as PageDescription)
-            .description;
     }
 
     const timerName = `Analyzing page actions`;
     console.time(timerName);
 
     const response = await ctx.agent.getCandidateUserActions(
-        undefined,
+        discoverySchema,
         htmlFragments,
         screenshots,
         pageSummary,
     );
 
+    console.timeEnd(timerName);
+
     if (!response.success) {
-        console.error("Attempt to get page actions failed");
-        console.error(response.message);
+        debug("Discovery LLM call failed: %s", response.message);
         return {
             displayText: "Action could not be completed",
             entities: ctx.entities.getEntities(),
         };
     }
 
-    console.timeEnd(timerName);
+    // The LLM returns a CandidateActionList with the subset of flows
+    // that actually apply to this page.
+    const selected = response.data as { actions: { actionName: string }[] };
+    const selectedNames = new Set(selected.actions.map((a) => a.actionName));
 
-    const selected = response.data as UserActionsList;
-    const uniqueItems = new Map(
-        selected.actions.map((action) => [action.actionName, action]),
+    // Filter the full WebFlowDefinitions to only those the LLM selected
+    const applicableFlows = candidateFlows.filter((f) =>
+        selectedNames.has(f.name),
     );
 
-    let message =
-        "Possible user actions: \n" +
-        JSON.stringify(Array.from(uniqueItems.values()), null, 2);
-
-    const actionNames = [...new Set(uniqueItems.keys())];
-
-    const { schema, typeDefinitions } = await getDynamicSchema(
-        actionNames,
-        ctx.sessionContext,
+    debug(
+        `Discovery: ${candidateFlows.length} candidates → ${applicableFlows.length} applicable to page`,
     );
-    message += `\n =========== \n Discovered actions schema: \n ${schema} `;
-
-    const url = await getBrowserControl(
-        ctx.sessionContext.agentContext,
-    ).getPageUrl();
-
-    // AUTO-SAVE: Save discovered actions directly to WebFlowStore
-    if (uniqueItems.size > 0 && ctx.sessionContext.agentContext.webFlowStore) {
-        try {
-            const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
-            await ensureSampleFlowsRegistered(webFlowStore);
-            const domain = new URL(url!).hostname;
-            let savedCount = 0;
-            let skippedCount = 0;
-
-            const existingFlowNames = new Set(
-                await webFlowStore.listForDomain(domain),
-            );
-
-            for (const actionData of Array.from(uniqueItems.values()) as any) {
-                if (!actionData.actionName) continue;
-
-                if (existingFlowNames.has(actionData.actionName)) {
-                    skippedCount++;
-                    continue;
-                }
-
-                // Build a WebFlowDefinition directly from the discovered action
-                const paramEntries = Object.entries(
-                    actionData.parameters || {},
-                );
-                const parameters: Record<string, WebFlowParameter> = {};
-                for (const [k, v] of paramEntries) {
-                    const param = v as any;
-                    parameters[k] = {
-                        type: (param.type || "string") as
-                            | "string"
-                            | "number"
-                            | "boolean",
-                        required: param.required !== false,
-                        description: param.description || k,
-                    };
-                }
-
-                const flow: WebFlowDefinition = {
-                    name: actionData.actionName,
-                    description:
-                        actionData.description ||
-                        `Auto-discovered: ${actionData.actionName}`,
-                    version: 1,
-                    parameters,
-                    script: generateDiscoveredActionScript(
-                        actionData.actionName,
-                        parameters,
-                    ),
-                    grammarPatterns: generateGrammarPatterns(
-                        actionData.actionName,
-                        parameters,
-                    ),
-                    scope: { type: "site", domains: [domain] },
-                    source: {
-                        type: "discovered",
-                        timestamp: new Date().toISOString(),
-                    },
-                };
-
-                await webFlowStore.save(flow);
-                savedCount++;
-            }
-
-            debug(
-                `Auto-saved ${savedCount} discovered actions to WebFlowStore for ${domain} (skipped ${skippedCount} existing)`,
-            );
-        } catch (error) {
-            debug("Failed to auto-save discovered actions:", error);
-        }
-    }
-
-    // Auto-approve this domain for webAgent registration so the
-    // WebFlowAgent can register a temp_ agent without a user prompt.
-    if (url) {
-        try {
-            const hostname = new URL(url).hostname;
-            await addAllowDynamicAgentDomains(hostname, ctx.sessionContext);
-        } catch {
-            // Invalid URL — skip
-        }
-    }
-
-    // Tell the browser-side WebFlowAgent to re-fetch flows and update schema
-    sendWebFlowRefreshToClient(ctx.sessionContext);
-
-    // Return the site-scoped actions actually applicable to this page
-    // (not the raw LLM output which may include irrelevant pool actions).
-    let siteActions: WebFlowDefinition[] = [];
-    if (url && ctx.sessionContext.agentContext.webFlowStore) {
-        try {
-            const domain = new URL(url).hostname;
-            siteActions =
-                await ctx.sessionContext.agentContext.webFlowStore.listForDomainWithDetails(
-                    domain,
-                );
-            // Exclude global actions — only return site-scoped and user-recorded
-            siteActions = siteActions.filter((f) => f.scope.type !== "global");
-        } catch {
-            // URL parsing failed
-        }
-    }
 
     return {
-        displayText: message,
+        displayText: `Found ${applicableFlows.length} applicable actions`,
         entities: ctx.entities.getEntities(),
-        data: {
-            schema: Array.from(uniqueItems.values()),
-            typeDefinitions: typeDefinitions,
-            actions: siteActions,
-        },
+        data: { actions: applicableFlows },
     };
+}
+
+function generateDiscoverySchema(flows: WebFlowDefinition[]): string {
+    const typeNames: string[] = [];
+    const typeDefs: string[] = [];
+
+    for (const flow of flows) {
+        const typeName = capitalize(flow.name);
+        typeNames.push(typeName);
+
+        const paramFields: string[] = [];
+        for (const [name, param] of Object.entries(flow.parameters)) {
+            const tsType =
+                param.type === "number"
+                    ? "number"
+                    : param.type === "boolean"
+                      ? "boolean"
+                      : "string";
+            const optional = param.required ? "" : "?";
+            const comment = param.description ? ` // ${param.description}` : "";
+            paramFields.push(
+                `        ${name}${optional}: ${tsType};${comment}`,
+            );
+        }
+
+        const description = flow.description ? `// ${flow.description}\n` : "";
+        const paramsBlock =
+            paramFields.length > 0
+                ? `    parameters: {\n${paramFields.join("\n")}\n    };`
+                : "";
+
+        typeDefs.push(
+            `${description}export type ${typeName} = {\n` +
+                `    actionName: "${flow.name}";\n` +
+                (paramsBlock ? `${paramsBlock}\n` : "") +
+                `};`,
+        );
+    }
+
+    const unionMembers = typeNames.join("\n    | ");
+    const union =
+        typeNames.length > 0
+            ? `export type CandidateActions = \n    | ${unionMembers};`
+            : `export type CandidateActions = never;`;
+
+    return (
+        typeDefs.join("\n\n") +
+        "\n\n" +
+        union +
+        "\n\n" +
+        `export type CandidateActionList = {\n    actions: CandidateActions[];\n};`
+    );
 }
 
 function capitalize(name: string): string {
     return name.charAt(0).toUpperCase() + name.slice(1);
-}
-
-function generateGrammarPatterns(
-    actionName: string,
-    parameters: Record<string, WebFlowParameter>,
-): string[] {
-    // Convert camelCase action name to words: "searchForProduct" -> ["search", "for", "product"]
-    const words = actionName
-        .replace(/([A-Z])/g, " $1")
-        .trim()
-        .toLowerCase()
-        .split(/\s+/);
-
-    const paramEntries = Object.entries(parameters);
-    const requiredParams = paramEntries.filter(([, p]) => p.required);
-
-    if (requiredParams.length === 0) {
-        return [words.join(" ")];
-    }
-
-    const patterns: string[] = [];
-    // Build a base phrase from the action name words
-    const basePhrase = words.join(" ");
-
-    // For single-parameter actions, append the param as a wildcard/number
-    if (requiredParams.length === 1) {
-        const [paramName, paramDef] = requiredParams[0];
-        const paramToken =
-            paramDef.type === "number"
-                ? `$(${paramName}:number)`
-                : `$(${paramName}:wildcard)`;
-        patterns.push(`${basePhrase} ${paramToken}`);
-
-        // Add a shorter variant if action name already implies direction
-        if (words.length > 2) {
-            const shortPhrase = words.slice(0, 2).join(" ");
-            patterns.push(`${shortPhrase} ${paramToken}`);
-        }
-    } else {
-        // Multi-parameter: just use the base phrase with first required param
-        const [paramName, paramDef] = requiredParams[0];
-        const paramToken =
-            paramDef.type === "number"
-                ? `$(${paramName}:number)`
-                : `$(${paramName}:wildcard)`;
-        patterns.push(`${basePhrase} ${paramToken}`);
-    }
-
-    return patterns;
-}
-
-function generateDiscoveredActionScript(
-    actionName: string,
-    parameters: Record<
-        string,
-        { type: string; required: boolean; description: string }
-    >,
-): string {
-    const paramChecks = Object.entries(parameters)
-        .filter(([, p]) => p.required)
-        .map(
-            ([name]) =>
-                `    if (!params.${name}) throw new Error("Missing required parameter: ${name}");`,
-        )
-        .join("\n");
-
-    return `async function execute(browser, params) {
-${paramChecks}
-    // Discovered action: ${actionName}
-    // This is a placeholder script. The action was detected on the page
-    // but no recording was made. Record this action to generate a real script.
-    return { success: false, message: "Action '${actionName}' needs to be recorded to generate executable script" };
-}`;
-}
-
-async function buildDynamicSchemaFromWebFlows(
-    store: WebFlowStore,
-    currentDomain: string,
-    actionNames: string[],
-): Promise<{
-    schema: string;
-    actionNames: string[];
-    typeDefinitions: Record<string, ActionSchemaTypeDefinition>;
-}> {
-    const eligibleNames = await store.listForDomain(currentDomain);
-    // Include all eligible webFlows (detected + user-authored), not just LLM-detected
-    const relevantNames = [
-        ...new Set([
-            ...actionNames.filter((n) => eligibleNames.includes(n)),
-            ...eligibleNames,
-        ]),
-    ];
-
-    const schemaActionNames: string[] = [];
-    const typeDefinitions = new Map<string, ActionSchemaTypeDefinition>();
-
-    for (const name of relevantNames) {
-        const flow = await store.get(name);
-        if (!flow) continue;
-
-        schemaActionNames.push(flow.name);
-
-        const paramEntries = Object.entries(flow.parameters);
-        const typeName = capitalize(flow.name);
-
-        const paramFields: Map<string, any> = new Map<string, any>();
-        for (const [k, v] of paramEntries) {
-            let paramType: ActionParamType = sc.string();
-            if (v.type === "number") paramType = sc.number();
-            if (v.type === "boolean") paramType = sc.number();
-
-            if (v.required) {
-                paramFields.set(k, sc.field(paramType, v.description));
-            } else {
-                paramFields.set(k, sc.optional(paramType, v.description));
-            }
-        }
-
-        const obj: ActionSchemaObject = sc.obj({
-            actionName: sc.string(flow.name),
-            parameters: sc.obj(Object.fromEntries(paramFields)),
-        } as const);
-
-        const typeDef = sc.type(typeName, obj, flow.description, true);
-        typeDefinitions.set(flow.name, typeDef);
-    }
-
-    // Generate unified schema
-    const union = sc.union(
-        Array.from(typeDefinitions.values()).map((definition) =>
-            sc.ref(definition),
-        ),
-    );
-    const entry = sc.type("DynamicUserPageActions", union);
-    entry.exported = true;
-    const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
-    const order = new Map<string, number>();
-    const schema = await generateActionSchema(
-        { entry, actionSchemas, order },
-        { exact: true },
-    );
-
-    return {
-        schema,
-        actionNames: schemaActionNames,
-        typeDefinitions: Object.fromEntries(typeDefinitions),
-    };
-}
-
-async function getDynamicSchema(
-    actionNames: string[],
-    sessionContext: SessionContext<BrowserActionContext>,
-) {
-    const webFlowStore = sessionContext.agentContext.webFlowStore;
-    if (!webFlowStore) {
-        throw new Error(
-            "WebFlowStore not available — cannot build dynamic schema",
-        );
-    }
-
-    const url = await getBrowserControl(
-        sessionContext.agentContext,
-    ).getPageUrl();
-    const domain = new URL(url!).hostname;
-    return await buildDynamicSchemaFromWebFlows(
-        webFlowStore,
-        domain,
-        actionNames,
-    );
-}
-
-function refreshDynamicAgentSchema(ctx: DiscoveryActionHandlerContext): void {
-    sendWebFlowRefreshToClient(ctx.sessionContext);
 }
 
 async function handleGetPageSummary(
@@ -625,7 +406,7 @@ async function handleCreateWebFlowFromRecording(
     await webFlowStore.save(flow);
     debug(`Saved webFlow from recording: ${flow.name}`);
 
-    await refreshDynamicAgentSchema(ctx);
+    sendWebFlowRefreshToClient(ctx.sessionContext);
 
     return {
         displayText: `Created action: ${flow.name}`,
@@ -710,7 +491,7 @@ async function handleDeleteWebFlow(
 
     if (deleted) {
         debug(`Deleted webFlow: ${action.parameters.name}`);
-        await refreshDynamicAgentSchema(ctx);
+        sendWebFlowRefreshToClient(ctx.sessionContext);
     }
 
     return {
