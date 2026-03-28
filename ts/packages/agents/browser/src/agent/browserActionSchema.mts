@@ -54,7 +54,6 @@ export type OpenWebPage = {
             | "commerce"
             | "montage"
             | "markdown"
-            | "planViewer"
             | "turtleGraphics"
             | "annotationsLibrary"
             | "knowledgeLibrary"

@@ -20,70 +20,16 @@ export type MacroCategory =
     | "Other";
 export type NotificationType = "success" | "error" | "warning" | "info";
 
-// Create global extension service instance
 const extensionService = createExtensionService();
-
-export async function refreshSchema(): Promise<{
-    schema?: any[];
-    actionDefinitions?: any;
-}> {
-    return await extensionService.refreshSchema();
-}
-
-export async function startRecording(): Promise<void> {
-    return await extensionService.startRecording();
-}
-
-export async function stopRecording(): Promise<any> {
-    return await extensionService.stopRecording();
-}
-
-export async function captureHtmlFragments(): Promise<any[]> {
-    return await extensionService.captureHtmlFragments();
-}
-
-export async function registerTempSchema(): Promise<void> {
-    return await extensionService.registerTempSchema();
-}
-
-export async function createWebFlowFromRecording(params: {
-    actionName: string;
-    actionDescription: string;
-    steps: string;
-    existingActionNames: string[];
-    startUrl: string;
-    screenshots: string[];
-    html: any[];
-}): Promise<any> {
-    return await extensionService.createWebFlowFromRecording(params);
-}
 
 export async function getAllWebFlows(): Promise<any[]> {
     return await extensionService.getAllWebFlows();
-}
-
-export async function getWebFlowsForDomain(domain: string): Promise<any[]> {
-    return await extensionService.getWebFlowsForDomain(domain);
 }
 
 export async function deleteWebFlow(
     name: string,
 ): Promise<{ success: boolean; error?: string }> {
     return await extensionService.deleteWebFlow(name);
-}
-
-export async function settingsUpdated(settings: any): Promise<void> {
-    return await extensionService.settingsUpdated(settings);
-}
-
-export async function checkConnection(): Promise<any> {
-    return await extensionService.checkConnection();
-}
-
-export async function checkWebSocketConnection(): Promise<{
-    connected: boolean;
-}> {
-    return await extensionService.checkWebSocketConnection();
 }
 
 export function filterMacros(macros: any[], options: FilterOptions): any[] {

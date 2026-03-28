@@ -17,16 +17,6 @@ export type BrowserAgentInvokeFunctions = {
         mode: string;
     }): Promise<any>;
 
-    extractKnowledgeFromPageStreaming(params: {
-        url: string;
-        title: string;
-        mode: string;
-        extractionId: string;
-        htmlFragments: any[];
-        extractionSettings?: any;
-        saveToIndex?: boolean;
-    }): Promise<any>;
-
     // Knowledge queries
     searchWebMemories(params: {
         query: string;
@@ -104,14 +94,6 @@ export type BrowserAgentInvokeFunctions = {
         neighborhoodDepth?: number;
     }): Promise<any>;
 
-    discoverRelatedKnowledge(params: {
-        entities?: string[];
-        topics?: string[];
-        depth?: number;
-        maxEntities?: number;
-        maxTopics?: number;
-    }): Promise<any>;
-
     discoverRelationships(params: {
         url: string;
         knowledge: any;
@@ -122,17 +104,6 @@ export type BrowserAgentInvokeFunctions = {
         url: string;
         knowledge: any;
         relatedContent?: any[];
-    }): Promise<any>;
-
-    generatePageQuestions(params: {
-        url: string;
-        pageKnowledge: any;
-    }): Promise<any>;
-
-    generateGraphQuestions(params: {
-        url: string;
-        relatedEntities: any;
-        relatedTopics: any;
     }): Promise<any>;
 
     // Knowledge graph
@@ -244,16 +215,6 @@ export type BrowserAgentInvokeFunctions = {
     deleteWebFlow(params: { name: string }): Promise<any>;
 
     // Search/analytics
-    getRecentKnowledgeItems(params: {
-        limit?: number;
-        type?: string;
-    }): Promise<any>;
-
-    getDiscoverInsights(params: {
-        limit?: number;
-        timeframe?: string;
-    }): Promise<any>;
-
     getAnalyticsData(params: {
         timeRange?: string;
         includeQuality?: boolean;
@@ -263,17 +224,6 @@ export type BrowserAgentInvokeFunctions = {
     }): Promise<any>;
 
     getWebsiteStats(params: { groupBy?: string; limit?: number }): Promise<any>;
-
-    // AI availability
-    checkAIModelAvailability(params: {
-        url: string;
-        title: string;
-        htmlFragments: any[];
-        extractEntities: boolean;
-        extractRelationships: boolean;
-        suggestQuestions: boolean;
-        mode: string;
-    }): Promise<any>;
 
     // Navigation
     handlePageNavigation(params: {
@@ -313,10 +263,7 @@ export type ExtensionLocalInvokeFunctions = {
     checkWebSocketConnection(): Promise<{ connected: boolean }>;
     checkConnection(): Promise<{ connected: boolean }>;
     initialize(): Promise<string>;
-    startRecording(): Promise<{}>;
-    stopRecording(): Promise<any>;
     takeScreenshot(): Promise<string>;
-    captureHtmlFragments(): Promise<any[]>;
     saveRecordedActions(params: {
         recordedActions: any;
         recordedActionPageHTML: any;
@@ -483,14 +430,7 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         // Agent-forwarded operations (the service worker forwards these to the agent)
         // Listed separately because the service worker acts as a proxy
         getLibraryStats(params?: any): Promise<any>;
-        refreshSchema(): Promise<any>;
-        registerTempSchema(params: { agentName: string }): Promise<any>;
-        extractPageKnowledge(params?: any): Promise<any>;
-        extractPageKnowledgeStreaming(params?: any): Promise<any>;
         queryKnowledge(params: any): Promise<any>;
-        generatePageQuestions(params: any): Promise<any>;
-        discoverRelatedKnowledge(params: any): Promise<any>;
-        generateGraphQuestions(params: any): Promise<any>;
         searchWebMemories(params: any): Promise<any>;
         searchByEntities(params: any): Promise<any>;
         searchByTopics(params: any): Promise<any>;
@@ -517,14 +457,9 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         importHtmlFolder(params: any): Promise<any>;
         getFileImportProgress(params: { importId: string }): Promise<any>;
         cancelFileImport(params: { importId: string }): Promise<any>;
-        createWebFlowFromRecording(params: any): Promise<any>;
-        getWebFlowsForDomain(params: any): Promise<any>;
         getAllWebFlows(): Promise<any>;
         deleteWebFlow(params: any): Promise<any>;
-        checkAIModelAvailability(params: any): Promise<any>;
         getPageQualityMetrics(params: any): Promise<any>;
-        getRecentKnowledgeItems(params: any): Promise<any>;
-        getDiscoverInsights(params: any): Promise<any>;
         getAnalyticsData(params: any): Promise<any>;
         getKnowledgeGraphStatus(): Promise<any>;
         buildKnowledgeGraph(params: any): Promise<any>;

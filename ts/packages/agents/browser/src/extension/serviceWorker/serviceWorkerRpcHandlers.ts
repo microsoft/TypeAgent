@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { getActiveTab } from "./tabManager";
-import { getTabHTMLFragments, CompressionMode } from "./capture";
 import { getRecordedActions, saveRecordedActions } from "./storage";
 import {
     sendActionToAgent,
@@ -20,9 +19,7 @@ import {
     captureHtmlFragments,
     takeScreenshot,
 } from "./recording";
-import { broadcastEvent } from "./extensionEventHelpers";
 import {
-    knowledgeExtractionCallbacks,
     handleImportWebsiteDataWithProgress,
     handleImportHtmlFolder,
     handleClearWebsiteLibrary,
@@ -45,9 +42,7 @@ import {
     handleCheckIndexStatus,
     indexPageContent,
     shouldIndexPage,
-    sendProgressToUI,
 } from "./messageHandlers";
-import type { KnowledgeExtractionProgress } from "../interfaces/knowledgeExtraction.types";
 import type { AllServiceWorkerInvokeFunctions } from "../../common/serviceTypes.mjs";
 
 /**
@@ -94,39 +89,8 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             return "initialized";
         },
 
-        async startRecording() {
-            const tab = await getActiveTab();
-            if (tab?.id) {
-                await chrome.tabs.sendMessage(
-                    tab.id,
-                    { type: "startRecording" },
-                    { frameId: 0 },
-                );
-            }
-            return {};
-        },
-
-        async stopRecording() {
-            const tab = await getActiveTab();
-            if (tab?.id) {
-                const result = await chrome.tabs.sendMessage(
-                    tab.id,
-                    { type: "stopRecording" },
-                    { frameId: 0 },
-                );
-                return result;
-            }
-            return {};
-        },
-
         async takeScreenshot() {
             return screenshotCoordinator.captureScreenshot();
-        },
-
-        async captureHtmlFragments() {
-            const tab = await getActiveTab();
-            if (!tab) return [];
-            return getTabHTMLFragments(tab, CompressionMode.None);
         },
 
         async saveRecordedActions(params: any) {
@@ -442,159 +406,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
         // Complex local handlers (HTML capture + agent forward)
         // =============================================================
 
-        async extractPageKnowledge(params: any) {
-            const targetTab = await getActiveTab();
-            if (targetTab) {
-                try {
-                    const htmlFragments = await getTabHTMLFragments(
-                        targetTab,
-                        CompressionMode.KnowledgeExtraction,
-                        false,
-                        true,
-                        false,
-                        true,
-                        true,
-                    );
-
-                    const knowledgeResult = await forward(
-                        "extractKnowledgeFromPage",
-                        {
-                            url: targetTab.url,
-                            title: targetTab.title,
-                            htmlFragments: htmlFragments,
-                            extractEntities: true,
-                            extractRelationships: true,
-                            suggestQuestions: true,
-                            mode: params.extractionSettings?.mode || "content",
-                        },
-                    );
-
-                    return {
-                        knowledge: {
-                            entities: knowledgeResult.entities || [],
-                            relationships: knowledgeResult.relationships || [],
-                            keyTopics: knowledgeResult.keyTopics || [],
-                            suggestedQuestions:
-                                knowledgeResult.suggestedQuestions || [],
-                            summary: knowledgeResult.summary || "",
-                            contentActions:
-                                knowledgeResult.contentActions || [],
-                            detectedActions:
-                                knowledgeResult.detectedActions || [],
-                            actionSummary: knowledgeResult.actionSummary,
-                            contentMetrics: knowledgeResult.contentMetrics || {
-                                readingTime: 0,
-                                wordCount: 0,
-                            },
-                        },
-                    };
-                } catch (error) {
-                    console.error("Error extracting knowledge:", error);
-                    return {
-                        error: "Failed to extract knowledge from page",
-                    };
-                }
-            }
-            return {
-                error: "No browser tabs are currently open. Please open a browser tab to continue.",
-            };
-        },
-
-        async extractPageKnowledgeStreaming(params: any) {
-            const targetTab = await getActiveTab();
-            if (targetTab && params.streamingEnabled) {
-                const extractionId = params.extractionId;
-
-                const progressCallback = (
-                    progress: KnowledgeExtractionProgress,
-                ) => {
-                    try {
-                        broadcastEvent("knowledgeExtractionProgress", {
-                            extractionId,
-                            progress,
-                        });
-                    } catch (error) {
-                        console.error("Failed to send progress to UI:", error);
-                    }
-                };
-
-                knowledgeExtractionCallbacks.set(
-                    extractionId,
-                    progressCallback,
-                );
-
-                try {
-                    const htmlFragments = await getTabHTMLFragments(
-                        targetTab,
-                        CompressionMode.KnowledgeExtraction,
-                        false,
-                        false,
-                        false,
-                        true,
-                        true,
-                    );
-
-                    const knowledgeResult = await forward(
-                        "extractKnowledgeFromPageStreaming",
-                        {
-                            url: targetTab.url,
-                            title: targetTab.title,
-                            mode: params.mode || "content",
-                            extractionId: extractionId,
-                            htmlFragments: htmlFragments,
-                            extractionSettings: params.extractionSettings,
-                            saveToIndex: params.saveToIndex || false,
-                        },
-                    );
-
-                    return {
-                        success: true,
-                        extractionId: extractionId,
-                        finalData: knowledgeResult,
-                    };
-                } catch (error) {
-                    console.error(
-                        "Error in streaming knowledge extraction:",
-                        error,
-                    );
-
-                    const errorProgress: KnowledgeExtractionProgress = {
-                        extractionId,
-                        phase: "error",
-                        totalItems: 1,
-                        processedItems: 0,
-                        errors: [
-                            {
-                                message:
-                                    (error as Error).message || String(error),
-                                timestamp: Date.now(),
-                            },
-                        ],
-                    };
-
-                    const callback =
-                        knowledgeExtractionCallbacks.get(extractionId);
-                    if (callback) {
-                        callback(errorProgress);
-                        knowledgeExtractionCallbacks.delete(extractionId);
-                    }
-
-                    return {
-                        error: "Failed to extract knowledge from page",
-                        extractionId: extractionId,
-                        success: false,
-                    };
-                }
-            }
-            return {
-                error: targetTab
-                    ? "Streaming mode is disabled"
-                    : "No browser tabs are currently open",
-                extractionId: params.extractionId,
-                success: false,
-            };
-        },
-
         async indexPageContentDirect(params: any) {
             const targetTab = await getActiveTab();
             if (targetTab) {
@@ -654,27 +465,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             }
         },
 
-        async registerTempSchema(params: any) {
-            const schemaResult = await forward("registerPageDynamicAgent", {
-                agentName: params.agentName,
-            });
-            return { schema: schemaResult };
-        },
-
-        async refreshSchema() {
-            const discoveryResult = await forward("detectPageActions", {
-                registerAgent: false,
-            });
-            return {
-                schema: discoveryResult?.schema ?? [],
-                actionDefinitions: discoveryResult?.typeDefinitions,
-            };
-        },
-
-        // =============================================================
-        // Agent forwards with local transforms
-        // =============================================================
-
         // =============================================================
         // Simple agent forwards
         // =============================================================
@@ -687,30 +477,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             return forward("getLibraryStats", {});
         },
 
-        async createWebFlowFromRecording(params: any) {
-            const result = await forward("createWebFlowFromRecording", {
-                actionName: params.actionName,
-                actionDescription: params.actionDescription,
-                recordedSteps: params.steps,
-                existingActionNames: params.existingActionNames,
-                startUrl: params.startUrl,
-                screenshots: params.screenshots,
-                fragments: params.html,
-            });
-            if (result.success && result.webFlowName) {
-                broadcastEvent("macroAdded", {
-                    webFlowName: result.webFlowName,
-                });
-            }
-            return result;
-        },
-
-        async getWebFlowsForDomain(params: any) {
-            return forward("getWebFlowsForDomain", {
-                domain: params.domain,
-            });
-        },
-
         async getAllWebFlows() {
             return forward("getAllWebFlows", {});
         },
@@ -720,11 +486,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 const result = await forward("deleteWebFlow", {
                     name: params.name,
                 });
-                if (result.success) {
-                    broadcastEvent("macroDeleted", {
-                        name: params.name,
-                    });
-                }
                 return result;
             } catch (error) {
                 console.error("Failed to delete webFlow:", error);
@@ -753,50 +514,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             } catch (error) {
                 console.error("Error querying knowledge:", error);
                 return { error: "Failed to query knowledge" };
-            }
-        },
-
-        async generatePageQuestions(params: any) {
-            try {
-                return await forward("generatePageQuestions", {
-                    url: params.url,
-                    pageKnowledge: params.pageKnowledge,
-                });
-            } catch (error) {
-                console.error("Error generating page questions:", error);
-                return { error: "Failed to generate page questions" };
-            }
-        },
-
-        async discoverRelatedKnowledge(params: any) {
-            try {
-                return await forward("discoverRelatedKnowledge", {
-                    entities: params.entities || [],
-                    topics: params.topics || [],
-                    depth: params.depth || 2,
-                    maxEntities: params.maxEntities || 10,
-                    maxTopics: params.maxTopics || 10,
-                });
-            } catch (error) {
-                console.error("Error discovering related knowledge:", error);
-                return {
-                    relatedEntities: [],
-                    relatedTopics: [],
-                    success: false,
-                };
-            }
-        },
-
-        async generateGraphQuestions(params: any) {
-            try {
-                return await forward("generateGraphQuestions", {
-                    url: params.url,
-                    relatedEntities: params.relatedEntities,
-                    relatedTopics: params.relatedTopics,
-                });
-            } catch (error) {
-                console.error("Error generating graph questions:", error);
-                return { error: "Failed to generate graph questions" };
             }
         },
 
@@ -928,86 +645,6 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                         extractionMode: "unknown",
                         lastUpdated: null,
                     },
-                    error:
-                        error instanceof Error ? error.message : String(error),
-                };
-            }
-        },
-
-        async checkAIModelAvailability(params: any) {
-            try {
-                const result = await forward("extractKnowledgeFromPage", {
-                    url: "test://ai-check",
-                    title: "AI Availability Test",
-                    htmlFragments: [
-                        {
-                            text: "test content for AI availability check",
-                        },
-                    ],
-                    extractEntities: false,
-                    extractRelationships: false,
-                    suggestQuestions: false,
-                    mode: "basic",
-                });
-                return {
-                    available: !result.error,
-                    version: result.version || "unknown",
-                    endpoint: result.endpoint || "unknown",
-                };
-            } catch (error) {
-                console.error("Error checking AI model availability:", error);
-                return {
-                    available: false,
-                    error:
-                        error instanceof Error ? error.message : String(error),
-                };
-            }
-        },
-
-        async getRecentKnowledgeItems(params: any) {
-            try {
-                const result = await forward("getRecentKnowledgeItems", {
-                    limit: params.limit || 10,
-                    type: params.itemType || "both",
-                });
-                return {
-                    success: result.success || false,
-                    entities: result.entities || [],
-                    topics: result.topics || [],
-                };
-            } catch (error) {
-                console.error("Error getting recent knowledge items:", error);
-                return {
-                    success: false,
-                    entities: [],
-                    topics: [],
-                    error:
-                        error instanceof Error ? error.message : String(error),
-                };
-            }
-        },
-
-        async getDiscoverInsights(params: any) {
-            try {
-                const result = await forward("getDiscoverInsights", {
-                    limit: params.limit || 10,
-                    timeframe: params.timeframe || "30d",
-                });
-                return {
-                    success: result.success || false,
-                    trendingTopics: result.trendingTopics || [],
-                    readingPatterns: result.readingPatterns || [],
-                    popularPages: result.popularPages || [],
-                    topDomains: result.topDomains || [],
-                };
-            } catch (error) {
-                console.error("Error getting discover insights:", error);
-                return {
-                    success: false,
-                    trendingTopics: [],
-                    readingPatterns: [],
-                    popularPages: [],
-                    topDomains: [],
                     error:
                         error instanceof Error ? error.message : String(error),
                 };

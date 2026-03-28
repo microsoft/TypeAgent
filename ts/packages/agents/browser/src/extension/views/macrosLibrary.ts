@@ -44,7 +44,6 @@ interface MacroIndexState {
 }
 
 class MacroIndexApp {
-    private viewHostUrl: string | null = null;
     private state: MacroIndexState = {
         allMacros: [],
         filteredMacros: [],
@@ -65,15 +64,9 @@ class MacroIndexApp {
     async initialize() {
         console.log("Initializing Macro Index App");
 
-        this.viewHostUrl = await this.getViewHostUrl();
-
         this.setupEventListeners();
         await this.loadAllMacros();
         this.renderUI();
-    }
-
-    private async getViewHostUrl(): Promise<string | null> {
-        return await extensionService.getViewHostUrl();
     }
 
     private setupEventListeners() {
@@ -567,41 +560,7 @@ class MacroIndexApp {
         this.updateBulkOperationsUI();
     }
 
-    private async viewMacroDetails(macro: any) {
-        try {
-            if (!this.viewHostUrl) {
-                showNotification("Loading view service...", "info");
-                this.viewHostUrl = await this.getViewHostUrl();
-
-                if (!this.viewHostUrl) {
-                    showNotification("View service is not available", "error");
-                    return;
-                }
-            }
-
-            if (macro.author !== "user") {
-                showNotification(
-                    "Viewing is only available for user-defined actions",
-                    "info",
-                );
-                return;
-            }
-
-            const actionId = macro.id || macro.name;
-            if (!actionId) {
-                showNotification("Invalid action ID", "error");
-                return;
-            }
-
-            const viewUrl = `${this.viewHostUrl}/plans/?actionId=${encodeURIComponent(actionId)}&mode=viewAction`;
-            this.showActionViewModal(macro.name, viewUrl);
-        } catch (error) {
-            console.error("Error opening action view:", error);
-            showNotification("Failed to open action view", "error");
-        }
-    }
-
-    private showActionViewModal(actionTitle: string, iframeUrl: string) {
+    private viewMacroDetails(macro: any) {
         const modal = document.getElementById(
             "actionDetailsModal",
         ) as HTMLElement;
@@ -613,26 +572,67 @@ class MacroIndexApp {
         ) as HTMLElement;
 
         if (!modal || !modalTitle || !modalBody) {
-            console.error("Modal elements not found");
             showNotification("Error opening action view", "error");
             return;
         }
 
-        // Add macro-view-modal class to hide header
-        modal.classList.add("macro-view-modal");
-
-        modalTitle.textContent = actionTitle;
-
-        const iframe = document.createElement("iframe");
-        iframe.className = "macro-view-iframe";
-        iframe.src = iframeUrl;
-        iframe.title = `View ${actionTitle}`;
-
+        modalTitle.textContent = macro.name;
         modalBody.innerHTML = "";
-        modalBody.appendChild(iframe);
 
-        // Set up message listener for iframe communication
-        this.setupIframeMessageListener(modal, iframe);
+        const description = document.createElement("p");
+        description.className = "macro-detail-description";
+        description.textContent = macro.description || "No description";
+        modalBody.appendChild(description);
+
+        if (macro.parameters && Object.keys(macro.parameters).length > 0) {
+            const paramsHeading = document.createElement("h6");
+            paramsHeading.textContent = "Parameters";
+            modalBody.appendChild(paramsHeading);
+
+            const paramsList = document.createElement("ul");
+            paramsList.className = "macro-detail-params";
+            for (const [name, param] of Object.entries(macro.parameters) as [
+                string,
+                any,
+            ][]) {
+                const li = document.createElement("li");
+                const required = param.required ? " (required)" : "";
+                li.textContent = `${name}: ${param.type || "string"}${required}`;
+                if (param.description) {
+                    li.textContent += ` — ${param.description}`;
+                }
+                paramsList.appendChild(li);
+            }
+            modalBody.appendChild(paramsList);
+        }
+
+        if (macro.script) {
+            const scriptHeading = document.createElement("h6");
+            scriptHeading.textContent = "Script";
+            modalBody.appendChild(scriptHeading);
+
+            const pre = document.createElement("pre");
+            pre.className = "macro-detail-script";
+            const code = document.createElement("code");
+            code.className = "language-javascript";
+            code.textContent = macro.script;
+            pre.appendChild(code);
+            modalBody.appendChild(pre);
+        }
+
+        if (macro.source) {
+            const meta = document.createElement("div");
+            meta.className = "macro-detail-meta";
+            meta.textContent = `Source: ${macro.source.type || "unknown"}`;
+            if (macro.source.timestamp) {
+                meta.textContent += ` | Created: ${new Date(macro.source.timestamp).toLocaleDateString()}`;
+            }
+            modalBody.appendChild(meta);
+        }
+
+        if (window.Prism) {
+            window.Prism.highlightAll();
+        }
 
         const bsModal = new (window as any).bootstrap.Modal(modal);
         bsModal.show();
@@ -641,38 +641,10 @@ class MacroIndexApp {
             "hidden.bs.modal",
             () => {
                 modalBody.innerHTML = "";
-                modal.classList.remove("macro-view-modal");
-                // Remove message listener
-                window.removeEventListener("message", this.handleIframeMessage);
             },
             { once: true },
         );
     }
-
-    private setupIframeMessageListener(
-        modal: HTMLElement,
-        iframe: HTMLIFrameElement,
-    ) {
-        this.handleIframeMessage = (event: MessageEvent) => {
-            // Verify origin for security (optional but recommended)
-            if (event.source !== iframe.contentWindow) {
-                return;
-            }
-
-            if (event.data.type === "closeModal") {
-                const bsModal = (window as any).bootstrap.Modal.getInstance(
-                    modal,
-                );
-                if (bsModal) {
-                    bsModal.hide();
-                }
-            }
-        };
-
-        window.addEventListener("message", this.handleIframeMessage);
-    }
-
-    private handleIframeMessage: (event: MessageEvent) => void = () => {};
 
     private editMacro(macro: any) {
         // TODO: Implement macro editing

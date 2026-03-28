@@ -248,12 +248,30 @@ async function handleFindUserActions(
     // Tell the browser-side WebFlowAgent to re-fetch flows and update schema
     sendWebFlowRefreshToClient(ctx.sessionContext);
 
+    // Return the site-scoped actions actually applicable to this page
+    // (not the raw LLM output which may include irrelevant pool actions).
+    let siteActions: WebFlowDefinition[] = [];
+    if (url && ctx.sessionContext.agentContext.webFlowStore) {
+        try {
+            const domain = new URL(url).hostname;
+            siteActions =
+                await ctx.sessionContext.agentContext.webFlowStore.listForDomainWithDetails(
+                    domain,
+                );
+            // Exclude global actions — only return site-scoped and user-recorded
+            siteActions = siteActions.filter((f) => f.scope.type !== "global");
+        } catch {
+            // URL parsing failed
+        }
+    }
+
     return {
         displayText: message,
         entities: ctx.entities.getEntities(),
         data: {
             schema: Array.from(uniqueItems.values()),
             typeDefinitions: typeDefinitions,
+            actions: siteActions,
         },
     };
 }
