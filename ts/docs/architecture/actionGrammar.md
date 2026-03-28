@@ -638,23 +638,23 @@ the last matched item.
 
 #### P at a keyword boundary (between parts)
 
-| Separator Mode                                | Preceding wildcard? | Trailing separator?          | Forward = Backward? | Why                                                                     |
-| --------------------------------------------- | ------------------- | ---------------------------- | ------------------- | ----------------------------------------------------------------------- |
-| `required` / `auto` (word-space scripts)      | No                  | Committed                    | **Yes**             | Separator commits the word; backward has nothing to reconsider          |
-| `required` / `auto` (word-space scripts)      | No                  | Uncommitted (keyword at EOI) | **No**              | Backward backs up to re-offer the keyword; forward offers the next part |
-| `optional` / `auto` (CJK / non-word-boundary) | No                  | Committed                    | **Yes**             | Separator commits                                                       |
-| `optional` / `auto` (CJK / non-word-boundary) | No                  | Uncommitted                  | **No**              | Backward backs up; forward advances                                     |
-| `none`                                        | No                  | N/A (no separators)          | **No**              | `couldBackUp` is always `true` when `spacingMode === "none"`            |
+| Mode / Trailing sep                   | Fwd = Bwd? | Why                                                     |
+| ------------------------------------- | ---------- | ------------------------------------------------------- |
+| `required`/`auto` — committed         | **Yes**    | Separator commits; nothing to reconsider                |
+| `required`/`auto` — uncommitted (EOI) | **No**     | Backward re-offers keyword; forward offers next part    |
+| `optional`/`auto` (CJK) — committed   | **Yes**    | Separator commits                                       |
+| `optional`/`auto` (CJK) — uncommitted | **No**     | Backward backs up; forward advances                     |
+| `none`                                | **No**     | `couldBackUp` always true when `spacingMode === "none"` |
 
 #### P inside a multi-word keyword (between words of one keyword)
 
-| Separator Mode      | Trailing separator after word K?   | Forward = Backward? | Why                                                          |
-| ------------------- | ---------------------------------- | ------------------- | ------------------------------------------------------------ |
-| `required` / `auto` | Committed (separator after word K) | **Yes**             | Separator commits word K; `couldBackUp` is false             |
-| `required` / `auto` | Uncommitted (word K at EOI)        | **No**              | Backward backs up to `prevEndIndex`; forward offers word K+1 |
-| `optional`          | Committed                          | **Yes**             | Separator commits                                            |
-| `optional`          | Uncommitted                        | **No**              | Backward reconsiders word K                                  |
-| `none`              | N/A                                | **No**              | `spacingMode === "none"` ⇒ `couldBackUp` always true         |
+| Mode / Trailing sep                   | Fwd = Bwd? | Why                                 |
+| ------------------------------------- | ---------- | ----------------------------------- |
+| `required`/`auto` — committed         | **Yes**    | Separator commits word K            |
+| `required`/`auto` — uncommitted (EOI) | **No**     | Backward backs up to `prevEndIndex` |
+| `optional` — committed                | **Yes**    | Separator commits                   |
+| `optional` — uncommitted              | **No**     | Backward reconsiders word K         |
+| `none`                                | **No**     | `couldBackUp` always true           |
 
 #### P at a wildcard-keyword boundary (wildcard finalized at EOI, next part is string)
 
@@ -664,31 +664,33 @@ more text, moving the boundary forward. The grammar matcher sets
 these positions. The table below explains _why_ the directions always
 differ at these boundaries.
 
-| Separator Mode | Partial keyword inside wildcard?                        | Forward = Backward? | Why                                                                                                            |
-| -------------- | ------------------------------------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| non-`none`     | No partial keyword                                      | **No**              | Forward defers to Phase B (offers keyword at `prefix.length`); backward backs up to wildcard start             |
-| non-`none`     | Yes, at position Q < P                                  | **No**              | Both find partial keyword at Q, but backward could also back up to wildcard start — position is ambiguous      |
-| non-`none`     | Yes, at position Q = P (full first keyword word at EOI) | **No**              | Forward uses it; backward rejects (requires Q < `state.index`) and falls through to `collectBackwardCandidate` |
-| `none`         | Any                                                     | **No**              | `none` mode makes `couldBackUp` always true                                                                    |
+| Mode / Partial keyword?                          | Fwd = Bwd? | Why                                                               |
+| ------------------------------------------------ | ---------- | ----------------------------------------------------------------- |
+| non-`none` — no partial keyword                  | **No**     | Forward defers to Phase B; backward backs up to wildcard start    |
+| non-`none` — partial at Q < P                    | **No**     | Both find partial at Q, but backward can also back up — ambiguous |
+| non-`none` — partial at Q = P (full word at EOI) | **No**     | Forward uses it; backward rejects (Q < `state.index` required)    |
+| `none` — any                                     | **No**     | `couldBackUp` always true                                         |
 
 #### P inside a wildcard (no keyword boundary reached)
 
-| Separator Mode | What follows P?                                  | Forward = Backward?                      | Why                                                                                        |
-| -------------- | ------------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
-| any            | Non-separator text (Category 3a)                 | **No**                                   | Forward: property completion for wildcard slot; backward: backs up to last matched keyword |
-| any            | Separator only / nothing (wildcard just started) | **No** (if `lastMatchedPartInfo` exists) | Backward can reconsider the preceding keyword                                              |
+| What follows P?                             | Fwd = Bwd? | Why                                                              |
+| ------------------------------------------- | ---------- | ---------------------------------------------------------------- |
+| Non-separator text (Cat 3a)                 | **No**     | Forward: property completion; backward: backs up to last keyword |
+| Separator / nothing (wildcard just started) | **No**\*   | Backward reconsiders preceding keyword                           |
+
+\* When `lastMatchedPartInfo` exists.
 
 #### P = 0 (nothing matched)
 
-| Scenario                                     | Forward = Backward? | Why                                                                                        |
-| -------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------ |
-| Partial match of first keyword (Category 3b) | **Yes**             | `couldBackUp = false` (no words fully matched); backward falls through to forward behavior |
+| Scenario                       | Fwd = Bwd? | Why                                                      |
+| ------------------------------ | ---------- | -------------------------------------------------------- |
+| Partial first keyword (Cat 3b) | **Yes**    | `couldBackUp = false`; backward falls through to forward |
 
 #### P = input.length, all parts matched (Category 1: exact match)
 
-| Scenario            | Forward = Backward? | Why                                                                    |
-| ------------------- | ------------------- | ---------------------------------------------------------------------- |
-| All parts satisfied | **Yes**             | Both directions use `tryCollectBackwardCandidate` — direction-agnostic |
+| Scenario            | Fwd = Bwd? | Why                                                         |
+| ------------------- | ---------- | ----------------------------------------------------------- |
+| All parts satisfied | **Yes**    | Both use `tryCollectBackwardCandidate` — direction-agnostic |
 
 #### Decision tree
 

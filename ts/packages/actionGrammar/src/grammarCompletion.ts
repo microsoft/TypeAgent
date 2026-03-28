@@ -372,6 +372,8 @@ function tryPartialStringMatch(
     | {
           consumedLength: number;
           remainingText: string;
+          /** True when at least one full word matched without a trailing
+           *  separator, so backward could reconsider the last matched word. */
           couldBackUp: boolean;
       }
     | undefined {
@@ -1396,6 +1398,11 @@ export function matchGrammarCompletion(
         }
     }
 
+    // --- Trailing-separator advancement & directionSensitive ---
+    //
+    // These two steps are grouped because trailingSepAdvanced feeds
+    // directly into the decision tree below.
+
     // Advance past trailing separators so the reported prefix length
     // includes any trailing whitespace the user typed.  This makes
     // completion trailing-space-sensitive: "play music " reports
@@ -1419,7 +1426,7 @@ export function matchGrammarCompletion(
         }
     }
 
-    // --- Compute directionSensitive ---
+    // Compute directionSensitive.
     //
     // Would completion(input[0..P], "backward") produce a different
     // result than completion(input[0..P], "forward")?
@@ -1433,6 +1440,9 @@ export function matchGrammarCompletion(
     // Decision tree:
     //   openWildcard   → true (wildcard boundary is ambiguous;
     //                     backward can always reconsider)
+    //                     Note: openWildcard requires at least one
+    //                     keyword match before the wildcard, so
+    //                     P > 0 whenever openWildcard is true.
     //   P = minPrefixLength → false (nothing was matched beyond the
     //                     caller's floor, backward has nothing to
     //                     reconsider)
