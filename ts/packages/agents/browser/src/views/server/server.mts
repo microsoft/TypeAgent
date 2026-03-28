@@ -3,7 +3,6 @@
 
 import { BaseServer } from "./core/baseServer.js";
 import { ServerConfig } from "./core/types.js";
-import { PlansRoutes } from "./features/plans/plansRoutes.js";
 import { PDFRoutes } from "./features/pdf/pdfRoutes.js";
 import registerDebug from "debug";
 
@@ -29,7 +28,6 @@ async function main() {
     const server = new BaseServer(config);
 
     // Register features
-    await server.registerFeature(PlansRoutes.createFeatureConfig());
     await server.registerFeature(PDFRoutes.createFeatureConfig());
 
     // Start server

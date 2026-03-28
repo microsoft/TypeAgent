@@ -1057,14 +1057,6 @@ async function resolveWebPage(
 
         case "turtlegraphics":
             return ["http://localhost:9000/"];
-        case "planviewer":
-            // handle browser views
-            const browserPort = await context.getSharedLocalHostPort("browser");
-            if (browserPort !== undefined) {
-                debug(`Resolved local site on PORT ${browserPort}`);
-
-                return [`http://localhost:${browserPort}/plans`];
-            }
         case "chatview":
             // handle browser views
             const shellPort = await context.getSharedLocalHostPort("shell");
@@ -1932,97 +1924,6 @@ async function lookup(
  * Progress update helper function
  */
 
-/**
- * Setup IPC communication with view service for action retrieval
- */
-function setupViewServiceIPC(
-    viewServiceProcess: ChildProcess,
-    context: SessionContext<BrowserActionContext>,
-): void {
-    viewServiceProcess.on("message", async (message: any) => {
-        try {
-            if (message.type === "getAction") {
-                await handleGetActionRequest(
-                    message,
-                    viewServiceProcess,
-                    context,
-                );
-            }
-        } catch (error) {
-            debug("Error handling IPC message:", error);
-        }
-    });
-
-    viewServiceProcess.on("error", (error: Error) => {
-        debug("View service process error:", error);
-    });
-}
-
-/**
- * Handle action retrieval request from view service
- */
-async function handleGetActionRequest(
-    message: any,
-    viewServiceProcess: ChildProcess,
-    context: SessionContext<BrowserActionContext>,
-): Promise<void> {
-    const { actionId, requestId } = message;
-    const startTime = Date.now();
-
-    try {
-        if (!actionId || !requestId) {
-            throw new Error(
-                "Missing required parameters: actionId or requestId",
-            );
-        }
-
-        if (typeof actionId !== "string") {
-            throw new Error("Invalid actionId format");
-        }
-
-        debug(`Handling action request for: ${actionId}`);
-
-        const webFlowStore = context.agentContext.webFlowStore;
-        if (!webFlowStore) {
-            throw new Error("WebFlowStore not available");
-        }
-
-        const action = await webFlowStore.get(actionId);
-
-        if (!action) {
-            viewServiceProcess.send({
-                type: "getActionResponse",
-                requestId,
-                success: false,
-                error: "Action not found",
-                timestamp: Date.now(),
-            });
-            return;
-        }
-
-        viewServiceProcess.send({
-            type: "getActionResponse",
-            requestId,
-            success: true,
-            action: action,
-            timestamp: Date.now(),
-        });
-
-        const duration = Date.now() - startTime;
-        debug(`Action request completed in ${duration}ms`);
-    } catch (error) {
-        debug("Error handling action request:", error);
-
-        viewServiceProcess.send({
-            type: "getActionResponse",
-            requestId,
-            success: false,
-            error: (error as Error).message || "Unknown error",
-            timestamp: Date.now(),
-        });
-    }
-}
-
 async function createViewServiceHost(
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -2057,9 +1958,6 @@ async function createViewServiceHost(
                         TYPEAGENT_BROWSER_FILES: folderPath,
                     },
                 });
-
-                // Setup IPC message handling for action retrieval
-                setupViewServiceIPC(childProcess, context);
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {
@@ -3062,6 +2960,9 @@ class DiscoverActionsHandler implements CommandHandlerNoParams {
         context.actionIO.appendDisplay("Analyzing page...", "temporary");
 
         try {
+            // Run discovery — calls the LLM to detect page actions,
+            // auto-saves them to the WebFlowStore scoped to the domain,
+            // and returns site-scoped actions in data.actions.
             const discoveryResult = await handleSchemaDiscoveryAction(
                 {
                     actionName: "detectPageActions",
@@ -3070,66 +2971,28 @@ class DiscoverActionsHandler implements CommandHandlerNoParams {
                 context.sessionContext,
             );
 
-            const discoveredActions = discoveryResult.data?.schema || [];
+            const actions: any[] = discoveryResult.data?.actions || [];
 
-            // Also fetch user-authored/recorded WebFlows for this domain
-            let webFlows: any[] = [];
-            const webFlowStore = agentContext.webFlowStore;
-            if (webFlowStore && agentContext.browserControl) {
-                try {
-                    const url = await agentContext.browserControl.getPageUrl();
-                    if (url) {
-                        const domain = new URL(url).hostname;
-                        webFlows =
-                            await webFlowStore.listForDomainWithDetails(domain);
-                    }
-                } catch {
-                    // URL parsing failed — skip WebFlows
-                }
-            }
-
-            // Build combined markdown
-            let md = "";
-
-            if (discoveredActions.length > 0) {
-                md += `### Discovered Actions (${discoveredActions.length})\n\n`;
-                for (const action of discoveredActions) {
-                    const params = action.parameters
-                        ? Object.keys(action.parameters).join(", ")
-                        : "";
-                    const paramStr = params ? ` *(${params})*` : "";
-                    md += `- **${action.actionName}**${paramStr}`;
-                    if (action.description) {
-                        md += ` — ${action.description}`;
-                    }
-                    md += "\n";
-                }
-            }
-
-            if (webFlows.length > 0) {
-                md += `\n### Saved Actions (${webFlows.length})\n\n`;
-                for (const flow of webFlows) {
-                    const params = flow.parameters
-                        ? Object.keys(flow.parameters).join(", ")
-                        : "";
-                    const paramStr = params ? ` *(${params})*` : "";
-                    const source = flow.source?.type
-                        ? ` [${flow.source.type}]`
-                        : "";
-                    md += `- **${flow.name}**${paramStr}`;
-                    if (flow.description) {
-                        md += ` — ${flow.description}`;
-                    }
-                    md += `${source}\n`;
-                }
-            }
-
-            if (!md) {
+            if (actions.length === 0) {
                 context.actionIO.setDisplay({
                     type: "text",
                     content: "No actions found on this page.",
                 });
                 return;
+            }
+
+            let md = `### Actions available on this page (${actions.length})\n\n`;
+            for (const action of actions) {
+                const params = action.parameters
+                    ? Object.keys(action.parameters)
+                    : [];
+                const paramStr =
+                    params.length > 0 ? ` *(${params.join(", ")})*` : "";
+                md += `- **${action.name}**${paramStr}`;
+                if (action.description) {
+                    md += ` — ${action.description}`;
+                }
+                md += "\n";
             }
 
             context.actionIO.setDisplay({

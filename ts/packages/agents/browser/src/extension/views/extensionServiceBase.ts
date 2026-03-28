@@ -7,12 +7,7 @@ import type {
     ImportResult,
     ProgressCallback,
 } from "../interfaces/websiteImport.types";
-import type {
-    KnowledgeExtractionProgress,
-    KnowledgeProgressCallback,
-    KnowledgeExtractionResult,
-} from "../interfaces/knowledgeExtraction.types";
-import { url } from "inspector/promises";
+import type { KnowledgeProgressCallback } from "../interfaces/knowledgeExtraction.types";
 
 // ===================================================================
 // INTERFACE DEFINITIONS
@@ -262,39 +257,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async extractPageKnowledgeStreaming(
-        url: string,
-        mode: string,
-        extractionSettings: any,
-        streamingEnabled: boolean = true,
-        extractionId: string,
-        saveToIndex: boolean = false,
-    ): Promise<any> {
-        try {
-            const response = await this.sendMessage({
-                type: "extractPageKnowledgeStreaming",
-                url,
-                mode,
-                extractionSettings,
-                streamingEnabled,
-                extractionId,
-                saveToIndex,
-            });
-
-            if (!response) {
-                return { extractionId, success: false };
-            }
-
-            return response;
-        } catch (error) {
-            return {
-                extractionId,
-                success: false,
-                error: (error as Error).message || String(error),
-            };
-        }
-    }
-
     async queryKnowledge(parameters: any): Promise<any> {
         return this.sendMessage({
             type: "queryKnowledge",
@@ -342,40 +304,6 @@ export abstract class ExtensionServiceBase {
             extractedKnowledge,
             mode,
             timestamp,
-        });
-    }
-
-    async generatePageQuestions(url: string, pageKnowledge: any): Promise<any> {
-        return this.sendMessage({
-            type: "generatePageQuestions",
-            url,
-            pageKnowledge,
-        });
-    }
-
-    async generateGraphQuestions(
-        url: string,
-        relatedEntities: any[],
-        relatedTopics: any[],
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "generateGraphQuestions",
-            url,
-            relatedEntities,
-            relatedTopics,
-        });
-    }
-
-    async discoverRelatedKnowledge(
-        entities: any[],
-        topics: string[],
-        depth: number = 2,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "discoverRelatedKnowledge",
-            entities,
-            topics,
-            depth,
         });
     }
 
@@ -442,12 +370,6 @@ export abstract class ExtensionServiceBase {
         return this.sendMessage({
             type: "searchWebMemoriesAdvanced",
             parameters,
-        });
-    }
-
-    async checkAIModelAvailability(): Promise<any> {
-        return this.sendMessage({
-            type: "checkAIModelAvailability",
         });
     }
 
@@ -597,13 +519,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async getRecentKnowledgeItems(limit?: number): Promise<any> {
-        return this.sendMessage({
-            type: "getRecentKnowledgeItems",
-            limit,
-        });
-    }
-
     async extractKnowledge(url: string): Promise<any> {
         return this.sendMessage({
             type: "extractKnowledge",
@@ -623,17 +538,6 @@ export abstract class ExtensionServiceBase {
             type: "getRecentSearches",
         });
         return response?.searches || [];
-    }
-
-    async getDiscoverInsights(
-        limit?: number,
-        timeframe?: string,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "getDiscoverInsights",
-            limit,
-            timeframe,
-        });
     }
 
     async saveSearch(query: string, results: any): Promise<void> {
@@ -711,64 +615,9 @@ export abstract class ExtensionServiceBase {
         this.onExtractionProgressImpl(extractionId, callback);
     }
 
-    async refreshSchema(): Promise<{
-        schema?: any[];
-        actionDefinitions?: any;
-    }> {
-        const response = await this.sendMessage<{
-            schema?: any[];
-            actionDefinitions?: any;
-        }>({
-            type: "refreshSchema",
-        });
-        return response || {};
-    }
-
-    async startRecording(): Promise<void> {
-        await this.sendMessage({ type: "startRecording" });
-    }
-
-    async stopRecording(): Promise<any> {
-        return await this.sendMessage({ type: "stopRecording" });
-    }
-
-    async captureHtmlFragments(): Promise<any[]> {
-        const response = await this.sendMessage<any[]>({
-            type: "captureHtmlFragments",
-        });
-        return response || [];
-    }
-
-    async registerTempSchema(): Promise<void> {
-        await this.sendMessage({ type: "registerTempSchema" });
-    }
-
-    async createWebFlowFromRecording(params: {
-        actionName: string;
-        actionDescription: string;
-        steps: string;
-        existingActionNames: string[];
-        startUrl: string;
-        screenshots: string[];
-        html: any[];
-    }): Promise<any> {
-        return await this.sendMessage({
-            type: "createWebFlowFromRecording",
-            ...params,
-        });
-    }
-
     async getAllWebFlows(): Promise<any[]> {
         const response = await this.sendMessage<{ actions?: any[] }>({
             type: "getAllWebFlows",
-        });
-        return response?.actions || [];
-    }
-
-    async getWebFlowsForDomain(domain: string): Promise<any[]> {
-        const response = await this.sendMessage<{ actions?: any[] }>({
-            type: "getWebFlowsForDomain",
-            domain,
         });
         return response?.actions || [];
     }

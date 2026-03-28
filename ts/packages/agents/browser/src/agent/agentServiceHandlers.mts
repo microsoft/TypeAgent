@@ -7,10 +7,6 @@ import type { BrowserActionContext } from "./browserActions.mjs";
 import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
 import {
-    generatePageQuestions,
-    generateGraphQuestions,
-} from "./knowledge/actions/pageQnAActions.mjs";
-import {
     handleWebsiteAction,
     handleWebsiteLibraryStats,
 } from "./browserActionHandler.mjs";
@@ -44,9 +40,6 @@ export function createAgentInvokeHandlers(
         // Knowledge extraction
         extractKnowledgeFromPage: (params: any) =>
             knowledgeHandler("extractKnowledgeFromPage", params),
-        extractKnowledgeFromPageStreaming: (params: any) =>
-            knowledgeHandler("extractKnowledgeFromPageStreaming", params),
-
         // Knowledge queries
         searchWebMemories: (params: any) =>
             websiteHandler("searchWebMemories", params),
@@ -71,16 +64,10 @@ export function createAgentInvokeHandlers(
             knowledgeHandler("getEntityDetails", params),
         getTopicTimelines: (params: any) =>
             knowledgeHandler("getTopicTimelines", params),
-        discoverRelatedKnowledge: (params: any) =>
-            knowledgeHandler("discoverRelatedKnowledge", params),
         discoverRelationships: (params: any) =>
             knowledgeHandler("discoverRelationships", params),
         analyzeKnowledgeGaps: (params: any) =>
             knowledgeHandler("analyzeKnowledgeGaps", params),
-        generatePageQuestions: (params: any) =>
-            generatePageQuestions(params, context),
-        generateGraphQuestions: (params: any) =>
-            generateGraphQuestions(params, context),
 
         // Knowledge graph
         getKnowledgeGraphStatus: (params: any) =>
@@ -143,14 +130,8 @@ export function createAgentInvokeHandlers(
             discoveryHandler("deleteWebFlow", params),
 
         // Search/analytics
-        getRecentKnowledgeItems: (params: any) =>
-            knowledgeHandler("getRecentKnowledgeItems", params),
-        getDiscoverInsights: (params: any) =>
-            knowledgeHandler("getDiscoverInsights", params),
         getAnalyticsData: (params: any) =>
             knowledgeHandler("getAnalyticsData", params),
-        checkAIModelAvailability: (params: any) =>
-            knowledgeHandler("extractKnowledgeFromPage", params),
 
         // Navigation
         async handlePageNavigation(params: any) {

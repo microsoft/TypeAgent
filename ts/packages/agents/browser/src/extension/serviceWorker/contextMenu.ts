@@ -67,13 +67,6 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        id: "sidepanel-registerAgent",
-        title: "Update Page Agent",
-        contexts: ["all"],
-        documentUrlPatterns: ["chrome-extension://*/views/pageMacros.html"],
-    });
-
-    chrome.contextMenus.create({
         type: "separator",
         id: "menuSeparator3",
     });
@@ -127,14 +120,6 @@ export async function handleContextMenuClick(
             }
             break;
         }
-        case "sidepanel-registerAgent": {
-            await sendActionToAgent({
-                actionName: "registerPageDynamicAgent",
-                parameters: {},
-            });
-            break;
-        }
-
         case "extractKnowledgeFromPage": {
             await openChatAndInjectCommand(
                 tab.id!,

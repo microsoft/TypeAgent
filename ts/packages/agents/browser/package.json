@@ -45,7 +45,7 @@
     "tsc:extension:chrome:typecheck": "tsc -p src/extension/tsconfig.json",
     "tsc:extension:electron:typecheck": "tsc -p src/electron/tsconfig.json",
     "tsc:puppeteer": "tsc -p src/puppeteer/tsconfig.json",
-    "tsc:views:client:typecheck": "tsc -p src/views/client/plans/tsconfig.json",
+    "tsc:views:client:typecheck": "tsc -p src/views/client/pdf/tsconfig.json",
     "tsc:views:server": "tsc -p src/views/server/tsconfig.json",
     "tsc:views:shared": "tsc -p src/views/shared/tsconfig.json",
     "vite:extension": "build-extension",
