@@ -358,6 +358,7 @@ function tryPartialStringMatch(
     startIndex: number,
     spacingMode: CompiledSpacingMode,
     direction?: "forward" | "backward",
+    effectivePrefixEnd?: number,
 ):
     | {
           consumedLength: number;
@@ -377,9 +378,14 @@ function tryPartialStringMatch(
 
     // Direction matters when at least one word fully matched and no
     // trailing separator commits the last matched word.
+    // When effectivePrefixEnd is set and endIndex has reached it,
+    // characters beyond that point are logically absent (Category 1
+    // trailing-separator stripping) — treat as uncommitted.
     const couldBackUp =
         matchedWords > 0 &&
         (spacingMode === "none" ||
+            (effectivePrefixEnd !== undefined &&
+                endIndex >= effectivePrefixEnd) ||
             nextNonSeparatorIndex(prefix, endIndex) === endIndex);
 
     if (direction === "backward" && couldBackUp) {
@@ -680,14 +686,15 @@ export function matchGrammarCompletion(
         candidateOpenWildcard: boolean,
         startIndex: number,
         dir: "forward" | "backward" | undefined,
-        effectivePrefix?: string,
+        effectivePrefixEnd?: number,
     ): boolean {
         const partial = tryPartialStringMatch(
             part,
-            effectivePrefix ?? prefix,
+            prefix,
             startIndex,
             state.spacingMode,
             dir,
+            effectivePrefixEnd,
         );
         if (partial !== undefined) {
             updateMaxPrefixLength(partial.consumedLength);
@@ -717,7 +724,7 @@ export function matchGrammarCompletion(
     function tryCollectBackwardCandidate(
         state: MatchState,
         savedWildcard: PendingWildcard | undefined,
-        effectivePrefix?: string,
+        effectivePrefixEnd?: number,
     ): boolean {
         const wildcardStart = savedWildcard?.start;
         const partStart = state.lastMatchedPartInfo?.start;
@@ -743,7 +750,7 @@ export function matchGrammarCompletion(
                         info.afterWildcard,
                         info.start,
                         "backward",
-                        effectivePrefix,
+                        effectivePrefixEnd,
                     )
                 ) {
                     return true;
@@ -814,21 +821,19 @@ export function matchGrammarCompletion(
                 ) {
                     // Category 1 is direction-agnostic — both
                     // directions back up identically.
-                    // Strip trailing separators: in an exact
+                    // Ignore trailing separators: in an exact
                     // match, trailing whitespace/punctuation
                     // carries no structural meaning — all parts
-                    // are satisfied.  Without stripping,
+                    // are satisfied.  Without the end-index limit,
                     // tryPartialStringMatch sees the trailing
                     // separator and sets couldBackUp=false,
                     // incorrectly blocking the backup.
-                    const effectivePrefix =
-                        state.index < prefix.length
-                            ? prefix.substring(0, state.index)
-                            : undefined;
+                    const effectivePrefixEnd =
+                        state.index < prefix.length ? state.index : undefined;
                     tryCollectBackwardCandidate(
                         preFinalizeState ?? state,
                         savedPendingWildcard,
-                        effectivePrefix,
+                        effectivePrefixEnd,
                     );
                 } else {
                     debugCompletion("Matched. Nothing to complete.");

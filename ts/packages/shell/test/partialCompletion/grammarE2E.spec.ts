@@ -662,6 +662,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             session.update("play ", getPos);
             expect(menu.isActive()).toBe(true);
+            expect(menu.setChoices).toHaveBeenLastCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "music" }),
+                ]),
+            );
 
             // Backspace to "play"
             session.update("play", getPos);
@@ -698,6 +703,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // The extra space should not leak into the trie filter.
             // Menu should be active with "music" offered.
             expect(menu.isActive()).toBe(true);
+            expect(menu.setChoices).toHaveBeenLastCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "music" }),
+                ]),
+            );
         });
     });
 
@@ -742,6 +752,13 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Double space should not break entity display.
             expect(menu.isActive()).toBe(true);
+            expect(menu.setChoices).toHaveBeenLastCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "Bohemian Rhapsody" }),
+                    expect.objectContaining({ matchText: "Shake It Off" }),
+                    expect.objectContaining({ matchText: "Shape of You" }),
+                ]),
+            );
         });
 
         test("unknown prefix 'play xyz' triggers re-fetch (closedSet=false)", async () => {
