@@ -42,6 +42,14 @@ function consumeTrailingSeparators(text: string, index: number): number {
         : index;
 }
 
+// True when the substring text[from..to) contains only separator
+// characters (whitespace / punctuation).  Used to decide whether
+// advancing maxPrefixLength across a gap should preserve or clear
+// existing candidates.
+function isSeparatorOnlyGap(text: string, from: number, to: number): boolean {
+    return to > from && nextNonSeparatorIndex(text, from) >= to;
+}
+
 // Greedily match keyword words against text starting at startIndex.
 // Returns the number of fully matched words and cursor positions.
 //
@@ -967,9 +975,27 @@ export function matchGrammarCompletion(
                     // instead of offering property completion for the
                     // unfilled wildcard — the user hasn't started
                     // typing into the unfilled slot yet.
-                    backwardEmitted =
-                        tryCollectBackwardCandidate(state, undefined) ||
-                        backwardEmitted;
+                    const didBackUp = tryCollectBackwardCandidate(
+                        state,
+                        undefined,
+                    );
+                    if (didBackUp) {
+                        backwardEmitted = true;
+                    } else {
+                        // tryCollectBackwardCandidate returned false
+                        // (e.g. all keyword words fully matched with
+                        // trailing separator).  Fall back to the
+                        // forward path so the property completion is
+                        // still collected.
+                        // Intentionally not setting backwardEmitted —
+                        // this is the forward fallback path.
+                        debugCompletion("Completing wildcard part");
+                        collectPropertyCandidate(
+                            state,
+                            pendingWildcard.valueId,
+                            pendingWildcard.start,
+                        );
+                    }
                 } else {
                     // Forward (or backward with nothing to
                     // reconsider): report a property completion
@@ -1056,7 +1082,23 @@ export function matchGrammarCompletion(
                 // Collect as a fixed candidate (may advance
                 // maxPrefixLength, clearing weaker fallback
                 // candidates from Phase A).
-                updateMaxPrefixLength(partialResult.position);
+                //
+                // When the gap between the current maxPrefixLength
+                // and the partial keyword position is separator-only,
+                // preserve existing candidates (they'd survive on the
+                // truncated input too).
+                if (
+                    isSeparatorOnlyGap(
+                        prefix,
+                        maxPrefixLength,
+                        partialResult.position,
+                    )
+                ) {
+                    // Separator-only gap: advance without clearing.
+                    maxPrefixLength = partialResult.position;
+                } else {
+                    updateMaxPrefixLength(partialResult.position);
+                }
                 if (partialResult.position === maxPrefixLength) {
                     fixedCandidates.push({
                         kind: "string",
@@ -1217,6 +1259,9 @@ export function matchGrammarCompletion(
     // be skipped to preserve that anchor.
     let rangeCandidateEmitted = false;
     if (processRangeCandidates) {
+        // Truncate once so range candidates don't peek at trailing
+        // input beyond maxPrefixLength (invariant #3).
+        const truncatedPrefix = prefix.substring(0, maxPrefixLength);
         for (const c of rangeCandidates) {
             if (maxPrefixLength <= c.wildcardStart) continue;
             if (
@@ -1232,7 +1277,7 @@ export function matchGrammarCompletion(
             if (c.kind === "wildcardString") {
                 const partial = tryPartialStringMatch(
                     c.nextPart,
-                    prefix,
+                    truncatedPrefix,
                     maxPrefixLength,
                     c.spacingMode,
                     "forward",
@@ -1335,17 +1380,20 @@ export function matchGrammarCompletion(
         // Merge: anchor matches maxPrefixLength, OR the gap between
         //   maxPrefixLength and anchor consists entirely of separator
         //   characters — existing candidates are legitimate Category 2
-        //   matches at EOI (e.g. "music" at mpl=14 for "play
+        //   matches at EOI (e.g. "music" at matchedPrefixLength=14 for "play
         //   beautiful " where anchor=15).  Keep them and add EOI
         //   instantiations alongside.
         //
-        // For partial keyword recovery (hasPartialKeyword), always
-        // displace — the anchor is at a sub-prefix position where
-        // the partial keyword was found.
-        const gapIsSeparatorOnly =
-            !hasPartialKeyword &&
-            maxPrefixLength > 0 &&
-            nextNonSeparatorIndex(prefix, maxPrefixLength) >= anchor;
+        // For partial keyword recovery (hasPartialKeyword), the
+        // anchor is at a sub-prefix position where the partial
+        // keyword was found.  When the gap between maxPrefixLength
+        // and anchor is separator-only, existing completions are
+        // legitimate and should be preserved (merge).
+        const gapIsSeparatorOnly = isSeparatorOnlyGap(
+            prefix,
+            maxPrefixLength,
+            anchor,
+        );
         if (anchor !== maxPrefixLength && !gapIsSeparatorOnly) {
             debugCompletion(
                 `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `prefix.length=${anchor} (displace)`}`,

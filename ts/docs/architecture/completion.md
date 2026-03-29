@@ -561,7 +561,7 @@ The flag is correct under the cross-query invariant definition:
 For `openWildcard` positions, truncating to `input[0..P]` removes the
 content that established the anchor, so backward on the truncated input
 always diverges — even when both directions happen to agree on the
-original (longer) input. See invariant #4.
+original (longer) input. See invariant #7.
 
 **Decision tree** (evaluated once after all candidates are collected):
 
@@ -724,15 +724,15 @@ menus, or mispositioned insertions.
 
 **Quick reference — symptom → invariants to check:**
 
-| Symptom                                  | Check          |
-| ---------------------------------------- | -------------- |
-| Wrong or missing completions             | #2, #5, #7, #9 |
-| Completions at wrong position            | #1, #7, #8     |
-| Stale menu after backspace               | #3a–c          |
-| Inconsistent menu (forward vs. backward) | #4, #5         |
-| Unnecessary re-fetches (perf)            | #3, #11        |
-| Wrong separator behavior                 | #6, #10        |
-| Menu disappears at wildcard boundary     | #7, #12        |
+| Symptom                                  | Check                |
+| ---------------------------------------- | -------------------- |
+| Wrong or missing completions             | #2, #3, #8, #10, #12 |
+| Completions at wrong position            | #1, #3, #10, #11     |
+| Stale menu after backspace               | #4–#6                |
+| Inconsistent menu (forward vs. backward) | #7, #8               |
+| Unnecessary re-fetches (perf)            | #4–#6, #14           |
+| Wrong separator behavior                 | #9, #13              |
+| Menu disappears at wildcard boundary     | #10, #15             |
 
 ### Per-result invariants (grammar matcher layer)
 
@@ -750,66 +750,79 @@ _Impact:_ False `true` → shell uses "accept" policy and never re-fetches —
 user misses entity completions. False `false` → unnecessary re-fetches
 (perf cost, no visible bug).
 
+**#3 — Truncated-forward idempotency.**
+When `matchedPrefixLength < prefix.length`:
+`result === completion(input[0..matchedPrefixLength], "forward")`.
+Stripping unconsumed trailing input and re-running forward must produce
+the same completions. For backward results this is guarded on forward
+actually reaching the same position (otherwise a known forward gap would
+cause a false failure).
+_Impact:_ Trailing garbage in the input silently changes which completions
+are offered — the result depends on content the grammar claims it did not
+consume.
+
 ### Cross-direction invariants
 
-Invariants #3–#5 are automatically checked by `assertCrossDirectionInvariants`
-in `withInvariantChecks` (grammar variant only). The test uses a local
-numbering scheme (#1–#5) for its five cross-direction checks; the mapping
-to doc invariant numbers is:
+Invariants #4–#8 are automatically checked by `assertCrossDirectionInvariants`
+in `withInvariantChecks` (grammar variant only).
 
-| Test # | Doc # | Summary                                                 |
-| ------ | ----- | ------------------------------------------------------- |
-| Test 1 | #3a   | equal `matchedPrefixLength` → identical results         |
-| Test 2 | #3b   | !fwd.directionSensitive → backward on truncated = fwd   |
-| Test 3 | #3c   | !bwd.directionSensitive → forward on truncated = bwd    |
-| Test 4 | #4    | fwd.directionSensitive → backward of truncated backs up |
-| Test 5 | #5    | bwd.directionSensitive → forward reaches bwd position   |
+All automatically-checked invariants (per-result, cross-direction, and
+truncated-forward) use the same numbering as this document:
 
-**#3 — `directionSensitive` consistency (decomposed).**
+| #   | Assertion function                | Summary                                                 |
+| --- | --------------------------------- | ------------------------------------------------------- |
+| #1  | `assertSingleResultInvariants`    | `matchedPrefixLength` bounds                            |
+| #2  | `assertSingleResultInvariants`    | `closedSet` ↔ `properties` consistency                 |
+| #3  | `assertTruncatedForwardInvariant` | truncated-forward idempotency                           |
+| #4  | `assertCrossDirectionInvariants`  | equal `matchedPrefixLength` → identical results         |
+| #5  | `assertCrossDirectionInvariants`  | !fwd.directionSensitive → backward on truncated = fwd   |
+| #6  | `assertCrossDirectionInvariants`  | !bwd.directionSensitive → forward on truncated = bwd    |
+| #7  | `assertCrossDirectionInvariants`  | fwd.directionSensitive → backward of truncated backs up |
+| #8  | `assertCrossDirectionInvariants`  | bwd.directionSensitive → forward reaches bwd position   |
 
-_#3a — Equal consumption → identical results._
+**#4 — Equal consumption → identical results.**
 `forward.matchedPrefixLength === backward.matchedPrefixLength` →
 `forward` deep-equals `backward`.
 _Impact:_ False negative → stale menu after backspace.
 
-_#3b — Forward not direction-sensitive → backward on truncated agrees._
+**#5 — Forward not direction-sensitive → backward on truncated agrees.**
 `!forward.directionSensitive` →
-`forward === completion(input[0..fwd.mpl], "backward")`.
+`forward === completion(input[0..fwd.matchedPrefixLength], "backward")`.
 _Impact:_ False negative → stale menu; false positive → unnecessary
 re-fetch.
 
-_#3c — Backward not direction-sensitive → forward on truncated agrees._
+**#6 — Backward not direction-sensitive → forward on truncated agrees.**
 `!backward.directionSensitive` →
-`backward === completion(input[0..bwd.mpl], "forward")`.
-_Impact:_ Same as #3b.
+`backward === completion(input[0..bwd.matchedPrefixLength], "forward")`.
+_Impact:_ Same as #5.
 
-**#4 — Forward direction-sensitive → backward backs up.**
+**#7 — Forward direction-sensitive → backward backs up.**
 `forward.directionSensitive` →
-`completion(input[0..fwd.mpl], "backward").matchedPrefixLength < fwd.mpl`.
+`completion(input[0..fwd.matchedPrefixLength], "backward").matchedPrefixLength < fwd.matchedPrefixLength`.
 _Impact:_ Backspacing shows different completions than forward-typing to
 the same position — the menu is inconsistent depending on how the user
 arrived at that input.
 
-**#5 — Backward direction-sensitive → forward reaches backward's position.**
-When `fwd.mpl ≠ bwd.mpl` and `backward.directionSensitive`:
-`completion(input[0..bwd.mpl], "forward").matchedPrefixLength ≥ bwd.mpl`.
+**#8 — Backward direction-sensitive → forward reaches backward's position.**
+When `fwd.matchedPrefixLength ≠ bwd.matchedPrefixLength` and `backward.directionSensitive`:
+`completion(input[0..bwd.matchedPrefixLength], "forward").matchedPrefixLength ≥ bwd.matchedPrefixLength`.
 Confirms that backward's backed-up position is reachable from forward.
 _Impact:_ User sees only one completion branch when backspacing at a fork —
 other valid alternatives are silently lost.
 
-Note: invariants #3b–#5 previously skipped `openWildcard` cases because
+Note: invariants #5–#8 previously skipped `openWildcard` cases because
 truncating to an ambiguous wildcard boundary removed the content that
 established the anchor. With `openWildcard → directionSensitive=true`,
-#3b/#3c never fire for openWildcard (the guard is `!directionSensitive`),
-and #4/#5 validate correctly (backward on truncated does back up).
+#5/#6 never fire for openWildcard (the guard is `!directionSensitive`),
+and #7/#8 validate correctly (backward on truncated does back up).
 
 ### Field-specific invariants
 
-**#6 — `separatorMode` = `"none"` for `[spacing=none]` rules.**
+**#9 — `separatorMode` = `"none"` for `[spacing=none]` rules.**
 _Impact:_ Tokens incorrectly separated in a grammar designed for direct
 adjacency.
 
-**#7 — `openWildcard` correctness.**
+**#10 — `openWildcard` correctness.**
 `true` only at ambiguous wildcard boundaries (Category 2 forward after
 wildcard finalized at EOI, or backward at keyword after captured wildcard).
 _Impact:_ False `true` → anchor slides when it shouldn't — completions
@@ -818,26 +831,26 @@ boundary instead of sliding.
 
 ### Merge invariants (cache / dispatcher layers)
 
-**#8 — `matchedPrefixLength`: longest wins.**
+**#11 — `matchedPrefixLength`: longest wins.**
 Keep longest across sources; discard shorter.
 _Impact:_ Completions anchored at wrong position when multiple
 grammars/agents contribute.
 
-**#9 — `closedSet`: AND-merge.**
+**#12 — `closedSet`: AND-merge.**
 Closed only if ALL sources are closed.
 _Impact:_ Premature "accept" when one source is open — user misses
 completions from that source.
 
-**#10 — `separatorMode`: strongest requirement wins.**
+**#13 — `separatorMode`: strongest requirement wins.**
 `"space"` > `"spacePunctuation"` > `"optional"` > `"none"`.
 _Impact:_ Fused display if a weak mode wins over a strong one, or
 unnecessary separation if the reverse.
 
-**#11 — `directionSensitive`: OR-merge.**
+**#14 — `directionSensitive`: OR-merge.**
 Sensitive if ANY source is sensitive.
 _Impact:_ Skipped re-fetch when one source's results differ by direction.
 
-**#12 — `openWildcard`: OR-merge.**
+**#15 — `openWildcard`: OR-merge.**
 Open if ANY source has ambiguous boundary.
 _Impact:_ Anchor doesn't slide when one source's position is ambiguous —
 menu disappears.

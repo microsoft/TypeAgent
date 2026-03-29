@@ -1119,6 +1119,35 @@ describeForEachCompletion(
                     });
                 });
             });
+
+            describe('backward: "play hello by " — property fallback', () => {
+                it("backward: offers property completion via Category 3a fallback", () => {
+                    // When tryCollectBackwardCandidate returns false for
+                    // a property candidate, the engine falls back to
+                    // collectPropertyCandidate so the $(artist) slot
+                    // is still offered.
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play hello by ",
+                        undefined,
+                        "backward",
+                    );
+                    expectMetadata(result, {
+                        completions: ["by"],
+                        matchedPrefixLength: 13,
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [
+                            {
+                                match: { name: "hello" },
+                                propertyNames: ["artist"],
+                            },
+                        ],
+                    });
+                });
+            });
         });
 
         describe("partial keyword after wildcard — 'play Never b'", () => {

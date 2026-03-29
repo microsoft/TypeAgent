@@ -630,7 +630,7 @@ input `"play"`:
   past the boundary. Both directions agree on the committed position.
   For example, `"play "` (with space) offers `"music"` for both
   directions. (This is a consequence of the `directionSensitive`
-  biconditional — see invariant #3 in `completion.md`.)
+  biconditional — see invariant #4 in `completion.md`.)
   Exception: in `[spacing=none]` mode, whitespace is not a
   separator, so `directionSensitive` is always `true` when any word has
   been fully matched — trailing spaces do not commit.
@@ -747,7 +747,7 @@ wildcard boundary is ambiguous. Truncating to `input[0..P]` removes
 the content that established the anchor, so
 `completion(input[0..P], "backward")` always diverges — confirming
 that the position is genuinely direction-sensitive under the cross-query
-definition (invariant #4 in `completion.md`). This also simplifies the
+definition (invariant #7 in `completion.md`). This also simplifies the
 implementation (no `partialKeywordAgrees` tracking needed) and enables
 unguarded cross-query invariant checking in tests.
 
