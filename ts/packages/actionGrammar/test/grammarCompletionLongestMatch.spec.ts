@@ -1120,11 +1120,11 @@ describeForEachCompletion(
                 });
             });
 
-            describe('backward: "play hello by " — property fallthrough', () => {
-                it("backward: offers property completion via Category 3a fallthrough", () => {
+            describe('backward: "play hello by " — property fallback', () => {
+                it("backward: offers property completion via Category 3a fallback", () => {
                     // When tryCollectBackwardCandidate returns false for
-                    // a property candidate, the engine must fall through
-                    // to collectPropertyCandidate so the $(artist) slot
+                    // a property candidate, the engine falls back to
+                    // collectPropertyCandidate so the $(artist) slot
                     // is still offered.
                     const result = matchGrammarCompletion(
                         grammar,

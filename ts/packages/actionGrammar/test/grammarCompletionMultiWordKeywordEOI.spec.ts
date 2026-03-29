@@ -56,12 +56,12 @@ describeForEachCompletion(
             });
         });
 
-        it('forward: "play something play" — partial first keyword word, should offer "played"', () => {
+        it('forward: "play something play" — partial keyword + merge, completions: ["good", "played"]', () => {
             // "play" is a partial prefix of "played" — this correctly
             // offers "played" via findPartialKeywordInWildcard at
             // position 15 (start of "play"), which is < state.index.
             // "good" (from Rule 1) survives because the gap between
-            // mpl=14 and anchor=15 is separator-only (merge path).
+            // matchedPrefixLength=14 and anchor=15 is separator-only (merge path).
             const result = matchGrammarCompletion(
                 grammar,
                 "play something play",
