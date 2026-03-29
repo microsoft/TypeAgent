@@ -47,10 +47,10 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "first ");
                 expect(result.completions).toContain("second");
                 expectMetadata(result, {
-                    matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 5,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -73,10 +73,10 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "first second ");
                 expect(result.completions).toContain("third");
                 expectMetadata(result, {
-                    matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -345,10 +345,10 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("percent");
                 expectMetadata(result, {
-                    matchedPrefixLength: 14,
+                    matchedPrefixLength: 13,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -826,8 +826,8 @@ describeForEachCompletion(
                 expect(r2.completions).toEqual(r3.completions);
                 expect(r1.completions).toContain("two");
                 expect(r1.separatorMode).toBe("spacePunctuation");
-                expect(r2.separatorMode).toBe("optional");
-                expect(r3.separatorMode).toBe("optional");
+                expect(r2.separatorMode).toBe("spacePunctuation");
+                expect(r3.separatorMode).toBe("spacePunctuation");
                 expect(r1.closedSet).toBe(true);
                 expect(r2.closedSet).toBe(true);
                 expect(r3.closedSet).toBe(true);
@@ -839,19 +839,18 @@ describeForEachCompletion(
                 expect(r3.properties).toEqual([]);
             });
 
-            it("matchedPrefixLength includes trailing whitespace", () => {
+            it("matchedPrefixLength does not include trailing whitespace", () => {
                 const r1 = matchGrammarCompletion(grammar, "one");
                 const r2 = matchGrammarCompletion(grammar, "one ");
                 const r3 = matchGrammarCompletion(grammar, "one  ");
-                // Each includes the trailing whitespace in
-                // matchedPrefixLength: "one"=3, "one "=4, "one  "=5.
+                // matchedPrefixLength stays at 3 regardless of trailing space.
                 expect(r1.matchedPrefixLength).toBe(3);
-                expect(r2.matchedPrefixLength).toBe(4);
-                expect(r3.matchedPrefixLength).toBe(5);
-                // directionSensitive: true without trailing space, false with
+                expect(r2.matchedPrefixLength).toBe(3);
+                expect(r3.matchedPrefixLength).toBe(3);
+                // directionSensitive: true (P > 0)
                 expect(r1.directionSensitive).toBe(true);
-                expect(r2.directionSensitive).toBe(false);
-                expect(r3.directionSensitive).toBe(false);
+                expect(r2.directionSensitive).toBe(true);
+                expect(r3.directionSensitive).toBe(true);
             });
         });
 

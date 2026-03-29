@@ -125,6 +125,12 @@ const settingsEntities: EntityMap = {
     value: ["low", "medium", "high"],
 };
 
+// Keyword-only grammar for trailing-separator session behavior tests.
+const keywordGrammar = loadGrammarRules(
+    "keyword.grammar",
+    `<Start> = play music loudly -> true;`,
+);
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("PartialCompletionSession — grammar e2e with mocked entities", () => {
@@ -609,6 +615,177 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Backward with text past the anchor — direction-sensitive
             // check only fires at exact anchor.
             session.update("play ", getPos, "backward");
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+        });
+    });
+
+    // ── Trailing-separator session behavior (keyword-only grammar) ───
+
+    describe("keyword grammar: trailing-separator session behavior", () => {
+        let menu: TestSearchMenu;
+        let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
+        let session: PartialCompletionSession;
+
+        beforeEach(async () => {
+            menu = makeMenu();
+            dispatcher = makeGrammarDispatcher(keywordGrammar, {});
+            session = new PartialCompletionSession(menu, dispatcher);
+        });
+
+        test("backspace from 'play ' to 'play' hides menu, no re-fetch", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play ", getPos);
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Backspace removes the space.
+            session.update("play", getPos);
+
+            // No re-fetch — previous result still valid at anchor "play".
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+        });
+
+        test("'play ' → 'play' → 'play ' round-trip shows menu again", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+
+            session.update("play ", getPos);
+            expect(menu.isActive()).toBe(true);
+
+            // Backspace to "play"
+            session.update("play", getPos);
+
+            // Re-type space — menu should reappear without re-fetch.
+            session.update("play ", getPos);
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("'play ' → 'pla' diverges anchor → re-fetches", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+            session.update("pla", getPos);
+
+            // Input is shorter than anchor — anchor diverged → re-fetch.
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore + 1,
+            );
+        });
+
+        test("double space 'play  ' strips separator and shows menu", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+
+            session.update("play  ", getPos);
+
+            // The extra space should not leak into the trie filter.
+            // Menu should be active with "music" offered.
+            expect(menu.isActive()).toBe(true);
+        });
+    });
+
+    // ── Trailing-separator with entity transitions ───────────────────
+
+    describe("music grammar: trailing-separator entity behavior", () => {
+        let menu: TestSearchMenu;
+        let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
+        let session: PartialCompletionSession;
+
+        beforeEach(async () => {
+            menu = makeMenu();
+            dispatcher = makeGrammarDispatcher(musicGrammar, musicEntities);
+            session = new PartialCompletionSession(menu, dispatcher);
+        });
+
+        test("backspace from 'play ' to 'play' hides entity menu, no re-fetch", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play ", getPos);
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Backspace removes the space — entity menu should hide.
+            session.update("play", getPos);
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+        });
+
+        test("double space 'play  ' shows entity completions", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+
+            session.update("play  ", getPos);
+
+            // Double space should not break entity display.
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("unknown prefix 'play xyz' triggers re-fetch (closedSet=false)", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+
+            // "xyz" doesn't match any entity in the trie.
+            // closedSet=false → C1 re-fetch.
+            session.update("play xyz", getPos);
+            await flush();
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+                "play xyz",
+                "forward",
+            );
+        });
+    });
+
+    // ── Open wildcard trailing-separator behavior ────────────────────
+
+    describe("music grammar: wildcard backspace behavior", () => {
+        test("backspace from 'play unknown ' to 'play unknown' hides menu, no re-fetch", async () => {
+            const menu = makeMenu();
+            const dispatcher = makeGrammarDispatcher(
+                musicGrammar,
+                musicEntities,
+            );
+            const session = new PartialCompletionSession(menu, dispatcher);
+
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play unknown", getPos);
+            await flush();
+            session.update("play unknown ", getPos);
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Backspace removes the space after wildcard text.
+            session.update("play unknown", getPos);
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
