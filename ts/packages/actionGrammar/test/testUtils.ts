@@ -276,27 +276,23 @@ function assertTruncatedForwardInvariant(
         return;
     }
 
-    if (!completionResultsEqual(result, forwardOnTruncated)) {
-        // Completion order is not significant — sort before comparing.
-        const sortedResult = {
-            ...result,
-            completions: [...result.completions].sort(),
-        };
-        const sortedTruncated = {
-            ...forwardOnTruncated,
-            completions: [...forwardOnTruncated.completions].sort(),
-        };
-        if (!completionResultsEqual(sortedResult, sortedTruncated)) {
-            try {
-                expect(sortedTruncated).toEqual(sortedResult);
-            } catch (e) {
-                const err = e as Error;
-                err.message =
-                    `Invariant #6: ${direction} result ≠ completion(input[0..${mpl}]="${truncated}", "forward") ` +
-                    `when matchedPrefixLength (${mpl}) < prefix.length (${prefix.length}) ` +
-                    `(prefix="${prefix}")\n\n${err.message}`;
-                throw err;
-            }
+    // Completion order is not significant — normalize before comparing.
+    const normalize = (r: GrammarCompletionResult) => ({
+        ...r,
+        completions: [...r.completions].sort(),
+    });
+    const sortedResult = normalize(result);
+    const sortedTruncated = normalize(forwardOnTruncated);
+    if (!completionResultsEqual(sortedResult, sortedTruncated)) {
+        try {
+            expect(sortedTruncated).toEqual(sortedResult);
+        } catch (e) {
+            const err = e as Error;
+            err.message =
+                `Invariant #6: ${direction} result ≠ completion(input[0..${mpl}]="${truncated}", "forward") ` +
+                `when matchedPrefixLength (${mpl}) < prefix.length (${prefix.length}) ` +
+                `(prefix="${prefix}")\n\n${err.message}`;
+            throw err;
         }
     }
 }

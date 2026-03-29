@@ -90,6 +90,8 @@ describeForEachCompletion(
                 undefined,
                 "backward",
             );
+            // properties:[] — the partial keyword path only produces
+            // fixed string candidates, not property completions.
             expectMetadata(result, {
                 completions: ["good", "played"],
                 matchedPrefixLength: 15,

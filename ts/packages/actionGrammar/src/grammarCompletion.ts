@@ -42,6 +42,14 @@ function consumeTrailingSeparators(text: string, index: number): number {
         : index;
 }
 
+// True when the substring text[from..to) contains only separator
+// characters (whitespace / punctuation).  Used to decide whether
+// advancing maxPrefixLength across a gap should preserve or clear
+// existing candidates.
+function isSeparatorOnlyGap(text: string, from: number, to: number): boolean {
+    return from > 0 && to > from && nextNonSeparatorIndex(text, from) >= to;
+}
+
 // Greedily match keyword words against text starting at startIndex.
 // Returns the number of fully matched words and cursor positions.
 //
@@ -978,6 +986,8 @@ export function matchGrammarCompletion(
                         // matched with trailing separator).  Fall
                         // through to the forward path so the property
                         // completion is still collected.
+                        // Intentionally not setting backwardEmitted —
+                        // this is the forward fallback path.
                         debugCompletion("Completing wildcard part");
                         collectPropertyCandidate(
                             state,
@@ -1077,10 +1087,11 @@ export function matchGrammarCompletion(
                 // preserve existing candidates (they'd survive on the
                 // truncated input too).
                 if (
-                    partialResult.position > maxPrefixLength &&
-                    maxPrefixLength > 0 &&
-                    nextNonSeparatorIndex(prefix, maxPrefixLength) >=
-                        partialResult.position
+                    isSeparatorOnlyGap(
+                        prefix,
+                        maxPrefixLength,
+                        partialResult.position,
+                    )
                 ) {
                     // Separator-only gap: advance without clearing.
                     maxPrefixLength = partialResult.position;
@@ -1247,6 +1258,9 @@ export function matchGrammarCompletion(
     // be skipped to preserve that anchor.
     let rangeCandidateEmitted = false;
     if (processRangeCandidates) {
+        // Truncate once so range candidates don't peek at trailing
+        // input beyond maxPrefixLength (invariant #6).
+        const truncatedPrefix = prefix.substring(0, maxPrefixLength);
         for (const c of rangeCandidates) {
             if (maxPrefixLength <= c.wildcardStart) continue;
             if (
@@ -1260,13 +1274,9 @@ export function matchGrammarCompletion(
                 continue;
             }
             if (c.kind === "wildcardString") {
-                // Use truncated prefix so range candidates don't
-                // peek at trailing input beyond maxPrefixLength.
-                // This ensures backward results match forward on
-                // the truncated input (invariant #6).
                 const partial = tryPartialStringMatch(
                     c.nextPart,
-                    prefix.substring(0, maxPrefixLength),
+                    truncatedPrefix,
                     maxPrefixLength,
                     c.spacingMode,
                     "forward",
@@ -1378,10 +1388,13 @@ export function matchGrammarCompletion(
         // keyword was found.  When the gap between maxPrefixLength
         // and anchor is separator-only, existing completions are
         // legitimate and should be preserved (merge).
+        // NOTE: the first conjunct (anchor !== maxPrefixLength)
+        // prevents gapIsSeparatorOnly from being true when anchor
+        // equals maxPrefixLength, which would cause the merge branch
+        // to incorrectly skip displacement.
         const gapIsSeparatorOnly =
             anchor !== maxPrefixLength &&
-            maxPrefixLength > 0 &&
-            nextNonSeparatorIndex(prefix, maxPrefixLength) >= anchor;
+            isSeparatorOnlyGap(prefix, maxPrefixLength, anchor);
         if (anchor !== maxPrefixLength && !gapIsSeparatorOnly) {
             debugCompletion(
                 `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `prefix.length=${anchor} (displace)`}`,
