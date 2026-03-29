@@ -620,7 +620,7 @@ export function matchGrammarCompletion(
     //  B2 — Materialization: converts surviving candidates into
     //    the final completions[] and properties[] arrays.
     //    Also handles EOI instantiation, range candidates,
-    //    trailing-separator advancement, and deduplication.
+    //    and deduplication.
     const fixedCandidates: FixedCandidate[] = [];
     const rangeCandidates: RangeCandidate[] = [];
     // Wildcard-at-EOI descriptors: Phase A pushes one descriptor
@@ -634,28 +634,15 @@ export function matchGrammarCompletion(
     // whitespace (which breaks for CJK and other non-space scripts).
     let maxPrefixLength = minPrefixLength ?? 0;
 
-    // Whether backward actually collected a backed-up candidate that
-    // survives at the current maxPrefixLength.  Reset when
-    // updateMaxPrefixLength clears fixedCandidates (a stale true
-    // from a cleared candidate would incorrectly block trailing-
-    // separator advancement for surviving forward-style candidates).
-    // When false, backward fell through to forward behavior —
-    // the trailing-separator-advancement guard is skipped so the
-    // result is identical to forward.
-    let backwardEmitted = false;
-
     // Helper: update maxPrefixLength.  When it increases, all previously
     // accumulated fixed-point candidates from shorter matches are
-    // irrelevant — clear them.  backwardEmitted is also reset so
-    // that a stale backward flag from a cleared candidate does not
-    // block trailing-separator advancement for surviving candidates.
+    // irrelevant — clear them.
     // Range candidates are NOT cleared because their valid position
     // is a range that may include the new maxPrefixLength.
     function updateMaxPrefixLength(prefixLength: number): void {
         if (prefixLength > maxPrefixLength) {
             maxPrefixLength = prefixLength;
             fixedCandidates.length = 0;
-            backwardEmitted = false;
         }
     }
 
@@ -712,9 +699,6 @@ export function matchGrammarCompletion(
                     openWildcard: candidateOpenWildcard,
                     partialKeywordBackup: false,
                 });
-            }
-            if (partial.couldBackUp && dir === "backward") {
-                backwardEmitted = true;
             }
             return true;
         }
@@ -888,11 +872,10 @@ export function matchGrammarCompletion(
                 // a partial keyword exists inside the wildcard, Phase
                 // B1 will find it and may clear this fallback in
                 // favor of a higher-position candidate.
-                backwardEmitted =
-                    tryCollectBackwardCandidate(
-                        preFinalizeState ?? state,
-                        savedPendingWildcard,
-                    ) || backwardEmitted;
+                tryCollectBackwardCandidate(
+                    preFinalizeState ?? state,
+                    savedPendingWildcard,
+                );
                 // Range candidates for non-string next parts
                 // (wildcard/number) — these don't involve partial
                 // keyword scans so they're pushed directly.
@@ -972,16 +955,12 @@ export function matchGrammarCompletion(
                         state,
                         undefined,
                     );
-                    if (didBackUp) {
-                        backwardEmitted = true;
-                    } else {
+                    if (!didBackUp) {
                         // tryCollectBackwardCandidate returned false
                         // (e.g. all keyword words fully matched with
                         // trailing separator).  Fall back to the
                         // forward path so the property completion is
                         // still collected.
-                        // Intentionally not setting backwardEmitted —
-                        // this is the forward fallback path.
                         debugCompletion("Completing wildcard part");
                         collectPropertyCandidate(
                             state,
@@ -1101,7 +1080,6 @@ export function matchGrammarCompletion(
                         partialKeywordBackup: true,
                     });
                 }
-                backwardEmitted = true;
             } else {
                 // No useful partial keyword — create range
                 // candidate for Phase B2.
@@ -1224,11 +1202,7 @@ export function matchGrammarCompletion(
     // would have done for that rule's wildcard-keyword boundary.
     //
     // Gating: range candidates are processed when backward has
-    // range candidates and trailing text remains.  The gate uses
-    // rangeCandidates.length directly (not backwardEmitted) because
-    // range candidates are never cleared — their existence is the
-    // natural signal, decoupled from whether a fixed backward
-    // candidate survived at maxPrefixLength.
+    // range candidates and trailing text remains.
     //
     // rangeCandidateGateOpen: the backed-up position is usable for
     // range candidate processing.  True when either:

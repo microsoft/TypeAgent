@@ -554,8 +554,6 @@ This invariant is verified by the "two-pass backward invariant" tests.
 
 Range candidates are **skipped** when:
 
-- `backwardEmitted=false` — backward didn't back up (e.g., exact match
-  with no remaining completions), so the result already matches forward.
 - `openWildcard=true` **and** `partialKeywordBackup=false` — the
   backed-up position is at an ambiguous wildcard boundary with no
   partial keyword to pin it. Forward evaluation at the shorter input
@@ -838,15 +836,10 @@ unguarded cross-query invariant checking in tests.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
 - `directionSensitive` — see "Why direction matters" and "When
-  direction does _not_ matter" above. The flag is evaluated at
-  `matchedPrefixLength` rather than at the full input. When backward
-  backs up (`backwardEmitted=true` and `maxPrefixLength < prefix.length`),
-  `directionSensitive` is recomputed for the backed-up position: at
-  `P > 0`, at least one keyword was matched before the completion point,
-  so `directionSensitive` is `true`; at `P = 0`, nothing was matched, so
-  it is `false`. When backward falls through to forward behavior
-  (`backwardEmitted=false`), `directionSensitive` reflects the
-  forward-only evaluation.
+  direction does _not_ matter" above. True whenever something was
+  matched beyond the caller's floor (`P > minPrefixLength`) or the
+  wildcard boundary is ambiguous (`openWildcard`). False only when
+  nothing was matched.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary — see `completion.md` [`openWildcard`] for the full
   definition (definite vs. ambiguous positions, persistence semantics,
