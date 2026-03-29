@@ -1260,7 +1260,7 @@ export function matchGrammarCompletion(
     let rangeCandidateEmitted = false;
     if (processRangeCandidates) {
         // Truncate once so range candidates don't peek at trailing
-        // input beyond maxPrefixLength (invariant #8).
+        // input beyond maxPrefixLength (invariant #3).
         const truncatedPrefix = prefix.substring(0, maxPrefixLength);
         for (const c of rangeCandidates) {
             if (maxPrefixLength <= c.wildcardStart) continue;
