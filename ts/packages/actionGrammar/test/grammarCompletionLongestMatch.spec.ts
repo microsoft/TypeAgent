@@ -998,16 +998,31 @@ describeForEachCompletion(
                     // openWildcard stays true because the grammar considers
                     // both parse paths.  The shell resolves this via B4
                     // (unique match) when the user types "by" in the trie.
+                    //
+                    // Phase B2: the gap between mpl=13 and anchor=14 is
+                    // a single trailing space (separator-only), so the
+                    // existing Cat 2 candidate (property completion for
+                    // $(artist)) is preserved.  The separator in the gap
+                    // has been consumed → separatorMode demoted to
+                    // "optional".  closedSet=false because the property
+                    // slot is open-ended.
                     const result = matchGrammarCompletion(
                         grammar,
                         "play hello by ",
                     );
                     expectMetadata(result, {
+                        completions: ["by"],
                         matchedPrefixLength: 14,
                         separatorMode: "optional",
-                        closedSet: true,
+                        closedSet: false,
                         directionSensitive: true,
                         openWildcard: true,
+                        properties: [
+                            {
+                                match: { name: "hello" },
+                                propertyNames: ["artist"],
+                            },
+                        ],
                     });
                 });
             });

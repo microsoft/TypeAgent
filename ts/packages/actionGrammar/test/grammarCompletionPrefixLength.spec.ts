@@ -2966,6 +2966,406 @@ describeForEachCompletion(
             });
         });
 
+        describe("stale backwardEmitted — wildcard rule cleared by keyword rule", () => {
+            // Regression: when a wildcard rule's backward candidate
+            // is cleared by a longer keyword match from another rule,
+            // the backwardEmitted flag must also be reset.  Otherwise:
+            //   - Trailing-separator advancement is incorrectly
+            //     skipped for the surviving forward-style candidate.
+            //   - Range candidates may be incorrectly gated.
+            //
+            // Grammar:
+            //   Rule A: play $(song) by $(artist)  — wildcard rule
+            //   Rule B: play beautiful music        — keyword rule
+            //
+            // Input (backward): "play beautiful "
+            //
+            // Rule A: wildcard absorbs " beautiful ", backward backs
+            //   up to wildcard start (position 4).  backwardEmitted=true.
+            // Rule B: matches "play" + "beautiful" to position 14,
+            //   updateMaxPrefixLength(14) clears Rule A's candidate.
+            //   backwardEmitted must also be reset to false.
+            //
+            // With the fix: trailing-sep advances to 15, offers "music"
+            // at matchedPrefixLength=15 with separatorMode="optional".
+            //
+            // Without the fix: stale backwardEmitted=true blocks
+            // trailing-sep advancement, leaving matchedPrefixLength=14.
+
+            describe("wildcard rule + keyword rule, trailing space", () => {
+                const g = [
+                    `import { SongName };`,
+                    `import { ArtistName };`,
+                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play beautiful music -> "play_beautiful_music";`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("backward on 'play beautiful ' — wildcard rule's range candidate anchors at 14", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful ",
+                        undefined,
+                        "backward",
+                    );
+                    // Rule B: "play beautiful" matches (14 chars), offers "music".
+                    // Rule A: wildcard-at-EOI range candidate adds "by" at
+                    // mpl=14.  Range candidate output blocks trailing-sep
+                    // advancement — mpl stays at 14 (not 15), preserving
+                    // the backward anchor.
+                    expectMetadata(result, {
+                        completions: ["music", "by"],
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+
+                it("forward on 'play beautiful ' — EOI merge preserves 'music' alongside 'by'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful ",
+                        undefined,
+                        "forward",
+                    );
+                    // Phase B2: gap between mpl=14 and anchor=15 is
+                    // a single trailing space (separator-only), so
+                    // existing Cat 2 candidate "music" is preserved
+                    // and EOI candidate "by" is merged alongside.
+                    // The separator in the gap has been consumed →
+                    // separatorMode demoted to "optional".
+                    expectMetadata(result, {
+                        completions: ["music", "by"],
+                        matchedPrefixLength: 15,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+
+                it("backward on 'play beautiful' — no trailing space, backs up", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful",
+                        undefined,
+                        "backward",
+                    );
+                    // No trailing separator — backward should back up
+                    // to "beautiful" at position 4.  Both rules produce
+                    // candidates at this position.
+                    expectMetadata(result, {
+                        completions: ["beautiful"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [
+                            {
+                                match: {
+                                    actionName: "playBy",
+                                    parameters: {},
+                                },
+                                propertyNames: ["parameters.song"],
+                            },
+                        ],
+                    });
+                });
+
+                it("forward on 'play beautiful' — offers 'music' and 'by'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful",
+                        undefined,
+                        "forward",
+                    );
+                    // Rule B offers "music", Rule A offers "by" (via
+                    // wildcard-at-EOI partial keyword).
+                    expectMetadata(result, {
+                        completions: ["music", "by"],
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+            });
+
+            describe("wildcard rule + keyword rule, no trailing space", () => {
+                const g = [
+                    `import { SongName };`,
+                    `import { ArtistName };`,
+                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play something good -> "play_something_good";`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("backward on 'play something ' — range candidate anchors at 14", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play something ",
+                        undefined,
+                        "backward",
+                    );
+                    // Rule B: "play something" matched (14 chars),
+                    // offers "good".  Rule A: range candidate adds "by"
+                    // at mpl=14.  Range candidate blocks trailing-sep.
+                    expectMetadata(result, {
+                        completions: ["good", "by"],
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+            });
+
+            describe("range candidates survive when backwardEmitted is reset", () => {
+                // When backward's fixed candidate is cleared but range
+                // candidates exist, the range candidates should still
+                // be processed (gated by rangeCandidates.length > 0,
+                // not by backwardEmitted).
+                const g = [
+                    `import { SongName };`,
+                    `import { ArtistName };`,
+                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play nice by heart -> "play_nice_by_heart";`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("backward on 'play nice by' — keyword rule wins, range candidate from wildcard rule adds 'by'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play nice by",
+                        undefined,
+                        "backward",
+                    );
+                    // Rule B: "play nice by" fully matched, backs up
+                    // to "by" at position 9.
+                    // Rule A: wildcard captured "nice", "by" matched
+                    // as keyword — backward backs up to "by" at
+                    // position 9 (afterWildcard=true → openWildcard).
+                    expectMetadata(result, {
+                        completions: ["by"],
+                        matchedPrefixLength: 9,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+            });
+        });
+
+        // ============================================================
+        // Phase B2 separator-only gap — merge vs displace
+        //
+        // When Phase B2's anchor (prefix.length or partial keyword
+        // position) differs from maxPrefixLength, the gap between
+        // mpl and anchor determines whether existing Cat 2 candidates
+        // are preserved (merge) or replaced (displace):
+        //
+        //   Separator-only gap → merge (Cat 2 at EOI)
+        //   Non-separator gap  → displace (Cat 3b fallback)
+        // ============================================================
+        describe("Phase B2 separator-only gap — merge vs displace", () => {
+            describe("Cat 3b displace — non-separator gap", () => {
+                // Rule A: play $(song) by $(artist) — wildcard
+                // Rule B: play some video             — keyword
+                //
+                // Input: "play beautiful "
+                // Rule B: Cat 3b at mpl=4 ("some" doesn't match "beautiful")
+                // Rule A: EOI candidate at anchor=15
+                // Gap "beautiful " (11 chars) has non-separator content → displace
+                const g = [
+                    `import { SongName, ArtistName };`,
+                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play some video -> "playSomeVideo";`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("forward on 'play beautiful ' — displaces Cat 3b 'video'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful ",
+                        undefined,
+                        "forward",
+                    );
+                    // "video" from Cat 3b (mpl=4) is displaced by
+                    // EOI candidate "by" at anchor=15.
+                    expectMetadata(result, {
+                        completions: ["by"],
+                        matchedPrefixLength: 15,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+            });
+
+            describe("Cat 2 merge — separator-only gap (trailing space)", () => {
+                // Rule A: play $(song) by $(artist) — wildcard
+                // Rule B: play beautiful music       — keyword
+                //
+                // Input: "play beautiful "
+                // Rule B: Cat 2 at mpl=14 (offers "music")
+                // Rule A: EOI candidate at anchor=15
+                // Gap " " (1 char space) is separator-only → merge
+                const g = [
+                    `import { SongName, ArtistName };`,
+                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play beautiful music -> "playBeautifulMusic";`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("forward on 'play beautiful ' — merges Cat 2 'music' with 'by'", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful ",
+                        undefined,
+                        "forward",
+                    );
+                    expectMetadata(result, {
+                        completions: ["music", "by"],
+                        matchedPrefixLength: 15,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+
+                it("forward on 'play beautiful' — no gap, both at mpl=14", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful",
+                        undefined,
+                        "forward",
+                    );
+                    // No trailing space → anchor=14=mpl, natural merge.
+                    expectMetadata(result, {
+                        completions: ["music", "by"],
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+            });
+
+            describe("Cat 2 merge — separator-only gap (trailing punctuation)", () => {
+                // Punctuation is also a separator character.
+                const g = [
+                    `import { SongName, ArtistName };`,
+                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play beautiful music -> "playBeautifulMusic";`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("forward on 'play beautiful,' — punctuation gap triggers merge", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful,",
+                        undefined,
+                        "forward",
+                    );
+                    // Comma is punctuation (\p{P}), so gap is
+                    // separator-only → merge.
+                    expectMetadata(result, {
+                        completions: ["music", "by"],
+                        matchedPrefixLength: 15,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+            });
+
+            describe("Cat 3b displace — large content gap", () => {
+                // When Cat 3b candidates are far from the anchor,
+                // the gap contains real unmatched content → displace.
+                const g = [
+                    `import { SongName, ArtistName };`,
+                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play something entirely different -> "playDifferent";`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("forward on 'play beautiful song ' — 3b 'something' at mpl=4 displaced by 'by' at 20", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play beautiful song ",
+                        undefined,
+                        "forward",
+                    );
+                    // Rule B: Cat 3b, only matched "play" (mpl=4),
+                    // stopped at "something". Gap "beautiful song "
+                    // contains non-separator content → displaced.
+                    expectMetadata(result, {
+                        completions: ["by"],
+                        matchedPrefixLength: 20,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+            });
+
+            describe("Cat 2 property candidate preserved during merge", () => {
+                // When a Cat 2 candidate is a property completion (from
+                // a wildcard slot at EOI), it should survive Phase B2
+                // merge alongside a string EOI candidate from another rule.
+                const g = [
+                    `import { SongName, ArtistName };`,
+                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play $(song:SongName) -> { actionName: "play", parameters: { song } };`,
+                ].join("\n");
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                it("forward on 'play hello ' — keyword 'by' and property completion coexist", () => {
+                    const result = matchGrammarCompletion(
+                        grammar,
+                        "play hello ",
+                        undefined,
+                        "forward",
+                    );
+                    // Rule A: wildcard-at-EOI → offers "by" via Phase B
+                    // Rule B: wildcard captured "hello", Cat 2 property
+                    // completion for song.  Phase B2 displaces (gap
+                    // "hello " contains non-separator content), so only
+                    // "by" survives.
+                    expectMetadata(result, {
+                        completions: ["by"],
+                        matchedPrefixLength: 11,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
+                });
+            });
+        });
+
         describe("openWildcard skip — no re-invocation at wildcard boundary", () => {
             // When backward backs up to a position at an ambiguous
             // wildcard boundary (openWildcard=true), re-invocation is
