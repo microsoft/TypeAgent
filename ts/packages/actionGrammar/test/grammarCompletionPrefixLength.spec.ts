@@ -3013,10 +3013,10 @@ describeForEachCompletion(
                     // mpl=14.  Range candidate output blocks trailing-sep
                     // advancement — mpl stays at 14 (not 15), preserving
                     // the backward anchor.
-                    expect(result.completions).toContain("music");
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["music", "by"],
                         matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         openWildcard: true,
@@ -3058,8 +3058,23 @@ describeForEachCompletion(
                     // No trailing separator — backward should back up
                     // to "beautiful" at position 4.  Both rules produce
                     // candidates at this position.
-                    expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.directionSensitive).toBe(true);
+                    expectMetadata(result, {
+                        completions: ["beautiful"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "spacePunctuation",
+                        closedSet: false,
+                        directionSensitive: true,
+                        openWildcard: false,
+                        properties: [
+                            {
+                                match: {
+                                    actionName: "playBy",
+                                    parameters: {},
+                                },
+                                propertyNames: ["parameters.song"],
+                            },
+                        ],
+                    });
                 });
 
                 it("forward on 'play beautiful' — offers 'music' and 'by'", () => {
@@ -3071,8 +3086,15 @@ describeForEachCompletion(
                     );
                     // Rule B offers "music", Rule A offers "by" (via
                     // wildcard-at-EOI partial keyword).
-                    expect(result.completions).toContain("music");
-                    expect(result.matchedPrefixLength).toBe(14);
+                    expectMetadata(result, {
+                        completions: ["music", "by"],
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
                 });
             });
 
@@ -3095,12 +3117,14 @@ describeForEachCompletion(
                     // Rule B: "play something" matched (14 chars),
                     // offers "good".  Rule A: range candidate adds "by"
                     // at mpl=14.  Range candidate blocks trailing-sep.
-                    expect(result.matchedPrefixLength).toBe(14);
-                    expect(result.completions).toContain("good");
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["good", "by"],
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
                         directionSensitive: true,
                         openWildcard: true,
+                        properties: [],
                     });
                 });
             });
@@ -3130,8 +3154,15 @@ describeForEachCompletion(
                     // Rule A: wildcard captured "nice", "by" matched
                     // as keyword — backward backs up to "by" at
                     // position 9 (afterWildcard=true → openWildcard).
-                    expect(result.completions).toContain("by");
-                    expect(result.directionSensitive).toBe(true);
+                    expectMetadata(result, {
+                        completions: ["by"],
+                        matchedPrefixLength: 9,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
                 });
             });
         });
@@ -3172,11 +3203,14 @@ describeForEachCompletion(
                     );
                     // "video" from Cat 3b (mpl=4) is displaced by
                     // EOI candidate "by" at anchor=15.
-                    expect(result.completions).not.toContain("video");
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["by"],
                         matchedPrefixLength: 15,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
                         openWildcard: true,
+                        properties: [],
                     });
                 });
             });
@@ -3203,12 +3237,14 @@ describeForEachCompletion(
                         undefined,
                         "forward",
                     );
-                    expect(result.completions).toContain("music");
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["music", "by"],
                         matchedPrefixLength: 15,
-                        openWildcard: true,
+                        separatorMode: "optional",
                         closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
                     });
                 });
 
@@ -3220,11 +3256,14 @@ describeForEachCompletion(
                         "forward",
                     );
                     // No trailing space → anchor=14=mpl, natural merge.
-                    expect(result.completions).toContain("music");
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["music", "by"],
                         matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
+                        closedSet: true,
+                        directionSensitive: true,
                         openWildcard: true,
+                        properties: [],
                     });
                 });
             });
@@ -3247,11 +3286,14 @@ describeForEachCompletion(
                     );
                     // Comma is punctuation (\p{P}), so gap is
                     // separator-only → merge.
-                    expect(result.completions).toContain("music");
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["music", "by"],
                         matchedPrefixLength: 15,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
                         openWildcard: true,
+                        properties: [],
                     });
                 });
             });
@@ -3276,11 +3318,14 @@ describeForEachCompletion(
                     // Rule B: Cat 3b, only matched "play" (mpl=4),
                     // stopped at "something". Gap "beautiful song "
                     // contains non-separator content → displaced.
-                    expect(result.completions).not.toContain("something");
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["by"],
                         matchedPrefixLength: 20,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
                         openWildcard: true,
+                        properties: [],
                     });
                 });
             });
@@ -3305,9 +3350,18 @@ describeForEachCompletion(
                     );
                     // Rule A: wildcard-at-EOI → offers "by" via Phase B
                     // Rule B: wildcard captured "hello", Cat 2 property
-                    // completion for song. Both should be present.
-                    expect(result.completions).toContain("by");
-                    expect(result.openWildcard).toBe(true);
+                    // completion for song.  Phase B2 displaces (gap
+                    // "hello " contains non-separator content), so only
+                    // "by" survives.
+                    expectMetadata(result, {
+                        completions: ["by"],
+                        matchedPrefixLength: 11,
+                        separatorMode: "optional",
+                        closedSet: true,
+                        directionSensitive: true,
+                        openWildcard: true,
+                        properties: [],
+                    });
                 });
             });
         });
