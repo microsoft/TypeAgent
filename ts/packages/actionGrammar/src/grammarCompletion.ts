@@ -967,9 +967,24 @@ export function matchGrammarCompletion(
                     // instead of offering property completion for the
                     // unfilled wildcard — the user hasn't started
                     // typing into the unfilled slot yet.
-                    backwardEmitted =
-                        tryCollectBackwardCandidate(state, undefined) ||
-                        backwardEmitted;
+                    const didBackUp = tryCollectBackwardCandidate(
+                        state,
+                        undefined,
+                    );
+                    if (didBackUp) {
+                        backwardEmitted = true;
+                    } else {
+                        // Backup failed (e.g. all keyword words fully
+                        // matched with trailing separator).  Fall
+                        // through to the forward path so the property
+                        // completion is still collected.
+                        debugCompletion("Completing wildcard part");
+                        collectPropertyCandidate(
+                            state,
+                            pendingWildcard.valueId,
+                            pendingWildcard.start,
+                        );
+                    }
                 } else {
                     // Forward (or backward with nothing to
                     // reconsider): report a property completion
@@ -1056,7 +1071,22 @@ export function matchGrammarCompletion(
                 // Collect as a fixed candidate (may advance
                 // maxPrefixLength, clearing weaker fallback
                 // candidates from Phase A).
-                updateMaxPrefixLength(partialResult.position);
+                //
+                // When the gap between the current maxPrefixLength
+                // and the partial keyword position is separator-only,
+                // preserve existing candidates (they'd survive on the
+                // truncated input too).
+                if (
+                    partialResult.position > maxPrefixLength &&
+                    maxPrefixLength > 0 &&
+                    nextNonSeparatorIndex(prefix, maxPrefixLength) >=
+                        partialResult.position
+                ) {
+                    // Separator-only gap: advance without clearing.
+                    maxPrefixLength = partialResult.position;
+                } else {
+                    updateMaxPrefixLength(partialResult.position);
+                }
                 if (partialResult.position === maxPrefixLength) {
                     fixedCandidates.push({
                         kind: "string",
@@ -1230,9 +1260,13 @@ export function matchGrammarCompletion(
                 continue;
             }
             if (c.kind === "wildcardString") {
+                // Use truncated prefix so range candidates don't
+                // peek at trailing input beyond maxPrefixLength.
+                // This ensures backward results match forward on
+                // the truncated input (invariant #6).
                 const partial = tryPartialStringMatch(
                     c.nextPart,
-                    prefix,
+                    prefix.substring(0, maxPrefixLength),
                     maxPrefixLength,
                     c.spacingMode,
                     "forward",
@@ -1339,11 +1373,13 @@ export function matchGrammarCompletion(
         //   beautiful " where anchor=15).  Keep them and add EOI
         //   instantiations alongside.
         //
-        // For partial keyword recovery (hasPartialKeyword), always
-        // displace — the anchor is at a sub-prefix position where
-        // the partial keyword was found.
+        // For partial keyword recovery (hasPartialKeyword), the
+        // anchor is at a sub-prefix position where the partial
+        // keyword was found.  When the gap between maxPrefixLength
+        // and anchor is separator-only, existing completions are
+        // legitimate and should be preserved (merge).
         const gapIsSeparatorOnly =
-            !hasPartialKeyword &&
+            anchor !== maxPrefixLength &&
             maxPrefixLength > 0 &&
             nextNonSeparatorIndex(prefix, maxPrefixLength) >= anchor;
         if (anchor !== maxPrefixLength && !gapIsSeparatorOnly) {

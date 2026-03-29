@@ -234,6 +234,74 @@ function assertSingleResultInvariants(
 }
 
 /**
+ * Assert that truncating input to a result's matchedPrefixLength and
+ * re-running forward produces the same result.
+ *
+ * - #6: result.mpl < prefix.length →
+ *       result === completion(input[0..mpl], "forward")
+ *
+ * Stripping unconsumed trailing input should not change the answer.
+ * For forward results this is a straightforward idempotency check.
+ * For backward results we guard on forward actually reaching the
+ * same position (otherwise a known forward gap would cause a false
+ * failure).
+ */
+function assertTruncatedForwardInvariant(
+    result: GrammarCompletionResult,
+    prefix: string,
+    direction: string,
+    minPrefixLength: number | undefined,
+    grammar: Grammar,
+    baseFn: TestCompletionFn,
+): void {
+    const mpl = result.matchedPrefixLength ?? 0;
+    if (mpl >= prefix.length) {
+        return;
+    }
+
+    const truncated = prefix.substring(0, mpl);
+    const forwardOnTruncated = baseFn(
+        grammar,
+        truncated,
+        minPrefixLength,
+        "forward",
+    );
+
+    // For backward results, skip when forward can't reach the same
+    // position (known gap — see completion.md § Known gaps).
+    if (
+        direction === "backward" &&
+        (forwardOnTruncated.matchedPrefixLength ?? 0) < mpl
+    ) {
+        return;
+    }
+
+    if (!completionResultsEqual(result, forwardOnTruncated)) {
+        // Completion order is not significant — sort before comparing.
+        const sortedResult = {
+            ...result,
+            completions: [...result.completions].sort(),
+        };
+        const sortedTruncated = {
+            ...forwardOnTruncated,
+            completions: [...forwardOnTruncated.completions].sort(),
+        };
+        if (!completionResultsEqual(sortedResult, sortedTruncated)) {
+            try {
+                expect(sortedTruncated).toEqual(sortedResult);
+            } catch (e) {
+                const err = e as Error;
+                err.message =
+                    `Invariant #6: ${direction} result ≠ completion(input[0..${mpl}]="${truncated}", "forward") ` +
+                    `when matchedPrefixLength (${mpl}) < prefix.length (${prefix.length}) ` +
+                    `(prefix="${prefix}")\n\n${err.message}`;
+                throw err;
+            }
+        }
+    }
+}
+
+/**
  * Assert cross-direction invariants between forward and backward results.
  *
  * On the original input we can only assert one thing:
@@ -417,6 +485,23 @@ function withInvariantChecks(baseFn: TestCompletionFn): TestCompletionFn {
             prefix,
             "backward",
             minPrefixLength,
+        );
+
+        assertTruncatedForwardInvariant(
+            forward,
+            prefix,
+            "forward",
+            minPrefixLength,
+            grammar,
+            baseFn,
+        );
+        assertTruncatedForwardInvariant(
+            backward,
+            prefix,
+            "backward",
+            minPrefixLength,
+            grammar,
+            baseFn,
         );
 
         assertCrossDirectionInvariants(

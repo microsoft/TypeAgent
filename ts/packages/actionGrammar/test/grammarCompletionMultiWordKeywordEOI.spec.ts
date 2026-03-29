@@ -60,6 +60,8 @@ describeForEachCompletion(
             // "play" is a partial prefix of "played" — this correctly
             // offers "played" via findPartialKeywordInWildcard at
             // position 15 (start of "play"), which is < state.index.
+            // "good" (from Rule 1) survives because the gap between
+            // mpl=14 and anchor=15 is separator-only (merge path).
             const result = matchGrammarCompletion(
                 grammar,
                 "play something play",
@@ -67,9 +69,54 @@ describeForEachCompletion(
                 "forward",
             );
             expectMetadata(result, {
-                completions: ["played"],
+                completions: ["good", "played"],
                 matchedPrefixLength: 15,
                 separatorMode: "optional",
+                closedSet: true,
+                directionSensitive: true,
+                openWildcard: true,
+                properties: [],
+            });
+        });
+
+        it('backward: "play something play" — separator-only gap preserves "good"', () => {
+            // When backward encounters a partial keyword whose position
+            // exceeds maxPrefixLength across a separator-only gap,
+            // fixedCandidates (like "good" from Rule 1) must be
+            // preserved rather than cleared.
+            const result = matchGrammarCompletion(
+                grammar,
+                "play something play",
+                undefined,
+                "backward",
+            );
+            expectMetadata(result, {
+                completions: ["good", "played"],
+                matchedPrefixLength: 15,
+                separatorMode: "optional",
+                closedSet: true,
+                directionSensitive: true,
+                openWildcard: true,
+                properties: [],
+            });
+        });
+
+        it('backward: "play something played" — range candidate uses truncated prefix', () => {
+            // Backward range candidate processing must truncate the
+            // prefix to maxPrefixLength before calling
+            // tryPartialStringMatch.  Without truncation, the match
+            // peeks at "played" beyond mpl and incorrectly offers
+            // "by" instead of the expected completions.
+            const result = matchGrammarCompletion(
+                grammar,
+                "play something played",
+                undefined,
+                "backward",
+            );
+            expectMetadata(result, {
+                completions: ["good", "played"],
+                matchedPrefixLength: 14,
+                separatorMode: "spacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
                 openWildcard: true,
