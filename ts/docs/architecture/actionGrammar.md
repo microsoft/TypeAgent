@@ -626,18 +626,20 @@ input `"play"`:
 - **Nothing was fully matched** (e.g., `"pla"` against `play music`):
   There is no completed part to back up to. Both directions produce
   the same partial match (Category 3b) offering `"play"`.
-- **Exact match with no remaining completions** (e.g., `"play music "`
+- **Exact match with trailing whitespace** (e.g., `"play music "`
   against `play music`): All grammar parts are satisfied and the
-  trailing input is only whitespace/punctuation. There are no
-  completions or properties to differ on, so both directions produce
-  an identical empty result. The grammar matcher detects this case
-  and advances `matchedPrefixLength` to `prefix.length` (absorbing
-  the trailing whitespace) with `directionSensitive=false`.
+  trailing input is only whitespace/punctuation. Category 1 strips
+  the trailing separator via `effectivePrefixEnd` and backs up to the
+  last keyword — both directions produce the same backed-up result
+  (completions `["music"]` at `matchedPrefixLength=4`,
+  `directionSensitive=true`). This is consistent with the general
+  rule: trailing separators are not consumed, and P stays at the
+  keyword boundary.
 
-  Note: trailing separators are **not** consumed in the general case.
-  `"play "` against `play music` has `matchedPrefixLength=4` (not 5)
-  and `directionSensitive=true`. See "Design choice — trailing
-  separators are not consumed" below for the rationale.
+  `"play "` against `play music` behaves the same way:
+  `matchedPrefixLength=4` (not 5) and `directionSensitive=true`.
+  See "Design choice — trailing separators are not consumed" below
+  for the rationale.
 
 ### Forward/backward equivalence analysis
 
@@ -650,13 +652,12 @@ The answer depends on **where P lands** in the grammar structure, the
 the last matched item.
 
 > **Note:** The grammar matcher always produces P at an uncommitted
-> position (no trailing separator in `input[0..P]`), except for
-> exact-match advancement where P = input.length. The committed cases
-> in the tables below are included for completeness — they confirm that
-> _if_ a caller manually truncated at a committed position, the
-> directions would agree. This validates the design: the matcher can
-> safely skip trailing separators without introducing incorrect
-> `directionSensitive` flags.
+> position (no trailing separator in `input[0..P]`). The committed
+> cases in the tables below are included for completeness — they
+> confirm that _if_ a caller manually truncated at a committed
+> position, the directions would agree. This validates the design:
+> the matcher can safely skip trailing separators without introducing
+> incorrect `directionSensitive` flags.
 
 **Terminology:**
 
@@ -737,19 +738,15 @@ P = minPrefixLength (or 0 if unset)?
   └─ Yes → SAME (nothing matched beyond the caller's floor;
            backward has nothing to reconsider)
 
-exactMatchAdvanced? (no completions, no properties, trailing input
-                     is only whitespace/punctuation)
-  └─ Yes → SAME (both directions produce identical empty result)
-
 otherwise
   └─ DIFFERENT (keyword boundary — backward can back up)
 ```
 
 **Key insight:** Once any keyword or wildcard is fully matched (P >
 minPrefixLength), backward can always reconsider that match —
-regardless of trailing whitespace. The only exception is exact-match
-advancement, where the grammar is fully consumed and there are no
-completions to differ on.
+regardless of trailing whitespace. There are no exceptions: even
+exact matches with trailing whitespace back up to the last keyword
+via Category 1 `effectivePrefixEnd` stripping.
 
 **Design choice — trailing separators are not consumed.** The grammar
 matcher never advances `matchedPrefixLength` past a trailing separator
@@ -777,17 +774,10 @@ Rationale:
    the re-offer.
 
 3. **Simpler invariants.** Without trailing-separator advancement,
-   `P < input.length` always means "keyword boundary, backward can back
-   up" — no need to distinguish committed vs. uncommitted positions.
-   The only `directionSensitive=false` case at P = input.length is
-   exact-match advancement, which is a narrow and easy-to-verify
-   condition.
-
-The one exception is **exact-match advancement**: when the grammar is
-fully consumed (no completions, no properties) and the trailing input
-is only whitespace/punctuation. Here, advancing P to `input.length` is
-safe because there is nothing to differ on — both directions produce an
-identical empty result.
+   P always lands at a keyword boundary where backward can back up —
+   no need to distinguish committed vs. uncommitted positions.
+   `directionSensitive` reduces to `openWildcard || P != minPrefixLength`,
+   which is easy to verify.
 
 **Design choice — openWildcard → always true:** Even when both
 directions happen to find the same partial keyword at the same position

@@ -1223,11 +1223,10 @@ describeForEachCompletion(
             });
         });
 
-        describe("trailing separator commits token across spacing modes", () => {
-            // Trailing separator after a keyword means backward produces
-            // the same result as forward — the separator "commits" the
-            // match position.  The specific separator characters depend
-            // on the spacing mode.
+        describe("trailing separator — backward matches forward across spacing modes", () => {
+            // Trailing separator after a keyword: backward produces the
+            // same result as forward because both directions back up
+            // past the separator to the same keyword boundary.
 
             describe("default (auto) spacing", () => {
                 const g = `<Start> = play music now -> true;`;
@@ -1425,7 +1424,7 @@ describeForEachCompletion(
                 );
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("trailing space does NOT commit — backward on 'play ' still backs up", () => {
+                it("trailing space — backward on 'play ' still backs up", () => {
                     // "play " does not match "playmusic" in none mode,
                     // so "play" is the only matched word.  Space is not a
                     // separator in none mode, so backward is not neutralized.
@@ -1553,7 +1552,7 @@ describeForEachCompletion(
         describe("escaped space in last term", () => {
             // An escaped space (\ ) makes the space part of the literal
             // token content.  The trailing separator check should NOT
-            // treat such a space as a commit signal.
+            // treat such a space as a separator boundary.
 
             describe("default (auto) spacing — single segment with literal space", () => {
                 // "hello\ world" parses as one segment: "hello world"

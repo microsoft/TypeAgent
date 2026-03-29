@@ -548,9 +548,7 @@ examples and the Option A/B design trade-off.
 
 **When `directionSensitive=false`:** Nothing was fully matched
 (partial/dirty), or the position is at the caller's floor
-(`P = minPrefixLength`). Exact matches with trailing whitespace
-(empty completions) also return `false` because both directions
-produce the same empty result.
+(`P = minPrefixLength`).
 
 The flag is correct under the cross-query invariant definition:
 `directionSensitive=true` if and only if
@@ -568,10 +566,6 @@ P = minPrefixLength → false (nothing matched beyond caller's floor)
 otherwise           → true  (keyword boundary — backward can back up)
 ```
 
-Exception: exact-match advancement (no completions, no properties,
-trailing input is only whitespace/punctuation) forces `false` because
-both directions produce an identical empty result.
-
 See the "Forward/backward equivalence analysis" section in
 `actionGrammar.md` for the full position-by-position analysis.
 
@@ -580,18 +574,18 @@ inputs. The general pattern: `true` when anything was matched beyond
 the floor; `false` only when partial/dirty or exact match with no
 remaining completions.
 
-| Rule                   | Input          | `directionSensitive` | Why                                                                     |
-| ---------------------- | -------------- | -------------------- | ----------------------------------------------------------------------- |
-| `play <song> by <a>`   | `play`         | `true`               | `"play"` fully matched, backward can reconsider                         |
-| `play <song> by <a>`   | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary               |
-| `play <song> by <a>`   | `play Never`   | `true`               | `"Never"` in wildcard, keyword `"by"` next; no trailing space           |
-| `play <song> by <a>`   | `play Never b` | `true`               | `openWildcard=true` — wildcard boundary ambiguous                       |
-| `play <song> by <a>`   | `pla`          | `false`              | Only partial match (Category 3b) — nothing to back up to                |
-| `play music`           | `play`         | `true`               | `"play"` fully matched, no trailing space                               |
-| `play music`           | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary               |
-| `play music`           | `play music `  | `false`              | Exact match + trailing space → no completions → exact-match advancement |
-| `(play \| player) now` | `play`         | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`              |
-| `(play \| player) now` | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary               |
+| Rule                   | Input          | `directionSensitive` | Why                                                           |
+| ---------------------- | -------------- | -------------------- | ------------------------------------------------------------- |
+| `play <song> by <a>`   | `play`         | `true`               | `"play"` fully matched, backward can reconsider               |
+| `play <song> by <a>`   | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary     |
+| `play <song> by <a>`   | `play Never`   | `true`               | `"Never"` in wildcard, keyword `"by"` next; no trailing space |
+| `play <song> by <a>`   | `play Never b` | `true`               | `openWildcard=true` — wildcard boundary ambiguous             |
+| `play <song> by <a>`   | `pla`          | `false`              | Only partial match (Category 3b) — nothing to back up to      |
+| `play music`           | `play`         | `true`               | `"play"` fully matched, no trailing space                     |
+| `play music`           | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary     |
+| `play music`           | `play music `  | `true`               | Cat 1 strips trailing space; P=4, completions=["music"]       |
+| `(play \| player) now` | `play`         | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`    |
+| `(play \| player) now` | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary     |
 
 The dispatcher may additionally set `directionSensitive=true` at the
 command level — for example, when a subcommand name is both a valid

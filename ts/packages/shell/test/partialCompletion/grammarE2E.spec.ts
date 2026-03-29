@@ -647,6 +647,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Backspace removes the space.
             session.update("play", getPos);
+            expect(menu.isActive()).toBe(false);
 
             // No re-fetch — previous result still valid at anchor "play".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
@@ -670,6 +671,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Backspace to "play"
             session.update("play", getPos);
+            expect(menu.isActive()).toBe(false);
 
             // Re-type space — menu should reappear without re-fetch.
             session.update("play ", getPos);
@@ -736,6 +738,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Backspace removes the space — entity menu should hide.
             session.update("play", getPos);
+            expect(menu.isActive()).toBe(false);
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
@@ -803,6 +806,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Backspace removes the space after wildcard text.
             session.update("play unknown", getPos);
+            expect(menu.isActive()).toBe(false);
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
