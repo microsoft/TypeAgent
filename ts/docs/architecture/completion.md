@@ -200,7 +200,7 @@ the grammar matcher assigns at different input states:
 ### 1. Grammar Matcher
 
 **Package:** `packages/actionGrammar`
-**Entry point:** `matchGrammarCompletion(grammar, prefix, minPrefixLength, direction)`
+**Entry point:** `matchGrammarCompletion(grammar, input, minPrefixLength, direction)`
 
 Computes the set of valid next-tokens for a partial input against compiled
 grammar rules. The matcher categorizes each partial match into one of four

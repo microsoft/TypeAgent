@@ -264,7 +264,7 @@ export class GrammarStoreImpl implements GrammarStore {
 
     // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
-        requestPrefix: string,
+        input: string,
         options?: MatchOptions,
         direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
@@ -289,7 +289,7 @@ export class GrammarStoreImpl implements GrammarStore {
             }
             if (this.useDFA && entry.dfa) {
                 // DFA-based completions
-                const tokens = requestPrefix
+                const tokens = input
                     .trim()
                     .split(/\s+/)
                     .filter((t) => t.length > 0);
@@ -321,7 +321,7 @@ export class GrammarStoreImpl implements GrammarStore {
                 }
             } else if (this.useNFA && entry.nfa) {
                 // NFA-based completions: tokenize into complete whole tokens
-                const tokens = requestPrefix
+                const tokens = input
                     .trim()
                     .split(/\s+/)
                     .filter((t) => t.length > 0);
@@ -356,7 +356,7 @@ export class GrammarStoreImpl implements GrammarStore {
                 // simple grammar-based completions
                 const partial = matchGrammarCompletion(
                     entry.grammar,
-                    requestPrefix,
+                    input,
                     matchedPrefixLength,
                     direction,
                 );
@@ -367,7 +367,7 @@ export class GrammarStoreImpl implements GrammarStore {
                         openWildcard,
                         partialPrefixLength,
                         partial.openWildcard,
-                        requestPrefix.length,
+                        input.length,
                     );
 
                     if (!adopt) continue;

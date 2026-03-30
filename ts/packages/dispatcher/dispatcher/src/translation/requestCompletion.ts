@@ -76,11 +76,11 @@ function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
 }
 
 export async function requestCompletion(
-    requestPrefix: string,
+    input: string,
     context: CommandHandlerContext,
     direction?: CompletionDirection, // defaults to forward-like behavior when omitted
 ): Promise<CompletionGroups> {
-    debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
+    debugCompletion(`Request completion for input: '${input}'`);
     const namespaceKeys = getCompletionNamespaceKeys(context);
     debugCompletion(`Request completion namespace keys`, namespaceKeys);
 
@@ -92,7 +92,7 @@ export async function requestCompletion(
         history: getHistoryContext(context),
     };
     const results = context.agentCache.completion(
-        requestPrefix,
+        input,
         options,
         direction,
     );

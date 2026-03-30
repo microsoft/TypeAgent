@@ -463,19 +463,19 @@ export class ConstructionCache {
     }
 
     public completion(
-        requestPrefix: string,
+        input: string,
         options?: MatchOptions,
         direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
-        debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
+        debugCompletion(`Request completion for input: '${input}'`);
         const namespaceKeys = options?.namespaceKeys;
         debugCompletion(`Request completion namespace keys`, namespaceKeys);
 
         // Resolve direction to a boolean: true when the user is actively
         // backing up and no trailing separator has committed the last token.
         const backward =
-            direction === "backward" && !/[\s\p{P}]$/u.test(requestPrefix);
-        const results = this.match(requestPrefix, options, true, backward);
+            direction === "backward" && !/[\s\p{P}]$/u.test(input);
+        const results = this.match(input, options, true, backward);
 
         debugCompletion(
             `Request completion construction match: ${results.length}`,
@@ -550,7 +550,7 @@ export class ConstructionCache {
             } else {
                 // Forward: exact match means nothing to complete.
                 if (partialPartCount === construction.parts.length) {
-                    updateMaxPrefixLength(requestPrefix.length);
+                    updateMaxPrefixLength(input.length);
                     if (partialPartCount >= 1) {
                         hasMatchedPart = true;
                     }
@@ -592,7 +592,7 @@ export class ConstructionCache {
                             completionText.length > 0
                         ) {
                             const needsSep = needsSeparatorInAutoMode(
-                                requestPrefix[candidatePrefixLength - 1],
+                                input[candidatePrefixLength - 1],
                                 completionText[0],
                             );
                             separatorMode = mergeSeparatorMode(
@@ -635,7 +635,7 @@ export class ConstructionCache {
                         });
                         if (candidatePrefixLength > 0) {
                             const needsSep = needsSeparatorInAutoMode(
-                                requestPrefix[candidatePrefixLength - 1],
+                                input[candidatePrefixLength - 1],
                                 "a",
                             );
                             separatorMode = mergeSeparatorMode(
@@ -658,10 +658,10 @@ export class ConstructionCache {
         // position is where backward wants completions to anchor.
         // Advancing past trailing separator chars would defeat the
         // backup (e.g. separator-only keywords like "...").
-        if (!backward && maxPrefixLength < requestPrefix.length) {
-            const trailing = requestPrefix.substring(maxPrefixLength);
+        if (!backward && maxPrefixLength < input.length) {
+            const trailing = input.substring(maxPrefixLength);
             if (/^[\s\p{P}]+$/u.test(trailing)) {
-                maxPrefixLength = requestPrefix.length;
+                maxPrefixLength = input.length;
                 separatorMode = "optional";
             }
         }
@@ -671,7 +671,7 @@ export class ConstructionCache {
         // Direction-sensitive when: at least one candidate at
         // maxPrefixLength had a matched part to reconsider, AND no
         // trailing separator in the input commits the match.
-        const noTrailingSeparator = !/[\s\p{P}]$/u.test(requestPrefix);
+        const noTrailingSeparator = !/[\s\p{P}]$/u.test(input);
         const directionSensitive = hasMatchedPart && noTrailingSeparator;
 
         return {
