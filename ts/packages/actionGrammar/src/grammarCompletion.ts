@@ -295,8 +295,16 @@ export type GrammarCompletionResult = {
     // completion(input[0..P], "forward"), where P = matchedPrefixLength.
     // When false, the caller can skip re-fetching on direction change.
     //
-    // True whenever P > 0 — something was matched.  False only when
-    // nothing was matched (P = 0).
+    // In this implementation, computed as `P > 0`.  P is always
+    // placed at a part or sub-part (word) boundary by
+    // updateMaxPrefixLength, so P > 0 guarantees a preceding
+    // part exists for backward to back up to.
+    // Re-invoking at input[0..P]:
+    //   - Forward: re-matches up to P, stays at or near P.
+    //   - Backward: backs up to the preceding part, producing
+    //     matchedPrefixLength < P.
+    // When P = 0 no part boundary was crossed and both
+    // directions are identical.
     directionSensitive: boolean;
     // True when the completion's `matchedPrefixLength` position is
     // *ambiguous* — it could shift forward as the user types more.
@@ -449,9 +457,10 @@ function tryPartialStringMatch(
  * one of three categories:
  *
  * 1. **Exact match** — the prefix satisfies every part in the rule.
- *    No completion is needed, but `maxPrefixLength` is updated to
- *    the full input length so that completion candidates from shorter
- *    partial matches are eagerly discarded (via `updateMaxPrefixLength`).
+ *    The function backs up to the last matched term (keyword, wildcard,
+ *    or number) and offers it as a completion — `maxPrefixLength` is set
+ *    to the backed-up position so that candidates from shorter partial
+ *    matches are eagerly discarded (via `updateMaxPrefixLength`).
  *
  * 2. **Partial match, finalized** — the prefix was consumed (possibly with
  *    trailing separators) but the rule still has remaining parts.
@@ -781,8 +790,12 @@ function tryCollectBackwardCandidate(
 // --- Category 1: Exact match ---
 // All parts matched AND prefix was fully consumed.
 // Back up to the last matched term (string keyword,
-// number, or wildcard).  Both directions get the same
-// result — no direction-specific handling needed.
+// number, or wildcard).  The processing is direction-
+// agnostic — this function always backs up, producing
+// the same candidate regardless of ctx.direction.
+// (The caller re-invoking at input[0..P] will see
+// different results for forward vs backward, but that
+// difference is handled by the re-invocation, not here.)
 function processExactMatch(
     ctx: CompletionContext,
     state: MatchState,
@@ -794,8 +807,10 @@ function processExactMatch(
         state.lastMatchedPartInfo !== undefined ||
         savedPendingWildcard?.valueId !== undefined
     ) {
-        // Category 1 is direction-agnostic — both
-        // directions back up identically.
+        // Category 1 processing is direction-agnostic:
+        // always back up to the last matched term.
+        // (Forward vs backward divergence occurs when
+        // the caller re-invokes at input[0..P].)
         // Ignore trailing separators: in an exact
         // match, trailing whitespace/punctuation
         // carries no structural meaning — all parts
@@ -853,9 +868,11 @@ function processCleanPartial(
         });
     }
 
-    // Would backward produce different results than forward?
-    // True when the prefix was fully consumed and there is a
-    // matched part (string/number) or wildcard to back up to.
+    // Does this state have a matched part that backward could
+    // reconsider?  True when the prefix was fully consumed and
+    // there is a matched part (string/number) or wildcard to
+    // back up to.  (Per-state condition, not the final output
+    // directionSensitive — that is computed after all states.)
     const hasPartToReconsider =
         state.index >= prefix.length &&
         (savedPendingWildcard?.valueId !== undefined ||
@@ -1533,15 +1550,10 @@ function materializeCandidates(
         }
     }
 
-    // Compute directionSensitive.
-    //
-    // True whenever P > 0 — something was matched and backward at
-    // input[0..P] can reconsider it.  minPrefixLength is not
-    // consulted: it is a caller-supplied lower bound for the search,
-    // not a property of the result.  Category 1 exact matches with
-    // trailing separators are handled by stripping the trailing text
-    // before backing up, so the backup always succeeds and P lands
-    // at the backed-up keyword position (not at prefix.length).
+    // See the directionSensitive field comment on
+    // GrammarCompletionResult for why P > 0 is correct.
+    // minPrefixLength (caller-supplied search lower bound) is
+    // not consulted — it constrains the search, not the result.
     const directionSensitive = ctx.maxPrefixLength > 0;
 
     return {

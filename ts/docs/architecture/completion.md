@@ -542,64 +542,25 @@ direction if this flag is `true`." When it is `false`, the shell skips
 the re-fetch entirely (trigger A4 does not fire), reusing the cached
 result regardless of whether the user is now typing or backspacing.
 
-**The rule:** The grammar matcher sets `directionSensitive=true`
-whenever backward completion has something to reconsider — i.e., a
-word, keyword, wildcard, or number was fully matched (the position is
-always uncommitted because trailing separators are not consumed).
-Forward offers what comes _next_; backward
-backs up to re-offer the last thing the user passed. If those two
-results differ, `directionSensitive=true`.
+The grammar matcher determines `directionSensitive` based on the
+matched prefix position — see `actionGrammar.md` § "Forward/backward
+equivalence analysis" for the decision tree, position-by-position
+analysis, and the Option A/B design trade-off.
 
-This arises at three kinds of structural ambiguity: wildcard-keyword
-boundary forks, multi-word keyword boundaries, and alternation-prefix
-overlaps. See `actionGrammar.md` "Why direction matters" for detailed
-examples and the Option A/B design trade-off.
+**Examples:** The table below shows `directionSensitive` across layers.
+The interesting cases are where `false` appears despite a non-zero
+`startIndex` — the position is unambiguous so direction doesn't matter.
 
-**When `directionSensitive=false`:** Nothing was fully matched
-(partial/dirty) — P = 0.
+| Layer      | Input               | `directionSensitive` | Why                                                                                      |
+| ---------- | ------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| Dispatcher | `@player --level`   | `true`               | Flag exactly matched; backward re-offers flag alternatives (case 2a-ii)                  |
+| Dispatcher | `@player --level `  | `false`              | Trailing space commits the flag; position unambiguous (case 2b)                          |
+| Dispatcher | `@player --level 5` | `false`              | Editing free-form value; trailing whitespace determines state, not direction (case 2a-i) |
+| Dispatcher | `@play`             | `true`               | `play` matches subcommand but `player` also exists; backward reconsiders                 |
 
-The flag is correct under the cross-query invariant definition:
-`directionSensitive=true` if and only if
-`completion(input[0..P], "backward")` differs from the forward result.
-For `openWildcard` positions, truncating to `input[0..P]` removes the
-content that established the anchor, so backward on the truncated input
-always diverges — even when both directions happen to agree on the
-original (longer) input. See invariant #7.
-
-`minPrefixLength` is not consulted: it is a caller-supplied lower
-bound for the search, not a property of the result.
-
-**Decision tree** (evaluated once after all candidates are collected):
-
-```
-P = 0      → false (nothing matched; backward has nothing to reconsider)
-P > 0      → true  (something was matched — backward can back up)
-```
-
-See the "Forward/backward equivalence analysis" section in
-`actionGrammar.md` for the full position-by-position analysis.
-
-**Examples:** The table below shows `directionSensitive` for various
-inputs. The general pattern: `true` when anything was matched beyond
-the floor; `false` only when partial/dirty or exact match with no
-remaining completions.
-
-| Rule                   | Input          | `directionSensitive` | Why                                                           |
-| ---------------------- | -------------- | -------------------- | ------------------------------------------------------------- |
-| `play <song> by <a>`   | `play`         | `true`               | `"play"` fully matched, backward can reconsider               |
-| `play <song> by <a>`   | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary     |
-| `play <song> by <a>`   | `play Never`   | `true`               | `"Never"` in wildcard, keyword `"by"` next; no trailing space |
-| `play <song> by <a>`   | `play Never b` | `true`               | `openWildcard=true` — wildcard boundary ambiguous             |
-| `play <song> by <a>`   | `pla`          | `false`              | Only partial match (Category 3b) — nothing to back up to      |
-| `play music`           | `play`         | `true`               | `"play"` fully matched, no trailing space                     |
-| `play music`           | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary     |
-| `play music`           | `play music `  | `true`               | Cat 1 strips trailing space; P=4, completions=["music"]       |
-| `(play \| player) now` | `play`         | `true`               | Backward: `["play","player"]` at mpl=0; forward: `["now"]`    |
-| `(play \| player) now` | `play `        | `true`               | Trailing space not consumed; P stays at `"play"` boundary     |
-
-The dispatcher may additionally set `directionSensitive=true` at the
-command level — for example, when a subcommand name is both a valid
-complete command and a prefix of a longer one.
+For grammar-level examples (the `P = 0 → false`, `P > 0 → true` rule,
+equivalence analysis tables, and the Option A/B design trade-off), see
+`actionGrammar.md` § "Forward/backward equivalence analysis".
 
 Merge rule: OR across sources (sensitive if _any_ source is sensitive).
 
@@ -749,11 +710,17 @@ Automatically checked by the `withInvariantChecks` wrapper in
 _Impact:_ Completions inserted at wrong position in the input.
 
 **#2 — `closedSet` ↔ `properties` consistency** (grammar matcher layer
-only — see `actionGrammar.md` [properties](#metadata-produced) for scope).
+only).
 `closedSet=false` ↔ `properties` is non-empty.
 _Impact:_ False `true` → shell uses "accept" policy and never re-fetches —
 user misses entity completions. False `false` → unnecessary re-fetches
 (perf cost, no visible bug).
+_Scope:_ This invariant applies only at the grammar matcher layer.
+At the dispatcher layer, `properties` entries have been consumed via
+`getActionCompletion()` and `closedSet` is determined by
+`computeClosedSet()` independently — so the grammar-matcher biconditional
+does not hold (e.g., free-form text has `closedSet=false` with no
+`properties`).
 
 **#3 — Truncated-forward idempotency.**
 When `matchedPrefixLength < prefix.length`:
