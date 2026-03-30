@@ -1139,7 +1139,7 @@ describeForEachCompletion(
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: [",done"],
-                    matchedPrefixLength: 6,
+                    matchedPrefixLength: 5,
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
@@ -1277,7 +1277,7 @@ describeForEachCompletion(
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: [".world"],
-                    matchedPrefixLength: 11,
+                    matchedPrefixLength: 10,
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
@@ -1873,8 +1873,8 @@ describeForEachCompletion(
                 // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["hello,"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -1895,8 +1895,8 @@ describeForEachCompletion(
                 // requiresSeparator(" ", "h", auto) → "optional"
                 expectMetadata(result, {
                     completions: ["hello,"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -2316,7 +2316,7 @@ describeForEachCompletion(
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: ["."],
-                    matchedPrefixLength: 6,
+                    matchedPrefixLength: 5,
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
@@ -2342,7 +2342,7 @@ describeForEachCompletion(
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: ["."],
-                    matchedPrefixLength: 6,
+                    matchedPrefixLength: 5,
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
@@ -2616,8 +2616,8 @@ describeForEachCompletion(
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: ["hello world"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -2667,8 +2667,8 @@ describeForEachCompletion(
                 // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["hello world"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -2763,7 +2763,7 @@ describeForEachCompletion(
                 // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
                 expectMetadata(result, {
                     completions: [",world"],
-                    matchedPrefixLength: 4,
+                    matchedPrefixLength: 3,
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
@@ -2956,8 +2956,8 @@ describeForEachCompletion(
                 // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["hello "],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -3002,7 +3002,7 @@ describeForEachCompletion(
                 // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["-done"],
-                    matchedPrefixLength: 4,
+                    matchedPrefixLength: 3,
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
@@ -3071,8 +3071,8 @@ describeForEachCompletion(
                 // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["done!"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -3093,8 +3093,8 @@ describeForEachCompletion(
                 // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["done!"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -3128,8 +3128,8 @@ describeForEachCompletion(
                 // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["hello world"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -3149,8 +3149,8 @@ describeForEachCompletion(
                 // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["hello world"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -3169,8 +3169,8 @@ describeForEachCompletion(
                 // Forward also finds the same partial keyword → not direction-sensitive.
                 expectMetadata(result, {
                     completions: ["hello world"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 3,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,

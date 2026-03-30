@@ -32,6 +32,23 @@ function isSeparatorOnlyGap(text: string, from: number, to: number): boolean {
     return to > from && nextNonSeparatorIndex(text, from) >= to;
 }
 
+// Strip trailing separator characters from a position, scanning
+// backward until a non-separator character is found or the lower
+// bound is reached.  Returns the stripped position.
+function stripTrailingSeparators(
+    text: string,
+    position: number,
+    lowerBound: number,
+): number {
+    while (
+        position > lowerBound &&
+        nextNonSeparatorIndex(text, position - 1) >= position
+    ) {
+        position--;
+    }
+    return position;
+}
+
 // Greedily match keyword words against text starting at startIndex.
 // Returns the number of fully matched words and cursor positions.
 //
@@ -1060,23 +1077,28 @@ export function matchGrammarCompletion(
                 // maxPrefixLength, clearing weaker fallback
                 // candidates from Phase A).
                 //
-                // When the gap between the current maxPrefixLength
-                // and the partial keyword position is separator-only,
-                // preserve existing candidates (they'd survive on the
-                // truncated input too).
-                if (
-                    isSeparatorOnlyGap(
-                        prefix,
-                        maxPrefixLength,
-                        partialResult.position,
-                    )
-                ) {
-                    // Separator-only gap: advance without clearing.
-                    maxPrefixLength = partialResult.position;
-                } else {
-                    updateMaxPrefixLength(partialResult.position);
-                }
-                if (partialResult.position === maxPrefixLength) {
+                // When the gap between maxPrefixLength and the
+                // partial keyword is separator-only, P stays at
+                // maxPrefixLength (merge — the separator is
+                // flex-space, not consumed).  Otherwise, strip
+                // trailing separators and advance (displace —
+                // the gap has real content).
+                if (partialResult.position >= maxPrefixLength) {
+                    if (
+                        !isSeparatorOnlyGap(
+                            prefix,
+                            maxPrefixLength,
+                            partialResult.position,
+                        )
+                    ) {
+                        updateMaxPrefixLength(
+                            stripTrailingSeparators(
+                                prefix,
+                                partialResult.position,
+                                maxPrefixLength,
+                            ),
+                        );
+                    }
                     fixedCandidates.push({
                         kind: "string",
                         completionText: partialResult.completionWord,
@@ -1300,26 +1322,24 @@ export function matchGrammarCompletion(
     // The wildcard boundary is ambiguous, so Phase A never pushes
     // maxPrefixLength for them; Phase B1/B2 decides the final anchor.
     //
-    // Phase B2 operates in one of three modes:
+    // Phase B2 operates in one of two modes:
     //
-    //   Clear + anchor at partial keyword position P:
-    //     Phase B1 found a partial keyword at P < prefix.length.
-    //     Reset everything and anchor there.
-    //
-    //   Clear + anchor at prefix.length (displace):
-    //     maxPrefixLength < prefix.length AND the gap between
-    //     maxPrefixLength and prefix.length contains non-separator
+    //   Clear + anchor (displace):
+    //     anchor > maxPrefixLength AND the gap contains non-separator
     //     content — only weaker candidates (e.g. Category 3b)
-    //     survived Phase A.  Replace them with EOI instantiations
-    //     at prefix.length.
+    //     survived Phase A.  Replace them with EOI instantiations.
     //
-    //   Merge at prefix.length:
-    //     maxPrefixLength is already at prefix.length, OR the gap
-    //     consists entirely of separator characters (trailing
-    //     whitespace/punctuation) — legitimate candidates (e.g.
-    //     Category 2 keyword matches or property completions for a
-    //     wildcard slot) exist at that position.  Preserve them and
-    //     add EOI instantiations alongside.
+    //   Merge at anchor:
+    //     anchor matches maxPrefixLength (natural merge), OR the
+    //     gap consists entirely of separator characters — legitimate
+    //     candidates exist at that position.  Preserve them and add
+    //     EOI instantiations alongside.
+    //
+    // The anchor is computed to align with keyword behavior: P lands
+    // before the flex-space (trailing separators stripped), not after
+    // it.  This makes wildcard→keyword transitions consistent with
+    // keyword→keyword transitions, where P stays at the last matched
+    // token boundary.
     const hasPartialKeyword =
         forwardPartialKeyword !== undefined &&
         forwardPartialKeyword.position <= prefix.length;
@@ -1330,38 +1350,42 @@ export function matchGrammarCompletion(
         (forwardEoiCandidates.length > 0 || hasPartialKeyword)
     ) {
         // anchor is what becomes matchedPrefixLength for these candidates.
-        const anchor = hasPartialKeyword
+        // Start from the partial keyword position (if any) or
+        // prefix.length, then strip trailing separators so that P
+        // lands before the flex-space — consistent with how
+        // keyword→keyword P stays at the last matched token boundary.
+        // For partial keywords, this strips the separator gap between
+        // the wildcard content and the partial keyword start.
+        // The strip is bounded by maxPrefixLength: if another rule
+        // already consumed content at that position (e.g. via an
+        // escaped-space keyword), we must not discard it.
+        //
+        // Skip stripping when a partial keyword consumed to EOI
+        // (position === prefix.length): the keyword content itself
+        // may end with separator characters (e.g. comma in "hello,")
+        // that must not be stripped.
+        let anchor = hasPartialKeyword
             ? forwardPartialKeyword!.position
             : prefix.length;
+        if (!hasPartialKeyword || anchor < prefix.length) {
+            anchor = stripTrailingSeparators(prefix, anchor, maxPrefixLength);
+        }
 
         // Decide whether to clear existing candidates (displace)
         // or keep them (merge).
         //
-        // Displace: anchor differs from maxPrefixLength AND the
-        //   gap contains non-separator content — existing candidates
-        //   are weaker Category 3b fallbacks from shorter partial
-        //   matches.  Replace them with EOI instantiations.
+        // After stripping, anchor either equals maxPrefixLength
+        // (natural merge — stripping consumed the entire gap) or
+        // lands on a non-separator character above maxPrefixLength.
+        // In the latter case the gap necessarily contains that
+        // non-separator, so it's always a displace.
         //
-        // Merge: anchor matches maxPrefixLength, OR the gap between
-        //   maxPrefixLength and anchor consists entirely of separator
-        //   characters — existing candidates are legitimate Category 2
-        //   matches at EOI (e.g. "music" at matchedPrefixLength=14 for "play
-        //   beautiful " where anchor=15).  Keep them and add EOI
-        //   instantiations alongside.
-        //
-        // For partial keyword recovery (hasPartialKeyword), the
-        // anchor is at a sub-prefix position where the partial
-        // keyword was found.  When the gap between maxPrefixLength
-        // and anchor is separator-only, existing completions are
-        // legitimate and should be preserved (merge).
-        const gapIsSeparatorOnly = isSeparatorOnlyGap(
-            prefix,
-            maxPrefixLength,
-            anchor,
-        );
-        if (anchor !== maxPrefixLength && !gapIsSeparatorOnly) {
+        // (A separator-only gap between maxPrefixLength and the
+        // raw position is fully consumed by stripping, collapsing
+        // anchor to maxPrefixLength — the merge case.)
+        if (anchor !== maxPrefixLength) {
             debugCompletion(
-                `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `prefix.length=${anchor} (displace)`}`,
+                `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `stripped EOI P=${anchor} (displace)`}`,
             );
             completions.clear();
             properties.length = 0;
@@ -1370,15 +1394,6 @@ export function matchGrammarCompletion(
             separatorMode = undefined;
             openWildcard = false;
         } else {
-            if (gapIsSeparatorOnly) {
-                // Advance maxPrefixLength to include the trailing
-                // separator gap so it aligns with the anchor.
-                // The separator has been consumed, so demote
-                // separatorMode to "optional" — no additional
-                // separator is needed at the new position.
-                maxPrefixLength = anchor;
-                separatorMode = "optional";
-            }
             debugCompletion(`Phase B: merge at prefix.length=${anchor}`);
         }
 
@@ -1453,13 +1468,15 @@ export function matchGrammarCompletion(
     // Compute directionSensitive.
     //
     // True whenever something was matched beyond the caller's floor
-    // (P > minPrefixLength) or the wildcard boundary is ambiguous
-    // (openWildcard).  Category 1 exact matches with trailing
-    // separators are handled by stripping the trailing text before
-    // backing up, so the backup always succeeds and P lands at
-    // the backed-up keyword position (not at prefix.length).
-    const directionSensitive =
-        openWildcard || maxPrefixLength !== (minPrefixLength ?? 0);
+    // (P > minPrefixLength).  openWildcard is not checked
+    // separately: every path that sets openWildcard also advances
+    // maxPrefixLength past minPrefixLength (a wildcard boundary
+    // requires matched content before it).  Category 1 exact
+    // matches with trailing separators are handled by stripping the
+    // trailing text before backing up, so the backup always succeeds
+    // and P lands at the backed-up keyword position (not at
+    // prefix.length).
+    const directionSensitive = maxPrefixLength !== (minPrefixLength ?? 0);
 
     const result: GrammarCompletionResult = {
         completions: [...completions],

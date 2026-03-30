@@ -464,8 +464,13 @@ text.
 | `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
 
 See `actionGrammar.md` Spacing modes for how the grammar matcher
-determines `separatorMode` from spacing annotations, including the
-"separator already consumed" override.
+determines `separatorMode` from spacing annotations. The matcher
+strips trailing separators so P lands before the flex-space, making
+`separatorMode` always reflect the real grammar requirement (not a
+"separator already consumed" override). The one exception is
+multi-word keywords consumed to EOI (e.g. `"hello,"` in a grammar
+`$(x) hello, world`), where P stays at `prefix.length` because the
+keyword content itself ends with a separator character.
 
 ### `CompletionDirection`
 

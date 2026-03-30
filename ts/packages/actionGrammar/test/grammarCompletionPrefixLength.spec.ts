@@ -272,8 +272,8 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play hello ");
                 expectMetadata(result, {
                     completions: ["now"],
-                    matchedPrefixLength: 11,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 10,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -3178,8 +3178,8 @@ describeForEachCompletion(
                     // EOI candidate "by" at anchor=15.
                     expectMetadata(result, {
                         completions: ["by"],
-                        matchedPrefixLength: 15,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         openWildcard: true,
@@ -3212,8 +3212,8 @@ describeForEachCompletion(
                     );
                     expectMetadata(result, {
                         completions: ["music", "by"],
-                        matchedPrefixLength: 15,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         openWildcard: true,
@@ -3261,8 +3261,8 @@ describeForEachCompletion(
                     // separator-only → merge.
                     expectMetadata(result, {
                         completions: ["music", "by"],
-                        matchedPrefixLength: 15,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 14,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         openWildcard: true,
@@ -3293,8 +3293,8 @@ describeForEachCompletion(
                     // contains non-separator content → displaced.
                     expectMetadata(result, {
                         completions: ["by"],
-                        matchedPrefixLength: 20,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 19,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         openWildcard: true,
@@ -3328,8 +3328,8 @@ describeForEachCompletion(
                     // "by" survives.
                     expectMetadata(result, {
                         completions: ["by"],
-                        matchedPrefixLength: 11,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 10,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         openWildcard: true,
@@ -3619,7 +3619,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["by", "from", "song", "track"],
                     sortCompletions: true,
-                    matchedPrefixLength: 19,
+                    matchedPrefixLength: 18,
                     openWildcard: true,
                     directionSensitive: true,
                 });
@@ -3635,7 +3635,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["by", "from", "song", "track"],
                     sortCompletions: true,
-                    matchedPrefixLength: 19,
+                    matchedPrefixLength: 18,
                     openWildcard: true,
                     directionSensitive: true,
                 });
@@ -3709,7 +3709,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["by", "cut", "from", "one", "song", "track"],
                     sortCompletions: true,
-                    matchedPrefixLength: 19,
+                    matchedPrefixLength: 18,
                     directionSensitive: true,
                     openWildcard: true,
                 });
@@ -3768,7 +3768,7 @@ describeForEachCompletion(
                     "forward",
                 );
                 expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(16);
+                expect(result.matchedPrefixLength).toBe(15);
             });
         });
     },
