@@ -817,13 +817,6 @@ already covers this case.
   titles, contact names). When the grammar offers only keyword completions
   (no wildcards), `properties` is empty.
 
-  `properties` is a grammar-matcher concept. At the dispatcher layer,
-  `properties` entries have been consumed via `getActionCompletion()`
-  and `closedSet` is determined by `computeClosedSet()` independently —
-  so the grammar-matcher invariant `closedSet=false ↔ properties non-empty`
-  does not hold at the dispatcher level (e.g., free-form text has
-  `closedSet=false` with no `properties`).
-
 - `separatorMode` — determined by the grammar rule's `[spacing=...]`
   annotation (see [Spacing modes](#spacing-modes) above). Special cases:
   - When `matchedPrefixLength=0` (nothing consumed), `separatorMode` is
@@ -842,11 +835,11 @@ already covers this case.
   (no entity/wildcard values).
 - `directionSensitive` — `true` when `completion(input[0..P], backward)`
   would differ from `completion(input[0..P], forward)`, where P =
-  `matchedPrefixLength`. See "Why direction matters" and "When
-  direction does _not_ matter" above. True whenever something was
-  matched beyond the caller's floor (`P > minPrefixLength`) or the
-  wildcard boundary is ambiguous (`openWildcard`). False only when
-  nothing was matched.
+  `matchedPrefixLength`. True whenever `P > 0` (something was matched
+  that backward can back up to). False only when nothing was matched
+  (`P = 0`). See "Why direction matters", "Forward/backward equivalence
+  analysis", and the decision tree earlier in this document for the
+  full rationale.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary — see `completion.md` [`openWildcard`] for the full
   definition (definite vs. ambiguous positions, persistence semantics,
