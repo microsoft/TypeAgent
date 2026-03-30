@@ -109,6 +109,12 @@ export class PartialCompletionSession {
     // The in-flight completion request, or undefined when settled.
     private completionP: Promise<CommandCompletionResult> | undefined;
 
+    // Set when the user explicitly closes the menu (e.g. Escape).
+    // startNewSession uses this to suppress reopening if the refetch returns
+    // the same anchor — meaning the completions are unchanged and the user
+    // already dismissed them.
+    private explicitCloseAnchor: string | undefined = undefined;
+
     constructor(
         private readonly menu: ISearchMenu,
         private readonly dispatcher: ICompletionDispatcher,
@@ -146,6 +152,41 @@ export class PartialCompletionSession {
     public resetToIdle(): void {
         this.anchor = undefined;
         this.completionP = undefined;
+        this.explicitCloseAnchor = undefined;
+    }
+
+    // Called when the user explicitly dismisses the menu (e.g. Escape key).
+    // Hides the menu and — when conditions allow — issues a background refetch
+    // with the full current input.  The menu is only reopened if the backend
+    // returns a different anchor (startIndex changed), indicating the grammar
+    // found a new parse point.  If the anchor is unchanged the completions
+    // would be the same ones the user just dismissed, so reopening is suppressed.
+    //
+    // Conditions where refetch is skipped (result guaranteed identical):
+    //   IDLE          — no active session
+    //   input===anchor — no prefix typed; same input was already fetched
+    //   noMatchPolicy !== "refetch":
+    //     "accept"    — closed set; backend cannot offer more completions
+    //     "slide"     — wildcard boundary; refetch returns same anchor shifted
+    public explicitHide(
+        input: string,
+        getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection,
+    ): void {
+        this.completionP = undefined; // cancel any in-flight fetch
+        this.menu.hide();
+
+        if (
+            this.anchor === undefined ||
+            input === this.anchor ||
+            this.noMatchPolicy !== "refetch"
+        ) {
+            return;
+        }
+
+        // Save anchor so startNewSession can compare after the result arrives.
+        this.explicitCloseAnchor = this.anchor;
+        this.startNewSession(input, getPosition, direction);
     }
 
     // Returns the text typed after the anchor, or undefined when
@@ -489,6 +530,21 @@ export class PartialCompletionSession {
 
                 this.menu.setChoices(completions);
 
+                // If triggered by an explicit close, only reopen when the
+                // anchor advanced.  Same anchor means the same completions at
+                // the same position — the user already dismissed them.
+                const explicitCloseAnchor = this.explicitCloseAnchor;
+                this.explicitCloseAnchor = undefined;
+                if (
+                    explicitCloseAnchor !== undefined &&
+                    partial === explicitCloseAnchor
+                ) {
+                    debug(
+                        `Partial completion explicit-hide: anchor unchanged ('${partial}'), suppressing reopen`,
+                    );
+                    return;
+                }
+
                 // Re-run update with captured input to show the menu (or defer
                 // if the separator has not been typed yet).
                 this.reuseSession(input, getPosition, direction);
@@ -499,6 +555,7 @@ export class PartialCompletionSession {
                 // anchor so that identical input reuses the session (no
                 // re-fetch) while diverged input still triggers a new fetch.
                 this.completionP = undefined;
+                this.explicitCloseAnchor = undefined;
             });
     }
 }
