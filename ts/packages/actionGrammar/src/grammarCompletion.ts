@@ -593,205 +593,228 @@ function mergeSepMode(
     return mergeSeparatorMode(current, needsSep, spacingMode);
 }
 
-export function matchGrammarCompletion(
-    grammar: Grammar,
+// --- CompletionContext: mutable state shared across completion phases ---
+//
+// The main loop (Phase A) collects lightweight candidate descriptors
+// (FixedCandidate / RangeCandidate) rather than immediately emitting
+// final completion strings and property objects.  A post-loop Phase B
+// converts surviving candidates into the output arrays.
+//
+// This decouples candidate *discovery* (which rule matched, at what
+// position) from candidate *materialization* (building the
+// GrammarCompletionProperty, computing separatorMode).  The split is
+// essential for backward completion: the main loop evaluates every rule
+// at the full prefix length, but the final completion position
+// (maxPrefixLength) is only known after ALL rules have been processed.
+// Range candidates exploit this — they defer the "where does the
+// wildcard end?" decision until Phase B, when maxPrefixLength is
+// settled.
+//
+// fixedCandidates — single valid position, cleared whenever
+//     maxPrefixLength advances.  Produced by all three categories
+//     in both forward and backward modes.
+//
+// rangeCandidates — valid at any wildcard split in
+//     [wildcardStart+1, prefix.length], never cleared.  They
+//     arise in Category 2 backward when a wildcard absorbed
+//     all remaining input and the next part could match at
+//     a flexible position.  Processed in Phase B only under
+//     the same conditions the old retrigger required.
+//
+// Phase B is split into two sub-phases:
+//  B1 — Anchor resolution: runs findPartialKeywordInWildcard
+//    on deferred wildcardEoiDescriptors, populating
+//    forwardPartialKeyword / forwardEoiCandidates (forward) or
+//    fixedCandidates / rangeCandidates (backward).
+//  B2 — Materialization: converts surviving candidates into
+//    the final completions[] and properties[] arrays.
+//    Also handles EOI instantiation, range candidates,
+//    and deduplication.
+type CompletionContext = {
+    readonly prefix: string;
+    readonly direction: "forward" | "backward" | undefined;
+    maxPrefixLength: number;
+    fixedCandidates: FixedCandidate[];
+    rangeCandidates: RangeCandidate[];
+    wildcardEoiDescriptors: WildcardEoiDescriptor[];
+};
+
+function createCompletionContext(
     prefix: string,
-    minPrefixLength?: number,
-    direction?: "forward" | "backward",
-): GrammarCompletionResult {
-    debugCompletion(
-        `Start completion for prefix ${direction ?? "forward"}: "${prefix}"`,
+    minPrefixLength: number | undefined,
+    direction: "forward" | "backward" | undefined,
+): CompletionContext {
+    return {
+        prefix,
+        direction,
+        maxPrefixLength: minPrefixLength ?? 0,
+        fixedCandidates: [],
+        rangeCandidates: [],
+        wildcardEoiDescriptors: [],
+    };
+}
+
+// Update maxPrefixLength.  When it increases, all previously
+// accumulated fixed-point candidates from shorter matches are
+// irrelevant — clear them.
+// Range candidates are NOT cleared because their valid position
+// is a range that may include the new maxPrefixLength.
+function updateMaxPrefixLength(
+    ctx: CompletionContext,
+    prefixLength: number,
+): void {
+    if (prefixLength > ctx.maxPrefixLength) {
+        ctx.maxPrefixLength = prefixLength;
+        ctx.fixedCandidates.length = 0;
+    }
+}
+
+// Collect a property completion candidate at a given prefix position.
+// Updates maxPrefixLength; skips if position is below max.  The
+// candidate is converted to a final GrammarCompletionProperty in Phase B.
+function collectPropertyCandidate(
+    ctx: CompletionContext,
+    state: MatchState,
+    valueId: number,
+    prefixPosition: number,
+    candidateOpenWildcard: boolean = false,
+): void {
+    updateMaxPrefixLength(ctx, prefixPosition);
+    if (prefixPosition !== ctx.maxPrefixLength) return;
+    ctx.fixedCandidates.push({
+        kind: "property",
+        valueId,
+        state: { ...state },
+        spacingMode: state.spacingMode,
+        openWildcard: candidateOpenWildcard,
+        partialKeywordBackup: false,
+    });
+}
+
+// Try partial string match and collect the result as a literal string
+// completion candidate.  Updates maxPrefixLength; skips if position is
+// below max.  Used by Category 2 forward, Category 3b, and backward
+// candidate collection.  Returns true if a partial match was found (the
+// candidate may still be discarded by the maxPrefixLength filter).
+function tryCollectStringCandidate(
+    ctx: CompletionContext,
+    state: MatchState,
+    part: StringPart,
+    candidateOpenWildcard: boolean,
+    startIndex: number,
+    dir: "forward" | "backward" | undefined,
+    effectivePrefixEnd?: number,
+): boolean {
+    const partial = tryPartialStringMatch(
+        part,
+        ctx.prefix,
+        startIndex,
+        state.spacingMode,
+        dir,
+        effectivePrefixEnd,
     );
+    if (partial !== undefined) {
+        updateMaxPrefixLength(ctx, partial.consumedLength);
+        if (partial.consumedLength === ctx.maxPrefixLength) {
+            ctx.fixedCandidates.push({
+                kind: "string",
+                completionText: partial.remainingText,
+                spacingMode: state.spacingMode,
+                openWildcard: candidateOpenWildcard,
+                partialKeywordBackup: false,
+            });
+        }
+        return true;
+    }
+    return false;
+}
+
+// Backward completion — back up to the last matched item (wildcard,
+// literal word, or number).  If a wildcard was captured after the last
+// matched part, prefer it; otherwise back up to the last matched part
+// via tryPartialStringMatch (for strings) or collectPropertyCandidate
+// (for numbers).
+//
+// Tags the candidate with openWildcard when backing up to a part that
+// was matched after a captured wildcard (afterWildcard) — that position
+// is ambiguous because the wildcard could extend.
+function tryCollectBackwardCandidate(
+    ctx: CompletionContext,
+    state: MatchState,
+    savedWildcard: PendingWildcard | undefined,
+    effectivePrefixEnd?: number,
+): boolean {
+    const wildcardStart = savedWildcard?.start;
+    const partStart = state.lastMatchedPartInfo?.start;
+    if (
+        savedWildcard !== undefined &&
+        savedWildcard.valueId !== undefined &&
+        (partStart === undefined ||
+            (wildcardStart !== undefined && wildcardStart >= partStart))
+    ) {
+        collectPropertyCandidate(
+            ctx,
+            state,
+            savedWildcard.valueId,
+            savedWildcard.start,
+        );
+        return true;
+    } else if (state.lastMatchedPartInfo !== undefined) {
+        const info = state.lastMatchedPartInfo;
+        if (info.type === "string") {
+            if (
+                tryCollectStringCandidate(
+                    ctx,
+                    state,
+                    info.part,
+                    info.afterWildcard,
+                    info.start,
+                    "backward",
+                    effectivePrefixEnd,
+                )
+            ) {
+                return true;
+            } else {
+                updateMaxPrefixLength(ctx, state.index);
+            }
+        } else {
+            // Number part — offer property completion for the
+            // number slot so the user can re-enter a value.
+            collectPropertyCandidate(
+                ctx,
+                state,
+                info.valueId,
+                info.start,
+                info.afterWildcard,
+            );
+            return true;
+        }
+    }
+    return false;
+}
+
+// --- Phase A: process every pending state, collecting candidates ---
+//
+// Explores every alternative rule/state in the grammar (via the pending
+// work-list).  Each state is run through matchState which consumes as
+// many parts as the prefix allows.  The state then falls into one of
+// three categories:
+//
+// 1. **Exact match** — the prefix satisfies every part in the rule.
+// 2. **Partial match, finalized** — the prefix was consumed but parts
+//    remain.  The next unmatched part produces a completion candidate.
+// 3. **Partial match, NOT finalized** — either a pending wildcard
+//    couldn't be finalized, or trailing text didn't match any part.
+//
+// See matchGrammarCompletion JSDoc for full category descriptions.
+function collectCandidates(ctx: CompletionContext, grammar: Grammar): void {
+    const { prefix, direction, wildcardEoiDescriptors, rangeCandidates } = ctx;
 
     // Seed the work-list with one MatchState per top-level grammar rule.
     // matchState may push additional states (for nested rules, optional
     // parts, wildcard extensions, repeat groups) during processing.
     const pending = initialMatchState(grammar);
 
-    // --- Two-Phase "Collect then Convert" Architecture ---
-    //
-    // The main loop (Phase A) collects lightweight candidate
-    // descriptors (FixedCandidate / RangeCandidate, defined at
-    // module scope) rather than immediately emitting final completion
-    // strings and property objects.  A post-loop Phase B converts
-    // surviving candidates into the output arrays.
-    //
-    // This decouples candidate *discovery* (which rule matched, at
-    // what position) from candidate *materialization* (building the
-    // GrammarCompletionProperty, computing separatorMode).  The split
-    // is essential for backward completion: the main loop evaluates
-    // every rule at the full prefix length, but the final completion
-    // position (maxPrefixLength) is only known after ALL rules have
-    // been processed.  Range candidates exploit this — they defer
-    // the "where does the wildcard end?" decision until Phase B,
-    // when maxPrefixLength is settled.
-    //
-    // fixedCandidates — single valid position, cleared whenever
-    //     maxPrefixLength advances.  Produced by all three categories
-    //     in both forward and backward modes.
-    //
-    // rangeCandidates — valid at any wildcard split in
-    //     [wildcardStart+1, prefix.length], never cleared.  They
-    //     arise in Category 2 backward when a wildcard absorbed
-    //     all remaining input and the next part could match at
-    //     a flexible position.  Processed in Phase B only under
-    //     the same conditions the old retrigger required.
-    //
-    // Phase B is split into two sub-phases:
-    //  B1 — Anchor resolution: runs findPartialKeywordInWildcard
-    //    on deferred wildcardEoiDescriptors, populating
-    //    forwardPartialKeyword / forwardEoiCandidates (forward) or
-    //    fixedCandidates / rangeCandidates (backward).
-    //  B2 — Materialization: converts surviving candidates into
-    //    the final completions[] and properties[] arrays.
-    //    Also handles EOI instantiation, range candidates,
-    //    and deduplication.
-    const fixedCandidates: FixedCandidate[] = [];
-    const rangeCandidates: RangeCandidate[] = [];
-    // Wildcard-at-EOI descriptors: Phase A pushes one descriptor
-    // per wildcard-at-EOI string state (both directions).  Phase
-    // B1 processes them via findPartialKeywordInWildcard.
-    const wildcardEoiDescriptors: WildcardEoiDescriptor[] = [];
-
-    // Track the furthest point the grammar consumed across all
-    // states (including exact matches).  This tells the caller where
-    // the "filter text" begins so it doesn't have to guess from
-    // whitespace (which breaks for CJK and other non-space scripts).
-    let maxPrefixLength = minPrefixLength ?? 0;
-
-    // Helper: update maxPrefixLength.  When it increases, all previously
-    // accumulated fixed-point candidates from shorter matches are
-    // irrelevant — clear them.
-    // Range candidates are NOT cleared because their valid position
-    // is a range that may include the new maxPrefixLength.
-    function updateMaxPrefixLength(prefixLength: number): void {
-        if (prefixLength > maxPrefixLength) {
-            maxPrefixLength = prefixLength;
-            fixedCandidates.length = 0;
-        }
-    }
-
-    // Helper: collect a property completion candidate at a given
-    // prefix position.  Updates maxPrefixLength; skips if position
-    // is below max.  The candidate is converted to a final
-    // GrammarCompletionProperty in Phase B.
-    function collectPropertyCandidate(
-        state: MatchState,
-        valueId: number,
-        prefixPosition: number,
-        candidateOpenWildcard: boolean = false,
-    ): void {
-        updateMaxPrefixLength(prefixPosition);
-        if (prefixPosition !== maxPrefixLength) return;
-        fixedCandidates.push({
-            kind: "property",
-            valueId,
-            state: { ...state },
-            spacingMode: state.spacingMode,
-            openWildcard: candidateOpenWildcard,
-            partialKeywordBackup: false,
-        });
-    }
-
-    // Helper: try partial string match and collect the result as a
-    // literal string completion candidate.  Updates maxPrefixLength;
-    // skips if position is below max.  Used by Category 2 forward,
-    // Category 3b, and backward candidate collection.  Returns true
-    // if a partial match was found (the candidate may still be
-    // discarded by the maxPrefixLength filter).
-    function tryCollectStringCandidate(
-        state: MatchState,
-        part: StringPart,
-        candidateOpenWildcard: boolean,
-        startIndex: number,
-        dir: "forward" | "backward" | undefined,
-        effectivePrefixEnd?: number,
-    ): boolean {
-        const partial = tryPartialStringMatch(
-            part,
-            prefix,
-            startIndex,
-            state.spacingMode,
-            dir,
-            effectivePrefixEnd,
-        );
-        if (partial !== undefined) {
-            updateMaxPrefixLength(partial.consumedLength);
-            if (partial.consumedLength === maxPrefixLength) {
-                fixedCandidates.push({
-                    kind: "string",
-                    completionText: partial.remainingText,
-                    spacingMode: state.spacingMode,
-                    openWildcard: candidateOpenWildcard,
-                    partialKeywordBackup: false,
-                });
-            }
-            return true;
-        }
-        return false;
-    }
-
-    // Helper: backward completion — back up to the last matched item
-    // (wildcard, literal word, or number).  If a wildcard was captured
-    // after the last matched part, prefer it; otherwise back up to
-    // the last matched part via tryPartialStringMatch (for strings)
-    // or collectPropertyCandidate (for numbers).
-    //
-    // Tags the candidate with openWildcard when backing up to a part
-    // that was matched after a captured wildcard (afterWildcard) —
-    // that position is ambiguous because the wildcard could extend.
-    function tryCollectBackwardCandidate(
-        state: MatchState,
-        savedWildcard: PendingWildcard | undefined,
-        effectivePrefixEnd?: number,
-    ): boolean {
-        const wildcardStart = savedWildcard?.start;
-        const partStart = state.lastMatchedPartInfo?.start;
-        if (
-            savedWildcard !== undefined &&
-            savedWildcard.valueId !== undefined &&
-            (partStart === undefined ||
-                (wildcardStart !== undefined && wildcardStart >= partStart))
-        ) {
-            collectPropertyCandidate(
-                state,
-                savedWildcard.valueId,
-                savedWildcard.start,
-            );
-            return true;
-        } else if (state.lastMatchedPartInfo !== undefined) {
-            const info = state.lastMatchedPartInfo;
-            if (info.type === "string") {
-                if (
-                    tryCollectStringCandidate(
-                        state,
-                        info.part,
-                        info.afterWildcard,
-                        info.start,
-                        "backward",
-                        effectivePrefixEnd,
-                    )
-                ) {
-                    return true;
-                } else {
-                    updateMaxPrefixLength(state.index);
-                }
-            } else {
-                // Number part — offer property completion for the
-                // number slot so the user can re-enter a value.
-                collectPropertyCandidate(
-                    state,
-                    info.valueId,
-                    info.start,
-                    info.afterWildcard,
-                );
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // --- Main loop: process every pending state ---
     while (pending.length > 0) {
         const state = pending.pop()!;
 
@@ -850,13 +873,14 @@ export function matchGrammarCompletion(
                     const effectivePrefixEnd =
                         state.index < prefix.length ? state.index : undefined;
                     tryCollectBackwardCandidate(
+                        ctx,
                         preFinalizeState ?? state,
                         savedPendingWildcard,
                         effectivePrefixEnd,
                     );
                 } else {
                     debugCompletion("Matched. Nothing to complete.");
-                    updateMaxPrefixLength(state.index);
+                    updateMaxPrefixLength(ctx, state.index);
                 }
                 continue;
             }
@@ -897,6 +921,7 @@ export function matchGrammarCompletion(
                 // B1 will find it and may clear this fallback in
                 // favor of a higher-position candidate.
                 tryCollectBackwardCandidate(
+                    ctx,
                     preFinalizeState ?? state,
                     savedPendingWildcard,
                 );
@@ -925,6 +950,7 @@ export function matchGrammarCompletion(
                 );
                 if (nextPart.type === "string" && !deferredToEoi) {
                     tryCollectStringCandidate(
+                        ctx,
                         state,
                         nextPart,
                         savedPendingWildcard?.valueId !== undefined,
@@ -976,6 +1002,7 @@ export function matchGrammarCompletion(
                     // unfilled wildcard — the user hasn't started
                     // typing into the unfilled slot yet.
                     const didBackUp = tryCollectBackwardCandidate(
+                        ctx,
                         state,
                         undefined,
                     );
@@ -987,6 +1014,7 @@ export function matchGrammarCompletion(
                         // still collected.
                         debugCompletion("Completing wildcard part");
                         collectPropertyCandidate(
+                            ctx,
                             state,
                             pendingWildcard.valueId,
                             pendingWildcard.start,
@@ -999,6 +1027,7 @@ export function matchGrammarCompletion(
                     // provide entity-specific suggestions.
                     debugCompletion("Completing wildcard part");
                     collectPropertyCandidate(
+                        ctx,
                         state,
                         pendingWildcard.valueId,
                         pendingWildcard.start,
@@ -1021,6 +1050,7 @@ export function matchGrammarCompletion(
                     currentPart.type === "string"
                 ) {
                     tryCollectStringCandidate(
+                        ctx,
                         state,
                         currentPart,
                         false,
@@ -1031,21 +1061,33 @@ export function matchGrammarCompletion(
             }
         }
     }
+}
 
-    // --- Phase B1: Resolve partial keyword anchors ---
-    //
-    // wildcardEoiDescriptors contains all wildcard-at-EOI string
-    // states from both directions.  findPartialKeywordInWildcard
-    // is called here (not in Phase A) so that the scan is decoupled
-    // from candidate discovery.
-    //
-    // For each descriptor, B1 either:
-    //   - Finds a partial keyword → records the best anchor for
-    //     forward (forwardPartialKeyword), or collects a fixed
-    //     candidate for backward.
-    //   - Does not find a partial keyword → defers to Phase B2 via
-    //     forwardEoiCandidates (forward) or rangeCandidates
-    //     (backward).
+// --- Phase B1: Resolve partial keyword anchors ---
+//
+// wildcardEoiDescriptors contains all wildcard-at-EOI string
+// states from both directions.  findPartialKeywordInWildcard
+// is called here (not in Phase A) so that the scan is decoupled
+// from candidate discovery.
+//
+// For each descriptor, B1 either:
+//   - Finds a partial keyword → records the best anchor for
+//     forward (forwardPartialKeyword), or collects a fixed
+//     candidate for backward.
+//   - Does not find a partial keyword → defers to Phase B2 via
+//     forwardEoiCandidates (forward) or rangeCandidates
+//     (backward).
+function resolveWildcardAnchors(ctx: CompletionContext): {
+    forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined;
+    forwardEoiCandidates: WildcardStringRangeCandidate[];
+} {
+    const {
+        prefix,
+        direction,
+        fixedCandidates,
+        rangeCandidates,
+        wildcardEoiDescriptors,
+    } = ctx;
 
     // Forward partial keyword: see ForwardPartialKeywordCandidate.
     let forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined;
@@ -1082,19 +1124,20 @@ export function matchGrammarCompletion(
                 // flex-space, not consumed).  Otherwise, strip
                 // trailing separators and advance (displace —
                 // the gap has real content).
-                if (partialResult.position >= maxPrefixLength) {
+                if (partialResult.position >= ctx.maxPrefixLength) {
                     if (
                         !isSeparatorOnlyGap(
                             prefix,
-                            maxPrefixLength,
+                            ctx.maxPrefixLength,
                             partialResult.position,
                         )
                     ) {
                         updateMaxPrefixLength(
+                            ctx,
                             stripTrailingSeparators(
                                 prefix,
                                 partialResult.position,
-                                maxPrefixLength,
+                                ctx.maxPrefixLength,
                             ),
                         );
                     }
@@ -1148,20 +1191,29 @@ export function matchGrammarCompletion(
         }
     }
 
-    // --- Phase B2: Convert candidates to final completions/properties ---
-    //
-    // Fixed candidates are converted directly — they are already
-    // guaranteed to be at maxPrefixLength (candidates at shorter
-    // positions were discarded when maxPrefixLength advanced).
-    //
-    // Range candidates are only converted when the "retrigger"
-    // conditions are met (see the range-candidate block below).
-    //
-    // Global string deduplication: multiple rules (or repeat-
-    // expansion states of the same rule) can produce the same
-    // completion text at the same maxPrefixLength.  Showing
-    // duplicates in the menu is unhelpful, so we deduplicate
-    // globally.
+    return { forwardPartialKeyword, forwardEoiCandidates };
+}
+
+// --- Phase B2: Convert candidates to final completions/properties ---
+//
+// Fixed candidates are converted directly — they are already
+// guaranteed to be at maxPrefixLength (candidates at shorter
+// positions were discarded when maxPrefixLength advanced).
+//
+// Range candidates are only converted when the "retrigger"
+// conditions are met (see the range-candidate block below).
+//
+// Global string deduplication: multiple rules (or repeat-
+// expansion states of the same rule) can produce the same
+// completion text at the same maxPrefixLength.  Showing
+// duplicates in the menu is unhelpful, so we deduplicate
+// globally.
+function materializeCandidates(
+    ctx: CompletionContext,
+    forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined,
+    forwardEoiCandidates: WildcardStringRangeCandidate[],
+): GrammarCompletionResult {
+    const { prefix, direction, fixedCandidates, rangeCandidates } = ctx;
     const completions = new Set<string>();
     const properties: GrammarCompletionProperty[] = [];
 
@@ -1188,7 +1240,7 @@ export function matchGrammarCompletion(
             separatorMode = mergeSepMode(
                 prefix,
                 separatorMode,
-                maxPrefixLength,
+                ctx.maxPrefixLength,
                 c.completionText[0],
                 c.spacingMode,
             );
@@ -1203,7 +1255,7 @@ export function matchGrammarCompletion(
                 separatorMode = mergeSepMode(
                     prefix,
                     separatorMode,
-                    maxPrefixLength,
+                    ctx.maxPrefixLength,
                     "a",
                     c.spacingMode,
                 );
@@ -1239,19 +1291,19 @@ export function matchGrammarCompletion(
     const processRangeCandidates =
         direction === "backward" &&
         rangeCandidates.length > 0 &&
-        maxPrefixLength < prefix.length &&
+        ctx.maxPrefixLength < prefix.length &&
         rangeCandidateGateOpen;
     if (processRangeCandidates) {
         // Truncate once so range candidates don't peek at trailing
         // input beyond maxPrefixLength (invariant #3).
-        const truncatedPrefix = prefix.substring(0, maxPrefixLength);
+        const truncatedPrefix = prefix.substring(0, ctx.maxPrefixLength);
         for (const c of rangeCandidates) {
-            if (maxPrefixLength <= c.wildcardStart) continue;
+            if (ctx.maxPrefixLength <= c.wildcardStart) continue;
             if (
                 getWildcardStr(
                     prefix,
                     c.wildcardStart,
-                    maxPrefixLength,
+                    ctx.maxPrefixLength,
                     c.spacingMode,
                 ) === undefined
             ) {
@@ -1261,7 +1313,7 @@ export function matchGrammarCompletion(
                 const partial = tryPartialStringMatch(
                     c.nextPart,
                     truncatedPrefix,
-                    maxPrefixLength,
+                    ctx.maxPrefixLength,
                     c.spacingMode,
                     "forward",
                 );
@@ -1273,7 +1325,7 @@ export function matchGrammarCompletion(
                     separatorMode = mergeSepMode(
                         prefix,
                         separatorMode,
-                        maxPrefixLength,
+                        ctx.maxPrefixLength,
                         partial.remainingText[0],
                         c.spacingMode,
                     );
@@ -1289,7 +1341,7 @@ export function matchGrammarCompletion(
                     separatorMode = mergeSepMode(
                         prefix,
                         separatorMode,
-                        maxPrefixLength,
+                        ctx.maxPrefixLength,
                         "a",
                         c.spacingMode,
                     );
@@ -1353,7 +1405,11 @@ export function matchGrammarCompletion(
             ? forwardPartialKeyword!.position
             : prefix.length;
         if (!hasPartialKeyword || anchor < prefix.length) {
-            anchor = stripTrailingSeparators(prefix, anchor, maxPrefixLength);
+            anchor = stripTrailingSeparators(
+                prefix,
+                anchor,
+                ctx.maxPrefixLength,
+            );
         }
 
         // Decide whether to clear existing candidates (displace)
@@ -1368,13 +1424,13 @@ export function matchGrammarCompletion(
         // (A separator-only gap between maxPrefixLength and the
         // raw position is fully consumed by stripping, collapsing
         // anchor to maxPrefixLength — the merge case.)
-        if (anchor !== maxPrefixLength) {
+        if (anchor !== ctx.maxPrefixLength) {
             debugCompletion(
                 `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `stripped EOI P=${anchor} (displace)`}`,
             );
             completions.clear();
             properties.length = 0;
-            maxPrefixLength = anchor;
+            ctx.maxPrefixLength = anchor;
             closedSet = true;
             separatorMode = undefined;
             openWildcard = false;
@@ -1451,17 +1507,40 @@ export function matchGrammarCompletion(
     // trailing separators are handled by stripping the trailing text
     // before backing up, so the backup always succeeds and P lands
     // at the backed-up keyword position (not at prefix.length).
-    const directionSensitive = maxPrefixLength > 0;
+    const directionSensitive = ctx.maxPrefixLength > 0;
 
-    const result: GrammarCompletionResult = {
+    return {
         completions: [...completions],
         properties,
-        matchedPrefixLength: maxPrefixLength,
+        matchedPrefixLength: ctx.maxPrefixLength,
         separatorMode,
         closedSet,
         directionSensitive,
         openWildcard,
     };
+}
+
+export function matchGrammarCompletion(
+    grammar: Grammar,
+    prefix: string,
+    minPrefixLength?: number,
+    direction?: "forward" | "backward",
+): GrammarCompletionResult {
+    debugCompletion(
+        `Start completion for prefix ${direction ?? "forward"}: "${prefix}"`,
+    );
+
+    const ctx = createCompletionContext(prefix, minPrefixLength, direction);
+
+    collectCandidates(ctx, grammar); // Phase A
+    const { forwardPartialKeyword, forwardEoiCandidates } =
+        resolveWildcardAnchors(ctx); // Phase B1
+    const result = materializeCandidates( // Phase B2
+        ctx,
+        forwardPartialKeyword,
+        forwardEoiCandidates,
+    );
+
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
     return result;
 }
