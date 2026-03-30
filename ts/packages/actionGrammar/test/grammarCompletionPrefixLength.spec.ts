@@ -44,13 +44,15 @@ describeForEachCompletion(
             it("returns remaining words as completion for first word typed", () => {
                 const result = matchGrammarCompletion(grammar, "play ");
                 // tryPartialStringMatch splits the multi-word part: "play"
-                // is consumed (4 chars), trailing space advances to 5.
+                // is consumed (4 chars).  Trailing space is not included in
+                // matchedPrefixLength — the shell handles it via separator
+                // stripping.
                 expectMetadata(result, {
                     completions: ["music"],
-                    matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -99,14 +101,16 @@ describeForEachCompletion(
                 });
             });
 
-            it("not direction-sensitive for exact match with trailing space", () => {
+            it("exact match with trailing space", () => {
                 const result = matchGrammarCompletion(grammar, "play music ");
+                // Trailing separators are stripped in Category 1,
+                // so backup succeeds — same as "play music".
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 11,
-                    separatorMode: "optional",
+                    completions: ["music"],
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -151,13 +155,12 @@ describeForEachCompletion(
 
             it("returns second part after nested rule with trailing space", () => {
                 const result = matchGrammarCompletion(grammar, "play ");
-                // Trailing space commits → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["music"],
-                    matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -220,10 +223,10 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music", "video"],
                     sortCompletions: true,
-                    matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -239,14 +242,14 @@ describeForEachCompletion(
                 // "play " — the trailing space is only a separator, not valid
                 // wildcard content, so the wildcard can't finalize and we fall
                 // through to the property-completion path instead of offering
-                // the terminator string.  Trailing space advances to 5.
+                // the terminator string.
                 const result = matchGrammarCompletion(grammar, "play ");
                 expectMetadata(result, {
                     completions: [],
-                    matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: false,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                 });
             });
@@ -299,15 +302,14 @@ describeForEachCompletion(
             it("returns property completion for separator-only trailing wildcard", () => {
                 // The trailing space is not valid wildcard content, so the
                 // wildcard can't finalize.  The else-branch produces a
-                // property completion instead.  Trailing space advances
-                // matchedPrefixLength to 5.
+                // property completion instead.
                 const result = matchGrammarCompletion(grammar, "play ");
                 expectMetadata(result, {
                     completions: [],
-                    matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: false,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [
                         {
@@ -358,10 +360,10 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "再生 ");
                 expectMetadata(result, {
                     completions: ["音楽"],
-                    matchedPrefixLength: 3,
+                    matchedPrefixLength: 2,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -424,14 +426,13 @@ describeForEachCompletion(
             it("returns property completion when only separator follows CJK wildcard start", () => {
                 // Same as the Latin case: trailing space is a separator, not
                 // valid wildcard content, so the terminator isn't offered.
-                // Trailing space advances matchedPrefixLength to 3.
                 const result = matchGrammarCompletion(grammar, "再生 ");
                 expectMetadata(result, {
                     completions: [],
-                    matchedPrefixLength: 3,
+                    matchedPrefixLength: 2,
                     separatorMode: "optional",
                     closedSet: false,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                 });
             });
@@ -570,15 +571,13 @@ describeForEachCompletion(
             });
 
             it("reports separatorMode for 'play ' before wildcard", () => {
-                // Trailing space consumed: matchedPrefixLength advances to 5,
-                // separatorMode demoted to "optional".
                 const result = matchGrammarCompletion(grammar, "play ");
                 expectMetadata(result, {
                     completions: [],
-                    matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: false,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [
                         {
@@ -1029,22 +1028,19 @@ describeForEachCompletion(
                     });
                 });
 
-                it("trailing space commits — backward on 'play ' offers next word (same as forward)", () => {
+                it("trailing space — backward on 'play ' offers next word", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play ",
                         undefined,
                         "backward",
                     );
-                    // Trailing space is a commit signal — direction no
-                    // longer matters.  Should offer "music" at position 5,
-                    // same as forward.
                     expectMetadata(result, {
                         completions: ["music"],
-                        matchedPrefixLength: 5,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 4,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1059,10 +1055,10 @@ describeForEachCompletion(
                     );
                     expectMetadata(result, {
                         completions: ["music"],
-                        matchedPrefixLength: 5,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 4,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1227,47 +1223,46 @@ describeForEachCompletion(
             });
         });
 
-        describe("trailing separator commits token across spacing modes", () => {
-            // Trailing separator neutralizes backward direction.
-            // The specific separator characters depend on the spacing mode.
+        describe("trailing separator — backward matches forward across spacing modes", () => {
+            // Trailing separator after a keyword: backward produces the
+            // same result as forward because both directions back up
+            // past the separator to the same keyword boundary.
 
             describe("default (auto) spacing", () => {
                 const g = `<Start> = play music now -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("trailing space commits — backward on 'play music ' acts like forward", () => {
+                it("trailing space — backward on 'play music ' acts like forward", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play music ",
                         undefined,
                         "backward",
                     );
-                    // Trailing space commits "music"; should offer "now".
                     expectMetadata(result, {
                         completions: ["now"],
-                        matchedPrefixLength: 11,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 10,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
                 });
 
-                it("trailing punctuation commits — backward on 'play music,' acts like forward", () => {
+                it("trailing punctuation — backward on 'play music,' acts like forward", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play music,",
                         undefined,
                         "backward",
                     );
-                    // Trailing comma is a separator in auto mode; commits "music".
                     expectMetadata(result, {
                         completions: ["now"],
-                        matchedPrefixLength: 11,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 10,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1291,6 +1286,48 @@ describeForEachCompletion(
                         properties: [],
                     });
                 });
+
+                it("backward on 'play ' matches forward (first keyword + trailing space)", () => {
+                    const backward = matchGrammarCompletion(
+                        grammar,
+                        "play ",
+                        undefined,
+                        "backward",
+                    );
+                    const forward = matchGrammarCompletion(
+                        grammar,
+                        "play ",
+                        undefined,
+                        "forward",
+                    );
+                    expectMetadata(backward, {
+                        completions: ["music"],
+                        matchedPrefixLength: 4,
+                        directionSensitive: true,
+                    });
+                    expect(backward).toEqual(forward);
+                });
+
+                it("backward on 'play,' matches forward (first keyword + trailing punctuation)", () => {
+                    const backward = matchGrammarCompletion(
+                        grammar,
+                        "play,",
+                        undefined,
+                        "backward",
+                    );
+                    const forward = matchGrammarCompletion(
+                        grammar,
+                        "play,",
+                        undefined,
+                        "forward",
+                    );
+                    expectMetadata(backward, {
+                        completions: ["music"],
+                        matchedPrefixLength: 4,
+                        directionSensitive: true,
+                    });
+                    expect(backward).toEqual(forward);
+                });
             });
 
             describe("spacing=required", () => {
@@ -1299,7 +1336,7 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("trailing space commits — backward acts like forward", () => {
+                it("trailing space — backward on 'play music ' acts like forward", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play music ",
@@ -1308,10 +1345,10 @@ describeForEachCompletion(
                     );
                     expectMetadata(result, {
                         completions: ["now"],
-                        matchedPrefixLength: 11,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 10,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1342,7 +1379,7 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("trailing space commits — backward acts like forward", () => {
+                it("trailing space — backward on 'play music ' acts like forward", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play music ",
@@ -1351,10 +1388,10 @@ describeForEachCompletion(
                     );
                     expectMetadata(result, {
                         completions: ["now"],
-                        matchedPrefixLength: 11,
+                        matchedPrefixLength: 10,
                         separatorMode: "optional",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1387,7 +1424,7 @@ describeForEachCompletion(
                 );
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("trailing space does NOT commit — backward on 'play ' still backs up", () => {
+                it("trailing space — backward on 'play ' still backs up", () => {
                     // "play " does not match "playmusic" in none mode,
                     // so "play" is the only matched word.  Space is not a
                     // separator in none mode, so backward is not neutralized.
@@ -1471,20 +1508,20 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("trailing space commits — backward on CJK '再生 音楽 ' acts like forward", () => {
+                it("trailing space — backward on CJK '再生 音楽 ' acts like forward", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "再生 音楽 ",
                         undefined,
                         "backward",
                     );
-                    // Trailing space commits; should offer "停止".
+                    // Trailing space; should offer "停止".
                     expectMetadata(result, {
                         completions: ["停止"],
-                        matchedPrefixLength: 6,
+                        matchedPrefixLength: 5,
                         separatorMode: "optional",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1515,7 +1552,7 @@ describeForEachCompletion(
         describe("escaped space in last term", () => {
             // An escaped space (\ ) makes the space part of the literal
             // token content.  The trailing separator check should NOT
-            // treat such a space as a commit signal.
+            // treat such a space as a separator boundary.
 
             describe("default (auto) spacing — single segment with literal space", () => {
                 // "hello\ world" parses as one segment: "hello world"
@@ -1603,7 +1640,7 @@ describeForEachCompletion(
                     });
                 });
 
-                it("trailing separator after complete token — backward on 'hello world ' acts like forward", () => {
+                it("trailing separator — backward on 'hello world ' acts like forward", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "hello world ",
@@ -1611,13 +1648,13 @@ describeForEachCompletion(
                         "backward",
                     );
                     // The space after "hello world" IS a real separator.
-                    // Should commit and offer "next".
+                    // Should offer "next".
                     expectMetadata(result, {
                         completions: ["next"],
-                        matchedPrefixLength: 12,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 11,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1737,16 +1774,16 @@ describeForEachCompletion(
                     // "hello " (literal) + " " (flex-space) = 7 chars consumed.
                     expectMetadata(result, {
                         completions: ["world"],
-                        matchedPrefixLength: 7,
+                        matchedPrefixLength: 6,
                         separatorMode: "optional",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
                 });
 
-                it("backward on 'hello  ' — real trailing separator commits", () => {
+                it("backward on 'hello  ' — real trailing separator", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "hello  ",
@@ -1755,13 +1792,13 @@ describeForEachCompletion(
                     );
                     // "hello " (literal) consumed 6 chars.  The extra
                     // space at position 6 is a real separator beyond the
-                    // match — commits the segment, acts like forward.
+                    // match.
                     expectMetadata(result, {
                         completions: ["world"],
-                        matchedPrefixLength: 7,
+                        matchedPrefixLength: 6,
                         separatorMode: "optional",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1814,29 +1851,29 @@ describeForEachCompletion(
                     );
                     expectMetadata(result, {
                         completions: ["next"],
-                        matchedPrefixLength: 12,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 11,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
                 });
 
-                it("backward on 'hello world ' — trailing separator commits", () => {
+                it("backward on 'hello world ' — trailing separator", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "hello world ",
                         undefined,
                         "backward",
                     );
-                    // Trailing space after complete token commits.
+                    // Trailing space after complete token.
                     expectMetadata(result, {
                         completions: ["next"],
-                        matchedPrefixLength: 12,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 11,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -1866,7 +1903,7 @@ describeForEachCompletion(
                 });
             });
 
-            it("not direction-sensitive for 'play ' with trailing space", () => {
+            it("direction-sensitive for 'play ' with trailing space", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play ",
@@ -1875,10 +1912,10 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["shuffle", "music"],
-                    matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1920,7 +1957,7 @@ describeForEachCompletion(
                 });
             });
 
-            it("not direction-sensitive for 'play shuffle ' (trailing space commits)", () => {
+            it("direction-sensitive for 'play shuffle ' (trailing space)", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play shuffle ",
@@ -1929,10 +1966,10 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["music"],
-                    matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2085,19 +2122,22 @@ describeForEachCompletion(
                 });
             });
 
-            it("not direction-sensitive for exact match with trailing space", () => {
+            it("exact match with trailing space backs up", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play some music ",
                     undefined,
                     "forward",
                 );
+                // Rule 1 (play some music): Category 1, trailing
+                // separator stripped → backs up to mpl=9.
+                // Rule 2 (play some video): Category 3b at mpl=9.
                 expectMetadata(result, {
-                    completions: [],
-                    matchedPrefixLength: 16,
-                    separatorMode: "optional",
+                    completions: ["music", "video"],
+                    matchedPrefixLength: 9,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2283,7 +2323,7 @@ describeForEachCompletion(
                 });
             });
 
-            it("not direction-sensitive for 'play song ' (trailing space commits)", () => {
+            it("direction-sensitive for 'play song ' (trailing space)", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play song ",
@@ -2292,10 +2332,10 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["now", "song"],
-                    matchedPrefixLength: 10,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 9,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2423,7 +2463,7 @@ describeForEachCompletion(
                 });
             });
 
-            it("both directions agree on non-direction-sensitivity for 'play '", () => {
+            it("both directions agree for 'play '", () => {
                 const forward = matchGrammarCompletion(
                     grammar,
                     "play ",
@@ -2438,10 +2478,10 @@ describeForEachCompletion(
                 );
                 expectMetadata(forward, {
                     completions: ["music"],
-                    matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 4,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2506,7 +2546,7 @@ describeForEachCompletion(
                     });
                 });
 
-                it("trailing space commits — both directions offer wildcard", () => {
+                it("trailing space — both directions offer wildcard", () => {
                     const forward = matchGrammarCompletion(
                         grammar,
                         "play ",
@@ -2519,7 +2559,7 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    // Trailing space commits the alternation choice.
+                    // Trailing space.
                     // Both directions offer the wildcard property.
                     const expectedProperty = {
                         match: {
@@ -2529,7 +2569,7 @@ describeForEachCompletion(
                         propertyNames: ["parameters.song"],
                     };
                     expectMetadata(forward, {
-                        directionSensitive: false,
+                        directionSensitive: true,
                         properties: [expectedProperty],
                     });
                     expect(backward).toEqual(forward);
@@ -2737,18 +2777,18 @@ describeForEachCompletion(
                     });
                 });
 
-                it("trailing space 'play ' commits the choice", () => {
+                it("trailing space 'play ' narrows the choice", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play ",
                         undefined,
                         "forward",
                     );
-                    // Trailing space commits — only "play" branch
+                    // Trailing space — only "play" branch
                     // survives; "player" is eliminated.
                     expectMetadata(result, {
                         completions: ["now"],
-                        matchedPrefixLength: 5,
+                        matchedPrefixLength: 4,
                     });
                 });
             });
@@ -2966,31 +3006,11 @@ describeForEachCompletion(
             });
         });
 
-        describe("stale backwardEmitted — wildcard rule cleared by keyword rule", () => {
-            // Regression: when a wildcard rule's backward candidate
-            // is cleared by a longer keyword match from another rule,
-            // the backwardEmitted flag must also be reset.  Otherwise:
-            //   - Trailing-separator advancement is incorrectly
-            //     skipped for the surviving forward-style candidate.
-            //   - Range candidates may be incorrectly gated.
-            //
-            // Grammar:
-            //   Rule A: play $(song) by $(artist)  — wildcard rule
-            //   Rule B: play beautiful music        — keyword rule
-            //
-            // Input (backward): "play beautiful "
-            //
-            // Rule A: wildcard absorbs " beautiful ", backward backs
-            //   up to wildcard start (position 4).  backwardEmitted=true.
-            // Rule B: matches "play" + "beautiful" to position 14,
-            //   updateMaxPrefixLength(14) clears Rule A's candidate.
-            //   backwardEmitted must also be reset to false.
-            //
-            // With the fix: trailing-sep advances to 15, offers "music"
-            // at matchedPrefixLength=15 with separatorMode="optional".
-            //
-            // Without the fix: stale backwardEmitted=true blocks
-            // trailing-sep advancement, leaving matchedPrefixLength=14.
+        describe("backward with wildcard rule cleared by keyword rule", () => {
+            // When a wildcard rule's backward candidate is cleared by
+            // a longer keyword match from another rule, range candidates
+            // from the wildcard rule should still be processed at the
+            // surviving keyword rule's position.
 
             describe("wildcard rule + keyword rule, trailing space", () => {
                 const g = [
@@ -3001,7 +3021,7 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("backward on 'play beautiful ' — wildcard rule's range candidate anchors at 14", () => {
+                it("backward on 'play beautiful ' — range candidate anchors at 14", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play beautiful ",
@@ -3010,37 +3030,11 @@ describeForEachCompletion(
                     );
                     // Rule B: "play beautiful" matches (14 chars), offers "music".
                     // Rule A: wildcard-at-EOI range candidate adds "by" at
-                    // mpl=14.  Range candidate output blocks trailing-sep
-                    // advancement — mpl stays at 14 (not 15), preserving
-                    // the backward anchor.
+                    // mpl=14.
                     expectMetadata(result, {
                         completions: ["music", "by"],
                         matchedPrefixLength: 14,
                         separatorMode: "spacePunctuation",
-                        closedSet: true,
-                        directionSensitive: true,
-                        openWildcard: true,
-                        properties: [],
-                    });
-                });
-
-                it("forward on 'play beautiful ' — EOI merge preserves 'music' alongside 'by'", () => {
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "play beautiful ",
-                        undefined,
-                        "forward",
-                    );
-                    // Phase B2: gap between mpl=14 and anchor=15 is
-                    // a single trailing space (separator-only), so
-                    // existing Cat 2 candidate "music" is preserved
-                    // and EOI candidate "by" is merged alongside.
-                    // The separator in the gap has been consumed →
-                    // separatorMode demoted to "optional".
-                    expectMetadata(result, {
-                        completions: ["music", "by"],
-                        matchedPrefixLength: 15,
-                        separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
                         openWildcard: true,
@@ -3076,26 +3070,6 @@ describeForEachCompletion(
                         ],
                     });
                 });
-
-                it("forward on 'play beautiful' — offers 'music' and 'by'", () => {
-                    const result = matchGrammarCompletion(
-                        grammar,
-                        "play beautiful",
-                        undefined,
-                        "forward",
-                    );
-                    // Rule B offers "music", Rule A offers "by" (via
-                    // wildcard-at-EOI partial keyword).
-                    expectMetadata(result, {
-                        completions: ["music", "by"],
-                        matchedPrefixLength: 14,
-                        separatorMode: "spacePunctuation",
-                        closedSet: true,
-                        directionSensitive: true,
-                        openWildcard: true,
-                        properties: [],
-                    });
-                });
             });
 
             describe("wildcard rule + keyword rule, no trailing space", () => {
@@ -3116,7 +3090,7 @@ describeForEachCompletion(
                     );
                     // Rule B: "play something" matched (14 chars),
                     // offers "good".  Rule A: range candidate adds "by"
-                    // at mpl=14.  Range candidate blocks trailing-sep.
+                    // at mpl=14.
                     expectMetadata(result, {
                         completions: ["good", "by"],
                         matchedPrefixLength: 14,
@@ -3129,11 +3103,10 @@ describeForEachCompletion(
                 });
             });
 
-            describe("range candidates survive when backwardEmitted is reset", () => {
+            describe("range candidates survive when fixed candidate is cleared", () => {
                 // When backward's fixed candidate is cleared but range
                 // candidates exist, the range candidates should still
-                // be processed (gated by rangeCandidates.length > 0,
-                // not by backwardEmitted).
+                // be processed.
                 const g = [
                     `import { SongName };`,
                     `import { ArtistName };`,
@@ -3464,87 +3437,6 @@ describeForEachCompletion(
             });
         });
 
-        describe("backwardEmitted=false — trailing separator commits", () => {
-            // When backward falls through to forward behavior (the
-            // trailing separator "commits" the match), backwardEmitted
-            // remains false.  The result should be identical to forward
-            // — same completions, same matchedPrefixLength, and
-            // directionSensitive=false.
-
-            describe("keyword grammar with trailing space", () => {
-                const g = `<Start> = play music now -> true;`;
-                const grammar = loadGrammarRules("test.grammar", g);
-
-                it("backward on 'play ' matches forward on 'play '", () => {
-                    const backward = matchGrammarCompletion(
-                        grammar,
-                        "play ",
-                        undefined,
-                        "backward",
-                    );
-                    const forward = matchGrammarCompletion(
-                        grammar,
-                        "play ",
-                        undefined,
-                        "forward",
-                    );
-                    expectMetadata(backward, {
-                        completions: ["music"],
-                        matchedPrefixLength: 5,
-                        directionSensitive: false,
-                    });
-                    expect(backward).toEqual(forward);
-                });
-
-                it("backward on 'play music ' matches forward on 'play music '", () => {
-                    const backward = matchGrammarCompletion(
-                        grammar,
-                        "play music ",
-                        undefined,
-                        "backward",
-                    );
-                    const forward = matchGrammarCompletion(
-                        grammar,
-                        "play music ",
-                        undefined,
-                        "forward",
-                    );
-                    expectMetadata(backward, {
-                        completions: ["now"],
-                        matchedPrefixLength: 11,
-                        directionSensitive: false,
-                    });
-                    expect(backward).toEqual(forward);
-                });
-            });
-
-            describe("trailing punctuation commits", () => {
-                const g = `<Start> = play music now -> true;`;
-                const grammar = loadGrammarRules("test.grammar", g);
-
-                it("backward on 'play,' matches forward on 'play,'", () => {
-                    const backward = matchGrammarCompletion(
-                        grammar,
-                        "play,",
-                        undefined,
-                        "backward",
-                    );
-                    const forward = matchGrammarCompletion(
-                        grammar,
-                        "play,",
-                        undefined,
-                        "forward",
-                    );
-                    expectMetadata(backward, {
-                        completions: ["music"],
-                        matchedPrefixLength: 5,
-                        directionSensitive: false,
-                    });
-                    expect(backward).toEqual(forward);
-                });
-            });
-        });
-
         describe("separator-only keyword backward", () => {
             // Keywords consisting entirely of separator characters
             // (like "..." which is all punctuation) must not be treated
@@ -3589,7 +3481,7 @@ describeForEachCompletion(
                     });
                 });
 
-                it("backward on '... ' commits (trailing space)", () => {
+                it("backward on '... ' (trailing space)", () => {
                     const backward = matchGrammarCompletion(
                         grammar,
                         "... ",
@@ -3604,8 +3496,8 @@ describeForEachCompletion(
                     );
                     expectMetadata(backward, {
                         completions: ["done"],
-                        matchedPrefixLength: 4,
-                        directionSensitive: false,
+                        matchedPrefixLength: 3,
+                        directionSensitive: true,
                     });
                     expect(backward).toEqual(forward);
                 });

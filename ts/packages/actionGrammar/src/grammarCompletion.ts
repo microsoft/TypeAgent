@@ -24,24 +24,6 @@ import {
 
 const debugCompletion = registerDebug("typeagent:grammar:completion");
 
-// When `index` is followed only by separator characters (whitespace /
-// punctuation) until end-of-string, return `text.length` so that the
-// trailing separators are included in the consumed prefix.  Otherwise
-// return `index` unchanged.
-//
-// This makes completion trailing-space-sensitive: "play music " reports
-// matchedPrefixLength=11 (including the space) instead of 10.  The
-// dispatcher no longer strips trailing whitespace, so the grammar must
-// include it when the user has already typed it.
-function consumeTrailingSeparators(text: string, index: number): number {
-    if (index >= text.length) {
-        return index;
-    }
-    return nextNonSeparatorIndex(text, index) >= text.length
-        ? text.length
-        : index;
-}
-
 // True when the substring text[from..to) contains only separator
 // characters (whitespace / punctuation).  Used to decide whether
 // advancing maxPrefixLength across a gap should preserve or clear
@@ -291,15 +273,13 @@ export type GrammarCompletionResult = {
     // past unrecognized input and find more completions (e.g.
     // wildcard/entity slots whose values are external to the grammar).
     closedSet?: boolean | undefined;
-    // True when the result would differ if queried with the opposite
-    // direction.  When false, the caller can skip re-fetching on
-    // direction change.
+    // True when completion(input[0..P], "backward") would differ from
+    // completion(input[0..P], "forward"), where P = matchedPrefixLength.
+    // When false, the caller can skip re-fetching on direction change.
     //
-    // Decision tree (see actionGrammar.md § Forward/backward equivalence):
-    //   openWildcard        → true  (ambiguous boundary)
-    //   P = minPrefixLength → false (nothing matched beyond floor)
-    //   midPosition         → true  (keyword boundary, no trailing sep)
-    //   P = prefix.length   → !trailingSepAdvanced
+    // True whenever something was matched beyond the caller's floor
+    // (P > minPrefixLength) or the wildcard boundary is ambiguous
+    // (openWildcard).  False only when nothing was matched.
     directionSensitive: boolean;
     // True when the completion's `matchedPrefixLength` position is
     // *ambiguous* — it could shift forward as the user types more.
@@ -378,6 +358,7 @@ function tryPartialStringMatch(
     startIndex: number,
     spacingMode: CompiledSpacingMode,
     direction?: "forward" | "backward",
+    effectivePrefixEnd?: number,
 ):
     | {
           consumedLength: number;
@@ -396,10 +377,15 @@ function tryPartialStringMatch(
     );
 
     // Direction matters when at least one word fully matched and no
-    // trailing separator commits the last matched word.
+    // trailing separator follows the last matched word.
+    // When effectivePrefixEnd is set and endIndex has reached it,
+    // characters beyond that point are logically absent (Category 1
+    // trailing-separator stripping) — treat as uncommitted.
     const couldBackUp =
         matchedWords > 0 &&
         (spacingMode === "none" ||
+            (effectivePrefixEnd !== undefined &&
+                endIndex >= effectivePrefixEnd) ||
             nextNonSeparatorIndex(prefix, endIndex) === endIndex);
 
     if (direction === "backward" && couldBackUp) {
@@ -640,7 +626,7 @@ export function matchGrammarCompletion(
     //  B2 — Materialization: converts surviving candidates into
     //    the final completions[] and properties[] arrays.
     //    Also handles EOI instantiation, range candidates,
-    //    trailing-separator advancement, and deduplication.
+    //    and deduplication.
     const fixedCandidates: FixedCandidate[] = [];
     const rangeCandidates: RangeCandidate[] = [];
     // Wildcard-at-EOI descriptors: Phase A pushes one descriptor
@@ -654,28 +640,15 @@ export function matchGrammarCompletion(
     // whitespace (which breaks for CJK and other non-space scripts).
     let maxPrefixLength = minPrefixLength ?? 0;
 
-    // Whether backward actually collected a backed-up candidate that
-    // survives at the current maxPrefixLength.  Reset when
-    // updateMaxPrefixLength clears fixedCandidates (a stale true
-    // from a cleared candidate would incorrectly block trailing-
-    // separator advancement for surviving forward-style candidates).
-    // When false, backward fell through to forward behavior —
-    // the trailing-separator-advancement guard is skipped so the
-    // result is identical to forward.
-    let backwardEmitted = false;
-
     // Helper: update maxPrefixLength.  When it increases, all previously
     // accumulated fixed-point candidates from shorter matches are
-    // irrelevant — clear them.  backwardEmitted is also reset so
-    // that a stale backward flag from a cleared candidate does not
-    // block trailing-separator advancement for surviving candidates.
+    // irrelevant — clear them.
     // Range candidates are NOT cleared because their valid position
     // is a range that may include the new maxPrefixLength.
     function updateMaxPrefixLength(prefixLength: number): void {
         if (prefixLength > maxPrefixLength) {
             maxPrefixLength = prefixLength;
             fixedCandidates.length = 0;
-            backwardEmitted = false;
         }
     }
 
@@ -713,6 +686,7 @@ export function matchGrammarCompletion(
         candidateOpenWildcard: boolean,
         startIndex: number,
         dir: "forward" | "backward" | undefined,
+        effectivePrefixEnd?: number,
     ): boolean {
         const partial = tryPartialStringMatch(
             part,
@@ -720,6 +694,7 @@ export function matchGrammarCompletion(
             startIndex,
             state.spacingMode,
             dir,
+            effectivePrefixEnd,
         );
         if (partial !== undefined) {
             updateMaxPrefixLength(partial.consumedLength);
@@ -731,9 +706,6 @@ export function matchGrammarCompletion(
                     openWildcard: candidateOpenWildcard,
                     partialKeywordBackup: false,
                 });
-            }
-            if (partial.couldBackUp && dir === "backward") {
-                backwardEmitted = true;
             }
             return true;
         }
@@ -752,6 +724,7 @@ export function matchGrammarCompletion(
     function tryCollectBackwardCandidate(
         state: MatchState,
         savedWildcard: PendingWildcard | undefined,
+        effectivePrefixEnd?: number,
     ): boolean {
         const wildcardStart = savedWildcard?.start;
         const partStart = state.lastMatchedPartInfo?.start;
@@ -777,6 +750,7 @@ export function matchGrammarCompletion(
                         info.afterWildcard,
                         info.start,
                         "backward",
+                        effectivePrefixEnd,
                     )
                 ) {
                     return true;
@@ -845,13 +819,21 @@ export function matchGrammarCompletion(
                     state.lastMatchedPartInfo !== undefined ||
                     savedPendingWildcard?.valueId !== undefined
                 ) {
-                    // Category 1 is direction-agnostic — don't update
-                    // backwardEmitted, which gates post-loop behaviors
-                    // (trailing-separator advancement).
-                    // Return value intentionally ignored.
+                    // Category 1 is direction-agnostic — both
+                    // directions back up identically.
+                    // Ignore trailing separators: in an exact
+                    // match, trailing whitespace/punctuation
+                    // carries no structural meaning — all parts
+                    // are satisfied.  Without the end-index limit,
+                    // tryPartialStringMatch sees the trailing
+                    // separator and sets couldBackUp=false,
+                    // incorrectly blocking the backup.
+                    const effectivePrefixEnd =
+                        state.index < prefix.length ? state.index : undefined;
                     tryCollectBackwardCandidate(
                         preFinalizeState ?? state,
                         savedPendingWildcard,
+                        effectivePrefixEnd,
                     );
                 } else {
                     debugCompletion("Matched. Nothing to complete.");
@@ -895,11 +877,10 @@ export function matchGrammarCompletion(
                 // a partial keyword exists inside the wildcard, Phase
                 // B1 will find it and may clear this fallback in
                 // favor of a higher-position candidate.
-                backwardEmitted =
-                    tryCollectBackwardCandidate(
-                        preFinalizeState ?? state,
-                        savedPendingWildcard,
-                    ) || backwardEmitted;
+                tryCollectBackwardCandidate(
+                    preFinalizeState ?? state,
+                    savedPendingWildcard,
+                );
                 // Range candidates for non-string next parts
                 // (wildcard/number) — these don't involve partial
                 // keyword scans so they're pushed directly.
@@ -979,16 +960,12 @@ export function matchGrammarCompletion(
                         state,
                         undefined,
                     );
-                    if (didBackUp) {
-                        backwardEmitted = true;
-                    } else {
+                    if (!didBackUp) {
                         // tryCollectBackwardCandidate returned false
                         // (e.g. all keyword words fully matched with
                         // trailing separator).  Fall back to the
                         // forward path so the property completion is
                         // still collected.
-                        // Intentionally not setting backwardEmitted —
-                        // this is the forward fallback path.
                         debugCompletion("Completing wildcard part");
                         collectPropertyCandidate(
                             state,
@@ -1108,7 +1085,6 @@ export function matchGrammarCompletion(
                         partialKeywordBackup: true,
                     });
                 }
-                backwardEmitted = true;
             } else {
                 // No useful partial keyword — create range
                 // candidate for Phase B2.
@@ -1231,11 +1207,7 @@ export function matchGrammarCompletion(
     // would have done for that rule's wildcard-keyword boundary.
     //
     // Gating: range candidates are processed when backward has
-    // range candidates and trailing text remains.  The gate uses
-    // rangeCandidates.length directly (not backwardEmitted) because
-    // range candidates are never cleared — their existence is the
-    // natural signal, decoupled from whether a fixed backward
-    // candidate survived at maxPrefixLength.
+    // range candidates and trailing text remains.
     //
     // rangeCandidateGateOpen: the backed-up position is usable for
     // range candidate processing.  True when either:
@@ -1253,11 +1225,6 @@ export function matchGrammarCompletion(
         rangeCandidates.length > 0 &&
         maxPrefixLength < prefix.length &&
         rangeCandidateGateOpen;
-    // Whether range candidate processing produced any completions
-    // or properties.  When true, the results are anchored at the
-    // current maxPrefixLength — trailing-separator advancement must
-    // be skipped to preserve that anchor.
-    let rangeCandidateEmitted = false;
     if (processRangeCandidates) {
         // Truncate once so range candidates don't peek at trailing
         // input beyond maxPrefixLength (invariant #3).
@@ -1299,7 +1266,6 @@ export function matchGrammarCompletion(
                         c.spacingMode,
                     );
                     openWildcard = true;
-                    rangeCandidateEmitted = true;
                 }
             } else {
                 const completionProperty = getGrammarCompletionProperty(
@@ -1321,7 +1287,6 @@ export function matchGrammarCompletion(
                     );
                     openWildcard = true;
                     closedSet = false;
-                    rangeCandidateEmitted = true;
                 }
             }
         }
@@ -1485,69 +1450,16 @@ export function matchGrammarCompletion(
         }
     }
 
-    // --- Trailing-separator advancement & directionSensitive ---
-    //
-    // These two steps are grouped because trailingSepAdvanced feeds
-    // directly into the decision tree below.
-
-    // Advance past trailing separators so the reported prefix length
-    // includes any trailing whitespace the user typed.  This makes
-    // completion trailing-space-sensitive: "play music " reports
-    // matchedPrefixLength=11 (with the space) rather than 10.
-    //
-    // When advancing, demote separatorMode to "optional" — the
-    // trailing space is already consumed, so no additional separator
-    // is required between the anchor and the completion text.
-    //
-    // Skip advancement when backward backed up (backwardEmitted)
-    // or range candidates produced results (rangeCandidateEmitted):
-    // the backed-up position P is where backward intentionally wants
-    // completions to anchor.  Advancing P past trailing separators
-    // would move the anchor forward, defeating the backup.
-    let trailingSepAdvanced = false;
-    if (!backwardEmitted && !rangeCandidateEmitted) {
-        const advanced = consumeTrailingSeparators(prefix, maxPrefixLength);
-        if (advanced > maxPrefixLength) {
-            maxPrefixLength = advanced;
-            separatorMode = "optional";
-            trailingSepAdvanced = true;
-        }
-    }
-
     // Compute directionSensitive.
     //
-    // Would completion(input[0..P], "backward") produce a different
-    // result than completion(input[0..P], "forward")?
-    //
-    // The separator is the universal "commit" mechanism.  Once
-    // input[0..P] ends with a separator after the last matched item,
-    // the position is committed and both directions agree.  Without
-    // that separator (including "none" mode where separators don't
-    // exist), backward has the option to reconsider.
-    //
-    // Decision tree:
-    //   openWildcard   → true (wildcard boundary is ambiguous;
-    //                     backward can always reconsider)
-    //                     Note: openWildcard requires at least one
-    //                     keyword match before the wildcard, so
-    //                     P > 0 whenever openWildcard is true.
-    //   P = minPrefixLength → false (nothing was matched beyond the
-    //                     caller's floor, backward has nothing to
-    //                     reconsider)
-    //   midPosition    → true (truncated input ends at keyword
-    //                     boundary with no trailing separator —
-    //                     backward always backs up)
-    //   P = prefix.length → !trailingSepAdvanced (a trailing separator
-    //                     committed the position → not sensitive;
-    //                     no trailing sep → sensitive)
-    const midPosition = maxPrefixLength > 0 && maxPrefixLength < prefix.length;
-    const directionSensitive = openWildcard
-        ? true
-        : maxPrefixLength === (minPrefixLength ?? 0)
-          ? false
-          : midPosition
-            ? true
-            : !trailingSepAdvanced;
+    // True whenever something was matched beyond the caller's floor
+    // (P > minPrefixLength) or the wildcard boundary is ambiguous
+    // (openWildcard).  Category 1 exact matches with trailing
+    // separators are handled by stripping the trailing text before
+    // backing up, so the backup always succeeds and P lands at
+    // the backed-up keyword position (not at prefix.length).
+    const directionSensitive =
+        openWildcard || maxPrefixLength !== (minPrefixLength ?? 0);
 
     const result: GrammarCompletionResult = {
         completions: [...completions],

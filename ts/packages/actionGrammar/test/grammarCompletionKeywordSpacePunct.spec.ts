@@ -84,14 +84,12 @@ describeForEachCompletion(
 
             it("offers second segment after first segment + space", () => {
                 const result = matchGrammarCompletion(grammar, "hello, ");
-                // Trailing space commits the match → both directions same
-                // Trailing separator consumed → "optional"
                 expectMetadata(result, {
                     completions: ["world"],
-                    matchedPrefixLength: 7,
+                    matchedPrefixLength: 6,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -198,13 +196,12 @@ describeForEachCompletion(
 
             it("offers second segment after 'hello '", () => {
                 const result = matchGrammarCompletion(grammar, "hello ");
-                // Trailing space commits → not direction-sensitive
                 expectMetadata(result, {
                     completions: [",world"],
-                    matchedPrefixLength: 6,
+                    matchedPrefixLength: 5,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -279,13 +276,12 @@ describeForEachCompletion(
 
             it("offers 'world' after 'hello . '", () => {
                 const result = matchGrammarCompletion(grammar, "hello . ");
-                // Trailing space commits → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["world"],
-                    matchedPrefixLength: 8,
+                    matchedPrefixLength: 7,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -387,13 +383,12 @@ describeForEachCompletion(
 
             it("offers 'next' after 'hello world '", () => {
                 const result = matchGrammarCompletion(grammar, "hello world ");
-                // Trailing space commits → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["next"],
-                    matchedPrefixLength: 12,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -582,14 +577,12 @@ describeForEachCompletion(
                     // and the regex is non-greedy, so the space should be
                     // left for the literal " world".
                     const result = matchGrammarCompletion(grammar, "hello ");
-                    // Trailing space: consumeTrailingSeparators advances → "optional"
-                    // Trailing space commits "hello" → not direction-sensitive
                     expectMetadata(result, {
                         completions: [" world"],
-                        matchedPrefixLength: 6,
+                        matchedPrefixLength: 5,
                         separatorMode: "optional",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -622,23 +615,20 @@ describeForEachCompletion(
                     });
                 });
 
-                it("backward on 'hello world ' commits → offers 'next'", () => {
+                it("trailing separator — backward on 'hello world ' offers 'next'", () => {
                     // Trailing space after full match of both segments
-                    // commits the match → forward-like behavior.
                     const result = matchGrammarCompletion(
                         grammar,
                         "hello world ",
                         undefined,
                         "backward",
                     );
-                    // Trailing space consumed → "optional"
-                    // Trailing space commits → same as forward → not direction-sensitive
                     expectMetadata(result, {
                         completions: ["next"],
-                        matchedPrefixLength: 12,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 11,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -666,24 +656,18 @@ describeForEachCompletion(
                 });
 
                 it("backward on 'hello ' — space consumed, backs up to ' world'", () => {
-                    // "hello " in backward: the space is consumed (either
-                    // by flex-space or partial literal " world"), so
-                    // matchedPrefixLength is 6.  Backward backs up to
-                    // offer " world" as the next segment.
                     const result = matchGrammarCompletion(
                         grammar,
                         "hello ",
                         undefined,
                         "backward",
                     );
-                    // Trailing space consumed → "optional"
-                    // Trailing space commits → not direction-sensitive
                     expectMetadata(result, {
                         completions: [" world"],
-                        matchedPrefixLength: 6,
+                        matchedPrefixLength: 5,
                         separatorMode: "optional",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -707,7 +691,7 @@ describeForEachCompletion(
                     });
                 });
 
-                it("directionSensitive is false for 'hello world ' (trailing sep)", () => {
+                it("'hello world ' offers 'next'", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "hello world ",
@@ -716,10 +700,10 @@ describeForEachCompletion(
                     );
                     expectMetadata(result, {
                         completions: ["next"],
-                        matchedPrefixLength: 12,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 11,
+                        separatorMode: "spacePunctuation",
                         closedSet: true,
-                        directionSensitive: false,
+                        directionSensitive: true,
                         openWildcard: false,
                         properties: [],
                     });
@@ -943,13 +927,12 @@ describeForEachCompletion(
 
             it("offers 'value' after 'set: '", () => {
                 const result = matchGrammarCompletion(grammar, "set: ");
-                // Trailing space commits → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["value"],
-                    matchedPrefixLength: 5,
+                    matchedPrefixLength: 4,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1037,13 +1020,12 @@ describeForEachCompletion(
 
             it("offers 'world' after 'hello ... '", () => {
                 const result = matchGrammarCompletion(grammar, "hello ... ");
-                // Trailing space commits
                 expectMetadata(result, {
                     completions: ["world"],
-                    matchedPrefixLength: 10,
+                    matchedPrefixLength: 9,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1113,13 +1095,12 @@ describeForEachCompletion(
 
             it("offers 'done' after '... '", () => {
                 const result = matchGrammarCompletion(grammar, "... ");
-                // Trailing space commits
                 expectMetadata(result, {
                     completions: ["done"],
-                    matchedPrefixLength: 4,
+                    matchedPrefixLength: 3,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1223,13 +1204,12 @@ describeForEachCompletion(
 
             it("offers property completion after 'hello, '", () => {
                 const result = matchGrammarCompletion(grammar, "hello, ");
-                // Trailing space commits
                 expectMetadata(result, {
                     completions: [],
-                    matchedPrefixLength: 7,
+                    matchedPrefixLength: 6,
                     separatorMode: "optional",
                     closedSet: false,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [
                         {
@@ -1375,22 +1355,19 @@ describeForEachCompletion(
                 });
             });
 
-            it("backward on 'hello, ' (trailing space) commits → forward behavior", () => {
+            it("backward on 'hello, ' (trailing space) offers 'world'", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "hello, ",
                     undefined,
                     "backward",
                 );
-                // Trailing space commits → should offer "world" like forward
-                // Trailing space consumed → "optional"
-                // Trailing space commits → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["world"],
-                    matchedPrefixLength: 7,
+                    matchedPrefixLength: 6,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1427,21 +1404,19 @@ describeForEachCompletion(
                 });
             });
 
-            it("backward on 'hello world ' commits → offers 'next'", () => {
+            it("backward on 'hello world ' offers 'next'", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "hello world ",
                     undefined,
                     "backward",
                 );
-                // Trailing space consumed → "optional"
-                // Trailing space commits → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["next"],
-                    matchedPrefixLength: 12,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 11,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1580,28 +1555,25 @@ describeForEachCompletion(
             it("offers second segment after 'hello, '", () => {
                 // required mode needs explicit separator after "hello,"
                 const result = matchGrammarCompletion(grammar, "hello, ");
-                // Trailing space commits in required mode
-                // Trailing space consumed → "optional"
                 expectMetadata(result, {
                     completions: ["world"],
-                    matchedPrefixLength: 7,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 6,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
             });
 
             it("separatorMode for required spacing after punctuation word", () => {
-                // Trailing space triggers consumeTrailingSeparators → "optional"
                 const result = matchGrammarCompletion(grammar, "hello, ");
                 expectMetadata(result, {
                     completions: ["world"],
-                    matchedPrefixLength: 7,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 6,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -1787,13 +1759,12 @@ describeForEachCompletion(
 
             it("offers property completion after '... '", () => {
                 const result = matchGrammarCompletion(grammar, "... ");
-                // Trailing space commits
                 expectMetadata(result, {
                     completions: [],
-                    matchedPrefixLength: 4,
+                    matchedPrefixLength: 3,
                     separatorMode: "optional",
                     closedSet: false,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [
                         {
@@ -2191,7 +2162,7 @@ describeForEachCompletion(
         // Section 27: Trailing separator after punctuation keyword
         //   In auto mode, comma IS a separator character. So "hello,"
         //   ends with a separator. Does the trailing separator logic
-        //   count it as committing the match?
+        //   count it as a separator boundary?
         // ================================================================
 
         describe("trailing separator handling with punctuated keywords", () => {
@@ -2222,7 +2193,7 @@ describeForEachCompletion(
                 // not a trailing separator. Backward should back up to "hello,".
                 // However, comma IS a separator character ([\s\p{P}]),
                 // so the trailing separator check might incorrectly
-                // treat it as a commit signal.
+                // treat it as a separator boundary.
                 const result = matchGrammarCompletion(
                     grammar,
                     "play hello,",
@@ -2242,22 +2213,19 @@ describeForEachCompletion(
                 });
             });
 
-            it("backward on 'play hello, ' — space after comma commits", () => {
+            it("backward on 'play hello, ' — space after comma", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play hello, ",
                     undefined,
                     "backward",
                 );
-                // Space after "hello," is a real trailing separator → commits
-                // Trailing space consumed → "optional"
-                // Trailing space commits → not direction-sensitive
                 expectMetadata(result, {
                     completions: ["world"],
-                    matchedPrefixLength: 12,
+                    matchedPrefixLength: 11,
                     separatorMode: "optional",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
@@ -2600,7 +2568,7 @@ describeForEachCompletion(
                 });
             });
 
-            it("directionSensitive is false for 'hello, world ' (trailing sep commits)", () => {
+            it("'hello, world ' offers 'done'", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "hello, world ",
@@ -2609,10 +2577,10 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["done"],
-                    matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 12,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });

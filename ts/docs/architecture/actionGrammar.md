@@ -476,10 +476,11 @@ contract and the design trade-off of host-provided vs. backend-inferred
 direction).
 
 The grammar matcher uses `direction` to resolve structural ambiguity at
-match boundaries. `directionSensitive` is `true` when querying the same
-input prefix with the opposite direction would produce a different
-result (different completions, different `matchedPrefixLength`, or
-both). The caller uses this to decide whether a direction change
+match boundaries. `directionSensitive` is `true` when
+`completion(input[0..P], "backward")` would produce a different result
+than `completion(input[0..P], "forward")` — where P is the returned
+`matchedPrefixLength`, not the full input length. The caller uses this
+to decide whether a direction change
 requires a re-fetch: the `partialCompletionSession` re-fetches only
 when the user is still at the `matchedPrefixLength` position
 (`input === anchor`); once the user types past it, the cached
@@ -488,7 +489,10 @@ The core rule is simple:
 
 > **`directionSensitive=true` when backward has something to
 > reconsider** — a word, keyword, wildcard, or number was fully
-> matched with no trailing separator to commit it.
+> matched. Trailing whitespace does not change this: the grammar
+> matcher does not advance P past trailing separators, so the
+> matched position remains uncommitted and backward can always
+> reconsider.
 
 Forward completion offers what comes _next_ in the grammar. Backward
 completion _backs up_ to the last successfully matched part and
@@ -538,7 +542,7 @@ a single-pass approach that defers sibling-rule resolution to Phase B
    `maxPrefixLength` to produce sibling completions — the same result
    the old two-pass re-invocation would have produced, but without a
    second full traversal of the grammar. Phase B2 also handles forward
-   EOI candidate instantiation, trailing-separator advancement, and
+   EOI candidate instantiation, exact-match advancement, and
    global deduplication.
 
 **Correctness invariant — two-pass equivalence.** Let _P_ =
@@ -551,8 +555,6 @@ This invariant is verified by the "two-pass backward invariant" tests.
 
 Range candidates are **skipped** when:
 
-- `backwardEmitted=false` — backward didn't back up (e.g., trailing
-  separator committed the match), so the result already matches forward.
 - `openWildcard=true` **and** `partialKeywordBackup=false` — the
   backed-up position is at an ambiguous wildcard boundary with no
   partial keyword to pin it. Forward evaluation at the shorter input
@@ -625,15 +627,26 @@ input `"play"`:
 - **Nothing was fully matched** (e.g., `"pla"` against `play music`):
   There is no completed part to back up to. Both directions produce
   the same partial match (Category 3b) offering `"play"`.
-- **Trailing separator commits:** A trailing space (or punctuation)
-  after a keyword "commits" the match position — the user has moved
-  past the boundary. Both directions agree on the committed position.
-  For example, `"play "` (with space) offers `"music"` for both
-  directions. (This is a consequence of the `directionSensitive`
-  biconditional — see invariant #4 in `completion.md`.)
-  Exception: in `[spacing=none]` mode, whitespace is not a
-  separator, so `directionSensitive` is always `true` when any word has
-  been fully matched — trailing spaces do not commit.
+
+**When both directions agree on the original input despite
+`directionSensitive=true`:**
+
+- **Exact match with trailing whitespace** (e.g., `"play music "`
+  against `play music`): All grammar parts are satisfied and the
+  trailing input is only whitespace/punctuation. Category 1 strips
+  the trailing separator via `effectivePrefixEnd` and backs up to the
+  last keyword — both directions produce the same backed-up result
+  (completions `["music"]` at `matchedPrefixLength=4`,
+  `directionSensitive=true`). The flag is `true` because
+  `completion("play", "backward")` differs from
+  `completion("play", "forward")` — backward re-offers `"play"` at
+  P=0, while forward offers `"music"` at P=4. The cross-query is on
+  `input[0..P]` = `"play"`, not on the original `"play music "`.
+
+  `"play "` against `play music` behaves the same way:
+  `matchedPrefixLength=4` (not 5) and `directionSensitive=true`.
+  See "Design choice — trailing separators are not consumed" below
+  for the rationale.
 
 ### Forward/backward equivalence analysis
 
@@ -645,6 +658,17 @@ The answer depends on **where P lands** in the grammar structure, the
 **separator mode**, and whether there is a **trailing separator** after
 the last matched item.
 
+> **Note — why "committed" rows are hypothetical:** The grammar
+> matcher never advances P past a trailing separator (see "Design
+> choice — trailing separators are not consumed" below), so P always
+> lands at an uncommitted position — `input[0..P]` never ends with a
+> separator after the last matched item. The committed rows in the
+> tables below cannot occur in practice. They are included to confirm
+> that _if_ a caller manually truncated at a committed position, the
+> directions would agree — validating that the matcher can safely skip
+> trailing separators without introducing incorrect `directionSensitive`
+> flags.
+
 **Terminology:**
 
 - **Committed:** a separator character follows the last matched
@@ -655,23 +679,23 @@ the last matched item.
 
 #### P at a keyword boundary (between parts)
 
-| Mode / Trailing sep                   | Fwd = Bwd? | Why                                                     |
-| ------------------------------------- | ---------- | ------------------------------------------------------- |
-| `required`/`auto` — committed         | **Yes**    | Separator commits; nothing to reconsider                |
-| `required`/`auto` — uncommitted (EOI) | **No**     | Backward re-offers keyword; forward offers next part    |
-| `optional`/`auto` (CJK) — committed   | **Yes**    | Separator commits                                       |
-| `optional`/`auto` (CJK) — uncommitted | **No**     | Backward backs up; forward advances                     |
-| `none`                                | **No**     | `couldBackUp` always true when `spacingMode === "none"` |
+| Mode / Trailing sep                                | Fwd = Bwd? | Why                                                     |
+| -------------------------------------------------- | ---------- | ------------------------------------------------------- |
+| `required`/`auto` — committed (hypothetical)       | **Yes**    | Separator would commit; nothing to reconsider           |
+| `required`/`auto` — uncommitted (EOI)              | **No**     | Backward re-offers keyword; forward offers next part    |
+| `optional`/`auto` (CJK) — committed (hypothetical) | **Yes**    | Separator would commit                                  |
+| `optional`/`auto` (CJK) — uncommitted              | **No**     | Backward backs up; forward advances                     |
+| `none`                                             | **No**     | `couldBackUp` always true when `spacingMode === "none"` |
 
 #### P inside a multi-word keyword (between words of one keyword)
 
-| Mode / Trailing sep                   | Fwd = Bwd? | Why                                 |
-| ------------------------------------- | ---------- | ----------------------------------- |
-| `required`/`auto` — committed         | **Yes**    | Separator commits word K            |
-| `required`/`auto` — uncommitted (EOI) | **No**     | Backward backs up to `prevEndIndex` |
-| `optional` — committed                | **Yes**    | Separator commits                   |
-| `optional` — uncommitted              | **No**     | Backward reconsiders word K         |
-| `none`                                | **No**     | `couldBackUp` always true           |
+| Mode / Trailing sep                          | Fwd = Bwd? | Why                                 |
+| -------------------------------------------- | ---------- | ----------------------------------- |
+| `required`/`auto` — committed (hypothetical) | **Yes**    | Separator would commit word K       |
+| `required`/`auto` — uncommitted (EOI)        | **No**     | Backward backs up to `prevEndIndex` |
+| `optional` — committed (hypothetical)        | **Yes**    | Separator would commit              |
+| `optional` — uncommitted                     | **No**     | Backward reconsiders word K         |
+| `none`                                       | **No**     | `couldBackUp` always true           |
 
 #### P at a wildcard-keyword boundary (wildcard finalized at EOI, next part is string)
 
@@ -724,21 +748,46 @@ P = minPrefixLength (or 0 if unset)?
   └─ Yes → SAME (nothing matched beyond the caller's floor;
            backward has nothing to reconsider)
 
-P < input.length? (midPosition)
-  └─ Yes → DIFFERENT (truncated input ends at keyword boundary
-           with no trailing separator — backward always backs up)
-
-P = input.length:
-  └─ Trailing separator advanced P past last matched item?
-      ├─ Yes → SAME (separator commits the position)
-      └─ No → DIFFERENT (no separator — backward can reconsider)
+otherwise
+  └─ DIFFERENT (keyword boundary — backward can back up)
 ```
 
-**Key insight:** The separator is the universal "commit" mechanism.
-Once `input[0..P]` ends with a separator after the last matched item,
-the position is committed and both directions agree. Without that
-separator (including `none` mode where separators don't exist),
-backward has the option to reconsider — and the directions diverge.
+**Key insight:** Once any keyword or wildcard is fully matched (P >
+minPrefixLength), backward can always reconsider that match —
+regardless of trailing whitespace. There are no exceptions: even
+exact matches with trailing whitespace back up to the last keyword
+via Category 1 `effectivePrefixEnd` stripping.
+
+**Design choice — trailing separators are not consumed.** The grammar
+matcher never advances `matchedPrefixLength` past a trailing separator
+in the general case (i.e., when completions or properties exist). For
+example, `"play "` against `play music` yields `matchedPrefixLength=4`,
+not 5.
+
+Rationale:
+
+1. **Separator mode fidelity.** When P stops before the trailing space,
+   `separatorMode` accurately reflects the grammar's spacing annotation
+   (e.g., `"spacePunctuation"` for Latin auto-spacing). If P advanced
+   past the space, the separator is already present and `separatorMode`
+   collapses to `"optional"` — losing the information about what kind of
+   separator the grammar expects. The shell needs the un-collapsed mode
+   to decide whether a non-space punctuation character should trigger a
+   re-fetch.
+
+2. **directionSensitive correctness.** With P before the space, backward
+   completion can back up and re-offer the last keyword (the user pressed
+   backspace into the space). This is the correct behavior: the trailing
+   space is an uncommitted separator — the user can still reconsider.
+   Advancing P past the space would force `directionSensitive=false`,
+   telling the shell that backspace changes nothing, which would suppress
+   the re-offer.
+
+3. **Simpler invariants.** Without trailing-separator advancement,
+   P always lands at a keyword boundary where backward can back up —
+   no need to distinguish committed vs. uncommitted positions.
+   `directionSensitive` reduces to `openWildcard || P != minPrefixLength`,
+   which is easy to verify.
 
 **Design choice — openWildcard → always true:** Even when both
 directions happen to find the same partial keyword at the same position
@@ -786,17 +835,13 @@ unguarded cross-query invariant checking in tests.
     a word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
-- `directionSensitive` — see "Why direction matters" and "When
-  direction does _not_ matter" above. The flag is evaluated at
-  `matchedPrefixLength` rather than at the full input. When backward
-  backs up (`backwardEmitted=true` and `maxPrefixLength < prefix.length`),
-  `directionSensitive` is recomputed for the backed-up position: at
-  `P > 0`, at least one keyword was matched before the completion point,
-  so `directionSensitive` is `true`; at `P = 0`, nothing was matched, so
-  it is `false`. When backward falls through to forward behavior
-  (`backwardEmitted=false`), the trailing-separator advancement is
-  applied normally and `directionSensitive` reflects the forward-only
-  evaluation.
+- `directionSensitive` — `true` when `completion(input[0..P], backward)`
+  would differ from `completion(input[0..P], forward)`, where P =
+  `matchedPrefixLength`. See "Why direction matters" and "When
+  direction does _not_ matter" above. True whenever something was
+  matched beyond the caller's floor (`P > minPrefixLength`) or the
+  wildcard boundary is ambiguous (`openWildcard`). False only when
+  nothing was matched.
 - `openWildcard` is `true` when the matched position sits at an ambiguous
   wildcard boundary — see `completion.md` [`openWildcard`] for the full
   definition (definite vs. ambiguous positions, persistence semantics,
