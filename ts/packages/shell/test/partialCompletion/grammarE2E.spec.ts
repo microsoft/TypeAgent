@@ -561,6 +561,96 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             );
             expect(menu.isActive()).toBe(true);
         });
+
+        test("'play unknown b' narrows keyword to 'by' via trie", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play unknown", getPos);
+            await flush();
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Typing past the separator — trie prefix "b" narrows to "by".
+            session.update("play unknown b", getPos);
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+                "b",
+                expect.anything(),
+            );
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("'play unknown ' → 'play unknown' → 'play unknown ' round-trip", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play unknown", getPos);
+            await flush();
+
+            session.update("play unknown ", getPos);
+            expect(menu.isActive()).toBe(true);
+
+            // Backspace hides.
+            session.update("play unknown", getPos);
+            expect(menu.isActive()).toBe(false);
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Re-type space — menu reappears without re-fetch.
+            session.update("play unknown ", getPos);
+            expect(menu.isActive()).toBe(true);
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+        });
+
+        test("double space 'play unknown  ' shows keyword menu", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play unknown", getPos);
+            await flush();
+
+            session.update("play unknown  ", getPos);
+
+            // Extra space should not break the trie display.
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("wildcard → keyword → entity: 'play unknown by' shows artist entities", async () => {
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play unknown", getPos);
+            await flush();
+
+            // "by" uniquely satisfies the keyword → re-fetch.
+            session.update("play unknown by", getPos);
+            await flush();
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+                "play unknown by",
+                "forward",
+            );
+            // Grammar returns artist properties → mock entities injected.
+            expect(menu.setChoices).toHaveBeenLastCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "Ed Sheeran" }),
+                    expect.objectContaining({ matchText: "Queen" }),
+                    expect.objectContaining({ matchText: "Taylor Swift" }),
+                ]),
+            );
+        });
     });
 
     // ── Direction sensitivity ────────────────────────────────────────
