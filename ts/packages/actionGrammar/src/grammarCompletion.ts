@@ -793,6 +793,234 @@ function tryCollectBackwardCandidate(
     return false;
 }
 
+// --- Category 1: Exact match ---
+// All parts matched AND prefix was fully consumed.
+// Back up to the last matched term (string keyword,
+// number, or wildcard).  Both directions get the same
+// result — no direction-specific handling needed.
+function processExactMatch(
+    ctx: CompletionContext,
+    state: MatchState,
+    preFinalizeState: MatchState | undefined,
+    savedPendingWildcard: PendingWildcard | undefined,
+): void {
+    const { prefix } = ctx;
+    if (
+        state.lastMatchedPartInfo !== undefined ||
+        savedPendingWildcard?.valueId !== undefined
+    ) {
+        // Category 1 is direction-agnostic — both
+        // directions back up identically.
+        // Ignore trailing separators: in an exact
+        // match, trailing whitespace/punctuation
+        // carries no structural meaning — all parts
+        // are satisfied.  Without the end-index limit,
+        // tryPartialStringMatch sees the trailing
+        // separator and sets couldBackUp=false,
+        // incorrectly blocking the backup.
+        const effectivePrefixEnd =
+            state.index < prefix.length ? state.index : undefined;
+        tryCollectBackwardCandidate(
+            ctx,
+            preFinalizeState ?? state,
+            savedPendingWildcard,
+            effectivePrefixEnd,
+        );
+    } else {
+        debugCompletion("Matched. Nothing to complete.");
+        updateMaxPrefixLength(ctx, state.index);
+    }
+}
+
+// --- Category 2: Partial match (clean finalization) ---
+// matchState stopped at state.partIndex because it couldn't
+// match the next part against the (exhausted) prefix.
+// That next part is what we offer as a completion.
+//
+// Wildcard-at-EOI with a string next part: defer the
+// partial keyword scan to Phase B1 via wildcardEoiDescriptors.
+//
+// Non-string next parts (wildcard, number, rules) don't produce
+// completions here — wildcards are handled by Category 3a
+// (pending wildcard) and nested rules are expanded by matchState
+// into separate pending states.
+function processCleanPartial(
+    ctx: CompletionContext,
+    state: MatchState,
+    preFinalizeState: MatchState | undefined,
+    savedPendingWildcard: PendingWildcard | undefined,
+): void {
+    const { prefix, direction, wildcardEoiDescriptors, rangeCandidates } = ctx;
+    const nextPart = state.parts[state.partIndex];
+
+    // Wildcard-at-EOI with a string next part: defer the
+    // partial keyword scan to Phase B1.  This applies to
+    // both directions under the same condition.
+    const deferredToEoi =
+        savedPendingWildcard?.valueId !== undefined &&
+        state.index >= prefix.length &&
+        nextPart.type === "string";
+    if (deferredToEoi) {
+        wildcardEoiDescriptors.push({
+            wildcardStart: savedPendingWildcard.start,
+            nextPart,
+            spacingMode: state.spacingMode,
+        });
+    }
+
+    // Would backward produce different results than forward?
+    // True when the prefix was fully consumed and there is a
+    // matched part (string/number) or wildcard to back up to.
+    const hasPartToReconsider =
+        state.index >= prefix.length &&
+        (savedPendingWildcard?.valueId !== undefined ||
+            state.lastMatchedPartInfo !== undefined);
+
+    if (direction === "backward" && hasPartToReconsider) {
+        // Backward: collect a fallback candidate (backs up
+        // to the wildcard start or last matched part).  If
+        // a partial keyword exists inside the wildcard, Phase
+        // B1 will find it and may clear this fallback in
+        // favor of a higher-position candidate.
+        tryCollectBackwardCandidate(
+            ctx,
+            preFinalizeState ?? state,
+            savedPendingWildcard,
+        );
+        // Range candidates for non-string next parts
+        // (wildcard/number) — these don't involve partial
+        // keyword scans so they're pushed directly.
+        if (
+            savedPendingWildcard?.valueId !== undefined &&
+            (nextPart.type === "wildcard" || nextPart.type === "number")
+        ) {
+            // preFinalizeState is always defined here:
+            // the guard `savedPendingWildcard?.valueId !== undefined`
+            // implies `savedPendingWildcard !== undefined`, which is
+            // the same condition that created preFinalizeState.
+            rangeCandidates.push({
+                kind: "wildcardProperty",
+                wildcardStart: savedPendingWildcard.start,
+                valueId: savedPendingWildcard.valueId,
+                state: preFinalizeState!,
+                spacingMode: state.spacingMode,
+            });
+        }
+    } else {
+        debugCompletion(`Completing ${nextPart.type} part ${state.name}`);
+        if (nextPart.type === "string" && !deferredToEoi) {
+            tryCollectStringCandidate(
+                ctx,
+                state,
+                nextPart,
+                savedPendingWildcard?.valueId !== undefined,
+                state.index,
+                direction,
+            );
+        } else if (nextPart.type !== "string") {
+            debugCompletion(
+                `No completion for ${nextPart.type} part (handled by Category 3a or matchState expansion)`,
+            );
+        }
+    }
+}
+
+// --- Category 3: finalizeState failed ---
+// Either (a) a pending wildcard couldn't capture meaningful
+// content, or (b) trailing non-separator text remains that
+// didn't match any grammar part.
+function processDirtyPartial(
+    ctx: CompletionContext,
+    state: MatchState,
+    matched: boolean,
+): void {
+    const { direction } = ctx;
+    const pendingWildcard = state.pendingWildcard;
+
+    if (
+        pendingWildcard !== undefined &&
+        pendingWildcard.valueId !== undefined
+    ) {
+        // --- Category 3a: Unfinalizable pending wildcard ---
+        // The grammar reached a wildcard slot but it is
+        // unfinalizable (capture region empty, separator-only,
+        // or not yet started — e.g. prefix="play " with
+        // wildcard starting at index 4).
+        // Backward reconsidering is appropriate when:
+        //  (a) the last matched part followed a captured
+        //      wildcard — wildcard-keyword boundary fork, OR
+        //  (b) the prefix was fully consumed before the
+        //      wildcard started (state.index >= prefix.length)
+        //      — the user hasn't typed into the wildcard yet
+        //      and may want to reconsider the preceding part
+        //      (e.g., alternation-prefix overlap:
+        //      (play | player) <song>, input "play").
+        const canReconsider3a =
+            state.lastMatchedPartInfo !== undefined &&
+            (state.lastMatchedPartInfo.afterWildcard ||
+                state.index >= ctx.prefix.length);
+        if (direction === "backward" && canReconsider3a) {
+            // Backward: back up to the last matched keyword
+            // instead of offering property completion for the
+            // unfilled wildcard — the user hasn't started
+            // typing into the unfilled slot yet.
+            const didBackUp = tryCollectBackwardCandidate(
+                ctx,
+                state,
+                undefined,
+            );
+            if (!didBackUp) {
+                // tryCollectBackwardCandidate returned false
+                // (e.g. all keyword words fully matched with
+                // trailing separator).  Fall back to the
+                // forward path so the property completion is
+                // still collected.
+                debugCompletion("Completing wildcard part");
+                collectPropertyCandidate(
+                    ctx,
+                    state,
+                    pendingWildcard.valueId,
+                    pendingWildcard.start,
+                );
+            }
+        } else {
+            // Forward (or backward with nothing to
+            // reconsider): report a property completion
+            // describing the wildcard's type so the caller can
+            // provide entity-specific suggestions.
+            debugCompletion("Completing wildcard part");
+            collectPropertyCandidate(
+                ctx,
+                state,
+                pendingWildcard.valueId,
+                pendingWildcard.start,
+            );
+        }
+    } else if (!matched) {
+        // --- Category 3b: Completion after consumed prefix ---
+        // The grammar stopped at a string part it could not
+        // match.  Report the string part as a completion
+        // candidate regardless of any trailing text — the
+        // caller can use matchedPrefixLength to determine how
+        // much of the input was successfully consumed and
+        // filter completions by any trailing text beyond that
+        // point.  Candidates from shorter partial matches are
+        // automatically discarded when a longer match updates
+        // maxPrefixLength.
+        const currentPart = state.parts[state.partIndex];
+        if (currentPart !== undefined && currentPart.type === "string") {
+            tryCollectStringCandidate(
+                ctx,
+                state,
+                currentPart,
+                false,
+                state.index,
+                direction,
+            );
+        }
+    }
+}
+
 // --- Phase A: process every pending state, collecting candidates ---
 //
 // Explores every alternative rule/state in the grammar (via the pending
@@ -808,7 +1036,7 @@ function tryCollectBackwardCandidate(
 //
 // See matchGrammarCompletion JSDoc for full category descriptions.
 function collectCandidates(ctx: CompletionContext, grammar: Grammar): void {
-    const { prefix, direction, wildcardEoiDescriptors, rangeCandidates } = ctx;
+    const { prefix } = ctx;
 
     // Seed the work-list with one MatchState per top-level grammar rule.
     // matchState may push additional states (for nested rules, optional
@@ -851,214 +1079,23 @@ function collectCandidates(ctx: CompletionContext, grammar: Grammar): void {
         // It returns true when the state is "clean" — all input was
         // consumed (or only trailing separators remain).
         if (finalizeState(state, prefix)) {
-            // --- Category 1: Exact match ---
-            // All parts matched AND prefix was fully consumed.
-            // Back up to the last matched term (string keyword,
-            // number, or wildcard).  Both directions get the same
-            // result — no direction-specific handling needed.
             if (matched) {
-                if (
-                    state.lastMatchedPartInfo !== undefined ||
-                    savedPendingWildcard?.valueId !== undefined
-                ) {
-                    // Category 1 is direction-agnostic — both
-                    // directions back up identically.
-                    // Ignore trailing separators: in an exact
-                    // match, trailing whitespace/punctuation
-                    // carries no structural meaning — all parts
-                    // are satisfied.  Without the end-index limit,
-                    // tryPartialStringMatch sees the trailing
-                    // separator and sets couldBackUp=false,
-                    // incorrectly blocking the backup.
-                    const effectivePrefixEnd =
-                        state.index < prefix.length ? state.index : undefined;
-                    tryCollectBackwardCandidate(
-                        ctx,
-                        preFinalizeState ?? state,
-                        savedPendingWildcard,
-                        effectivePrefixEnd,
-                    );
-                } else {
-                    debugCompletion("Matched. Nothing to complete.");
-                    updateMaxPrefixLength(ctx, state.index);
-                }
-                continue;
-            }
-
-            // --- Category 2: Partial match (clean finalization) ---
-            // matchState stopped at state.partIndex because it couldn't
-            // match the next part against the (exhausted) prefix.
-            // That next part is what we offer as a completion.
-            const nextPart = state.parts[state.partIndex];
-
-            // Wildcard-at-EOI with a string next part: defer the
-            // partial keyword scan to Phase B1.  This applies to
-            // both directions under the same condition.
-            const deferredToEoi =
-                savedPendingWildcard?.valueId !== undefined &&
-                state.index >= prefix.length &&
-                nextPart.type === "string";
-            if (deferredToEoi) {
-                wildcardEoiDescriptors.push({
-                    wildcardStart: savedPendingWildcard.start,
-                    nextPart,
-                    spacingMode: state.spacingMode,
-                });
-            }
-
-            // Would backward produce different results than forward?
-            // True when the prefix was fully consumed and there is a
-            // matched part (string/number) or wildcard to back up to.
-            const hasPartToReconsider =
-                state.index >= prefix.length &&
-                (savedPendingWildcard?.valueId !== undefined ||
-                    state.lastMatchedPartInfo !== undefined);
-
-            if (direction === "backward" && hasPartToReconsider) {
-                // Backward: collect a fallback candidate (backs up
-                // to the wildcard start or last matched part).  If
-                // a partial keyword exists inside the wildcard, Phase
-                // B1 will find it and may clear this fallback in
-                // favor of a higher-position candidate.
-                tryCollectBackwardCandidate(
+                processExactMatch(
                     ctx,
-                    preFinalizeState ?? state,
+                    state,
+                    preFinalizeState,
                     savedPendingWildcard,
                 );
-                // Range candidates for non-string next parts
-                // (wildcard/number) — these don't involve partial
-                // keyword scans so they're pushed directly.
-                if (
-                    savedPendingWildcard?.valueId !== undefined &&
-                    (nextPart.type === "wildcard" || nextPart.type === "number")
-                ) {
-                    // preFinalizeState is always defined here:
-                    // the guard `savedPendingWildcard?.valueId !== undefined`
-                    // implies `savedPendingWildcard !== undefined`, which is
-                    // the same condition that created preFinalizeState.
-                    rangeCandidates.push({
-                        kind: "wildcardProperty",
-                        wildcardStart: savedPendingWildcard.start,
-                        valueId: savedPendingWildcard.valueId,
-                        state: preFinalizeState!,
-                        spacingMode: state.spacingMode,
-                    });
-                }
-            } else {
-                debugCompletion(
-                    `Completing ${nextPart.type} part ${state.name}`,
-                );
-                if (nextPart.type === "string" && !deferredToEoi) {
-                    tryCollectStringCandidate(
-                        ctx,
-                        state,
-                        nextPart,
-                        savedPendingWildcard?.valueId !== undefined,
-                        state.index,
-                        direction,
-                    );
-                } else if (nextPart.type !== "string") {
-                    debugCompletion(
-                        `No completion for ${nextPart.type} part (handled by Category 3a or matchState expansion)`,
-                    );
-                }
+                continue;
             }
-            // Note: non-string next parts (wildcard, number, rules) in
-            // Category 2 don't produce completions here — wildcards are
-            // handled by Category 3a (pending wildcard) and nested rules
-            // are expanded by matchState into separate pending states.
+            processCleanPartial(
+                ctx,
+                state,
+                preFinalizeState,
+                savedPendingWildcard,
+            );
         } else {
-            // --- Category 3: finalizeState failed ---
-            // Either (a) a pending wildcard couldn't capture meaningful
-            // content, or (b) trailing non-separator text remains that
-            // didn't match any grammar part.
-            const pendingWildcard = state.pendingWildcard;
-
-            if (
-                pendingWildcard !== undefined &&
-                pendingWildcard.valueId !== undefined
-            ) {
-                // --- Category 3a: Unfinalizable pending wildcard ---
-                // The grammar reached a wildcard slot but it is
-                // unfinalizable (capture region empty, separator-only,
-                // or not yet started — e.g. prefix="play " with
-                // wildcard starting at index 4).
-                // Backward reconsidering is appropriate when:
-                //  (a) the last matched part followed a captured
-                //      wildcard — wildcard-keyword boundary fork, OR
-                //  (b) the prefix was fully consumed before the
-                //      wildcard started (state.index >= prefix.length)
-                //      — the user hasn't typed into the wildcard yet
-                //      and may want to reconsider the preceding part
-                //      (e.g., alternation-prefix overlap:
-                //      (play | player) <song>, input "play").
-                const canReconsider3a =
-                    state.lastMatchedPartInfo !== undefined &&
-                    (state.lastMatchedPartInfo.afterWildcard ||
-                        state.index >= prefix.length);
-                if (direction === "backward" && canReconsider3a) {
-                    // Backward: back up to the last matched keyword
-                    // instead of offering property completion for the
-                    // unfilled wildcard — the user hasn't started
-                    // typing into the unfilled slot yet.
-                    const didBackUp = tryCollectBackwardCandidate(
-                        ctx,
-                        state,
-                        undefined,
-                    );
-                    if (!didBackUp) {
-                        // tryCollectBackwardCandidate returned false
-                        // (e.g. all keyword words fully matched with
-                        // trailing separator).  Fall back to the
-                        // forward path so the property completion is
-                        // still collected.
-                        debugCompletion("Completing wildcard part");
-                        collectPropertyCandidate(
-                            ctx,
-                            state,
-                            pendingWildcard.valueId,
-                            pendingWildcard.start,
-                        );
-                    }
-                } else {
-                    // Forward (or backward with nothing to
-                    // reconsider): report a property completion
-                    // describing the wildcard's type so the caller can
-                    // provide entity-specific suggestions.
-                    debugCompletion("Completing wildcard part");
-                    collectPropertyCandidate(
-                        ctx,
-                        state,
-                        pendingWildcard.valueId,
-                        pendingWildcard.start,
-                    );
-                }
-            } else if (!matched) {
-                // --- Category 3b: Completion after consumed prefix ---
-                // The grammar stopped at a string part it could not
-                // match.  Report the string part as a completion
-                // candidate regardless of any trailing text — the
-                // caller can use matchedPrefixLength to determine how
-                // much of the input was successfully consumed and
-                // filter completions by any trailing text beyond that
-                // point.  Candidates from shorter partial matches are
-                // automatically discarded when a longer match updates
-                // maxPrefixLength.
-                const currentPart = state.parts[state.partIndex];
-                if (
-                    currentPart !== undefined &&
-                    currentPart.type === "string"
-                ) {
-                    tryCollectStringCandidate(
-                        ctx,
-                        state,
-                        currentPart,
-                        false,
-                        state.index,
-                        direction,
-                    );
-                }
-            }
+            processDirtyPartial(ctx, state, matched);
         }
     }
 }
