@@ -464,8 +464,14 @@ text.
 | `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
 
 See `actionGrammar.md` Spacing modes for how the grammar matcher
-determines `separatorMode` from spacing annotations, including the
-"separator already consumed" override.
+determines `separatorMode` from spacing annotations. The matcher
+strips trailing separators so P lands before the flex-space, making
+`separatorMode` always reflect the real grammar requirement (no
+position-based override needed). The one exception is
+keywords whose content ends with a separator character (e.g.
+`hello,` in a grammar `$(x) hello, world`) consumed to EOI, where
+P stays at `prefix.length` because stripping would remove keyword
+content.
 
 ### `CompletionDirection`
 
@@ -550,8 +556,7 @@ overlaps. See `actionGrammar.md` "Why direction matters" for detailed
 examples and the Option A/B design trade-off.
 
 **When `directionSensitive=false`:** Nothing was fully matched
-(partial/dirty), or the position is at the caller's floor
-(`P = minPrefixLength`).
+(partial/dirty) — P = 0.
 
 The flag is correct under the cross-query invariant definition:
 `directionSensitive=true` if and only if
@@ -561,12 +566,14 @@ content that established the anchor, so backward on the truncated input
 always diverges — even when both directions happen to agree on the
 original (longer) input. See invariant #7.
 
+`minPrefixLength` is not consulted: it is a caller-supplied lower
+bound for the search, not a property of the result.
+
 **Decision tree** (evaluated once after all candidates are collected):
 
 ```
-openWildcard        → true  (ambiguous boundary; backward can reconsider)
-P = minPrefixLength → false (nothing matched beyond caller's floor)
-otherwise           → true  (keyword boundary — backward can back up)
+P = 0      → false (nothing matched; backward has nothing to reconsider)
+P > 0      → true  (something was matched — backward can back up)
 ```
 
 See the "Forward/backward equivalence analysis" section in

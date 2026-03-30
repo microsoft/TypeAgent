@@ -1011,8 +1011,8 @@ describeForEachCompletion(
                     );
                     expectMetadata(result, {
                         completions: ["by"],
-                        matchedPrefixLength: 14,
-                        separatorMode: "optional",
+                        matchedPrefixLength: 13,
+                        separatorMode: "spacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         openWildcard: true,
@@ -1159,8 +1159,8 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play Never b");
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 11,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 10,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -1177,8 +1177,8 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 11,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 10,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -1193,8 +1193,8 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 22,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 21,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -1211,8 +1211,8 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 22,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 21,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,

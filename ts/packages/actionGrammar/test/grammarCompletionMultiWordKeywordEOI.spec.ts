@@ -70,8 +70,8 @@ describeForEachCompletion(
             );
             expectMetadata(result, {
                 completions: ["good", "played"],
-                matchedPrefixLength: 15,
-                separatorMode: "optional",
+                matchedPrefixLength: 14,
+                separatorMode: "spacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
                 openWildcard: true,
@@ -94,8 +94,8 @@ describeForEachCompletion(
             // fixed string candidates, not property completions.
             expectMetadata(result, {
                 completions: ["good", "played"],
-                matchedPrefixLength: 15,
-                separatorMode: "optional",
+                matchedPrefixLength: 14,
+                separatorMode: "spacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
                 openWildcard: true,
@@ -183,8 +183,8 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 18,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 17,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -222,8 +222,8 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("played");
                 expectMetadata(result, {
-                    matchedPrefixLength: 11,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 10,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,
@@ -267,8 +267,8 @@ describeForEachCompletion(
                 );
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
-                    matchedPrefixLength: 18,
-                    separatorMode: "optional",
+                    matchedPrefixLength: 17,
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     openWildcard: true,

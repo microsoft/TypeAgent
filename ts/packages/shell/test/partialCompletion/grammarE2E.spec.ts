@@ -520,16 +520,19 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session = new PartialCompletionSession(menu, dispatcher);
         });
 
-        test("after 'play X' typing more text slides anchor (openWildcard)", async () => {
+        // Prime the session through "play unknown" so the wildcard
+        // is active and the keyword trie is populated.
+        async function primeWildcard(): Promise<void> {
             session.update("", getPos);
             await flush();
             session.update("play", getPos);
             await flush();
-
-            // The entity trie has no match for "unknown" so with
-            // closedSet=false, a re-fetch happens.
             session.update("play unknown", getPos);
             await flush();
+        }
+
+        test("after 'play X' typing more text slides anchor (openWildcard)", async () => {
+            await primeWildcard();
 
             // Grammar at "play unknown" returns openWildcard=true, completions=["by"]
             // Further typing past the anchor without a separator should slide.
@@ -545,12 +548,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
         });
 
         test("'by' keyword appears after wildcard text with space", async () => {
-            session.update("", getPos);
-            await flush();
-            session.update("play", getPos);
-            await flush();
-            session.update("play unknown", getPos);
-            await flush();
+            await primeWildcard();
 
             // After typing space, the separator is satisfied and trie filters.
             session.update("play unknown ", getPos);
@@ -560,6 +558,87 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 expect.anything(),
             );
             expect(menu.isActive()).toBe(true);
+        });
+
+        test("'play unknown b' narrows keyword to 'by' via trie", async () => {
+            await primeWildcard();
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Typing past the separator — trie prefix "b" narrows to "by".
+            session.update("play unknown b", getPos);
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+                "b",
+                expect.anything(),
+            );
+            // The trie should show "by" as a narrowed match.
+            expect(menu.setChoices).toHaveBeenCalled();
+            const lastChoices =
+                menu.setChoices.mock.calls[
+                    menu.setChoices.mock.calls.length - 1
+                ][0];
+            expect(lastChoices).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "by" }),
+                ]),
+            );
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("'play unknown ' → 'play unknown' → 'play unknown ' round-trip", async () => {
+            await primeWildcard();
+
+            session.update("play unknown ", getPos);
+            expect(menu.isActive()).toBe(true);
+
+            // Backspace hides.
+            session.update("play unknown", getPos);
+            expect(menu.isActive()).toBe(false);
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Re-type space — menu reappears without re-fetch.
+            session.update("play unknown ", getPos);
+            expect(menu.isActive()).toBe(true);
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+        });
+
+        test("double space 'play unknown  ' shows keyword menu", async () => {
+            await primeWildcard();
+
+            session.update("play unknown  ", getPos);
+
+            // Extra space should not break the trie display.
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("wildcard → keyword → entity: 'play unknown by' shows artist entities", async () => {
+            await primeWildcard();
+
+            // "by" uniquely satisfies the keyword → re-fetch.
+            session.update("play unknown by", getPos);
+            await flush();
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+                "play unknown by",
+                "forward",
+            );
+            // Grammar returns artist properties → mock entities injected.
+            expect(menu.setChoices).toHaveBeenLastCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "Ed Sheeran" }),
+                    expect.objectContaining({ matchText: "Queen" }),
+                    expect.objectContaining({ matchText: "Taylor Swift" }),
+                ]),
+            );
         });
     });
 

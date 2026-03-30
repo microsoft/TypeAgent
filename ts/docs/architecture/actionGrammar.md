@@ -526,13 +526,15 @@ a single-pass approach that defers sibling-rule resolution to Phase B
    both directions under the same condition.
 2. **Phase B1 (anchor resolution):** Runs
    `findPartialKeywordInWildcard` on deferred `wildcardEoiDescriptors`.
-   For backward, a partial keyword found strictly inside the prefix is
-   collected as a fixed candidate (which may advance `maxPrefixLength`,
-   clearing weaker fallback candidates from Phase A); otherwise a range
-   candidate is created for Phase B2. For forward, the best partial
-   keyword anchor is recorded in `forwardPartialKeyword`; states
-   without a partial keyword are deferred to `forwardEoiCandidates`
-   for Phase B2.
+   For backward, a partial keyword found strictly inside the prefix
+   has its position stripped of trailing separators (stripping stops
+   at `maxPrefixLength` to avoid discarding previously matched
+   content), then collected as a fixed candidate (which may
+   advance `maxPrefixLength`, clearing weaker fallback candidates from
+   Phase A); otherwise a range candidate is created for Phase B2. For
+   forward, the best partial keyword anchor is recorded in
+   `forwardPartialKeyword`; states without a partial keyword are
+   deferred to `forwardEoiCandidates` for Phase B2.
 3. **Phase B2 (materialization):** Converts surviving candidates into
    the final `completions[]` and `properties[]` arrays. Range
    candidates are evaluated: each checks whether `maxPrefixLength`
@@ -541,9 +543,14 @@ a single-pass approach that defers sibling-rule resolution to Phase B
    `getWildcardStr`). If so, `tryPartialStringMatch` runs forward at
    `maxPrefixLength` to produce sibling completions — the same result
    the old two-pass re-invocation would have produced, but without a
-   second full traversal of the grammar. Phase B2 also handles forward
-   EOI candidate instantiation, exact-match advancement, and
-   global deduplication.
+   second full traversal of the grammar. For forward EOI candidates,
+   the anchor is stripped of trailing separators so that P lands before
+   the flex-space (consistent with keyword→keyword behavior). When a
+   partial keyword consumed to EOI (position = prefix.length), the
+   keyword content may end with separator characters (e.g. comma in
+   `"hello,"`), so stripping is skipped to avoid removing keyword
+   content. Phase B2 also handles exact-match advancement and global
+   deduplication.
 
 **Correctness invariant — two-pass equivalence.** Let _P_ =
 `completion(input, backward).matchedPrefixLength`. The range-candidate
@@ -740,23 +747,21 @@ evaluated once after all candidates are collected using the final
 `maxPrefixLength` (P).
 
 ```
-openWildcard?
-  └─ Yes → DIFFERENT (wildcard boundary is ambiguous;
-           backward can always reconsider)
+P = 0?
+  └─ Yes → SAME (nothing matched; backward has nothing to reconsider)
 
-P = minPrefixLength (or 0 if unset)?
-  └─ Yes → SAME (nothing matched beyond the caller's floor;
-           backward has nothing to reconsider)
-
-otherwise
-  └─ DIFFERENT (keyword boundary — backward can back up)
+P > 0?
+  └─ DIFFERENT (something was matched — backward can back up)
 ```
 
-**Key insight:** Once any keyword or wildcard is fully matched (P >
-minPrefixLength), backward can always reconsider that match —
-regardless of trailing whitespace. There are no exceptions: even
-exact matches with trailing whitespace back up to the last keyword
-via Category 1 `effectivePrefixEnd` stripping.
+`minPrefixLength` is not consulted: it is a caller-supplied lower
+bound for the search, not a property of the result.
+
+**Key insight:** Once any keyword or wildcard is fully matched (P > 0),
+backward can always reconsider that match — regardless of trailing
+whitespace. There are no exceptions: even exact matches with trailing
+whitespace back up to the last keyword via Category 1
+`effectivePrefixEnd` stripping.
 
 **Design choice — trailing separators are not consumed.** The grammar
 matcher never advances `matchedPrefixLength` past a trailing separator
@@ -786,19 +791,19 @@ Rationale:
 3. **Simpler invariants.** Without trailing-separator advancement,
    P always lands at a keyword boundary where backward can back up —
    no need to distinguish committed vs. uncommitted positions.
-   `directionSensitive` reduces to `openWildcard || P != minPrefixLength`,
-   which is easy to verify.
+   `directionSensitive` reduces to `P > 0`, which is easy to verify.
 
 **Design choice — openWildcard → always true:** Even when both
 directions happen to find the same partial keyword at the same position
-(e.g. "play Never b" where both find "b"→"by" at position 11), the
+(e.g. "play Never b" where both find "b"→"by" at position 10, after
+stripping the separator before "b"), the
 wildcard boundary is ambiguous. Truncating to `input[0..P]` removes
 the content that established the anchor, so
 `completion(input[0..P], "backward")` always diverges — confirming
 that the position is genuinely direction-sensitive under the cross-query
-definition (invariant #7 in `completion.md`). This also simplifies the
-implementation (no `partialKeywordAgrees` tracking needed) and enables
-unguarded cross-query invariant checking in tests.
+definition (invariant #7 in `completion.md`). Since P > 0 whenever
+`openWildcard=true`, the simplified decision tree (`P > 0 → true`)
+already covers this case.
 
 **Metadata produced:**
 

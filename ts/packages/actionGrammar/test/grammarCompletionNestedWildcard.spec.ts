@@ -57,8 +57,8 @@ describeForEachCompletion(
             const result = matchGrammarCompletion(grammar, "play This Train b");
             expect(result.completions).toContain("by");
             expectMetadata(result, {
-                matchedPrefixLength: 16,
-                separatorMode: "optional",
+                matchedPrefixLength: 15,
+                separatorMode: "spacePunctuation",
                 openWildcard: true,
             });
         });
@@ -67,8 +67,8 @@ describeForEachCompletion(
             const result = matchGrammarCompletion(grammar, "play Nevermind b");
             expect(result.completions).toContain("by");
             expectMetadata(result, {
-                matchedPrefixLength: 15,
-                separatorMode: "optional",
+                matchedPrefixLength: 14,
+                separatorMode: "spacePunctuation",
                 openWildcard: true,
             });
         });

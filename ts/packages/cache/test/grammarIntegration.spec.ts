@@ -877,9 +877,10 @@ describe("Grammar Integration", () => {
             const completions = cache.completion(prefix, { namespaceKeys });
             expect(completions).toBeDefined();
 
-            // The partial keyword "by" anchors at position 16 (before "b"),
-            // NOT at 17 (EOI where localPlayer's wildcard absorbs everything)
-            expect(completions!.matchedPrefixLength).toBe(16);
+            // The partial keyword "by" anchors at position 15 (trailing
+            // separator before "b" is stripped), NOT at 17 (EOI where
+            // localPlayer's wildcard absorbs everything)
+            expect(completions!.matchedPrefixLength).toBe(15);
             expect(completions!.completions).toContain("by");
         });
     });
