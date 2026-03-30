@@ -111,14 +111,14 @@ function matchWordsGreedily(
 // Returns the position and completion word if a partial match is found,
 // or undefined if no match or all words matched fully.
 function matchKeywordWordsFrom(
-    prefix: string,
+    input: string,
     startIndex: number,
     words: string[],
     spacingMode: CompiledSpacingMode,
 ): { position: number; completionWord: string } | undefined {
     const { matchedWords, endIndex } = matchWordsGreedily(
         words,
-        prefix,
+        input,
         startIndex,
         spacingMode,
     );
@@ -127,16 +127,16 @@ function matchKeywordWordsFrom(
     if (matchedWords >= words.length) return undefined;
 
     // Consumed to end of prefix with more words remaining.
-    if (matchedWords > 0 && endIndex === prefix.length) {
+    if (matchedWords > 0 && endIndex === input.length) {
         return {
-            position: prefix.length,
+            position: input.length,
             completionWord: words[matchedWords],
         };
     }
 
     // Check if remaining text is a partial prefix of the next word.
     const word = words[matchedWords];
-    let textToCheck = prefix.slice(endIndex);
+    let textToCheck = input.slice(endIndex);
     if (matchedWords > 0 && spacingMode !== "none") {
         const sepMatch = textToCheck.match(
             new RegExp(`^[${separatorRegExpStr}]+`, "u"),
@@ -162,7 +162,7 @@ function matchKeywordWordsFrom(
         (textToCheck.length > 0 || matchedWords > 0)
     ) {
         return {
-            position: prefix.length - textToCheck.length,
+            position: input.length - textToCheck.length,
             completionWord: word,
         };
     }
@@ -196,7 +196,7 @@ function matchKeywordWordsFrom(
 //   "optional" → [\s\p{P}]* between words
 //   auto       → + or * depending on requiresSeparator() for adjacent chars
 function findPartialKeywordInWildcard(
-    prefix: string,
+    input: string,
     wildcardStart: number,
     part: StringPart,
     spacingMode: CompiledSpacingMode,
@@ -206,7 +206,7 @@ function findPartialKeywordInWildcard(
 
     // Scan candidate start positions from right to left.
     for (
-        let candidateStart = prefix.length - 1;
+        let candidateStart = input.length - 1;
         candidateStart >= minStart;
         candidateStart--
     ) {
@@ -221,9 +221,9 @@ function findPartialKeywordInWildcard(
         //     character itself creates a natural boundary.
         if (
             spacingMode !== "none" &&
-            !sepCharRe.test(prefix[candidateStart - 1]) &&
+            !sepCharRe.test(input[candidateStart - 1]) &&
             requiresSeparator(
-                prefix[candidateStart - 1],
+                input[candidateStart - 1],
                 part.value[0][0],
                 spacingMode,
             )
@@ -232,7 +232,7 @@ function findPartialKeywordInWildcard(
         }
 
         const result = matchKeywordWordsFrom(
-            prefix,
+            input,
             candidateStart,
             part.value,
             spacingMode,
@@ -244,7 +244,7 @@ function findPartialKeywordInWildcard(
         // Verify the wildcard content before the candidate is valid.
         if (
             getWildcardStr(
-                prefix,
+                input,
                 wildcardStart,
                 candidateStart,
                 spacingMode,
@@ -379,7 +379,7 @@ function getGrammarCompletionProperty(
  */
 function tryPartialStringMatch(
     part: StringPart,
-    prefix: string,
+    input: string,
     startIndex: number,
     spacingMode: CompiledSpacingMode,
     direction?: "forward" | "backward",
@@ -396,7 +396,7 @@ function tryPartialStringMatch(
     const words = part.value;
     const { matchedWords, endIndex, prevEndIndex } = matchWordsGreedily(
         words,
-        prefix,
+        input,
         startIndex,
         spacingMode,
     );
@@ -411,7 +411,7 @@ function tryPartialStringMatch(
         (spacingMode === "none" ||
             (effectivePrefixEnd !== undefined &&
                 endIndex >= effectivePrefixEnd) ||
-            nextNonSeparatorIndex(prefix, endIndex) === endIndex);
+            nextNonSeparatorIndex(input, endIndex) === endIndex);
 
     if (direction === "backward" && couldBackUp) {
         return {
@@ -585,7 +585,7 @@ type ForwardPartialKeywordCandidate = {
 // `position` in `prefix` and `firstCompletionChar`, then merge the
 // result into the running `current` separator mode.
 function mergeSepMode(
-    prefix: string,
+    input: string,
     current: SeparatorMode | undefined,
     position: number,
     firstCompletionChar: string,
@@ -595,7 +595,7 @@ function mergeSepMode(
         position > 0 &&
         spacingMode !== "none" &&
         requiresSeparator(
-            prefix[position - 1],
+            input[position - 1],
             firstCompletionChar,
             spacingMode,
         );
@@ -640,7 +640,7 @@ function mergeSepMode(
 //    Also handles EOI instantiation, range candidates,
 //    and deduplication.
 type CompletionContext = {
-    readonly prefix: string;
+    readonly input: string;
     readonly direction: "forward" | "backward" | undefined;
     maxPrefixLength: number;
     fixedCandidates: FixedCandidate[];
@@ -701,7 +701,7 @@ function tryCollectStringCandidate(
 ): boolean {
     const partial = tryPartialStringMatch(
         part,
-        ctx.prefix,
+        ctx.input,
         startIndex,
         state.spacingMode,
         dir,
@@ -802,7 +802,7 @@ function processExactMatch(
     preFinalizeState: MatchState | undefined,
     savedPendingWildcard: PendingWildcard | undefined,
 ): void {
-    const { prefix } = ctx;
+    const { input } = ctx;
     if (
         state.lastMatchedPartInfo !== undefined ||
         savedPendingWildcard?.valueId !== undefined
@@ -819,7 +819,7 @@ function processExactMatch(
         // separator and sets couldBackUp=false,
         // incorrectly blocking the backup.
         const effectivePrefixEnd =
-            state.index < prefix.length ? state.index : undefined;
+            state.index < input.length ? state.index : undefined;
         tryCollectBackwardCandidate(
             ctx,
             preFinalizeState ?? state,
@@ -850,7 +850,7 @@ function processCleanPartial(
     preFinalizeState: MatchState | undefined,
     savedPendingWildcard: PendingWildcard | undefined,
 ): void {
-    const { prefix, direction, wildcardEoiDescriptors, rangeCandidates } = ctx;
+    const { input, direction, wildcardEoiDescriptors, rangeCandidates } = ctx;
     const nextPart = state.parts[state.partIndex];
 
     // Wildcard-at-EOI with a string next part: defer the
@@ -858,7 +858,7 @@ function processCleanPartial(
     // both directions under the same condition.
     const deferredToEoi =
         savedPendingWildcard?.valueId !== undefined &&
-        state.index >= prefix.length &&
+        state.index >= input.length &&
         nextPart.type === "string";
     if (deferredToEoi) {
         wildcardEoiDescriptors.push({
@@ -874,7 +874,7 @@ function processCleanPartial(
     // back up to.  (Per-state condition, not the final output
     // directionSensitive — that is computed after all states.)
     const hasPartToReconsider =
-        state.index >= prefix.length &&
+        state.index >= input.length &&
         (savedPendingWildcard?.valueId !== undefined ||
             state.lastMatchedPartInfo !== undefined);
 
@@ -960,7 +960,7 @@ function processDirtyPartial(
         const canReconsider3a =
             state.lastMatchedPartInfo !== undefined &&
             (state.lastMatchedPartInfo.afterWildcard ||
-                state.index >= ctx.prefix.length);
+                state.index >= ctx.input.length);
         if (direction === "backward" && canReconsider3a) {
             // Backward: back up to the last matched keyword
             // instead of offering property completion for the
@@ -1039,12 +1039,12 @@ function processDirtyPartial(
 // See matchGrammarCompletion JSDoc for full category descriptions.
 function collectCandidates(
     grammar: Grammar,
-    prefix: string,
+    input: string,
     minPrefixLength: number | undefined,
     direction: "forward" | "backward" | undefined,
 ): CompletionContext {
     const ctx: CompletionContext = {
-        prefix,
+        input,
         direction,
         maxPrefixLength: minPrefixLength ?? 0,
         fixedCandidates: [],
@@ -1066,7 +1066,7 @@ function collectCandidates(
         // may also push new derivative states onto `pending` (e.g. for
         // alternative nested rules, optional-skip paths, wildcard
         // extensions, repeat iterations).
-        const matched = matchState(state, prefix, pending);
+        const matched = matchState(state, input, pending);
 
         // Save the pending wildcard before finalizeState clears it.
         // Needed for backward completion of wildcards at the end of a rule.
@@ -1092,7 +1092,7 @@ function collectCandidates(
         //      un-consumed (those states don't represent valid parses).
         // It returns true when the state is "clean" — all input was
         // consumed (or only trailing separators remain).
-        if (finalizeState(state, prefix)) {
+        if (finalizeState(state, input)) {
             if (matched) {
                 processExactMatch(
                     ctx,
@@ -1134,7 +1134,7 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
     forwardEoiCandidates: WildcardStringRangeCandidate[];
 } {
     const {
-        prefix,
+        input,
         direction,
         fixedCandidates,
         rangeCandidates,
@@ -1152,7 +1152,7 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
 
     for (const desc of wildcardEoiDescriptors) {
         const partialResult = findPartialKeywordInWildcard(
-            prefix,
+            input,
             desc.wildcardStart,
             desc.nextPart,
             desc.spacingMode,
@@ -1161,9 +1161,9 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
             if (
                 partialResult !== undefined &&
                 // Equivalent to the old `< state.index`: deferredToEoi
-                // guarantees state.index >= prefix.length, and
-                // state.index never exceeds prefix.length.
-                partialResult.position < prefix.length
+                // guarantees state.index >= input.length, and
+                // state.index never exceeds input.length.
+                partialResult.position < input.length
             ) {
                 // Partial keyword found strictly inside the prefix.
                 // Collect as a fixed candidate (may advance
@@ -1179,7 +1179,7 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
                 if (partialResult.position >= ctx.maxPrefixLength) {
                     if (
                         !isSeparatorOnlyGap(
-                            prefix,
+                            input,
                             ctx.maxPrefixLength,
                             partialResult.position,
                         )
@@ -1187,7 +1187,7 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
                         updateMaxPrefixLength(
                             ctx,
                             stripTrailingSeparators(
-                                prefix,
+                                input,
                                 partialResult.position,
                                 ctx.maxPrefixLength,
                             ),
@@ -1265,7 +1265,7 @@ function materializeCandidates(
     forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined,
     forwardEoiCandidates: WildcardStringRangeCandidate[],
 ): GrammarCompletionResult {
-    const { prefix, direction, fixedCandidates, rangeCandidates } = ctx;
+    const { input, direction, fixedCandidates, rangeCandidates } = ctx;
     const completions = new Set<string>();
     const properties: GrammarCompletionProperty[] = [];
 
@@ -1290,7 +1290,7 @@ function materializeCandidates(
         if (c.kind === "string") {
             completions.add(c.completionText);
             separatorMode = mergeSepMode(
-                prefix,
+                input,
                 separatorMode,
                 ctx.maxPrefixLength,
                 c.completionText[0],
@@ -1305,7 +1305,7 @@ function materializeCandidates(
                 properties.push(completionProperty);
                 closedSet = false;
                 separatorMode = mergeSepMode(
-                    prefix,
+                    input,
                     separatorMode,
                     ctx.maxPrefixLength,
                     "a",
@@ -1343,17 +1343,17 @@ function materializeCandidates(
     const processRangeCandidates =
         direction === "backward" &&
         rangeCandidates.length > 0 &&
-        ctx.maxPrefixLength < prefix.length &&
+        ctx.maxPrefixLength < input.length &&
         rangeCandidateGateOpen;
     if (processRangeCandidates) {
         // Truncate once so range candidates don't peek at trailing
         // input beyond maxPrefixLength (invariant #3).
-        const truncatedPrefix = prefix.substring(0, ctx.maxPrefixLength);
+        const truncatedInput = input.substring(0, ctx.maxPrefixLength);
         for (const c of rangeCandidates) {
             if (ctx.maxPrefixLength <= c.wildcardStart) continue;
             if (
                 getWildcardStr(
-                    prefix,
+                    input,
                     c.wildcardStart,
                     ctx.maxPrefixLength,
                     c.spacingMode,
@@ -1364,7 +1364,7 @@ function materializeCandidates(
             if (c.kind === "wildcardString") {
                 const partial = tryPartialStringMatch(
                     c.nextPart,
-                    truncatedPrefix,
+                    truncatedInput,
                     ctx.maxPrefixLength,
                     c.spacingMode,
                     "forward",
@@ -1375,7 +1375,7 @@ function materializeCandidates(
                 ) {
                     completions.add(partial.remainingText);
                     separatorMode = mergeSepMode(
-                        prefix,
+                        input,
                         separatorMode,
                         ctx.maxPrefixLength,
                         partial.remainingText[0],
@@ -1391,7 +1391,7 @@ function materializeCandidates(
                 if (completionProperty !== undefined) {
                     properties.push(completionProperty);
                     separatorMode = mergeSepMode(
-                        prefix,
+                        input,
                         separatorMode,
                         ctx.maxPrefixLength,
                         "a",
@@ -1431,7 +1431,7 @@ function materializeCandidates(
     // token boundary.
     const hasPartialKeyword =
         forwardPartialKeyword !== undefined &&
-        forwardPartialKeyword.position <= prefix.length;
+        forwardPartialKeyword.position <= input.length;
     if (
         // Defensive: forwardEoiCandidates is only populated in the
         // forward direction, but the guard makes the intent explicit.
@@ -1455,10 +1455,10 @@ function materializeCandidates(
         // that must not be stripped.
         let anchor = hasPartialKeyword
             ? forwardPartialKeyword!.position
-            : prefix.length;
-        if (!hasPartialKeyword || anchor < prefix.length) {
+            : input.length;
+        if (!hasPartialKeyword || anchor < input.length) {
             anchor = stripTrailingSeparators(
-                prefix,
+                input,
                 anchor,
                 ctx.maxPrefixLength,
             );
@@ -1506,7 +1506,7 @@ function materializeCandidates(
             const fpk = forwardPartialKeyword!;
             completions.add(fpk.completionWord);
             separatorMode = mergeSepMode(
-                prefix,
+                input,
                 separatorMode,
                 anchor,
                 fpk.completionWord[0],
@@ -1519,7 +1519,7 @@ function materializeCandidates(
             if (anchor <= c.wildcardStart) continue;
             if (
                 getWildcardStr(
-                    prefix,
+                    input,
                     c.wildcardStart,
                     anchor,
                     c.spacingMode,
@@ -1529,7 +1529,7 @@ function materializeCandidates(
             }
             const partial = tryPartialStringMatch(
                 c.nextPart,
-                prefix,
+                input,
                 anchor,
                 c.spacingMode,
                 "forward",
@@ -1540,7 +1540,7 @@ function materializeCandidates(
             ) {
                 completions.add(partial.remainingText);
                 separatorMode = mergeSepMode(
-                    prefix,
+                    input,
                     separatorMode,
                     anchor,
                     partial.remainingText[0],
@@ -1569,16 +1569,16 @@ function materializeCandidates(
 
 export function matchGrammarCompletion(
     grammar: Grammar,
-    prefix: string,
+    input: string,
     minPrefixLength?: number,
     direction?: "forward" | "backward",
 ): GrammarCompletionResult {
     debugCompletion(
-        `Start completion for prefix ${direction ?? "forward"}: "${prefix}"`,
+        `Start completion for input ${direction ?? "forward"}: "${input}"`,
     );
 
     // Phase A
-    const ctx = collectCandidates(grammar, prefix, minPrefixLength, direction);
+    const ctx = collectCandidates(grammar, input, minPrefixLength, direction);
     // Phase B1
     const { forwardPartialKeyword, forwardEoiCandidates } =
         resolveWildcardAnchors(ctx);
