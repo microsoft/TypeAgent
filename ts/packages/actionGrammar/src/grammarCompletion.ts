@@ -40,6 +40,7 @@ function stripTrailingSeparators(
     position: number,
     lowerBound: number,
 ): number {
+    // nextNonSeparatorIndex(text, i) >= i+1 iff text[i] is a separator.
     while (
         position > lowerBound &&
         nextNonSeparatorIndex(text, position - 1) >= position
@@ -527,13 +528,15 @@ type FixedCandidate =
           partialKeywordBackup: boolean;
       };
 
+type WildcardStringRangeCandidate = {
+    kind: "wildcardString";
+    wildcardStart: number;
+    nextPart: StringPart;
+    spacingMode: CompiledSpacingMode;
+};
+
 type RangeCandidate =
-    | {
-          kind: "wildcardString";
-          wildcardStart: number;
-          nextPart: StringPart;
-          spacingMode: CompiledSpacingMode;
-      }
+    | WildcardStringRangeCandidate
     | {
           kind: "wildcardProperty";
           wildcardStart: number;
@@ -1051,10 +1054,7 @@ export function matchGrammarCompletion(
     // the appropriate anchor:
     //   - partial keyword position (if one exists from other states)
     //   - prefix.length (otherwise)
-    const forwardEoiCandidates: Extract<
-        RangeCandidate,
-        { kind: "wildcardString" }
-    >[] = [];
+    const forwardEoiCandidates: WildcardStringRangeCandidate[] = [];
 
     for (const desc of wildcardEoiDescriptors) {
         const partialResult = findPartialKeywordInWildcard(
@@ -1098,6 +1098,9 @@ export function matchGrammarCompletion(
                             ),
                         );
                     }
+                    // Candidate is valid at the (possibly updated)
+                    // maxPrefixLength: completionWord is position-
+                    // independent and mergeSepMode uses maxPrefixLength.
                     fixedCandidates.push({
                         kind: "string",
                         completionText: partialResult.completionWord,
@@ -1377,7 +1380,7 @@ export function matchGrammarCompletion(
             separatorMode = undefined;
             openWildcard = false;
         } else {
-            debugCompletion(`Phase B: merge at prefix.length=${anchor}`);
+            debugCompletion(`Phase B: merge at P=${anchor}`);
         }
 
         // Wildcard boundary is ambiguous when Phase B is
