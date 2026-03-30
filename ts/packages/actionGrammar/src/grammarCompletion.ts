@@ -569,25 +569,25 @@ type ForwardPartialKeywordCandidate = {
     spacingMode: CompiledSpacingMode;
 };
 
-// Callers pass either a literal char ("a" for property candidates) or
-// completionText[0] from tryPartialStringMatch, which always returns
-// non-empty grammar words.  firstCompletionChar is therefore always
-// a single character.
-function computeNeedsSep(
+// Compute whether a separator is needed between the character at
+// `position` in `prefix` and `firstCompletionChar`, then merge the
+// result into the running `current` separator mode.
+function mergeSepMode(
     prefix: string,
+    current: SeparatorMode | undefined,
     position: number,
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
-): boolean {
-    return (
+): SeparatorMode | undefined {
+    const needsSep =
         position > 0 &&
         spacingMode !== "none" &&
         requiresSeparator(
             prefix[position - 1],
             firstCompletionChar,
             spacingMode,
-        )
-    );
+        );
+    return mergeSeparatorMode(current, needsSep, spacingMode);
 }
 
 export function matchGrammarCompletion(
@@ -1182,15 +1182,11 @@ export function matchGrammarCompletion(
         }
         if (c.kind === "string") {
             completions.add(c.completionText);
-            const needsSep = computeNeedsSep(
+            separatorMode = mergeSepMode(
                 prefix,
+                separatorMode,
                 maxPrefixLength,
                 c.completionText[0],
-                c.spacingMode,
-            );
-            separatorMode = mergeSeparatorMode(
-                separatorMode,
-                needsSep,
                 c.spacingMode,
             );
         } else {
@@ -1201,15 +1197,11 @@ export function matchGrammarCompletion(
             if (completionProperty !== undefined) {
                 properties.push(completionProperty);
                 closedSet = false;
-                const needsSep = computeNeedsSep(
+                separatorMode = mergeSepMode(
                     prefix,
+                    separatorMode,
                     maxPrefixLength,
                     "a",
-                    c.spacingMode,
-                );
-                separatorMode = mergeSeparatorMode(
-                    separatorMode,
-                    needsSep,
                     c.spacingMode,
                 );
             }
@@ -1275,15 +1267,11 @@ export function matchGrammarCompletion(
                     !completions.has(partial.remainingText)
                 ) {
                     completions.add(partial.remainingText);
-                    const candidateNeedsSep = computeNeedsSep(
+                    separatorMode = mergeSepMode(
                         prefix,
+                        separatorMode,
                         maxPrefixLength,
                         partial.remainingText[0],
-                        c.spacingMode,
-                    );
-                    separatorMode = mergeSeparatorMode(
-                        separatorMode,
-                        candidateNeedsSep,
                         c.spacingMode,
                     );
                     openWildcard = true;
@@ -1295,15 +1283,11 @@ export function matchGrammarCompletion(
                 );
                 if (completionProperty !== undefined) {
                     properties.push(completionProperty);
-                    const candidateNeedsSep = computeNeedsSep(
+                    separatorMode = mergeSepMode(
                         prefix,
+                        separatorMode,
                         maxPrefixLength,
                         "a",
-                        c.spacingMode,
-                    );
-                    separatorMode = mergeSeparatorMode(
-                        separatorMode,
-                        candidateNeedsSep,
                         c.spacingMode,
                     );
                     openWildcard = true;
@@ -1411,15 +1395,11 @@ export function matchGrammarCompletion(
         if (hasPartialKeyword) {
             const fpk = forwardPartialKeyword!;
             completions.add(fpk.completionWord);
-            const fpkNeedsSep = computeNeedsSep(
+            separatorMode = mergeSepMode(
                 prefix,
+                separatorMode,
                 anchor,
                 fpk.completionWord[0],
-                fpk.spacingMode,
-            );
-            separatorMode = mergeSeparatorMode(
-                separatorMode,
-                fpkNeedsSep,
                 fpk.spacingMode,
             );
         }
@@ -1449,15 +1429,11 @@ export function matchGrammarCompletion(
                 !completions.has(partial.remainingText)
             ) {
                 completions.add(partial.remainingText);
-                const candidateNeedsSep = computeNeedsSep(
+                separatorMode = mergeSepMode(
                     prefix,
+                    separatorMode,
                     anchor,
                     partial.remainingText[0],
-                    c.spacingMode,
-                );
-                separatorMode = mergeSeparatorMode(
-                    separatorMode,
-                    candidateNeedsSep,
                     c.spacingMode,
                 );
             }
