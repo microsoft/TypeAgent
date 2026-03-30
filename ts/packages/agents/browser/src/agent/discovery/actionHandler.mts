@@ -134,9 +134,7 @@ async function handleFindUserActions(
     debugPerf(
         `getCandidateUserActions LLM: ${Date.now() - candidateStart}ms, success=${response.success}`,
     );
-    debugPerf(
-        `handleFindUserActions total: ${Date.now() - totalStart}ms`,
-    );
+    debugPerf(`handleFindUserActions total: ${Date.now() - totalStart}ms`);
 
     if (!response.success) {
         debug("Discovery LLM call failed: %s", response.message);

@@ -305,9 +305,7 @@ export class SchemaDiscoveryAgent<T extends object> {
             (sum, s: any) => sum + (s.text?.length || 0),
             0,
         );
-        debugPerf(
-            `  [getCandidateUserActions] prompt: ${promptChars} chars`,
-        );
+        debugPerf(`  [getCandidateUserActions] prompt: ${promptChars} chars`);
         const llmStart = Date.now();
         const response = await bootstrapTranslator.translate("", [
             {

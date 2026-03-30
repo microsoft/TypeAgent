@@ -1278,14 +1278,15 @@ async function questionWithCompletion(
                 // into the normal terminal flow so it appears in scrollback.
                 cleanup();
                 const width = process.stdout.columns || 80;
-                const styledInput = chalk.cyanBright(message) + input;
+                const inputDisplay = `❯ ${input}`;
+                const visibleLen = getDisplayWidth(inputDisplay);
+                const pad = Math.max(0, width - visibleLen);
                 stdout.write(
-                    styledInput +
-                        "\n" +
-                        ANSI.dim +
-                        "─".repeat(width) +
-                        ANSI.reset +
-                        "\n",
+                    "\n" +
+                        chalk.bgGray.white.bold(
+                            inputDisplay + " ".repeat(pad),
+                        ) +
+                        "\n\n",
                 );
                 resolve(input);
             } else if (code === 9) {
@@ -1780,5 +1781,5 @@ function getNextInput(
  * Returns a clean prompt regardless of status text
  */
 export function getEnhancedConsolePrompt(_text: string): string {
-    return `${getVerboseIndicator()}> `;
+    return `${getVerboseIndicator()}❯ `;
 }
