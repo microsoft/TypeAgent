@@ -15,6 +15,9 @@ import { openai as ai } from "aiclient";
 import { fileURLToPath } from "node:url";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
+import registerDebug from "debug";
+
+const debugPerf = registerDebug("typeagent:browser:discover:perf");
 
 export type HtmlFragments = {
     frameId: string;
@@ -269,37 +272,18 @@ export class SchemaDiscoveryAgent<T extends object> {
     async getCandidateUserActions(
         discoverySchema: string,
         fragments?: HtmlFragments[],
-        screenshots?: string[],
-        pageSummary?: string,
     ) {
         const bootstrapTranslator = this.getBootstrapTranslator(
             "CandidateActionList",
             discoverySchema,
         );
 
-        const screenshotSection = getScreenshotPromptSection(
-            screenshots,
-            fragments,
-        );
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getPrefixPromptSection();
         const suffixSection = getSuffixPromptSection();
-        let requestSection = [];
-        if (pageSummary) {
-            requestSection.push({
-                type: "text",
-                text: `
-            Here is a previously-generated summary of the page
-            '''
-            ${pageSummary}
-            '''
-            `,
-            });
-        }
 
         const promptSections = [
             ...prefixSection,
-            ...screenshotSection,
             ...htmlSection,
             {
                 type: "text",
@@ -314,16 +298,26 @@ export class SchemaDiscoveryAgent<T extends object> {
         '''
         `,
             },
-            ...requestSection,
             ...suffixSection,
         ];
 
+        const promptChars = promptSections.reduce(
+            (sum, s: any) => sum + (s.text?.length || 0),
+            0,
+        );
+        debugPerf(
+            `  [getCandidateUserActions] prompt: ${promptChars} chars`,
+        );
+        const llmStart = Date.now();
         const response = await bootstrapTranslator.translate("", [
             {
                 role: "user",
                 content: promptSections as MultimodalPromptContent[],
             },
         ]);
+        debugPerf(
+            `  [getCandidateUserActions] LLM translate: ${Date.now() - llmStart}ms`,
+        );
         return response;
     }
 

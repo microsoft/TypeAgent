@@ -36,6 +36,7 @@ import {
 import { sendWebFlowRefreshToClient } from "../browserActionHandler.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
+const debugPerf = registerDebug("typeagent:browser:discover:perf");
 
 // Entity collection infrastructure for discovery actions
 export interface EntityInfo {
@@ -113,41 +114,29 @@ async function handleFindUserActions(
 
     // Build a TypeScript schema from the candidate WebFlows for TypeChat
     const discoverySchema = generateDiscoverySchema(candidateFlows);
+    const totalStart = Date.now();
 
+    const htmlStart = Date.now();
     const htmlFragments = await ctx.browser.getHtmlFragments();
-    let screenshot = "";
-    try {
-        screenshot = await getCurrentPageScreenshot(ctx.browser);
-    } catch (error) {
-        console.warn(
-            "Screenshot capture failed, continuing without screenshot:",
-            (error as Error)?.message,
-        );
-    }
-    const screenshots = screenshot ? [screenshot] : [];
-
-    let pageSummary = "";
-    const summaryResponse = await ctx.agent.getPageSummary(
-        undefined,
-        htmlFragments,
-        screenshots,
+    const totalChars = htmlFragments.reduce(
+        (sum: number, f: any) => sum + (f.content?.length || 0),
+        0,
     );
-    if (summaryResponse.success) {
-        pageSummary =
-            "Page summary: \n" + JSON.stringify(summaryResponse.data, null, 2);
-    }
+    debugPerf(
+        `getHtmlFragments: ${Date.now() - htmlStart}ms, ${htmlFragments.length} fragments, ${totalChars} chars`,
+    );
 
-    const timerName = `Analyzing page actions`;
-    console.time(timerName);
-
+    const candidateStart = Date.now();
     const response = await ctx.agent.getCandidateUserActions(
         discoverySchema,
         htmlFragments,
-        screenshots,
-        pageSummary,
     );
-
-    console.timeEnd(timerName);
+    debugPerf(
+        `getCandidateUserActions LLM: ${Date.now() - candidateStart}ms, success=${response.success}`,
+    );
+    debugPerf(
+        `handleFindUserActions total: ${Date.now() - totalStart}ms`,
+    );
 
     if (!response.success) {
         debug("Discovery LLM call failed: %s", response.message);
