@@ -639,21 +639,6 @@ type CompletionContext = {
     wildcardEoiDescriptors: WildcardEoiDescriptor[];
 };
 
-function createCompletionContext(
-    prefix: string,
-    minPrefixLength: number | undefined,
-    direction: "forward" | "backward" | undefined,
-): CompletionContext {
-    return {
-        prefix,
-        direction,
-        maxPrefixLength: minPrefixLength ?? 0,
-        fixedCandidates: [],
-        rangeCandidates: [],
-        wildcardEoiDescriptors: [],
-    };
-}
-
 // Update maxPrefixLength.  When it increases, all previously
 // accumulated fixed-point candidates from shorter matches are
 // irrelevant — clear them.
@@ -1035,8 +1020,20 @@ function processDirtyPartial(
 //    couldn't be finalized, or trailing text didn't match any part.
 //
 // See matchGrammarCompletion JSDoc for full category descriptions.
-function collectCandidates(ctx: CompletionContext, grammar: Grammar): void {
-    const { prefix } = ctx;
+function collectCandidates(
+    grammar: Grammar,
+    prefix: string,
+    minPrefixLength: number | undefined,
+    direction: "forward" | "backward" | undefined,
+): CompletionContext {
+    const ctx: CompletionContext = {
+        prefix,
+        direction,
+        maxPrefixLength: minPrefixLength ?? 0,
+        fixedCandidates: [],
+        rangeCandidates: [],
+        wildcardEoiDescriptors: [],
+    };
 
     // Seed the work-list with one MatchState per top-level grammar rule.
     // matchState may push additional states (for nested rules, optional
@@ -1098,6 +1095,7 @@ function collectCandidates(ctx: CompletionContext, grammar: Grammar): void {
             processDirtyPartial(ctx, state, matched);
         }
     }
+    return ctx;
 }
 
 // --- Phase B1: Resolve partial keyword anchors ---
@@ -1567,12 +1565,14 @@ export function matchGrammarCompletion(
         `Start completion for prefix ${direction ?? "forward"}: "${prefix}"`,
     );
 
-    const ctx = createCompletionContext(prefix, minPrefixLength, direction);
-
-    collectCandidates(ctx, grammar); // Phase A
+    // Phase A
+    const ctx = collectCandidates(grammar, prefix, minPrefixLength, direction);
+    // Phase B1
     const { forwardPartialKeyword, forwardEoiCandidates } =
-        resolveWildcardAnchors(ctx); // Phase B1
-    const result = materializeCandidates( // Phase B2
+        resolveWildcardAnchors(ctx);
+
+    // Phase B2
+    const result = materializeCandidates(
         ctx,
         forwardPartialKeyword,
         forwardEoiCandidates,
