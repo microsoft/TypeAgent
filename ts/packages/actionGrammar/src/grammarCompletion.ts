@@ -273,9 +273,9 @@ export type GrammarCompletionResult = {
     // past unrecognized input and find more completions (e.g.
     // wildcard/entity slots whose values are external to the grammar).
     closedSet?: boolean | undefined;
-    // True when the result would differ if queried with the opposite
-    // direction.  When false, the caller can skip re-fetching on
-    // direction change.
+    // True when completion(input[0..P], "backward") would differ from
+    // completion(input[0..P], "forward"), where P = matchedPrefixLength.
+    // When false, the caller can skip re-fetching on direction change.
     //
     // True whenever something was matched beyond the caller's floor
     // (P > minPrefixLength) or the wildcard boundary is ambiguous
@@ -377,7 +377,7 @@ function tryPartialStringMatch(
     );
 
     // Direction matters when at least one word fully matched and no
-    // trailing separator commits the last matched word.
+    // trailing separator follows the last matched word.
     // When effectivePrefixEnd is set and endIndex has reached it,
     // characters beyond that point are logically absent (Category 1
     // trailing-separator stripping) — treat as uncommitted.

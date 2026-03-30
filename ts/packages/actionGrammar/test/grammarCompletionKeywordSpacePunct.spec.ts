@@ -615,7 +615,7 @@ describeForEachCompletion(
                     });
                 });
 
-                it("backward on 'hello world ' commits → offers 'next'", () => {
+                it("trailing separator — backward on 'hello world ' offers 'next'", () => {
                     // Trailing space after full match of both segments
                     const result = matchGrammarCompletion(
                         grammar,
@@ -2162,7 +2162,7 @@ describeForEachCompletion(
         // Section 27: Trailing separator after punctuation keyword
         //   In auto mode, comma IS a separator character. So "hello,"
         //   ends with a separator. Does the trailing separator logic
-        //   count it as committing the match?
+        //   count it as a separator boundary?
         // ================================================================
 
         describe("trailing separator handling with punctuated keywords", () => {
@@ -2193,7 +2193,7 @@ describeForEachCompletion(
                 // not a trailing separator. Backward should back up to "hello,".
                 // However, comma IS a separator character ([\s\p{P}]),
                 // so the trailing separator check might incorrectly
-                // treat it as a commit signal.
+                // treat it as a separator boundary.
                 const result = matchGrammarCompletion(
                     grammar,
                     "play hello,",

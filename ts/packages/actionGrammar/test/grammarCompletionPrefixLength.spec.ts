@@ -1379,7 +1379,7 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("trailing space — backward acts like forward", () => {
+                it("trailing space — backward on 'play music ' acts like forward", () => {
                     const result = matchGrammarCompletion(
                         grammar,
                         "play music ",

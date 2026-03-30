@@ -94,7 +94,7 @@ The return path carries `CommandCompletionResult`:
   completions: CompletionGroup[];
   separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
   closedSet: boolean;           // true → list is exhaustive
-  directionSensitive: boolean;  // true → opposite direction would produce different results
+  directionSensitive: boolean;  // true → completion(input[0..P], backward) ≠ completion(input[0..P], forward)
   openWildcard: boolean;        // true → wildcard boundary is ambiguous; shell should slide anchor
 }
 ```
@@ -219,7 +219,9 @@ back up) — see `actionGrammar.md`.
   `[]` for keyword-only completions
 - `separatorMode` — determined by the rule's `[spacing=...]` annotation
 - `closedSet` — `true` when all completions are grammar keywords
-- `directionSensitive` — `true` when backward completion would differ
+- `directionSensitive` — `true` when `completion(input[0..P], backward)`
+  would differ from `completion(input[0..P], forward)`, where
+  P = `matchedPrefixLength`
   (see [`directionSensitive`](#directionsensitive) below)
 - `openWildcard` — `true` at ambiguous wildcard boundaries
 
@@ -536,8 +538,9 @@ result regardless of whether the user is now typing or backspacing.
 
 **The rule:** The grammar matcher sets `directionSensitive=true`
 whenever backward completion has something to reconsider — i.e., a
-word, keyword, wildcard, or number was fully matched with no trailing
-separator to commit it. Forward offers what comes _next_; backward
+word, keyword, wildcard, or number was fully matched (the position is
+always uncommitted because trailing separators are not consumed).
+Forward offers what comes _next_; backward
 backs up to re-offer the last thing the user passed. If those two
 results differ, `directionSensitive=true`.
 
