@@ -1172,6 +1172,12 @@ async function questionWithCompletion(
         const onData = async (chunk: Buffer) => {
             const data = chunk.toString();
 
+            // Auto-dismiss framed debug panel on any key except Ctrl+D
+            const dpForDismiss = getDebugPanel();
+            if (dpForDismiss?.isPanelVisible && data.charCodeAt(0) !== 4) {
+                dpForDismiss.dismissPanel();
+            }
+
             // Handle multi-byte sequences
             if (data.startsWith("\x1b[")) {
                 // Arrow keys
@@ -1252,11 +1258,28 @@ async function questionWithCompletion(
                 cleanup();
                 process.exit(0);
             } else if (code === 4) {
-                // Ctrl+D — dump debug buffer into the scroll region
+                // Ctrl+D — cycle debug panel: off → compact → full → off
                 const dp = getDebugPanel();
                 if (dp && dp.lineCount > 0) {
-                    // dumpBuffer writes to stdout — it will appear in the scroll region
-                    dp.dumpBuffer();
+                    if (!dp.isPanelVisible) {
+                        // Off → compact
+                        dp.toggleAtPrompt();
+                        const panelLines = dp.renderFramedPanel();
+                        for (const line of panelLines) {
+                            layout.writeContent(line);
+                        }
+                    } else if (!dp.isPanelFull) {
+                        // Compact → full
+                        dp.toggleFullMode();
+                        const panelLines = dp.renderFramedPanel(true);
+                        for (const line of panelLines) {
+                            layout.writeContent(line);
+                        }
+                    } else {
+                        // Full → off
+                        dp.toggleFullMode();
+                        dp.toggleAtPrompt();
+                    }
                     render();
                 }
                 return;
