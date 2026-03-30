@@ -146,6 +146,32 @@
   },
   "fluidBuild": {
     "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/agent/browserSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/agent/browserSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/agent/browserActionSchema.mts"
+          ],
+          "outputGlobs": [
+            "dist/agent/browserSchema.pas.json"
+          ]
+        }
+      },
       "build": {
         "dependsOn": [
           "^build",
