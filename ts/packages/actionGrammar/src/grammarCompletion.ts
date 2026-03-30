@@ -296,7 +296,7 @@ export type GrammarCompletionResult = {
     // When false, the caller can skip re-fetching on direction change.
     //
     // True whenever P > 0 — something was matched.  False only when
-    // nothing was consumed (P = 0).
+    // nothing was matched (P = 0).
     directionSensitive: boolean;
     // True when the completion's `matchedPrefixLength` position is
     // *ambiguous* — it could shift forward as the user types more.
@@ -1316,10 +1316,9 @@ export function matchGrammarCompletion(
     //     survived Phase A.  Replace them with EOI instantiations.
     //
     //   Merge at anchor:
-    //     anchor matches maxPrefixLength (natural merge), OR the
-    //     gap consists entirely of separator characters — legitimate
-    //     candidates exist at that position.  Preserve them and add
-    //     EOI instantiations alongside.
+    //     anchor matches maxPrefixLength (stripping collapsed any
+    //     separator-only gap).  Legitimate candidates exist at that
+    //     position.  Preserve them and add EOI instantiations alongside.
     //
     // The anchor is computed to align with keyword behavior: P lands
     // before the flex-space (trailing separators stripped), not after

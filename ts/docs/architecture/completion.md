@@ -466,8 +466,8 @@ text.
 See `actionGrammar.md` Spacing modes for how the grammar matcher
 determines `separatorMode` from spacing annotations. The matcher
 strips trailing separators so P lands before the flex-space, making
-`separatorMode` always reflect the real grammar requirement (not a
-"separator already consumed" override). The one exception is
+`separatorMode` always reflect the real grammar requirement (no
+position-based override needed). The one exception is
 keywords whose content ends with a separator character (e.g.
 `hello,` in a grammar `$(x) hello, world`) consumed to EOI, where
 P stays at `prefix.length` because stripping would remove keyword

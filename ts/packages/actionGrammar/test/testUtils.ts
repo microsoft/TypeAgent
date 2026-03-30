@@ -347,7 +347,6 @@ function assertCrossDirectionInvariants(
     forward: GrammarCompletionResult,
     backward: GrammarCompletionResult,
     prefix: string,
-    minPrefixLength: number | undefined,
     grammar: Grammar,
     baseFn: TestCompletionFn,
 ): void {
@@ -373,8 +372,9 @@ function assertCrossDirectionInvariants(
     //     When forward says direction doesn't matter at its position,
     //     backward on the truncated input should produce the same result.
     //     The cross-query is unconstrained (no minPrefixLength) because
-    //     directionSensitive is about the position P, not the caller's
-    //     floor.
+    //     directionSensitive answers "would backward at input[0..P]
+    //     differ from forward?" — a property of position P itself,
+    //     independent of any caller-imposed floor.
     if (!forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
         const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
@@ -512,7 +512,6 @@ function withInvariantChecks(baseFn: TestCompletionFn): TestCompletionFn {
             forward,
             backward,
             prefix,
-            minPrefixLength,
             grammar,
             baseFn,
         );

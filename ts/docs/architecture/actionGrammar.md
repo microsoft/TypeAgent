@@ -527,8 +527,9 @@ a single-pass approach that defers sibling-rule resolution to Phase B
 2. **Phase B1 (anchor resolution):** Runs
    `findPartialKeywordInWildcard` on deferred `wildcardEoiDescriptors`.
    For backward, a partial keyword found strictly inside the prefix
-   has its position stripped of trailing separators (bounded by
-   `maxPrefixLength`), then collected as a fixed candidate (which may
+   has its position stripped of trailing separators (stripping stops
+   at `maxPrefixLength` to avoid discarding previously matched
+   content), then collected as a fixed candidate (which may
    advance `maxPrefixLength`, clearing weaker fallback candidates from
    Phase A); otherwise a range candidate is created for Phase B2. For
    forward, the best partial keyword anchor is recorded in
@@ -800,9 +801,9 @@ wildcard boundary is ambiguous. Truncating to `input[0..P]` removes
 the content that established the anchor, so
 `completion(input[0..P], "backward")` always diverges — confirming
 that the position is genuinely direction-sensitive under the cross-query
-definition (invariant #7 in `completion.md`). This also simplifies the
-implementation (no `partialKeywordAgrees` tracking needed) and enables
-unguarded cross-query invariant checking in tests.
+definition (invariant #7 in `completion.md`). Since P > 0 whenever
+`openWildcard=true`, the simplified decision tree (`P > 0 → true`)
+already covers this case.
 
 **Metadata produced:**
 

@@ -1868,9 +1868,9 @@ describeForEachCompletion(
                 // findPartialKeywordInWildcard should find "hel" as
                 // partial prefix of "hello,"
                 // Wildcard boundary pinned at partial keyword → openWildcard
-                // findPartialKeywordInWildcard: position=4 ("hel" starts after " ")
-                // requiresSeparator(" ", "h", auto) → "optional"
-                // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
+                // findPartialKeywordInWildcard: raw position=4 ("hel" starts after " "),
+                //   stripped to P=3 (trailing separator removed)
+                // P > 0 → direction-sensitive (backward can back up)
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 3,
@@ -1890,9 +1890,9 @@ describeForEachCompletion(
                     "forward",
                 );
                 // Wildcard finalized at EOI → openWildcard
-                // Forward now uses findPartialKeywordInWildcard → mpl = partial keyword position
-                // findPartialKeywordInWildcard: position=4 ("hel" starts after " ")
-                // requiresSeparator(" ", "h", auto) → "optional"
+                // Forward uses findPartialKeywordInWildcard → mpl = stripped partial keyword position
+                // findPartialKeywordInWildcard: raw position=4 ("hel" starts after " "),
+                //   stripped to P=3 (trailing separator removed)
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 3,
@@ -2662,9 +2662,9 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                // Backward partial keyword found in wildcard tail
-                // requiresSeparator(" ", "h", auto) → "optional"
-                // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
+                // Backward partial keyword found in wildcard tail,
+                // stripped to P=3 (trailing separator removed)
+                // P > 0 → direction-sensitive (backward can back up)
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
@@ -2760,7 +2760,7 @@ describeForEachCompletion(
                 );
                 // ",wor" is a partial prefix of ",world"
                 // candidateStart at position 4 (the comma) — prefix[3]=" " is separator ✓
-                // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
+                // P > 0 → direction-sensitive (backward can back up)
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
@@ -2784,7 +2784,7 @@ describeForEachCompletion(
                 // needed between wildcard content and keyword. The comma
                 // at candidateStart=3 is accepted, and ",wor" is a partial
                 // prefix of ",world".
-                // Forward now also uses findPartialKeywordInWildcard → not direction-sensitive
+                // P > 0 → direction-sensitive (backward can back up)
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
@@ -2906,7 +2906,7 @@ describeForEachCompletion(
                 // (space is not a word-boundary script), so no separator is
                 // needed. candidateStart=3 (the space) is accepted.
                 // textToCheck=" do" is a partial prefix of " done".
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: [" done"],
                     matchedPrefixLength: 3,
@@ -2953,7 +2953,7 @@ describeForEachCompletion(
                 );
                 // "hel" is partial prefix of "hello " (segment includes
                 // trailing space)
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: ["hello "],
                     matchedPrefixLength: 3,
@@ -2999,7 +2999,7 @@ describeForEachCompletion(
                 );
                 // "-do" partially matches "-done". candidateStart at
                 // position 4 ("-"): prefix[3]=" " is separator ✓
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
@@ -3022,7 +3022,7 @@ describeForEachCompletion(
                 // (hyphen is not a word-boundary script), so no separator is
                 // needed. candidateStart=3 (the hyphen) is accepted.
                 // "-do" is a partial prefix of "-done".
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
@@ -3068,7 +3068,7 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "don" is partial prefix of "done!"
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 3,
@@ -3090,7 +3090,7 @@ describeForEachCompletion(
                 // "done" is NOT a full match of "done!" — the segment
                 // includes the exclamation mark. So "done" is a partial
                 // prefix of "done!".
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 3,
@@ -3125,7 +3125,7 @@ describeForEachCompletion(
                 );
                 // "hello" is partial prefix of "hello world" (single
                 // segment includes the space)
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
@@ -3146,7 +3146,7 @@ describeForEachCompletion(
                 );
                 // "hello " is partial prefix of "hello world" (space
                 // included in single segment)
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
@@ -3166,7 +3166,7 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "hello w" is partial prefix of "hello world"
-                // Forward also finds the same partial keyword → not direction-sensitive.
+                // P > 0 → direction-sensitive (backward can back up).
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
