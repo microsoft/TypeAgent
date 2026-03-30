@@ -73,14 +73,14 @@ class TerminalLayout {
     setup(rows: number) {
         this.promptRows = rows;
         this.active = true;
-        // Move existing content up so the prompt appears right below it.
-        // We move the cursor to the bottom of where the scroll region
-        // will be, then set up the region. This way the first \n in
-        // writeContent() scrolls from this position.
+        // Push existing content upward so the fixed prompt region at
+        // the bottom doesn't overwrite the last lines of output.
+        // When the cursor is near the bottom of the terminal, these
+        // newlines force the terminal to scroll, creating blank space
+        // for the prompt area.
+        process.stdout.write("\n".repeat(this.promptRows));
         const height = process.stdout.rows || 24;
         const scrollHeight = Math.max(1, height - this.promptRows);
-        // Move cursor to scrollHeight row — if existing content is above,
-        // this positions us below it (or at it). Then apply the region.
         process.stdout.write(`\x1b[${scrollHeight};1H`);
         this.applyScrollRegion();
         // Listen for terminal resize
@@ -1063,8 +1063,17 @@ async function questionWithCompletion(
             // Update scroll region if prompt height changed
             layout.setPromptRows(totalRows);
 
-            // Build the prompt content for the fixed region
-            layout.clearFixed();
+            // drawFixed() clears each line before writing, so a separate
+            // clearFixed() pass is not needed and would cause visible
+            // flicker (blank frame between clear and redraw).  Only clear
+            // stale rows left over when the prompt shrinks (e.g. input
+            // un-wraps to fewer lines).
+            const prevTotal = prevInputRows + EXTRA_ROWS;
+            if (totalRows < prevTotal) {
+                for (let r = totalRows; r < prevTotal; r++) {
+                    layout.drawFixed(r, "");
+                }
+            }
 
             // Row 0: separator
             layout.drawFixed(0, ANSI.dim + "─".repeat(width) + ANSI.reset);
