@@ -473,8 +473,7 @@ export class ConstructionCache {
 
         // Resolve direction to a boolean: true when the user is actively
         // backing up and no trailing separator has committed the last token.
-        const backward =
-            direction === "backward" && !/[\s\p{P}]$/u.test(input);
+        const backward = direction === "backward" && !/[\s\p{P}]$/u.test(input);
         const results = this.match(input, options, true, backward);
 
         debugCompletion(

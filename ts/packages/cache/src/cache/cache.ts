@@ -627,11 +627,7 @@ export class AgentCache {
 
         // Otherwise use completion-based construction store (with grammar store fallback)
         const store = this._constructionStore;
-        const storeCompletion = store.completion(
-            input,
-            options,
-            direction,
-        );
+        const storeCompletion = store.completion(input, options, direction);
         const grammarStore = this._grammarStore;
         const grammarCompletion = grammarStore.completion(
             input,

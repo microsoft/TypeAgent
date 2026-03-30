@@ -91,11 +91,7 @@ export async function requestCompletion(
         namespaceKeys,
         history: getHistoryContext(context),
     };
-    const results = context.agentCache.completion(
-        input,
-        options,
-        direction,
-    );
+    const results = context.agentCache.completion(input, options, direction);
 
     if (results === undefined) {
         return { groups: [] };
