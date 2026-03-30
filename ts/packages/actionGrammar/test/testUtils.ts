@@ -372,14 +372,12 @@ function assertCrossDirectionInvariants(
     //     forward === completion(input[0..fwd.mpl], "backward")
     //     When forward says direction doesn't matter at its position,
     //     backward on the truncated input should produce the same result.
+    //     The cross-query is unconstrained (no minPrefixLength) because
+    //     directionSensitive is about the position P, not the caller's
+    //     floor.
     if (!forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
-        const backwardAtFwd = baseFn(
-            grammar,
-            truncated,
-            minPrefixLength,
-            "backward",
-        );
+        const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
         if (!completionResultsEqual(forward, backwardAtFwd)) {
             try {
                 expect(backwardAtFwd).toEqual(forward);
@@ -400,12 +398,7 @@ function assertCrossDirectionInvariants(
     //     forward on the truncated input should produce the same result.
     if (!backward.directionSensitive) {
         const truncated = prefix.substring(0, bwdMpl);
-        const forwardAtBwd = baseFn(
-            grammar,
-            truncated,
-            minPrefixLength,
-            "forward",
-        );
+        const forwardAtBwd = baseFn(grammar, truncated, undefined, "forward");
         // Guard: only check when forward can reach backward's position.
         // When forwardAtBwd.mpl < bwdMpl, the forward path has a known
         // gap and can't reproduce backward's position.
@@ -431,12 +424,7 @@ function assertCrossDirectionInvariants(
     //     input should back up to a shorter position.
     if (forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
-        const backwardAtFwd = baseFn(
-            grammar,
-            truncated,
-            minPrefixLength,
-            "backward",
-        );
+        const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
         const backwardAtFwdMpl = backwardAtFwd.matchedPrefixLength ?? 0;
         if (backwardAtFwdMpl >= fwdMpl) {
             throw new Error(
@@ -455,12 +443,7 @@ function assertCrossDirectionInvariants(
     //     least to backward's position (confirming it's reachable).
     if (fwdMpl !== bwdMpl && backward.directionSensitive) {
         const truncated = prefix.substring(0, bwdMpl);
-        const forwardAtBwd = baseFn(
-            grammar,
-            truncated,
-            minPrefixLength,
-            "forward",
-        );
+        const forwardAtBwd = baseFn(grammar, truncated, undefined, "forward");
         const forwardAtBwdMpl = forwardAtBwd.matchedPrefixLength ?? 0;
         // Guard: skip when forward can't reach backward's position
         // at all (mpl=0).  This is a known gap — e.g. number-variable

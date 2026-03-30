@@ -555,8 +555,7 @@ overlaps. See `actionGrammar.md` "Why direction matters" for detailed
 examples and the Option A/B design trade-off.
 
 **When `directionSensitive=false`:** Nothing was fully matched
-(partial/dirty), or the position is at the caller's floor
-(`P = minPrefixLength`).
+(partial/dirty) — P = 0.
 
 The flag is correct under the cross-query invariant definition:
 `directionSensitive=true` if and only if
@@ -566,12 +565,14 @@ content that established the anchor, so backward on the truncated input
 always diverges — even when both directions happen to agree on the
 original (longer) input. See invariant #7.
 
+`minPrefixLength` is not consulted: it is a caller-supplied lower
+bound for the search, not a property of the result.
+
 **Decision tree** (evaluated once after all candidates are collected):
 
 ```
-openWildcard        → true  (ambiguous boundary; backward can reconsider)
-P = minPrefixLength → false (nothing matched beyond caller's floor)
-otherwise           → true  (keyword boundary — backward can back up)
+P = 0      → false (nothing matched; backward has nothing to reconsider)
+P > 0      → true  (something was matched — backward can back up)
 ```
 
 See the "Forward/backward equivalence analysis" section in

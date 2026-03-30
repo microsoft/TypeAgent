@@ -294,9 +294,8 @@ export type GrammarCompletionResult = {
     // completion(input[0..P], "forward"), where P = matchedPrefixLength.
     // When false, the caller can skip re-fetching on direction change.
     //
-    // True whenever something was matched beyond the caller's floor
-    // (P > minPrefixLength) or the wildcard boundary is ambiguous
-    // (openWildcard).  False only when nothing was matched.
+    // True whenever P > 0 — something was matched.  False only when
+    // nothing was consumed (P = 0).
     directionSensitive: boolean;
     // True when the completion's `matchedPrefixLength` position is
     // *ambiguous* — it could shift forward as the user types more.
@@ -1467,16 +1466,14 @@ export function matchGrammarCompletion(
 
     // Compute directionSensitive.
     //
-    // True whenever something was matched beyond the caller's floor
-    // (P > minPrefixLength).  openWildcard is not checked
-    // separately: every path that sets openWildcard also advances
-    // maxPrefixLength past minPrefixLength (a wildcard boundary
-    // requires matched content before it).  Category 1 exact
-    // matches with trailing separators are handled by stripping the
-    // trailing text before backing up, so the backup always succeeds
-    // and P lands at the backed-up keyword position (not at
-    // prefix.length).
-    const directionSensitive = maxPrefixLength !== (minPrefixLength ?? 0);
+    // True whenever P > 0 — something was matched and backward at
+    // input[0..P] can reconsider it.  minPrefixLength is not
+    // consulted: it is a caller-supplied lower bound for the search,
+    // not a property of the result.  Category 1 exact matches with
+    // trailing separators are handled by stripping the trailing text
+    // before backing up, so the backup always succeeds and P lands
+    // at the backed-up keyword position (not at prefix.length).
+    const directionSensitive = maxPrefixLength > 0;
 
     const result: GrammarCompletionResult = {
         completions: [...completions],

@@ -746,23 +746,21 @@ evaluated once after all candidates are collected using the final
 `maxPrefixLength` (P).
 
 ```
-openWildcard?
-  └─ Yes → DIFFERENT (wildcard boundary is ambiguous;
-           backward can always reconsider)
+P = 0?
+  └─ Yes → SAME (nothing matched; backward has nothing to reconsider)
 
-P = minPrefixLength (or 0 if unset)?
-  └─ Yes → SAME (nothing matched beyond the caller's floor;
-           backward has nothing to reconsider)
-
-otherwise
-  └─ DIFFERENT (keyword boundary — backward can back up)
+P > 0?
+  └─ DIFFERENT (something was matched — backward can back up)
 ```
 
-**Key insight:** Once any keyword or wildcard is fully matched (P >
-minPrefixLength), backward can always reconsider that match —
-regardless of trailing whitespace. There are no exceptions: even
-exact matches with trailing whitespace back up to the last keyword
-via Category 1 `effectivePrefixEnd` stripping.
+`minPrefixLength` is not consulted: it is a caller-supplied lower
+bound for the search, not a property of the result.
+
+**Key insight:** Once any keyword or wildcard is fully matched (P > 0),
+backward can always reconsider that match — regardless of trailing
+whitespace. There are no exceptions: even exact matches with trailing
+whitespace back up to the last keyword via Category 1
+`effectivePrefixEnd` stripping.
 
 **Design choice — trailing separators are not consumed.** The grammar
 matcher never advances `matchedPrefixLength` past a trailing separator
@@ -792,8 +790,7 @@ Rationale:
 3. **Simpler invariants.** Without trailing-separator advancement,
    P always lands at a keyword boundary where backward can back up —
    no need to distinguish committed vs. uncommitted positions.
-   `directionSensitive` reduces to `openWildcard || P != minPrefixLength`,
-   which is easy to verify.
+   `directionSensitive` reduces to `P > 0`, which is easy to verify.
 
 **Design choice — openWildcard → always true:** Even when both
 directions happen to find the same partial keyword at the same position

@@ -2409,12 +2409,15 @@ describeForEachCompletion(
                 // are relevant.  Backward on "play music" would back up
                 // to "music" at position 4, which is below the minimum,
                 // so completions are filtered out.
+                // directionSensitive is true because P=5 > 0 (something
+                // was matched); minPrefixLength is a caller-supplied
+                // floor, not a property of the result.
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 5,
                     separatorMode: undefined,
                     closedSet: true,
-                    directionSensitive: false,
+                    directionSensitive: true,
                     openWildcard: false,
                     properties: [],
                 });
