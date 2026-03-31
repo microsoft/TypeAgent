@@ -123,7 +123,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     `Failed to compile grammar to NFA for ${schemaName}:`,
                     error,
                 );
-                // Fall back to old matcher if compilation fails
+                // NFA compilation failed; fall back to simple grammar matcher
             }
         }
         if (this.useDFA && entry.nfa) {
