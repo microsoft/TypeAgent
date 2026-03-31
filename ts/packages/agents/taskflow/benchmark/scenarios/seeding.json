@@ -7,7 +7,9 @@
       "requiredFlows": [
         "createTopSongsPlaylist",
         "playPopularKpopSong",
-        "weeklyEmailDigest"
+        "weeklyEmailDigest",
+        "dailyAgendaEmail",
+        "searchAndList"
       ]
     },
     "utterances": [
@@ -31,7 +33,7 @@
   {
     "id": "seed-02",
     "category": "seeding",
-    "description": "Seeded flow count is 3",
+    "description": "Seeded flow count is 5",
     "setup": { "requiredFlows": [] },
     "utterances": [
       {
@@ -41,7 +43,7 @@
           "matchedFlow": "listTaskFlows",
           "execution": {
             "shouldSucceed": true,
-            "outputPattern": "3"
+            "outputPattern": "5"
           }
         }
       }

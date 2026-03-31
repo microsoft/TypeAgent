@@ -949,12 +949,10 @@ async function executeReasoningWithTracing(
                             systemContext,
                         );
                         if (saved) {
-                            debug(
-                                `TaskFlow recipe saved: ${recipe.actionName}`,
-                            );
+                            debug(`TaskFlow recipe saved: ${recipe.name}`);
                             context.actionIO.appendDisplay({
                                 type: "text",
-                                content: `\n✓ Task flow registered: ${recipe.actionName}`,
+                                content: `\n✓ Task flow registered: ${recipe.name}`,
                             });
                             try {
                                 await systemContext.agents.reloadAgentSchema(
@@ -992,11 +990,11 @@ async function executeReasoningWithTracing(
 }
 
 /**
- * Save a TaskFlow recipe to instance storage and register as active flow.
+ * Save a TaskFlow script recipe to instance storage and register as active flow.
  */
 async function saveTaskFlowRecipeToStorage(
     recipe: {
-        actionName: string;
+        name: string;
         description: string;
         parameters: Array<{
             name: string;
@@ -1005,13 +1003,7 @@ async function saveTaskFlowRecipeToStorage(
             description: string;
             default?: unknown;
         }>;
-        steps: Array<{
-            id: string;
-            schemaName: string;
-            actionName: string;
-            parameters: Record<string, unknown>;
-            observedOutputFormat?: string;
-        }>;
+        script: string;
         grammarPatterns: string[];
         source?: { type: string; sourceId?: string; timestamp: string };
     },
@@ -1047,9 +1039,9 @@ async function saveTaskFlowRecipeToStorage(
         };
     }
 
-    const { actionName } = recipe;
-    if (index.flows[actionName]) {
-        debug(`TaskFlow '${actionName}' already exists, skipping`);
+    const { name } = recipe;
+    if (index.flows[name]) {
+        debug(`TaskFlow '${name}' already exists, skipping`);
         return false;
     }
 
@@ -1062,15 +1054,17 @@ async function saveTaskFlowRecipeToStorage(
         flowParams[p.name] = def;
     }
 
+    // Write flow metadata (without script)
     const flowDef = {
-        name: actionName,
+        name,
         description: recipe.description,
         parameters: flowParams,
-        steps: recipe.steps,
     };
 
-    const flowPath = `flows/${actionName}.flow.json`;
+    const flowPath = `flows/${name}.flow.json`;
+    const scriptPath = `scripts/${name}.js`;
     await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+    await storage.write(scriptPath, recipe.script);
 
     const grammarRules: string[] = [];
     for (const pattern of recipe.grammarPatterns) {
@@ -1080,8 +1074,8 @@ async function saveTaskFlowRecipeToStorage(
         const paramJson =
             captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
         grammarRules.push(
-            `<${actionName}> [spacing=optional] = ${pattern}` +
-                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
+            `<${name}> [spacing=optional] = ${pattern}` +
+                ` -> { actionName: "${name}", parameters: ${paramJson} };`,
         );
     }
 
@@ -1093,10 +1087,11 @@ async function saveTaskFlowRecipeToStorage(
     }));
 
     const now = new Date().toISOString();
-    index.flows[actionName] = {
-        actionName,
+    index.flows[name] = {
+        actionName: name,
         description: recipe.description,
         flowPath,
+        scriptPath,
         grammarRuleText: grammarRules.join("\n"),
         parameters: parametersMeta,
         created: now,
@@ -1108,7 +1103,7 @@ async function saveTaskFlowRecipeToStorage(
     index.lastModified = now;
 
     await storage.write("index.json", JSON.stringify(index, null, 2));
-    debug(`TaskFlow registered as active: ${actionName}`);
+    debug(`TaskFlow registered as active: ${name}`);
     return true;
 }
 

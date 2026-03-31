@@ -270,7 +270,7 @@ export type GrammarCompletionResult = {
     properties?: GrammarCompletionProperty[] | undefined;
     // Number of characters from the input prefix that the grammar consumed
     // before the completion point.  The shell uses this to determine where
-    // to insert/filter completions (replacing the space-based heuristic).
+    // to insert/filter completions.
     matchedPrefixLength?: number | undefined;
     // What kind of separator is expected between the content at
     // `matchedPrefixLength` and the completion text.  This is a

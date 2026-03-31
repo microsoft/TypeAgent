@@ -83,20 +83,12 @@ function extractFlowName(
     if (trace.matchedAction) return trace.matchedAction;
     const result = commandResult as any;
 
+    // Dynamic flows route directly with the flow name as actionName
     const firstAction = result?.actions?.[0];
     if (firstAction) {
-        // TaskFlow routes through executeTaskFlow with flowName param
-        if (firstAction.parameters?.flowName) {
-            return firstAction.parameters.flowName;
-        }
-        if (firstAction.schemaName === "taskflow") {
-            return firstAction.actionName;
-        }
         return firstAction.actionName ?? null;
     }
 
-    if (result?.action?.parameters?.flowName)
-        return result.action.parameters.flowName;
     if (result?.action?.actionName) return result.action.actionName;
     return null;
 }

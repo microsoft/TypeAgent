@@ -14,13 +14,4 @@ export type DeleteTaskFlow = {
     };
 };
 
-// Execute a registered task flow by name with parameters
-export type ExecuteTaskFlow = {
-    actionName: "executeTaskFlow";
-    parameters: {
-        flowName: string;
-        [key: string]: unknown;
-    };
-};
-
-export type TaskFlowActions = ListTaskFlows | DeleteTaskFlow | ExecuteTaskFlow;
+export type TaskFlowActions = ListTaskFlows | DeleteTaskFlow;

@@ -93,8 +93,8 @@ export type CompletionGroups = {
     groups: CompletionGroup[];
     // Number of characters of the input consumed by the grammar/command parser
     // before the completion point.  When present, the shell inserts
-    // completions at this offset, replacing space-based heuristics that fail
-    // for CJK and other non-space-delimited scripts.
+    // completions at this offset; clients need not split on spaces
+    // (which fails for CJK and other non-space-delimited scripts).
     matchedPrefixLength?: number | undefined;
     // What kind of separator is required between the matched prefix and
     // the completion text.  When omitted, defaults to "space" (whitespace
