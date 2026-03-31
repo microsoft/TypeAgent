@@ -139,9 +139,9 @@ export function anchorsInsideInput(
  * whether the candidate should be preferred over the incumbent.
  *
  * The normal rule is "longer wins", with one exception: a longer
- * result at end-of-input with an open wildcard is displaced by a
- * shorter result that anchors inside the input (the trailing text
- * filters the shorter result's completions, making it more
+ * result at end-of-input with afterWildcard != "none" is displaced
+ * by a shorter result that anchors inside the input (the trailing
+ * text filters the shorter result's completions, making it more
  * informative).
  *
  * Returns true when the candidate should replace the incumbent.
@@ -166,6 +166,18 @@ export function shouldPreferNewResult(
         anchorsInsideInput(candidateLen, prefixLength) &&
         isEoiWildcard(currentLen, prefixLength, currentAfterWildcard)
     );
+}
+
+/** Tri-state merge for afterWildcard:
+ *  equal → same; unequal → "some"; both undefined → undefined. */
+export function mergeAfterWildcard(
+    a: AfterWildcard | undefined,
+    b: AfterWildcard | undefined,
+): AfterWildcard | undefined {
+    if (a === undefined && b === undefined) return undefined;
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    return a === b ? a : "some";
 }
 
 // Architecture: docs/architecture/completion.md — §2 Cache Layer
@@ -234,17 +246,10 @@ export function mergeCompletionResults(
                 : undefined,
         // Tri-state merge for afterWildcard:
         // equal → same; unequal → "some"; both undefined → undefined.
-        afterWildcard:
-            first.afterWildcard !== undefined ||
-            second.afterWildcard !== undefined
-                ? first.afterWildcard === second.afterWildcard
-                    ? first.afterWildcard
-                    : first.afterWildcard === undefined
-                      ? second.afterWildcard
-                      : second.afterWildcard === undefined
-                        ? first.afterWildcard
-                        : "some"
-                : undefined,
+        afterWildcard: mergeAfterWildcard(
+            first.afterWildcard,
+            second.afterWildcard,
+        ),
     };
 }
 

@@ -529,7 +529,7 @@ type FixedCandidate =
           kind: "string";
           completionText: string;
           spacingMode: CompiledSpacingMode;
-          afterWildcard: boolean;
+          isAfterWildcard: boolean;
           partialKeywordBackup: boolean;
       }
     | {
@@ -537,7 +537,7 @@ type FixedCandidate =
           valueId: number;
           state: MatchState;
           spacingMode: CompiledSpacingMode;
-          afterWildcard: boolean;
+          isAfterWildcard: boolean;
           partialKeywordBackup: boolean;
       };
 
@@ -675,7 +675,7 @@ function collectPropertyCandidate(
     state: MatchState,
     valueId: number,
     prefixPosition: number,
-    afterWildcard: boolean = false,
+    isAfterWildcard: boolean = false,
 ): void {
     updateMaxPrefixLength(ctx, prefixPosition);
     if (prefixPosition !== ctx.maxPrefixLength) return;
@@ -684,7 +684,7 @@ function collectPropertyCandidate(
         valueId,
         state: { ...state },
         spacingMode: state.spacingMode,
-        afterWildcard,
+        isAfterWildcard,
         partialKeywordBackup: false,
     });
 }
@@ -698,7 +698,7 @@ function tryCollectStringCandidate(
     ctx: CompletionContext,
     state: MatchState,
     part: StringPart,
-    afterWildcard: boolean,
+    isAfterWildcard: boolean,
     startIndex: number,
     dir: "forward" | "backward" | undefined,
     effectivePrefixEnd?: number,
@@ -718,7 +718,7 @@ function tryCollectStringCandidate(
                 kind: "string",
                 completionText: partial.remainingText,
                 spacingMode: state.spacingMode,
-                afterWildcard,
+                isAfterWildcard,
                 partialKeywordBackup: false,
             });
         }
@@ -733,7 +733,7 @@ function tryCollectStringCandidate(
 // via tryPartialStringMatch (for strings) or collectPropertyCandidate
 // (for numbers).
 //
-// Tags the candidate with afterWildcard when backing up to a part that
+// Tags the candidate with isAfterWildcard when backing up to a part that
 // was matched after a captured wildcard (afterWildcard) — that position
 // is ambiguous because the wildcard could extend.
 function tryCollectBackwardCandidate(
@@ -1204,7 +1204,7 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
                         kind: "string",
                         completionText: partialResult.completionWord,
                         spacingMode: desc.spacingMode,
-                        afterWildcard: true,
+                        isAfterWildcard: true,
                         partialKeywordBackup: true,
                     });
                 }
@@ -1303,7 +1303,7 @@ function materializeCandidates(
     let partialKeywordBackup = false;
 
     for (const c of fixedCandidates) {
-        if (c.afterWildcard) {
+        if (c.isAfterWildcard) {
             anyAfterWildcard = true;
         } else if (c.kind === "string") {
             hasNonWildcardCompletion = true;

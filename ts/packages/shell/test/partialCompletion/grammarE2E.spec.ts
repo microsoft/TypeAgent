@@ -721,10 +721,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             //   "music" from Rule B (literal, position-sensitive)
             //   "by" from Rule A (wildcard-stable)
             // AND-merge → afterWildcard="none" → noMatchPolicy="refetch"
-            const choices =
-                menu.setChoices.mock.calls[
-                    menu.setChoices.mock.calls.length - 1
-                ][0];
+            const choices = menu.setChoices.mock.calls.at(-1)![0];
             expect(choices).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "music" }),
@@ -762,10 +759,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // At "play beautifull", only the wildcard rule contributes.
             // "music" should be gone — it was position-sensitive to
             // "play beautiful" (exact partial match of Rule B).
-            const choices =
-                menu.setChoices.mock.calls[
-                    menu.setChoices.mock.calls.length - 1
-                ][0];
+            const choices = menu.setChoices.mock.calls.at(-1)![0];
             expect(choices).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "by" }),
@@ -810,10 +804,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(menu.isActive()).toBe(true);
 
             // Verify the trie filtered to only "by".
-            const updateArgs =
-                menu.updatePrefix.mock.calls[
-                    menu.updatePrefix.mock.calls.length - 1
-                ];
+            const updateArgs = menu.updatePrefix.mock.calls.at(-1)!;
             expect(updateArgs[0]).toBe("b");
         });
 

@@ -28,6 +28,7 @@ import {
     CompletionProperty,
     CompletionResult,
     MatchOptions,
+    mergeAfterWildcard,
     shouldPreferNewResult,
 } from "../constructions/constructionCache.js";
 import { MatchResult, GrammarStore } from "./types.js";
@@ -404,15 +405,11 @@ export class GrammarStoreImpl implements GrammarStore {
                     // length is direction-sensitive.
                     directionSensitive =
                         directionSensitive || partial.directionSensitive;
-                    // Tri-state merge for afterWildcard:
-                    // equal → same; unequal → "some";
-                    // undefined + X → X (first-value-wins).
-                    afterWildcard =
-                        afterWildcard === undefined
-                            ? partial.afterWildcard
-                            : afterWildcard === partial.afterWildcard
-                              ? afterWildcard
-                              : "some";
+                    // Tri-state merge for afterWildcard.
+                    afterWildcard = mergeAfterWildcard(
+                        afterWildcard,
+                        partial.afterWildcard,
+                    );
                     if (
                         partial.properties !== undefined &&
                         partial.properties.length > 0

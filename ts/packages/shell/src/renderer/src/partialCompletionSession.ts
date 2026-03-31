@@ -55,6 +55,8 @@ function computeNoMatchPolicy(
 ): NoMatchPolicy {
     if (afterWildcard === "all") return "slide";
     if (closedSet && afterWildcard === "none") return "accept";
+    // Covers closedSet=false (open-ended set) and afterWildcard="some"
+    // (mixed wildcard/literal rules — neither sliding nor accepting is safe).
     return "refetch";
 }
 
