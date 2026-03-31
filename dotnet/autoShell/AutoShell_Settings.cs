@@ -789,22 +789,18 @@ internal partial class AutoShell
         }
     }
 
-    #endregion
-
-    #region Cursor Trail Settings
-
     /// <summary>
     /// Enables or disables the mouse cursor trail and sets its length.
     /// Command: {"CursorTrail": "{\"enable\":true,\"length\":7}"}
     /// SPI_SETMOUSETRAILS: 0 or 1 = off, >= 2 = trail length
     /// </summary>
-    static void HandleCursorTrail(string jsonParams)
+    static void HandleMouseCursorTrail(string jsonParams)
     {
         try
         {
             var param = JObject.Parse(jsonParams);
-            bool enable = param.Value<bool?>("enable") ?? true;
-            int length = param.Value<int?>("length") ?? 7;
+            var enable = param.Value<bool?>("enable") ?? true;
+            var length = param.Value<int?>("length") ?? 7;
 
             // Clamp trail length to valid range
             length = Math.Max(2, Math.Min(12, length));
