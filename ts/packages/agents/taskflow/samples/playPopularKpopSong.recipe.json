@@ -1,6 +1,5 @@
 {
-  "version": 1,
-  "actionName": "playPopularKpopSong",
+  "name": "playPopularKpopSong",
   "description": "Find and play the most popular K-pop song this month",
   "parameters": [
     {
@@ -11,47 +10,12 @@
       "description": "Time period for the chart (e.g., 'this month', 'this week')"
     }
   ],
-  "steps": [
-    {
-      "id": "fetchChart",
-      "schemaName": "utility",
-      "actionName": "webFetch",
-      "parameters": {
-        "url": "https://onlyhit.us/charts/kpop-thisweek/"
-      },
-      "observedOutputFormat": "HTML page with K-pop chart rankings"
-    },
-    {
-      "id": "extractTopSong",
-      "schemaName": "utility",
-      "actionName": "llmTransform",
-      "parameters": {
-        "input": "${fetchChart.text}",
-        "prompt": "Extract the #1 song from this K-pop chart. Return a JSON object with 'trackName' (song title) and 'artist' (artist name) fields. If there are multiple artists, put them in a single string separated by commas.",
-        "parseJson": true,
-        "model": "claude-haiku-4-5-20251001"
-      },
-      "observedOutputFormat": "{ \"trackName\": \"song title\", \"artist\": \"artist name\" }"
-    },
-    {
-      "id": "playSong",
-      "schemaName": "player",
-      "actionName": "playTrack",
-      "parameters": {
-        "trackName": "${extractTopSong.data.trackName}",
-        "artists": ["${extractTopSong.data.artist}"]
-      }
-    }
-  ],
+  "script": "async function execute(api, params) {\n    const chart = await api.webFetch(\"https://onlyhit.us/charts/kpop-thisweek/\");\n\n    const topSong = await api.queryLLM(\n        \"Extract the #1 song from this K-pop chart. Return a JSON object with 'trackName' (song title) and 'artist' (artist name) fields. If there are multiple artists, put them in a single string separated by commas.\",\n        { input: chart.text, parseJson: true, model: \"claude-haiku-4-5-20251001\" },\n    );\n\n    if (!topSong.data || !topSong.data.trackName) {\n        return { success: false, error: \"Could not extract the #1 K-pop song from the chart\" };\n    }\n\n    const result = await api.callAction(\"player\", \"playTrack\", {\n        trackName: topSong.data.trackName,\n        artists: [topSong.data.artist],\n    });\n\n    return { success: true, message: result.text };\n}",
   "grammarPatterns": [
     "play the most popular kpop song $(timePeriod:wildcard)",
     "play the top kpop song $(timePeriod:wildcard)",
     "get the most popular kpop song $(timePeriod:wildcard) and play it",
     "find the hottest kpop song $(timePeriod:wildcard) and play it",
     "play the number one kpop song $(timePeriod:wildcard)"
-  ],
-  "source": {
-    "type": "manual",
-    "timestamp": "2026-03-25T00:00:00Z"
-  }
+  ]
 }

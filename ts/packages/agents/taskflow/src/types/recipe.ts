@@ -1,16 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export interface Recipe {
-    version: 1;
-    actionName: string;
+export interface ScriptRecipe {
+    name: string;
     description: string;
     parameters: RecipeParameter[];
-    steps: RecipeStep[];
+    script: string;
     grammarPatterns: string[];
     source?: {
-        type: "reasoning" | "browser" | "webtask" | "manual";
-        sourceId?: string;
+        type: "reasoning" | "manual" | "seed";
         timestamp: string;
     };
 }
@@ -21,13 +19,4 @@ export interface RecipeParameter {
     required: boolean;
     description: string;
     default?: unknown;
-    testValue?: unknown;
-}
-
-export interface RecipeStep {
-    id: string;
-    schemaName: string;
-    actionName: string;
-    parameters: Record<string, unknown>;
-    observedOutputFormat?: string;
 }

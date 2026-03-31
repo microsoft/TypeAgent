@@ -430,45 +430,61 @@ function getClaudeOptions(
                 "",
                 "RECIPE FORMAT (write as JSON):",
                 "{",
-                '  "version": 1,',
-                '  "actionName": "camelCaseActionName",',
+                '  "name": "camelCaseActionName",',
                 '  "description": "what this flow does",',
                 '  "parameters": [',
                 '    { "name": "param", "type": "string|number|boolean", "required": true|false,',
                 '      "default": defaultValue, "description": "..." }',
                 "  ],",
-                '  "steps": [',
-                '    { "id": "stepId",',
-                '      "schemaName": "exactSchemaFromDiscover",',
-                '      "actionName": "exactActionFromDiscover",',
-                '      "parameters": {',
-                '        "key": "${paramName}",',
-                '        "nested": { "inner": "${paramName}" },',
-                '        "fromPriorStep": "${stepId.text}"',
-                "      }",
-                "    }",
-                "  ],",
+                '  "script": "async function execute(api, params) { ... }",',
                 '  "grammarPatterns": [',
                 '    "3-5 natural invocation patterns with $(param:wildcard) or $(param:number) captures"',
                 "  ]",
                 "}",
                 "",
-                "STEP PARAMETER REFERENCES:",
-                '- "${paramName}"     → flow parameter value',
-                '- "${stepId.text}"   → prior step plain text output',
-                '- "${stepId.data}"   → prior step output parsed as JSON',
-                '- "prefix ${p} sfx" → interpolated string',
-                "- Static values (strings, numbers, booleans, objects, arrays) passed through as-is",
-                "- Nested objects and arrays resolve ${...} recursively",
+                "SCRIPT API — the `api` object has these methods:",
+                "- api.callAction(schemaName, actionName, params) → { text, data, error? }",
+                "- api.queryLLM(prompt, { input?, parseJson?, model? }) → { text, data, error? }",
+                "- api.webSearch(query) → { text, data, error? }",
+                "- api.webFetch(url) → { text, data, error? }",
                 "",
-                "LLM STEPS: use utility.llmTransform (not a 'query' step type):",
-                '  { "id": "summary", "schemaName": "utility", "actionName": "llmTransform",',
-                '    "parameters": { "input": "${priorStep.text}", "prompt": "Summarize...",',
-                '    "model": "claude-haiku-4-5-20251001" } }',
+                "SCRIPT RULES:",
+                "- Must define: async function execute(api, params) { ... }",
+                "- Return { success: true, message: '...' } on success",
+                "- Return { success: false, error: '...' } on failure",
+                "- Check step.error before using step.data",
+                "- Use api.queryLLM() for LLM interpretation, api.webSearch() for search, api.webFetch() for URL fetch",
+                "- Use api.callAction(schemaName, actionName, params) for all other agent actions",
+                "- Use template literals for interpolation: `Top ${params.quantity} songs`",
+                "- Default LLM model: 'claude-haiku-4-5-20251001'",
+                "- BLOCKED identifiers: eval, Function, require, import, fetch, setTimeout, process, window, document",
+                "",
+                "SCRIPT EXAMPLE — multi-step flow with error handling:",
+                "async function execute(api, params) {",
+                "    const chart = await api.webFetch(",
+                "        `https://example.com/chart/${params.genre}/`,",
+                "    );",
+                "    const songs = await api.queryLLM(",
+                "        `Extract top ${params.quantity} songs as JSON array.`,",
+                "        { input: chart.text, parseJson: true },",
+                "    );",
+                "    if (!Array.isArray(songs.data) || songs.data.length === 0) {",
+                '        return { success: false, error: "Could not extract songs" };',
+                "    }",
+                '    const result = await api.callAction("player", "createPlaylist", {',
+                "        name: `Top ${params.quantity} ${params.genre}`,",
+                "        songs: songs.data,",
+                "    });",
+                "    return { success: true, message: result.text };",
+                "}",
                 "",
                 "GRAMMAR PATTERN RULES:",
                 "- ONLY TWO capture types exist: $(name:wildcard) for strings, $(name:number) for numbers",
                 "  NEVER write $(name:string) or $(name:integer) — those are invalid and will fail to compile",
+                "- Lead with 2-3 distinctive fixed tokens before any wildcard",
+                "- Include a flow-specific anchor keyword (e.g., 'playlist', 'digest', 'agenda')",
+                "- Make distinguishing tokens mandatory, not optional",
+                "- Avoid starting with verbs owned by other agents: 'search', 'play', 'email', 'find', 'send'",
                 "- Optional words: (word)?   Alternatives: word1 | word2",
                 "- Bare variable names in action body: { genre } not { genre: $genre }",
                 "",
@@ -476,7 +492,7 @@ function getClaudeOptions(
                 "- Required: domain-specific, no reasonable default (e.g. genre, recipient)",
                 "- Optional with default: sensible default exists (e.g. quantity=10, timePeriod='this month')",
                 "- Use exact schemaName from discover_actions; utility agent is schemaName 'utility'",
-                "- For query steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
+                "- For LLM steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
                 "",
                 "# WebFlow Recording",
@@ -861,10 +877,10 @@ async function executeReasoningWithTracing(
                         systemContext,
                     );
                     if (saved) {
-                        debug(`TaskFlow recipe saved: ${recipe.actionName}`);
+                        debug(`TaskFlow recipe saved: ${recipe.name}`);
                         context.actionIO.appendDisplay({
                             type: "text",
-                            content: `\n✓ Task flow registered: ${recipe.actionName}`,
+                            content: `\n✓ Task flow registered: ${recipe.name}`,
                         });
                         try {
                             await systemContext.agents.reloadAgentSchema(
@@ -1148,7 +1164,7 @@ async function writeDynamicGrammarForIndex(
  */
 async function saveTaskFlowRecipeToInstanceStorage(
     recipe: {
-        actionName: string;
+        name: string;
         description: string;
         parameters: Array<{
             name: string;
@@ -1157,13 +1173,7 @@ async function saveTaskFlowRecipeToInstanceStorage(
             description: string;
             default?: unknown;
         }>;
-        steps: Array<{
-            id: string;
-            schemaName: string;
-            actionName: string;
-            parameters: Record<string, unknown>;
-            observedOutputFormat?: string;
-        }>;
+        script: string;
         grammarPatterns: string[];
         source?: { type: string; sourceId?: string; timestamp: string };
     },
@@ -1200,9 +1210,9 @@ async function saveTaskFlowRecipeToInstanceStorage(
         };
     }
 
-    const { actionName } = recipe;
-    if (index.flows[actionName]) {
-        debug(`TaskFlow '${actionName}' already exists, skipping`);
+    const { name } = recipe;
+    if (index.flows[name]) {
+        debug(`TaskFlow '${name}' already exists, skipping`);
         return false;
     }
 
@@ -1216,17 +1226,19 @@ async function saveTaskFlowRecipeToInstanceStorage(
         flowParams[p.name] = def;
     }
 
+    // Write flow metadata (without script)
     const flowDef = {
-        name: actionName,
+        name,
         description: recipe.description,
         parameters: flowParams,
-        steps: recipe.steps,
     };
 
-    const flowPath = `flows/${actionName}.flow.json`;
+    const flowPath = `flows/${name}.flow.json`;
+    const scriptPath = `scripts/${name}.js`;
     await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+    await storage.write(scriptPath, recipe.script);
 
-    // Generate grammar rule text — use flow's own actionName (not executeTaskFlow)
+    // Generate grammar rule text
     const grammarRules: string[] = [];
     for (const pattern of recipe.grammarPatterns) {
         const captures = [...pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
@@ -1235,8 +1247,8 @@ async function saveTaskFlowRecipeToInstanceStorage(
         const paramJson =
             captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
         grammarRules.push(
-            `<${actionName}> [spacing=optional] = ${pattern}` +
-                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
+            `<${name}> [spacing=optional] = ${pattern}` +
+                ` -> { actionName: "${name}", parameters: ${paramJson} };`,
         );
     }
     const grammarRuleText = grammarRules.join("\n");
@@ -1249,10 +1261,11 @@ async function saveTaskFlowRecipeToInstanceStorage(
     }));
 
     const now = new Date().toISOString();
-    index.flows[actionName] = {
-        actionName,
+    index.flows[name] = {
+        actionName: name,
         description: recipe.description,
         flowPath,
+        scriptPath,
         grammarRuleText,
         parameters: parametersMeta,
         created: now,
@@ -1264,7 +1277,7 @@ async function saveTaskFlowRecipeToInstanceStorage(
     index.lastModified = now;
 
     await storage.write("index.json", JSON.stringify(index, null, 2));
-    debug(`TaskFlow registered as active: ${actionName}`);
+    debug(`TaskFlow registered as active: ${name}`);
     return true;
 }
 

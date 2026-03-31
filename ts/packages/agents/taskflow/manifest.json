@@ -4,9 +4,7 @@
   "defaultEnabled": true,
   "schema": {
     "description": "Task flow actions. Flows are taught from examples and registered for reuse.",
-    "originalSchemaFile": "./src/schema/userActions.mts",
-    "schemaFile": "./dist/taskflowSchema.pas.json",
-    "grammarFile": "./dist/taskflowSchema.ag.json",
+    "schemaFile": "./src/schema/userActions.mts",
     "schemaType": "TaskFlowActions"
   }
 }

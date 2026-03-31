@@ -1,8 +1,8 @@
 [
   {
     "id": "sp-01",
-    "category": "step-patterns",
-    "description": "Pattern A: JSON data flows between steps (webFetch -> llmTransform(parseJson) -> createPlaylist)",
+    "category": "script-patterns",
+    "description": "Script with chained actions: webFetch -> queryLLM(parseJson) -> createPlaylist",
     "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
     "utterances": [
       {
@@ -20,8 +20,8 @@
   },
   {
     "id": "sp-02",
-    "category": "step-patterns",
-    "description": "Pattern B: Nested object parameter interpolation (findEmail with messageRef.receivedDateTime.dayRange)",
+    "category": "script-patterns",
+    "description": "Script with nested object parameter (findEmail with messageRef.receivedDateTime.dayRange)",
     "setup": { "requiredFlows": ["weeklyEmailDigest"] },
     "utterances": [
       {
@@ -38,8 +38,8 @@
   },
   {
     "id": "sp-03",
-    "category": "step-patterns",
-    "description": "Pattern C: Array element interpolation (playTrack with artists=[\"${step.data.artist}\"])",
+    "category": "script-patterns",
+    "description": "Script with data extraction and array construction (playTrack with artists array)",
     "setup": { "requiredFlows": ["playPopularKpopSong"] },
     "utterances": [
       {
@@ -56,12 +56,12 @@
   },
   {
     "id": "sp-04",
-    "category": "step-patterns",
-    "description": "Pattern D: webSearch -> llmTransform -> createList (fixture: searchAndList)",
+    "category": "script-patterns",
+    "description": "Script with webSearch -> queryLLM -> createList (fixture: searchAndList)",
     "setup": { "requiredFlows": ["searchAndList"] },
     "utterances": [
       {
-        "text": "search for TypeScript best practices and make a list",
+        "text": "search and list TypeScript best practices",
         "expected": {
           "routedTo": "grammar",
           "matchedFlow": "searchAndList",
@@ -75,12 +75,12 @@
   },
   {
     "id": "sp-05",
-    "category": "step-patterns",
-    "description": "Pattern E: findTodaysEvents -> llmTransform -> sendEmail (fixture: dailyAgendaEmail)",
+    "category": "script-patterns",
+    "description": "Script with calendar + LLM + email (fixture: dailyAgendaEmail)",
     "setup": { "requiredFlows": ["dailyAgendaEmail"] },
     "utterances": [
       {
-        "text": "send me my daily agenda email",
+        "text": "daily agenda email",
         "expected": {
           "routedTo": "grammar",
           "matchedFlow": "dailyAgendaEmail",

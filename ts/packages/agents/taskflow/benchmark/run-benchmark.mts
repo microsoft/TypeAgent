@@ -99,6 +99,24 @@ function parseArgs(): BenchmarkOptions & { dryRun: boolean } {
     return options;
 }
 
+function extractMessageText(message: any): string {
+    if (!message) return "";
+    const msg = message.message ?? message;
+    if (typeof msg === "string") return msg;
+    if (Array.isArray(msg)) {
+        return msg
+            .map((item: any) => {
+                if (typeof item === "string") return item;
+                if (item?.content) return String(item.content);
+                return "";
+            })
+            .filter(Boolean)
+            .join("\n");
+    }
+    if (typeof msg === "object" && msg.content) return String(msg.content);
+    return "";
+}
+
 async function createLiveDispatcher(
     persistDir: string,
 ): Promise<DispatcherAdapter> {
@@ -141,6 +159,32 @@ async function createLiveDispatcher(
             nodeProvidersPath.replace(/\\/g, "/")
     );
 
+    let lastDisplayText = "";
+
+    // Custom clientIO that captures display output for evaluation.
+    // The default nullClientIO discards all display calls.
+    const clientIO = {
+        clear: () => {},
+        exit: () => process.exit(0),
+        setUserRequest: () => {},
+        setDisplayInfo: () => {},
+        setDisplay(message: any) {
+            const text = extractMessageText(message);
+            if (text) lastDisplayText = text;
+        },
+        appendDisplay(message: any) {
+            const text = extractMessageText(message);
+            if (text) lastDisplayText += (lastDisplayText ? "\n" : "") + text;
+        },
+        appendDiagnosticData: () => {},
+        setDynamicDisplay: () => {},
+        askYesNo: async (_rid: any, _msg: string, defaultValue = false) =>
+            defaultValue,
+        proposeAction: async () => undefined,
+        notify: () => {},
+        takeAction: () => {},
+    };
+
     const dispatcher = await createDispatcher("taskflow-benchmark", {
         appAgentProviders: providers,
         agents: { actions: true, commands: true },
@@ -149,83 +193,13 @@ async function createLiveDispatcher(
         portBase: 9200,
         persistDir,
         storageProvider: getFsStorageProvider(),
+        clientIO,
     });
-
-    let lastDisplayText = "";
 
     return {
         async processCommand(command: string): Promise<unknown> {
-            let seqBefore = 0;
-            try {
-                const before = await dispatcher.getDisplayHistory();
-                if (before.length > 0) {
-                    seqBefore = (before[before.length - 1] as any).seq ?? 0;
-                }
-            } catch {
-                /* ignore */
-            }
-
-            const result = await dispatcher.processCommand(command);
-
-            // Poll for display output with stability window
-            const pollStart = Date.now();
-            let prevCount = 0;
-            let stableAt = 0;
             lastDisplayText = "";
-
-            while (Date.now() - pollStart < 15000) {
-                await new Promise((r) => setTimeout(r, 300));
-                try {
-                    const entries =
-                        await dispatcher.getDisplayHistory(seqBefore);
-                    if (entries.length > prevCount) {
-                        prevCount = entries.length;
-                        stableAt = Date.now();
-                    } else if (
-                        entries.length > 0 &&
-                        Date.now() - stableAt > 1000
-                    ) {
-                        break;
-                    }
-
-                    if (entries.length === 0 && Date.now() - pollStart > 2000) {
-                        break;
-                    }
-                } catch {
-                    break;
-                }
-            }
-
-            try {
-                const entries = await dispatcher.getDisplayHistory(seqBefore);
-                const textParts: string[] = [];
-                for (const entry of entries) {
-                    if (
-                        entry.type === "set-display" ||
-                        entry.type === "append-display"
-                    ) {
-                        const msg = (entry as any).message?.message;
-                        if (typeof msg === "string") {
-                            textParts.push(msg);
-                        } else if (Array.isArray(msg)) {
-                            for (const item of msg) {
-                                if (typeof item === "string") {
-                                    textParts.push(item);
-                                } else if (
-                                    item &&
-                                    typeof item === "object" &&
-                                    item.content
-                                ) {
-                                    textParts.push(String(item.content));
-                                }
-                            }
-                        }
-                    }
-                }
-                lastDisplayText = textParts.join("\n");
-            } catch {
-                lastDisplayText = "";
-            }
+            const result = await dispatcher.processCommand(command);
             return result ?? null;
         },
         getDisplayText(): string {
@@ -272,7 +246,9 @@ async function main() {
         "execution.json",
         "flow-crud.json",
         "recording.json",
-        "step-patterns.json",
+        "flow-generation.json",
+        "script-patterns.json",
+        "dynamic-registration.json",
         "error-handling.json",
         "end-to-end.json",
     ];
