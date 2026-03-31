@@ -16,7 +16,7 @@
       "description": "Maximum items in list"
     }
   ],
-  "script": "async function execute(api, params) {\n    const results = await api.webSearch(params.topic);\n\n    const summary = await api.queryLLM(\n        `Extract the top ${params.maxItems} key findings as a bullet list. Return one finding per line.`,\n        { input: results.text, model: \"claude-haiku-4-5-20251001\" },\n    );\n\n    const list = await api.callAction(\"list\", \"createList\", {\n        listName: `${params.topic} findings`,\n    });\n\n    return { success: true, message: list.text, data: { findings: summary.text } };\n}",
+  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> {\n    const results = await api.webSearch(params.topic);\n\n    const summary = await api.queryLLM(\n        `Extract the top ${params.maxItems} key findings as a bullet list. Return one finding per line.`,\n        { input: results.text, model: \"claude-haiku-4-5-20251001\" },\n    );\n\n    const list = await api.callAction(\"list\", \"createList\", {\n        listName: `${params.topic} findings`,\n    });\n\n    return { success: true, message: list.text, data: { findings: summary.text } };\n}",
   "grammarPatterns": [
     "search and list $(topic:wildcard)",
     "research $(topic:wildcard) and list (the)? findings",

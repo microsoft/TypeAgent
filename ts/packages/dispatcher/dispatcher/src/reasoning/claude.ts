@@ -436,7 +436,7 @@ function getClaudeOptions(
                 '    { "name": "param", "type": "string|number|boolean", "required": true|false,',
                 '      "default": defaultValue, "description": "..." }',
                 "  ],",
-                '  "script": "async function execute(api, params) { ... }",',
+                '  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> { ... }",',
                 '  "grammarPatterns": [',
                 '    "3-5 natural invocation patterns with $(param:wildcard) or $(param:number) captures"',
                 "  ]",
@@ -449,7 +449,8 @@ function getClaudeOptions(
                 "- api.webFetch(url) → { text, data, error? }",
                 "",
                 "SCRIPT RULES:",
-                "- Must define: async function execute(api, params) { ... }",
+                "- Script MUST be TypeScript. Define: async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult>",
+                "- Do NOT add import statements — all types are provided globally.",
                 "- Return { success: true, message: '...' } on success",
                 "- Return { success: false, error: '...' } on failure",
                 "- Check step.error before using step.data",
@@ -460,7 +461,7 @@ function getClaudeOptions(
                 "- BLOCKED identifiers: eval, Function, require, import, fetch, setTimeout, process, window, document",
                 "",
                 "SCRIPT EXAMPLE — multi-step flow with error handling:",
-                "async function execute(api, params) {",
+                "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> {",
                 "    const chart = await api.webFetch(",
                 "        `https://example.com/chart/${params.genre}/`,",
                 "    );",
@@ -1234,7 +1235,7 @@ async function saveTaskFlowRecipeToInstanceStorage(
     };
 
     const flowPath = `flows/${name}.flow.json`;
-    const scriptPath = `scripts/${name}.js`;
+    const scriptPath = `scripts/${name}.ts`;
     await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
     await storage.write(scriptPath, recipe.script);
 

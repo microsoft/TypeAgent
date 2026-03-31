@@ -3,6 +3,7 @@
 
 import { TaskFlowScriptAPI } from "./taskFlowScriptApi.mjs";
 import { TaskFlowScriptResult } from "./types.mjs";
+import { BLOCKED_IDENTIFIERS } from "./taskFlowScriptValidator.mjs";
 
 export interface ScriptExecutionOptions {
     timeout: number;
@@ -12,16 +13,10 @@ const DEFAULT_OPTIONS: ScriptExecutionOptions = {
     timeout: 300_000,
 };
 
-/**
- * Executes a taskFlow script in a restricted environment.
- *
- * The script receives:
- * - `api`: A frozen TaskFlowScriptAPI proxy for calling agent actions
- * - `params`: Frozen parameter values
- * - `console`: A logging-only console stub
- *
- * The script has no access to window, document, fetch, require, etc.
- */
+const BLOCKED_GLOBALS_OVERRIDE: Record<string, undefined> = Object.fromEntries(
+    [...BLOCKED_IDENTIFIERS].map((name) => [name, undefined]),
+);
+
 export async function executeTaskFlowScript(
     scriptSource: string,
     api: TaskFlowScriptAPI,
@@ -42,6 +37,7 @@ export async function executeTaskFlowScript(
         api: sandboxedApi,
         params: sandboxedParams,
         console: sandboxedConsole,
+        ...BLOCKED_GLOBALS_OVERRIDE,
     };
 
     try {

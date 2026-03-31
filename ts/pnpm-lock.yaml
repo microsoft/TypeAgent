@@ -1495,6 +1495,9 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@4.3.6)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
       website-memory:
         specifier: workspace:*
         version: link:../../memory/website
@@ -1610,9 +1613,6 @@ importers:
       ts-loader:
         specifier: ^9.5.1
         version: 9.5.2(typescript@5.4.5)(webpack@5.105.0(esbuild@0.25.11))
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
       vite:
         specifier: ^6.4.1
         version: 6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
@@ -2481,6 +2481,9 @@ importers:
       debug:
         specifier: ^4.3.4
         version: 4.4.3(supports-color@8.1.1)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
     devDependencies:
       '@types/debug':
         specifier: ^4.1.12
@@ -2491,9 +2494,6 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
 
   packages/agents/test:
     dependencies:

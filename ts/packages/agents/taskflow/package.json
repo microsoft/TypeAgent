@@ -26,12 +26,12 @@
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
-    "debug": "^4.3.4"
+    "debug": "^4.3.4",
+    "typescript": "~5.4.5"
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "prettier": "^3.5.3",
-    "rimraf": "^6.0.1",
-    "typescript": "~5.4.5"
+    "rimraf": "^6.0.1"
   }
 }

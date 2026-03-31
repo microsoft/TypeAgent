@@ -23,7 +23,10 @@ import {
 import type { ScriptRecipe } from "./types/recipe.js";
 import { TaskFlowScriptAPIImpl } from "./script/taskFlowScriptApi.mjs";
 import { executeTaskFlowScript } from "./script/taskFlowScriptExecutor.mjs";
-import { validateTaskFlowScript } from "./script/taskFlowScriptValidator.mjs";
+import {
+    validateTaskFlowScript,
+    transpileScript,
+} from "./script/taskFlowScriptValidator.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:taskflow:handler");
@@ -174,10 +177,11 @@ async function executeFlow(
         );
     }
 
-    // Validate script
+    // Validate TypeScript script
     const validation = validateTaskFlowScript(
         flowDef.script,
         Object.keys(flowDef.parameters),
+        flowDef.parameters,
     );
     if (!validation.valid) {
         const errors = validation.errors
@@ -188,15 +192,14 @@ async function executeFlow(
         );
     }
 
+    // Transpile TypeScript to JavaScript for execution
+    const jsScript = transpileScript(flowDef.script);
+
     // Build API and execute
     const api = new TaskFlowScriptAPIImpl(context);
 
     try {
-        const result = await executeTaskFlowScript(
-            flowDef.script,
-            api,
-            flowParams,
-        );
+        const result = await executeTaskFlowScript(jsScript, api, flowParams);
 
         if (result.success) {
             return createActionResultFromTextDisplay(

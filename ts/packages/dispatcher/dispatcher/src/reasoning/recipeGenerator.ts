@@ -30,17 +30,26 @@ export interface RecipeParameter {
     default?: unknown;
 }
 
-const TASKFLOW_API_SCHEMA = `interface TaskFlowScriptAPI {
-    /** Call any TypeAgent action by schema + action name */
+const TASKFLOW_API_SCHEMA = `interface ActionStepResult {
+    text: string;
+    data: unknown;
+    error?: string;
+}
+
+interface TaskFlowScriptAPI {
     callAction(schemaName: string, actionName: string, params: Record<string, unknown>):
-        Promise<{ text: string; data: unknown; error?: string }>;
-    /** Convenience: callAction("utility", "llmTransform", ...) */
+        Promise<ActionStepResult>;
     queryLLM(prompt: string, options?: { input?: string; parseJson?: boolean; model?: string }):
-        Promise<{ text: string; data: unknown; error?: string }>;
-    /** Convenience: callAction("utility", "webSearch", ...) */
-    webSearch(query: string): Promise<{ text: string; data: unknown; error?: string }>;
-    /** Convenience: callAction("utility", "webFetch", ...) */
-    webFetch(url: string): Promise<{ text: string; data: unknown; error?: string }>;
+        Promise<ActionStepResult>;
+    webSearch(query: string): Promise<ActionStepResult>;
+    webFetch(url: string): Promise<ActionStepResult>;
+}
+
+interface TaskFlowScriptResult {
+    success: boolean;
+    message?: string;
+    data?: unknown;
+    error?: string;
 }`;
 
 const BLOCKED_IDENTIFIERS = [
@@ -165,16 +174,17 @@ ${TASKFLOW_API_SCHEMA}
 \`\`\`
 
 SCRIPT GENERATION RULES:
-1. The script must define: async function execute(api, params) { ... }
-2. Call agent actions via api.callAction(schemaName, actionName, params)
-3. Use api.queryLLM() for LLM transform steps, api.webSearch() for web search, api.webFetch() for URL fetch
-4. Use api.callAction() for all other agent actions (email, calendar, player, list, etc.)
-5. Add error checking: if a step returns an error, return { success: false, error: ... }
-6. Return { success: true, message: "..." } on success
-7. Parameterize values that change between invocations via params.paramName
-8. Use template literals for string interpolation: \`Top \${params.quantity} songs\`
-9. Default LLM model: "claude-haiku-4-5-20251001" for extraction/formatting
-10. BLOCKED identifiers — do NOT use: ${BLOCKED_IDENTIFIERS}
+1. The script MUST be TypeScript. Define: async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult>
+2. Do NOT add import statements — all types are provided globally.
+3. Call agent actions via api.callAction(schemaName, actionName, params)
+4. Use api.queryLLM() for LLM transform steps, api.webSearch() for web search, api.webFetch() for URL fetch
+5. Use api.callAction() for all other agent actions (email, calendar, player, list, etc.)
+6. Add error checking: if a step returns an error, return { success: false, error: ... }
+7. Return { success: true, message: "..." } on success
+8. Parameterize values that change between invocations via params.paramName
+9. Use template literals for string interpolation: \`Top \${params.quantity} songs\`
+10. Default LLM model: "claude-haiku-4-5-20251001" for extraction/formatting
+11. BLOCKED identifiers — do NOT use: ${BLOCKED_IDENTIFIERS}
 
 GRAMMAR PATTERN RULES:
 - Lead with 2-3 distinctive fixed tokens before any wildcard
@@ -193,7 +203,7 @@ Generate a JSON object:
     { "name": "param", "type": "string", "required": true, "description": "..." },
     { "name": "optionalParam", "type": "number", "required": false, "default": 10, "description": "..." }
   ],
-  "script": "async function execute(api, params) { ... }",
+  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> { ... }",
   "grammarPatterns": [
     "natural language pattern with $(paramName:wildcard) or $(paramName:number) captures"
   ]
@@ -221,13 +231,9 @@ Generate a corrected version. Return ONLY the JSON object, no markdown or explan
     private validateScript(source: string): string[] {
         const errors: string[] = [];
 
-        if (
-            !/async\s+function\s+execute\s*\(\s*api\s*,\s*params\s*\)/.test(
-                source,
-            )
-        ) {
+        if (!/async\s+function\s+execute\s*\(/.test(source)) {
             errors.push(
-                'Script must define "async function execute(api, params)"',
+                'Script must define "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult>"',
             );
         }
 

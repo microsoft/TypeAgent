@@ -6,7 +6,7 @@ import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
 import { WebFlowStore } from "./store/webFlowStore.mjs";
 import { WebFlowDefinition } from "./types.js";
 import { WebFlowActions } from "./schema/webFlowActions.mjs";
-import { validateWebFlowScript } from "./scriptValidator.mjs";
+import { validateWebFlowScript, transpileScript } from "./scriptValidator.mjs";
 import { executeWebFlowScript } from "./scriptExecutor.mjs";
 import {
     createFrozenBrowserApi,
@@ -265,10 +265,11 @@ async function handleDynamicFlowExecution(
         }
     }
 
-    // Validate script
+    // Validate TypeScript script
     const validation = validateWebFlowScript(
         flow.script,
         Object.keys(flow.parameters),
+        flow,
     );
     if (!validation.valid) {
         const errors = validation.errors
@@ -279,6 +280,9 @@ async function handleDynamicFlowExecution(
             data: { success: false, error: "validation_failed", errors },
         };
     }
+
+    // Transpile TypeScript to JavaScript for execution
+    const jsScript = transpileScript(flow.script);
 
     // Fill in defaults for missing optional params
     const resolvedParams: Record<string, unknown> = {};
@@ -300,7 +304,7 @@ async function handleDynamicFlowExecution(
     const extractFn = createExtractComponentFn(context);
     const browserApi = createFrozenBrowserApi(browser, flow.scope, extractFn);
     const result = await executeWebFlowScript(
-        flow.script,
+        jsScript,
         browserApi,
         resolvedParams,
     );
