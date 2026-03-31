@@ -791,6 +791,39 @@ internal partial class AutoShell
 
     #endregion
 
+    #region Cursor Trail Settings
+
+    /// <summary>
+    /// Enables or disables the mouse cursor trail and sets its length.
+    /// Command: {"CursorTrail": "{\"enable\":true,\"length\":7}"}
+    /// SPI_SETMOUSETRAILS: 0 or 1 = off, >= 2 = trail length
+    /// </summary>
+    static void HandleCursorTrail(string jsonParams)
+    {
+        try
+        {
+            var param = JObject.Parse(jsonParams);
+            bool enable = param.Value<bool?>("enable") ?? true;
+            int length = param.Value<int?>("length") ?? 7;
+
+            // Clamp trail length to valid range
+            length = Math.Max(2, Math.Min(12, length));
+
+            int trailValue = enable ? length : 0;
+
+            SystemParametersInfo(SPI_SETMOUSETRAILS, trailValue, IntPtr.Zero, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+            Debug.WriteLine(enable
+                ? $"Cursor trail enabled with length {length}"
+                : "Cursor trail disabled");
+        }
+        catch (Exception ex)
+        {
+            LogError(ex);
+        }
+    }
+
+    #endregion
+
     #region Touchpad Settings
 
     /// <summary>
@@ -1531,6 +1564,7 @@ internal partial class AutoShell
     const int SPI_GETMOUSE = 0x0003;
     const int SPI_SETMOUSE = 0x0004;
     const int SPI_SETWHEELSCROLLLINES = 0x0069;
+    const int SPI_SETMOUSETRAILS = 0x005D;
     // Note: SPIF_UPDATEINIFILE, SPIF_SENDCHANGE, WM_SETTINGCHANGE, HWND_BROADCAST
     // are already defined in AutoShell_Win32.cs
 

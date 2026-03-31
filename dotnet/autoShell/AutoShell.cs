@@ -1115,6 +1115,9 @@ internal partial class AutoShell
                 case "mousePointerCustomization":
                     HandleMousePointerCustomization(value);
                     break;
+                case "CursorTrail":
+                    HandleCursorTrail(value);
+                    break;
 
                 // Touchpad Settings
                 case "EnableTouchPad":
