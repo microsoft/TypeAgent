@@ -782,12 +782,6 @@ Confirms that backward's backed-up position is reachable from forward.
 _Impact:_ User sees only one completion branch when backspacing at a fork —
 other valid alternatives are silently lost.
 
-Note: invariants #5–#8 previously skipped `openWildcard` cases because
-truncating to an ambiguous wildcard boundary removed the content that
-established the anchor. With `openWildcard → directionSensitive=true`,
-#5/#6 never fire for openWildcard (the guard is `!directionSensitive`),
-and #7/#8 validate correctly (backward on truncated does back up).
-
 ### Field-specific invariants
 
 **#9 — `separatorMode` = `"none"` for `[spacing=none]` rules.**
