@@ -141,7 +141,7 @@ function testCompletionDFA(
             propertyNames: [p.propertyPath],
         })),
         directionSensitive: false,
-        openWildcard: false,
+        afterWildcard: "none",
     };
 }
 
@@ -537,7 +537,7 @@ export function expectMetadata(
             | undefined;
         closedSet?: boolean;
         directionSensitive?: boolean;
-        openWildcard?: boolean;
+        afterWildcard?: string;
         properties?: unknown[];
         sortCompletions?: boolean;
     },
@@ -564,8 +564,8 @@ export function expectMetadata(
     if ("directionSensitive" in expected) {
         expect(result.directionSensitive).toBe(expected.directionSensitive);
     }
-    if ("openWildcard" in expected) {
-        expect(result.openWildcard).toBe(expected.openWildcard);
+    if ("afterWildcard" in expected) {
+        expect(result.afterWildcard).toBe(expected.afterWildcard);
     }
     if ("properties" in expected) {
         expect(result.properties).toEqual(expected.properties);

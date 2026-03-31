@@ -29,6 +29,7 @@ export {
     matchGrammarCompletion,
     GrammarCompletionResult,
 } from "./grammarCompletion.js";
+export type { AfterWildcard } from "./grammarCompletion.js";
 
 // Entity system
 export type { EntityValidator, EntityConverter } from "./entityRegistry.js";
