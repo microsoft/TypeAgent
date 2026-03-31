@@ -17,20 +17,34 @@ import {
     getPropertyNameFromTransformInfo,
     isMatchPart,
     MatchSet,
+    toTransformInfoKey,
     TransformInfo,
 } from "../constructions/matchPart.js";
 import { isParsePart, ParsePart } from "../constructions/parsePart.js";
 import { loadConstructionCacheFile } from "../cache/constructionStore.js";
 import { setObjectProperty } from "@typeagent/common-utils";
 import { MatchedValueTranslator } from "../constructions/constructionValue.js";
+import { Transforms } from "../constructions/transforms.js";
 
 import registerDebug from "debug";
 
 const debugError = registerDebug("typeagent:cache:grammar:export:error");
 const MAX_MULTI_PART_COMBINATIONS = 1000;
+
+// Sentinel translator used as cache key for non-transformed MatchSet rules.
+// When there's no transform, the translator is never called and rules can be
+// shared across all constructions regardless of their transformNamespaces.
+const noTransformSentinel: MatchedValueTranslator = {
+    transform: () => undefined,
+    transformConflicts: () => undefined,
+    parse: () => undefined as any,
+};
 type State = {
     definitions: Set<RuleDefinition>;
-    matchSetRuleDefinitions: Map<MatchSet, RuleDefinition>;
+    matchSetRuleDefinitions: Map<
+        MatchedValueTranslator,
+        Map<string, RuleDefinition>
+    >;
     ruleNameNextIds: Map<string, number>;
 };
 export async function convertConstructionFileToGrammar(fileName: string) {
@@ -74,8 +88,22 @@ export function convertConstructionsToGrammar(constructions: Construction[]) {
 }
 
 function convertConstructions(state: State, constructions: Construction[]) {
+    // Cache translators by transformNamespaces identity so that constructions
+    // sharing the same transformNamespaces reuse the same translator object,
+    // enabling MatchSet rule deduplication in the cache.
+    const translatorCache = new Map<
+        Map<string, Transforms>,
+        MatchedValueTranslator
+    >();
     for (const construction of constructions) {
-        convertConstruction(state, construction);
+        let translator = translatorCache.get(construction.transformNamespaces);
+        if (translator === undefined) {
+            translator = getDefaultMatchValueTranslator(
+                construction.transformNamespaces,
+            );
+            translatorCache.set(construction.transformNamespaces, translator);
+        }
+        convertConstruction(state, construction, translator);
     }
 }
 
@@ -96,10 +124,19 @@ function getMatchSetRuleDefinition(
     transformInfo?: TransformInfo,
     wildcardMode?: WildcardMode,
 ): RuleDefinition | undefined {
-    if (transformInfo === undefined) {
-        // Can reuse match set rules only when there are no transforms,
-        // since transform-valued rules depend on the specific transform.
-        const existing = state.matchSetRuleDefinitions.get(matchSet);
+    // Cache key includes the MatchSet identity, transform, and wildcard mode
+    // so that the same (matchSet, transform, wildcardMode) combo is reused
+    // across constructions while different transforms produce separate rules.
+    // Scoped per translator since different constructions may have different
+    // transformNamespaces that resolve the same transform key to different values.
+    // When there's no transform, the translator is irrelevant — use a shared
+    // sentinel so non-transformed rules are always reused.
+    const cacheKey = matchSetCacheKey(matchSet, transformInfo, wildcardMode);
+    const translatorKey =
+        transformInfo !== undefined ? translator : noTransformSentinel;
+    let translatorCache = state.matchSetRuleDefinitions.get(translatorKey);
+    if (translatorCache !== undefined) {
+        const existing = translatorCache.get(cacheKey);
         if (existing !== undefined) {
             return existing;
         }
@@ -157,11 +194,26 @@ function getMatchSetRuleDefinition(
         definitionName: { name: getNextRuleName(state, matchSet.name) },
         rules,
     };
-    if (transformInfo === undefined) {
-        state.matchSetRuleDefinitions.set(matchSet, matchSetRuleDefinition);
+    if (translatorCache === undefined) {
+        translatorCache = new Map();
+        state.matchSetRuleDefinitions.set(translatorKey, translatorCache);
     }
+    translatorCache.set(cacheKey, matchSetRuleDefinition);
 
     return matchSetRuleDefinition;
+}
+
+function matchSetCacheKey(
+    matchSet: MatchSet,
+    transformInfo?: TransformInfo,
+    wildcardMode?: WildcardMode,
+): string {
+    // Use the MatchSet's unmergedUid (includes name + namespace + match strings)
+    // combined with the transform identity and wildcard mode.
+    const base = matchSet.unmergedUid;
+    const ti = transformInfo ? toTransformInfoKey(transformInfo) : "";
+    const wm = wildcardMode ?? 0;
+    return `${base}|${ti}|${wm}`;
 }
 
 /**
@@ -222,11 +274,8 @@ function getMultiTransformMatchSetRuleDefinition(
 function convertConstruction(
     state: State,
     construction: Construction,
+    translator: MatchedValueTranslator,
 ): undefined {
-    const translator = getDefaultMatchValueTranslator(
-        construction.transformNamespaces,
-    );
-
     // Handle multi-part transforms using cross-product enumeration when
     // any transform in the construction spans multiple parts.
     if (
