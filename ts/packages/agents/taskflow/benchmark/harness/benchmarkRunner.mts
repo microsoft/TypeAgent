@@ -51,7 +51,9 @@ const SCENARIO_FILES = [
     "execution.json",
     "flow-crud.json",
     "recording.json",
-    "step-patterns.json",
+    "flow-generation.json",
+    "script-patterns.json",
+    "dynamic-registration.json",
     "error-handling.json",
     "end-to-end.json",
 ];
@@ -61,6 +63,7 @@ const MODE_CATEGORIES: Record<string, string[]> = {
         "seeding",
         "grammar-match",
         "flow-crud",
+        "dynamic-registration",
         "error-handling",
         "end-to-end",
     ],
@@ -69,6 +72,7 @@ const MODE_CATEGORIES: Record<string, string[]> = {
         "grammar-match",
         "llm-translation",
         "flow-crud",
+        "dynamic-registration",
         "error-handling",
         "end-to-end",
     ],
@@ -78,7 +82,8 @@ const MODE_CATEGORIES: Record<string, string[]> = {
         "llm-translation",
         "execution",
         "flow-crud",
-        "step-patterns",
+        "dynamic-registration",
+        "script-patterns",
         "error-handling",
         "end-to-end",
     ],
@@ -88,8 +93,10 @@ const MODE_CATEGORIES: Record<string, string[]> = {
         "llm-translation",
         "execution",
         "flow-crud",
+        "dynamic-registration",
         "recording",
-        "step-patterns",
+        "flow-generation",
+        "script-patterns",
         "error-handling",
         "end-to-end",
     ],
@@ -99,8 +106,10 @@ const MODE_CATEGORIES: Record<string, string[]> = {
         "llm-translation",
         "execution",
         "flow-crud",
+        "dynamic-registration",
         "recording",
-        "step-patterns",
+        "flow-generation",
+        "script-patterns",
         "error-handling",
         "end-to-end",
     ],
@@ -231,6 +240,13 @@ export class BenchmarkRunner {
             try {
                 commandResult = await this.dispatcher.processCommand(text);
                 displayText = this.dispatcher.getDisplayText();
+
+                // If the display pipeline didn't capture text, try to
+                // extract it from the command result directly.
+                if (!displayText) {
+                    displayText = extractDisplayFromResult(commandResult) ?? "";
+                }
+
                 trace = this.traceCollector.buildTrace(text, scenarioStart);
                 trace.executionResult = {
                     success: !(commandResult as any)?.lastError,
@@ -257,7 +273,7 @@ export class BenchmarkRunner {
                 trace.fallbackTriggered = true;
                 trace.fallbackReason = resultObj.lastError;
             }
-            if (displayText && /reasoning|executeTaskFlow/i.test(displayText)) {
+            if (displayText && /reasoning/i.test(displayText)) {
                 trace.reasoningInvoked = true;
             }
 
@@ -290,4 +306,30 @@ export class BenchmarkRunner {
             console.log(`  [${status}] ${scenario.id}: ${text}`);
         }
     }
+}
+
+function extractDisplayFromResult(commandResult: unknown): string | undefined {
+    const r = commandResult as any;
+    if (!r) return undefined;
+
+    // Check actions array for display content
+    if (Array.isArray(r.actions)) {
+        const parts: string[] = [];
+        for (const action of r.actions) {
+            const dc = action?.result?.displayContent;
+            if (typeof dc === "string") parts.push(dc);
+            else if (Array.isArray(dc)) parts.push(dc.join("\n"));
+            if (action?.result?.historyText)
+                parts.push(action.result.historyText);
+        }
+        if (parts.length > 0) return parts.join("\n");
+    }
+
+    if (r.displayText) return r.displayText;
+    if (r.result?.displayContent) {
+        const dc = r.result.displayContent;
+        if (typeof dc === "string") return dc;
+        if (Array.isArray(dc)) return dc.join("\n");
+    }
+    return undefined;
 }

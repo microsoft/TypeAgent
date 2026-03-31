@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import type { Storage } from "@typeagent/agent-sdk";
-import type { Recipe } from "../types/recipe.js";
+import type { ScriptRecipe } from "../types/recipe.js";
 
 import registerDebug from "debug";
 
@@ -28,6 +28,7 @@ export interface TaskFlowIndexEntry {
     actionName: string;
     description: string;
     flowPath: string;
+    scriptPath: string;
     grammarRuleText: string;
     parameters: FlowParameterMeta[];
     created: string;
@@ -52,13 +53,7 @@ export interface TaskFlowDefinition {
             description?: string;
         }
     >;
-    steps: Array<{
-        id: string;
-        schemaName: string;
-        actionName: string;
-        parameters: Record<string, unknown>;
-        observedOutputFormat?: string;
-    }>;
+    script?: string;
 }
 
 // ── Grammar generation ──────────────────────────────────────────────────────
@@ -87,7 +82,7 @@ export function generateGrammarRuleText(
 
 // ── Recipe → FlowDefinition conversion ──────────────────────────────────────
 
-export function recipeToFlowDef(recipe: Recipe): TaskFlowDefinition {
+function recipeToFlowDef(recipe: ScriptRecipe): TaskFlowDefinition {
     const parameters: TaskFlowDefinition["parameters"] = {};
     for (const p of recipe.parameters) {
         parameters[p.name] = {
@@ -99,21 +94,9 @@ export function recipeToFlowDef(recipe: Recipe): TaskFlowDefinition {
     }
 
     return {
-        name: recipe.actionName,
+        name: recipe.name,
         description: recipe.description,
         parameters,
-        steps: recipe.steps.map((s) => {
-            const step: TaskFlowDefinition["steps"][number] = {
-                id: s.id,
-                schemaName: s.schemaName,
-                actionName: s.actionName,
-                parameters: s.parameters,
-            };
-            if (s.observedOutputFormat !== undefined) {
-                step.observedOutputFormat = s.observedOutputFormat;
-            }
-            return step;
-        }),
     };
 }
 
@@ -143,8 +126,6 @@ export class TaskFlowStore {
             debug(
                 `Loaded index with ${Object.keys(this.index.flows).length} flows`,
             );
-
-            await this.regenerateGrammarRules();
         } catch {
             debug("No existing index found, starting fresh");
             this.index = emptyIndex();
@@ -156,19 +137,24 @@ export class TaskFlowStore {
     // ── CRUD ───────────────────────────────────────────────────────────
 
     async saveFlow(
-        recipe: Recipe,
+        recipe: ScriptRecipe,
         source: "reasoning" | "manual" | "seed" = "manual",
     ): Promise<string> {
         this.ensureInitialized();
 
-        const { actionName } = recipe;
-        const flowPath = `flows/${actionName}.flow.json`;
+        const { name } = recipe;
+        const flowPath = `flows/${name}.flow.json`;
+        const scriptPath = `scripts/${name}.ts`;
 
+        // Write flow metadata (without script)
         const flowDef = recipeToFlowDef(recipe);
         await this.storage.write(flowPath, JSON.stringify(flowDef, null, 2));
 
+        // Write script separately
+        await this.storage.write(scriptPath, recipe.script);
+
         const grammarRuleText = generateGrammarRuleText(
-            actionName,
+            name,
             recipe.grammarPatterns,
         );
 
@@ -180,10 +166,11 @@ export class TaskFlowStore {
         }));
 
         const now = new Date().toISOString();
-        this.index.flows[actionName] = {
-            actionName,
+        this.index.flows[name] = {
+            actionName: name,
             description: recipe.description,
             flowPath,
+            scriptPath,
             grammarRuleText,
             parameters: paramMeta,
             created: now,
@@ -195,8 +182,8 @@ export class TaskFlowStore {
         this.index.lastModified = now;
 
         await this.saveIndex();
-        debug(`Flow saved: ${actionName}`);
-        return actionName;
+        debug(`Flow saved: ${name}`);
+        return name;
     }
 
     async getFlow(actionName: string): Promise<TaskFlowDefinition | null> {
@@ -207,7 +194,17 @@ export class TaskFlowStore {
 
         try {
             const json = await this.storage.read(entry.flowPath, "utf8");
-            return JSON.parse(json) as TaskFlowDefinition;
+            const flow = JSON.parse(json) as TaskFlowDefinition;
+
+            // Load script from separate file
+            try {
+                flow.script = await this.storage.read(entry.scriptPath, "utf8");
+            } catch {
+                debug(`Failed to read script for ${actionName}`);
+                return null;
+            }
+
+            return flow;
         } catch {
             debug(`Failed to read flow file for ${actionName}`);
             return null;
@@ -222,6 +219,9 @@ export class TaskFlowStore {
 
         try {
             await this.storage.delete(entry.flowPath);
+        } catch {}
+        try {
+            await this.storage.delete(entry.scriptPath);
         } catch {}
 
         delete this.index.flows[actionName];
@@ -249,81 +249,6 @@ export class TaskFlowStore {
         return this.index.deletedSamples.includes(actionName);
     }
 
-    // ── Pending recipes ────────────────────────────────────────────────
-
-    async savePending(recipe: Recipe): Promise<string> {
-        this.ensureInitialized();
-        const id = recipe.actionName + "_" + Date.now().toString(36);
-        const pendingPath = `pending/${id}.recipe.json`;
-        await this.storage.write(pendingPath, JSON.stringify(recipe, null, 2));
-        debug(`Pending recipe saved: ${id}`);
-        return id;
-    }
-
-    async listPending(): Promise<string[]> {
-        this.ensureInitialized();
-        try {
-            const files = await this.storage.list("pending");
-            return files.filter((f) => f.endsWith(".recipe.json"));
-        } catch {
-            return [];
-        }
-    }
-
-    async getPending(filename: string): Promise<Recipe | null> {
-        this.ensureInitialized();
-        try {
-            const json = await this.storage.read(`pending/${filename}`, "utf8");
-            return JSON.parse(json) as Recipe;
-        } catch {
-            return null;
-        }
-    }
-
-    async promotePending(filename: string): Promise<string | null> {
-        this.ensureInitialized();
-        const recipe = await this.getPending(filename);
-        if (!recipe) return null;
-
-        const actionName = await this.saveFlow(recipe, "reasoning");
-        try {
-            await this.storage.delete(`pending/${filename}`);
-        } catch {}
-        return actionName;
-    }
-
-    // ── Suggestions ────────────────────────────────────────────────────
-
-    async saveSuggestion(actionName: string, content: string): Promise<string> {
-        this.ensureInitialized();
-        const filename = `suggestions/${actionName}.suggestions.md`;
-        await this.storage.write(filename, content);
-        debug(`Suggestion saved: ${filename}`);
-        return filename;
-    }
-
-    async getSuggestion(actionName: string): Promise<string | null> {
-        this.ensureInitialized();
-        try {
-            return await this.storage.read(
-                `suggestions/${actionName}.suggestions.md`,
-                "utf8",
-            );
-        } catch {
-            return null;
-        }
-    }
-
-    async listSuggestions(): Promise<string[]> {
-        this.ensureInitialized();
-        try {
-            const files = await this.storage.list("suggestions");
-            return files.filter((f) => f.endsWith(".suggestions.md"));
-        } catch {
-            return [];
-        }
-    }
-
     // ── Usage tracking ─────────────────────────────────────────────────
 
     async recordUsage(actionName: string): Promise<void> {
@@ -339,8 +264,11 @@ export class TaskFlowStore {
     // ── Dynamic grammar ────────────────────────────────────────────────
 
     getDynamicGrammarText(): string {
-        const ruleNames: string[] = [];
-        const ruleTexts: string[] = [];
+        const ruleNames: string[] = ["listTaskFlows", "deleteTaskFlow"];
+        const ruleTexts: string[] = [
+            '<listTaskFlows> = (show | list | display) (all)? (the)? (available)? task flows -> { actionName: "listTaskFlows" };',
+            '<deleteTaskFlow> [spacing=optional] = (delete | remove) (the)? task flow $(name:wildcard) -> { actionName: "deleteTaskFlow", parameters: { name } };',
+        ];
 
         for (const entry of Object.values(this.index.flows)) {
             if (!entry.enabled || !entry.grammarRuleText) continue;
@@ -352,8 +280,6 @@ export class TaskFlowStore {
                 }
             }
         }
-
-        if (ruleNames.length === 0) return "";
 
         const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
         return `${startRule}\n\n${ruleTexts.join("\n\n")}`;
@@ -381,7 +307,6 @@ export class TaskFlowStore {
             "};",
         ];
 
-        // Generate per-flow action types with unique actionNames
         const flowTypeNames: string[] = [];
         for (const entry of enabledFlows) {
             const typeName =
@@ -430,27 +355,6 @@ export class TaskFlowStore {
     }
 
     // ── Internal ───────────────────────────────────────────────────────
-
-    private async regenerateGrammarRules(): Promise<void> {
-        let updated = false;
-        for (const entry of Object.values(this.index.flows)) {
-            try {
-                const json = await this.storage.read(entry.flowPath, "utf8");
-                const flow = JSON.parse(json) as TaskFlowDefinition;
-                // Re-derive grammar patterns from the stored flow
-                // The flow itself doesn't store grammarPatterns, so we
-                // rely on the cached grammarRuleText in the index.
-                // If the rule format changes, we'd regenerate here.
-                void flow;
-            } catch {
-                debug(`Could not read flow for ${entry.actionName}`);
-            }
-        }
-        if (updated) {
-            await this.saveIndex();
-            debug("Regenerated grammar rules for existing flows");
-        }
-    }
 
     private async saveIndex(): Promise<void> {
         await this.storage.write(

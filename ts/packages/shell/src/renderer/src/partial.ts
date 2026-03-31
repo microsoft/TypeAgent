@@ -342,11 +342,25 @@ export class PartialCompletion {
             return false;
         }
         if (event.key === "Escape") {
-            this.searchMenu.hide();
+            this.explicitHide();
             event.preventDefault();
             return true;
         }
         return this.searchMenu.handleSpecialKeys(event);
+    }
+
+    private explicitHide(): void {
+        const input = this.getCurrentInputForCompletion();
+        const direction: CompletionDirection =
+            input.length < this.previousInput.length &&
+            this.previousInput.startsWith(input)
+                ? "backward"
+                : "forward";
+        this.session.explicitHide(
+            input,
+            (prefix) => this.getSearchMenuPosition(prefix),
+            direction,
+        );
     }
 
     public handleMouseWheel(event: WheelEvent) {

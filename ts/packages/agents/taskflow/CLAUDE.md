@@ -43,10 +43,12 @@ Do NOT write TypeScript files. Do NOT edit `userActions.mts`, `taskflowSchema.ag
 
 ## Recipe Format
 
+Scripts must be written in **TypeScript**. The sandbox provides these types
+globally — do NOT add import statements.
+
 ```json
 {
-  "version": 1,
-  "actionName": "camelCaseActionName",
+  "name": "camelCaseActionName",
   "description": "what this flow does",
   "parameters": [
     {
@@ -63,55 +65,23 @@ Do NOT write TypeScript files. Do NOT edit `userActions.mts`, `taskflowSchema.ag
       "description": "..."
     }
   ],
-  "steps": [
-    {
-      "id": "stepId",
-      "schemaName": "utility",
-      "actionName": "webSearch",
-      "parameters": {
-        "query": "${paramName}"
-      }
-    },
-    {
-      "id": "result",
-      "schemaName": "utility",
-      "actionName": "llmTransform",
-      "parameters": {
-        "input": "${stepId.text}",
-        "prompt": "Summarize the following...",
-        "model": "claude-haiku-4-5-20251001"
-      }
-    }
-  ],
+  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> {\n    const result = await api.webSearch(params.paramName);\n    return { success: true, message: result.text };\n}",
   "grammarPatterns": [
     "3-5 natural ways to invoke this, with $(param:wildcard) or $(param:number) captures"
   ]
 }
 ```
 
-### Parameter references in step parameters
+### Script API
 
-| Value                          | Resolves to                                                        |
-| ------------------------------ | ------------------------------------------------------------------ |
-| `"${paramName}"`               | flow parameter value (typed)                                       |
-| `"${stepId.text}"`             | prior step's plain text output                                     |
-| `"${stepId.data}"`             | prior step's output parsed as JSON                                 |
-| `"prefix ${paramName} suffix"` | interpolated string                                                |
-| Static value                   | passed through as-is (strings, numbers, booleans, objects, arrays) |
+The `api` parameter implements `TaskFlowScriptAPI`:
 
-### Nested objects and arrays are fine
+- `api.callAction(schemaName, actionName, params)` — call any TypeAgent agent action
+- `api.queryLLM(prompt, { input?, parseJson?, model? })` — LLM transform
+- `api.webSearch(query)` — web search
+- `api.webFetch(url)` — fetch a URL
 
-Step parameters can contain nested objects and arrays — the interpreter resolves
-`${...}` references recursively:
-
-```json
-"parameters": {
-  "messageRef": {
-    "receivedDateTime": { "dayRange": "${timePeriod}" }
-  },
-  "to": ["me"]
-}
-```
+All return `Promise<ActionStepResult>` with `{ text, data, error? }`.
 
 ### Grammar pattern syntax
 
@@ -119,7 +89,6 @@ Step parameters can contain nested objects and arrays — the interpreter resolv
 - Optional tokens: `(word)?`
 - Alternatives within a pattern: `(this | that)`
 - Bare words only — no quotes around words
-- The compile script extracts captures and builds the action body automatically
 
 ---
 

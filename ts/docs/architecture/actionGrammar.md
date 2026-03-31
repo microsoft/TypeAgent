@@ -46,18 +46,21 @@ expressions. Agents never write matching code; they declare patterns.
 #### Declarations
 
 ```agr
-entity CalendarDate, Ordinal;              // Entity type declarations
+import { CalendarDate, Ordinal };          // Entity imports (no source — runtime-registered)
 import { helper } from "./other.agr";      // Named import
 import * from "./global.agr";             // Wildcard import
 ```
 
-Entity declarations register typed validators (see [Entities](#entities)
-below). Imports pull rules from other `.agr` files:
+Imports serve two roles:
 
+- **Entity imports** (`import { CalendarDate, Ordinal }`) declare entity
+  types that are registered at runtime (see [Entities](#entities) below).
+  No `from` clause is used — these names are resolved against the global
+  entity registry at compile time.
 - **Named imports** (`import { helper } from "./other.agr"`) bring in
   specific named rules from the target file.
 - **Wildcard imports** (`import * from "./global.agr"`) import all rules
-  and entity declarations from the target file into the current scope.
+  and entity imports from the target file into the current scope.
   Name conflicts between wildcard-imported rules and locally defined
   rules are detected and reported as errors during compilation.
 
@@ -149,7 +152,7 @@ word-boundary script), so `auto` spacing at a digit–Latin boundary
 ### Entities
 
 Entities are typed validators and converters for captured wildcards.
-A grammar declares which entity types it uses (`entity CalendarDate;`),
+A grammar declares which entity types it uses (`import { CalendarDate };`),
 and wildcards reference them with `$(var:EntityType)`.
 
 #### Built-in entities
@@ -342,8 +345,8 @@ CompiledValueNode
 The parser in `grammarRuleParser.ts` implements a hand-written recursive
 descent parser for the `.agr` grammar syntax. It handles:
 
-- **Entity declarations**: `entity CalendarDate, Ordinal;`
-- **Imports**: `import { helper } from "./other.agr";` and wildcard imports
+- **Entity imports**: `import { CalendarDate, Ordinal };` (no source clause)
+- **Sourced imports**: `import { helper } from "./other.agr";` and wildcard imports
 - **Rule definitions**: `<RuleName> [annotation] = alternatives ;`
 - **Expressions**: string literals, wildcards (`$(var:type)`), rule
   references (`<Rule>`), grouping with `( )`, quantifiers (`?`, `*`, `+`)
@@ -356,8 +359,7 @@ pipeline diagram above) captures the full source structure:
 ```typescript
 GrammarParseResult {
   definitions: RuleDefinition[]   // Named rules with alternatives
-  imports: ImportStatement[]       // File imports
-  entities: string[]               // Entity declarations
+  imports: ImportStatement[]       // All imports: entity imports (no source) and sourced imports
 }
 ```
 
@@ -542,8 +544,8 @@ a single-pass approach that defers sibling-rule resolution to Phase B
    and whether the wildcard text at that split is well-formed (via
    `getWildcardStr`). If so, `tryPartialStringMatch` runs forward at
    `maxPrefixLength` to produce sibling completions — the same result
-   the old two-pass re-invocation would have produced, but without a
-   second full traversal of the grammar. For forward EOI candidates,
+   a dedicated forward pass starting at `maxPrefixLength` would produce,
+   but without a second full traversal of the grammar. For forward EOI candidates,
    the anchor is stripped of trailing separators so that P lands before
    the flex-space (consistent with keyword→keyword behavior). When a
    partial keyword consumed to EOI (position = prefix.length), the
@@ -555,9 +557,9 @@ a single-pass approach that defers sibling-rule resolution to Phase B
 **Correctness invariant — two-pass equivalence.** Let _P_ =
 `completion(input, backward).matchedPrefixLength`. The range-candidate
 resolution in Phase B2 must produce the same completions as
-`completion(input[0..P], forward)` — i.e., a single backward pass
-with range candidates is equivalent to the old two-pass approach
-(backward to find _P_, then forward at _P_ to collect siblings).
+`completion(input[0..P], forward)` — i.e., a single backward pass with
+range candidates produces the same result as running backward to find _P_
+and then re-running forward at _P_ to collect sibling completions.
 This invariant is verified by the "two-pass backward invariant" tests.
 
 Range candidates are **skipped** when:

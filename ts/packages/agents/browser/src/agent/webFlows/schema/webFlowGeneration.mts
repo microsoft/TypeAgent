@@ -13,9 +13,10 @@ export type WebFlowGenerationResult = {
     // Search terms, product names, prices should become parameters.
     // Fixed UI element names (button text, labels) should NOT be parameters.
     parameters: { [paramName: string]: WebFlowParameterDef };
-    // The script body as a string. Must be an async function with signature:
-    //   async function execute(browser, params) { ... }
+    // The script body as a TypeScript string. Must be an async function with signature:
+    //   async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult>
     // The script can ONLY use browser.* methods and params.* values. No other globals.
+    // Use TypeScript type annotations. Do not add import statements — types are provided globally.
     script: string;
     // 3-5 natural language patterns for grammar matching.
     // Use $(paramName:wildcard) for string captures,

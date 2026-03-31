@@ -9,7 +9,7 @@
       "description": "The category to browse"
     }
   },
-  "script": "async function execute(browser, params) {\n    const navLink = await browser.extractComponent(\n        {\n            typeName: 'NavigationLink',\n            schema: '{ title: string; linkSelector: string; }'\n        },\n        params.categoryName || 'categories'\n    );\n    if (!navLink || !navLink.linkSelector) {\n        throw new Error('Could not find category link' + (params.categoryName ? ' for: ' + params.categoryName : ''));\n    }\n    await browser.click(navLink.linkSelector);\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Browsing ' + (navLink.title || params.categoryName || 'categories') };\n}",
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const navLink = await browser.extractComponent<{ title: string; linkSelector: string }>(\n        {\n            typeName: 'NavigationLink',\n            schema: '{ title: string; linkSelector: string; }'\n        },\n        params.categoryName || 'categories'\n    );\n    if (!navLink || !navLink.linkSelector) {\n        throw new Error('Could not find category link' + (params.categoryName ? ' for: ' + params.categoryName : ''));\n    }\n    await browser.click(navLink.linkSelector);\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Browsing ' + (navLink.title || params.categoryName || 'categories') };\n}",
   "grammarPatterns": [
     "browse $(categoryName:wildcard) category",
     "browse categories",

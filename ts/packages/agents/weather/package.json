@@ -51,6 +51,19 @@
             "dist/weatherSchema.ag.json"
           ]
         }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/weatherSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/weatherSchema.pas.json"
+          ]
+        }
       }
     }
   }
