@@ -111,10 +111,11 @@ export async function generateWebFlowFromTrace(
 
         const parsed = toWebFlowDefinition(response.data, trace.startUrl);
 
-        // Validate the generated script content
+        // Validate the generated TypeScript script
         const validation = validateWebFlowScript(
             parsed.script,
             Object.keys(parsed.parameters),
+            parsed,
         );
         if (!validation.valid) {
             const errors = validation.errors
@@ -134,6 +135,7 @@ export async function generateWebFlowFromTrace(
                 const retryValidation = validateWebFlowScript(
                     retryParsed.script,
                     Object.keys(retryParsed.parameters),
+                    retryParsed,
                 );
                 if (retryValidation.valid) {
                     return retryParsed;
@@ -220,13 +222,26 @@ If your recording overlaps with an existing flow (same purpose, similar paramete
 flow that includes ALL parameters from both the existing flow and the new recording. Use the existing
 flow's name. Any new parameters should be optional with sensible defaults.\n`
         : ""
-}Generate a WebFlowGenerationResult that turns this trace into a reusable, parameterized script.
+}Generate a WebFlowGenerationResult that turns this trace into a reusable, parameterized TypeScript script.
 
-The script's \`browser\` parameter implements the following TypeScript interface. Use ONLY these methods in the generated script:
+IMPORTANT: The script MUST be written in TypeScript with type annotations. The following types are available globally (do NOT add import statements):
 
 \`\`\`typescript
 ${browserApiSchema}
+
+interface WebFlowResult {
+    success: boolean;
+    message?: string;
+    data?: unknown;
+    error?: string;
+}
 \`\`\`
+
+The script function signature must be:
+  async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult>
+
+Where FlowParams is an interface with the declared parameters as typed properties.
+Use type annotations on variables where it improves clarity. The script will be type-checked against the WebFlowBrowserAPI interface — only methods defined above are available.
 
 SCRIPT GENERATION RULES:
 1. Remove exploratory or corrective steps. Keep only the essential path.
@@ -238,6 +253,7 @@ SCRIPT GENERATION RULES:
 7. Action methods (click, enterText, selectOption, clickAndWait, followLink) take a CSS selector string directly. Do NOT use findElement or waitForElement — they do not exist.
 8. IMPORTANT — valueOptions for fixed-choice parameters: When the trace shows interaction with a dropdown, radio button group, segmented toggle, or any control with a fixed set of choices, populate the parameter's valueOptions array with ALL available option texts (not just the one selected in the recording). Extract these from the recorded step data (e.g., select element option lists, button group labels). Also include these options in the parameter description. The script should match params against valueOptions case-insensitively before passing to selectOption/click.
 9. IMPORTANT — skip empty parameters: When a parameter value is falsy (empty string, null, undefined), the script should skip that parameter's action gracefully and continue with the remaining steps. Only throw an error if ALL parameters are empty. A partially-filled request should apply the values that were provided and leave the rest unchanged.
+10. Do NOT add import statements. All types are provided globally in the sandbox.
 
 IMPORTANT patterns for the script:
 - To click a link: use extractComponent({typeName: 'NavigationLink', schema: '{ title: string; linkSelector: string; }'}, 'link text') then browser.followLink(link.linkSelector)

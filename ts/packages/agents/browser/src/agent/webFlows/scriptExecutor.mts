@@ -3,6 +3,7 @@
 
 import { WebFlowBrowserAPI } from "./webFlowBrowserApi.mjs";
 import { WebFlowResult } from "./types.js";
+import { BLOCKED_IDENTIFIERS } from "./scriptValidator.mjs";
 
 export interface ScriptExecutionOptions {
     timeout: number;
@@ -12,16 +13,12 @@ const DEFAULT_OPTIONS: ScriptExecutionOptions = {
     timeout: 180000,
 };
 
-/**
- * Executes a webFlow script in a restricted environment.
- *
- * The script receives:
- * - `browser`: A frozen WebFlowBrowserAPI proxy
- * - `params`: Frozen parameter values
- * - `console`: A logging-only console stub
- *
- * The script has no access to window, document, fetch, require, etc.
- */
+// Globals that are explicitly shadowed with undefined in the Function scope,
+// preventing scripts from accessing them even if the AST validator is bypassed.
+const BLOCKED_GLOBALS_OVERRIDE: Record<string, undefined> = Object.fromEntries(
+    [...BLOCKED_IDENTIFIERS].map((name) => [name, undefined]),
+);
+
 export async function executeWebFlowScript(
     scriptSource: string,
     browserApi: WebFlowBrowserAPI,
@@ -42,6 +39,7 @@ export async function executeWebFlowScript(
         browser: sandboxedBrowser,
         params: sandboxedParams,
         console: sandboxedConsole,
+        ...BLOCKED_GLOBALS_OVERRIDE,
     };
 
     try {

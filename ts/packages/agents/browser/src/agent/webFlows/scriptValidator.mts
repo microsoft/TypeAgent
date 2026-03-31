@@ -1,9 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { ValidationResult, ValidationError } from "./types.js";
+import ts from "typescript";
+import {
+    ValidationResult,
+    ValidationError,
+    WebFlowDefinition,
+} from "./types.js";
+import {
+    generateSandboxDeclarations,
+    generateGenericSandboxDeclarations,
+} from "./sandboxDeclarations.mjs";
 
-const BLOCKED_IDENTIFIERS = new Set([
+const BLOCKED_PROPERTIES = new Set(["__proto__", "constructor", "prototype"]);
+
+const DANGEROUS_CALLS = new Set(["eval", "Function"]);
+
+export const BLOCKED_IDENTIFIERS = new Set([
     "eval",
     "Function",
     "require",
@@ -57,28 +70,224 @@ export const ALLOWED_GLOBALS = new Set([
     "false",
 ]);
 
-/**
- * Validates a webFlow script using regex-based analysis.
- * Checks that only allowed APIs are used and blocked constructs are absent.
- *
- * This is a conservative, pattern-based validator. It scans for:
- * 1. Blocked global identifiers (eval, fetch, document, etc.)
- * 2. Dynamic code execution patterns (new Function, import())
- * 3. Presence of the execute function signature
- * 4. Usage of declared parameters
- */
-export function validateWebFlowScript(
-    source: string,
-    declaredParams: string[],
-): ValidationResult {
+function createVirtualHost(files: Record<string, string>): ts.CompilerHost {
+    const defaultHost = ts.createCompilerHost({
+        strict: true,
+        target: ts.ScriptTarget.ES2022,
+    });
+
+    return {
+        ...defaultHost,
+        getSourceFile(fileName, languageVersion) {
+            if (fileName in files) {
+                return ts.createSourceFile(
+                    fileName,
+                    files[fileName],
+                    languageVersion,
+                    true,
+                );
+            }
+            return defaultHost.getSourceFile(fileName, languageVersion);
+        },
+        fileExists(fileName) {
+            return fileName in files || defaultHost.fileExists(fileName);
+        },
+        readFile(fileName) {
+            return files[fileName] ?? defaultHost.readFile(fileName);
+        },
+    };
+}
+
+function getLineAndColumn(
+    sourceFile: ts.SourceFile,
+    pos: number,
+): { line: number; column: number } {
+    const lc = sourceFile.getLineAndCharacterOfPosition(pos);
+    return { line: lc.line + 1, column: lc.character };
+}
+
+function createError(
+    sourceFile: ts.SourceFile,
+    node: ts.Node,
+    message: string,
+    severity: "error" | "warning" = "error",
+): ValidationError {
+    const { line, column } = getLineAndColumn(sourceFile, node.getStart());
+    return { line, column, message, severity };
+}
+
+function walkForSecurityViolations(
+    sourceFile: ts.SourceFile,
+): ValidationError[] {
     const errors: ValidationError[] = [];
 
-    // Check for execute function signature
-    if (
-        !/async\s+function\s+execute\s*\(\s*browser\s*,\s*params\s*\)/.test(
-            source,
-        )
-    ) {
+    function visit(node: ts.Node) {
+        // Block eval() and Function() calls
+        if (
+            ts.isCallExpression(node) &&
+            ts.isIdentifier(node.expression) &&
+            DANGEROUS_CALLS.has(node.expression.text)
+        ) {
+            errors.push(
+                createError(
+                    sourceFile,
+                    node,
+                    `'${node.expression.text}()' is not allowed`,
+                ),
+            );
+        }
+
+        // Block new Function()
+        if (
+            ts.isNewExpression(node) &&
+            ts.isIdentifier(node.expression) &&
+            node.expression.text === "Function"
+        ) {
+            errors.push(
+                createError(
+                    sourceFile,
+                    node,
+                    "'new Function()' is not allowed",
+                ),
+            );
+        }
+
+        // Block import() expressions
+        if (
+            ts.isCallExpression(node) &&
+            node.expression.kind === ts.SyntaxKind.ImportKeyword
+        ) {
+            errors.push(
+                createError(
+                    sourceFile,
+                    node,
+                    "Dynamic import() is not allowed",
+                ),
+            );
+        }
+
+        // Block dangerous property access (__proto__, constructor, prototype)
+        if (ts.isPropertyAccessExpression(node)) {
+            if (BLOCKED_PROPERTIES.has(node.name.text)) {
+                errors.push(
+                    createError(
+                        sourceFile,
+                        node.name,
+                        `Access to '${node.name.text}' is not allowed`,
+                    ),
+                );
+            }
+        }
+
+        // Block computed property access on identifiers (e.g., browser["__proto__"])
+        if (
+            ts.isElementAccessExpression(node) &&
+            ts.isStringLiteral(node.argumentExpression) &&
+            BLOCKED_PROPERTIES.has(node.argumentExpression.text)
+        ) {
+            errors.push(
+                createError(
+                    sourceFile,
+                    node.argumentExpression,
+                    `Computed access to '${node.argumentExpression.text}' is not allowed`,
+                ),
+            );
+        }
+
+        // Block with statements
+        if (ts.isWithStatement(node)) {
+            errors.push(
+                createError(
+                    sourceFile,
+                    node,
+                    "'with' statement is not allowed",
+                ),
+            );
+        }
+
+        // Block debugger statements
+        if (node.kind === ts.SyntaxKind.DebuggerStatement) {
+            errors.push(
+                createError(
+                    sourceFile,
+                    node,
+                    "'debugger' statement is not allowed",
+                ),
+            );
+        }
+
+        ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+    return errors;
+}
+
+function validateEntryPoint(sourceFile: ts.SourceFile): ValidationError[] {
+    const errors: ValidationError[] = [];
+    let foundExecute = false;
+
+    for (const statement of sourceFile.statements) {
+        if (
+            ts.isFunctionDeclaration(statement) &&
+            statement.name?.text === "execute"
+        ) {
+            foundExecute = true;
+
+            if (
+                !statement.modifiers?.some(
+                    (m) => m.kind === ts.SyntaxKind.AsyncKeyword,
+                )
+            ) {
+                errors.push(
+                    createError(
+                        sourceFile,
+                        statement,
+                        "execute function must be async",
+                    ),
+                );
+            }
+
+            const params = statement.parameters;
+            if (params.length < 2) {
+                errors.push(
+                    createError(
+                        sourceFile,
+                        statement,
+                        "execute function must have at least two parameters (browser, params)",
+                    ),
+                );
+            } else {
+                if (
+                    ts.isIdentifier(params[0].name) &&
+                    params[0].name.text !== "browser"
+                ) {
+                    errors.push(
+                        createError(
+                            sourceFile,
+                            params[0],
+                            "First parameter must be named 'browser'",
+                        ),
+                    );
+                }
+                if (
+                    ts.isIdentifier(params[1].name) &&
+                    params[1].name.text !== "params"
+                ) {
+                    errors.push(
+                        createError(
+                            sourceFile,
+                            params[1],
+                            "Second parameter must be named 'params'",
+                        ),
+                    );
+                }
+            }
+            break;
+        }
+    }
+
+    if (!foundExecute) {
         errors.push({
             line: 1,
             column: 0,
@@ -88,56 +297,79 @@ export function validateWebFlowScript(
         });
     }
 
-    const lines = source.split("\n");
+    return errors;
+}
 
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const lineNum = i + 1;
+// Diagnostic codes to suppress — these are expected in our sandbox environment
+const SUPPRESSED_DIAGNOSTICS = new Set([
+    // "Cannot find module" for type-only imports we don't provide
+    2307,
+]);
 
-        // Skip comments
-        const trimmed = line.trim();
-        if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
+export function validateWebFlowScript(
+    source: string,
+    declaredParams: string[],
+    flow?: WebFlowDefinition,
+): ValidationResult {
+    const errors: ValidationError[] = [];
 
-        // Check for blocked identifiers used as standalone references
-        for (const blocked of BLOCKED_IDENTIFIERS) {
-            // Match as standalone identifier (not as part of a larger word, not in a string)
-            const pattern = new RegExp(`\\b${blocked}\\b`);
-            if (pattern.test(line)) {
-                // Exclude occurrences inside string literals (basic check)
-                const withoutStrings = line
-                    .replace(/"[^"]*"/g, '""')
-                    .replace(/'[^']*'/g, "''")
-                    .replace(/`[^`]*`/g, "``");
-                if (pattern.test(withoutStrings)) {
-                    errors.push({
-                        line: lineNum,
-                        column: line.search(pattern),
-                        message: `Disallowed identifier: '${blocked}'`,
-                        severity: "error",
-                    });
-                }
-            }
-        }
+    const sandboxDts = flow
+        ? generateSandboxDeclarations(flow)
+        : generateGenericSandboxDeclarations();
 
-        // Check for dynamic import
-        if (/\bimport\s*\(/.test(line)) {
-            errors.push({
-                line: lineNum,
-                column: line.search(/\bimport\s*\(/),
-                message: "Dynamic import() is not allowed",
-                severity: "error",
-            });
-        }
+    const files: Record<string, string> = {
+        "sandbox.d.ts": sandboxDts,
+        "script.ts": source,
+    };
 
-        // Check for new Function()
-        if (/new\s+Function\s*\(/.test(line)) {
-            errors.push({
-                line: lineNum,
-                column: line.search(/new\s+Function\s*\(/),
-                message: "new Function() is not allowed",
-                severity: "error",
-            });
-        }
+    const host = createVirtualHost(files);
+
+    const program = ts.createProgram(
+        ["script.ts"],
+        {
+            strict: true,
+            noEmit: true,
+            target: ts.ScriptTarget.ES2022,
+            module: ts.ModuleKind.ES2022,
+            moduleResolution: ts.ModuleResolutionKind.Node10,
+            types: [], // Block all ambient types (Node, DOM, etc.)
+            skipLibCheck: true,
+        },
+        host,
+    );
+
+    // Collect type-checking diagnostics
+    const diagnostics = ts.getPreEmitDiagnostics(program);
+    for (const diag of diagnostics) {
+        if (SUPPRESSED_DIAGNOSTICS.has(diag.code)) continue;
+        // Only report diagnostics from our script file
+        if (diag.file && diag.file.fileName !== "script.ts") continue;
+
+        const line =
+            diag.file && diag.start !== undefined
+                ? diag.file.getLineAndCharacterOfPosition(diag.start).line + 1
+                : 0;
+        const column =
+            diag.file && diag.start !== undefined
+                ? diag.file.getLineAndCharacterOfPosition(diag.start).character
+                : 0;
+
+        errors.push({
+            line,
+            column,
+            message: ts.flattenDiagnosticMessageText(diag.messageText, "\n"),
+            severity:
+                diag.category === ts.DiagnosticCategory.Error
+                    ? "error"
+                    : "warning",
+        });
+    }
+
+    // Validate entry point structure
+    const sourceFile = program.getSourceFile("script.ts");
+    if (sourceFile) {
+        errors.push(...validateEntryPoint(sourceFile));
+        errors.push(...walkForSecurityViolations(sourceFile));
     }
 
     // Check that all declared parameters are referenced
@@ -157,4 +389,15 @@ export function validateWebFlowScript(
         valid: errors.filter((e) => e.severity === "error").length === 0,
         errors,
     };
+}
+
+export function transpileScript(source: string): string {
+    const result = ts.transpileModule(source, {
+        compilerOptions: {
+            target: ts.ScriptTarget.ES2022,
+            module: ts.ModuleKind.ES2022,
+            removeComments: true,
+        },
+    });
+    return result.outputText;
 }

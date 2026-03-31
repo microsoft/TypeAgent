@@ -144,7 +144,7 @@ export class TaskFlowStore {
 
         const { name } = recipe;
         const flowPath = `flows/${name}.flow.json`;
-        const scriptPath = `scripts/${name}.js`;
+        const scriptPath = `scripts/${name}.ts`;
 
         // Write flow metadata (without script)
         const flowDef = recipeToFlowDef(recipe);
