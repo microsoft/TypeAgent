@@ -3,7 +3,6 @@
 
 import {
     type AppAgent,
-    type AppAction,
     type ActionContext,
     type ActionResult,
     type SessionContext,
@@ -14,14 +13,17 @@ import {
     createActionResultFromTextDisplay,
     createActionResultFromError,
 } from "@typeagent/agent-sdk/helpers/action";
-import { existsSync, readFileSync, readdirSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import {
     TaskFlowStore,
     type TaskFlowDefinition,
 } from "./store/taskFlowStore.mjs";
-import type { Recipe } from "./types/recipe.js";
+import type { ScriptRecipe } from "./types/recipe.js";
+import { TaskFlowScriptAPIImpl } from "./script/taskFlowScriptApi.mjs";
+import { executeTaskFlowScript } from "./script/taskFlowScriptExecutor.mjs";
+import { validateTaskFlowScript } from "./script/taskFlowScriptValidator.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:taskflow:handler");
@@ -32,105 +34,6 @@ const SAMPLES_DIR = join(__dirname, "..", "samples");
 
 interface TaskFlowAgentContext {
     store?: TaskFlowStore | undefined;
-}
-
-// ── Genre validation ────────────────────────────────────────────────────────
-
-const KNOWN_GENRES: string[] = [
-    "acoustic",
-    "adult contemporary",
-    "afrobeat",
-    "alternative",
-    "americana",
-    "ambient",
-    "appalachian",
-    "bachata",
-    "bebop",
-    "big band",
-    "bluegrass",
-    "blues",
-    "bossa nova",
-    "broadway",
-    "cajun",
-    "celtic",
-    "children's",
-    "chillout",
-    "christian",
-    "christmas",
-    "classic rock",
-    "classical",
-    "contemporary christian",
-    "country",
-    "cumbia",
-    "dance",
-    "disco",
-    "drum and bass",
-    "dubstep",
-    "edm",
-    "electronic",
-    "emo",
-    "flamenco",
-    "folk",
-    "funk",
-    "gospel",
-    "grunge",
-    "hard rock",
-    "hip-hop",
-    "hip hop",
-    "holiday",
-    "honky tonk",
-    "house",
-    "indie",
-    "industrial",
-    "j-pop",
-    "jazz",
-    "k-pop",
-    "latin",
-    "lo-fi",
-    "metal",
-    "mountain",
-    "musical theatre",
-    "new age",
-    "new wave",
-    "old-time",
-    "opera",
-    "outlaw country",
-    "pop",
-    "power pop",
-    "progressive rock",
-    "psychedelic",
-    "punk",
-    "r&b",
-    "rap",
-    "red dirt",
-    "reggae",
-    "rnb",
-    "rockabilly",
-    "salsa",
-    "singer-songwriter",
-    "ska",
-    "smooth jazz",
-    "soft rock",
-    "soul",
-    "swing",
-    "swing jazz",
-    "techno",
-    "tejano",
-    "trap",
-    "western swing",
-    "world music",
-    "worship",
-    "zydeco",
-];
-
-function isKnownGenre(genre: string): boolean {
-    const normalized = genre.toLowerCase().trim();
-    return KNOWN_GENRES.some(
-        (g) =>
-            g === normalized ||
-            normalized.includes(g) ||
-            g.includes(normalized),
-    );
 }
 
 // ── Sample seeding ──────────────────────────────────────────────────────────
@@ -148,12 +51,12 @@ async function seedSampleFlows(store: TaskFlowStore): Promise<number> {
     }
 
     for (const file of sampleFiles) {
-        const recipe: Recipe = JSON.parse(
+        const recipe: ScriptRecipe = JSON.parse(
             readFileSync(join(SAMPLES_DIR, file), "utf8"),
         );
 
-        if (store.hasFlow(recipe.actionName)) continue;
-        if (store.isSampleDeleted(recipe.actionName)) continue;
+        if (store.hasFlow(recipe.name)) continue;
+        if (store.isSampleDeleted(recipe.name)) continue;
 
         await store.saveFlow(recipe, "seed");
         seeded++;
@@ -215,49 +118,18 @@ async function handleTaskFlowAction(
                     `Task flow not found: ${name}`,
                 );
             }
-            await context.sessionContext.reloadAgentSchema();
+            try {
+                await context.sessionContext.reloadAgentSchema();
+            } catch (e) {
+                debug(`Schema reload after delete: ${e}`);
+            }
             return createActionResultFromTextDisplay(
                 `Deleted task flow: ${name}`,
             );
         }
 
-        case "executeTaskFlow": {
-            if (!store) {
-                return createActionResultFromError(
-                    "Task flow store not available",
-                );
-            }
-            const flowName = action.parameters?.flowName as string | undefined;
-            if (!flowName) {
-                return createActionResultFromError(
-                    "Missing required parameter: flowName",
-                );
-            }
-
-            const flow = await store.getFlow(flowName);
-            if (!flow) {
-                return createActionResultFromError(
-                    `Unknown task flow '${flowName}'. Use 'list my task flows' to see available flows.`,
-                );
-            }
-
-            // Extract flow parameters (everything except flowName)
-            const flowParams: Record<string, unknown> = {};
-            if (action.parameters) {
-                for (const [key, value] of Object.entries(action.parameters)) {
-                    if (key !== "flowName") {
-                        flowParams[key] = value;
-                    }
-                }
-            }
-
-            const result = await executeFlow(flow, flowParams, context);
-            await store.recordUsage(flowName);
-            return result;
-        }
-
         default: {
-            // Dynamic flow execution — grammar may route directly to flow name
+            // Dynamic flow execution — grammar routes directly to flow name
             if (!store) {
                 return createActionResultFromError(
                     `Unknown action '${action.actionName}'`,
@@ -283,80 +155,63 @@ async function handleTaskFlowAction(
 }
 
 // ── Flow execution ──────────────────────────────────────────────────────────
-// Delegates to the dispatcher's processFlow() via dynamic import to avoid
-// cyclic workspace dependencies.
 
 async function executeFlow(
     flowDef: TaskFlowDefinition,
     flowParams: Record<string, unknown>,
     context: ActionContext<any>,
 ): Promise<ActionResult> {
+    // Apply parameter defaults
+    for (const [name, def] of Object.entries(flowDef.parameters)) {
+        if (!(name in flowParams) && def.default !== undefined) {
+            flowParams[name] = def.default;
+        }
+    }
+
+    if (!flowDef.script) {
+        return createActionResultFromError(
+            `Flow '${flowDef.name}' has no script.`,
+        );
+    }
+
+    // Validate script
+    const validation = validateTaskFlowScript(
+        flowDef.script,
+        Object.keys(flowDef.parameters),
+    );
+    if (!validation.valid) {
+        const errors = validation.errors
+            .filter((e) => e.severity === "error")
+            .map((e) => e.message);
+        return createActionResultFromError(
+            `Script validation failed for '${flowDef.name}': ${errors.join("; ")}`,
+        );
+    }
+
+    // Build API and execute
+    const api = new TaskFlowScriptAPIImpl(context);
+
     try {
-        // Import processFlow from the dispatcher at runtime to avoid
-        // cyclic package dependencies (taskflow -> dispatcher -> taskflow)
-        const tsRoot = join(__dirname, "..", "..", "..", "..");
-        const flowInterpreterPath = join(
-            tsRoot,
-            "packages",
-            "dispatcher",
-            "dispatcher",
-            "dist",
-            "execute",
-            "flowInterpreter.js",
+        const result = await executeTaskFlowScript(
+            flowDef.script,
+            api,
+            flowParams,
         );
 
-        if (!existsSync(flowInterpreterPath)) {
+        if (result.success) {
+            return createActionResultFromTextDisplay(
+                result.message ?? "Flow completed",
+            );
+        } else {
             return createActionResultFromError(
-                `Flow interpreter not found at ${flowInterpreterPath}. Ensure the dispatcher is built.`,
+                result.error ?? "Script execution failed",
             );
         }
-
-        const { processFlow } = await import(
-            /* webpackIgnore: true */ "file://" +
-                flowInterpreterPath.replace(/\\/g, "/")
-        );
-
-        // processFlow expects the FlowDefinition type from the dispatcher
-        return await processFlow(flowDef, flowParams, context, 0);
     } catch (err) {
         return createActionResultFromError(
             `Flow execution failed: ${err instanceof Error ? err.message : String(err)}`,
         );
     }
-}
-
-// ── Wildcard validation ─────────────────────────────────────────────────────
-
-async function validateTaskFlowWildcardMatch(
-    action: AppAction,
-    _context: SessionContext,
-): Promise<boolean> {
-    // For executeTaskFlow with flowName=createTopSongsPlaylist, validate genre
-    const params = (action as any).parameters;
-    if (
-        params?.flowName === "createTopSongsPlaylist" &&
-        typeof params?.genre === "string"
-    ) {
-        return isKnownGenre(params.genre);
-    }
-    return true;
-}
-
-// ── Action completion ───────────────────────────────────────────────────────
-
-async function getTaskFlowActionCompletion(
-    _context: SessionContext,
-    action: AppAction,
-    propertyName: string,
-): Promise<string[] | undefined> {
-    const params = (action as any).parameters;
-    if (
-        params?.flowName === "createTopSongsPlaylist" &&
-        propertyName === "parameters.genre"
-    ) {
-        return [...KNOWN_GENRES].sort();
-    }
-    return undefined;
 }
 
 // ── Instantiate ─────────────────────────────────────────────────────────────
@@ -404,10 +259,10 @@ export function instantiate(): AppAgent {
             _context: SessionContext,
             _schemaName: string,
         ): Promise<SchemaContent | undefined> {
-            if (!agentContext.store) return undefined;
+            if (!_agentStore) return undefined;
             return {
                 format: "ts",
-                content: agentContext.store.generateDynamicSchemaText(),
+                content: _agentStore.generateDynamicSchemaText(),
             };
         },
 
@@ -415,13 +270,10 @@ export function instantiate(): AppAgent {
             _context: SessionContext,
             _schemaName: string,
         ): Promise<GrammarContent | undefined> {
-            if (!agentContext.store) return undefined;
-            const text = agentContext.store.getDynamicGrammarText();
+            if (!_agentStore) return undefined;
+            const text = _agentStore.getDynamicGrammarText();
             if (!text) return undefined;
             return { format: "agr", content: text };
         },
-
-        validateWildcardMatch: validateTaskFlowWildcardMatch,
-        getActionCompletion: getTaskFlowActionCompletion,
     };
 }

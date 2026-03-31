@@ -1,6 +1,5 @@
 {
-  "version": 1,
-  "actionName": "weeklyEmailDigest",
+  "name": "weeklyEmailDigest",
   "description": "Fetch recent emails and send a digest summary to yourself",
   "parameters": [
     {
@@ -18,53 +17,12 @@
       "description": "What to focus on or exclude in the digest"
     }
   ],
-  "steps": [
-    {
-      "id": "emails",
-      "schemaName": "email",
-      "actionName": "findEmail",
-      "parameters": {
-        "messageRef": {
-          "receivedDateTime": {
-            "dayRange": "${timePeriod}"
-          }
-        }
-      }
-    },
-    {
-      "id": "digest",
-      "schemaName": "utility",
-      "actionName": "llmTransform",
-      "parameters": {
-        "input": "${emails.text}",
-        "prompt": "Write a concise email digest as HTML from the emails below. Use <h2> for section headers (e.g. Personal, Work, Skipped). Use <ul><li> for bullet points. Use <strong> for sender names. Wrap everything in <div style=\"font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;line-height:1.5\">. Focus on: ${focus}. Keep it concise.",
-        "htmlOutput": true,
-        "model": "claude-haiku-4-5-20251001"
-      }
-    },
-    {
-      "id": "sent",
-      "schemaName": "email",
-      "actionName": "sendEmail",
-      "parameters": {
-        "subject": "Email digest \u2014 ${timePeriod}",
-        "body": "${digest.text}",
-        "to": ["me"],
-        "genContent": {
-          "generateBody": false
-        }
-      }
-    }
-  ],
+  "script": "async function execute(api, params) {\n    const emails = await api.callAction(\"email\", \"findEmail\", {\n        messageRef: {\n            receivedDateTime: { dayRange: params.timePeriod },\n        },\n    });\n\n    if (!emails.text || emails.error) {\n        return { success: false, error: emails.error || \"No emails found for the period\" };\n    }\n\n    const digest = await api.queryLLM(\n        `Write a concise email digest as HTML from the emails below. Use <h2> for section headers (e.g. Personal, Work, Skipped). Use <ul><li> for bullet points. Use <strong> for sender names. Wrap everything in <div style=\"font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;line-height:1.5\">. Focus on: ${params.focus}. Keep it concise.`,\n        { input: emails.text, model: \"claude-haiku-4-5-20251001\" },\n    );\n\n    const result = await api.callAction(\"email\", \"sendEmail\", {\n        subject: `Email digest \\u2014 ${params.timePeriod}`,\n        body: digest.text,\n        to: [\"me\"],\n        genContent: { generateBody: false },\n    });\n\n    return { success: true, message: result.text };\n}",
   "grammarPatterns": [
     "send (me)? (a)? (weekly)? email digest (for)? $(timePeriod:wildcard)",
     "give me (my)? (weekly)? email digest (for)? $(timePeriod:wildcard)",
     "email digest (for)? $(timePeriod:wildcard)",
     "summarize (my)? (recent)? emails (for)? $(timePeriod:wildcard)",
     "(weekly)? email digest"
-  ],
-  "source": {
-    "type": "manual",
-    "timestamp": "2026-03-25T00:00:00Z"
-  }
+  ]
 }

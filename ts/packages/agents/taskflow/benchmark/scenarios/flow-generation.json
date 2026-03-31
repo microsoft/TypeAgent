@@ -1,0 +1,89 @@
+[
+  {
+    "id": "gen-01",
+    "category": "flow-generation",
+    "description": "learn: trigger generates a flow that appears in the flow list",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "learn: fetch today's top news headlines and email me a summary",
+        "expected": {
+          "routedTo": "reasoning",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Task flow registered"]
+          }
+        }
+      },
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputPattern": "news|headline|summary"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gen-02",
+    "category": "flow-generation",
+    "description": "Generated flow can be deleted",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "learn: look up the current temperature in a city and add it to my daily briefing",
+        "expected": {
+          "routedTo": "reasoning",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Task flow registered"]
+          }
+        }
+      },
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputPattern": "temperature|weather|briefing"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gen-03",
+    "category": "flow-generation",
+    "description": "remember how to trigger also generates a script-based flow",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "remember how to check my calendar for today and email me a formatted agenda",
+        "expected": {
+          "routedTo": "reasoning",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Task flow registered"]
+          }
+        }
+      },
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputPattern": "calendar|agenda"
+          }
+        }
+      }
+    ]
+  }
+]

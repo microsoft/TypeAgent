@@ -120,24 +120,61 @@ export function evaluateFallback(
 }
 
 function extractOutput(commandResult: unknown, trace: PipelineTrace): string {
-    if (trace.executionResult?.output) return trace.executionResult.output;
+    const parts: string[] = [];
+
+    // Display text captured from the display history pipeline
+    if (trace.executionResult?.output) {
+        parts.push(trace.executionResult.output);
+    }
+
+    // Also check the command result object itself for text content
     const result = commandResult as any;
-    if (typeof result === "string") return result;
-    if (result?.displayText) return result.displayText;
-    if (result?.result?.displayText) return result.result.displayText;
-    if (result?.text) return result.text;
-    if (result?.lastError) return result.lastError;
-    return JSON.stringify(result ?? "");
+    if (typeof result === "string") {
+        parts.push(result);
+    } else if (result) {
+        if (result.displayText) parts.push(result.displayText);
+        if (result.result?.displayText) parts.push(result.result.displayText);
+        if (result.text) parts.push(result.text);
+        if (result.lastError) parts.push(result.lastError);
+        // Check for action results embedded in the command result
+        if (result.actions) {
+            for (const action of result.actions) {
+                if (action.result?.displayContent) {
+                    const dc = action.result.displayContent;
+                    if (typeof dc === "string") parts.push(dc);
+                    else if (Array.isArray(dc)) parts.push(dc.join("\n"));
+                }
+                if (action.result?.historyText) {
+                    parts.push(action.result.historyText);
+                }
+            }
+        }
+    }
+
+    return parts.filter(Boolean).join("\n") || JSON.stringify(result ?? "");
 }
 
 function extractHasError(
     commandResult: unknown,
     trace: PipelineTrace,
 ): boolean {
+    // Check the display output for clear success/error indicators first.
+    // This is more reliable than commandResult.lastError which can be set
+    // by unrelated agents (e.g. browser agent init error).
+    const output = extractOutput(commandResult, trace);
+    if (output) {
+        const hasSuccessIndicator =
+            /deleted|completed|success|task flow|digest|playlist/i.test(output);
+        const hasErrorIndicator =
+            /^error:|failed:|not found|unknown task flow/i.test(output);
+        if (hasSuccessIndicator && !hasErrorIndicator) return false;
+        if (hasErrorIndicator && !hasSuccessIndicator) return true;
+    }
+
+    // Fall back to trace and result inspection
     if (trace.executionResult) return !trace.executionResult.success;
     const result = commandResult as any;
     if (result?.error) return true;
-    if (result?.lastError) return true;
     if (result?.result?.error) return true;
     return false;
 }
