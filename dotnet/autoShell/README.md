@@ -123,6 +123,7 @@ Run the application and send JSON commands via stdin:
 | `EnhancePointerPrecision` | `true`/`false` | Enables or disables pointer precision |
 | `AdjustMousePointerSize` | value | Adjusts mouse pointer size |
 | `mousePointerCustomization` | value | Customizes mouse pointer |
+| `CursorTrail` | `{"enable": true/false, "length": 2-12}` | Enables/disables cursor trail (length: 2–12) |
 
 ##### Touchpad Settings
 
@@ -285,6 +286,16 @@ Set display resolution with specific refresh rate:
 Set display resolution using JSON object:
 ```json
 {"setScreenResolution": {"width": 2560, "height": 1440, "refreshRate": 60}}
+```
+
+Enable cursor trail with length 7:
+```json
+{"CursorTrail": "{\"enable\":true,\"length\":7}"}
+```
+
+Disable cursor trail:
+```json
+{"CursorTrail": "{\"enable\":false}"}
 ```
 
 ### Supported Application Friendly Names
