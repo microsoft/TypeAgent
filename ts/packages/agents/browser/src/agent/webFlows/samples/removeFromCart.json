@@ -9,7 +9,7 @@
       "description": "The name of the product to remove"
     }
   },
-  "script": "async function execute(browser, params) {\n    const cartItem = await browser.extractComponent(\n        {\n            typeName: 'CartItem',\n            schema: '{ name: string; removeButtonSelector: string; }'\n        },\n        params.productName\n    );\n    if (!cartItem || !cartItem.removeButtonSelector) {\n        throw new Error('Could not find product \"' + params.productName + '\" in the cart');\n    }\n    await browser.click(cartItem.removeButtonSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Removed ' + params.productName + ' from cart' };\n}",
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const cartItem = await browser.extractComponent<{ name: string; removeButtonSelector: string }>(\n        {\n            typeName: 'CartItem',\n            schema: '{ name: string; removeButtonSelector: string; }'\n        },\n        params.productName\n    );\n    if (!cartItem || !cartItem.removeButtonSelector) {\n        throw new Error('Could not find product \"' + params.productName + '\" in the cart');\n    }\n    await browser.click(cartItem.removeButtonSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Removed ' + params.productName + ' from cart' };\n}",
   "grammarPatterns": [
     "remove $(productName:wildcard) from cart",
     "remove $(productName:wildcard) from my cart",

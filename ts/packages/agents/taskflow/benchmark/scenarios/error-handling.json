@@ -2,17 +2,13 @@
   {
     "id": "err-01",
     "category": "error-handling",
-    "description": "Unknown flow name returns error",
+    "description": "Non-taskflow utterance does not match any flow grammar",
     "setup": { "requiredFlows": [] },
     "utterances": [
       {
-        "text": "execute task flow nonExistentFlow",
+        "text": "do something completely unrelated to any flow",
         "expected": {
-          "routedTo": "grammar",
-          "execution": {
-            "shouldSucceed": false,
-            "outputContains": ["Unknown"]
-          }
+          "matchedFlow": null
         }
       }
     ]
@@ -39,7 +35,7 @@
   {
     "id": "err-03",
     "category": "error-handling",
-    "description": "List flows when store is empty still succeeds",
+    "description": "List flows when store has flows still succeeds",
     "setup": { "requiredFlows": [] },
     "utterances": [
       {

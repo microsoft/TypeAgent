@@ -9,7 +9,7 @@
       "description": "The filter criteria to apply (e.g., price range, brand, size)"
     }
   },
-  "script": "async function execute(browser, params) {\n    const filterControl = await browser.extractComponent(\n        {\n            typeName: 'FilterControl',\n            schema: '{ label: string; cssSelector: string; type: string; }'\n        },\n        params.filterCriteria\n    );\n    if (!filterControl || !filterControl.cssSelector) {\n        throw new Error('Could not find filter for: ' + params.filterCriteria);\n    }\n    await browser.click(filterControl.cssSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Applied filter: ' + params.filterCriteria };\n}",
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const filterControl = await browser.extractComponent<{ label: string; cssSelector: string; type: string }>(\n        {\n            typeName: 'FilterControl',\n            schema: '{ label: string; cssSelector: string; type: string; }'\n        },\n        params.filterCriteria\n    );\n    if (!filterControl || !filterControl.cssSelector) {\n        throw new Error('Could not find filter for: ' + params.filterCriteria);\n    }\n    await browser.click(filterControl.cssSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Applied filter: ' + params.filterCriteria };\n}",
   "grammarPatterns": [
     "filter by $(filterCriteria:wildcard)",
     "filter products by $(filterCriteria:wildcard)",

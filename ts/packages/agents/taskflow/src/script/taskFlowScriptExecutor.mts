@@ -1,33 +1,31 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { WebFlowBrowserAPI } from "./webFlowBrowserApi.mjs";
-import { WebFlowResult } from "./types.js";
-import { BLOCKED_IDENTIFIERS } from "./scriptValidator.mjs";
+import { TaskFlowScriptAPI } from "./taskFlowScriptApi.mjs";
+import { TaskFlowScriptResult } from "./types.mjs";
+import { BLOCKED_IDENTIFIERS } from "./taskFlowScriptValidator.mjs";
 
 export interface ScriptExecutionOptions {
     timeout: number;
 }
 
 const DEFAULT_OPTIONS: ScriptExecutionOptions = {
-    timeout: 180000,
+    timeout: 300_000,
 };
 
-// Globals that are explicitly shadowed with undefined in the Function scope,
-// preventing scripts from accessing them even if the AST validator is bypassed.
 const BLOCKED_GLOBALS_OVERRIDE: Record<string, undefined> = Object.fromEntries(
     [...BLOCKED_IDENTIFIERS].map((name) => [name, undefined]),
 );
 
-export async function executeWebFlowScript(
+export async function executeTaskFlowScript(
     scriptSource: string,
-    browserApi: WebFlowBrowserAPI,
+    api: TaskFlowScriptAPI,
     params: Record<string, unknown>,
     options: ScriptExecutionOptions = DEFAULT_OPTIONS,
-): Promise<WebFlowResult> {
+): Promise<TaskFlowScriptResult> {
     const executionLog: unknown[][] = [];
 
-    const sandboxedBrowser = Object.freeze(browserApi);
+    const sandboxedApi = Object.freeze(api);
     const sandboxedParams = Object.freeze({ ...params });
     const sandboxedConsole = Object.freeze({
         log: (...args: unknown[]) => executionLog.push(args),
@@ -36,7 +34,7 @@ export async function executeWebFlowScript(
     });
 
     const sandbox: Record<string, unknown> = {
-        browser: sandboxedBrowser,
+        api: sandboxedApi,
         params: sandboxedParams,
         console: sandboxedConsole,
         ...BLOCKED_GLOBALS_OVERRIDE,
@@ -45,7 +43,7 @@ export async function executeWebFlowScript(
     try {
         const fn = new Function(
             ...Object.keys(sandbox),
-            `"use strict"; return (${scriptSource})(browser, params);`,
+            `"use strict"; return (${scriptSource})(api, params);`,
         );
 
         const resultPromise = fn(...Object.values(sandbox));
@@ -60,7 +58,7 @@ export async function executeWebFlowScript(
         const result = await Promise.race([resultPromise, timeoutPromise]);
 
         if (result && typeof result === "object" && "success" in result) {
-            return result as WebFlowResult;
+            return result as TaskFlowScriptResult;
         }
 
         return {

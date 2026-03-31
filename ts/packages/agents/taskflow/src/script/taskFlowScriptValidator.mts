@@ -2,11 +2,7 @@
 // Licensed under the MIT License.
 
 import ts from "typescript";
-import {
-    ValidationResult,
-    ValidationError,
-    WebFlowDefinition,
-} from "./types.js";
+import { ValidationResult, ValidationError } from "./types.mjs";
 import {
     generateSandboxDeclarations,
     generateGenericSandboxDeclarations,
@@ -37,37 +33,6 @@ export const BLOCKED_IDENTIFIERS = new Set([
     "Buffer",
     "__dirname",
     "__filename",
-]);
-
-export const ALLOWED_GLOBALS = new Set([
-    "browser",
-    "params",
-    "console",
-    "JSON",
-    "Math",
-    "String",
-    "Number",
-    "Boolean",
-    "Array",
-    "Object",
-    "Date",
-    "RegExp",
-    "Map",
-    "Set",
-    "Promise",
-    "Error",
-    "TypeError",
-    "RangeError",
-    "parseInt",
-    "parseFloat",
-    "isNaN",
-    "isFinite",
-    "undefined",
-    "null",
-    "NaN",
-    "Infinity",
-    "true",
-    "false",
 ]);
 
 function createVirtualHost(files: Record<string, string>): ts.CompilerHost {
@@ -122,7 +87,6 @@ function walkForSecurityViolations(
     const errors: ValidationError[] = [];
 
     function visit(node: ts.Node) {
-        // Block eval() and Function() calls
         if (
             ts.isCallExpression(node) &&
             ts.isIdentifier(node.expression) &&
@@ -137,7 +101,6 @@ function walkForSecurityViolations(
             );
         }
 
-        // Block new Function()
         if (
             ts.isNewExpression(node) &&
             ts.isIdentifier(node.expression) &&
@@ -152,7 +115,6 @@ function walkForSecurityViolations(
             );
         }
 
-        // Block import() expressions
         if (
             ts.isCallExpression(node) &&
             node.expression.kind === ts.SyntaxKind.ImportKeyword
@@ -166,7 +128,6 @@ function walkForSecurityViolations(
             );
         }
 
-        // Block dangerous property access (__proto__, constructor, prototype)
         if (ts.isPropertyAccessExpression(node)) {
             if (BLOCKED_PROPERTIES.has(node.name.text)) {
                 errors.push(
@@ -179,7 +140,6 @@ function walkForSecurityViolations(
             }
         }
 
-        // Block computed property access on identifiers (e.g., browser["__proto__"])
         if (
             ts.isElementAccessExpression(node) &&
             ts.isStringLiteral(node.argumentExpression) &&
@@ -194,7 +154,6 @@ function walkForSecurityViolations(
             );
         }
 
-        // Block with statements
         if (ts.isWithStatement(node)) {
             errors.push(
                 createError(
@@ -205,7 +164,6 @@ function walkForSecurityViolations(
             );
         }
 
-        // Block debugger statements
         if (node.kind === ts.SyntaxKind.DebuggerStatement) {
             errors.push(
                 createError(
@@ -254,19 +212,19 @@ function validateEntryPoint(sourceFile: ts.SourceFile): ValidationError[] {
                     createError(
                         sourceFile,
                         statement,
-                        "execute function must have at least two parameters (browser, params)",
+                        "execute function must have at least two parameters (api, params)",
                     ),
                 );
             } else {
                 if (
                     ts.isIdentifier(params[0].name) &&
-                    params[0].name.text !== "browser"
+                    params[0].name.text !== "api"
                 ) {
                     errors.push(
                         createError(
                             sourceFile,
                             params[0],
-                            "First parameter must be named 'browser'",
+                            "First parameter must be named 'api'",
                         ),
                     );
                 }
@@ -291,8 +249,7 @@ function validateEntryPoint(sourceFile: ts.SourceFile): ValidationError[] {
         errors.push({
             line: 1,
             column: 0,
-            message:
-                'Script must define "async function execute(browser, params)"',
+            message: 'Script must define "async function execute(api, params)"',
             severity: "error",
         });
     }
@@ -300,21 +257,22 @@ function validateEntryPoint(sourceFile: ts.SourceFile): ValidationError[] {
     return errors;
 }
 
-// Diagnostic codes to suppress — these are expected in our sandbox environment
 const SUPPRESSED_DIAGNOSTICS = new Set([
-    // "Cannot find module" for type-only imports we don't provide
-    2307,
+    2307, // "Cannot find module"
 ]);
 
-export function validateWebFlowScript(
+export function validateTaskFlowScript(
     source: string,
     declaredParams: string[],
-    flow?: WebFlowDefinition,
+    flowParameters?: Record<
+        string,
+        { type: "string" | "number" | "boolean"; required?: boolean }
+    >,
 ): ValidationResult {
     const errors: ValidationError[] = [];
 
-    const sandboxDts = flow
-        ? generateSandboxDeclarations(flow)
+    const sandboxDts = flowParameters
+        ? generateSandboxDeclarations(flowParameters)
         : generateGenericSandboxDeclarations();
 
     const files: Record<string, string> = {
@@ -332,17 +290,15 @@ export function validateWebFlowScript(
             target: ts.ScriptTarget.ES2022,
             module: ts.ModuleKind.ES2022,
             moduleResolution: ts.ModuleResolutionKind.Node10,
-            types: [], // Block all ambient types (Node, DOM, etc.)
+            types: [],
             skipLibCheck: true,
         },
         host,
     );
 
-    // Collect type-checking diagnostics
     const diagnostics = ts.getPreEmitDiagnostics(program);
     for (const diag of diagnostics) {
         if (SUPPRESSED_DIAGNOSTICS.has(diag.code)) continue;
-        // Only report diagnostics from our script file
         if (diag.file && diag.file.fileName !== "script.ts") continue;
 
         const line =
@@ -365,14 +321,12 @@ export function validateWebFlowScript(
         });
     }
 
-    // Validate entry point structure
     const sourceFile = program.getSourceFile("script.ts");
     if (sourceFile) {
         errors.push(...validateEntryPoint(sourceFile));
         errors.push(...walkForSecurityViolations(sourceFile));
     }
 
-    // Check that all declared parameters are referenced
     for (const param of declaredParams) {
         const paramPattern = new RegExp(`params\\.${param}\\b`);
         if (!paramPattern.test(source)) {

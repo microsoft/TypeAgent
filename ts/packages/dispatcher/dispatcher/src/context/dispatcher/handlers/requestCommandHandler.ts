@@ -207,7 +207,7 @@ function getExplainerOptions(
     const { list, value, translate } =
         context.session.getConfig().explainer.filter.reference;
 
-    // In NFA mode, skip old construction system validation
+    // NFA mode uses grammar rules for matching; construction-cache validation is not needed.
     const isNFAMode = context.agentCache.isUsingNFAGrammar();
 
     return {
@@ -506,9 +506,9 @@ export class RequestCommandHandler implements CommandHandler {
         const result: CompletionGroups = { groups: [] };
         for (const name of names) {
             if (name === "request") {
-                const requestPrefix = params.args.request ?? "";
+                const input = params.args.request ?? "";
                 const requestResult = await requestCompletion(
-                    requestPrefix,
+                    input,
                     context.agentContext,
                     direction,
                 );

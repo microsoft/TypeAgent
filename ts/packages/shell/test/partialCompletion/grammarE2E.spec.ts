@@ -948,4 +948,135 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(session.getCompletionPrefix("pla")).toBeUndefined();
         });
     });
+
+    // ── explicitHide() — explicit close and conditional refetch ──────────
+
+    describe("explicitHide() — explicit close with conditional refetch", () => {
+        test("no refetch when noMatchPolicy=accept (keyword level, closed set)", async () => {
+            const menu = makeMenu();
+            const dispatcher = makeGrammarDispatcher(
+                musicGrammar,
+                musicEntities,
+            );
+            const session = new PartialCompletionSession(menu, dispatcher);
+
+            // Establish keyword completions at anchor=""; closedSet=true → accept.
+            session.update("", getPos);
+            await flush();
+
+            // Narrow to "p…" via trie — no re-fetch.
+            session.update("p", getPos);
+            expect(menu.isActive()).toBe(true);
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Explicit close: input "p" ≠ anchor "" but noMatchPolicy=accept → skip refetch.
+            session.explicitHide("p", getPos, "forward");
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+            expect(menu.hide).toHaveBeenCalled();
+        });
+
+        test("no refetch when input equals anchor", async () => {
+            const menu = makeMenu();
+            const dispatcher = makeGrammarDispatcher(
+                musicGrammar,
+                musicEntities,
+            );
+            const session = new PartialCompletionSession(menu, dispatcher);
+
+            // Establish anchor = "".
+            session.update("", getPos);
+            await flush();
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // input === anchor → skip refetch.
+            session.explicitHide("", getPos, "forward");
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore,
+            );
+        });
+
+        test("refetch triggered; same anchor → reopen suppressed", async () => {
+            const menu = makeMenu();
+            const dispatcher = makeGrammarDispatcher(
+                musicGrammar,
+                musicEntities,
+            );
+            const session = new PartialCompletionSession(menu, dispatcher);
+
+            // Navigate to entity completions at anchor="play".
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play ", getPos); // separator → menu active
+            session.update("play sha", getPos); // trie filters to Shake/Shape
+            expect(menu.isActive()).toBe(true);
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Escape while menu shows entity completions for prefix "sha".
+            // Grammar resolves "play sha" to startIndex=4 → anchor "play" unchanged.
+            session.explicitHide("play sha", getPos, "forward");
+            await flush();
+
+            // Refetch was issued with the full current input.
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore + 1,
+            );
+            expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+                "play sha",
+                "forward",
+            );
+            // Same anchor → reopen suppressed: menu stays hidden.
+            expect(menu.isActive()).toBe(false);
+        });
+
+        test("refetch triggered; anchor advances → session moves to next level", async () => {
+            const menu = makeMenu();
+            const dispatcher = makeGrammarDispatcher(
+                musicGrammar,
+                musicEntities,
+            );
+            const session = new PartialCompletionSession(menu, dispatcher);
+
+            // Navigate to entity completions at anchor="play".
+            session.update("", getPos);
+            await flush();
+            session.update("play", getPos);
+            await flush();
+            session.update("play ", getPos); // separator → menu active
+
+            // Explicit close with the full entity already typed.
+            // Grammar consumes "play Shake It Off" entirely → startIndex advances
+            // past 4 → new anchor differs from "play" → reopen is NOT suppressed.
+            session.explicitHide("play Shake It Off", getPos, "forward");
+            await flush();
+
+            // Refetch was issued with the full entity string.
+            expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+                "play Shake It Off",
+                "forward",
+            );
+
+            // Next-level completions include the "by" keyword.
+            expect(menu.setChoices).toHaveBeenLastCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "by" }),
+                ]),
+            );
+
+            // Typing the separator at the new anchor reveals the "by" completion.
+            session.update("play Shake It Off ", getPos);
+            expect(menu.isActive()).toBe(true);
+        });
+    });
 });
