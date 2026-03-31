@@ -53,6 +53,20 @@ export type CommandDescriptors =
 // Command APIs
 //===========================================
 
+//===========================================
+// Completion metadata types
+//
+// String-literal union types that flow through the completion pipeline
+// (grammar → cache → dispatcher → shell).  Each describes one axis of
+// the completion result.  See docs/architecture/completion.md for full
+// semantics and merge rules.
+//
+// AfterWildcard and SeparatorMode are intentionally duplicated in
+// actionGrammar (grammarCompletion.ts, grammarMatcher.ts) because the
+// two packages have no dependency relationship.  Keep the definitions
+// in sync.
+//===========================================
+
 // Describes what kind of separator is required between the matched prefix
 // and the completion text.  The frontend uses this to decide when to show
 // the completion menu.

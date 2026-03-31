@@ -263,11 +263,15 @@ export type GrammarCompletionProperty = {
     propertyNames: string[];
 };
 
-// See docs/architecture/completion.md § Invariants for the full catalog of
-// correctness invariants on these fields and their user-visible impact.
 // Describes how the grammar rules that produced completions at this
 // position relate to wildcards.  See afterWildcard on
-// GrammarCompletionResult for the full semantics.
+// GrammarCompletionResult for the full semantics, and
+// docs/architecture/completion.md § Invariants for correctness
+// invariants on these fields.
+//
+// Intentionally duplicated from @typeagent/agent-sdk (command.ts),
+// like SeparatorMode in grammarMatcher.ts, because the two packages
+// have no dependency relationship.  Keep both definitions in sync.
 export type AfterWildcard = "none" | "some" | "all";
 
 export type GrammarCompletionResult = {

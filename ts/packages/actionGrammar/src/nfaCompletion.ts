@@ -290,6 +290,9 @@ export function computeNFACompletions(
     const result: GrammarCompletionResult = {
         completions: uniqueCompletions,
         directionSensitive: false,
+        // TODO: The NFA path does not yet track wildcard-at-EOI states.
+        // If NFA grammars gain wildcard support, this should be computed
+        // dynamically like the DFA path in grammarCompletion.ts.
         afterWildcard: "none",
     };
     const grammarProperties = buildGrammarProperties(nfa, properties);

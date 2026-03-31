@@ -16,9 +16,10 @@ import {
 } from "./grammarTypes.js";
 
 // Separator mode for completion results.  Structurally identical to
-// SeparatorMode from @typeagent/agent-sdk; independently defined here so
-// actionGrammar does not depend on agentSdk.  The grammar matcher only
-// produces "spacePunctuation", "optional", and "none" — never "space"
+// SeparatorMode from @typeagent/agent-sdk (command.ts); independently
+// defined here so actionGrammar does not depend on agentSdk.  Keep
+// both definitions in sync.  The grammar matcher only produces
+// "spacePunctuation", "optional", and "none" — never "space"
 // (which is strictly command/flag-level).
 export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 

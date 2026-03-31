@@ -108,7 +108,12 @@ export type CompletionResult = {
     afterWildcard?: AfterWildcard | undefined;
 };
 
-/** The matched prefix reached end-of-input via a wildcard. */
+/** The matched prefix reached end-of-input via a wildcard.
+ *  Both "some" and "all" are treated as EOI-wildcard because in both
+ *  cases at least one rule's wildcard absorbed to end-of-input, making
+ *  the longer matchedPrefixLength ambiguous.  shouldPreferNewResult
+ *  uses this to avoid letting an ambiguous longer result displace a
+ *  shorter result that is structurally anchored inside the input. */
 export function isEoiWildcard(
     matchedLen: number,
     prefixLength: number,

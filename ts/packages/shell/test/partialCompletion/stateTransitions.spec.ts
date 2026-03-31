@@ -405,6 +405,27 @@ describe("PartialCompletionSession — afterWildcard anchor sliding", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
 
+    test('afterWildcard="some": non-separator after anchor triggers re-fetch, not slide', async () => {
+        const menu = makeMenu();
+        // "some" means mixed rules — some wildcard, some literal.
+        // The shell must re-fetch (not slide) so stale literal
+        // completions are replaced by fresh results at the new position.
+        const result = makeCompletionResult(["by", "music"], 11, {
+            closedSet: true,
+            afterWildcard: "some",
+            separatorMode: "spacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play my fav", getPos);
+        await Promise.resolve();
+
+        // Non-separator after anchor — afterWildcard="some" → re-fetch
+        session.update("play my favo", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+    });
+
     test('afterWildcard="all" with optional separator: C6 slide when trie empty', async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["next"], 8, {

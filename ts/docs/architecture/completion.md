@@ -111,9 +111,10 @@ Brief definitions here; see [Key types](#key-types) for full semantics.
 - **`closedSet`** — `true` when the completion list is exhaustive (all
   valid values are present); `false` when additional values may exist
   (e.g., entity names the backend cannot enumerate).
-- **`afterWildcard`** — `true` when the `startIndex` position is ambiguous
-  because it sits at a wildcard boundary that could shift with more
-  typing. Controls anchor-sliding behavior in the shell.
+- **`afterWildcard`** — `"all"` or `"some"` when the `startIndex`
+  position is ambiguous because it sits at a wildcard boundary that
+  could shift with more typing. `"none"` when the position is
+  structurally pinned. Controls anchor-sliding behavior in the shell.
 - **`direction`** — A `"forward"` or `"backward"` signal from the host,
   indicating whether the user is advancing (appending characters) or
   reconsidering (backspacing). Resolves structural ambiguity at command
@@ -223,7 +224,8 @@ back up) — see `actionGrammar.md`.
   would differ from `completion(input[0..P], forward)`, where
   P = `matchedPrefixLength`
   (see [`directionSensitive`](#directionsensitive) below)
-- `afterWildcard` — `true` at ambiguous wildcard boundaries
+- `afterWildcard` — `"all"` or `"some"` at ambiguous wildcard boundaries;
+  `"none"` when pinned
 
 ---
 
@@ -815,11 +817,14 @@ _Impact:_ Tokens incorrectly separated in a grammar designed for direct
 adjacency.
 
 **#10 — `afterWildcard` correctness.**
-`true` only at ambiguous wildcard boundaries (Category 2 forward after
-wildcard finalized at EOI, or backward at keyword after captured wildcard).
-_Impact:_ False `true` → anchor slides when it shouldn't — completions
-appear at wrong position. False `false` → menu disappears at wildcard
-boundary instead of sliding.
+`"all"` only when every rule reaches the position through a wildcard
+(Category 2 forward after wildcard finalized at EOI, or backward at
+keyword after captured wildcard). `"some"` when rules disagree.
+`"none"` when no wildcard is involved.
+_Impact:_ False `"all"` → anchor slides when it shouldn't — completions
+appear at wrong position. False `"none"` → menu disappears at wildcard
+boundary instead of sliding. Missing `"some"` → user gets stuck
+(no re-fetch when literal completions go stale).
 
 ### Merge invariants (cache / dispatcher layers)
 

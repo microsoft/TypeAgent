@@ -842,10 +842,11 @@ already covers this case.
   (`P = 0`). See "Why direction matters", "Forward/backward equivalence
   analysis", and the decision tree earlier in this document for the
   full rationale.
-- `afterWildcard` is `true` when the matched position sits at an ambiguous
-  wildcard boundary — see `completion.md` [`afterWildcard`] for the full
-  definition (definite vs. ambiguous positions, persistence semantics,
-  merge rule).
+- `afterWildcard` is `"all"` when every rule reaches the position
+  through a wildcard (ambiguous boundary), `"some"` when rules
+  disagree, or `"none"` when the position is structurally pinned —
+  see `completion.md` [`afterWildcard`] for the full definition
+  (definite vs. ambiguous positions, persistence semantics, merge rule).
 
 See `completion.md` for full definitions of how these metadata fields
 flow through the cache, dispatcher, and shell layers, and
