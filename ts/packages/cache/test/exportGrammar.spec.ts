@@ -401,6 +401,57 @@ describe("exportGrammar equivalence", () => {
             );
             expect(grammarResults[0].match).toEqual(constructionAction);
         });
+
+        it("wildcard fallback followed by non-transformed captured part", () => {
+            // Regression test: when a wildcard-enabled part's $(wc) alternative
+            // is explored by the tree matcher, the pending wildcard leaks into
+            // the next captured rule.  matchStringPartWithWildcard must assign
+            // the default string value for single-part rules just like the
+            // non-wildcard path does, otherwise finalizeNestedRule throws
+            // "No value assign to variable".
+            const construction = Construction.create(
+                [
+                    createMatchPart(["play"], "command", {
+                        wildcardMode: WildcardMode.Disabled,
+                    }),
+                    createMatchPart(["rock", "pop", "jazz"], "genre", {
+                        transformInfos: [makeTransformInfo("parameters.genre")],
+                        wildcardMode: WildcardMode.Enabled,
+                    }),
+                    createMatchPart(["tunes"], "music", {
+                        wildcardMode: WildcardMode.Disabled,
+                    }),
+                ],
+                makeTransforms([
+                    ["parameters.genre", "rock", "rock"],
+                    ["parameters.genre", "pop", "pop"],
+                    ["parameters.genre", "jazz", "jazz"],
+                ]),
+                undefined,
+                [
+                    {
+                        paramName: "fullActionName",
+                        paramValue: "player.playGenre",
+                    },
+                ],
+            );
+
+            // Known genre — should match via literal alternative
+            expectEquivalent(construction, "play rock tunes");
+            expectEquivalent(construction, "play pop tunes");
+
+            // Unknown genre — wildcard fallback path
+            const { constructionResults, grammarResults } = matchBoth(
+                construction,
+                "play metal tunes",
+            );
+            expect(constructionResults.length).toBeGreaterThan(0);
+            expect(grammarResults.length).toBeGreaterThan(0);
+            const constructionAction = toJsonActions(
+                constructionResults[0].match.actions,
+            );
+            expect(grammarResults[0].match).toEqual(constructionAction);
+        });
     });
 
     describe("multi-part transforms (Option A)", () => {
@@ -1021,6 +1072,105 @@ describe("exportGrammar equivalence", () => {
             // decomposition was not possible).
             const grammarText = convertConstructionsToGrammar([construction]);
             expect(grammarText).not.toMatch(/<multiPart_\d+>/);
+        });
+    });
+
+    describe("multi-transform parts (#7)", () => {
+        function matchBothExpr(construction: Construction, request: string) {
+            const constructionResults = construction.match(
+                request,
+                defaultConfig,
+            );
+            const grammarText = convertConstructionsToGrammar([construction], {
+                enableValueExpressions: true,
+            });
+            let grammarResults: { match: unknown }[] = [];
+            if (grammarText !== "") {
+                const grammar = loadGrammarRules("test", grammarText, {
+                    enableValueExpressions: true,
+                });
+                grammarResults = matchGrammar(grammar, request);
+            }
+            return { constructionResults, grammarResults, grammarText };
+        }
+
+        it("handles a single part with multiple transforms", () => {
+            // A single MatchPart that maps the same text to two different
+            // properties (e.g., "rock" → genre="rock" and category="music").
+            const construction = Construction.create(
+                [
+                    createMatchPart(["rock", "pop"], "genre", {
+                        transformInfos: [
+                            makeTransformInfo("genre"),
+                            makeTransformInfo("category"),
+                        ],
+                    }),
+                ],
+                makeTransforms([
+                    ["genre", "rock", "rock"],
+                    ["genre", "pop", "pop"],
+                    ["category", "rock", "music"],
+                    ["category", "pop", "music"],
+                ]),
+                undefined,
+                [
+                    {
+                        paramName: "fullActionName",
+                        paramValue: "player.setGenre",
+                    },
+                ],
+            );
+
+            // Verify both properties are present in the result.
+            const { grammarResults } = matchBothExpr(construction, "rock");
+            expect(grammarResults.length).toBeGreaterThan(0);
+            expect((grammarResults[0].match as any).genre).toBe("rock");
+            expect((grammarResults[0].match as any).category).toBe("music");
+            expect((grammarResults[0].match as any).fullActionName).toBe(
+                "player.setGenre",
+            );
+
+            // Also verify "pop"
+            const { grammarResults: gr2 } = matchBothExpr(construction, "pop");
+            expect(gr2.length).toBeGreaterThan(0);
+            expect((gr2[0].match as any).genre).toBe("pop");
+            expect((gr2[0].match as any).category).toBe("music");
+        });
+
+        it("skips matches where any transform fails in multi-transform", () => {
+            // "rock" has both transforms, "jazz" only has genre — should be
+            // skipped from the multi-transform rule.
+            const construction = Construction.create(
+                [
+                    createMatchPart(["rock", "jazz"], "genre", {
+                        transformInfos: [
+                            makeTransformInfo("genre"),
+                            makeTransformInfo("category"),
+                        ],
+                    }),
+                ],
+                makeTransforms([
+                    ["genre", "rock", "rock"],
+                    ["genre", "jazz", "jazz"],
+                    ["category", "rock", "music"],
+                    // no category entry for "jazz"
+                ]),
+                undefined,
+                [
+                    {
+                        paramName: "fullActionName",
+                        paramValue: "player.setGenre",
+                    },
+                ],
+            );
+
+            // "rock" should match — both transforms succeed.
+            const { grammarResults: gr1 } = matchBothExpr(construction, "rock");
+            expect(gr1.length).toBeGreaterThan(0);
+
+            // "jazz" should not match in grammar — category transform fails.
+            const { grammarResults: gr2 } = matchBothExpr(construction, "jazz");
+            expect(gr2.length).toBe(0);
         });
     });
 });

@@ -37,7 +37,9 @@ const MAX_MULTI_PART_COMBINATIONS = 1000;
 const noTransformSentinel: MatchedValueTranslator = {
     transform: () => undefined,
     transformConflicts: () => undefined,
-    parse: () => undefined as any,
+    parse: () => {
+        throw new Error("noTransformSentinel.parse must never be called");
+    },
 };
 type State = {
     definitions: Set<RuleDefinition>;
@@ -47,7 +49,10 @@ type State = {
     >;
     ruleNameNextIds: Map<string, number>;
 };
-export async function convertConstructionFileToGrammar(fileName: string) {
+export async function convertConstructionFileToGrammar(
+    fileName: string,
+    options?: ConvertConstructionsOptions,
+) {
     const cache = await loadConstructionCacheFile(fileName);
     if (cache === undefined) {
         throw new Error(`Construction cache file '${fileName}' is empty.`);
@@ -58,6 +63,7 @@ export async function convertConstructionFileToGrammar(fileName: string) {
         matchSetRuleDefinitions: new Map(),
         ruleNameNextIds: new Map(),
     };
+    const enableValueExpressions = options?.enableValueExpressions ?? false;
     const namespaces = cache.getConstructionNamespaces();
     for (const ns of namespaces) {
         const constructions = cache.getConstructionNamespace(ns);
@@ -66,7 +72,11 @@ export async function convertConstructionFileToGrammar(fileName: string) {
                 `No constructions found for namespace '${ns}' in file '${fileName}'.`,
             );
         }
-        convertConstructions(state, constructions.constructions);
+        convertConstructions(
+            state,
+            constructions.constructions,
+            enableValueExpressions,
+        );
     }
     return writeGrammarRules({
         definitions: Array.from(state.definitions),
@@ -74,20 +84,41 @@ export async function convertConstructionFileToGrammar(fileName: string) {
     });
 }
 
-export function convertConstructionsToGrammar(constructions: Construction[]) {
+export type ConvertConstructionsOptions = {
+    /**
+     * Enable value expressions (memberExpression, literal-only rules) in the
+     * generated grammar. When false (the default), constructions that require
+     * these features are silently skipped so the output is safe for the NFA
+     * matcher. Set to true when the consumer supports full value expressions.
+     */
+    enableValueExpressions?: boolean;
+};
+
+export function convertConstructionsToGrammar(
+    constructions: Construction[],
+    options?: ConvertConstructionsOptions,
+) {
     const state: State = {
         definitions: new Set(),
         matchSetRuleDefinitions: new Map(),
         ruleNameNextIds: new Map(),
     };
-    convertConstructions(state, constructions);
+    convertConstructions(
+        state,
+        constructions,
+        options?.enableValueExpressions ?? false,
+    );
     return writeGrammarRules({
         definitions: Array.from(state.definitions),
         imports: [],
     });
 }
 
-function convertConstructions(state: State, constructions: Construction[]) {
+function convertConstructions(
+    state: State,
+    constructions: Construction[],
+    enableValueExpressions: boolean,
+) {
     // Cache translators by transformNamespaces identity so that constructions
     // sharing the same transformNamespaces reuse the same translator object,
     // enabling MatchSet rule deduplication in the cache.
@@ -103,7 +134,12 @@ function convertConstructions(state: State, constructions: Construction[]) {
             );
             translatorCache.set(construction.transformNamespaces, translator);
         }
-        convertConstruction(state, construction, translator);
+        convertConstruction(
+            state,
+            construction,
+            translator,
+            enableValueExpressions,
+        );
     }
 }
 
@@ -213,7 +249,7 @@ function matchSetCacheKey(
     const base = matchSet.unmergedUid;
     const ti = transformInfo ? toTransformInfoKey(transformInfo) : "";
     const wm = wildcardMode ?? 0;
-    return `${base}|${ti}|${wm}`;
+    return `${base}\0${ti}\0${wm}`;
 }
 
 /**
@@ -226,6 +262,18 @@ function getMultiTransformMatchSetRuleDefinition(
     translator: MatchedValueTranslator,
     transformInfos: readonly TransformInfo[],
 ): RuleDefinition | undefined {
+    // Cache using the same two-level scheme as getMatchSetRuleDefinition:
+    // translator → string key → RuleDefinition.
+    const tiKeys = transformInfos.map(toTransformInfoKey).sort().join(",");
+    const cacheKey = `${matchSet.unmergedUid}\0multi\0${tiKeys}`;
+    let translatorCache = state.matchSetRuleDefinitions.get(translator);
+    if (translatorCache !== undefined) {
+        const existing = translatorCache.get(cacheKey);
+        if (existing !== undefined) {
+            return existing;
+        }
+    }
+
     const rules: Rule[] = [];
     for (const match of matchSet.matches) {
         const properties: {
@@ -265,17 +313,33 @@ function getMultiTransformMatchSetRuleDefinition(
         return undefined;
     }
 
-    return {
+    const ruleDef: RuleDefinition = {
         definitionName: { name: getNextRuleName(state, matchSet.name) },
         rules,
     };
+    if (translatorCache === undefined) {
+        translatorCache = new Map();
+        state.matchSetRuleDefinitions.set(translator, translatorCache);
+    }
+    translatorCache.set(cacheKey, ruleDef);
+    return ruleDef;
 }
 
 function convertConstruction(
     state: State,
     construction: Construction,
     translator: MatchedValueTranslator,
-): undefined {
+    enableValueExpressions: boolean,
+): void {
+    // Skip constructions with multi-transform parts when value expressions
+    // are disabled — they require memberExpression which the NFA cannot evaluate.
+    const hasMultiTransform = construction.parts.some(
+        (p) => isMatchPart(p) && (p.transformInfos?.length ?? 0) > 1,
+    );
+    if (!enableValueExpressions && hasMultiTransform) {
+        return;
+    }
+
     // Handle multi-part transforms using cross-product enumeration when
     // any transform in the construction spans multiple parts.
     if (
@@ -419,16 +483,26 @@ function convertParts(
         let variableName: string | undefined;
         let transformInfo: TransformInfo | undefined;
         if (transformInfos !== undefined) {
-            const variableId = nextVariableId++;
-            variableName = `v${variableId}`;
-
             if (transformInfos.length === 1) {
                 // Single transform — use direct variable reference
                 transformInfo = transformInfos[0];
                 const propertyName =
                     getPropertyNameFromTransformInfo(transformInfo);
-                propertyVariables.set(propertyName, variableId);
+                // If a prior multi-transform part already claimed this
+                // property, don't capture it again — emit the matchSet
+                // as uncaptured to avoid duplicate tokens and conflicting
+                // value entries.
+                if (propertyValueOverrides.has(propertyName)) {
+                    variableName = undefined;
+                    transformInfo = undefined;
+                } else {
+                    const variableId = nextVariableId++;
+                    variableName = `v${variableId}`;
+                    propertyVariables.set(propertyName, variableId);
+                }
             } else {
+                const variableId = nextVariableId++;
+                variableName = `v${variableId}`;
                 // Multi-transform — the MatchSet rule returns an object,
                 // and each property is accessed via member expressions.
                 for (const ti of transformInfos) {
@@ -623,9 +697,8 @@ function convertToValueNode(entry: any, leafValues: ValueNode[]): ValueNode {
     throw new Error(`Internal error: invalid value node entry: ${entry}`);
 }
 
-function multiPartGroupKey(ti: TransformInfo): string {
-    return `${ti.namespace}::${ti.actionIndex ?? ""}::${ti.transformName}`;
-}
+// Use toTransformInfoKey for grouping multi-part transforms.
+const multiPartGroupKey = toTransformInfoKey;
 
 /**
  * Handle constructions with multi-part transforms (partCount > 1) by
@@ -636,7 +709,7 @@ function convertMultiPartConstruction(
     state: State,
     construction: Construction,
     translator: MatchedValueTranslator,
-): undefined {
+): void {
     const groups = new Map<string, MultiPartGroup>();
     const multiPartPartIndices = new Set<number>();
 
@@ -692,15 +765,18 @@ function convertMultiPartConstruction(
     const groupCombos = new Map<string, ValidCombo[]>();
 
     for (const [key, group] of groups) {
-        const crossProduct = computeCrossProduct(
-            group.matchSets.map((ms) => [...ms.matches]),
+        const matchArrays = group.matchSets.map((ms) => [...ms.matches]);
+        const totalCombinations = matchArrays.reduce(
+            (acc, a) => acc * a.length,
+            1,
         );
-        if (crossProduct.length > MAX_MULTI_PART_COMBINATIONS) {
+        if (totalCombinations > MAX_MULTI_PART_COMBINATIONS) {
             debugError(
                 "Too many multi-part combinations, skipping construction",
             );
             return undefined;
         }
+        const crossProduct = computeCrossProduct(matchArrays);
         const validCombos: ValidCombo[] = [];
         for (const combo of crossProduct) {
             const v = translator.transform(group.transformInfo, combo);
@@ -735,14 +811,18 @@ function convertMultiPartConstruction(
     // Cross product across groups (when a construction has multiple
     // independent multi-part properties).
     const allGroupKeys = [...groupCombos.keys()];
+    const totalGroupCombinations = allGroupKeys.reduce(
+        (acc, k) => acc * groupCombos.get(k)!.length,
+        1,
+    );
+    if (totalGroupCombinations > MAX_MULTI_PART_COMBINATIONS) {
+        debugError("Too many cross-group combinations, skipping");
+        return undefined;
+    }
     const groupCrossProduct = computeGroupCrossProduct(
         allGroupKeys,
         groupCombos,
     );
-    if (groupCrossProduct.length > MAX_MULTI_PART_COMBINATIONS) {
-        debugError("Too many cross-group combinations, skipping");
-        return undefined;
-    }
 
     // For each overall combination, produce a Start rule alternative.
     const startRules: Rule[] = [];
@@ -888,7 +968,7 @@ function decomposeMultiPartGroups(
     groups: Map<string, MultiPartGroup>,
     groupCombos: Map<string, ValidCombo[]>,
     multiPartPartIndices: Set<number>,
-): undefined {
+): void {
     // Compute each group's span and create a composite rule.
     type GroupSpan = {
         key: string;

@@ -908,7 +908,7 @@ type-checked at compile time. Every expression node has a statically-known
 type — there is no `any` escape hatch. This section documents the design
 principles and restrictions.
 
-Enable expressions via `enableExpressions: true` in
+Enable expressions via `enableValueExpressions: true` in
 `LoadGrammarRulesOptions` when your grammar rules need computed values
 (arithmetic, conditionals, method calls) in the `->` position.
 

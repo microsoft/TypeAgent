@@ -95,5 +95,64 @@ describeForEachMatcher(
                 ]);
             });
         });
+
+        describe("Wildcard leaking into captured nested rule", () => {
+            it("wildcard sibling does not prevent default value in following captured rule", () => {
+                // Regression: when the wildcard alternative $(wc)->wc in
+                // <Genre> is explored, the pending wildcard leaks into
+                // <Suffix>.  matchStringPartWithWildcard must assign the
+                // default string value for single-part rules (just like the
+                // non-wildcard path) to avoid "No value assign to variable".
+                const g = `
+                    <Start> = $(v0:<Genre>) $(v1:<Suffix>)
+                            -> { genre: v0, suffix: v1 };
+                    <Genre> = rock -> "rock"
+                            | pop -> "pop"
+                            | $(wc) -> wc;
+                    <Suffix> = tunes;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                // Literal genre — may match via both literal and wildcard
+                // paths; verify at least one result is correct.
+                const rockResults = testMatchGrammar(grammar, "rock tunes");
+                expect(rockResults).toContainEqual({
+                    genre: "rock",
+                    suffix: "tunes",
+                });
+
+                // Unknown genre — wildcard path, wc captures "metal",
+                // then <Suffix> must still produce its default value.
+                expect(testMatchGrammar(grammar, "metal tunes")).toStrictEqual([
+                    { genre: "metal", suffix: "tunes" },
+                ]);
+            });
+
+            it("wildcard with preceding literal and trailing captured rule", () => {
+                // Same pattern but with a non-captured literal part before
+                // the wildcard rule, matching the exportGrammar output shape.
+                const g = `
+                    <Start> = play $(v0:<Genre>) $(v1:<Suffix>)
+                            -> { genre: v0, suffix: v1 };
+                    <Genre> = rock -> "rock"
+                            | $(wc) -> wc;
+                    <Suffix> = tunes;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                const rockResults = testMatchGrammar(
+                    grammar,
+                    "play rock tunes",
+                );
+                expect(rockResults).toContainEqual({
+                    genre: "rock",
+                    suffix: "tunes",
+                });
+
+                expect(
+                    testMatchGrammar(grammar, "play metal tunes"),
+                ).toStrictEqual([{ genre: "metal", suffix: "tunes" }]);
+            });
+        });
     },
 );

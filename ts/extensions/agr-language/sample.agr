@@ -173,7 +173,7 @@ export <PublicRule> = hello | goodbye;
         parameters: { items: [item], listName: list }
     };
 
-// ─── Value expressions (enableExpressions mode) ──────────────────────────────
+// ─── Value expressions (enableValueExpressions mode) ─────────────────────────
 
 // Ternary operator
 <Toggle> =
