@@ -69,6 +69,9 @@ const testCases = [
         phrase: "enable mouse acceleration",
         expected: "EnhancePointerPrecision",
     },
+    { phrase: "enable cursor trail", expected: "CursorTrail" },
+    { phrase: "disable mouse trail", expected: "CursorTrail" },
+    { phrase: "set cursor trail length to 8", expected: "CursorTrail" },
 
     // Privacy
     { phrase: "allow microphone access", expected: "ManageMicrophoneAccess" },

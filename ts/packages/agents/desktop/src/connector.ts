@@ -494,8 +494,12 @@ export async function runDesktopActions(
             let trailNote = "";
             if (trailLength !== undefined) {
                 if (trailLength < minTrail || trailLength > maxTrail) {
-                    trailNote = ` (adjusted to ${Math.max(minTrail, Math.min(maxTrail, trailLength))} — valid range is ${minTrail}–${maxTrail})`;
-                    trailLength = Math.max(minTrail, Math.min(maxTrail, trailLength));
+                    const requested = trailLength;
+                    trailLength = Math.max(
+                        minTrail,
+                        Math.min(maxTrail, trailLength),
+                    );
+                    trailNote = ` (requested ${requested}, adjusted to ${trailLength} — valid range is ${minTrail}–${maxTrail})`;
                 }
             }
             actionData = JSON.stringify({
@@ -503,7 +507,7 @@ export async function runDesktopActions(
                 length: trailLength,
             });
             confirmationMessage = action.parameters.enable
-                ? `Cursor trail enabled${trailLength ? ` with length ${trailLength}` : ""}${trailNote}`
+                ? `Cursor trail enabled${trailNote || (trailLength ? ` with length ${trailLength}` : "")}`
                 : `Cursor trail disabled`;
             break;
         }
