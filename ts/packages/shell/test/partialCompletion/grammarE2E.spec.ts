@@ -79,7 +79,7 @@ function makeGrammarDispatcher(
             separatorMode: result.separatorMode,
             closedSet: result.closedSet ?? true,
             directionSensitive: result.directionSensitive,
-            openWildcard: result.openWildcard,
+            afterWildcard: result.afterWildcard,
         });
     };
 
@@ -531,16 +531,16 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
         }
 
-        test("after 'play X' typing more text slides anchor (openWildcard)", async () => {
+        test("after 'play X' typing more text slides anchor (afterWildcard)", async () => {
             await primeWildcard();
 
-            // Grammar at "play unknown" returns openWildcard=true, completions=["by"]
+            // Grammar at "play unknown" returns afterWildcard="all", completions=["by"]
             // Further typing past the anchor without a separator should slide.
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
             session.update("play unknown text", getPos);
 
-            // openWildcard=true + non-separator after anchor → anchor slides
+            // afterWildcard="all" + non-separator after anchor → anchor slides
             // No new fetch — the session slides the anchor forward.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
@@ -620,6 +620,46 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(menu.isActive()).toBe(true);
         });
 
+        test("wildcard extends across word boundaries — slide, show, slide, show", async () => {
+            await primeWildcard();
+
+            const fetchCountAfterPrime =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // 1. Space after wildcard: separator satisfied, menu shows "by".
+            session.update("play unknown ", getPos);
+            expect(menu.isActive()).toBe(true);
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountAfterPrime,
+            );
+
+            // 2. Non-separator 't' after separator: the trie has no match
+            //    for "t" (only "by"), so noMatchPolicy="slide" slides anchor.
+            session.update("play unknown t", getPos);
+            expect(menu.isActive()).toBe(false);
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountAfterPrime,
+            );
+
+            // 3. Continue typing the second word — still sliding.
+            session.update("play unknown text", getPos);
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountAfterPrime,
+            );
+
+            // 4. Another space: separator satisfied again, menu reappears
+            //    with "by" from the cached trie.
+            session.update("play unknown text ", getPos);
+            expect(menu.isActive()).toBe(true);
+            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+                "",
+                expect.anything(),
+            );
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountAfterPrime,
+            );
+        });
+
         test("wildcard → keyword → entity: 'play unknown by' shows artist entities", async () => {
             await primeWildcard();
 
@@ -639,6 +679,162 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                     expect.objectContaining({ matchText: "Taylor Swift" }),
                 ]),
             );
+        });
+    });
+
+    // ── Cross-rule afterWildcard AND-merge ─────────────────────────────
+    //
+    // Regression test: when a wildcard rule and a literal keyword rule
+    // both produce string completions at the same matchedPrefixLength,
+    // afterWildcard should be "none" (AND-merge).  The shell should
+    // re-fetch instead of sliding when the user types into the wildcard,
+    // so that the literal keyword's stale completion is replaced by
+    // fresh results at the new position.
+
+    describe("cross-rule afterWildcard AND-merge", () => {
+        // Rule A: play $(name) by $(artist) — wildcard rule
+        // Rule B: play beautiful music       — literal keyword rule
+        const crossRuleGrammar = loadGrammarRules(
+            "crossrule.grammar",
+            [
+                `import { SongName, ArtistName };`,
+                `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                `<Start> = play beautiful music -> "playBeautifulMusic";`,
+            ].join("\n"),
+        );
+
+        let menu: TestSearchMenu;
+        let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
+        let session: PartialCompletionSession;
+
+        beforeEach(async () => {
+            menu = makeMenu();
+            dispatcher = makeGrammarDispatcher(crossRuleGrammar);
+            session = new PartialCompletionSession(menu, dispatcher);
+        });
+
+        test("'play beautiful' has afterWildcard=\"none\" — mixed candidates", async () => {
+            session.update("play beautiful", getPos);
+            await flush();
+
+            // Both rules contribute at mpl=14:
+            //   "music" from Rule B (literal, position-sensitive)
+            //   "by" from Rule A (wildcard-stable)
+            // AND-merge → afterWildcard="none" → noMatchPolicy="refetch"
+            const choices =
+                menu.setChoices.mock.calls[
+                    menu.setChoices.mock.calls.length - 1
+                ][0];
+            expect(choices).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "music" }),
+                    expect.objectContaining({ matchText: "by" }),
+                ]),
+            );
+        });
+
+        test("typing into wildcard triggers re-fetch, not slide", async () => {
+            session.update("play beautiful", getPos);
+            await flush();
+
+            const fetchCountAfterPrime =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Type a non-separator char past the anchor.
+            // With afterWildcard="none" (AND-merge), this should re-fetch
+            // instead of sliding — the anchor is no longer valid.
+            session.update("play beautifull", getPos);
+
+            // A re-fetch should have been triggered.
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountAfterPrime + 1,
+            );
+        });
+
+        test("re-fetch at new position drops stale literal completion", async () => {
+            session.update("play beautiful", getPos);
+            await flush();
+
+            // Type more — triggers re-fetch since afterWildcard="none".
+            session.update("play beautifull", getPos);
+            await flush();
+
+            // At "play beautifull", only the wildcard rule contributes.
+            // "music" should be gone — it was position-sensitive to
+            // "play beautiful" (exact partial match of Rule B).
+            const choices =
+                menu.setChoices.mock.calls[
+                    menu.setChoices.mock.calls.length - 1
+                ][0];
+            expect(choices).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "by" }),
+                ]),
+            );
+            expect(choices).not.toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "music" }),
+                ]),
+            );
+        });
+
+        test("space then non-matching prefix triggers re-fetch (afterWildcard some)", async () => {
+            session.update("play beautiful", getPos);
+            await flush();
+
+            // Space satisfies the separator — menu shows both entries.
+            session.update("play beautiful ", getPos);
+            expect(menu.isActive()).toBe(true);
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // "s" doesn't match any trie entry ("music", "by").
+            // afterWildcard="some" → noMatchPolicy="refetch" → re-fetch.
+            session.update("play beautiful s", getPos);
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore + 1,
+            );
+        });
+
+        test("space then matching prefix narrows trie to valid entry", async () => {
+            session.update("play beautiful", getPos);
+            await flush();
+
+            // Space → menu shows "music" and "by".
+            session.update("play beautiful ", getPos);
+            expect(menu.isActive()).toBe(true);
+
+            // "b" matches "by" in the trie — menu narrows correctly.
+            session.update("play beautiful b", getPos);
+            expect(menu.isActive()).toBe(true);
+
+            // Verify the trie filtered to only "by".
+            const updateArgs =
+                menu.updatePrefix.mock.calls[
+                    menu.updatePrefix.mock.calls.length - 1
+                ];
+            expect(updateArgs[0]).toBe("b");
+        });
+
+        test('single-rule wildcard still slides (afterWildcard="all")', async () => {
+            // "play hello" — only the wildcard rule matches, no literal
+            // rule conflict.  afterWildcard="all" → sliding works.
+            session.update("play hello", getPos);
+            await flush();
+
+            const fetchCountAfterPrime =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Type more text — should NOT re-fetch, anchor slides.
+            session.update("play hello world", getPos);
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountAfterPrime,
+            );
+
+            // After separator, "by" reappears from the cached trie.
+            session.update("play hello world ", getPos);
+            expect(menu.isActive()).toBe(true);
         });
     });
 

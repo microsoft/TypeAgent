@@ -78,6 +78,15 @@ export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 //                position.
 export type CompletionDirection = "forward" | "backward";
 
+// Describes how the grammar rules that produced completions at this
+// position relate to wildcards.
+//   "none" — no rule reached this position through a wildcard.
+//   "some" — some rules used a wildcard, some didn't (mixed merge).
+//   "all"  — every rule reached this position through a wildcard.
+// Only "none" and "all" arise from a single rule; "some" appears
+// after merging results from multiple rules or grammars.
+export type AfterWildcard = "none" | "some" | "all";
+
 export type CompletionGroup = {
     name: string; // The group name for the completion
     completions: string[]; // The list of completions in the group
@@ -112,12 +121,13 @@ export type CompletionGroups = {
     // direction change.  When omitted, the dispatcher will conservatively
     // assume true if matchedPrefixLength > 0 and false otherwise.
     directionSensitive?: boolean | undefined;
-    // True when the completions are offered at a position where a
-    // wildcard was finalized at end-of-input.  The wildcard's extent
-    // is ambiguous — the user may still be typing within it — so the
-    // caller should allow the anchor to slide forward on further input
-    // rather than re-fetching or giving up.
-    openWildcard?: boolean | undefined;
+    // Describes how the grammar rules that produced completions at
+    // this position relate to wildcards.  See AfterWildcard.
+    //   "none" — no wildcard; position is structurally pinned.
+    //   "some" — mixed; some rules used wildcards, some didn't.
+    //   "all"  — every rule used a wildcard; position can slide.
+    // When omitted, the dispatcher treats it as "none".
+    afterWildcard?: AfterWildcard | undefined;
 };
 
 export interface AppAgentCommandInterface {

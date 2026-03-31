@@ -4,7 +4,7 @@
 > — how completions flow from the grammar matcher through the cache,
 > dispatcher, agent SDK, shell, and CLI layers. It defines the metadata
 > contract (`startIndex`, `separatorMode`, `closedSet`,
-> `directionSensitive`, `openWildcard`), the shell state machine, and
+> `directionSensitive`, `afterWildcard`), the shell state machine, and
 > correctness invariants. For the grammar language, compilation
 > pipeline, and grammar-level matching algorithms (categories, direction
 > semantics, equivalence analysis), see `actionGrammar.md`.
@@ -95,7 +95,7 @@ The return path carries `CommandCompletionResult`:
   separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
   closedSet: boolean;           // true → list is exhaustive
   directionSensitive: boolean;  // true → completion(input[0..P], backward) ≠ completion(input[0..P], forward)
-  openWildcard: boolean;        // true → wildcard boundary is ambiguous; shell should slide anchor
+  afterWildcard: AfterWildcard;        // "none" | "some" | "all" — wildcard boundary ambiguity
 }
 ```
 
@@ -111,7 +111,7 @@ Brief definitions here; see [Key types](#key-types) for full semantics.
 - **`closedSet`** — `true` when the completion list is exhaustive (all
   valid values are present); `false` when additional values may exist
   (e.g., entity names the backend cannot enumerate).
-- **`openWildcard`** — `true` when the `startIndex` position is ambiguous
+- **`afterWildcard`** — `true` when the `startIndex` position is ambiguous
   because it sits at a wildcard boundary that could shift with more
   typing. Controls anchor-sliding behavior in the shell.
 - **`direction`** — A `"forward"` or `"backward"` signal from the host,
@@ -157,14 +157,14 @@ The user types `play Never` (free-form, no `@` prefix).
 
 4. **Dispatcher**: Assembles `CommandCompletionResult` with `startIndex=5`
    (after `"play "`), `closedSet=false` (entity values are not
-   exhaustive), `openWildcard=false` (the `startIndex` position is
+   exhaustive), `afterWildcard="none"` (the `startIndex` position is
    pinned by the keyword `"play "` — it cannot shift with more typing).
 
 5. **Shell**: Receives result. Sets anchor to `"play "` (the first 5
    characters). Completion prefix is `"Never"`. Populates trie with
    `["Never Gonna Give You Up", "Nevermind"]`. Both match the prefix →
    shows menu. `noMatchPolicy="refetch"` (closedSet=false,
-   openWildcard=false).
+   afterWildcard="none").
 
 6. **User types `mind`** → prefix becomes `"Nevermind"` → trie filters
    to one match → trigger B1 (unique match) → re-fetch for the next
@@ -175,7 +175,7 @@ The user types `play Never` (free-form, no `@` prefix).
    completion (category 2). This time, unlike step 4, the completions
    are grammar keywords (not agent entity values), and the keyword
    position sits at an end-of-input wildcard boundary — so
-   `closedSet=true` (keyword set is exhaustive) and `openWildcard=true`
+   `closedSet=true` (keyword set is exhaustive) and `afterWildcard="all"`
    (the wildcard boundary is ambiguous — the user may still be typing
    within the song name). Shell sets `noMatchPolicy="slide"`.
 
@@ -223,7 +223,7 @@ back up) — see `actionGrammar.md`.
   would differ from `completion(input[0..P], forward)`, where
   P = `matchedPrefixLength`
   (see [`directionSensitive`](#directionsensitive) below)
-- `openWildcard` — `true` at ambiguous wildcard boundaries
+- `afterWildcard` — `true` at ambiguous wildcard boundaries
 
 ---
 
@@ -246,7 +246,7 @@ Merges results from two sources:
   not, `undefined` is treated as `0` — defined wins unless both are `0`.
   When both are `undefined`, the merged result preserves `undefined`.
   **EOI guard:** when the longer result comes from a wildcard-at-EOI
-  state (`openWildcard=true`, `matchedPrefixLength === prefixLength`)
+  state (`afterWildcard="all"`, `matchedPrefixLength === prefixLength`)
   and the shorter result
   anchors inside the input (`matchedPrefixLength < prefixLength`),
   the shorter result is preferred. This prevents a grammar whose
@@ -414,7 +414,7 @@ contiguous within each category.
 - **Separator stripping**: when `separatorMode` requires a separator, the
   leading separator character in the raw prefix is stripped before trie lookup.
 - **`noMatchPolicy`**: computed once from the backend's descriptive fields
-  (`closedSet`, `openWildcard`) when a result arrives (see `NoMatchPolicy`
+  (`closedSet`, `afterWildcard`) when a result arrives (see `NoMatchPolicy`
   below). Drives the A3 and C1 decisions as a simple `switch` instead of
   checking two booleans independently.
 - **Session preservation**: `hide()` cancels in-flight fetches but preserves
@@ -577,11 +577,25 @@ Merge rule: AND across sources (closed only if _all_ sources are closed).
 The shell does not store `closedSet` directly; it is folded into
 `noMatchPolicy` (see below).
 
-### `openWildcard`
+### `afterWildcard`
 
-A boolean flowing through the backend pipeline, signaling that the
-`matchedPrefixLength` position is **ambiguous** — adjacent to a wildcard
-whose extent is not fully determined.
+A tri-state (`"none" | "some" | "all"`) flowing through the backend
+pipeline, signaling whether the `matchedPrefixLength` position is
+**ambiguous** — adjacent to a wildcard whose extent is not fully
+determined.
+
+**Why a tri-state instead of a boolean?** A boolean produces a stuck
+state when multiple grammar rules contribute completions at the same
+position and some are after a wildcard while others are not. With a
+boolean OR-merge, `true` maps to `"slide"` — but the literal completions
+from the non-wildcard rule are anchored at a fixed position and become
+stale when the anchor slides. With a boolean AND-merge, `false` and
+`closedSet=true` maps to `"accept"` — but after a space the user can
+type a prefix that doesn't match the trie, and "accept" silently reuses
+the old session instead of re-fetching, leaving the user stuck with no
+menu and no way to get new completions. The tri-state separates the
+three cases: `"all"` (safe to slide), `"none"` (safe to accept when
+closed), and `"some"` (mixed — must re-fetch).
 
 A position is **definite** when it is structurally pinned by matched
 grammar tokens: no amount of additional typing can change where it falls.
@@ -600,16 +614,22 @@ analysis.
 
 Values:
 
-- **`true`** — the position is ambiguous. The keyword following the
-  wildcard (e.g. "by") is offered as a completion, and `closedSet`
-  correctly describes that keyword set as exhaustive. However, the
-  _position_ of that set is uncertain.
+- **`"none"`** — the position is definite for all rules; no sliding
+  wildcard boundary.
 
-- **`false`** — the position is definite; no sliding wildcard boundary.
+- **`"some"`** — some rules place the position after a wildcard while
+  others contribute literal completions. Neither sliding nor accepting
+  is safe; the shell should re-fetch.
 
-Merge rule: OR across sources (open wildcard if _any_ source has one).
+- **`"all"`** — every completion is from after a wildcard. The keyword
+  following the wildcard (e.g. "by") is offered as a completion, and
+  `closedSet` correctly describes that keyword set as exhaustive.
+  However, the _position_ of that set is uncertain. The shell should
+  slide the anchor forward as the user types.
 
-The shell does not store `openWildcard` directly; it is folded into
+Merge rule: equal values stay the same; unequal values merge to `"some"`.
+
+The shell does not store `afterWildcard` directly; it is folded into
 `noMatchPolicy` (see below).
 
 ### Anchor
@@ -642,31 +662,37 @@ The anchor serves three purposes:
 
 ### `NoMatchPolicy` (shell-internal)
 
-Computed once from `closedSet` and `openWildcard` when a backend result
+Computed once from `closedSet` and `afterWildcard` when a backend result
 arrives. Controls what the shell does when the local trie has no matches
 for the user's typed prefix.
 
 **Why derive a policy?** The backend returns _descriptive_ metadata —
-`closedSet` says whether the completion list is exhaustive, `openWildcard`
+`closedSet` says whether the completion list is exhaustive, `afterWildcard`
 says whether the anchor position is ambiguous. These are grammar-level
 facts that don't depend on the shell's UI. The shell translates them into
 a single actionable policy on arrival, keeping the decision points (A3
 and C1) simple: each is a `switch` on one enum rather than reasoning
-about two independent booleans.
+about a boolean and a tri-state independently.
 
-**Why `openWildcard` wins over `closedSet`:** When a wildcard boundary is
+**Why `afterWildcard="all"` wins over `closedSet`:** When a wildcard boundary is
 ambiguous, `closedSet` correctly describes the _keyword_ set (e.g.
 "by" is exhaustive), but the _position_ of that set is uncertain because
 the wildcard extent could shift. Re-fetching would return the same
 keywords at a shifted position (wasteful), and `"accept"` would leave the
 user stuck (no menu, no re-fetch). Sliding is the only useful action, so
-`openWildcard=true` maps to `"slide"` regardless of `closedSet`.
+`afterWildcard="all"` maps to `"slide"` regardless of `closedSet`.
 
-| Policy      | Derived from                            | Shell action at A3 / C1          |
-| ----------- | --------------------------------------- | -------------------------------- |
-| `"accept"`  | `closedSet=true`, `openWildcard=false`  | Reuse (menu hidden, no re-fetch) |
-| `"refetch"` | `closedSet=false`, `openWildcard=false` | Re-fetch (backend may know more) |
-| `"slide"`   | `openWildcard=true` (any `closedSet`)   | Slide anchor forward             |
+**Why `afterWildcard="some"` forces refetch:** When some rules place the
+cursor after a wildcard but others contribute literal completions, the
+keyword set is stable but the anchor may shift for some rules. Neither
+sliding nor accepting is safe — re-fetching lets the backend resolve the
+ambiguity.
+
+| Policy      | Derived from                                 | Shell action at A3 / C1          |
+| ----------- | -------------------------------------------- | -------------------------------- |
+| `"accept"`  | `closedSet=true`, `afterWildcard="none"`     | Reuse (menu hidden, no re-fetch) |
+| `"refetch"` | `closedSet=false`, or `afterWildcard="some"` | Re-fetch (backend may know more) |
+| `"slide"`   | `afterWildcard="all"` (any `closedSet`)      | Slide anchor forward             |
 
 This replaces independent checks on two booleans with a single `switch`:
 
@@ -788,7 +814,7 @@ other valid alternatives are silently lost.
 _Impact:_ Tokens incorrectly separated in a grammar designed for direct
 adjacency.
 
-**#10 — `openWildcard` correctness.**
+**#10 — `afterWildcard` correctness.**
 `true` only at ambiguous wildcard boundaries (Category 2 forward after
 wildcard finalized at EOI, or backward at keyword after captured wildcard).
 _Impact:_ False `true` → anchor slides when it shouldn't — completions
@@ -816,10 +842,10 @@ unnecessary separation if the reverse.
 Sensitive if ANY source is sensitive.
 _Impact:_ Skipped re-fetch when one source's results differ by direction.
 
-**#15 — `openWildcard`: OR-merge.**
-Open if ANY source has ambiguous boundary.
-_Impact:_ Anchor doesn't slide when one source's position is ambiguous —
-menu disappears.
+**#15 — `afterWildcard`: merge.**
+Equal values stay the same; unequal merge to `"some"`.
+_Impact:_ One source's ambiguous boundary doesn't cause another source's
+definite completions to slide — `"some"` triggers re-fetch instead.
 
 ### Known gaps
 

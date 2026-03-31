@@ -458,7 +458,7 @@ text `"mx"`. This applies equally to forward and backward directions.
    the wildcard absorbs `"Never b"` but `"b"` is a prefix of `"by"`.
    Phase B1 finds the partial keyword and (for backward) collects
    `"by"` at the partial keyword position (after `"Never "`), with
-   `openWildcard=true`, instead of using the fallback wildcard-start
+   `afterWildcard="all"`, instead of using the fallback wildcard-start
    candidate from Phase A. For forward, Phase B1 records the partial
    keyword anchor and Phase B2 uses it to emit the completion. This
    handles multi-word keywords as well: for
@@ -564,7 +564,7 @@ This invariant is verified by the "two-pass backward invariant" tests.
 
 Range candidates are **skipped** when:
 
-- `openWildcard=true` **and** `partialKeywordBackup=false` — the
+- `afterWildcard="all"` **and** `partialKeywordBackup=false` — the
   backed-up position is at an ambiguous wildcard boundary with no
   partial keyword to pin it. Forward evaluation at the shorter input
   would re-parse with fresh greedy wildcards that absorb different
@@ -710,7 +710,7 @@ the last matched item.
 
 Wildcard boundaries are always ambiguous — the wildcard could absorb
 more text, moving the boundary forward. The grammar matcher sets
-`openWildcard=true` and `directionSensitive=true` unconditionally for
+`afterWildcard="all"` and `directionSensitive=true` unconditionally for
 these positions. The table below explains _why_ the directions always
 differ at these boundaries.
 
@@ -795,7 +795,7 @@ Rationale:
    no need to distinguish committed vs. uncommitted positions.
    `directionSensitive` reduces to `P > 0`, which is easy to verify.
 
-**Design choice — openWildcard → always true:** Even when both
+**Design choice — afterWildcard → always true:** Even when both
 directions happen to find the same partial keyword at the same position
 (e.g. "play Never b" where both find "b"→"by" at position 10, after
 stripping the separator before "b"), the
@@ -804,7 +804,7 @@ the content that established the anchor, so
 `completion(input[0..P], "backward")` always diverges — confirming
 that the position is genuinely direction-sensitive under the cross-query
 definition (invariant #7 in `completion.md`). Since P > 0 whenever
-`openWildcard=true`, the simplified decision tree (`P > 0 → true`)
+`afterWildcard="all"`, the simplified decision tree (`P > 0 → true`)
 already covers this case.
 
 **Metadata produced:**
@@ -842,8 +842,8 @@ already covers this case.
   (`P = 0`). See "Why direction matters", "Forward/backward equivalence
   analysis", and the decision tree earlier in this document for the
   full rationale.
-- `openWildcard` is `true` when the matched position sits at an ambiguous
-  wildcard boundary — see `completion.md` [`openWildcard`] for the full
+- `afterWildcard` is `true` when the matched position sits at an ambiguous
+  wildcard boundary — see `completion.md` [`afterWildcard`] for the full
   definition (definite vs. ambiguous positions, persistence semantics,
   merge rule).
 

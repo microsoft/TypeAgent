@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CompletionDirection, SeparatorMode } from "@typeagent/agent-sdk";
+import {
+    CompletionDirection,
+    SeparatorMode,
+    AfterWildcard,
+} from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     ExecutableAction,
@@ -95,21 +99,26 @@ export type CompletionResult = {
     // direction.  When false, the caller can skip re-fetching on
     // direction change.
     directionSensitive?: boolean | undefined;
-    // True when the completions are offered at a position where a
-    // wildcard was finalized at end-of-input.  The wildcard's extent
-    // is ambiguous — the user may still be typing within it — so the
-    // caller should allow the anchor to slide forward on further input
-    // rather than re-fetching or giving up.
-    openWildcard?: boolean | undefined;
+    // Describes how the grammar rules that produced completions at
+    // this position relate to wildcards.  See AfterWildcard in
+    // @typeagent/agent-sdk.
+    //   "none" — no wildcard; position is structurally pinned.
+    //   "some" — mixed; some rules used wildcards, some didn't.
+    //   "all"  — every rule used a wildcard; position can slide.
+    afterWildcard?: AfterWildcard | undefined;
 };
 
-/** The matched prefix reached end-of-input via an open wildcard. */
+/** The matched prefix reached end-of-input via a wildcard. */
 export function isEoiWildcard(
     matchedLen: number,
     prefixLength: number,
-    openWildcard: boolean | undefined,
+    afterWildcard: AfterWildcard | undefined,
 ): boolean {
-    return matchedLen >= prefixLength && !!openWildcard;
+    return (
+        matchedLen >= prefixLength &&
+        afterWildcard !== undefined &&
+        afterWildcard !== "none"
+    );
 }
 
 /** The matched prefix stops before end-of-input (trailing text filters completions). */
@@ -134,15 +143,15 @@ export function anchorsInsideInput(
  */
 export function shouldPreferNewResult(
     currentLen: number,
-    currentOpenWildcard: boolean | undefined,
+    currentAfterWildcard: AfterWildcard | undefined,
     candidateLen: number,
-    candidateOpenWildcard: boolean | undefined,
+    candidateAfterWildcard: AfterWildcard | undefined,
     prefixLength: number,
 ): boolean {
     if (candidateLen > currentLen) {
         // Longer wins unless it's EOI wildcard displacing an anchored result.
         return !(
-            isEoiWildcard(candidateLen, prefixLength, candidateOpenWildcard) &&
+            isEoiWildcard(candidateLen, prefixLength, candidateAfterWildcard) &&
             anchorsInsideInput(currentLen, prefixLength)
         );
     }
@@ -150,7 +159,7 @@ export function shouldPreferNewResult(
     // Shorter candidate wins only when anchored and current is EOI wildcard.
     return (
         anchorsInsideInput(candidateLen, prefixLength) &&
-        isEoiWildcard(currentLen, prefixLength, currentOpenWildcard)
+        isEoiWildcard(currentLen, prefixLength, currentAfterWildcard)
     );
 }
 
@@ -180,9 +189,9 @@ export function mergeCompletionResults(
     if (firstLen !== secondLen) {
         return shouldPreferNewResult(
             firstLen,
-            first.openWildcard,
+            first.afterWildcard,
             secondLen,
-            second.openWildcard,
+            second.afterWildcard,
             prefixLength,
         )
             ? second
@@ -218,12 +227,18 @@ export function mergeCompletionResults(
                 ? (first.directionSensitive ?? false) ||
                   (second.directionSensitive ?? false)
                 : undefined,
-        // Open wildcard if either source has one.
-        openWildcard:
-            first.openWildcard !== undefined ||
-            second.openWildcard !== undefined
-                ? (first.openWildcard ?? false) ||
-                  (second.openWildcard ?? false)
+        // Tri-state merge for afterWildcard:
+        // equal → same; unequal → "some"; both undefined → undefined.
+        afterWildcard:
+            first.afterWildcard !== undefined ||
+            second.afterWildcard !== undefined
+                ? first.afterWildcard === second.afterWildcard
+                    ? first.afterWildcard
+                    : first.afterWildcard === undefined
+                      ? second.afterWildcard
+                      : second.afterWildcard === undefined
+                        ? first.afterWildcard
+                        : "some"
                 : undefined,
     };
 }

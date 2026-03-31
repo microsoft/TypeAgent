@@ -369,16 +369,16 @@ describe("mergeCompletionResults", () => {
     });
 
     describe("open wildcard at EOI — prefer anchored result", () => {
-        it("keeps shorter anchored result when longer is openWildcard at EOI", () => {
+        it("keeps shorter anchored result when longer is afterWildcard at EOI", () => {
             const anchored: CompletionResult = {
                 completions: ["by"],
                 matchedPrefixLength: 16,
-                openWildcard: true,
+                afterWildcard: "all",
             };
             const eoi: CompletionResult = {
                 completions: ["track", "song"],
                 matchedPrefixLength: 17,
-                openWildcard: true,
+                afterWildcard: "all",
             };
             // prefixLength=17: eoi is at EOI, anchored is inside input
             const result = mergeCompletionResults(anchored, eoi, 17)!;
@@ -390,12 +390,12 @@ describe("mergeCompletionResults", () => {
             const anchored: CompletionResult = {
                 completions: ["by"],
                 matchedPrefixLength: 16,
-                openWildcard: true,
+                afterWildcard: "all",
             };
             const eoi: CompletionResult = {
                 completions: ["track", "song"],
                 matchedPrefixLength: 17,
-                openWildcard: true,
+                afterWildcard: "all",
             };
             // Reversed argument order
             const result = mergeCompletionResults(eoi, anchored, 17)!;
@@ -407,12 +407,12 @@ describe("mergeCompletionResults", () => {
             const shorter: CompletionResult = {
                 completions: ["a"],
                 matchedPrefixLength: 5,
-                openWildcard: true,
+                afterWildcard: "all",
             };
             const longer: CompletionResult = {
                 completions: ["b"],
                 matchedPrefixLength: 10,
-                openWildcard: true,
+                afterWildcard: "all",
             };
             const result = mergeCompletionResults(shorter, longer, 20)!;
             expect(result.completions).toEqual(["b"]);
@@ -427,14 +427,14 @@ describe("mergeCompletionResults", () => {
             const eoi: CompletionResult = {
                 completions: ["track"],
                 matchedPrefixLength: 17,
-                openWildcard: true,
+                afterWildcard: "all",
             };
             const result = mergeCompletionResults(shorter, eoi, 17)!;
             expect(result.completions).toEqual(["track"]);
             expect(result.matchedPrefixLength).toBe(17);
         });
 
-        it("still prefers longer when openWildcard is false", () => {
+        it('still prefers longer when afterWildcard is "none"', () => {
             const anchored: CompletionResult = {
                 completions: ["by"],
                 matchedPrefixLength: 16,
@@ -442,7 +442,7 @@ describe("mergeCompletionResults", () => {
             const eoi: CompletionResult = {
                 completions: ["track"],
                 matchedPrefixLength: 17,
-                openWildcard: false,
+                afterWildcard: "none",
             };
             const result = mergeCompletionResults(anchored, eoi, 17)!;
             expect(result.completions).toEqual(["track"]);

@@ -252,7 +252,7 @@ export type MatchState = {
     // — i.e., a wildcard preceded this part and the part's position
     // was determined by scanning forward through the wildcard region.
     // When backward backs up to such a part, the position is ambiguous
-    // (see openWildcard on GrammarCompletionResult in grammarCompletion.ts).
+    // (see afterWildcard on GrammarCompletionResult in grammarCompletion.ts).
     lastMatchedPartInfo?:
         | {
               readonly type: "string";
