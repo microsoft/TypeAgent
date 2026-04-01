@@ -39,7 +39,7 @@ export default defineConfig({
     },
 
     maxFailures: 0,
-    timeout: 300_000, // Set global timeout to 120 seconds
+    timeout: 600_000, // Set global timeout to 10 minutes (for LLM-heavy tests)
 
     /* Configure projects for major browsers */
     projects: [
