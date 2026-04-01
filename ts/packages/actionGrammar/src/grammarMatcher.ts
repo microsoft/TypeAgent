@@ -837,6 +837,20 @@ function matchStringPartWithWildcard(
         }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex, pending)) {
+            // Assign default string value for single-part rules without
+            // an explicit value expression — same logic as the non-wildcard
+            // path in matchStringPartWithoutWildcard.  Without this, a
+            // pending wildcard from a parent rule that leaks into a
+            // single-part child rule would bypass the default value
+            // assignment and cause "No value assign to variable" at
+            // finalizeNestedRule time.
+            if (
+                state.value === undefined &&
+                state.parts.length === 1 &&
+                state.valueIds !== null
+            ) {
+                addValue(state, undefined, part.value.join(" "));
+            }
             state.lastMatchedPartInfo = {
                 type: "string",
                 start: wildcardEnd,

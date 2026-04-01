@@ -87,7 +87,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <RuleRefExpr> ::= <RuleName>
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" | ")*" | ")+" )
  *
- *   // ── Value (basic mode: enableExpressions=false) ──────────────────────────
+ *   // ── Value (basic mode: enableValueExpressions=false) ──────────────────────────
  *   <Value> = <BooleanValue> | <NumberValue> | <StringValue>
  *           | <ObjectValue> | <ArrayValue> | <VarReference>
  *   <ArrayValue> = "[" (<Value> ("," <Value>)* ","?)? "]"
@@ -102,8 +102,8 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <StringValue> = <StringLiteral>
  *   <VarReference> = <VarName>
  *
- *   // ── Value expressions (enableExpressions=true) ───────────────────────────
- *   // When enableExpressions is true, the <Value> position (after "->")
+ *   // ── Value expressions (enableValueExpressions=true) ───────────────────────────
+ *   // When enableValueExpressions is true, the <Value> position (after "->")
  *   // supports full JavaScript-like expressions with operator precedence.
  *   // In this mode <Value> is replaced by <ValueExpr>.
  *   //
@@ -181,13 +181,13 @@ export function parseGrammarRules(
     /** Whether to track source positions on value nodes (default: true). */
     position?: boolean,
     /** Enable JavaScript-like value expressions in the `->` position (default: false). */
-    enableExpressions: boolean = false,
+    enableValueExpressions: boolean = false,
 ): GrammarParseResult {
     const parser = new GrammarRuleParser(
         fileName,
         content,
         position ?? true,
-        enableExpressions,
+        enableValueExpressions,
     );
     const result = parser.parse();
     debugParse(JSON.stringify(result, undefined, 2));
@@ -430,7 +430,7 @@ class GrammarRuleParser implements ValueExprParserContext {
         private readonly fileName: string,
         readonly content: string,
         private readonly position: boolean = true,
-        private readonly enableExpressions: boolean = false,
+        private readonly enableValueExpressions: boolean = false,
     ) {}
 
     private get pos(): number | undefined {
@@ -905,7 +905,7 @@ class GrammarRuleParser implements ValueExprParserContext {
     }
 
     private parseValue(): ValueNode {
-        if (this.enableExpressions) {
+        if (this.enableValueExpressions) {
             return parseValueExpr(this);
         }
         return this.parseSimpleValue();

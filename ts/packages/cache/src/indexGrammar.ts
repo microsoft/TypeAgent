@@ -5,3 +5,4 @@ export {
     convertConstructionsToGrammar,
     convertConstructionFileToGrammar,
 } from "./grammar/exportGrammar.js";
+export type { ConvertConstructionsOptions } from "./grammar/exportGrammar.js";
