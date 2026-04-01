@@ -911,7 +911,7 @@ function matchStringPartWithoutWildcard(
 // flex-space, we've reached the top-level rule — its spacing mode
 // determines the leading/trailing behavior (all modes except "none"
 // allow leading whitespace at the top level).
-function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
+export function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
     if (state.partIndex !== 0 || state.parent === undefined) {
         return state.spacingMode;
     }

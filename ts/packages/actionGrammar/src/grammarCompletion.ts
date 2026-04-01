@@ -20,6 +20,7 @@ import {
     finalizeNestedRule,
     matchState,
     initialMatchState,
+    leadingSpacingMode,
 } from "./grammarMatcher.js";
 
 const debugCompletion = registerDebug("typeagent:grammar:completion");
@@ -64,6 +65,7 @@ function matchWordsGreedily(
     text: string,
     startIndex: number,
     spacingMode: CompiledSpacingMode,
+    noLeadingSeparator: boolean = false,
 ): { matchedWords: number; endIndex: number; prevEndIndex: number } {
     let index = startIndex;
     let prevIndex = startIndex;
@@ -74,7 +76,9 @@ function matchWordsGreedily(
         const escaped = escapeMatch(word);
 
         let regExpStr: string;
-        if (spacingMode === "none") {
+        if (k === 0 && noLeadingSeparator) {
+            regExpStr = escaped;
+        } else if (spacingMode === "none" && k > 0) {
             regExpStr = escaped;
         } else if (k === 0) {
             regExpStr = `[${separatorRegExpStr}]*?${escaped}`;
@@ -388,6 +392,7 @@ function tryPartialStringMatch(
     spacingMode: CompiledSpacingMode,
     direction?: "forward" | "backward",
     effectivePrefixEnd?: number,
+    noLeadingSeparator: boolean = false,
 ):
     | {
           consumedLength: number;
@@ -403,6 +408,7 @@ function tryPartialStringMatch(
         input,
         startIndex,
         spacingMode,
+        noLeadingSeparator,
     );
 
     // Direction matters when at least one word fully matched and no
@@ -679,11 +685,15 @@ function collectPropertyCandidate(
 ): void {
     updateMaxPrefixLength(ctx, prefixPosition);
     if (prefixPosition !== ctx.maxPrefixLength) return;
+    // At the leading edge of a nested rule, the separator between
+    // the matched prefix and the property slot is governed by the
+    // parent's spacing mode, not the nested rule's own mode.
+    const effectiveMode = leadingSpacingMode(state);
     ctx.fixedCandidates.push({
         kind: "property",
         valueId,
         state: { ...state },
-        spacingMode: state.spacingMode,
+        spacingMode: effectiveMode,
         isAfterWildcard,
         partialKeywordBackup: false,
     });
@@ -703,6 +713,12 @@ function tryCollectStringCandidate(
     dir: "forward" | "backward" | undefined,
     effectivePrefixEnd?: number,
 ): boolean {
+    // At nested-rule boundaries the leading separator mode may differ
+    // from the rule's own spacingMode (see leadingSpacingMode in
+    // grammarMatcher.ts).  Use it for the first-word separator and
+    // for the candidate's spacingMode when the completion is the first
+    // word (consumedLength === startIndex).
+    const effectiveLeadingMode = leadingSpacingMode(state);
     const partial = tryPartialStringMatch(
         part,
         ctx.input,
@@ -710,14 +726,23 @@ function tryCollectStringCandidate(
         state.spacingMode,
         dir,
         effectivePrefixEnd,
+        effectiveLeadingMode === "none",
     );
     if (partial !== undefined) {
         updateMaxPrefixLength(ctx, partial.consumedLength);
         if (partial.consumedLength === ctx.maxPrefixLength) {
+            // When no words were consumed (completion is the first
+            // word of the part), the separator between the matched
+            // prefix and the completion is governed by the leading
+            // mode, not the rule's inter-word spacingMode.
+            const candidateSpacingMode =
+                partial.consumedLength === startIndex
+                    ? effectiveLeadingMode
+                    : state.spacingMode;
             ctx.fixedCandidates.push({
                 kind: "string",
                 completionText: partial.remainingText,
-                spacingMode: state.spacingMode,
+                spacingMode: candidateSpacingMode,
                 isAfterWildcard,
                 partialKeywordBackup: false,
             });
