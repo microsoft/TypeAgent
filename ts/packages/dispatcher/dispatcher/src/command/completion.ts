@@ -13,6 +13,7 @@ import {
     CompletionGroup,
     CompletionGroups,
     SeparatorMode,
+    AfterWildcard,
 } from "@typeagent/agent-sdk";
 import {
     getFlagMultiple,
@@ -439,7 +440,7 @@ async function getCommandParameterCompletion(
     let agentClosedSet: boolean | undefined;
     let separatorMode: SeparatorMode | undefined = target.separatorMode;
     let directionSensitive = false;
-    let openWildcard = false;
+    let afterWildcard: AfterWildcard = "none";
 
     const agent = context.agents.getAppAgent(result.actualAppAgentName);
     if (agent.getCommandCompletion && target.completionNames.length > 0) {
@@ -479,7 +480,7 @@ async function getCommandParameterCompletion(
         directionSensitive =
             agentResult.directionSensitive ??
             (groupPrefixLength !== undefined && groupPrefixLength > 0);
-        openWildcard = agentResult.openWildcard ?? false;
+        afterWildcard = agentResult.afterWildcard ?? "none";
         debug(
             `Command completion parameter with agent: groupPrefixLength=${groupPrefixLength}, startIndex=${startIndex}`,
         );
@@ -496,7 +497,7 @@ async function getCommandParameterCompletion(
             params.nextArgs.length > 0,
         ),
         directionSensitive: target.directionSensitive || directionSensitive,
-        openWildcard,
+        afterWildcard,
     };
 }
 
@@ -515,7 +516,7 @@ async function completeDescriptor(
     separatorMode: SeparatorMode | undefined;
     closedSet: boolean;
     directionSensitive: boolean;
-    openWildcard: boolean;
+    afterWildcard: AfterWildcard;
 }> {
     const completions: CompletionGroup[] = [];
     let separatorMode: SeparatorMode | undefined;
@@ -557,7 +558,7 @@ async function completeDescriptor(
             separatorMode,
             closedSet: true,
             directionSensitive: false,
-            openWildcard: false,
+            afterWildcard: "none",
         };
     }
 
@@ -571,7 +572,7 @@ async function completeDescriptor(
         ),
         closedSet: parameterCompletions.closedSet,
         directionSensitive: parameterCompletions.directionSensitive,
-        openWildcard: parameterCompletions.openWildcard,
+        afterWildcard: parameterCompletions.afterWildcard,
     };
 }
 
@@ -681,7 +682,7 @@ export async function getCommandCompletion(
         // Track whether direction influenced the result.  When false,
         // the caller can skip re-fetching on direction change.
         let directionSensitive = false;
-        let openWildcard = false;
+        let afterWildcard: AfterWildcard = "none";
 
         const descriptor = result.descriptor;
 
@@ -743,7 +744,7 @@ export async function getCommandCompletion(
             // direction) or if the agent/parameter level is.
             directionSensitive =
                 directionSensitiveCommand || desc.directionSensitive;
-            openWildcard = desc.openWildcard;
+            afterWildcard = desc.afterWildcard;
         } else if (table !== undefined) {
             // descriptor is undefined: the suffix didn't resolve to any
             // known command or subcommand.  startIndex already points to
@@ -809,7 +810,7 @@ export async function getCommandCompletion(
             separatorMode,
             closedSet,
             directionSensitive,
-            openWildcard,
+            afterWildcard,
         };
 
         debug(`Command completion result:`, completionResult);
@@ -824,7 +825,7 @@ export async function getCommandCompletion(
             separatorMode: undefined,
             closedSet: false,
             directionSensitive: false,
-            openWildcard: false,
+            afterWildcard: "none",
         };
     }
 }

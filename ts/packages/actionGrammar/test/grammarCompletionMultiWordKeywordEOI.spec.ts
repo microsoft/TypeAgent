@@ -34,7 +34,7 @@ describeForEachCompletion(
         it('forward: "play something played" — should offer "by", not "played"', () => {
             // Buggy result:
             //   completions: ["played"], matchedPrefixLength: 21,
-            //   separatorMode: "spacePunctuation", openWildcard: true
+            //   separatorMode: "spacePunctuation", afterWildcard: "all"
             //
             // Correct: "played" is keyword word 0, fully matched to EOI.
             // The completion should be "by" (keyword word 1) at
@@ -51,7 +51,7 @@ describeForEachCompletion(
                 separatorMode: "spacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
-                openWildcard: true,
+                afterWildcard: "all",
                 properties: [],
             });
         });
@@ -74,7 +74,7 @@ describeForEachCompletion(
                 separatorMode: "spacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
-                openWildcard: true,
+                afterWildcard: "some",
                 properties: [],
             });
         });
@@ -98,7 +98,7 @@ describeForEachCompletion(
                 separatorMode: "spacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
-                openWildcard: true,
+                afterWildcard: "some",
                 properties: [],
             });
         });
@@ -121,7 +121,7 @@ describeForEachCompletion(
                 separatorMode: "spacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
-                openWildcard: true,
+                afterWildcard: "some",
                 properties: [],
             });
         });
@@ -129,7 +129,7 @@ describeForEachCompletion(
         it('forward: "play something played " — first keyword word + space, should offer "by"', () => {
             // Buggy result:
             //   completions: ["played"], matchedPrefixLength: 22,
-            //   separatorMode: "optional", openWildcard: true
+            //   separatorMode: "optional", afterWildcard: "all"
             //
             // Correct: "played " with trailing space — the first keyword
             // word was fully matched.  Should offer "by" at
@@ -146,7 +146,7 @@ describeForEachCompletion(
                 separatorMode: "optional",
                 closedSet: true,
                 directionSensitive: true,
-                openWildcard: true,
+                afterWildcard: "all",
                 properties: [],
             });
         });
@@ -169,7 +169,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
@@ -187,7 +187,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
@@ -209,7 +209,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                 });
             });
 
@@ -226,7 +226,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
@@ -248,7 +248,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: {},
@@ -271,7 +271,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
@@ -296,7 +296,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
@@ -318,7 +318,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: {},
@@ -353,7 +353,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });

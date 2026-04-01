@@ -101,7 +101,7 @@ export async function requestCompletion(
     const separatorMode = results.separatorMode;
     const closedSet = results.closedSet;
     const directionSensitive = results.directionSensitive;
-    const openWildcard = results.openWildcard;
+    const afterWildcard = results.afterWildcard;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -119,7 +119,7 @@ export async function requestCompletion(
             separatorMode,
             closedSet,
             directionSensitive,
-            openWildcard,
+            afterWildcard,
         };
     }
 
@@ -146,7 +146,7 @@ export async function requestCompletion(
         separatorMode,
         closedSet,
         directionSensitive,
-        openWildcard,
+        afterWildcard,
     };
 }
 

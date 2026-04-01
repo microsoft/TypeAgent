@@ -517,7 +517,7 @@ export class RequestCommandHandler implements CommandHandler {
                 result.separatorMode = requestResult.separatorMode;
                 result.closedSet = requestResult.closedSet;
                 result.directionSensitive = requestResult.directionSensitive;
-                result.openWildcard = requestResult.openWildcard;
+                result.afterWildcard = requestResult.afterWildcard;
             }
         }
         return result;

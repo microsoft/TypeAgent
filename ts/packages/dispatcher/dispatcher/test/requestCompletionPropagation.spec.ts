@@ -9,12 +9,12 @@ import {
 import { getCommandCompletion } from "../src/command/completion.js";
 
 // ---------------------------------------------------------------------------
-// Test: openWildcard and directionSensitive propagation through the
+// Test: afterWildcard and directionSensitive propagation through the
 // request handler path (bare text → requestCommandHandler.getCompletion
 // → requestCompletion → agentCache.completion)
 //
 // Strategy: initialize a context, then monkey-patch agentCache.completion
-// to return a controlled CompletionResult with openWildcard and
+// to return a controlled CompletionResult with afterWildcard and
 // directionSensitive.  Send bare text (no @-prefix) so the dispatcher
 // routes through the request handler.
 // ---------------------------------------------------------------------------
@@ -48,14 +48,14 @@ describe("Request handler completion propagation", () => {
         patchCacheCompletion(undefined);
     });
 
-    it("propagates openWildcard=true from cache through request handler", async () => {
+    it('propagates afterWildcard="all" from cache through request handler', async () => {
         patchCacheCompletion({
             completions: ["by", "from"],
             matchedPrefixLength: 10,
             separatorMode: "spacePunctuation",
             closedSet: true,
             directionSensitive: true,
-            openWildcard: true,
+            afterWildcard: "all",
         });
 
         const result = await getCommandCompletion(
@@ -64,28 +64,28 @@ describe("Request handler completion propagation", () => {
             context,
         );
         expect(result).toBeDefined();
-        expect(result.openWildcard).toBe(true);
+        expect(result.afterWildcard).toBe("all");
         expect(result.directionSensitive).toBe(true);
         expect(result.closedSet).toBe(true);
         expect(result.separatorMode).toBe("spacePunctuation");
     });
 
-    it("propagates openWildcard=false from cache through request handler", async () => {
+    it('propagates afterWildcard="none" from cache through request handler', async () => {
         patchCacheCompletion({
             completions: ["music"],
             matchedPrefixLength: 5,
             separatorMode: "spacePunctuation",
             closedSet: true,
             directionSensitive: false,
-            openWildcard: false,
+            afterWildcard: "none",
         });
 
         const result = await getCommandCompletion("play ", "forward", context);
         expect(result).toBeDefined();
-        expect(result.openWildcard).toBe(false);
+        expect(result.afterWildcard).toBe("none");
     });
 
-    it("returns openWildcard=false when cache returns undefined", async () => {
+    it('returns afterWildcard="none" when cache returns undefined', async () => {
         patchCacheCompletion(undefined);
 
         const result = await getCommandCompletion(
@@ -94,7 +94,7 @@ describe("Request handler completion propagation", () => {
             context,
         );
         expect(result).toBeDefined();
-        expect(result.openWildcard).toBe(false);
+        expect(result.afterWildcard).toBe("none");
     });
 
     it("propagates directionSensitive through request handler", async () => {
@@ -103,7 +103,7 @@ describe("Request handler completion propagation", () => {
             matchedPrefixLength: 5,
             closedSet: false,
             directionSensitive: true,
-            openWildcard: false,
+            afterWildcard: "none",
         });
 
         const result = await getCommandCompletion("play ", "forward", context);
@@ -116,7 +116,7 @@ describe("Request handler completion propagation", () => {
             completions: ["by", "from"],
             matchedPrefixLength: 10,
             closedSet: true,
-            openWildcard: true,
+            afterWildcard: "all",
         });
 
         const result = await getCommandCompletion(

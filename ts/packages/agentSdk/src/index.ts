@@ -33,6 +33,7 @@ export {
     CompletionGroup,
     CompletionGroups,
     SeparatorMode,
+    AfterWildcard,
 } from "./command.js";
 
 export {

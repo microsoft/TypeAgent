@@ -3,6 +3,7 @@
 
 import { CommandCompletionResult } from "agent-dispatcher";
 import {
+    AfterWildcard,
     CompletionDirection,
     CompletionGroup,
     SeparatorMode,
@@ -36,24 +37,26 @@ export interface ICompletionDispatcher {
 
 // Describes what the shell should do when the local trie has no matches
 // for the user's typed prefix.  Computed once from the backend's
-// descriptive fields (closedSet, openWildcard) when a result arrives,
+// descriptive fields (closedSet, afterWildcard) when a result arrives,
 // then used in reuseSession() decisions.
 //
 //   "accept"  — the completion set is exhaustive; no re-fetch can help.
-//               (Derived from closedSet=true, openWildcard=false.)
+//               (Derived from closedSet=true, afterWildcard="none".)
 //   "refetch" — the set is open-ended; the backend may know more.
-//               (Derived from closedSet=false, openWildcard=false.)
+//               (Derived from closedSet=false, or afterWildcard="some".)
 //   "slide"   — the anchor sits at a sliding wildcard boundary; slide
 //               it forward instead of re-fetching or giving up.
-//               (Derived from openWildcard=true, any closedSet.)
+//               (Derived from afterWildcard="all", any closedSet.)
 type NoMatchPolicy = "accept" | "refetch" | "slide";
 
 function computeNoMatchPolicy(
     closedSet: boolean,
-    openWildcard: boolean,
+    afterWildcard: AfterWildcard,
 ): NoMatchPolicy {
-    if (openWildcard) return "slide";
-    if (closedSet) return "accept";
+    if (afterWildcard === "all") return "slide";
+    if (closedSet && afterWildcard === "none") return "accept";
+    // Covers closedSet=false (open-ended set) and afterWildcard="some"
+    // (mixed wildcard/literal rules — neither sliding nor accepting is safe).
     return "refetch";
 }
 
@@ -100,7 +103,7 @@ export class PartialCompletionSession {
 
     // Saved as-is from the last completion result.
     private separatorMode: SeparatorMode = "space";
-    // Computed from the backend's closedSet + openWildcard fields.
+    // Computed from the backend's closedSet + afterWildcard fields.
     // Controls what happens when the local trie has no matches.
     private noMatchPolicy: NoMatchPolicy = "refetch";
     // True when completions differ between forward and backward.
@@ -497,7 +500,7 @@ export class PartialCompletionSession {
                 this.separatorMode = result.separatorMode ?? "space";
                 this.noMatchPolicy = computeNoMatchPolicy(
                     result.closedSet,
-                    result.openWildcard,
+                    result.afterWildcard,
                 );
                 this.directionSensitive = result.directionSensitive;
 

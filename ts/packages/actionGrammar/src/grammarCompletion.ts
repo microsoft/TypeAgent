@@ -263,8 +263,17 @@ export type GrammarCompletionProperty = {
     propertyNames: string[];
 };
 
-// See docs/architecture/completion.md § Invariants for the full catalog of
-// correctness invariants on these fields and their user-visible impact.
+// Describes how the grammar rules that produced completions at this
+// position relate to wildcards.  See afterWildcard on
+// GrammarCompletionResult for the full semantics, and
+// docs/architecture/completion.md § Invariants for correctness
+// invariants on these fields.
+//
+// Intentionally duplicated from @typeagent/agent-sdk (command.ts),
+// like SeparatorMode in grammarMatcher.ts, because the two packages
+// have no dependency relationship.  Keep both definitions in sync.
+export type AfterWildcard = "none" | "some" | "all";
+
 export type GrammarCompletionResult = {
     completions: string[];
     properties?: GrammarCompletionProperty[] | undefined;
@@ -306,32 +315,27 @@ export type GrammarCompletionResult = {
     // When P = 0 no part boundary was crossed and both
     // directions are identical.
     directionSensitive: boolean;
-    // True when the completion's `matchedPrefixLength` position is
-    // *ambiguous* — it could shift forward as the user types more.
+    // Describes how the grammar rules that produced completions at
+    // this position relate to wildcards.
+    //   "none" — no rule reached this position through a wildcard.
+    //            The position is structurally pinned.
+    //   "some" — some rules used a wildcard, some didn't (mixed).
+    //            Position-sensitive literals are mixed with
+    //            wildcard-stable completions.
+    //   "all"  — every rule reached this position through a wildcard.
+    //            The position is ambiguous and can slide forward.
     //
-    // A position is **definite** when it is structurally pinned by
-    // matched grammar tokens: no amount of additional typing can
-    // change where it falls.  Examples: the start of a wildcard
-    // (pinned by the preceding keyword), or a keyword matched
-    // without a preceding wildcard.
+    // A position is **definite** ("none") when it is structurally
+    // pinned by matched grammar tokens: no amount of additional typing
+    // can change where it falls.
     //
-    // A position is **ambiguous** when it sits at the boundary of a
-    // wildcard whose extent is not fully determined.  The wildcard
-    // could absorb more text, moving the boundary forward.  This
-    // happens in two cases:
-    //   - **Forward:** a keyword completion follows a wildcard that
-    //     was finalized at end-of-input (via `finalizeState`).  The
-    //     wildcard consumed everything up to EOI, but the user may
-    //     still be typing within it.
-    //   - **Backward:** completion backs up to a keyword that was
-    //     matched after a captured wildcard (`afterWildcard`).  The
-    //     wildcard's end was pinned by this keyword, but backing up
-    //     un-pins it — the wildcard could extend to absorb the
-    //     keyword text.
+    // A position is **ambiguous** ("some" or "all") when at least one
+    // rule has a wildcard whose extent is not fully determined.  The
+    // wildcard could absorb more text, moving the boundary forward.
     //
-    // When true, the caller should allow its anchor to slide forward
-    // (the "slide" policy) rather than re-fetching or giving up.
-    openWildcard: boolean;
+    // Within a single grammar, only "none" and "all" arise.  "some"
+    // appears after merging results from multiple rules that disagree.
+    afterWildcard: AfterWildcard;
 };
 
 function getGrammarCompletionProperty(
@@ -525,7 +529,7 @@ type FixedCandidate =
           kind: "string";
           completionText: string;
           spacingMode: CompiledSpacingMode;
-          openWildcard: boolean;
+          isAfterWildcard: boolean;
           partialKeywordBackup: boolean;
       }
     | {
@@ -533,7 +537,7 @@ type FixedCandidate =
           valueId: number;
           state: MatchState;
           spacingMode: CompiledSpacingMode;
-          openWildcard: boolean;
+          isAfterWildcard: boolean;
           partialKeywordBackup: boolean;
       };
 
@@ -671,7 +675,7 @@ function collectPropertyCandidate(
     state: MatchState,
     valueId: number,
     prefixPosition: number,
-    candidateOpenWildcard: boolean = false,
+    isAfterWildcard: boolean = false,
 ): void {
     updateMaxPrefixLength(ctx, prefixPosition);
     if (prefixPosition !== ctx.maxPrefixLength) return;
@@ -680,7 +684,7 @@ function collectPropertyCandidate(
         valueId,
         state: { ...state },
         spacingMode: state.spacingMode,
-        openWildcard: candidateOpenWildcard,
+        isAfterWildcard,
         partialKeywordBackup: false,
     });
 }
@@ -694,7 +698,7 @@ function tryCollectStringCandidate(
     ctx: CompletionContext,
     state: MatchState,
     part: StringPart,
-    candidateOpenWildcard: boolean,
+    isAfterWildcard: boolean,
     startIndex: number,
     dir: "forward" | "backward" | undefined,
     effectivePrefixEnd?: number,
@@ -714,7 +718,7 @@ function tryCollectStringCandidate(
                 kind: "string",
                 completionText: partial.remainingText,
                 spacingMode: state.spacingMode,
-                openWildcard: candidateOpenWildcard,
+                isAfterWildcard,
                 partialKeywordBackup: false,
             });
         }
@@ -729,7 +733,7 @@ function tryCollectStringCandidate(
 // via tryPartialStringMatch (for strings) or collectPropertyCandidate
 // (for numbers).
 //
-// Tags the candidate with openWildcard when backing up to a part that
+// Tags the candidate with isAfterWildcard when backing up to a part that
 // was matched after a captured wildcard (afterWildcard) — that position
 // is ambiguous because the wildcard could extend.
 function tryCollectBackwardCandidate(
@@ -1200,7 +1204,7 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
                         kind: "string",
                         completionText: partialResult.completionWord,
                         spacingMode: desc.spacingMode,
-                        openWildcard: true,
+                        isAfterWildcard: true,
                         partialKeywordBackup: true,
                     });
                 }
@@ -1273,16 +1277,36 @@ function materializeCandidates(
     // candidates at the final maxPrefixLength contribute.  The
     // implicit reset when updateMaxPrefixLength clears fixedCandidates
     // is automatic (no surviving candidate ⇒ default value).
-    // separatorMode, closedSet, and openWildcard may be updated by
+    // separatorMode, closedSet, and afterWildcard may be updated by
     // range candidates and forward EOI candidates below.
     let separatorMode: SeparatorMode | undefined;
     let closedSet = true;
-    let openWildcard = false;
+    // Two booleans that accumulate independently during candidate
+    // processing, then combine into the output AfterWildcard
+    // tri-state at the end.  Order-independent: each candidate
+    // sets one flag without needing to know what came before.
+    //   anyAfterWildcard:        true if ANY candidate is after a wildcard
+    //   hasNonWildcardCompletion: true if ANY STRING candidate is NOT
+    //                             after a wildcard
+    // Property completions don't affect hasNonWildcardCompletion —
+    // they don't go into the shell's trie (they are metadata for
+    // the dispatcher to request agent property values, gated by
+    // closedSet=false).
+    //
+    // A single tri-state can't replace these two booleans because
+    // candidateorder is arbitrary: both "none → wildcard → all"
+    // and "none → non-wildcard string → none" are valid prefixes,
+    // but the tri-state can't distinguish "none (empty)" from
+    // "none (has non-wildcard string)" when a wildcard arrives.
+    let anyAfterWildcard = false;
+    let hasNonWildcardCompletion = false;
     let partialKeywordBackup = false;
 
     for (const c of fixedCandidates) {
-        if (c.openWildcard) {
-            openWildcard = true;
+        if (c.isAfterWildcard) {
+            anyAfterWildcard = true;
+        } else if (c.kind === "string") {
+            hasNonWildcardCompletion = true;
         }
         if (c.partialKeywordBackup) {
             partialKeywordBackup = true;
@@ -1331,15 +1355,15 @@ function materializeCandidates(
     //
     // rangeCandidateGateOpen: the backed-up position is usable for
     // range candidate processing.  True when either:
-    //  (a) the position is definite (!openWildcard) — no wildcard
+    //  (a) the position is definite (!anyAfterWildcard) — no wildcard
     //      boundary ambiguity; forward re-parsing would land at
     //      the same position, or
     //  (b) the position is anchored by a partial keyword
     //      (partialKeywordBackup) — the keyword fragment pins the
     //      position even though a wildcard boundary is open.
     //
-    // Invariant: partialKeywordBackup implies openWildcard.
-    const rangeCandidateGateOpen = !openWildcard || partialKeywordBackup;
+    // Invariant: partialKeywordBackup implies anyAfterWildcard.
+    const rangeCandidateGateOpen = !anyAfterWildcard || partialKeywordBackup;
     const processRangeCandidates =
         direction === "backward" &&
         rangeCandidates.length > 0 &&
@@ -1381,7 +1405,7 @@ function materializeCandidates(
                         partial.remainingText[0],
                         c.spacingMode,
                     );
-                    openWildcard = true;
+                    anyAfterWildcard = true;
                 }
             } else {
                 const completionProperty = getGrammarCompletionProperty(
@@ -1397,7 +1421,7 @@ function materializeCandidates(
                         "a",
                         c.spacingMode,
                     );
-                    openWildcard = true;
+                    anyAfterWildcard = true;
                     closedSet = false;
                 }
             }
@@ -1485,7 +1509,8 @@ function materializeCandidates(
             ctx.maxPrefixLength = anchor;
             closedSet = true;
             separatorMode = undefined;
-            openWildcard = false;
+            anyAfterWildcard = false;
+            hasNonWildcardCompletion = false;
         } else {
             debugCompletion(`Phase B: merge at P=${anchor}`);
         }
@@ -1494,7 +1519,7 @@ function materializeCandidates(
         // actually instantiating candidates (partial keyword or
         // deferred EOI candidates).
         if (hasPartialKeyword || forwardEoiCandidates.length > 0) {
-            openWildcard = true;
+            anyAfterWildcard = true;
         }
 
         // Add the partial keyword itself when it determined
@@ -1563,7 +1588,14 @@ function materializeCandidates(
         separatorMode,
         closedSet,
         directionSensitive,
-        openWildcard,
+        // Combine the two accumulation booleans into the output
+        // tri-state.  Order-independent: each boolean was set by
+        // any candidate that matched its condition.
+        afterWildcard: !anyAfterWildcard
+            ? "none"
+            : hasNonWildcardCompletion
+              ? "some"
+              : "all",
     };
 }
 

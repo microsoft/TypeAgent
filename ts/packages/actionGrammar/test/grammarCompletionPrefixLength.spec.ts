@@ -23,7 +23,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -36,7 +36,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -53,7 +53,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -68,7 +68,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -82,7 +82,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -96,7 +96,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -111,7 +111,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -134,7 +134,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -148,7 +148,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -161,7 +161,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -176,7 +176,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -189,7 +189,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -203,7 +203,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -227,7 +227,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -250,7 +250,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                 });
             });
 
@@ -263,7 +263,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
@@ -276,7 +276,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
@@ -294,7 +294,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -310,7 +310,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: {},
@@ -337,7 +337,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -351,7 +351,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -364,7 +364,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -378,7 +378,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -398,7 +398,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -413,7 +413,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -433,7 +433,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                 });
             });
 
@@ -445,7 +445,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
@@ -468,7 +468,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -491,7 +491,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -512,7 +512,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -533,7 +533,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -557,7 +557,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: {
@@ -578,7 +578,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: {
@@ -611,7 +611,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -630,7 +630,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -655,7 +655,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -673,7 +673,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -701,7 +701,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -719,7 +719,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -747,7 +747,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -774,7 +774,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -811,7 +811,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -832,7 +832,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -861,7 +861,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -881,7 +881,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -912,7 +912,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -938,7 +938,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -949,12 +949,12 @@ describeForEachCompletion(
                 // backed-up positions must run independently of
                 // range-candidate processing. The old code gated both
                 // on processRangeCandidates (which included
-                // rangeCandidateGateOpen = !openWildcard ||
-                // partialKeywordBackup). When openWildcard=true and no
+                // rangeCandidateGateOpen = !anyAfterWildcard ||
+                // partialKeywordBackup). When afterWildcard="all" and no
                 // partial keyword backup, the recompute was skipped,
                 // leaving a potentially stale directionSensitive.
                 //
-                // This grammar produces openWildcard=true in the
+                // This grammar produces afterWildcard="all" in the
                 // backward main loop: backward backs up to "now" which
                 // follows a captured wildcard (afterWildcard=true).
                 const g = [
@@ -963,7 +963,7 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("backward backs up to 'now' with openWildcard=true", () => {
+                it("backward backs up to 'now' with afterWildcard=\"all\"", () => {
                     const bwd = matchGrammarCompletion(
                         grammar,
                         "play Hello now",
@@ -971,7 +971,7 @@ describeForEachCompletion(
                         "backward",
                     );
                     // Backward: backs up to "now" (mpl=10, after "play Hello").
-                    // afterWildcard=true → openWildcard=true.
+                    // afterWildcard=true → afterWildcard="all".
                     // Forward would show "now" at mpl=14 (greedy wildcard).
                     // Results differ → directionSensitive must be true.
                     // Invariant #3 validated by the wrapper.
@@ -979,7 +979,7 @@ describeForEachCompletion(
                         completions: ["now"],
                         matchedPrefixLength: 10,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                     });
                 });
             });
@@ -1003,7 +1003,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1023,7 +1023,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1041,7 +1041,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1059,7 +1059,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1080,7 +1080,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1102,7 +1102,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1132,7 +1132,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -1169,7 +1169,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -1190,7 +1190,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -1216,7 +1216,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -1245,7 +1245,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1263,7 +1263,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1282,7 +1282,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1349,7 +1349,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1367,7 +1367,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1392,7 +1392,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1410,7 +1410,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1440,7 +1440,7 @@ describeForEachCompletion(
                         separatorMode: "none",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1458,7 +1458,7 @@ describeForEachCompletion(
                         separatorMode: "none",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1477,7 +1477,7 @@ describeForEachCompletion(
                         separatorMode: "none",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1496,7 +1496,7 @@ describeForEachCompletion(
                         separatorMode: "none",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1522,7 +1522,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1542,7 +1542,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1573,7 +1573,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1593,7 +1593,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1613,7 +1613,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1635,7 +1635,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1655,7 +1655,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1680,7 +1680,7 @@ describeForEachCompletion(
                         separatorMode: "none",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1698,7 +1698,7 @@ describeForEachCompletion(
                         separatorMode: "none",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1737,7 +1737,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1759,7 +1759,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1778,7 +1778,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1799,7 +1799,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1817,7 +1817,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1837,7 +1837,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1855,7 +1855,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1874,7 +1874,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [],
                     });
                 });
@@ -1898,7 +1898,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -1916,7 +1916,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -1934,7 +1934,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -1952,7 +1952,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -1970,7 +1970,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -1989,7 +1989,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2009,7 +2009,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2034,7 +2034,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2055,7 +2055,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: true,
@@ -2080,7 +2080,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: true,
@@ -2117,7 +2117,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2138,7 +2138,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2156,7 +2156,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2174,7 +2174,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2192,7 +2192,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2220,7 +2220,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: {
@@ -2247,7 +2247,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [
                         {
                             match: {
@@ -2282,7 +2282,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2300,7 +2300,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2318,7 +2318,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2336,7 +2336,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2363,7 +2363,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2381,7 +2381,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2418,7 +2418,7 @@ describeForEachCompletion(
                     separatorMode: undefined,
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2451,7 +2451,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
 
@@ -2461,7 +2461,7 @@ describeForEachCompletion(
                     separatorMode: "optional",
                     closedSet: true,
                     directionSensitive: false,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
             });
@@ -2485,7 +2485,7 @@ describeForEachCompletion(
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     properties: [],
                 });
                 expect(backward).toEqual(forward);
@@ -2517,7 +2517,7 @@ describeForEachCompletion(
                         completions: [],
                         matchedPrefixLength: 4,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -2545,7 +2545,7 @@ describeForEachCompletion(
                         matchedPrefixLength: 0,
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                     });
                 });
 
@@ -3040,7 +3040,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "some",
                         properties: [],
                     });
                 });
@@ -3061,7 +3061,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -3100,7 +3100,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "some",
                         properties: [],
                     });
                 });
@@ -3129,14 +3129,14 @@ describeForEachCompletion(
                     // to "by" at position 9.
                     // Rule A: wildcard captured "nice", "by" matched
                     // as keyword — backward backs up to "by" at
-                    // position 9 (afterWildcard=true → openWildcard).
+                    // position 9 (afterWildcard=true → afterWildcard).
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 9,
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "some",
                         properties: [],
                     });
                 });
@@ -3185,7 +3185,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -3219,7 +3219,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "some",
                         properties: [],
                     });
                 });
@@ -3238,7 +3238,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "some",
                         properties: [],
                     });
                 });
@@ -3268,7 +3268,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "some",
                         properties: [],
                     });
                 });
@@ -3300,7 +3300,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
@@ -3335,16 +3335,103 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: true,
+                        afterWildcard: "all",
                         properties: [],
                     });
                 });
             });
         });
 
-        describe("openWildcard skip — no re-invocation at wildcard boundary", () => {
+        describe("afterWildcard AND-merge — cross-rule wildcard + literal", () => {
+            // Regression test: when a wildcard rule and a literal keyword
+            // rule both produce string completions at the same
+            // matchedPrefixLength, afterWildcard must be "none".
+            //
+            // Before the AND-merge fix, afterWildcard was OR-merged across
+            // candidates, so the literal keyword's completion ("beautiful")
+            // was tagged as slidable.  After the shell slid the anchor
+            // forward (e.g. "play b" → "play book "), the stale "beautiful"
+            // entry remained in the trie and reappeared at the next word
+            // boundary.
+            const g = [
+                `import { SongName, ArtistName };`,
+                `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                `<Start> = play beautiful music -> "playBeautifulMusic";`,
+            ].join("\n");
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("forward on 'play b' — only wildcard rule at this mpl, afterWildcard=\"all\"", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play b",
+                    undefined,
+                    "forward",
+                );
+                // Rule A (wildcard): "b" absorbed into $(song),
+                //   Phase B sets anchor at mpl=6, offers "by".
+                // Rule B (literal): "b" partial-matches "beautiful"
+                //   at mpl=4, which is shorter — discarded.
+                // Only wildcard candidates survive → afterWildcard="all".
+                expect(result.completions).toContain("by");
+                expectMetadata(result, {
+                    matchedPrefixLength: 6,
+                    closedSet: true,
+                    directionSensitive: true,
+                    afterWildcard: "all",
+                    properties: [],
+                });
+            });
+
+            it("forward on 'play beautiful' — mixed merge, afterWildcard=\"none\"", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play beautiful",
+                    undefined,
+                    "forward",
+                );
+                // Rule B: matched "play beautiful" (14 chars), offers
+                //   "music" (afterWildcard="some").
+                // Rule A: wildcard-at-EOI, Phase B offers "by".
+                // Both at mpl=14.  "music" is position-sensitive →
+                // afterWildcard="some".
+                expect(result.completions).toContain("music");
+                expect(result.completions).toContain("by");
+                expectMetadata(result, {
+                    matchedPrefixLength: 14,
+                    closedSet: true,
+                    directionSensitive: true,
+                    afterWildcard: "some",
+                    properties: [],
+                });
+            });
+
+            it("forward on 'play hello' — only wildcard rule contributes, afterWildcard=\"all\"", () => {
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play hello",
+                    undefined,
+                    "forward",
+                );
+                // Rule A: wildcard absorbed "hello", offers "by"
+                //   (afterWildcard="all").
+                // Rule B: "hello" doesn't match "beautiful" — no
+                //   contribution at this prefix length.
+                // Only wildcard candidates → afterWildcard="all".
+                expect(result.completions).toContain("by");
+                expect(result.completions).not.toContain("beautiful");
+                expectMetadata(result, {
+                    matchedPrefixLength: 10,
+                    closedSet: true,
+                    directionSensitive: true,
+                    afterWildcard: "all",
+                    properties: [],
+                });
+            });
+        });
+
+        describe("afterWildcard skip — no re-invocation at wildcard boundary", () => {
             // When backward backs up to a position at an ambiguous
-            // wildcard boundary (openWildcard=true), re-invocation is
+            // wildcard boundary (afterWildcard="all"), re-invocation is
             // skipped because forward on the shorter input re-parses
             // with greedy wildcards that absorb different text.
 
@@ -3364,11 +3451,11 @@ describeForEachCompletion(
                     );
                     // The wildcard captured "hello", "right" matched,
                     // "now" matched.  Backward backs up to "now" at
-                    // the keyword boundary — openWildcard=true because
+                    // the keyword boundary — afterWildcard="all" because
                     // the keyword follows a wildcard.
                     expectMetadata(result, {
                         completions: ["now"],
-                        openWildcard: true,
+                        afterWildcard: "all",
                         directionSensitive: true,
                     });
                 });
@@ -3390,7 +3477,7 @@ describeForEachCompletion(
                         separatorMode: "spacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -3425,7 +3512,7 @@ describeForEachCompletion(
                         completions: [],
                         matchedPrefixLength: 4,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                         properties: [
                             {
                                 match: {
@@ -3463,7 +3550,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: false,
-                        openWildcard: false,
+                        afterWildcard: "none",
                     });
                 });
 
@@ -3480,7 +3567,7 @@ describeForEachCompletion(
                         separatorMode: "optional",
                         closedSet: true,
                         directionSensitive: true,
-                        openWildcard: false,
+                        afterWildcard: "none",
                     });
                 });
 
@@ -3623,7 +3710,7 @@ describeForEachCompletion(
                     completions: ["by", "from", "song", "track"],
                     sortCompletions: true,
                     matchedPrefixLength: 18,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     directionSensitive: true,
                 });
             });
@@ -3639,7 +3726,7 @@ describeForEachCompletion(
                     completions: ["by", "from", "song", "track"],
                     sortCompletions: true,
                     matchedPrefixLength: 18,
-                    openWildcard: true,
+                    afterWildcard: "all",
                     directionSensitive: true,
                 });
             });
@@ -3658,7 +3745,7 @@ describeForEachCompletion(
                     completions: ["song", "the", "track"],
                     sortCompletions: true,
                     matchedPrefixLength: 4,
-                    openWildcard: false,
+                    afterWildcard: "none",
                     directionSensitive: true,
                 });
             });
@@ -3695,7 +3782,7 @@ describeForEachCompletion(
                     sortCompletions: true,
                     matchedPrefixLength: 18,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                 });
             });
 
@@ -3714,7 +3801,7 @@ describeForEachCompletion(
                     sortCompletions: true,
                     matchedPrefixLength: 18,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                 });
             });
         });
