@@ -176,15 +176,21 @@ async function readDotenv() {
         return [];
     }
     const dotenvFile = await fs.promises.readFile(dotenvPath, "utf8");
-    const dotEnv = dotenvFile.split("\n").map((line) => {
-        const [key, ...value] = line.split("=");
-        if (key.includes("-")) {
-            throw new Error(
-                `Invalid dotenv key '${key}' for key vault. Keys cannot contain dashes.`,
-            );
-        }
-        return [key, value.join("=")];
-    });
+    const dotEnv = dotenvFile
+        .split("\n")
+        .filter((line) => {
+            const trimmed = line.trim();
+            return trimmed !== "" && !trimmed.startsWith("#");
+        })
+        .map((line) => {
+            const [key, ...value] = line.split("=");
+            if (key.includes("-")) {
+                throw new Error(
+                    `Invalid dotenv key '${key}' for key vault. Keys cannot contain dashes.`,
+                );
+            }
+            return [key, value.join("=")];
+        });
     return dotEnv;
 }
 
