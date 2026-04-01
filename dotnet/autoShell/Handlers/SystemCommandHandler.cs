@@ -2,12 +2,14 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
+using System.Diagnostics;
+using autoShell.Services;
 using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
 /// <summary>
-/// Handles system/utility commands: quit, debug, toggleNotifications.
+/// Handles system/utility commands: debug, toggleNotifications.
 /// </summary>
 internal class SystemCommandHandler : ICommandHandler
 {
@@ -18,9 +20,25 @@ internal class SystemCommandHandler : ICommandHandler
         "ToggleNotifications",
     ];
 
+    private readonly IProcessService _process;
+
+    public SystemCommandHandler(IProcessService process)
+    {
+        _process = process;
+    }
+
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        AutoShell.HandleSystemCommand(key, value);
+        switch (key)
+        {
+            case "ToggleNotifications":
+                _process.StartShellExecute("ms-actioncenter:");
+                break;
+
+            case "Debug":
+                Debugger.Launch();
+                break;
+        }
     }
 }

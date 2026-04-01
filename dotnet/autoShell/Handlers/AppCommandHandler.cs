@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
@@ -22,6 +24,20 @@ internal class AppCommandHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        AutoShell.HandleAppCommand(key, value);
+        switch (key)
+        {
+            case "LaunchProgram":
+                AutoShell.OpenApplication(value);
+                break;
+
+            case "CloseProgram":
+                AutoShell.CloseApplication(value);
+                break;
+
+            case "ListAppNames":
+                var installedApps = AutoShell.GetAllInstalledAppsIds();
+                Console.WriteLine(JsonConvert.SerializeObject(installedApps.Keys));
+                break;
+        }
     }
 }

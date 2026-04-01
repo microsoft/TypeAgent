@@ -1,17 +1,50 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using autoShell.Services;
+using Microsoft.Win32;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
 /// <summary>
 /// Handles theme-related commands: applyTheme, listThemes, setThemeMode, setWallpaper.
-/// Delegates to existing static methods in AutoShell.
+/// Contains all Windows theme management logic including discovery, application,
+/// and light/dark mode toggling.
 /// </summary>
-internal class ThemeCommandHandler : ICommandHandler
+internal partial class ThemeCommandHandler : ICommandHandler
 {
+    private const int SPI_SETDESKWALLPAPER = 0x0014;
+    private const int SPIF_UPDATEINIFILE_SENDCHANGE = 3;
+    private const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
+
+    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    private static partial IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool FreeLibrary(IntPtr hModule);
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int LoadString(IntPtr hInstance, uint uID, [Out] char[] lpBuffer, int nBufferMax);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd,
+        uint Msg,
+        IntPtr wParam,
+        string lParam,
+        uint fuFlags,
+        uint uTimeout,
+        out IntPtr lpdwResult);
+
     /// <inheritdoc/>
     public IEnumerable<string> SupportedCommands { get; } =
     [
@@ -21,9 +54,383 @@ internal class ThemeCommandHandler : ICommandHandler
         "SetWallpaper",
     ];
 
+    private readonly IRegistryService _registry;
+    private readonly IProcessService _process;
+    private readonly ISystemParametersService _systemParams;
+
+    private string _previousTheme;
+    private Dictionary<string, string> _themeDictionary;
+    private Dictionary<string, string> _themeDisplayNameDictionary;
+
+    public ThemeCommandHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams)
+    {
+        _registry = registry;
+        _process = process;
+        _systemParams = systemParams;
+
+        LoadThemes();
+    }
+
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        AutoShell.HandleThemeCommand(key, value);
+        switch (key)
+        {
+            case "SetWallpaper":
+                _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, value, SPIF_UPDATEINIFILE_SENDCHANGE);
+                break;
+
+            case "ApplyTheme":
+                ApplyTheme(value);
+                break;
+
+            case "ListThemes":
+                var themes = GetInstalledThemes();
+                Console.WriteLine(JsonConvert.SerializeObject(themes));
+                break;
+
+            case "SetThemeMode":
+                HandleSetThemeMode(value);
+                break;
+        }
     }
+
+    private void HandleSetThemeMode(string value)
+    {
+        if (value.Equals("toggle", StringComparison.OrdinalIgnoreCase))
+        {
+            ToggleLightDarkMode();
+        }
+        else if (value.Equals("light", StringComparison.OrdinalIgnoreCase))
+        {
+            SetLightDarkMode(true);
+        }
+        else if (value.Equals("dark", StringComparison.OrdinalIgnoreCase))
+        {
+            SetLightDarkMode(false);
+        }
+        else if (bool.TryParse(value, out bool useLightMode))
+        {
+            SetLightDarkMode(useLightMode);
+        }
+    }
+
+    #region Theme Management
+
+    private void LoadThemes()
+    {
+        _themeDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        _themeDisplayNameDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        string[] themePaths =
+        [
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Resources", "Themes"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Resources", "Ease of Access Themes"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Microsoft", "Windows", "Themes")
+        ];
+
+        foreach (string themesFolder in themePaths)
+        {
+            if (Directory.Exists(themesFolder))
+            {
+                foreach (string themeFile in Directory.GetFiles(themesFolder, "*.theme"))
+                {
+                    string themeName = Path.GetFileNameWithoutExtension(themeFile);
+                    if (!_themeDictionary.ContainsKey(themeName))
+                    {
+                        _themeDictionary[themeName] = themeFile;
+
+                        // Parse display name from theme file
+                        string displayName = GetThemeDisplayName(themeFile);
+                        if (!string.IsNullOrEmpty(displayName) && !_themeDisplayNameDictionary.ContainsKey(displayName))
+                        {
+                            _themeDisplayNameDictionary[displayName] = themeName;
+                        }
+                    }
+                }
+            }
+        }
+
+        _themeDictionary["previous"] = GetCurrentTheme();
+    }
+
+    /// <summary>
+    /// Parses the display name from a .theme file.
+    /// </summary>
+    private static string GetThemeDisplayName(string themeFilePath)
+    {
+        try
+        {
+            foreach (string line in File.ReadLines(themeFilePath))
+            {
+                if (line.StartsWith("DisplayName=", StringComparison.OrdinalIgnoreCase))
+                {
+                    string displayName = line["DisplayName=".Length..].Trim();
+                    // Handle localized strings (e.g., @%SystemRoot%\System32\themeui.dll,-2013)
+                    if (displayName.StartsWith("@"))
+                    {
+                        displayName = ResolveLocalizedString(displayName);
+                    }
+                    return displayName;
+                }
+            }
+        }
+        catch
+        {
+            // Ignore errors reading theme file
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves a localized string resource reference.
+    /// </summary>
+    private static string ResolveLocalizedString(string localizedString)
+    {
+        try
+        {
+            // Remove the @ prefix
+            string resourcePath = localizedString[1..];
+            // Expand environment variables
+            int commaIndex = resourcePath.LastIndexOf(',');
+            if (commaIndex > 0)
+            {
+                string dllPath = Environment.ExpandEnvironmentVariables(resourcePath[..commaIndex]);
+                string resourceIdStr = resourcePath[(commaIndex + 1)..];
+                if (int.TryParse(resourceIdStr, out int resourceId))
+                {
+                    char[] buffer = new char[256];
+                    IntPtr hModule = LoadLibraryEx(dllPath, IntPtr.Zero, LOAD_LIBRARY_AS_DATAFILE);
+                    if (hModule != IntPtr.Zero)
+                    {
+                        try
+                        {
+                            int result = LoadString(hModule, (uint)Math.Abs(resourceId), buffer, buffer.Length);
+                            if (result > 0)
+                            {
+                                return new string(buffer, 0, result);
+                            }
+                        }
+                        finally
+                        {
+                            FreeLibrary(hModule);
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Ignore errors resolving localized string
+        }
+        return localizedString;
+    }
+
+    /// <summary>
+    /// Returns a list of all installed Windows themes.
+    /// </summary>
+    public List<string> GetInstalledThemes()
+    {
+        HashSet<string> themes = [];
+
+        themes.UnionWith(_themeDictionary.Keys);
+        themes.UnionWith(_themeDisplayNameDictionary.Keys);
+
+        return [.. themes];
+    }
+
+    /// <summary>
+    /// Gets the current Windows theme name.
+    /// </summary>
+    public string GetCurrentTheme()
+    {
+        try
+        {
+            const string themesPath = @"Software\Microsoft\Windows\CurrentVersion\Themes";
+            string currentThemePath = _registry.GetValue(themesPath, "CurrentTheme") as string;
+            if (!string.IsNullOrEmpty(currentThemePath))
+            {
+                return Path.GetFileNameWithoutExtension(currentThemePath);
+            }
+        }
+        catch
+        {
+            // Ignore errors reading registry
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Applies a Windows theme by name.
+    /// </summary>
+    public bool ApplyTheme(string themeName)
+    {
+        string themePath = FindThemePath(themeName);
+        if (string.IsNullOrEmpty(themePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            string previous = GetCurrentTheme();
+
+            if (!themeName.Equals("previous", StringComparison.InvariantCultureIgnoreCase))
+            {
+                _process.StartShellExecute(themePath);
+                _previousTheme = previous;
+                return true;
+            }
+            else
+            {
+                bool success = RevertToPreviousTheme();
+
+                if (success)
+                {
+                    _previousTheme = previous;
+                }
+
+                return success;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reverts to the previous Windows theme.
+    /// </summary>
+    public bool RevertToPreviousTheme()
+    {
+        if (string.IsNullOrEmpty(_previousTheme))
+        {
+            return false;
+        }
+
+        string themePath = FindThemePath(_previousTheme);
+        if (string.IsNullOrEmpty(themePath))
+        {
+            return false;
+        }
+
+        try
+        {
+            _process.StartShellExecute(themePath);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the name of the previous theme.
+    /// </summary>
+    public string GetPreviousTheme()
+    {
+        return _previousTheme;
+    }
+
+    /// <summary>
+    /// Finds the full path to a theme file by name or display name.
+    /// </summary>
+    private string FindThemePath(string themeName)
+    {
+        // First check by file name
+        if (_themeDictionary.TryGetValue(themeName, out string themePath))
+        {
+            return themePath;
+        }
+
+        // Then check by display name
+        if (_themeDisplayNameDictionary.TryGetValue(themeName, out string fileNameFromDisplay))
+        {
+            if (_themeDictionary.TryGetValue(fileNameFromDisplay, out string themePathFromDisplay))
+            {
+                return themePathFromDisplay;
+            }
+        }
+
+        return null;
+    }
+
+    #endregion
+
+    #region Light/Dark Mode
+
+    /// <summary>
+    /// Sets the Windows light or dark mode by modifying registry keys.
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public bool SetLightDarkMode(bool useLightMode)
+    {
+        try
+        {
+            const string personalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+            int value = useLightMode ? 1 : 0;
+
+            _registry.SetValue(personalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
+            _registry.SetValue(personalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
+
+            // Broadcast settings change notification to update UI
+            BroadcastSettingsChange();
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Toggles between light and dark mode.
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public bool ToggleLightDarkMode()
+    {
+        bool? currentMode = GetCurrentLightMode();
+        return currentMode.HasValue ? SetLightDarkMode(!currentMode.Value) : false;
+    }
+
+    /// <summary>
+    /// Broadcasts a WM_SETTINGCHANGE message to notify the system of theme changes.
+    /// </summary>
+    private static void BroadcastSettingsChange()
+    {
+        const int HWND_BROADCAST = 0xffff;
+        const int WM_SETTINGCHANGE = 0x001A;
+        const uint SMTO_ABORTIFHUNG = 0x0002;
+        SendMessageTimeout(
+            (IntPtr)HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            IntPtr.Zero,
+            "ImmersiveColorSet",
+            SMTO_ABORTIFHUNG,
+            1000,
+            out nint result);
+    }
+
+    /// <summary>
+    /// Gets the current light/dark mode setting from the registry.
+    /// </summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private bool? GetCurrentLightMode()
+    {
+        try
+        {
+            const string personalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+            object value = _registry.GetValue(personalizePath, "AppsUseLightTheme");
+            return value is int intValue ? intValue == 1 : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    #endregion
 }

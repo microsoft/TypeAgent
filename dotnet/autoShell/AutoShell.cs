@@ -86,9 +86,6 @@ internal partial class AutoShell
             s_friendlyNameToId.Add(kvp.Key, kvp.Value);
         }
 
-        // Load the installed themes
-        LoadThemes();
-
         // Desktop management
         s_shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_ImmersiveShell));
         s_virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)s_shell.QueryService(CLSID_VirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
@@ -108,12 +105,20 @@ internal partial class AutoShell
             new AudioCommandHandler(audio),
             new AppCommandHandler(),
             new WindowCommandHandler(),
-            new ThemeCommandHandler(),
+            new ThemeCommandHandler(registry, process, systemParams),
             new VirtualDesktopCommandHandler(),
             new NetworkCommandHandler(),
             new DisplayCommandHandler(),
-            new SettingsCommandHandler(registry, systemParams, process),
-            new SystemCommandHandler()
+            new TaskbarSettingsHandler(registry),
+            new DisplaySettingsHandler(registry, process),
+            new PersonalizationSettingsHandler(registry, process),
+            new MouseSettingsHandler(systemParams, process),
+            new AccessibilitySettingsHandler(registry, process),
+            new PrivacySettingsHandler(registry),
+            new PowerSettingsHandler(registry, process),
+            new FileExplorerSettingsHandler(registry),
+            new SystemSettingsHandler(process),
+            new SystemCommandHandler(process)
         );
     }
 
@@ -208,7 +213,7 @@ internal partial class AutoShell
         Console.ForegroundColor = previousColor;
     }
 
-    private static SortedList<string, string> GetAllInstalledAppsIds()
+    internal static SortedList<string, string> GetAllInstalledAppsIds()
     {
         // GUID taken from https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
         var FOLDERID_AppsFolder = new Guid("{1e87508d-89c2-42f0-8a7e-645a0f50ca58}");
@@ -256,7 +261,7 @@ internal partial class AutoShell
     }
 
     // given part of a process name, raise the window of that process to the top level
-    private static void RaiseWindow(string processName)
+    internal static void RaiseWindow(string processName)
     {
         processName = ResolveProcessNameFromFriendlyName(processName);
         Process[] processes = Process.GetProcessesByName(processName);
@@ -290,7 +295,7 @@ internal partial class AutoShell
         }
     }
 
-    private static void MaximizeWindow(string processName)
+    internal static void MaximizeWindow(string processName)
     {
         processName = ResolveProcessNameFromFriendlyName(processName);
         Process[] processes = Process.GetProcessesByName(processName);
@@ -320,7 +325,7 @@ internal partial class AutoShell
         }
     }
 
-    private static void MinimizeWindow(string processName)
+    internal static void MinimizeWindow(string processName)
     {
         processName = ResolveProcessNameFromFriendlyName(processName);
         Process[] processes = Process.GetProcessesByName(processName);
@@ -348,7 +353,7 @@ internal partial class AutoShell
         }
     }
 
-    private static void TileWindowPair(string processName1, string processName2)
+    internal static void TileWindowPair(string processName1, string processName2)
     {
         // find both processes
         // TODO: Update this to account for UWP apps (e.g. calculator). UWPs are hosted by ApplicationFrameHost.exe
@@ -487,7 +492,7 @@ internal partial class AutoShell
     }
 
     // given a friendly name, check if it's running and if not, start it; if it's running raise it to the top level
-    private static void OpenApplication(string friendlyName)
+    internal static void OpenApplication(string friendlyName)
     {
         // check to see if the application is running
         Process[] processes = Process.GetProcessesByName(friendlyName);
@@ -550,7 +555,7 @@ internal partial class AutoShell
     }
 
     // close application
-    private static void CloseApplication(string friendlyName)
+    internal static void CloseApplication(string friendlyName)
     {
         // check to see if the application is running
         string processName = ResolveProcessNameFromFriendlyName(friendlyName);
@@ -569,16 +574,11 @@ internal partial class AutoShell
         }
     }
 
-    private static void SetDesktopWallpaper(string imagePath)
-    {
-        SystemParametersInfo(SPI_SETDESKWALLPAPER, 0, imagePath, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
-    }
-
     /// <summary>
     /// Creates virtual desktops from a JSON array of desktop names.
     /// </summary>
     /// <param name="jsonValue">JSON array containing desktop names, e.g., ["Work", "Personal", "Gaming"]</param>
-    private static void CreateDesktop(string jsonValue)
+    internal static void CreateDesktop(string jsonValue)
     {
         try
         {
@@ -639,7 +639,7 @@ internal partial class AutoShell
         }
     }
 
-    private static void SwitchDesktop(string desktopIdentifier)
+    internal static void SwitchDesktop(string desktopIdentifier)
     {
         if (!int.TryParse(desktopIdentifier, out int index))
         {
@@ -679,7 +679,7 @@ internal partial class AutoShell
         Marshal.ReleaseComObject(desktops);
     }
 
-    private static void BumpDesktopIndex(int bump)
+    internal static void BumpDesktopIndex(int bump)
     {
         IVirtualDesktop desktop = s_virtualDesktopManagerInternal.GetCurrentDesktop();
         int index = GetDesktopIndex(desktop);
@@ -753,7 +753,7 @@ internal partial class AutoShell
     /// </summary>
     /// <param name="value"></param>
     /// <remarks>Currently not working correction, returns ACCESS_DENIED // TODO: investigate</remarks>
-    private static void MoveWindowToDesktop(JToken value)
+    internal static void MoveWindowToDesktop(JToken value)
     {
         string process = value.SelectToken("process").ToString();
         string desktop = value.SelectToken("desktop").ToString();
@@ -795,7 +795,7 @@ internal partial class AutoShell
         }
     }
 
-    private static void PinWindow(string processName)
+    internal static void PinWindow(string processName)
     {
         IntPtr hWnd = FindProcessWindowHandle(processName);
 
@@ -841,7 +841,7 @@ internal partial class AutoShell
     /// Sets the airplane mode state using the Radio Management API.
     /// </summary>
     /// <param name="enable">True to enable airplane mode, false to disable.</param>
-    private static void SetAirplaneMode(bool enable)
+    internal static void SetAirplaneMode(bool enable)
     {
         IRadioManager radioManager = null;
         try
@@ -907,7 +907,7 @@ internal partial class AutoShell
     /// <summary>
     /// Lists all WiFi networks currently in range.
     /// </summary>
-    private static void ListWifiNetworks()
+    internal static void ListWifiNetworks()
     {
         IntPtr clientHandle = IntPtr.Zero;
         IntPtr wlanInterfaceList = IntPtr.Zero;
@@ -1029,7 +1029,7 @@ internal partial class AutoShell
     /// </summary>
     /// <param name="ssid">The SSID of the network to connect to.</param>
     /// <param name="password">Optional password for secured networks.</param>
-    private static void ConnectToWifi(string ssid, string password = null)
+    internal static void ConnectToWifi(string ssid, string password = null)
     {
         IntPtr clientHandle = IntPtr.Zero;
         IntPtr wlanInterfaceList = IntPtr.Zero;
@@ -1158,7 +1158,7 @@ internal partial class AutoShell
     /// Sets the system text scaling factor (percentage).
     /// </summary>
     /// <param name="percentage">The text scaling percentage (100-225).</param>
-    private static void SetTextSize(int percentage)
+    internal static void SetTextSize(int percentage)
     {
         try
         {
@@ -1196,7 +1196,7 @@ internal partial class AutoShell
     /// <summary>
     /// Lists all available display resolutions for the primary monitor.
     /// </summary>
-    private static void ListDisplayResolutions()
+    internal static void ListDisplayResolutions()
     {
         try
         {
@@ -1238,7 +1238,7 @@ internal partial class AutoShell
     /// Sets the display resolution.
     /// </summary>
     /// <param name="value">JSON object with "width" and "height" properties, or a string like "1920x1080".</param>
-    private static void SetDisplayResolution(JToken value)
+    internal static void SetDisplayResolution(JToken value)
     {
         try
         {
@@ -1361,7 +1361,7 @@ internal partial class AutoShell
         }
     }
 
-    private static void DisconnectFromWifi()
+    internal static void DisconnectFromWifi()
     {
         IntPtr clientHandle = IntPtr.Zero;
         IntPtr wlanInterfaceList = IntPtr.Zero;
@@ -1426,191 +1426,4 @@ internal partial class AutoShell
             }
         }
     }
-
-    #region Bridge methods for command handlers
-
-    /// <summary>
-    /// Bridge method for AppCommandHandler.
-    /// </summary>
-    internal static void HandleAppCommand(string key, string value)
-    {
-        switch (key)
-        {
-            case "LaunchProgram":
-                OpenApplication(value);
-                break;
-            case "CloseProgram":
-                CloseApplication(value);
-                break;
-            case "ListAppNames":
-                var installedApps = GetAllInstalledAppsIds();
-                Console.WriteLine(JsonConvert.SerializeObject(installedApps.Keys));
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Bridge method for WindowCommandHandler.
-    /// </summary>
-    internal static void HandleWindowCommand(string key, string value)
-    {
-        switch (key)
-        {
-            case "Maximize":
-                MaximizeWindow(value);
-                break;
-            case "Minimize":
-                MinimizeWindow(value);
-                break;
-            case "SwitchTo":
-                RaiseWindow(value);
-                break;
-            case "Tile":
-                string[] apps = value.Split(',');
-                if (apps.Length == 2)
-                {
-                    TileWindowPair(apps[0], apps[1]);
-                }
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Bridge method for ThemeCommandHandler.
-    /// </summary>
-    internal static void HandleThemeCommand(string key, string value)
-    {
-        switch (key)
-        {
-            case "SetWallpaper":
-                SetDesktopWallpaper(value);
-                break;
-            case "ApplyTheme":
-                ApplyTheme(value);
-                break;
-            case "ListThemes":
-                var themes = GetInstalledThemes();
-                Console.WriteLine(JsonConvert.SerializeObject(themes));
-                break;
-            case "SetThemeMode":
-                if (value.Equals("toggle", StringComparison.OrdinalIgnoreCase))
-                {
-                    ToggleLightDarkMode();
-                }
-                else
-                {
-                    if (bool.TryParse(value, out bool useLightMode))
-                    {
-                        SetLightDarkMode(useLightMode);
-                    }
-                    else if (value.Equals("light", StringComparison.OrdinalIgnoreCase))
-                    {
-                        SetLightDarkMode(true);
-                    }
-                    else if (value.Equals("dark", StringComparison.OrdinalIgnoreCase))
-                    {
-                        SetLightDarkMode(false);
-                    }
-                }
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Bridge method for VirtualDesktopCommandHandler.
-    /// </summary>
-    internal static void HandleVirtualDesktopCommand(string key, string value, JToken rawValue)
-    {
-        switch (key)
-        {
-            case "CreateDesktop":
-                CreateDesktop(value);
-                break;
-            case "SwitchDesktop":
-                SwitchDesktop(value);
-                break;
-            case "NextDesktop":
-                BumpDesktopIndex(1);
-                break;
-            case "PreviousDesktop":
-                BumpDesktopIndex(-1);
-                break;
-            case "MoveWindowToDesktop":
-                MoveWindowToDesktop(rawValue);
-                break;
-            case "PinWindow":
-                PinWindow(value);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Bridge method for NetworkCommandHandler.
-    /// </summary>
-    internal static void HandleNetworkCommand(string key, string value)
-    {
-        switch (key)
-        {
-            case "ToggleAirplaneMode":
-                SetAirplaneMode(bool.Parse(value));
-                break;
-            case "ListWifiNetworks":
-                ListWifiNetworks();
-                break;
-            case "ConnectWifi":
-                JObject netInfo = JObject.Parse(value);
-                string ssid = netInfo.Value<string>("ssid");
-                string password = netInfo["password"] is not null ? netInfo.Value<string>("password") : "";
-                ConnectToWifi(ssid, password);
-                break;
-            case "DisconnectWifi":
-                DisconnectFromWifi();
-                break;
-            case "BluetoothToggle":
-            case "EnableWifi":
-            case "EnableMeteredConnections":
-                HandleSettingsCommand(key, value);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Bridge method for DisplayCommandHandler.
-    /// </summary>
-    internal static void HandleDisplayCommand(string key, string value, JToken rawValue)
-    {
-        switch (key)
-        {
-            case "SetTextSize":
-                if (int.TryParse(value, out int textSizePct))
-                {
-                    SetTextSize(textSizePct);
-                }
-                break;
-            case "SetScreenResolution":
-                SetDisplayResolution(rawValue);
-                break;
-            case "ListResolutions":
-                ListDisplayResolutions();
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Bridge method for SystemCommandHandler.
-    /// </summary>
-    internal static void HandleSystemCommand(string key, string value)
-    {
-        switch (key)
-        {
-            case "ToggleNotifications":
-                ShellExecute(IntPtr.Zero, "open", "ms-actioncenter:", null, null, 1);
-                break;
-            case "Debug":
-                Debugger.Launch();
-                break;
-        }
-    }
-
-    #endregion
 }

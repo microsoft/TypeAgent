@@ -8,13 +8,8 @@ using System.Windows;
 
 namespace autoShell
 {
-    internal unsafe partial class AutoShell
+    internal partial class AutoShell
     {
-        private const int SPI_SETDESKWALLPAPER = 20;
-        private const int SPIF_UPDATEINIFILE = 0x01;
-        private const int SPIF_SENDCHANGE = 0x02;
-        private const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
-
         // Text scaling constants
         private const uint WM_SETTINGCHANGE = 0x001A;
         private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
@@ -38,10 +33,6 @@ namespace autoShell
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, ref RECT Rect);
 
-        // import GetShellWindow
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetShellWindow();
-
         // import GetDesktopWindow
         [DllImport("user32.dll")]
         private static extern IntPtr GetDesktopWindow();
@@ -52,16 +43,6 @@ namespace autoShell
 
         [DllImport("user32.dll", EntryPoint = "SendMessage", SetLastError = true)]
         private static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, UInt32 wParam, IntPtr lParam);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr SendMessageTimeout(
-            IntPtr hWnd,
-            uint Msg,
-            IntPtr wParam,
-            string lParam,
-            uint fuFlags,
-            uint uTimeout,
-            out IntPtr lpdwResult);
 
         // import SetWindowPos
         [DllImport("user32.dll")]
@@ -74,18 +55,6 @@ namespace autoShell
         // import FindWindowEx
         [DllImport("user32.dll")]
         internal static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
-
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
-
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool FreeLibrary(IntPtr hModule);
-
-        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
-        private static extern int LoadString(IntPtr hInstance, uint uID, StringBuilder lpBuffer, int nBufferMax);
 
         #region Virtual Desktop APIs
 
@@ -343,32 +312,7 @@ namespace autoShell
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
-        // get handle of active window
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetForegroundWindow();
-
         #endregion Window Functions
-
-        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-        private static extern IntPtr ShellExecute(
-                IntPtr hwnd,
-                string lpOperation,
-                string lpFile,
-                string lpParameters,
-                string lpDirectory,
-                int nShowCmd);
-
-
-        [DllImport("combase.dll")]
-        internal static extern int WindowsCreateString(char* sourceString, int length, out IntPtr hstring);
-
-        [DllImport("combase.dll")]
-        internal static extern int WindowsDeleteString(IntPtr hstring);
-
-        [DllImport("combase.dll")]
-        internal static extern char* WindowsGetStringRawBuffer(IntPtr hstring, out uint length);
-
-        // Add these COM interface definitions for Radio Management API
 
         // GUIDs for Radio Management API
         internal static readonly Guid CLSID_RadioManagementAPI = new Guid(0x581333f6, 0x28db, 0x41be, 0xbc, 0x7a, 0xff, 0x20, 0x1f, 0x12, 0xf3, 0xf6);
@@ -516,15 +460,8 @@ namespace autoShell
         #region Display Resolution
 
         private const int ENUM_CURRENT_SETTINGS = -1;
-        private const int ENUM_REGISTRY_SETTINGS = -2;
         private const int DISP_CHANGE_SUCCESSFUL = 0;
         private const int DISP_CHANGE_RESTART = 1;
-        private const int DISP_CHANGE_FAILED = -1;
-        private const int DISP_CHANGE_BADMODE = -2;
-        private const int DISP_CHANGE_NOTUPDATED = -3;
-        private const int DISP_CHANGE_BADFLAGS = -4;
-        private const int DISP_CHANGE_BADPARAM = -5;
-        private const int DISP_CHANGE_BADDUALVIEW = -6;
 
         private const int DM_PELSWIDTH = 0x80000;
         private const int DM_PELSHEIGHT = 0x100000;
@@ -533,10 +470,6 @@ namespace autoShell
 
         private const int CDS_UPDATEREGISTRY = 0x01;
         private const int CDS_TEST = 0x02;
-        private const int CDS_FULLSCREEN = 0x04;
-        private const int CDS_GLOBAL = 0x08;
-        private const int CDS_SET_PRIMARY = 0x10;
-        private const int CDS_RESET = 0x40000000;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         internal struct DEVMODE

@@ -1,0 +1,76 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using autoShell.Services;
+using Microsoft.Win32;
+using Newtonsoft.Json.Linq;
+
+namespace autoShell.Handlers;
+
+/// <summary>
+/// Handles File Explorer settings: file extensions and hidden/system files visibility.
+/// </summary>
+internal partial class FileExplorerSettingsHandler : ICommandHandler
+{
+    private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
+
+    [LibraryImport("user32.dll")]
+    private static partial IntPtr SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    /// <inheritdoc/>
+    public IEnumerable<string> SupportedCommands { get; } =
+    [
+        "ShowFileExtensions",
+        "ShowHiddenAndSystemFiles",
+    ];
+
+    private readonly IRegistryService _registry;
+
+    public FileExplorerSettingsHandler(IRegistryService registry)
+    {
+        _registry = registry;
+    }
+
+    /// <inheritdoc/>
+    public void Handle(string key, string value, JToken rawValue)
+    {
+        try
+        {
+            var param = JObject.Parse(value);
+
+            switch (key)
+            {
+                case "ShowFileExtensions":
+                    HandleShowFileExtensions(param);
+                    break;
+
+                case "ShowHiddenAndSystemFiles":
+                    HandleShowHiddenAndSystemFiles(param);
+                    break;
+            }
+
+            SendNotifyMessage((IntPtr)0xffff, 0x001A, IntPtr.Zero, IntPtr.Zero);
+        }
+        catch (Exception ex)
+        {
+            AutoShell.LogError(ex);
+        }
+    }
+
+    private void HandleShowFileExtensions(JObject param)
+    {
+        bool enable = param.Value<bool?>("enable") ?? true;
+        // Inverted: enable showing extensions = HideFileExt 0
+        _registry.SetValue(ExplorerAdvanced, "HideFileExt", enable ? 0 : 1, RegistryValueKind.DWord);
+    }
+
+    private void HandleShowHiddenAndSystemFiles(JObject param)
+    {
+        bool enable = param.Value<bool?>("enable") ?? true;
+        _registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
+        _registry.SetValue(ExplorerAdvanced, "ShowSuperHidden", enable ? 1 : 0, RegistryValueKind.DWord);
+    }
+}

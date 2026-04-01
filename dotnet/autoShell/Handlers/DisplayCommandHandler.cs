@@ -8,7 +8,6 @@ namespace autoShell.Handlers;
 
 /// <summary>
 /// Handles display commands: setScreenResolution, listResolutions, setTextSize.
-/// Delegates to existing static methods in AutoShell.
 /// </summary>
 internal class DisplayCommandHandler : ICommandHandler
 {
@@ -23,6 +22,22 @@ internal class DisplayCommandHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        AutoShell.HandleDisplayCommand(key, value, rawValue);
+        switch (key)
+        {
+            case "SetTextSize":
+                if (int.TryParse(value, out int textSizePct))
+                {
+                    AutoShell.SetTextSize(textSizePct);
+                }
+                break;
+
+            case "SetScreenResolution":
+                AutoShell.SetDisplayResolution(rawValue);
+                break;
+
+            case "ListResolutions":
+                AutoShell.ListDisplayResolutions();
+                break;
+        }
     }
 }

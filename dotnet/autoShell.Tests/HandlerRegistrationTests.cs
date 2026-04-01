@@ -25,12 +25,20 @@ public class HandlerRegistrationTests
             new AudioCommandHandler(audioMock.Object),
             new AppCommandHandler(),
             new WindowCommandHandler(),
-            new ThemeCommandHandler(),
+            new ThemeCommandHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
             new VirtualDesktopCommandHandler(),
             new NetworkCommandHandler(),
             new DisplayCommandHandler(),
-            new SettingsCommandHandler(registryMock.Object, systemParamsMock.Object, processMock.Object),
-            new SystemCommandHandler(),
+            new TaskbarSettingsHandler(registryMock.Object),
+            new DisplaySettingsHandler(registryMock.Object, processMock.Object),
+            new PersonalizationSettingsHandler(registryMock.Object, processMock.Object),
+            new MouseSettingsHandler(systemParamsMock.Object, processMock.Object),
+            new AccessibilitySettingsHandler(registryMock.Object, processMock.Object),
+            new PrivacySettingsHandler(registryMock.Object),
+            new PowerSettingsHandler(registryMock.Object, processMock.Object),
+            new FileExplorerSettingsHandler(registryMock.Object),
+            new SystemSettingsHandler(processMock.Object),
+            new SystemCommandHandler(processMock.Object),
         ];
     }
 

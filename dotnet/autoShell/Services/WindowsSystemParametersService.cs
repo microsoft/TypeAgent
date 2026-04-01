@@ -38,6 +38,12 @@ internal partial class WindowsSystemParametersService : ISystemParametersService
     }
 
     /// <inheritdoc/>
+    public bool SetParameter(int action, int param, int[] vparam, int flags)
+    {
+        return SystemParametersInfo(action, param, vparam, flags);
+    }
+
+    /// <inheritdoc/>
     public bool GetParameter(int action, int param, int[] vparam, int flags)
     {
         return SystemParametersInfo(action, param, vparam, flags);

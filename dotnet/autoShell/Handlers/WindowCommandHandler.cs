@@ -23,6 +23,27 @@ internal class WindowCommandHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        AutoShell.HandleWindowCommand(key, value);
+        switch (key)
+        {
+            case "Maximize":
+                AutoShell.MaximizeWindow(value);
+                break;
+
+            case "Minimize":
+                AutoShell.MinimizeWindow(value);
+                break;
+
+            case "SwitchTo":
+                AutoShell.RaiseWindow(value);
+                break;
+
+            case "Tile":
+                string[] apps = value.Split(',');
+                if (apps.Length == 2)
+                {
+                    AutoShell.TileWindowPair(apps[0], apps[1]);
+                }
+                break;
+        }
     }
 }
