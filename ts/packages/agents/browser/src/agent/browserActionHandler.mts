@@ -32,13 +32,6 @@ import { BrowserClient } from "./agentWebSocketServer.mjs";
 import { extractPageComponent } from "./componentExtractor.mjs";
 import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
-import type {
-    ElementDescriptionResult,
-    PageStateMatchResult,
-    PageContentQueryResult,
-} from "./browserQueryResults.mjs";
-import { createTypeScriptJsonValidator } from "typechat/ts";
-import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -137,6 +130,10 @@ import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
 const debugClientRouting = registerDebug("typeagent:browser:client-routing");
+
+// Module-level reference to WebFlowStore for getDynamicGrammar/getDynamicSchema callbacks
+let _webFlowStore: any | undefined;
+let _webFlowStoreInitializing: Promise<void> | undefined;
 
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
@@ -265,6 +262,21 @@ export function instantiate(): AppAgent {
         executeAction: executeBrowserAction,
         resolveEntity,
         getDynamicDisplay: getDynamicDisplayImpl,
+        async getDynamicGrammar(_context, schemaName) {
+            if (schemaName !== "browser.webFlows") return undefined;
+            if (!_webFlowStore) return undefined;
+            const text = _webFlowStore.getDynamicGrammarText();
+            if (!text) return undefined;
+            return { format: "agr" as const, content: text };
+        },
+        async getDynamicSchema(_context, schemaName) {
+            if (schemaName !== "browser.webFlows") return undefined;
+            if (!_webFlowStore) return undefined;
+            return {
+                format: "ts" as const,
+                content: _webFlowStore.generateDynamicSchemaText(),
+            };
+        },
         ...getCommandInterface(handlers),
     };
 }
@@ -312,30 +324,46 @@ async function updateBrowserContext(
     context: SessionContext<BrowserActionContext>,
     schemaName: string,
 ): Promise<void> {
+    // Initialize WebFlowStore for any browser schema activation.
+    // Use a shared promise to prevent concurrent initialization from
+    // parallel updateAction calls for different sub-schemas.
+    if (enable && !_webFlowStore && context.instanceStorage) {
+        if (!_webFlowStoreInitializing) {
+            _webFlowStoreInitializing = (async () => {
+                try {
+                    const { WebFlowStore } = await import(
+                        "./webFlows/store/webFlowStore.mjs"
+                    );
+                    const store = new WebFlowStore(context.instanceStorage);
+                    await store.initialize();
+
+                    const { ensureSampleFlowsRegistered } = await import(
+                        "./webFlows/actionHandler.mjs"
+                    );
+                    await ensureSampleFlowsRegistered(store);
+
+                    context.agentContext.webFlowStore = store;
+                    _webFlowStore = store;
+
+                    const names = await store.getFlowNames();
+                    debug(
+                        `WebFlowStore initialized: ${names.length} flows seeded`,
+                    );
+                } catch (error) {
+                    debug("Failed to initialize WebFlowStore:", error);
+                }
+            })();
+        }
+        await _webFlowStoreInitializing;
+    }
+
     if (schemaName !== "browser") {
-        // REVIEW: ignore sub-translator updates.
         return;
     }
     if (enable) {
         await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
-        }
-
-        // Initialize WebFlowStore (uses instance storage for cross-session persistence)
-        if (!context.agentContext.webFlowStore && context.instanceStorage) {
-            try {
-                const { WebFlowStore } = await import(
-                    "./webFlows/store/webFlowStore.mjs"
-                );
-                context.agentContext.webFlowStore = new WebFlowStore(
-                    context.instanceStorage,
-                );
-                await context.agentContext.webFlowStore.initialize();
-                debug("WebFlowStore initialized successfully");
-            } catch (error) {
-                debug("Failed to initialize WebFlowStore:", error);
-            }
         }
 
         // Load the website index from disk
@@ -1022,14 +1050,6 @@ async function resolveWebPage(
 
         case "turtlegraphics":
             return ["http://localhost:9000/"];
-        case "planviewer":
-            // handle browser views
-            const browserPort = await context.getSharedLocalHostPort("browser");
-            if (browserPort !== undefined) {
-                debug(`Resolved local site on PORT ${browserPort}`);
-
-                return [`http://localhost:${browserPort}/plans`];
-            }
         case "chatview":
             // handle browser views
             const shellPort = await context.getSharedLocalHostPort("shell");
@@ -1633,67 +1653,81 @@ async function executeBrowserAction(
                         },
                     });
                 }
-                case "enterTextInElement": {
-                    const control = getActionBrowserControl(context);
-                    await control.enterTextIn(
-                        action.parameters.cssSelector,
-                        action.parameters.value,
+                case "executeAdHocScript": {
+                    const adHocBrowser = getActionBrowserControl(context);
+                    const { createFrozenBrowserApi } = await import(
+                        "./webFlows/webFlowBrowserApi.mjs"
                     );
-                    return;
-                }
-                case "setDropdownValue": {
-                    const control = getActionBrowserControl(context);
-                    await control.setDropdown(
-                        action.parameters.cssSelector,
-                        action.parameters.optionLabel,
+                    const { executeWebFlowScript } = await import(
+                        "./webFlows/scriptExecutor.mjs"
                     );
-                    return;
-                }
-                case "clickOnElement": {
-                    const control = getActionBrowserControl(context);
-                    await control.clickOn(action.parameters.cssSelector);
-                    return;
-                }
-                case "awaitPageLoad": {
-                    const control = getActionBrowserControl(context);
-                    await control.awaitPageLoad();
-                    return;
-                }
-                case "getHTML": {
-                    const control = getActionBrowserControl(context);
-                    const fragments = await control.getHtmlFragments(
-                        false,
-                        "knowledgeExtraction",
+                    // Wire up extract component function so scripts
+                    // can use browser.extractComponent() and LLM-based methods
+                    const extractFn = await (async () => {
+                        try {
+                            const { createDiscoveryPageTranslator } =
+                                await import("./discovery/translator.mjs");
+                            return async (
+                                componentDef: any,
+                                userRequest?: string,
+                            ) => {
+                                const agent =
+                                    await createDiscoveryPageTranslator(
+                                        "GPT_5_2",
+                                    );
+                                const htmlFragments =
+                                    await adHocBrowser.getHtmlFragments();
+                                let screenshot = "";
+                                try {
+                                    screenshot =
+                                        await adHocBrowser.captureScreenshot();
+                                } catch {}
+                                const screenshots = screenshot
+                                    ? [screenshot]
+                                    : [];
+                                const response =
+                                    await agent.getPageComponentSchema(
+                                        componentDef.typeName ||
+                                            componentDef.type ||
+                                            "Element",
+                                        userRequest,
+                                        htmlFragments,
+                                        screenshots,
+                                    );
+                                if (!response.success) {
+                                    throw new Error(
+                                        response.message ||
+                                            "Component extraction failed",
+                                    );
+                                }
+                                return response.data;
+                            };
+                        } catch {
+                            return undefined;
+                        }
+                    })();
+                    const browserApi = createFrozenBrowserApi(
+                        adHocBrowser,
+                        { type: "global" },
+                        extractFn,
                     );
-                    return createActionResult(JSON.stringify(fragments));
-                }
-                case "getElementByDescription": {
-                    const result = await handleGetElementByDescription(
-                        action.parameters,
-                        context,
+                    let scriptParams: Record<string, unknown> = {};
+                    if (action.parameters.params) {
+                        try {
+                            scriptParams = JSON.parse(action.parameters.params);
+                        } catch {
+                            throw new Error("Invalid JSON in params field");
+                        }
+                    }
+                    const scriptResult = await executeWebFlowScript(
+                        action.parameters.script,
+                        browserApi,
+                        scriptParams,
+                        {
+                            timeout: action.parameters.timeout || 120000,
+                        },
                     );
-                    return result;
-                }
-                case "isPageStateMatched": {
-                    const result = await handleIsPageStateMatched(
-                        action.parameters,
-                        context,
-                    );
-                    return result;
-                }
-                case "queryPageContent": {
-                    const result = await handleQueryPageContent(
-                        action.parameters,
-                        context,
-                    );
-                    return result;
-                }
-                case "downloadImage": {
-                    const result = await handleDownloadImage(
-                        action.parameters,
-                        context,
-                    );
-                    return result;
+                    return createActionResult(JSON.stringify(scriptResult));
                 }
                 default:
                     // Should never happen.
@@ -1897,97 +1931,6 @@ async function lookup(
  * Progress update helper function
  */
 
-/**
- * Setup IPC communication with view service for action retrieval
- */
-function setupViewServiceIPC(
-    viewServiceProcess: ChildProcess,
-    context: SessionContext<BrowserActionContext>,
-): void {
-    viewServiceProcess.on("message", async (message: any) => {
-        try {
-            if (message.type === "getAction") {
-                await handleGetActionRequest(
-                    message,
-                    viewServiceProcess,
-                    context,
-                );
-            }
-        } catch (error) {
-            debug("Error handling IPC message:", error);
-        }
-    });
-
-    viewServiceProcess.on("error", (error: Error) => {
-        debug("View service process error:", error);
-    });
-}
-
-/**
- * Handle action retrieval request from view service
- */
-async function handleGetActionRequest(
-    message: any,
-    viewServiceProcess: ChildProcess,
-    context: SessionContext<BrowserActionContext>,
-): Promise<void> {
-    const { actionId, requestId } = message;
-    const startTime = Date.now();
-
-    try {
-        if (!actionId || !requestId) {
-            throw new Error(
-                "Missing required parameters: actionId or requestId",
-            );
-        }
-
-        if (typeof actionId !== "string") {
-            throw new Error("Invalid actionId format");
-        }
-
-        debug(`Handling action request for: ${actionId}`);
-
-        const webFlowStore = context.agentContext.webFlowStore;
-        if (!webFlowStore) {
-            throw new Error("WebFlowStore not available");
-        }
-
-        const action = await webFlowStore.get(actionId);
-
-        if (!action) {
-            viewServiceProcess.send({
-                type: "getActionResponse",
-                requestId,
-                success: false,
-                error: "Action not found",
-                timestamp: Date.now(),
-            });
-            return;
-        }
-
-        viewServiceProcess.send({
-            type: "getActionResponse",
-            requestId,
-            success: true,
-            action: action,
-            timestamp: Date.now(),
-        });
-
-        const duration = Date.now() - startTime;
-        debug(`Action request completed in ${duration}ms`);
-    } catch (error) {
-        debug("Error handling action request:", error);
-
-        viewServiceProcess.send({
-            type: "getActionResponse",
-            requestId,
-            success: false,
-            error: (error as Error).message || "Unknown error",
-            timestamp: Date.now(),
-        });
-    }
-}
-
 async function createViewServiceHost(
     context: SessionContext<BrowserActionContext>,
 ) {
@@ -2022,9 +1965,6 @@ async function createViewServiceHost(
                         TYPEAGENT_BROWSER_FILES: folderPath,
                     },
                 });
-
-                // Setup IPC message handling for action retrieval
-                setupViewServiceIPC(childProcess, context);
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {
@@ -2389,500 +2329,6 @@ export async function handleWebsiteLibraryStats(
 }
 
 // ============================================================================
-// Browser Semantic Query Action Handlers
-// ============================================================================
-
-/**
- * Helper function to load schema file contents
- */
-async function getBrowserQuerySchemaContents(
-    fileName: string,
-): Promise<string> {
-    const packageRoot = path.join("..", "..");
-    return await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(packageRoot, "./src/agent", fileName),
-                import.meta.url,
-            ),
-        ),
-        "utf8",
-    );
-}
-
-/**
- * Create a TypeChat translator for browser query result types
- */
-function createBrowserQueryTranslator<T extends object>(
-    resultType: string,
-    schema: string,
-    context: ActionContext<BrowserActionContext>,
-) {
-    const apiSettings = openai.azureApiSettingsFromEnv(
-        openai.ModelType.Chat,
-        undefined,
-        "GPT_5_2",
-    );
-    const model = openai.createChatModel(apiSettings, undefined, undefined, [
-        "browser-query",
-    ]);
-    const validator = createTypeScriptJsonValidator<T>(schema, resultType);
-    const translator = createJsonTranslator(model, validator);
-
-    // Override createRequestPrompt to suppress TypeChat's default prompt
-    translator.createRequestPrompt = () => "";
-
-    return translator;
-}
-
-/**
- * Build prompt sections for HTML fragments
- */
-function buildHtmlPromptSection(fragments: any[] | undefined) {
-    const sections: any[] = [];
-    if (fragments && fragments.length > 0) {
-        const htmlContent = fragments
-            .map((f, i) => `Fragment ${i + 1}:\n${f.content || f.html || ""}`)
-            .join("\n\n");
-        sections.push({
-            type: "text",
-            text: `Here are HTML fragments from the page:\n\`\`\`\n${htmlContent}\n\`\`\``,
-        });
-    }
-    return sections;
-}
-
-/**
- * Build prompt sections for screenshot
- */
-function buildScreenshotPromptSection(screenshot: string | undefined) {
-    const sections: any[] = [];
-    if (screenshot) {
-        sections.push({
-            type: "text",
-            text: "Here is a screenshot of the currently visible webpage:",
-        });
-        sections.push({
-            type: "image_url",
-            image_url: { url: screenshot },
-        });
-    }
-    return sections;
-}
-
-/**
- * Handle getElementByDescription action
- */
-async function handleGetElementByDescription(
-    parameters: { elementDescription: string; elementType?: string },
-    context: ActionContext<BrowserActionContext>,
-): Promise<ActionResult> {
-    const browserControl = getActionBrowserControl(context);
-
-    try {
-        // Get HTML fragments for analysis
-        const htmlFragments = await browserControl.getHtmlFragments(
-            false,
-            "knowledgeExtraction",
-        );
-
-        // Attempt to capture screenshot (optional)
-        let screenshot: string | undefined;
-        try {
-            screenshot = await browserControl.captureScreenshot();
-        } catch (error) {
-            console.warn(
-                "Screenshot capture failed:",
-                (error as Error)?.message,
-            );
-        }
-
-        // Load schema and create translator
-        const schema = await getBrowserQuerySchemaContents(
-            "browserQueryResults.mts",
-        );
-        const translator =
-            createBrowserQueryTranslator<ElementDescriptionResult>(
-                "ElementDescriptionResult",
-                schema,
-                context,
-            );
-
-        // Build prompt
-        const screenshotSection = buildScreenshotPromptSection(screenshot);
-        const htmlSection = buildHtmlPromptSection(htmlFragments);
-
-        const promptSections = [
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `# Task: Locate Element by Description
-
-You are tasked with finding a specific UI element on the webpage based on a natural language description.
-
-## Element to Find
-Description: "${parameters.elementDescription}"
-${parameters.elementType ? `Type Hint: ${parameters.elementType}` : ""}
-
-## Instructions
-1. Examine the HTML fragments and screenshot provided
-2. Identify the element that best matches the description
-3. Extract the following information:
-   - Element name (short descriptive label)
-   - Element HTML (complete outerHTML of the element)
-   - CSS selector (prefer ID-based, fallback to other unique selectors)
-   - Element type (button, input, link, div, etc.)
-   - Visible text content (if any)
-   - Key attributes (id, class, data-*, aria-*, etc.)
-
-4. If the element cannot be found:
-   - Set found: false
-   - Provide a clear reason in notFoundReason
-
-## CSS Selector Guidelines
-- Prefer selectors in this order:
-  1. ID-based: #element-id
-  2. Data attribute: [data-testid="value"]
-  3. Unique class: .unique-class-name
-  4. Combination: button.class-name[type="submit"]
-- Ensure selector is specific enough to uniquely identify the element
-- Test mentally: would this selector match only one element?
-
-Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
-
-\`\`\`
-${translator.validator.getSchemaText()}
-\`\`\`
-
-The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
-            },
-        ];
-
-        const response = await translator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-
-        if (response.success && response.data) {
-            const result = response.data;
-            let displayText: string;
-            if (result.found) {
-                displayText = `Found element: ${result.elementName}`;
-                if (result.elementCssSelector) {
-                    displayText += `\nCSS Selector: ${result.elementCssSelector}`;
-                }
-                if (result.elementText) {
-                    displayText += `\nText: ${result.elementText}`;
-                }
-            } else {
-                displayText = `Element not found: ${result.notFoundReason || "Unknown reason"}`;
-            }
-            context.actionIO.setDisplay(displayText);
-            return createActionResult(JSON.stringify(result));
-        } else {
-            const errorMsg = "Failed to analyze page";
-            context.actionIO.setDisplay(errorMsg);
-            return createActionResultFromError(errorMsg);
-        }
-    } catch (error) {
-        const errorMsg = `Error in getElementByDescription: ${(error as Error).message}`;
-        context.actionIO.setDisplay(errorMsg);
-        return createActionResultFromError(errorMsg);
-    }
-}
-
-/**
- * Handle isPageStateMatched action
- */
-async function handleIsPageStateMatched(
-    parameters: { expectedStateDescription: string },
-    context: ActionContext<BrowserActionContext>,
-): Promise<ActionResult> {
-    const browserControl = getActionBrowserControl(context);
-
-    try {
-        // Get HTML fragments for analysis
-        const htmlFragments = await browserControl.getHtmlFragments(
-            false,
-            "knowledgeExtraction",
-        );
-
-        // Attempt to capture screenshot (optional)
-        let screenshot: string | undefined;
-        try {
-            screenshot = await browserControl.captureScreenshot();
-        } catch (error) {
-            console.warn(
-                "Screenshot capture failed:",
-                (error as Error)?.message,
-            );
-        }
-
-        // Load schema and create translator
-        const schema = await getBrowserQuerySchemaContents(
-            "browserQueryResults.mts",
-        );
-        const translator = createBrowserQueryTranslator<PageStateMatchResult>(
-            "PageStateMatchResult",
-            schema,
-            context,
-        );
-
-        // Build prompt
-        const screenshotSection = buildScreenshotPromptSection(screenshot);
-        const htmlSection = buildHtmlPromptSection(htmlFragments);
-
-        const promptSections = [
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `# Task: Verify Page State
-
-You are tasked with determining if the current page state matches an expected condition.
-
-## Expected State
-"${parameters.expectedStateDescription}"
-
-## Instructions
-1. Analyze the current page using the HTML fragments and screenshot
-2. Determine the current page state:
-   - Page type (e.g., homePage, searchResults, productDetails, shoppingCart)
-   - Description of what's currently shown
-   - Key elements visible on the page
-   - Possible user actions
-
-3. Compare current state to expected state:
-   - Does the page type match?
-   - Are the expected elements present?
-   - Does the content align with expectations?
-   - Calculate confidence score (0.0 to 1.0)
-
-4. Set matched: true only if:
-   - Core aspects of expected state are present
-   - Confidence >= 0.7
-
-5. Provide clear explanation:
-   - If matched: "The page shows [current state] which matches the expected [expected state]"
-   - If not matched: "The page shows [current state] but expected [expected state]. Missing: [details]"
-
-Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
-
-\`\`\`
-${translator.validator.getSchemaText()}
-\`\`\`
-
-The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
-            },
-        ];
-
-        const response = await translator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-
-        if (response.success && response.data) {
-            const result = response.data;
-            const displayText = result.matched
-                ? `✅ Page state matched: ${result.explanation}`
-                : `❌ Page state not matched: ${result.explanation}`;
-            context.actionIO.setDisplay(displayText);
-            return createActionResult(JSON.stringify(result));
-        } else {
-            const errorMsg = "Failed to analyze page state";
-            context.actionIO.setDisplay(errorMsg);
-            return createActionResultFromError(errorMsg);
-        }
-    } catch (error) {
-        const errorMsg = `Error in isPageStateMatched: ${(error as Error).message}`;
-        context.actionIO.setDisplay(errorMsg);
-        return createActionResultFromError(errorMsg);
-    }
-}
-
-/**
- * Handle queryPageContent action
- */
-async function handleQueryPageContent(
-    parameters: { query: string },
-    context: ActionContext<BrowserActionContext>,
-): Promise<ActionResult> {
-    const browserControl = getActionBrowserControl(context);
-
-    try {
-        // Get HTML fragments for analysis
-        const htmlFragments = await browserControl.getHtmlFragments(
-            false,
-            "knowledgeExtraction",
-        );
-
-        // Attempt to capture screenshot (optional)
-        let screenshot: string | undefined;
-        try {
-            screenshot = await browserControl.captureScreenshot();
-        } catch (error) {
-            console.warn(
-                "Screenshot capture failed:",
-                (error as Error)?.message,
-            );
-        }
-
-        // Load schema and create translator
-        const schema = await getBrowserQuerySchemaContents(
-            "browserQueryResults.mts",
-        );
-        const translator = createBrowserQueryTranslator<PageContentQueryResult>(
-            "PageContentQueryResult",
-            schema,
-            context,
-        );
-
-        // Build prompt
-        const screenshotSection = buildScreenshotPromptSection(screenshot);
-        const htmlSection = buildHtmlPromptSection(htmlFragments);
-
-        const promptSections = [
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `# Task: Answer Question About Page Content
-
-You are tasked with answering a question about the current webpage content.
-
-## Question
-"${parameters.query}"
-
-## Instructions
-1. Analyze the HTML fragments and screenshot provided
-2. Find the answer to the question in the page content
-3. If answered:
-   - Provide a clear, concise answer
-   - Extract relevant text snippets as evidence
-   - Include CSS selectors pointing to source elements
-   - Assign confidence score (0.0 to 1.0)
-   - Be precise: use exact values, include units (e.g., "$24.99" not "about 25")
-
-4. If unable to answer:
-   - Set answered: false
-   - Explain why (e.g., "Information not found on page", "Question ambiguous")
-   - Suggest next steps if applicable
-
-5. Answer Guidelines:
-   - Extract exact values from the page
-   - Include units for measurements, prices, quantities
-   - If multiple answers exist, list them clearly
-   - Cite specific locations in the page
-
-Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
-
-\`\`\`
-${translator.validator.getSchemaText()}
-\`\`\`
-
-The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
-            },
-        ];
-
-        const response = await translator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-
-        if (response.success && response.data) {
-            const result = response.data;
-            const displayText = result.answered
-                ? `Answer: ${result.answerText}`
-                : `Unable to answer: ${result.unableToAnswerReason || "No information found"}`;
-            context.actionIO.setDisplay(displayText);
-            return createActionResult(JSON.stringify(result));
-        } else {
-            const errorMsg = "Failed to query page content";
-            context.actionIO.setDisplay(errorMsg);
-            return createActionResultFromError(errorMsg);
-        }
-    } catch (error) {
-        const errorMsg = `Error in queryPageContent: ${(error as Error).message}`;
-        context.actionIO.setDisplay(errorMsg);
-        return createActionResultFromError(errorMsg);
-    }
-}
-
-/**
- * Handle downloadImage action
- */
-async function handleDownloadImage(
-    parameters: {
-        cssSelector?: string;
-        imageDescription?: string;
-        filename?: string;
-    },
-    context: ActionContext<BrowserActionContext>,
-): Promise<ActionResult> {
-    const browserControl = getActionBrowserControl(context);
-
-    try {
-        const filePath = await browserControl.downloadImage(
-            parameters.cssSelector,
-            parameters.imageDescription,
-            parameters.filename,
-        );
-        const displayText = `Image downloaded to: ${filePath}`;
-        context.actionIO.setDisplay(displayText);
-        return createActionResult(filePath);
-    } catch (error) {
-        const errorMsg = `Error downloading image: ${(error as Error).message}`;
-        context.actionIO.setDisplay(errorMsg);
-        return createActionResultFromError(errorMsg);
-    }
-}
-
-class StartAuthoringHandler implements CommandHandlerNoParams {
-    public readonly description =
-        "Start an interactive session to create a new web automation action by describing it";
-    public async run(context: ActionContext<BrowserActionContext>) {
-        const agentContext = context.sessionContext.agentContext;
-        if (!agentContext.browserControl) {
-            displayError("No browser connection available.", context);
-            return;
-        }
-
-        context.actionIO.appendDisplay(
-            "Starting authoring session...",
-            "temporary",
-        );
-
-        try {
-            const result = await handleSchemaDiscoveryAction(
-                {
-                    actionName: "startAuthoringSession",
-                    parameters: {},
-                } as any,
-                context.sessionContext,
-            );
-
-            context.actionIO.setDisplay({
-                type: "markdown",
-                content:
-                    result.displayText ||
-                    "Authoring session started. Describe the action you want to create.",
-            });
-        } catch (error: any) {
-            displayError(
-                `Failed to start authoring: ${error?.message || error}`,
-                context,
-            );
-        }
-    }
-}
-
 class RecordActionHandler implements CommandHandler {
     public readonly description =
         "Record a new browser action by capturing user interactions";
@@ -2903,7 +2349,7 @@ class RecordActionHandler implements CommandHandler {
             context.actionIO.setDisplay({
                 type: "text",
                 content:
-                    "Please provide a name for the action. Example: @browser record Search for products",
+                    "Please provide a name for the action. Example: @browser actions record Search for products",
             });
             return;
         }
@@ -2912,7 +2358,7 @@ class RecordActionHandler implements CommandHandler {
             type: "markdown",
             content:
                 `### Recording: "${actionName}"\n\n` +
-                "Perform the action on the web page. When you're done, type **@browser stop recording** to finish.\n\n" +
+                "Perform the action on the web page. When you're done, use the buttons below to save or cancel.\n\n" +
                 "*Recording user interactions...*",
         });
 
@@ -3066,6 +2512,9 @@ class DiscoverActionsHandler implements CommandHandlerNoParams {
         context.actionIO.appendDisplay("Analyzing page...", "temporary");
 
         try {
+            // Run discovery — calls the LLM to detect page actions,
+            // auto-saves them to the WebFlowStore scoped to the domain,
+            // and returns site-scoped actions in data.actions.
             const discoveryResult = await handleSchemaDiscoveryAction(
                 {
                     actionName: "detectPageActions",
@@ -3074,66 +2523,28 @@ class DiscoverActionsHandler implements CommandHandlerNoParams {
                 context.sessionContext,
             );
 
-            const discoveredActions = discoveryResult.data?.schema || [];
+            const actions: any[] = discoveryResult.data?.actions || [];
 
-            // Also fetch user-authored/recorded WebFlows for this domain
-            let webFlows: any[] = [];
-            const webFlowStore = agentContext.webFlowStore;
-            if (webFlowStore && agentContext.browserControl) {
-                try {
-                    const url = await agentContext.browserControl.getPageUrl();
-                    if (url) {
-                        const domain = new URL(url).hostname;
-                        webFlows =
-                            await webFlowStore.listForDomainWithDetails(domain);
-                    }
-                } catch {
-                    // URL parsing failed — skip WebFlows
-                }
-            }
-
-            // Build combined markdown
-            let md = "";
-
-            if (discoveredActions.length > 0) {
-                md += `### Discovered Actions (${discoveredActions.length})\n\n`;
-                for (const action of discoveredActions) {
-                    const params = action.parameters
-                        ? Object.keys(action.parameters).join(", ")
-                        : "";
-                    const paramStr = params ? ` *(${params})*` : "";
-                    md += `- **${action.actionName}**${paramStr}`;
-                    if (action.description) {
-                        md += ` — ${action.description}`;
-                    }
-                    md += "\n";
-                }
-            }
-
-            if (webFlows.length > 0) {
-                md += `\n### Saved Actions (${webFlows.length})\n\n`;
-                for (const flow of webFlows) {
-                    const params = flow.parameters
-                        ? Object.keys(flow.parameters).join(", ")
-                        : "";
-                    const paramStr = params ? ` *(${params})*` : "";
-                    const source = flow.source?.type
-                        ? ` [${flow.source.type}]`
-                        : "";
-                    md += `- **${flow.name}**${paramStr}`;
-                    if (flow.description) {
-                        md += ` — ${flow.description}`;
-                    }
-                    md += `${source}\n`;
-                }
-            }
-
-            if (!md) {
+            if (actions.length === 0) {
                 context.actionIO.setDisplay({
                     type: "text",
                     content: "No actions found on this page.",
                 });
                 return;
+            }
+
+            let md = `### Actions available on this page (${actions.length})\n\n`;
+            for (const action of actions) {
+                const params = action.parameters
+                    ? Object.keys(action.parameters)
+                    : [];
+                const paramStr =
+                    params.length > 0 ? ` *(${params.join(", ")})*` : "";
+                md += `- **${action.name}**${paramStr}`;
+                if (action.description) {
+                    md += ` — ${action.description}`;
+                }
+                md += "\n";
             }
 
             context.actionIO.setDisplay({
@@ -3331,13 +2742,18 @@ export const handlers: CommandHandlerTable = {
         },
         extractKnowledge: new ExtractKnowledgeHandler(),
         ask: new AskAboutPageHandler(),
-        discover: new DiscoverActionsHandler(),
-        author: new StartAuthoringHandler(),
-        record: new RecordActionHandler(),
-        stop: {
-            description: "Stop operations",
+        actions: {
+            description: "Manage page actions (discover, record, author)",
+            defaultSubCommand: "discover",
             commands: {
-                recording: new StopRecordingHandler(),
+                discover: new DiscoverActionsHandler(),
+                record: new RecordActionHandler(),
+                stop: {
+                    description: "Stop operations",
+                    commands: {
+                        recording: new StopRecordingHandler(),
+                    },
+                },
             },
         },
         search: new SearchProviderCommandHandlerTable(),

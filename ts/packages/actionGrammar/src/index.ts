@@ -23,12 +23,13 @@ export type {
 // Writer / formatter
 export { writeGrammarRules } from "./grammarRuleWriter.js";
 
+export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
+
 export {
-    matchGrammar,
-    GrammarMatchResult,
     matchGrammarCompletion,
     GrammarCompletionResult,
-} from "./grammarMatcher.js";
+} from "./grammarCompletion.js";
+export type { AfterWildcard } from "./grammarCompletion.js";
 
 // Entity system
 export type { EntityValidator, EntityConverter } from "./entityRegistry.js";

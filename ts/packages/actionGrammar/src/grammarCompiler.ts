@@ -9,6 +9,7 @@ import {
     StringPart,
     CompiledSpacingMode,
     CompiledValueNode,
+    CompiledObjectElement,
 } from "./grammarTypes.js";
 import {
     Rule,
@@ -16,6 +17,7 @@ import {
     ImportStatement,
     parseGrammarRules,
     ValueNode,
+    isObjectSpread,
 } from "./grammarRuleParser.js";
 import { getLineCol } from "./utils.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
@@ -78,9 +80,8 @@ type CompileContext = {
     ruleDefMap: DefinitionMap;
     exportedNames: Set<string>; // Only rules with export keyword are importable
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
-    knownTypeNames: Set<string>; // Type names imported from .ts files
-    importedTypeNames: Map<string, number | undefined>; // Explicitly named .ts type imports with positions (excludes entity names and wildcards)
-    usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
+    importedTypeNames: Map<string, number | undefined>; // All imported type names with positions (source-less entity imports + .ts type imports)
+    usedImportedTypes: Set<string>; // Imported types actually referenced in variables (entity + .ts type imports)
     resolvedTypes: Map<string, SchemaTypeDefinition>; // Parsed schema types resolved via SchemaLoader
     hasStarImport: boolean; // Indicates if there's a star import
     currentDefinition?: string | undefined;
@@ -94,12 +95,9 @@ function createImportCompileContext(
     fileLoader: FileLoader,
     grammarFileMap: Map<string, CompileContext>,
     referencingFileName: string,
-    importStmt: ImportStatement,
+    source: string,
 ): CompileContext {
-    const fullPath = fileLoader.resolvePath(
-        importStmt.source,
-        referencingFileName,
-    );
+    const fullPath = fileLoader.resolvePath(source, referencingFileName);
     if (grammarFileMap.has(fullPath)) {
         return grammarFileMap.get(fullPath)!;
     }
@@ -126,21 +124,12 @@ function createCompileContext(
     fileUtils: FileLoader | undefined,
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
-    entityNames?: string[],
     schemaLoader?: SchemaLoader,
 ): CompileContext {
     const ruleDefMap: DefinitionMap = new Map();
 
-    // Build separate sets of imported rule names and type names
+    // Build imported rule names and type names
     const importedRuleMap = new Map<string, CompileContext>();
-    const knownTypeNames = new Set<string>();
-
-    // Entity declarations (e.g., "entity CalendarDate;") are valid type names
-    if (entityNames) {
-        for (const name of entityNames) {
-            knownTypeNames.add(name);
-        }
-    }
     const importedTypeNames = new Map<string, number | undefined>();
     const usedImportedTypes = new Set<string>();
     const resolvedTypes = new Map<string, SchemaTypeDefinition>();
@@ -163,7 +152,6 @@ function createCompileContext(
         ruleDefMap,
         exportedNames,
         importedRuleMap,
-        knownTypeNames,
         importedTypeNames,
         usedImportedTypes,
         resolvedTypes,
@@ -198,6 +186,15 @@ function createCompileContext(
     // Process imports AFTER definitions - this populates importedRuleMap
     if (imports) {
         for (const importStmt of imports) {
+            // Source-less imports are entity declarations: import { Ordinal, Cardinal };
+            if (importStmt.source === undefined) {
+                if (importStmt.names !== "*") {
+                    for (const { name } of importStmt.names) {
+                        importedTypeNames.set(name, importStmt.pos);
+                    }
+                }
+                continue;
+            }
             // Determine if this is a type import (.ts) or grammar import (.agr)
             const isGrammarImport = importStmt.source.endsWith(".agr");
             if (isGrammarImport) {
@@ -208,7 +205,7 @@ function createCompileContext(
                     fileUtils,
                     grammarFileMap,
                     fullPath,
-                    importStmt,
+                    importStmt.source,
                 );
 
                 const ruleNames =
@@ -295,7 +292,6 @@ export function compileGrammar(
     errors: string[],
     warnings?: string[],
     imports?: ImportStatement[],
-    entityNames?: string[],
     schemaLoader?: SchemaLoader,
 ): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
@@ -307,7 +303,6 @@ export function compileGrammar(
         fileUtils,
         definitions,
         imports,
-        entityNames,
         schemaLoader,
     );
 
@@ -361,17 +356,24 @@ export function compileGrammar(
         );
     }
 
-    // Collect all imported .ts types used as variable types across all contexts
-    const usedImportedTypes = new Set<string>();
+    // TODO: Find a better way to discover entities instead of deriving them
+    // from import statements.
+    // Collect entity names from two sources:
+    // 1. Source-less imports: import { Ordinal, Cardinal };
+    // 2. Imported .ts types used as variable types across all contexts
+    const allEntities = new Set<string>();
+    for (const name of context.importedTypeNames.keys()) {
+        allEntities.add(name);
+    }
     for (const [, compileContext] of context.grammarFileMap) {
         for (const t of compileContext.usedImportedTypes) {
-            usedImportedTypes.add(t);
+            allEntities.add(t);
         }
     }
 
     const grammar: Grammar = { rules: grammarRules };
-    if (usedImportedTypes.size > 0) {
-        grammar.entities = Array.from(usedImportedTypes);
+    if (allEntities.size > 0) {
+        grammar.entities = Array.from(allEntities);
     }
     return grammar;
 }
@@ -412,27 +414,44 @@ function validateAndCompileValueNode(
             result = { type: "variable", name: node.name };
             break;
         case "object": {
-            const value: { [key: string]: CompiledValueNode | null } = {};
-            for (const prop of node.value) {
-                if (prop.value === null) {
+            const elements: CompiledObjectElement[] = [];
+            for (const elem of node.value) {
+                if (isObjectSpread(elem)) {
+                    elements.push({
+                        type: "spread",
+                        argument: validateAndCompileValueNode(
+                            context,
+                            elem.argument,
+                            availableVariables,
+                        ),
+                    });
+                } else if (elem.value === null) {
                     // Shorthand form: { key } means { key: key }
                     // Validate that 'key' is an available variable
-                    if (!availableVariables.has(prop.key)) {
+                    if (!availableVariables.has(elem.key)) {
                         context.errors.push({
-                            message: `Variable '${prop.key}' is referenced in the value but not defined in the rule`,
+                            message: `Variable '${elem.key}' is referenced in the value but not defined in the rule`,
                             definition: context.currentDefinition,
                         });
                     }
-                    value[prop.key] = null;
+                    elements.push({
+                        type: "property",
+                        key: elem.key,
+                        value: null,
+                    });
                 } else {
-                    value[prop.key] = validateAndCompileValueNode(
-                        context,
-                        prop.value,
-                        availableVariables,
-                    );
+                    elements.push({
+                        type: "property",
+                        key: elem.key,
+                        value: validateAndCompileValueNode(
+                            context,
+                            elem.value,
+                            availableVariables,
+                        ),
+                    });
                 }
             }
-            result = { type: "object", value };
+            result = { type: "object", value: elements };
             break;
         }
         case "array":
@@ -677,7 +696,6 @@ function createNamedGrammarRules(
                 // Verify the type was actually imported
                 if (
                     !context.importedTypeNames.has(typeName) &&
-                    !context.knownTypeNames.has(typeName) &&
                     !context.hasStarImport
                 ) {
                     context.errors.push({
@@ -689,7 +707,18 @@ function createNamedGrammarRules(
             }
 
             // Collect all leaf value nodes from the rule tree,
-            // including those in sub-rules referenced via RulesPart
+            // including those in sub-rules referenced via RulesPart.
+            //
+            // Why per-leaf instead of deriving the whole rule's type and doing
+            // a single isTypeAssignable check?  Semantically equivalent, but
+            // per-leaf validation yields much better diagnostics:
+            //   1. Source positions — each leaf carries a pos, so errors point
+            //      to the specific -> expression, not just the rule name.
+            //   2. Structural detail — object leaves get field-level messages
+            //      (missing required property, extraneous property, type mismatch).
+            //   3. Per-alternative isolation — if one of N alternatives is wrong,
+            //      the error identifies that alternative rather than failing the
+            //      whole union.
             const leafValues = collectLeafValues(
                 record.grammarRules,
                 context.valuePositions,
@@ -756,7 +785,6 @@ function createNamedGrammarRules(
                                 leaf.value,
                                 expectedType,
                                 varTypes,
-                                context.resolvedTypes,
                                 "",
                                 leafExprTypes.get(leaf.value),
                             );
@@ -988,7 +1016,6 @@ function createGrammarRule(
                     if (!isBuiltInType) {
                         const isImportedType =
                             context.hasStarImport ||
-                            context.knownTypeNames.has(referencedName) ||
                             context.importedTypeNames.has(referencedName) ||
                             globalEntityRegistry.getConverter(
                                 referencedName,

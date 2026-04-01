@@ -1,0 +1,227 @@
+[
+  {
+    "id": "lt-01",
+    "category": "llm-translation",
+    "description": "Grammar over-capture: find files bigger than 50MB in D:\\data",
+    "setup": { "requiredFlows": ["findLargeFiles"] },
+    "utterances": [
+      {
+        "text": "find files bigger than 50MB in D:\\data",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findLargeFiles"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-02",
+    "category": "llm-translation",
+    "description": "Numeric extraction: show old branches older than 14 days",
+    "setup": { "requiredFlows": ["staleBranches"] },
+    "utterances": [
+      {
+        "text": "show old branches older than 14 days",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "staleBranches"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-03",
+    "category": "llm-translation",
+    "description": "Enum param: show service dashboard as summary",
+    "setup": { "requiredFlows": ["checkServiceHealth"] },
+    "utterances": [
+      {
+        "text": "show service dashboard as summary",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "checkServiceHealth"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-04",
+    "category": "llm-translation",
+    "description": "Multi-param: filter users.csv where status is active",
+    "setup": { "requiredFlows": ["filterCsv"] },
+    "utterances": [
+      {
+        "text": "filter users.csv where status is active",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "filterCsv"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-05",
+    "category": "llm-translation",
+    "description": "Complex param: process csv, keep name and email columns",
+    "setup": { "requiredFlows": ["filterCsv"] },
+    "utterances": [
+      {
+        "text": "process csv, keep name and email columns",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "filterCsv"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-06",
+    "category": "llm-translation",
+    "description": "Override default: check if any drive has less than 50GB free",
+    "setup": { "requiredFlows": ["checkDiskSpace"] },
+    "utterances": [
+      {
+        "text": "check if any drive has less than 50GB free",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "checkDiskSpace"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-07",
+    "category": "llm-translation",
+    "description": "Grammar over-capture: list top 5 biggest files in C:\\Windows",
+    "setup": { "requiredFlows": ["findLargeFiles"] },
+    "utterances": [
+      {
+        "text": "list the top 5 biggest files in C:\\Windows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findLargeFiles"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-08",
+    "category": "llm-translation",
+    "description": "Grammar over-capture: check ports 80, 443, and 8080",
+    "setup": { "requiredFlows": ["checkPorts"] },
+    "utterances": [
+      {
+        "text": "check ports 80, 443, and 8080",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkPorts"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-09",
+    "category": "llm-translation",
+    "description": "Intent inference: what services are stopped",
+    "setup": { "requiredFlows": ["checkServiceHealth"] },
+    "utterances": [
+      {
+        "text": "what services are stopped",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "checkServiceHealth"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-10",
+    "category": "llm-translation",
+    "description": "Grammar over-capture: find large files over 1GB",
+    "setup": { "requiredFlows": ["findLargeFiles"] },
+    "utterances": [
+      {
+        "text": "find large files over 1GB",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findLargeFiles"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-11",
+    "category": "llm-translation",
+    "description": "Boolean from NL: csv transform with no header",
+    "setup": { "requiredFlows": ["filterCsv"] },
+    "utterances": [
+      {
+        "text": "csv transform with no header",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "filterCsv"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-12",
+    "category": "llm-translation",
+    "description": "Grammar over-capture: check if port 5432 is in use",
+    "setup": { "requiredFlows": ["checkPorts"] },
+    "utterances": [
+      {
+        "text": "check if port 5432 is in use",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkPorts"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-13",
+    "category": "llm-translation",
+    "description": "Context path: stale branches in the TypeAgent repo",
+    "setup": { "requiredFlows": ["staleBranches"] },
+    "utterances": [
+      {
+        "text": "stale branches in the TypeAgent repo",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "staleBranches"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-14",
+    "category": "llm-translation",
+    "description": "Modifier: list files sorted by size",
+    "setup": { "requiredFlows": ["listFiles"] },
+    "utterances": [
+      {
+        "text": "list files sorted by size",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "listFiles"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-15",
+    "category": "llm-translation",
+    "description": "Temporal: scan yesterday's logs",
+    "setup": { "requiredFlows": ["scanLogErrors"] },
+    "utterances": [
+      {
+        "text": "scan yesterday's logs",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "scanLogErrors"
+        }
+      }
+    ]
+  }
+]

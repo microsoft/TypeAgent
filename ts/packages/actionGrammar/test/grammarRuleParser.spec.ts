@@ -382,10 +382,15 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "type",
                         value: { type: "literal", value: "greeting" },
                     },
-                    { key: "count", value: { type: "literal", value: 1 } },
+                    {
+                        type: "property",
+                        key: "count",
+                        value: { type: "literal", value: 1 },
+                    },
                 ],
             });
         });
@@ -409,10 +414,15 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "type",
                         value: { type: "literal", value: "greeting" },
                     },
-                    { key: "count", value: { type: "literal", value: 1 } },
+                    {
+                        type: "property",
+                        key: "count",
+                        value: { type: "literal", value: 1 },
+                    },
                 ],
             });
         });
@@ -426,10 +436,15 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "type",
                         value: { type: "literal", value: "greeting" },
                     },
-                    { key: "count", value: { type: "literal", value: 1 } },
+                    {
+                        type: "property",
+                        key: "count",
+                        value: { type: "literal", value: 1 },
+                    },
                 ],
             });
         });
@@ -453,6 +468,7 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "items",
                         value: {
                             type: "array",
@@ -463,11 +479,13 @@ describe("Grammar Rule Parser", () => {
                         },
                     },
                     {
+                        type: "property",
                         key: "meta",
                         value: {
                             type: "object",
                             value: [
                                 {
+                                    type: "property",
                                     key: "count",
                                     value: { type: "literal", value: 2 },
                                 },
@@ -581,8 +599,13 @@ describe("Grammar Rule Parser", () => {
                             value: {
                                 type: "object",
                                 value: [
-                                    { key: "politeness", value: null },
                                     {
+                                        type: "property",
+                                        key: "politeness",
+                                        value: null,
+                                    },
+                                    {
+                                        type: "property",
                                         key: "actions",
                                         value: {
                                             type: "array",
@@ -603,11 +626,13 @@ describe("Grammar Rule Parser", () => {
                                         },
                                     },
                                     {
+                                        type: "property",
                                         key: "target",
                                         value: {
                                             type: "object",
                                             value: [
                                                 {
+                                                    type: "property",
                                                     key: "name",
                                                     value: {
                                                         type: "variable",
@@ -615,11 +640,13 @@ describe("Grammar Rule Parser", () => {
                                                     },
                                                 },
                                                 {
+                                                    type: "property",
                                                     key: "metadata",
                                                     value: {
                                                         type: "object",
                                                         value: [
                                                             {
+                                                                type: "property",
                                                                 key: "hasArticle",
                                                                 value: {
                                                                     type: "literal",
@@ -627,6 +654,7 @@ describe("Grammar Rule Parser", () => {
                                                                 },
                                                             },
                                                             {
+                                                                type: "property",
                                                                 key: "modifier",
                                                                 value: {
                                                                     type: "variable",
@@ -797,6 +825,7 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "type",
                         value: { type: "literal", value: "greeting" },
                         leadingComments: [
@@ -807,6 +836,7 @@ describe("Grammar Rule Parser", () => {
                         ],
                     },
                     {
+                        type: "property",
                         key: "count",
                         value: { type: "literal", value: 1 },
                     },
@@ -1192,7 +1222,7 @@ describe("Grammar Rule Parser", () => {
         it("should throw error for malformed rule name", () => {
             const grammar = "greeting = hello;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
-                "Expected rule definition, 'import' statement, or 'entity' declaration",
+                "Expected rule definition or 'import' statement",
             );
         });
 

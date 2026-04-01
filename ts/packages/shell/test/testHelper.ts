@@ -236,6 +236,7 @@ export async function sendUserRequest(prompt: string, page: Page) {
     // TODO: fix completion to not need this workaround
     await locator.press("ArrowLeft", { timeout: 30000 });
 
+    // send the request
     await locator.press("Enter", { timeout: 30000 });
 }
 

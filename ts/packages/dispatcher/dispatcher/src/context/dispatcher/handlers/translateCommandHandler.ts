@@ -82,9 +82,9 @@ export class TranslateCommandHandler implements CommandHandler {
         const result: CompletionGroups = { groups: [] };
         for (const name of names) {
             if (name === "request") {
-                const requestPrefix = params.args.request ?? "";
+                const input = params.args.request ?? "";
                 const requestResult = await requestCompletion(
-                    requestPrefix,
+                    input,
                     context.agentContext,
                     direction,
                 );
@@ -93,7 +93,7 @@ export class TranslateCommandHandler implements CommandHandler {
                 result.separatorMode = requestResult.separatorMode;
                 result.closedSet = requestResult.closedSet;
                 result.directionSensitive = requestResult.directionSensitive;
-                result.openWildcard = requestResult.openWildcard;
+                result.afterWildcard = requestResult.afterWildcard;
             }
         }
         return result;

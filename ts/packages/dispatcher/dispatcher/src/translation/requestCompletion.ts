@@ -76,11 +76,11 @@ function getCompletionNamespaceKeys(context: CommandHandlerContext): string[] {
 }
 
 export async function requestCompletion(
-    requestPrefix: string,
+    input: string,
     context: CommandHandlerContext,
     direction?: CompletionDirection, // defaults to forward-like behavior when omitted
 ): Promise<CompletionGroups> {
-    debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
+    debugCompletion(`Request completion for input: '${input}'`);
     const namespaceKeys = getCompletionNamespaceKeys(context);
     debugCompletion(`Request completion namespace keys`, namespaceKeys);
 
@@ -91,11 +91,7 @@ export async function requestCompletion(
         namespaceKeys,
         history: getHistoryContext(context),
     };
-    const results = context.agentCache.completion(
-        requestPrefix,
-        options,
-        direction,
-    );
+    const results = context.agentCache.completion(input, options, direction);
 
     if (results === undefined) {
         return { groups: [] };
@@ -105,7 +101,7 @@ export async function requestCompletion(
     const separatorMode = results.separatorMode;
     const closedSet = results.closedSet;
     const directionSensitive = results.directionSensitive;
-    const openWildcard = results.openWildcard;
+    const afterWildcard = results.afterWildcard;
     const completions: CompletionGroup[] = [];
     if (results.completions.length > 0) {
         completions.push({
@@ -123,7 +119,7 @@ export async function requestCompletion(
             separatorMode,
             closedSet,
             directionSensitive,
-            openWildcard,
+            afterWildcard,
         };
     }
 
@@ -150,7 +146,7 @@ export async function requestCompletion(
         separatorMode,
         closedSet,
         directionSensitive,
-        openWildcard,
+        afterWildcard,
     };
 }
 

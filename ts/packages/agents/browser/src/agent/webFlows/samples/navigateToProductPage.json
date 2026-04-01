@@ -9,7 +9,7 @@
       "description": "The name of the product to view"
     }
   },
-  "script": "async function execute(browser, params) {\n    const productTile = await browser.extractComponent(\n        {\n            typeName: 'ProductTile',\n            schema: '{ name: string; price: string; detailsLinkSelector: string; }'\n        },\n        params.productName\n    );\n    if (!productTile || !productTile.detailsLinkSelector) {\n        throw new Error('Could not find product: ' + params.productName);\n    }\n    await browser.click(productTile.detailsLinkSelector);\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Navigated to ' + productTile.name };\n}",
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const productTile = await browser.extractComponent<{ name: string; price: string; detailsLinkSelector: string }>(\n        {\n            typeName: 'ProductTile',\n            schema: '{ name: string; price: string; detailsLinkSelector: string; }'\n        },\n        params.productName\n    );\n    if (!productTile || !productTile.detailsLinkSelector) {\n        throw new Error('Could not find product: ' + params.productName);\n    }\n    await browser.click(productTile.detailsLinkSelector);\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Navigated to ' + productTile.name };\n}",
   "grammarPatterns": [
     "view $(productName:wildcard) details",
     "go to $(productName:wildcard) product page",

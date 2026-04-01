@@ -1,0 +1,248 @@
+[
+  {
+    "id": "ex-01",
+    "category": "execution",
+    "description": "Basic execution: list files in test directory",
+    "setup": {
+      "requiredFlows": ["listFiles"],
+      "environmentSetup": "Setup-BenchmarkEnv"
+    },
+    "utterances": [
+      {
+        "text": "list files in ${BENCHMARK_DIR}\\files",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Name", "Length", "LastWriteTime"],
+            "outputNotContains": ["error", "Error"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-02",
+    "category": "execution",
+    "description": "Large file finder against Windows directory",
+    "setup": { "requiredFlows": ["findLargeFiles"] },
+    "utterances": [
+      {
+        "text": "find large files in C:\\Windows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findLargeFiles",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["SizeMB"],
+            "outputPattern": "\\d+\\.\\d+\\s+\\d{4}-"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-03",
+    "category": "execution",
+    "description": "Check disk space with defaults",
+    "setup": { "requiredFlows": ["checkDiskSpace"] },
+    "utterances": [
+      {
+        "text": "check disk space",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkDiskSpace",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["SizeGB", "FreeGB"],
+            "outputPattern": "(Name|DeviceID)"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-04",
+    "category": "execution",
+    "description": "Check service health with default services",
+    "setup": { "requiredFlows": ["checkServiceHealth"] },
+    "utterances": [
+      {
+        "text": "check service health",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkServiceHealth",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Name", "Status"],
+            "outputPattern": "(Running|Stopped)"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-05",
+    "category": "execution",
+    "description": "Check common Windows ports",
+    "setup": { "requiredFlows": ["checkPorts"] },
+    "utterances": [
+      {
+        "text": "check port listeners on 135,445",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkPorts",
+          "execution": {
+            "shouldSucceed": true,
+            "outputPattern": "(Port|No listeners)"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-06",
+    "category": "execution",
+    "description": "Scan test log files for errors",
+    "setup": {
+      "requiredFlows": ["scanLogErrors"],
+      "environmentSetup": "Setup-BenchmarkEnv"
+    },
+    "utterances": [
+      {
+        "text": "log errors in ${BENCHMARK_DIR}\\logs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "scanLogErrors",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Scanning", "Summary by Severity"],
+            "outputPattern": "(ERROR|WARN|FATAL): \\d+ occurrence"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-07",
+    "category": "execution",
+    "description": "Filter CSV by department",
+    "setup": {
+      "requiredFlows": ["filterCsv"],
+      "environmentSetup": "Setup-BenchmarkEnv"
+    },
+    "utterances": [
+      {
+        "text": "filter csv file ${BENCHMARK_DIR}\\csv\\employees.csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "filterCsv",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Processed:", "rows"],
+            "outputPattern": "\\d+ rows -> \\d+ rows"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-08",
+    "category": "execution",
+    "description": "Error handling: non-existent path",
+    "setup": { "requiredFlows": ["listFiles"] },
+    "utterances": [
+      {
+        "text": "list files in C:\\NonExistent\\Path\\ThatDoesNotExist",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "execution": {
+            "shouldSucceed": false
+          },
+          "fallback": {
+            "shouldFallback": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-09",
+    "category": "execution",
+    "description": "Empty result: check unlikely port",
+    "setup": { "requiredFlows": ["checkPorts"] },
+    "utterances": [
+      {
+        "text": "check port listeners on 59999",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkPorts",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["No listeners"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-10",
+    "category": "execution",
+    "description": "Missing input file for CSV filter",
+    "setup": { "requiredFlows": ["filterCsv"] },
+    "utterances": [
+      {
+        "text": "filter csv file C:\\nonexistent\\fake.csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "filterCsv",
+          "execution": {
+            "shouldSucceed": false,
+            "outputContains": ["not found"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-11",
+    "category": "execution",
+    "description": "Missing service shows MISSING status",
+    "setup": { "requiredFlows": ["checkServiceHealth"] },
+    "utterances": [
+      {
+        "text": "service status for FakeService123",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkServiceHealth",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["MISSING"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-12",
+    "category": "execution",
+    "description": "Relative path: list files in current directory",
+    "setup": { "requiredFlows": ["listFiles"] },
+    "utterances": [
+      {
+        "text": "list files in .",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "extractedParams": { "path": "." },
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Name"]
+          }
+        }
+      }
+    ]
+  }
+]

@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { sendActionToAgent } from "./websocket";
-import { setChatPanelRpc } from "./dispatcherConnection";
 
 // RPC send function — set after RPC server is created in index.ts
 let rpcSendFn: ((name: string, ...args: any[]) => void) | undefined;
@@ -68,13 +67,6 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        id: "sidepanel-registerAgent",
-        title: "Update Page Agent",
-        contexts: ["all"],
-        documentUrlPatterns: ["chrome-extension://*/views/pageMacros.html"],
-    });
-
-    chrome.contextMenus.create({
         type: "separator",
         id: "menuSeparator3",
     });
@@ -101,7 +93,10 @@ export async function handleContextMenuClick(
 
     switch (info.menuItemId) {
         case "discoverPageActions": {
-            await openChatAndInjectCommand(tab.id!, "@browser discover");
+            await openChatAndInjectCommand(
+                tab.id!,
+                "@browser actions discover",
+            );
             break;
         }
         case "manageMacros": {
@@ -125,14 +120,6 @@ export async function handleContextMenuClick(
             }
             break;
         }
-        case "sidepanel-registerAgent": {
-            const schemaResult = await sendActionToAgent({
-                actionName: "registerPageDynamicAgent",
-                parameters: {},
-            });
-            break;
-        }
-
         case "extractKnowledgeFromPage": {
             await openChatAndInjectCommand(
                 tab.id!,

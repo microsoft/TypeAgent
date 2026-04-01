@@ -398,22 +398,26 @@ export class ConstructionStoreImpl implements ConstructionStore {
 
     // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
-        requestPrefix: string,
+        input: string,
         options?: MatchOptions,
         direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ) {
         const cacheCompletion = this.cache?.completion(
-            requestPrefix,
+            input,
             options,
             direction,
         );
         const builtInCompletion = this.builtInCache?.completion(
-            requestPrefix,
+            input,
             options,
             direction,
         );
 
-        return mergeCompletionResults(cacheCompletion, builtInCompletion);
+        return mergeCompletionResults(
+            cacheCompletion,
+            builtInCompletion,
+            input.length,
+        );
     }
 
     public async prune(filter: (namespaceKey: string) => boolean) {

@@ -20,10 +20,6 @@ export type RegisterPageDynamicAgent = {
     };
 };
 
-export type StartAuthoringSession = {
-    actionName: "startAuthoringSession";
-};
-
 export type HtmlFragments = {
     frameId: string;
     content: string;
@@ -67,7 +63,6 @@ export type SchemaDiscoveryActions =
     | DetectPageActions
     | RegisterPageDynamicAgent
     | SummarizePage
-    | StartAuthoringSession
     | CreateWebFlowFromRecording
     | GetWebFlowsForDomain
     | GetAllWebFlows

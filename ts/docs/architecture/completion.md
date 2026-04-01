@@ -1,5 +1,14 @@
 # Completion Architecture
 
+> **Scope:** This document describes the cross-layer completion pipeline
+> — how completions flow from the grammar matcher through the cache,
+> dispatcher, agent SDK, shell, and CLI layers. It defines the metadata
+> contract (`startIndex`, `separatorMode`, `closedSet`,
+> `directionSensitive`, `afterWildcard`), the shell state machine, and
+> correctness invariants. For the grammar language, compilation
+> pipeline, and grammar-level matching algorithms (categories, direction
+> semantics, equivalence analysis), see `actionGrammar.md`.
+
 ## Overview
 
 TypeAgent's completion system provides real-time, context-aware completions
@@ -85,8 +94,8 @@ The return path carries `CommandCompletionResult`:
   completions: CompletionGroup[];
   separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
   closedSet: boolean;           // true → list is exhaustive
-  directionSensitive: boolean;  // true → opposite direction would produce different results
-  openWildcard: boolean;        // true → wildcard boundary is ambiguous; shell should slide anchor
+  directionSensitive: boolean;  // true → completion(input[0..P], backward) ≠ completion(input[0..P], forward)
+  afterWildcard: AfterWildcard;        // "none" | "some" | "all" — wildcard boundary ambiguity
 }
 ```
 
@@ -102,9 +111,10 @@ Brief definitions here; see [Key types](#key-types) for full semantics.
 - **`closedSet`** — `true` when the completion list is exhaustive (all
   valid values are present); `false` when additional values may exist
   (e.g., entity names the backend cannot enumerate).
-- **`openWildcard`** — `true` when the `startIndex` position is ambiguous
-  because it sits at a wildcard boundary that could shift with more
-  typing. Controls anchor-sliding behavior in the shell.
+- **`afterWildcard`** — `"all"` or `"some"` when the `startIndex`
+  position is ambiguous because it sits at a wildcard boundary that
+  could shift with more typing. `"none"` when the position is
+  structurally pinned. Controls anchor-sliding behavior in the shell.
 - **`direction`** — A `"forward"` or `"backward"` signal from the host,
   indicating whether the user is advancing (appending characters) or
   reconsidering (backspacing). Resolves structural ambiguity at command
@@ -148,14 +158,14 @@ The user types `play Never` (free-form, no `@` prefix).
 
 4. **Dispatcher**: Assembles `CommandCompletionResult` with `startIndex=5`
    (after `"play "`), `closedSet=false` (entity values are not
-   exhaustive), `openWildcard=false` (the `startIndex` position is
+   exhaustive), `afterWildcard="none"` (the `startIndex` position is
    pinned by the keyword `"play "` — it cannot shift with more typing).
 
 5. **Shell**: Receives result. Sets anchor to `"play "` (the first 5
    characters). Completion prefix is `"Never"`. Populates trie with
    `["Never Gonna Give You Up", "Nevermind"]`. Both match the prefix →
    shows menu. `noMatchPolicy="refetch"` (closedSet=false,
-   openWildcard=false).
+   afterWildcard="none").
 
 6. **User types `mind`** → prefix becomes `"Nevermind"` → trie filters
    to one match → trigger B1 (unique match) → re-fetch for the next
@@ -166,7 +176,7 @@ The user types `play Never` (free-form, no `@` prefix).
    completion (category 2). This time, unlike step 4, the completions
    are grammar keywords (not agent entity values), and the keyword
    position sits at an end-of-input wildcard boundary — so
-   `closedSet=true` (keyword set is exhaustive) and `openWildcard=true`
+   `closedSet=true` (keyword set is exhaustive) and `afterWildcard="all"`
    (the wildcard boundary is ambiguous — the user may still be typing
    within the song name). Shell sets `noMatchPolicy="slide"`.
 
@@ -175,14 +185,14 @@ The user types `play Never` (free-form, no `@` prefix).
 Using the same `play <song> by <artist>` rule, here is what category
 the grammar matcher assigns at different input states:
 
-| User input       | Category     | Why                                                                                                                                                                                                                                                                                                       |
-| ---------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)                                                                                                                                                                                                                                                      |
-| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                                                                                                                                                                                                                                                                |
-| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                                                                                                                                                                                                                                                               |
-| `play Never b`   | 2 — Clean    | Backward direction only: wildcard absorbs `"Never b"`, then `findPartialKeywordInWildcard()` detects `"b"` as a prefix of keyword `"by"` and offers it as a completion at the partial keyword position (after `"Never "`). In the forward direction this would be category 3a (wildcard still consuming). |
-| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                                                                                                                                                                                                                                                              |
-| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                                                                                                                                                                                                                                                            |
+| User input       | Category     | Why                                                                                          |
+| ---------------- | ------------ | -------------------------------------------------------------------------------------------- |
+| `play Never by ` | 1 — Exact    | Rule could be fully matched (`<artist>` is empty wc)                                         |
+| `play `          | 2 — Clean    | Prefix consumed; `<song>` wildcard is next                                                   |
+| `play Never`     | 3a — Pending | `<song>` wildcard still consuming `"Never"`                                                  |
+| `play Never b`   | 2 — Clean    | Partial keyword `"b"` → `"by"` via `findPartialKeywordInWildcard`; see `actionGrammar.md` §6 |
+| `play Nev`       | 3a — Pending | Same — no keyword yet finalizes the wildcard                                                 |
+| `pla`            | 3b — Dirty   | `"pla"` partially matches the keyword `"play"`                                               |
 
 ---
 
@@ -191,58 +201,31 @@ the grammar matcher assigns at different input states:
 ### 1. Grammar Matcher
 
 **Package:** `packages/actionGrammar`
-**Entry point:** `matchGrammarCompletion(grammar, prefix, minPrefixLength)`
+**Entry point:** `matchGrammarCompletion(grammar, input, minPrefixLength, direction)`
 
 Computes the set of valid next-tokens for a partial input against compiled
-grammar rules. For the full algorithm, per-direction behavior, partial
-keyword detection, and spacing annotation semantics, see
-`actionGrammar.md`.
+grammar rules. The matcher categorizes each partial match into one of four
+outcomes (exact, clean partial, pending wildcard, dirty partial) and
+produces metadata that flows through the cache, dispatcher, and shell
+layers. For the full algorithm — completion categories, per-direction
+behavior, partial keyword detection, spacing annotation semantics, and
+the Option A/B design trade-off (always back up vs. alternation-only
+back up) — see `actionGrammar.md`.
 
-**Completion categories** — The matcher categorizes each match state into
-one of four outcomes:
-
-| Category           | Condition                                               | Result                                               |
-| ------------------ | ------------------------------------------------------- | ---------------------------------------------------- |
-| 1 — Exact          | Rule fully matched, prefix fully consumed               | No forward completions; backward re-offers last part |
-| 2 — Clean partial  | Prefix consumed, rule has remaining parts               | Next part of rule offered                            |
-| 3a — Pending wc    | Wildcard still consuming; no keyword finalizes it       | Wildcard property completion                         |
-| 3b — Dirty partial | Input extends beyond what the current rule part matched | All alternatives at matched prefix; caller filters   |
-
-**`directionSensitive` by category:**
-
-- **Category 1 (Exact match):** `directionSensitive=true` when there
-  is a matched part to reconsider — i.e., when the rule contains a
-  wildcard or multi-part keyword that backward completion could back
-  up into (the `hasPartToReconsider` condition in the code). Forward
-  offers no completions; backward offers the last matched
-  word/wildcard. For keyword-only exact matches with no reconsidering
-  (e.g., grammar `hello` with input `"hello"`), `directionSensitive`
-  remains `false`.
-- **Categories 2/3a with entity wildcards:** `directionSensitive=false`
-  when the next rule part is an entity wildcard. Both forward and
-  backward offer the same wildcard property completions, so direction
-  does not affect the result.
-- **Categories 3a/3b with keyword completions:** `directionSensitive`
-  may be `true` when forward and backward produce different completion
-  sets (e.g., forward prefix-filters the current keyword while
-  backward reconsiders the previous part).
-
-**Metadata produced:**
+**Metadata produced** (see [Key types](#key-types) for full definitions):
 
 - `matchedPrefixLength` — characters consumed; becomes `startIndex` upstream
-- `properties` — a `GrammarCompletionProperty[]` carrying entity/wildcard
-  property slot information (property names and match metadata) for the
-  completions. Although the TypeScript type is
-  `GrammarCompletionProperty[] | undefined`, the grammar matcher always
-  returns an array — it is `[]` (empty) for keyword-only completions and
-  populated when entity wildcards contribute completions.
+- `properties` — `GrammarCompletionProperty[]` carrying entity/wildcard
+  property slot information for agent `getActionCompletion()` calls;
+  `[]` for keyword-only completions
 - `separatorMode` — determined by the rule's `[spacing=...]` annotation
 - `closedSet` — `true` when all completions are grammar keywords
-- `directionSensitive` — `true` when backward completion would differ
-  (see [`directionSensitive`](#directionsensitive))
-- `openWildcard` — `true` at ambiguous wildcard boundaries
-
-See [Key types](#key-types) for full definitions of these fields.
+- `directionSensitive` — `true` when `completion(input[0..P], backward)`
+  would differ from `completion(input[0..P], forward)`, where
+  P = `matchedPrefixLength`
+  (see [`directionSensitive`](#directionsensitive) below)
+- `afterWildcard` — `"all"` or `"some"` at ambiguous wildcard boundaries;
+  `"none"` when pinned
 
 ---
 
@@ -264,6 +247,14 @@ Merges results from two sources:
   When one source has a defined `matchedPrefixLength` and the other does
   not, `undefined` is treated as `0` — defined wins unless both are `0`.
   When both are `undefined`, the merged result preserves `undefined`.
+  **EOI guard:** when the longer result comes from a wildcard-at-EOI
+  state (`afterWildcard="all"`, `matchedPrefixLength === prefixLength`)
+  and the shorter result
+  anchors inside the input (`matchedPrefixLength < prefixLength`),
+  the shorter result is preferred. This prevents a grammar whose
+  wildcard consumed to EOI from displacing a more-meaningful anchored
+  result from another grammar. See `isEoiWildcard()` /
+  `anchorsInsideInput()` in `constructionCache.ts`.
 - AND-merge `closedSet` (closed only if _both_ sources are closed;
   `undefined` is treated as `false`).
 - OR-merge `separatorMode` (strongest requirement wins;
@@ -322,7 +313,9 @@ longer one. For free-form parameter values, the backend derives mid-token
 status from the input's trailing whitespace instead.
 
 Orchestrates command resolution, parameter parsing, agent invocation, and
-built-in completions.
+built-in completions. The dispatcher may override `separatorMode` from the
+grammar — for example, setting `"space"` for structured commands
+(`@agent` prefixes, flags) or `"none"` when reconsidering a command name.
 
 **Pipeline:**
 
@@ -423,7 +416,7 @@ contiguous within each category.
 - **Separator stripping**: when `separatorMode` requires a separator, the
   leading separator character in the raw prefix is stripped before trie lookup.
 - **`noMatchPolicy`**: computed once from the backend's descriptive fields
-  (`closedSet`, `openWildcard`) when a result arrives (see `NoMatchPolicy`
+  (`closedSet`, `afterWildcard`) when a result arrives (see `NoMatchPolicy`
   below). Drives the A3 and C1 decisions as a simple `switch` instead of
   checking two booleans independently.
 - **Session preservation**: `hide()` cancels in-flight fetches but preserves
@@ -472,42 +465,15 @@ text.
 | `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars; also digit–Latin boundaries (digits are Unicode script "Common", not "Latin", so a transition like `"0"→"i"` is a script change that does not require a separator)                                                                            |
 | `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
 
-### `directionSensitive`
-
-A boolean flowing through the backend pipeline (grammar → cache →
-dispatcher), indicating that the result would differ if the opposite
-`direction` had been sent. The shell uses this for trigger A4: when
-the user changes direction (e.g., starts backspacing after typing),
-the session only re-fetches if the current result is
-`directionSensitive=true`. If `false`, the same completions apply
-regardless of direction, so no re-fetch is needed.
-
-**Origin:** The grammar matcher is the primary source. It sets
-`directionSensitive=true` when the matched state has a part the user
-could "back up" to — specifically, when at least one word has been
-fully matched **without** a trailing separator committing it. A
-trailing space (or punctuation, depending on `spacingMode`) "commits"
-the match position and clears direction sensitivity.
-
-Examples with rule `play <song> by <artist>`:
-
-| Input         | `directionSensitive` | Why                                               |
-| ------------- | -------------------- | ------------------------------------------------- |
-| `play`        | `true`               | `"play"` fully matched, no trailing space         |
-| `play `       | `false`              | Trailing space commits — backward same as forward |
-| `play music`  | `true`               | `"music"` fully matched, no trailing space        |
-| `play music ` | `false`              | Trailing space commits                            |
-| `pla`         | `false`              | Only partial match — nothing to back up to        |
-
-Exception: in `[spacing=none]` mode, whitespace is not a separator,
-so `directionSensitive` is always `true` when any word has been fully
-matched — trailing spaces do not commit.
-
-The dispatcher may additionally set `directionSensitive=true` at the
-command level — for example, when a subcommand name is both a valid
-complete command and a prefix of a longer one.
-
-Merge rule: OR across sources (sensitive if _any_ source is sensitive).
+See `actionGrammar.md` Spacing modes for how the grammar matcher
+determines `separatorMode` from spacing annotations. The matcher
+strips trailing separators so P lands before the flex-space, making
+`separatorMode` always reflect the real grammar requirement (no
+position-based override needed). The one exception is
+keywords whose content ends with a separator character (e.g.
+`hello,` in a grammar `$(x) hello, world`) consumed to EOI, where
+P stays at `prefix.length` because stripping would remove keyword
+content.
 
 ### `CompletionDirection`
 
@@ -519,6 +485,34 @@ the client tells the backend which direction to complete.
 | ------------ | --------------------- | ----------------------------------------------------- |
 | `"forward"`  | User is moving ahead  | Appending characters, typed separator, menu selection |
 | `"backward"` | User is reconsidering | Backspacing, deleting                                 |
+
+**UX motivation:** When the user is typing forward, they want to see
+what comes _next_ — the next parameter slot, the next keyword, the next
+subcommand. When they are backspacing, they want to _reconsider_ the
+choice they just passed — re-examine a keyword they accepted, revisit a
+flag they selected, or re-partition a wildcard boundary. The `direction`
+parameter tells the backend which of these two intents to serve, so the
+completion menu shows contextually appropriate suggestions for whichever
+editing action the user is performing.
+
+**Why the host must provide direction:** The completion backend is
+stateless — each call to `getCommandCompletion()` receives only the
+current input string, with no memory of previous inputs. Only the host
+(shell or CLI) has access to input history and can compare the current
+input to the previous input to determine whether the user is advancing
+or backspacing. The shell makes this determination by checking whether
+the new input is shorter than and a strict prefix of the old input
+(`"backward"`); otherwise it is `"forward"`.
+
+> **Design trade-off — why not infer direction in the backend?**
+> The alternative would be a stateful backend that remembers the
+> previous input per session. This would eliminate the `direction`
+> parameter but at the cost of session state management, concurrency
+> concerns (multiple tabs, undo/redo), and coupling the backend to
+> input sequencing. The stateless design keeps the backend simple and
+> idempotent — the same `(input, direction)` pair always produces the
+> same result — while pushing the trivial "is this a backspace?"
+> comparison to the host, which already has the information.
 
 Direction is only consulted at structural ambiguity points (command-level
 and flag-level resolution). For free-form parameter values the backend
@@ -533,6 +527,45 @@ Direction is advisory: an incorrect signal (e.g., `"forward"` during
 backspace) may produce suboptimal completions but cannot crash or corrupt
 state, since the backend is stateless per-request.
 
+### `directionSensitive`
+
+A boolean flowing through the backend pipeline (grammar → cache →
+dispatcher), indicating that the result would differ if the opposite
+`direction` (see [`CompletionDirection`](#completiondirection) above)
+had been sent.
+
+**Why it exists:** Re-fetching completions from the backend on every
+keystroke is expensive. Most of the time, switching direction (e.g.,
+the user backspaces after typing) does not change what completions are
+valid — the input position is unambiguous and both directions would
+return the same result. `directionSensitive` is an optimization signal
+that tells the shell: "you only need to re-fetch when the user changes
+direction if this flag is `true`." When it is `false`, the shell skips
+the re-fetch entirely (trigger A4 does not fire), reusing the cached
+result regardless of whether the user is now typing or backspacing.
+
+The grammar matcher determines `directionSensitive` based on the
+matched prefix position — see `actionGrammar.md` § "Forward/backward
+equivalence analysis" for the decision tree, position-by-position
+analysis, and the Option A/B design trade-off.
+
+**Examples:** The table below shows `directionSensitive` across layers.
+The interesting cases are where `false` appears despite a non-zero
+`startIndex` — the position is unambiguous so direction doesn't matter.
+
+| Layer      | Input               | `directionSensitive` | Why                                                                                      |
+| ---------- | ------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
+| Dispatcher | `@player --level`   | `true`               | Flag exactly matched; backward re-offers flag alternatives (case 2a-ii)                  |
+| Dispatcher | `@player --level `  | `false`              | Trailing space commits the flag; position unambiguous (case 2b)                          |
+| Dispatcher | `@player --level 5` | `false`              | Editing free-form value; trailing whitespace determines state, not direction (case 2a-i) |
+| Dispatcher | `@play`             | `true`               | `play` matches subcommand but `player` also exists; backward reconsiders                 |
+
+For grammar-level examples (the `P = 0 → false`, `P > 0 → true` rule,
+equivalence analysis tables, and the Option A/B design trade-off), see
+`actionGrammar.md` § "Forward/backward equivalence analysis".
+
+Merge rule: OR across sources (sensitive if _any_ source is sensitive).
+
 ### `closedSet`
 
 A boolean flowing through the backend pipeline (grammar → cache → dispatcher):
@@ -546,11 +579,25 @@ Merge rule: AND across sources (closed only if _all_ sources are closed).
 The shell does not store `closedSet` directly; it is folded into
 `noMatchPolicy` (see below).
 
-### `openWildcard`
+### `afterWildcard`
 
-A boolean flowing through the backend pipeline, signaling that the
-`matchedPrefixLength` position is **ambiguous** — adjacent to a wildcard
-whose extent is not fully determined.
+A tri-state (`"none" | "some" | "all"`) flowing through the backend
+pipeline, signaling whether the `matchedPrefixLength` position is
+**ambiguous** — adjacent to a wildcard whose extent is not fully
+determined.
+
+**Why a tri-state instead of a boolean?** A boolean produces a stuck
+state when multiple grammar rules contribute completions at the same
+position and some are after a wildcard while others are not. With a
+boolean OR-merge, `true` maps to `"slide"` — but the literal completions
+from the non-wildcard rule are anchored at a fixed position and become
+stale when the anchor slides. With a boolean AND-merge, `false` and
+`closedSet=true` maps to `"accept"` — but after a space the user can
+type a prefix that doesn't match the trie, and "accept" silently reuses
+the old session instead of re-fetching, leaving the user stuck with no
+menu and no way to get new completions. The tri-state separates the
+three cases: `"all"` (safe to slide), `"none"` (safe to accept when
+closed), and `"some"` (mixed — must re-fetch).
 
 A position is **definite** when it is structurally pinned by matched
 grammar tokens: no amount of additional typing can change where it falls.
@@ -558,40 +605,33 @@ Examples: the start of a wildcard (pinned by the preceding keyword), or a
 keyword matched without a preceding wildcard.
 
 A position is **ambiguous** when it sits at the boundary of a wildcard
-that could absorb more text, moving the boundary forward. This happens
-in two cases:
-
-- **Forward:** a keyword completion follows a wildcard that was finalized
-  at end-of-input (the matcher treats EOI as a tentative wildcard
-  boundary). The wildcard consumed everything up to EOI, but the user
-  may still be typing within it.
-- **Backward:** completion backs up to a keyword that had pinned the end
-  of a preceding wildcard. Backing up un-pins that boundary — the
-  wildcard could extend to absorb the keyword text.
-
-**Persistence:** `openWildcard` remains `true` even after the user types
-the full keyword text (e.g., `"play hello by"` and `"play hello by "`)
-because the grammar matcher always forks two parse paths at a
-wildcard-keyword boundary: one where the keyword is consumed, and one
-where the wildcard absorbs the keyword text. Both paths produce
-completions at the same prefix length, so neither can eliminate the
-other. `openWildcard` only becomes `false` when the ambiguity is
-structurally resolved by further context (e.g., the user types enough
-after the keyword that the wildcard-absorbing path can no longer produce
-a match at the same prefix length).
+that could absorb more text, moving the boundary forward — for example,
+a keyword completion following a wildcard that was finalized at
+end-of-input, or a backward completion backing up to a keyword that had
+pinned the end of a wildcard. The ambiguity persists until further
+context structurally resolves it (e.g., the user types enough after the
+keyword that the wildcard-absorbing path can no longer match at the same
+prefix length). See `actionGrammar.md` for the full grammar-level
+analysis.
 
 Values:
 
-- **`true`** — the position is ambiguous. The keyword following the
-  wildcard (e.g. "by") is offered as a completion, and `closedSet`
-  correctly describes that keyword set as exhaustive. However, the
-  _position_ of that set is uncertain.
+- **`"none"`** — the position is definite for all rules; no sliding
+  wildcard boundary.
 
-- **`false`** — the position is definite; no sliding wildcard boundary.
+- **`"some"`** — some rules place the position after a wildcard while
+  others contribute literal completions. Neither sliding nor accepting
+  is safe; the shell should re-fetch.
 
-Merge rule: OR across sources (open wildcard if _any_ source has one).
+- **`"all"`** — every completion is from after a wildcard. The keyword
+  following the wildcard (e.g. "by") is offered as a completion, and
+  `closedSet` correctly describes that keyword set as exhaustive.
+  However, the _position_ of that set is uncertain. The shell should
+  slide the anchor forward as the user types.
 
-The shell does not store `openWildcard` directly; it is folded into
+Merge rule: equal values stay the same; unequal values merge to `"some"`.
+
+The shell does not store `afterWildcard` directly; it is folded into
 `noMatchPolicy` (see below).
 
 ### Anchor
@@ -624,31 +664,37 @@ The anchor serves three purposes:
 
 ### `NoMatchPolicy` (shell-internal)
 
-Computed once from `closedSet` and `openWildcard` when a backend result
+Computed once from `closedSet` and `afterWildcard` when a backend result
 arrives. Controls what the shell does when the local trie has no matches
 for the user's typed prefix.
 
 **Why derive a policy?** The backend returns _descriptive_ metadata —
-`closedSet` says whether the completion list is exhaustive, `openWildcard`
+`closedSet` says whether the completion list is exhaustive, `afterWildcard`
 says whether the anchor position is ambiguous. These are grammar-level
 facts that don't depend on the shell's UI. The shell translates them into
 a single actionable policy on arrival, keeping the decision points (A3
 and C1) simple: each is a `switch` on one enum rather than reasoning
-about two independent booleans.
+about a boolean and a tri-state independently.
 
-**Why `openWildcard` wins over `closedSet`:** When a wildcard boundary is
+**Why `afterWildcard="all"` wins over `closedSet`:** When a wildcard boundary is
 ambiguous, `closedSet` correctly describes the _keyword_ set (e.g.
 "by" is exhaustive), but the _position_ of that set is uncertain because
 the wildcard extent could shift. Re-fetching would return the same
 keywords at a shifted position (wasteful), and `"accept"` would leave the
 user stuck (no menu, no re-fetch). Sliding is the only useful action, so
-`openWildcard=true` maps to `"slide"` regardless of `closedSet`.
+`afterWildcard="all"` maps to `"slide"` regardless of `closedSet`.
 
-| Policy      | Derived from                            | Shell action at A3 / C1          |
-| ----------- | --------------------------------------- | -------------------------------- |
-| `"accept"`  | `closedSet=true`, `openWildcard=false`  | Reuse (menu hidden, no re-fetch) |
-| `"refetch"` | `closedSet=false`, `openWildcard=false` | Re-fetch (backend may know more) |
-| `"slide"`   | `openWildcard=true` (any `closedSet`)   | Slide anchor forward             |
+**Why `afterWildcard="some"` forces refetch:** When some rules place the
+cursor after a wildcard but others contribute literal completions, the
+keyword set is stable but the anchor may shift for some rules. Neither
+sliding nor accepting is safe — re-fetching lets the backend resolve the
+ambiguity.
+
+| Policy      | Derived from                                 | Shell action at A3 / C1          |
+| ----------- | -------------------------------------------- | -------------------------------- |
+| `"accept"`  | `closedSet=true`, `afterWildcard="none"`     | Reuse (menu hidden, no re-fetch) |
+| `"refetch"` | `closedSet=false`, or `afterWildcard="some"` | Re-fetch (backend may know more) |
+| `"slide"`   | `afterWildcard="all"` (any `closedSet`)      | Slide anchor forward             |
 
 This replaces independent checks on two booleans with a single `switch`:
 
@@ -661,6 +707,160 @@ Anchor sliding preserves the trie and metadata so the menu re-appears at
 the next whitespace boundary. Recovery is automatic: when the user eventually
 types the keyword and it uniquely matches (trigger B1), the session
 re-fetches for the next grammar part.
+
+---
+
+## Invariants
+
+The completion metadata fields must satisfy several invariants across the
+pipeline. Violations produce user-visible bugs — wrong completions, stale
+menus, or mispositioned insertions.
+
+**Quick reference — symptom → invariants to check:**
+
+| Symptom                                  | Check                |
+| ---------------------------------------- | -------------------- |
+| Wrong or missing completions             | #2, #3, #8, #10, #12 |
+| Completions at wrong position            | #1, #3, #10, #11     |
+| Stale menu after backspace               | #4–#6                |
+| Inconsistent menu (forward vs. backward) | #7, #8               |
+| Unnecessary re-fetches (perf)            | #4–#6, #14           |
+| Wrong separator behavior                 | #9, #13              |
+| Menu disappears at wildcard boundary     | #10, #15             |
+
+### Per-result invariants (grammar matcher layer)
+
+Automatically checked by the `withInvariantChecks` wrapper in
+`packages/actionGrammar/test/testUtils.ts` (grammar variant only).
+
+**#1 — `matchedPrefixLength` bounds.**
+`matchedPrefixLength` ∈ [`minPrefixLength`, `prefix.length`].
+_Impact:_ Completions inserted at wrong position in the input.
+
+**#2 — `closedSet` ↔ `properties` consistency** (grammar matcher layer
+only).
+`closedSet=false` ↔ `properties` is non-empty.
+_Impact:_ False `true` → shell uses "accept" policy and never re-fetches —
+user misses entity completions. False `false` → unnecessary re-fetches
+(perf cost, no visible bug).
+_Scope:_ This invariant applies only at the grammar matcher layer.
+At the dispatcher layer, `properties` entries have been consumed via
+`getActionCompletion()` and `closedSet` is determined by
+`computeClosedSet()` independently — so the grammar-matcher biconditional
+does not hold (e.g., free-form text has `closedSet=false` with no
+`properties`).
+
+**#3 — Truncated-forward idempotency.**
+When `matchedPrefixLength < prefix.length`:
+`result === completion(input[0..matchedPrefixLength], "forward")`.
+Stripping unconsumed trailing input and re-running forward must produce
+the same completions. For backward results this is guarded on forward
+actually reaching the same position (otherwise a known forward gap would
+cause a false failure).
+_Impact:_ Trailing garbage in the input silently changes which completions
+are offered — the result depends on content the grammar claims it did not
+consume.
+
+### Cross-direction invariants
+
+Invariants #4–#8 are automatically checked by `assertCrossDirectionInvariants`
+in `withInvariantChecks` (grammar variant only).
+
+All automatically-checked invariants (per-result, cross-direction, and
+truncated-forward) use the same numbering as this document:
+
+| #   | Assertion function                | Summary                                                 |
+| --- | --------------------------------- | ------------------------------------------------------- |
+| #1  | `assertSingleResultInvariants`    | `matchedPrefixLength` bounds                            |
+| #2  | `assertSingleResultInvariants`    | `closedSet` ↔ `properties` consistency                 |
+| #3  | `assertTruncatedForwardInvariant` | truncated-forward idempotency                           |
+| #4  | `assertCrossDirectionInvariants`  | equal `matchedPrefixLength` → identical results         |
+| #5  | `assertCrossDirectionInvariants`  | !fwd.directionSensitive → backward on truncated = fwd   |
+| #6  | `assertCrossDirectionInvariants`  | !bwd.directionSensitive → forward on truncated = bwd    |
+| #7  | `assertCrossDirectionInvariants`  | fwd.directionSensitive → backward of truncated backs up |
+| #8  | `assertCrossDirectionInvariants`  | bwd.directionSensitive → forward reaches bwd position   |
+
+**#4 — Equal consumption → identical results.**
+`forward.matchedPrefixLength === backward.matchedPrefixLength` →
+`forward` deep-equals `backward`.
+_Impact:_ False negative → stale menu after backspace.
+
+**#5 — Forward not direction-sensitive → backward on truncated agrees.**
+`!forward.directionSensitive` →
+`forward === completion(input[0..fwd.matchedPrefixLength], "backward")`.
+_Impact:_ False negative → stale menu; false positive → unnecessary
+re-fetch.
+
+**#6 — Backward not direction-sensitive → forward on truncated agrees.**
+`!backward.directionSensitive` →
+`backward === completion(input[0..bwd.matchedPrefixLength], "forward")`.
+_Impact:_ Same as #5.
+
+**#7 — Forward direction-sensitive → backward backs up.**
+`forward.directionSensitive` →
+`completion(input[0..fwd.matchedPrefixLength], "backward").matchedPrefixLength < fwd.matchedPrefixLength`.
+_Impact:_ Backspacing shows different completions than forward-typing to
+the same position — the menu is inconsistent depending on how the user
+arrived at that input.
+
+**#8 — Backward direction-sensitive → forward reaches backward's position.**
+When `fwd.matchedPrefixLength ≠ bwd.matchedPrefixLength` and `backward.directionSensitive`:
+`completion(input[0..bwd.matchedPrefixLength], "forward").matchedPrefixLength ≥ bwd.matchedPrefixLength`.
+Confirms that backward's backed-up position is reachable from forward.
+_Impact:_ User sees only one completion branch when backspacing at a fork —
+other valid alternatives are silently lost.
+
+### Field-specific invariants
+
+**#9 — `separatorMode` = `"none"` for `[spacing=none]` rules.**
+_Impact:_ Tokens incorrectly separated in a grammar designed for direct
+adjacency.
+
+**#10 — `afterWildcard` correctness.**
+`"all"` only when every rule reaches the position through a wildcard
+(Category 2 forward after wildcard finalized at EOI, or backward at
+keyword after captured wildcard). `"some"` when rules disagree.
+`"none"` when no wildcard is involved.
+_Impact:_ False `"all"` → anchor slides when it shouldn't — completions
+appear at wrong position. False `"none"` → menu disappears at wildcard
+boundary instead of sliding. Missing `"some"` → user gets stuck
+(no re-fetch when literal completions go stale).
+
+### Merge invariants (cache / dispatcher layers)
+
+**#11 — `matchedPrefixLength`: longest wins.**
+Keep longest across sources; discard shorter.
+_Impact:_ Completions anchored at wrong position when multiple
+grammars/agents contribute.
+
+**#12 — `closedSet`: AND-merge.**
+Closed only if ALL sources are closed.
+_Impact:_ Premature "accept" when one source is open — user misses
+completions from that source.
+
+**#13 — `separatorMode`: strongest requirement wins.**
+`"space"` > `"spacePunctuation"` > `"optional"` > `"none"`.
+_Impact:_ Fused display if a weak mode wins over a strong one, or
+unnecessary separation if the reverse.
+
+**#14 — `directionSensitive`: OR-merge.**
+Sensitive if ANY source is sensitive.
+_Impact:_ Skipped re-fetch when one source's results differ by direction.
+
+**#15 — `afterWildcard`: merge.**
+Equal values stay the same; unequal merge to `"some"`.
+_Impact:_ One source's ambiguous boundary doesn't cause another source's
+definite completions to slide — `"some"` triggers re-fetch instead.
+
+### Known gaps
+
+- **Category 2 forward for number-variable next-parts:** When the prefix
+  is exhausted at a `VarNumberPart`, the forward path does not call
+  `updateMaxPrefixLength` or collect a property completion. This causes
+  `forward("set volume")` to report `matchedPrefixLength=0` instead of
+  `10` for grammar `set volume $(n:number) percent`. The backward path
+  handles this correctly. The two-pass invariant check skips this case
+  (when `forwardAtP.matchedPrefixLength < P`).
 
 ---
 

@@ -58,10 +58,9 @@ async function getCompletionsData(
                 prefix: "",
             };
         }
-        // Send the full input to the backend.  The grammar matcher reports
-        // how much of the input it consumed (matchedPrefixLength →
-        // startIndex), so we no longer need space-based token-boundary
-        // heuristics here.
+        // Send the full input to the backend; the grammar matcher reports
+        // how much it consumed (matchedPrefixLength → startIndex) so the
+        // CLI need not split on spaces to find token boundaries.
         // CLI tab-completion is always a forward action.
         const direction = "forward" as const;
         const result = await dispatcher.getCommandCompletion(line, direction);

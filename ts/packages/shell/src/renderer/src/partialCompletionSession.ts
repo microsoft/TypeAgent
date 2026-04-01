@@ -3,6 +3,7 @@
 
 import { CommandCompletionResult } from "agent-dispatcher";
 import {
+    AfterWildcard,
     CompletionDirection,
     CompletionGroup,
     SeparatorMode,
@@ -36,24 +37,26 @@ export interface ICompletionDispatcher {
 
 // Describes what the shell should do when the local trie has no matches
 // for the user's typed prefix.  Computed once from the backend's
-// descriptive fields (closedSet, openWildcard) when a result arrives,
+// descriptive fields (closedSet, afterWildcard) when a result arrives,
 // then used in reuseSession() decisions.
 //
 //   "accept"  — the completion set is exhaustive; no re-fetch can help.
-//               (Derived from closedSet=true, openWildcard=false.)
+//               (Derived from closedSet=true, afterWildcard="none".)
 //   "refetch" — the set is open-ended; the backend may know more.
-//               (Derived from closedSet=false, openWildcard=false.)
+//               (Derived from closedSet=false, or afterWildcard="some".)
 //   "slide"   — the anchor sits at a sliding wildcard boundary; slide
 //               it forward instead of re-fetching or giving up.
-//               (Derived from openWildcard=true, any closedSet.)
+//               (Derived from afterWildcard="all", any closedSet.)
 type NoMatchPolicy = "accept" | "refetch" | "slide";
 
 function computeNoMatchPolicy(
     closedSet: boolean,
-    openWildcard: boolean,
+    afterWildcard: AfterWildcard,
 ): NoMatchPolicy {
-    if (openWildcard) return "slide";
-    if (closedSet) return "accept";
+    if (afterWildcard === "all") return "slide";
+    if (closedSet && afterWildcard === "none") return "accept";
+    // Covers closedSet=false (open-ended set) and afterWildcard="some"
+    // (mixed wildcard/literal rules — neither sliding nor accepting is safe).
     return "refetch";
 }
 
@@ -100,16 +103,20 @@ export class PartialCompletionSession {
 
     // Saved as-is from the last completion result.
     private separatorMode: SeparatorMode = "space";
-    // Computed from the backend's closedSet + openWildcard fields.
+    // Computed from the backend's closedSet + afterWildcard fields.
     // Controls what happens when the local trie has no matches.
     private noMatchPolicy: NoMatchPolicy = "refetch";
     // True when completions differ between forward and backward.
     private directionSensitive: boolean = false;
-    // Direction used for the last fetch.
-    private lastDirection: CompletionDirection = "forward";
 
     // The in-flight completion request, or undefined when settled.
     private completionP: Promise<CommandCompletionResult> | undefined;
+
+    // Set when the user explicitly closes the menu (e.g. Escape).
+    // startNewSession uses this to suppress reopening if the refetch returns
+    // the same anchor — meaning the completions are unchanged and the user
+    // already dismissed them.
+    private explicitCloseAnchor: string | undefined = undefined;
 
     constructor(
         private readonly menu: ISearchMenu,
@@ -148,6 +155,41 @@ export class PartialCompletionSession {
     public resetToIdle(): void {
         this.anchor = undefined;
         this.completionP = undefined;
+        this.explicitCloseAnchor = undefined;
+    }
+
+    // Called when the user explicitly dismisses the menu (e.g. Escape key).
+    // Hides the menu and — when conditions allow — issues a background refetch
+    // with the full current input.  The menu is only reopened if the backend
+    // returns a different anchor (startIndex changed), indicating the grammar
+    // found a new parse point.  If the anchor is unchanged the completions
+    // would be the same ones the user just dismissed, so reopening is suppressed.
+    //
+    // Conditions where refetch is skipped (result guaranteed identical):
+    //   IDLE          — no active session
+    //   input===anchor — no prefix typed; same input was already fetched
+    //   noMatchPolicy !== "refetch":
+    //     "accept"    — closed set; backend cannot offer more completions
+    //     "slide"     — wildcard boundary; refetch returns same anchor shifted
+    public explicitHide(
+        input: string,
+        getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection,
+    ): void {
+        this.completionP = undefined; // cancel any in-flight fetch
+        this.menu.hide();
+
+        if (
+            this.anchor === undefined ||
+            input === this.anchor ||
+            this.noMatchPolicy !== "refetch"
+        ) {
+            return;
+        }
+
+        // Save anchor so startNewSession can compare after the result arrives.
+        this.explicitCloseAnchor = this.anchor;
+        this.startNewSession(input, getPosition, direction);
     }
 
     // Returns the text typed after the anchor, or undefined when
@@ -241,9 +283,15 @@ export class PartialCompletionSession {
         // ACTIVE from here.
         const { anchor, separatorMode: sepMode, noMatchPolicy } = this;
 
-        // [A4] Direction changed on a direction-sensitive result.
-        // The loaded completions were computed for the opposite direction
-        // and would differ — but only at the anchor boundary itself.
+        // [A4] Backward at a direction-sensitive anchor.
+        // The two-pass backward approach means the loaded result is
+        // always a forward-at-P result.  When the user is at the
+        // anchor going backward, the loaded forward result does not
+        // apply — re-fetch to get backward's backed-up result.
+        //
+        // Only backward needs this check: forward at the anchor
+        // matches the loaded result (which is forward-at-P).
+        //
         // Once the user has typed past the anchor (rawPrefix is
         // non-empty), the direction-sensitive point has been passed:
         // the trailing text acts as a commit signal, and backward is
@@ -255,12 +303,12 @@ export class PartialCompletionSession {
         // satisfied, A3 will catch it.  So this check only needs to
         // handle the exact-anchor case.
         if (
-            direction !== this.lastDirection &&
+            direction === "backward" &&
             this.directionSensitive &&
             input === anchor
         ) {
             debug(
-                `Partial completion re-fetch: direction changed (${this.lastDirection} → ${direction}), directionSensitive`,
+                `Partial completion re-fetch: backward at anchor, directionSensitive`,
             );
             return false;
         }
@@ -452,10 +500,9 @@ export class PartialCompletionSession {
                 this.separatorMode = result.separatorMode ?? "space";
                 this.noMatchPolicy = computeNoMatchPolicy(
                     result.closedSet,
-                    result.openWildcard,
+                    result.afterWildcard,
                 );
                 this.directionSensitive = result.directionSensitive;
-                this.lastDirection = direction;
 
                 const completions = toMenuItems(result.completions);
 
@@ -486,6 +533,21 @@ export class PartialCompletionSession {
 
                 this.menu.setChoices(completions);
 
+                // If triggered by an explicit close, only reopen when the
+                // anchor advanced.  Same anchor means the same completions at
+                // the same position — the user already dismissed them.
+                const explicitCloseAnchor = this.explicitCloseAnchor;
+                this.explicitCloseAnchor = undefined;
+                if (
+                    explicitCloseAnchor !== undefined &&
+                    partial === explicitCloseAnchor
+                ) {
+                    debug(
+                        `Partial completion explicit-hide: anchor unchanged ('${partial}'), suppressing reopen`,
+                    );
+                    return;
+                }
+
                 // Re-run update with captured input to show the menu (or defer
                 // if the separator has not been typed yet).
                 this.reuseSession(input, getPosition, direction);
@@ -496,6 +558,7 @@ export class PartialCompletionSession {
                 // anchor so that identical input reuses the session (no
                 // re-fetch) while diverged input still triggers a new fetch.
                 this.completionP = undefined;
+                this.explicitCloseAnchor = undefined;
             });
     }
 }

@@ -57,12 +57,9 @@ const sharedScripts = {
     webTypeAgentMain: "webTypeAgentMain.ts",
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
     "views/options": "views/options.ts",
-    "views/pageMacros": "views/pageMacros.ts",
     "views/macrosLibrary": "views/macrosLibrary.ts",
     "views/entityGraphView": "views/entityGraphView.ts",
     "views/topicGraphView": "views/topicGraphView.ts",
-    "views/pageKnowledge": "views/pageKnowledge.ts",
-    "views/pageQnA": "views/pageQnA.ts",
     "views/annotationsLibrary": "views/annotationsLibrary.ts",
     "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
     "views/pdfView": "views/pdfView.ts",
@@ -74,7 +71,6 @@ const sharedScripts = {
     "sites/paleobiodb": "sites/paleobiodb.ts",
     "sites/webflow": "sites/webflow.ts",
     "offscreen/contentProcessor": "offscreen/contentProcessor.ts",
-    "offscreen/screenshotCapture": "offscreen/screenshotCapture.ts",
 };
 
 const electronOnlyScripts = {
@@ -129,12 +125,6 @@ const libraryAssets = [
     "views/macrosLibrary.html",
     "views/options.css",
     "views/options.html",
-    "views/pageKnowledge.css",
-    "views/pageKnowledge.html",
-    "views/pageMacros.css",
-    "views/pageMacros.html",
-    "views/pageQnA.css",
-    "views/pageQnA.html",
     "views/pdfView.css",
     "views/pdfView.html",
     "views/chatPanel.css",
@@ -161,10 +151,6 @@ function copyCommonStaticAssets(outDir) {
     copyFileSync(
         `${srcDir}/offscreen/offscreen.html`,
         `${outDir}/offscreen/offscreen.html`,
-    );
-    copyFileSync(
-        `${srcDir}/offscreen/screenshotCapture.html`,
-        `${outDir}/offscreen/screenshotCapture.html`,
     );
 
     mkdirSync(`${outDir}/sites`, { recursive: true });

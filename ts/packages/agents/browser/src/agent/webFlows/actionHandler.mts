@@ -6,7 +6,7 @@ import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
 import { WebFlowStore } from "./store/webFlowStore.mjs";
 import { WebFlowDefinition } from "./types.js";
 import { WebFlowActions } from "./schema/webFlowActions.mjs";
-import { validateWebFlowScript } from "./scriptValidator.mjs";
+import { validateWebFlowScript, transpileScript } from "./scriptValidator.mjs";
 import { executeWebFlowScript } from "./scriptExecutor.mjs";
 import {
     createFrozenBrowserApi,
@@ -265,10 +265,11 @@ async function handleDynamicFlowExecution(
         }
     }
 
-    // Validate script
+    // Validate TypeScript script
     const validation = validateWebFlowScript(
         flow.script,
         Object.keys(flow.parameters),
+        flow,
     );
     if (!validation.valid) {
         const errors = validation.errors
@@ -279,6 +280,9 @@ async function handleDynamicFlowExecution(
             data: { success: false, error: "validation_failed", errors },
         };
     }
+
+    // Transpile TypeScript to JavaScript for execution
+    const jsScript = transpileScript(flow.script);
 
     // Fill in defaults for missing optional params
     const resolvedParams: Record<string, unknown> = {};
@@ -300,7 +304,7 @@ async function handleDynamicFlowExecution(
     const extractFn = createExtractComponentFn(context);
     const browserApi = createFrozenBrowserApi(browser, flow.scope, extractFn);
     const result = await executeWebFlowScript(
-        flow.script,
+        jsScript,
         browserApi,
         resolvedParams,
     );
@@ -396,10 +400,24 @@ async function handleGenerateWebFlow(
         `Generating WebFlow from trace "${traceId}" (${trace.steps.length} steps)`,
     );
 
-    const flow = await generateWebFlowFromTrace(trace, {
-        ...(name && { suggestedName: name }),
-        ...(description && { description }),
-    });
+    // Build existing flows context for dedup-aware generation
+    const store = await getStore(context);
+    const existingFlows = store.getIndex().flows
+        ? Object.entries(store.getIndex().flows).map(([n, e]) => ({
+              name: n,
+              description: e.description,
+              parameters: (e.parameters ?? []).map((p) => p.name),
+          }))
+        : [];
+
+    const flow = await generateWebFlowFromTrace(
+        trace,
+        {
+            ...(name && { suggestedName: name }),
+            ...(description && { description }),
+        },
+        existingFlows,
+    );
 
     if (!flow) {
         return {
@@ -409,8 +427,7 @@ async function handleGenerateWebFlow(
         };
     }
 
-    // Save the generated flow
-    const store = await getStore(context);
+    // Save the generated flow (store already fetched above for dedup context)
     await store.save(flow);
     debug(`Saved generated WebFlow: ${flow.name}`);
 
@@ -467,6 +484,21 @@ async function handleGenerateWebFlowFromRecording(
         };
     }
 
+    // Filter noop recordings (fewer than 2 meaningful actions)
+    const meaningfulActions = recordingData.actions.filter(
+        (a: any) =>
+            a.type !== "scroll" &&
+            a.type !== "pageLoad" &&
+            a.type !== "navigation",
+    );
+    if (meaningfulActions.length < 2) {
+        return {
+            displayText:
+                "Recording too short — fewer than 2 meaningful actions captured. Try recording a more complete interaction.",
+            data: { success: false, error: "noop_recording" },
+        };
+    }
+
     debug(`Normalizing recording: ${recordingData.actions.length} raw actions`);
     const trace = normalizeRecording(recordingData);
 
@@ -487,10 +519,25 @@ async function handleGenerateWebFlowFromRecording(
     debug(
         `Generating WebFlow from recording (${trace.steps.length} normalized steps)`,
     );
-    const flow = await generateWebFlowFromTrace(trace, {
-        ...(name && { suggestedName: name }),
-        description,
-    });
+
+    // Build existing flows context for dedup-aware generation
+    const store = await getStore(context);
+    const existingFlows = Object.entries(store.getIndex().flows).map(
+        ([n, e]) => ({
+            name: n,
+            description: e.description,
+            parameters: (e.parameters ?? []).map((p) => p.name),
+        }),
+    );
+
+    const flow = await generateWebFlowFromTrace(
+        trace,
+        {
+            ...(name && { suggestedName: name }),
+            description,
+        },
+        existingFlows,
+    );
 
     if (!flow) {
         return {
@@ -507,7 +554,6 @@ async function handleGenerateWebFlowFromRecording(
         ...(traceId && { traceId }),
     };
 
-    const store = await getStore(context);
     await store.save(flow);
     debug(`Saved WebFlow from recording: ${flow.name}`);
 

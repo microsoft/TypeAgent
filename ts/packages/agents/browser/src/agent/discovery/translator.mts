@@ -15,7 +15,9 @@ import { openai as ai } from "aiclient";
 import { fileURLToPath } from "node:url";
 import { SchemaDiscoveryActions } from "./schema/discoveryActions.mjs";
 import { PageDescription } from "./schema/pageSummary.mjs";
-import { UserActionsList } from "./schema/userActionsPool.mjs";
+import registerDebug from "debug";
+
+const debugPerf = registerDebug("typeagent:browser:discover:perf");
 
 export type HtmlFragments = {
     frameId: string;
@@ -140,35 +142,23 @@ export async function createDiscoveryPageTranslator(
         | "GPT_5_MINI"
         | "GPT_5_2",
 ) {
-    const userActionsPoolSchema = await getSchemaFileContents(
-        "userActionsPool.mts",
-    );
-    const pageTypesSchema = await getSchemaFileContents("pageTypes.mts");
+    const pageSummarySchema = await getSchemaFileContents("pageSummary.mts");
 
     const agent = new SchemaDiscoveryAgent<SchemaDiscoveryActions>(
-        userActionsPoolSchema,
-        pageTypesSchema,
-        "UserPageActions",
+        pageSummarySchema,
         model,
     );
     return agent;
 }
 
 export class SchemaDiscoveryAgent<T extends object> {
-    pageTypesSchema: string;
-    userActionsPoolSchema: string;
+    defaultSchema: string;
 
     model: TypeChatLanguageModel;
     translator: TypeChatJsonTranslator<T>;
 
-    constructor(
-        userActionsPoolSchema: string,
-        pageTypesSchema: string,
-        schemaName: string,
-        fastModelName: string,
-    ) {
-        this.userActionsPoolSchema = userActionsPoolSchema;
-        this.pageTypesSchema = pageTypesSchema;
+    constructor(defaultSchema: string, fastModelName: string) {
+        this.defaultSchema = defaultSchema;
 
         const apiSettings = ai.azureApiSettingsFromEnv(
             ai.ModelType.Chat,
@@ -182,8 +172,8 @@ export class SchemaDiscoveryAgent<T extends object> {
             ["schemaDiscovery"],
         );
         const validator = createTypeScriptJsonValidator<T>(
-            this.userActionsPoolSchema,
-            schemaName,
+            this.defaultSchema,
+            "PageDescription",
         );
         this.translator = createJsonTranslator(this.model, validator);
     }
@@ -237,7 +227,7 @@ export class SchemaDiscoveryAgent<T extends object> {
     }
 
     private getBootstrapTranslator(targetType: string, targetSchema?: string) {
-        const pageSchema = targetSchema ?? this.userActionsPoolSchema;
+        const pageSchema = targetSchema ?? this.defaultSchema;
 
         const validator = createTypeScriptJsonValidator(pageSchema, targetType);
         const bootstrapTranslator = createJsonTranslator(this.model, validator);
@@ -280,80 +270,57 @@ export class SchemaDiscoveryAgent<T extends object> {
     }
 
     async getCandidateUserActions(
-        userRequest?: string,
+        discoverySchema: string,
         fragments?: HtmlFragments[],
-        screenshots?: string[],
-        pageSummary?: string,
     ) {
-        // prompt - present html, optional screenshot and list of candidate actions
         const bootstrapTranslator = this.getBootstrapTranslator(
-            "UserActionsList",
-            this.userActionsPoolSchema,
+            "CandidateActionList",
+            discoverySchema,
         );
 
-        const screenshotSection = getScreenshotPromptSection(
-            screenshots,
-            fragments,
-        );
         const htmlSection = getHtmlPromptSection(fragments);
         const prefixSection = getPrefixPromptSection();
         const suffixSection = getSuffixPromptSection();
-        let requestSection = [];
-        if (userRequest) {
-            requestSection.push({
-                type: "text",
-                text: `
-            Here is  user request
-            '''
-            ${userRequest}
-            '''
-            `,
-            });
-        }
-        if (pageSummary) {
-            requestSection.push({
-                type: "text",
-                text: `
-               
-            Here is a previously-generated summary of the page
-            '''
-            ${pageSummary}
-            '''
-            `,
-            });
-        }
 
         const promptSections = [
             ...prefixSection,
-            ...screenshotSection,
             ...htmlSection,
             {
                 type: "text",
                 text: `
-        Examine the layout information provided and determine the set of possible UserPageActions users can take on the page.
-        Once you have this list, a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
-        If there are multiple UserPageActions of the same type, only return the first one in the output object.
-        
+        You are given a list of known user actions. Examine the page layout and content, then determine which of
+        these actions can actually be performed on THIS page. Only include actions that the page supports.
+        If none of the known actions apply, return an empty actions array.
+        Return a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+
         '''
         ${bootstrapTranslator.validator.getSchemaText()}
         '''
         `,
             },
-            ...requestSection,
             ...suffixSection,
         ];
 
+        const promptChars = promptSections.reduce(
+            (sum, s: any) => sum + (s.text?.length || 0),
+            0,
+        );
+        debugPerf(`  [getCandidateUserActions] prompt: ${promptChars} chars`);
+        const llmStart = Date.now();
         const response = await bootstrapTranslator.translate("", [
             {
                 role: "user",
                 content: promptSections as MultimodalPromptContent[],
             },
         ]);
+        debugPerf(
+            `  [getCandidateUserActions] LLM translate: ${Date.now() - llmStart}ms`,
+        );
         return response;
     }
 
     async unifyUserActions(
-        candidateActions: UserActionsList,
+        candidateActions: { actions: any[] },
         pageDescription?: PageDescription,
         fragments?: HtmlFragments[],
         screenshots?: string[],
@@ -638,209 +605,6 @@ export class SchemaDiscoveryAgent<T extends object> {
         ${bootstrapTranslator.validator.getSchemaText()}
         '''
         `,
-            },
-            ...requestSection,
-            ...suffixSection,
-        ];
-
-        const response = await bootstrapTranslator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-        return response;
-    }
-
-    async getDetailedStepsFromDescription(
-        recordedActionName: string,
-        recordedActionDescription: string,
-        fragments?: HtmlFragments[],
-        screenshots?: string[],
-    ) {
-        const resultsSchema = await getSchemaFileContents(
-            "expandDescription.mts",
-        );
-        const bootstrapTranslator = this.getBootstrapTranslator(
-            "PageActionsList",
-            resultsSchema,
-        );
-
-        const screenshotSection = getScreenshotPromptSection(
-            screenshots,
-            fragments,
-        );
-        const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getPrefixPromptSection();
-        const suffixSection = getSuffixPromptSection();
-        let requestSection = [];
-        requestSection.push({
-            type: "text",
-            text: `
-               
-            The user provided an example of how they would complete the ${recordedActionName} action on the webpage. 
-            They provided a description of the task below:
-            '''
-            ${recordedActionDescription}
-            '''
-            `,
-        });
-
-        const promptSections = [
-            ...prefixSection,
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `
-        Examine the layout information provided as well as the user action description. Use this information to create a detailed set of steps, including
-        the HTML elements that the user would need to interact with. Based on this
-        generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
-                
-        '''
-        ${bootstrapTranslator.validator.getSchemaText()}
-        '''
-        `,
-            },
-            ...requestSection,
-            ...suffixSection,
-        ];
-
-        const response = await bootstrapTranslator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-        return response;
-    }
-
-    async getWebPlanRunResult(
-        recordedActionName: string,
-        recordedActionDescription: string,
-        parameters: Map<string, any>,
-        fragments?: HtmlFragments[],
-        screenshots?: string[],
-    ) {
-        const resultsSchema = await getSchemaFileContents("evaluatePlan.mts");
-        const bootstrapTranslator = this.getBootstrapTranslator(
-            "WebPlanResult",
-            resultsSchema,
-        );
-
-        const screenshotSection = getScreenshotPromptSection(
-            screenshots,
-            fragments,
-        );
-        const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getPrefixPromptSection();
-        const suffixSection = getSuffixPromptSection();
-        let requestSection = [];
-        requestSection.push({
-            type: "text",
-            text: `
-           
-        The user provided an example of how they would complete the ${recordedActionName} action on the webpage. 
-        They provided a description of the task below:
-        '''
-        ${recordedActionDescription}
-        '''
-
-        Thw task was run on the page using the parameters:
-        '''
-        ${JSON.stringify(Object.fromEntries(parameters))}
-        '''
-        `,
-        });
-
-        const promptSections = [
-            ...prefixSection,
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `
-    Examine the layout information provided as well as the user action description. Use this information to determine whether the task goal has
-    been met in the provided webpage. Generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
-            
-    '''
-    ${bootstrapTranslator.validator.getSchemaText()}
-    '''
-    `,
-            },
-            ...requestSection,
-            ...suffixSection,
-        ];
-
-        const response = await bootstrapTranslator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-        return response;
-    }
-
-    async getWebPlanSuggestedSteps(
-        recordedActionName: string,
-        recordedActionDescription: string,
-        currentSteps?: string[],
-        fragments?: HtmlFragments[],
-        screenshots?: string[],
-    ) {
-        const resultsSchema = await getSchemaFileContents("evaluatePlan.mts");
-        const bootstrapTranslator = this.getBootstrapTranslator(
-            "WebPlanSuggestions",
-            resultsSchema,
-        );
-
-        const screenshotSection = getScreenshotPromptSection(
-            screenshots,
-            fragments,
-        );
-        const htmlSection = getHtmlPromptSection(fragments);
-        const prefixSection = getPrefixPromptSection();
-        const suffixSection = getSuffixPromptSection();
-        let requestSection = [];
-        requestSection.push({
-            type: "text",
-            text: `
-           
-        The user provided an example of how they would complete the ${recordedActionName} action on the webpage. 
-        They provided a description of the task below:
-        '''
-        ${recordedActionDescription}
-        '''
-        `,
-        });
-        if (currentSteps !== undefined && currentSteps.length > 0) {
-            requestSection.push({
-                type: "text",
-                text: `
-               
-            Here are the steps that are already included in the plan
-            '''
-            ${JSON.stringify(currentSteps)}
-            '''
-            `,
-            });
-        }
-
-        const promptSections = [
-            ...prefixSection,
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `
-    Examine the layout information provided as well as the user action description. Use this information to determine whether the task goal has
-    been met in the provided webpage. If the goal has not been met, or if there are steps missing from the current list, suggest the next steps the user can take in the UI.
-    Generate a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
-            
-    '''
-    ${bootstrapTranslator.validator.getSchemaText()}
-    '''
-    `,
             },
             ...requestSection,
             ...suffixSection,

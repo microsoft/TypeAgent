@@ -16,8 +16,8 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
     testDir: "./test",
-    /* Exclude jest unit tests in partialCompletion – they are run separately via jest-esm */
-    testIgnore: ["**/partialCompletion/**"],
+    /* Exclude Jest unit tests from Playwright test discovery */
+    testIgnore: /\/partialCompletion\//,
     /* Run tests sequentially otherwise the client will complain about locked session file */
     fullyParallel: false,
     /* Fail the build on CI if you accidentally left test.only in the source code. */

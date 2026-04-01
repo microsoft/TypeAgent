@@ -7,9 +7,16 @@ import {
 } from "../src/constructions/constructionCache.js";
 
 describe("mergeCompletionResults", () => {
+    // Infinity as prefixLength disables the EOI-wildcard preference
+    // logic (matchedLen >= Infinity is never true), letting tests
+    // exercise merge behavior without EOI guard interference.
     describe("matchedPrefixLength merging", () => {
         it("returns undefined when both are undefined", () => {
-            const result = mergeCompletionResults(undefined, undefined);
+            const result = mergeCompletionResults(
+                undefined,
+                undefined,
+                Infinity,
+            );
             expect(result).toBeUndefined();
         });
 
@@ -18,7 +25,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["a"],
                 matchedPrefixLength: 5,
             };
-            const result = mergeCompletionResults(first, undefined);
+            const result = mergeCompletionResults(first, undefined, Infinity);
             expect(result).toBe(first);
         });
 
@@ -27,7 +34,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 3,
             };
-            const result = mergeCompletionResults(undefined, second);
+            const result = mergeCompletionResults(undefined, second, Infinity);
             expect(result).toBe(second);
         });
 
@@ -40,7 +47,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 10,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(10);
             expect(result.completions).toEqual(["b"]);
         });
@@ -54,7 +61,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 3,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(12);
             expect(result.completions).toEqual(["a"]);
         });
@@ -68,7 +75,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 5,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(5);
             expect(result.completions).toEqual(["a", "b"]);
         });
@@ -80,7 +87,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["b"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBeUndefined();
             expect(result.completions).toEqual(["a", "b"]);
         });
@@ -93,7 +100,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["b"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(7);
             expect(result.completions).toEqual(["a"]);
         });
@@ -106,7 +113,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 matchedPrefixLength: 4,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(4);
             expect(result.completions).toEqual(["b"]);
         });
@@ -120,7 +127,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["c", "d"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.completions).toEqual(["a", "b", "c", "d"]);
         });
 
@@ -131,7 +138,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["c"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.completions).toEqual(["c"]);
         });
     });
@@ -154,7 +161,7 @@ describe("mergeCompletionResults", () => {
                 completions: [],
                 properties: [prop2],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toEqual([prop1, prop2]);
         });
 
@@ -170,7 +177,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: [],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toBe(first.properties);
         });
 
@@ -186,7 +193,7 @@ describe("mergeCompletionResults", () => {
                 completions: [],
                 properties: [prop2],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toBe(second.properties);
         });
 
@@ -197,7 +204,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: [],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toBeUndefined();
         });
     });
@@ -206,7 +213,7 @@ describe("mergeCompletionResults", () => {
         it("returns undefined when neither has separatorMode", () => {
             const first: CompletionResult = { completions: ["a"] };
             const second: CompletionResult = { completions: ["b"] };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBeUndefined();
         });
 
@@ -216,7 +223,7 @@ describe("mergeCompletionResults", () => {
                 separatorMode: "spacePunctuation",
             };
             const second: CompletionResult = { completions: ["b"] };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBe("spacePunctuation");
         });
 
@@ -226,7 +233,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 separatorMode: "spacePunctuation",
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBe("spacePunctuation");
         });
 
@@ -239,7 +246,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 separatorMode: "optional",
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBe("spacePunctuation");
         });
 
@@ -248,7 +255,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 separatorMode: "spacePunctuation",
             };
-            const result = mergeCompletionResults(undefined, second);
+            const result = mergeCompletionResults(undefined, second, Infinity);
             expect(result).toBe(second);
             expect(result!.separatorMode).toBe("spacePunctuation");
         });
@@ -258,7 +265,7 @@ describe("mergeCompletionResults", () => {
         it("returns undefined when neither has closedSet", () => {
             const first: CompletionResult = { completions: ["a"] };
             const second: CompletionResult = { completions: ["b"] };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBeUndefined();
         });
 
@@ -271,7 +278,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: true,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBe(true);
         });
 
@@ -284,7 +291,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: false,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBe(false);
         });
 
@@ -297,7 +304,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: true,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBe(false);
         });
 
@@ -310,7 +317,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: false,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBe(false);
         });
 
@@ -322,7 +329,7 @@ describe("mergeCompletionResults", () => {
             const second: CompletionResult = {
                 completions: ["b"],
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             // undefined treated as false → true && false = false
             expect(result.closedSet).toBe(false);
         });
@@ -335,7 +342,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: true,
             };
-            const result = mergeCompletionResults(first, second)!;
+            const result = mergeCompletionResults(first, second, Infinity)!;
             // undefined treated as false → false && true = false
             expect(result.closedSet).toBe(false);
         });
@@ -345,7 +352,7 @@ describe("mergeCompletionResults", () => {
                 completions: ["b"],
                 closedSet: true,
             };
-            const result = mergeCompletionResults(undefined, second);
+            const result = mergeCompletionResults(undefined, second, Infinity);
             expect(result).toBe(second);
             expect(result!.closedSet).toBe(true);
         });
@@ -355,9 +362,91 @@ describe("mergeCompletionResults", () => {
                 completions: ["a"],
                 closedSet: false,
             };
-            const result = mergeCompletionResults(first, undefined);
+            const result = mergeCompletionResults(first, undefined, Infinity);
             expect(result).toBe(first);
             expect(result!.closedSet).toBe(false);
+        });
+    });
+
+    describe("open wildcard at EOI — prefer anchored result", () => {
+        it("keeps shorter anchored result when longer is afterWildcard at EOI", () => {
+            const anchored: CompletionResult = {
+                completions: ["by"],
+                matchedPrefixLength: 16,
+                afterWildcard: "all",
+            };
+            const eoi: CompletionResult = {
+                completions: ["track", "song"],
+                matchedPrefixLength: 17,
+                afterWildcard: "all",
+            };
+            // prefixLength=17: eoi is at EOI, anchored is inside input
+            const result = mergeCompletionResults(anchored, eoi, 17)!;
+            expect(result.completions).toEqual(["by"]);
+            expect(result.matchedPrefixLength).toBe(16);
+        });
+
+        it("keeps shorter anchored result regardless of argument order", () => {
+            const anchored: CompletionResult = {
+                completions: ["by"],
+                matchedPrefixLength: 16,
+                afterWildcard: "all",
+            };
+            const eoi: CompletionResult = {
+                completions: ["track", "song"],
+                matchedPrefixLength: 17,
+                afterWildcard: "all",
+            };
+            // Reversed argument order
+            const result = mergeCompletionResults(eoi, anchored, 17)!;
+            expect(result.completions).toEqual(["by"]);
+            expect(result.matchedPrefixLength).toBe(16);
+        });
+
+        it("still prefers longer when both are below EOI", () => {
+            const shorter: CompletionResult = {
+                completions: ["a"],
+                matchedPrefixLength: 5,
+                afterWildcard: "all",
+            };
+            const longer: CompletionResult = {
+                completions: ["b"],
+                matchedPrefixLength: 10,
+                afterWildcard: "all",
+            };
+            const result = mergeCompletionResults(shorter, longer, 20)!;
+            expect(result.completions).toEqual(["b"]);
+            expect(result.matchedPrefixLength).toBe(10);
+        });
+
+        it("still prefers longer when longer is at EOI but shorter has no completions", () => {
+            const shorter: CompletionResult = {
+                completions: [],
+                matchedPrefixLength: 0,
+            };
+            const eoi: CompletionResult = {
+                completions: ["track"],
+                matchedPrefixLength: 17,
+                afterWildcard: "all",
+            };
+            const result = mergeCompletionResults(shorter, eoi, 17)!;
+            expect(result.completions).toEqual(["track"]);
+            expect(result.matchedPrefixLength).toBe(17);
+        });
+
+        it('still prefers longer when afterWildcard is "none"', () => {
+            const anchored: CompletionResult = {
+                completions: ["by"],
+                matchedPrefixLength: 16,
+            };
+            const eoi: CompletionResult = {
+                completions: ["track"],
+                matchedPrefixLength: 17,
+                afterWildcard: "none",
+            };
+            const result = mergeCompletionResults(anchored, eoi, 17)!;
+            expect(result.completions).toEqual(["track"]);
+            expect(result.matchedPrefixLength).toBe(17);
         });
     });
 });

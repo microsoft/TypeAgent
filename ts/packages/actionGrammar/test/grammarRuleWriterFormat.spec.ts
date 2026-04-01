@@ -24,8 +24,8 @@ function roundTrip(src: string, maxLineLength?: number) {
 //
 // A single grammar that touches every code path in writeGrammarRules:
 //   - file-level leading + trailing comments
-//   - entity declarations with leading/trailing comments
-//   - long entity list that breaks into block at narrow widths
+//   - source-less imports (entity declarations) with leading/trailing comments
+//   - long source-less import list that breaks into block at narrow widths
 //   - wildcard and named imports with leading/trailing comments
 //   - long named import list that breaks into block at narrow widths
 //   - all three non-default spacing annotations
@@ -53,10 +53,10 @@ const FULL_GRAMMAR = `\
 // Copyright (c) Example.
 // All formatting patterns in one grammar.
 
-// entities section
-entity Artist, Album; // known types
+// entities section (source-less imports)
+import { Artist, Album }; // known types
 // long entity list (breaks at maxLineLength=40)
-entity LongEntityAlpha, LongEntityBeta, LongEntityGamma;
+import { LongEntityAlpha, LongEntityBeta, LongEntityGamma };
 
 // wildcard import
 import * from "baseGrammar"; // base rules
@@ -197,7 +197,7 @@ first option here
 // says "all whitespace and comments are skipped" but the parser was previously
 // crashing or silently discarding them:
 //
-//   1. Entity name: leadingComments / trailingComment per name
+//   1. Import (source-less): afterImportComments, afterCloseBraceComments, per-name comments
 //   2. Import: afterImportComments, afterCloseBraceComments, afterFromComments
 //   3. Import wildcard: afterStarComments
 //   4. Import name: leadingComments / trailingComment per name
@@ -214,8 +214,8 @@ first option here
 const STRUCTURAL_COMMENTS = `\
 // Grammar exercising comment preservation at all structural positions.
 
-// entity: per-name leading and trailing block comments
-entity /* eL1 */ Artist /* eT1 */, /* eL2 */ Album;
+// source-less import: per-name leading and trailing block comments
+import { /* eL1 */ Artist /* eT1 */, /* eL2 */ Album };
 
 // import: after-keyword, per-name leading/trailing, after-brace comments
 import /* kw */ { /* nL1 */ PhraseA /* nT1 */, /* nL2 */ PhraseB /* nT2 */ } /* brace */ from "phrases";

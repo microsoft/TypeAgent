@@ -9,7 +9,7 @@
       "description": "Keywords describing the target page or link text"
     }
   },
-  "script": "async function execute(browser, params) {\n    const navLink = await browser.extractComponent(\n        {\n            typeName: 'NavigationLink',\n            schema: '{ title: string; linkSelector: string; }'\n        },\n        params.keywords\n    );\n    if (!navLink || !navLink.linkSelector) {\n        throw new Error('Could not find navigation link matching: ' + params.keywords);\n    }\n    await browser.click(navLink.linkSelector);\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Navigated to ' + navLink.title };\n}",
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const navLink = await browser.extractComponent<{ title: string; linkSelector: string }>(\n        {\n            typeName: 'NavigationLink',\n            schema: '{ title: string; linkSelector: string; }'\n        },\n        params.keywords\n    );\n    if (!navLink || !navLink.linkSelector) {\n        throw new Error('Could not find navigation link matching: ' + params.keywords);\n    }\n    await browser.click(navLink.linkSelector);\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Navigated to ' + navLink.title };\n}",
   "grammarPatterns": [
     "navigate to $(keywords:wildcard)",
     "go to $(keywords:wildcard) page",

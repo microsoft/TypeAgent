@@ -41,12 +41,22 @@ export interface WebFlowIndex {
     flows: Record<string, WebFlowIndexEntry>;
 }
 
+export interface WebFlowParameterMeta {
+    name: string;
+    type: "string" | "number" | "boolean";
+    required: boolean;
+    description: string;
+    valueOptions?: string[];
+}
+
 export interface WebFlowIndexEntry {
     description: string;
     scope: WebFlowScope;
     flowFile: string;
     scriptFile: string;
     grammarRegistered: boolean;
+    grammarRuleText?: string;
+    parameters?: WebFlowParameterMeta[];
     source: WebFlowSource["type"];
     created: string;
 }

@@ -1326,29 +1326,13 @@ export class DefaultDiscoveryServices implements DiscoveryServices {
     constructor(private chromeService: ExtensionServiceBase) {}
 
     async loadDiscoverData(): Promise<any> {
-        const response = await this.chromeService.getDiscoverInsights(
-            10,
-            "30d",
-        );
-
-        // Return the response in the expected format for the discovery panel
-        if (response && response.success) {
-            return {
-                success: true,
-                trendingTopics: response.trendingTopics || [],
-                readingPatterns: response.readingPatterns || [],
-                popularPages: response.popularPages || [],
-                topDomains: response.topDomains || [],
-            };
-        } else {
-            return {
-                success: false,
-                error: response?.error || "Failed to load discover data",
-                trendingTopics: [],
-                readingPatterns: [],
-                popularPages: [],
-                topDomains: [],
-            };
-        }
+        return {
+            success: false,
+            error: "Discovery insights not available",
+            trendingTopics: [],
+            readingPatterns: [],
+            popularPages: [],
+            topDomains: [],
+        };
     }
 }

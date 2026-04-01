@@ -443,6 +443,8 @@ export function createExternalBrowserServer(channel: RpcChannel) {
             const targetTab = await ensureActiveTab();
             return screenshotCoordinator.captureScreenshot({
                 tabId: targetTab.id,
+                format: "jpeg",
+                quality: 0.8,
             });
         },
         getPageTextContent: async (): Promise<string> => {

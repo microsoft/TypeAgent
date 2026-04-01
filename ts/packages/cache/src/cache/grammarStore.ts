@@ -18,12 +18,18 @@ import {
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
-import { CompletionDirection, SeparatorMode } from "@typeagent/agent-sdk";
+import {
+    CompletionDirection,
+    SeparatorMode,
+    AfterWildcard,
+} from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     CompletionProperty,
     CompletionResult,
     MatchOptions,
+    mergeAfterWildcard,
+    shouldPreferNewResult,
 } from "../constructions/constructionCache.js";
 import { MatchResult, GrammarStore } from "./types.js";
 import { getSchemaNamespaceKey, splitSchemaNamespaceKey } from "./cache.js";
@@ -122,7 +128,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     `Failed to compile grammar to NFA for ${schemaName}:`,
                     error,
                 );
-                // Fall back to old matcher if compilation fails
+                // NFA compilation failed; fall back to simple grammar matcher
             }
         }
         if (this.useDFA && entry.nfa) {
@@ -263,7 +269,7 @@ export class GrammarStoreImpl implements GrammarStore {
 
     // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
-        requestPrefix: string,
+        input: string,
         options?: MatchOptions,
         direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
@@ -280,7 +286,7 @@ export class GrammarStoreImpl implements GrammarStore {
         let separatorMode: SeparatorMode | undefined;
         let closedSet: boolean | undefined;
         let directionSensitive: boolean = false;
-        let openWildcard: boolean = false;
+        let afterWildcard: AfterWildcard | undefined;
         const filter = new Set(namespaceKeys);
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
@@ -288,7 +294,7 @@ export class GrammarStoreImpl implements GrammarStore {
             }
             if (this.useDFA && entry.dfa) {
                 // DFA-based completions
-                const tokens = requestPrefix
+                const tokens = input
                     .trim()
                     .split(/\s+/)
                     .filter((t) => t.length > 0);
@@ -320,7 +326,7 @@ export class GrammarStoreImpl implements GrammarStore {
                 }
             } else if (this.useNFA && entry.nfa) {
                 // NFA-based completions: tokenize into complete whole tokens
-                const tokens = requestPrefix
+                const tokens = input
                     .trim()
                     .split(/\s+/)
                     .filter((t) => t.length > 0);
@@ -355,20 +361,29 @@ export class GrammarStoreImpl implements GrammarStore {
                 // simple grammar-based completions
                 const partial = matchGrammarCompletion(
                     entry.grammar,
-                    requestPrefix,
+                    input,
                     matchedPrefixLength,
                     direction,
                 );
                 const partialPrefixLength = partial.matchedPrefixLength ?? 0;
-                if (partialPrefixLength > matchedPrefixLength) {
-                    // Longer prefix — discard shorter-match results.
+                if (partialPrefixLength !== matchedPrefixLength) {
+                    const adopt = shouldPreferNewResult(
+                        matchedPrefixLength,
+                        afterWildcard,
+                        partialPrefixLength,
+                        partial.afterWildcard,
+                        input.length,
+                    );
+
+                    if (!adopt) continue;
+
                     matchedPrefixLength = partialPrefixLength;
                     completions.length = 0;
                     properties.length = 0;
                     separatorMode = undefined;
                     closedSet = undefined;
                     directionSensitive = false;
-                    openWildcard = false;
+                    afterWildcard = undefined;
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
                     completions.push(...partial.completions);
@@ -390,9 +405,11 @@ export class GrammarStoreImpl implements GrammarStore {
                     // length is direction-sensitive.
                     directionSensitive =
                         directionSensitive || partial.directionSensitive;
-                    // True if any grammar result at this prefix
-                    // length has an open wildcard.
-                    openWildcard = openWildcard || partial.openWildcard;
+                    // Tri-state merge for afterWildcard.
+                    afterWildcard = mergeAfterWildcard(
+                        afterWildcard,
+                        partial.afterWildcard,
+                    );
                     if (
                         partial.properties !== undefined &&
                         partial.properties.length > 0
@@ -423,7 +440,7 @@ export class GrammarStoreImpl implements GrammarStore {
             separatorMode,
             closedSet,
             directionSensitive,
-            openWildcard,
+            afterWildcard,
         };
     }
 }

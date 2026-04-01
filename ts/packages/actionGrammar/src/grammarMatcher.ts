@@ -16,17 +16,17 @@ import {
 } from "./grammarTypes.js";
 
 // Separator mode for completion results.  Structurally identical to
-// SeparatorMode from @typeagent/agent-sdk; independently defined here so
-// actionGrammar does not depend on agentSdk.  The grammar matcher only
-// produces "spacePunctuation", "optional", and "none" — never "space"
+// SeparatorMode from @typeagent/agent-sdk (command.ts); independently
+// defined here so actionGrammar does not depend on agentSdk.  Keep
+// both definitions in sync.  The grammar matcher only produces
+// "spacePunctuation", "optional", and "none" — never "space"
 // (which is strictly command/flag-level).
-type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
-const debugCompletion = registerDebug("typeagent:grammar:completion");
 
 // Treats spaces and punctuation as word separators
-const separatorRegExpStr = "\\s\\p{P}";
+export const separatorRegExpStr = "\\s\\p{P}";
 const separatorRegExp = new RegExp(`[${separatorRegExpStr}]+`, "yu");
 const wildcardTrimRegExp = new RegExp(
     `[${separatorRegExpStr}]*([^${separatorRegExpStr}](?:.*[^${separatorRegExpStr}])?)[${separatorRegExpStr}]*$`,
@@ -69,7 +69,7 @@ export function needsSeparatorInAutoMode(a: string, b: string): boolean {
     }
     return isWordBoundaryScript(a) && isWordBoundaryScript(b);
 }
-function requiresSeparator(
+export function requiresSeparator(
     a: string,
     b: string,
     mode: CompiledSpacingMode,
@@ -112,7 +112,7 @@ function candidateSeparatorMode(
 // Merge a new candidate's separator mode into the running aggregate.
 // The mode requiring the strongest separator wins (i.e. the mode that
 // demands the most from the user): space > spacePunctuation > optional > none.
-function mergeSeparatorMode(
+export function mergeSeparatorMode(
     current: SeparatorMode | undefined,
     needsSep: boolean,
     spacingMode: CompiledSpacingMode,
@@ -139,7 +139,7 @@ function mergeSeparatorMode(
     return "none";
 }
 
-function isBoundarySatisfied(
+export function isBoundarySatisfied(
     request: string,
     index: number,
     mode: CompiledSpacingMode,
@@ -217,12 +217,12 @@ type ParentMatchState = {
 
 // A wildcard slot awaiting its capture value.  Used on MatchState.pendingWildcard
 // and saved across finalizeState calls for backward completion.
-type PendingWildcard = {
+export type PendingWildcard = {
     readonly start: number;
     readonly valueId: number | undefined;
 };
 
-type MatchState = {
+export type MatchState = {
     // Current context
     name: string; // For debugging
     parts: GrammarPart[];
@@ -253,7 +253,7 @@ type MatchState = {
     // — i.e., a wildcard preceded this part and the part's position
     // was determined by scanning forward through the wildcard region.
     // When backward backs up to such a part, the position is ambiguous
-    // (see openWildcard on GrammarCompletionResult).
+    // (see afterWildcard on GrammarCompletionResult in grammarCompletion.ts).
     lastMatchedPartInfo?:
         | {
               readonly type: "string";
@@ -389,7 +389,7 @@ function createValueForVariable(
     );
 }
 
-function createValue(
+export function createValue(
     node: CompiledValueNode | undefined,
     valueIds: ValueIdNode | undefined,
     values: MatchedValueEntry | undefined,
@@ -425,24 +425,45 @@ function createValue(
         case "object": {
             const obj: Record<string, any> = {};
 
-            for (const [k, v] of Object.entries(node.value)) {
-                if (v === null) {
-                    // Shorthand form: { k } means { k: k }
-                    obj[k] = createValueForVariable(
-                        k,
+            for (const elem of node.value) {
+                if (elem.type === "spread") {
+                    // Spread: evaluate the argument and merge into the object.
+                    const inner = createValue(
+                        elem.argument,
                         valueIds,
                         values,
-                        propertyName ? `${propertyName}.${k}` : k,
+                        propertyName,
+                        wildcardPropertyNames,
+                        partialValueId,
+                        stat,
+                    );
+                    if (inner === undefined) {
+                        // Partial match — the spread argument's variable
+                        // hasn't been captured yet.  Skip silently.
+                    } else if (typeof inner === "object") {
+                        Object.assign(obj, inner);
+                    } else {
+                        throw new Error(
+                            `Internal error: spread argument must produce an object, got ${typeof inner}`,
+                        );
+                    }
+                } else if (elem.value === null) {
+                    // Shorthand form: { k } means { k: k }
+                    obj[elem.key] = createValueForVariable(
+                        elem.key,
+                        valueIds,
+                        values,
+                        propertyName ? `${propertyName}.${elem.key}` : elem.key,
                         wildcardPropertyNames,
                         partialValueId,
                         stat,
                     );
                 } else {
-                    obj[k] = createValue(
-                        v,
+                    obj[elem.key] = createValue(
+                        elem.value,
                         valueIds,
                         values,
-                        propertyName ? `${propertyName}.${k}` : k,
+                        propertyName ? `${propertyName}.${elem.key}` : elem.key,
                         wildcardPropertyNames,
                         partialValueId,
                         stat,
@@ -530,7 +551,7 @@ function createValue(
 // the matcher rejects wildcard slots that contain no meaningful content.
 // In "none" mode no trimming is performed; only a truly zero-length capture
 // is rejected.
-function getWildcardStr(
+export function getWildcardStr(
     request: string,
     start: number,
     end: number,
@@ -618,7 +639,7 @@ function addValue(
     }
 }
 
-function nextNonSeparatorIndex(request: string, index: number) {
+export function nextNonSeparatorIndex(request: string, index: number) {
     if (request.length <= index) {
         return request.length;
     }
@@ -629,27 +650,9 @@ function nextNonSeparatorIndex(request: string, index: number) {
     return match === null ? index : index + match[0].length;
 }
 
-// When `index` is followed only by separator characters (whitespace /
-// punctuation) until end-of-string, return `text.length` so that the
-// trailing separators are included in the consumed prefix.  Otherwise
-// return `index` unchanged.
-//
-// This makes completion trailing-space-sensitive: "play music " reports
-// matchedPrefixLength=11 (including the space) instead of 10.  The
-// dispatcher no longer strips trailing whitespace, so the grammar must
-// include it when the user has already typed it.
-function consumeTrailingSeparators(text: string, index: number): number {
-    if (index >= text.length) {
-        return index;
-    }
-    return nextNonSeparatorIndex(text, index) >= text.length
-        ? text.length
-        : index;
-}
-
 // Finalize the state to capture the last wildcard if any
 // and make sure to reject any trailing un-matched non-separator characters.
-function finalizeState(state: MatchState, request: string) {
+export function finalizeState(state: MatchState, request: string) {
     const pendingWildcard = state.pendingWildcard;
     if (pendingWildcard !== undefined) {
         const value = getWildcardStr(
@@ -737,7 +740,7 @@ function finalizeMatch(
     results.push(matchResult);
 }
 
-function finalizeNestedRule(
+export function finalizeNestedRule(
     state: MatchState,
     pending?: MatchState[],
     partial: boolean = false,
@@ -849,207 +852,6 @@ function matchStringPartWithWildcard(
             `Rejected matched string '${part.value.join(" ")}' at ${wildcardEnd} with empty wildcard`,
         );
     }
-}
-
-// Greedily match keyword words against text starting at startIndex.
-// Returns the number of fully matched words and cursor positions.
-//
-// The first word allows an optional non-greedy leading separator
-// ([\s\p{P}]*?) so callers don't need to pre-skip whitespace.
-// Subsequent words use strict separators based on requiresSeparator.
-// isBoundarySatisfied is checked after every word — this is a no-op
-// at end-of-text and otherwise prevents partial-word matches
-// (e.g. "play" inside "playback").
-function matchWordsGreedily(
-    words: string[],
-    text: string,
-    startIndex: number,
-    spacingMode: CompiledSpacingMode,
-): { matchedWords: number; endIndex: number; prevEndIndex: number } {
-    let index = startIndex;
-    let prevIndex = startIndex;
-    let matchedWords = 0;
-
-    for (let k = 0; k < words.length; k++) {
-        const word = words[k];
-        const escaped = escapeMatch(word);
-
-        let regExpStr: string;
-        if (spacingMode === "none") {
-            regExpStr = escaped;
-        } else if (k === 0) {
-            regExpStr = `[${separatorRegExpStr}]*?${escaped}`;
-        } else {
-            const sep = requiresSeparator(
-                words[k - 1].at(-1)!,
-                word[0],
-                spacingMode,
-            )
-                ? `[${separatorRegExpStr}]+`
-                : `[${separatorRegExpStr}]*`;
-            regExpStr = sep + escaped;
-        }
-
-        const re = new RegExp(regExpStr, "iuy");
-        re.lastIndex = index;
-        const m = re.exec(text);
-        if (m === null) break;
-
-        const newIndex = m.index + m[0].length;
-        if (!isBoundarySatisfied(text, newIndex, spacingMode)) {
-            break;
-        }
-
-        prevIndex = index;
-        index = newIndex;
-        matchedWords++;
-    }
-
-    return { matchedWords, endIndex: index, prevEndIndex: prevIndex };
-}
-
-// Try matching keyword words forward from startIndex in prefix.
-// Returns the position and completion word if a partial match is found,
-// or undefined if no match or all words matched fully.
-function matchKeywordWordsFrom(
-    prefix: string,
-    startIndex: number,
-    words: string[],
-    spacingMode: CompiledSpacingMode,
-): { position: number; completionWord: string } | undefined {
-    const { matchedWords, endIndex } = matchWordsGreedily(
-        words,
-        prefix,
-        startIndex,
-        spacingMode,
-    );
-
-    // All words matched fully — not a partial match.
-    if (matchedWords >= words.length) return undefined;
-
-    // Consumed to end of prefix with more words remaining.
-    if (matchedWords > 0 && endIndex === prefix.length) {
-        return {
-            position: prefix.length,
-            completionWord: words[matchedWords],
-        };
-    }
-
-    // Check if remaining text is a partial prefix of the next word.
-    const word = words[matchedWords];
-    let textToCheck = prefix.slice(endIndex);
-    if (matchedWords > 0 && spacingMode !== "none") {
-        const sepMatch = textToCheck.match(
-            new RegExp(`^[${separatorRegExpStr}]+`, "u"),
-        );
-        if (sepMatch) {
-            textToCheck = textToCheck.slice(sepMatch[0].length);
-        } else if (
-            requiresSeparator(
-                words[matchedWords - 1].at(-1)!,
-                word[0],
-                spacingMode,
-            )
-        ) {
-            return undefined;
-        }
-    }
-
-    if (
-        textToCheck.length > 0 &&
-        textToCheck.length < word.length &&
-        word.toLowerCase().startsWith(textToCheck.toLowerCase())
-    ) {
-        return {
-            position: prefix.length - textToCheck.length,
-            completionWord: word,
-        };
-    }
-    return undefined;
-}
-
-// When a wildcard has absorbed all remaining input (via finalizeState),
-// check whether the absorbed text ends with a separator-delimited prefix
-// of the first word of the next keyword part.  Returns the position where
-// the partial keyword starts (i.e. the first non-separator character after
-// the last separator), or undefined if no partial keyword is found.
-//
-// Used in Category 2 backward to offer the keyword at the partial keyword
-// position instead of backing up to the wildcard start.
-//
-// Handles both single-word and multi-word keyword parts.  For a keyword
-// like ["played", "by"], the function recognizes:
-//   "p"        → partial of word 0 → completion = "played"
-//   "played"   → full word 0       → completion = "by"
-//   "played b" → full word 0 + partial of word 1 → completion = "by"
-//
-// Honors spacingMode between keyword words, using the same separator
-// logic as matchStringPart:
-//   "none"     → words are directly adjacent (no separators)
-//   "required" → [\s\p{P}]+ between words
-//   "optional" → [\s\p{P}]* between words
-//   auto       → + or * depending on requiresSeparator() for adjacent chars
-function findPartialKeywordInWildcard(
-    prefix: string,
-    wildcardStart: number,
-    part: StringPart,
-    spacingMode: CompiledSpacingMode,
-): { position: number; completionWord: string } | undefined {
-    const sepCharRe = /[\s\p{P}]/u;
-    const minStart = wildcardStart + 1;
-
-    // Scan candidate start positions from right to left.
-    for (
-        let candidateStart = prefix.length - 1;
-        candidateStart >= minStart;
-        candidateStart--
-    ) {
-        // The candidate position must be a valid boundary between the
-        // wildcard content and the keyword fragment.  This mirrors how
-        // matchStringPart builds its leading separator regex:
-        //   - "none" mode: no separator needed (keywords are adjacent).
-        //   - Other modes: a separator is required only when
-        //     requiresSeparator returns true for the adjacent characters.
-        //     When the keyword starts with punctuation, CJK, or another
-        //     non-word-boundary character, no separator is needed — the
-        //     character itself creates a natural boundary.
-        if (
-            spacingMode !== "none" &&
-            !sepCharRe.test(prefix[candidateStart - 1]) &&
-            requiresSeparator(
-                prefix[candidateStart - 1],
-                part.value[0][0],
-                spacingMode,
-            )
-        ) {
-            continue;
-        }
-
-        const result = matchKeywordWordsFrom(
-            prefix,
-            candidateStart,
-            part.value,
-            spacingMode,
-        );
-        if (result === undefined) {
-            continue;
-        }
-
-        // Verify the wildcard content before the candidate is valid.
-        if (
-            getWildcardStr(
-                prefix,
-                wildcardStart,
-                candidateStart,
-                spacingMode,
-            ) === undefined
-        ) {
-            continue;
-        }
-
-        return result;
-    }
-    return undefined;
 }
 
 function matchStringPartWithoutWildcard(
@@ -1321,7 +1123,11 @@ function matchVarStringPart(state: MatchState, part: VarStringPart) {
     return true;
 }
 
-function matchState(state: MatchState, request: string, pending: MatchState[]) {
+export function matchState(
+    state: MatchState,
+    request: string,
+    pending: MatchState[],
+) {
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
@@ -1437,7 +1243,7 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
     }
 }
 
-function initialMatchState(grammar: Grammar): MatchState[] {
+export function initialMatchState(grammar: Grammar): MatchState[] {
     return grammar.rules
         .map((r, i) => ({
             name: `<Start>[${i}]`,
@@ -1450,98 +1256,6 @@ function initialMatchState(grammar: Grammar): MatchState[] {
             spacingMode: r.spacingMode,
         }))
         .reverse();
-}
-
-export type GrammarCompletionProperty = {
-    match: unknown;
-    propertyNames: string[];
-};
-
-export type GrammarCompletionResult = {
-    completions: string[];
-    properties?: GrammarCompletionProperty[] | undefined;
-    // Number of characters from the input prefix that the grammar consumed
-    // before the completion point.  The shell uses this to determine where
-    // to insert/filter completions (replacing the space-based heuristic).
-    matchedPrefixLength?: number | undefined;
-    // What kind of separator is expected between the content at
-    // `matchedPrefixLength` and the completion text.  This is a
-    // *completion-result* concept (SeparatorMode), derived from the
-    // per-rule *match-time* spacing rules (CompiledSpacingMode /
-    // spacingMode) but distinct from them.
-    //   "spacePunctuation" — whitespace or punctuation required
-    //     (Latin "y" → "m" requires a separator).
-    //   "optional" — separator accepted but not required
-    //     (CJK 再生 → 音楽 does not require a separator).
-    //   "none" — no separator at all ([spacing=none] grammars).
-    // Omitted when no completions were generated.
-    separatorMode?: SeparatorMode | undefined;
-    // True when `completions` is the closed set of valid
-    // continuations after the matched prefix — if the user types
-    // something not in the list, no further completions can exist
-    // beyond it.  False or undefined means the parser can continue
-    // past unrecognized input and find more completions (e.g.
-    // wildcard/entity slots whose values are external to the grammar).
-    closedSet?: boolean | undefined;
-    // True when the result would differ if queried with the opposite
-    // direction.  When false, the caller can skip re-fetching on
-    // direction change.
-    directionSensitive: boolean;
-    // True when the completion's `matchedPrefixLength` position is
-    // *ambiguous* — it could shift forward as the user types more.
-    //
-    // A position is **definite** when it is structurally pinned by
-    // matched grammar tokens: no amount of additional typing can
-    // change where it falls.  Examples: the start of a wildcard
-    // (pinned by the preceding keyword), or a keyword matched
-    // without a preceding wildcard.
-    //
-    // A position is **ambiguous** when it sits at the boundary of a
-    // wildcard whose extent is not fully determined.  The wildcard
-    // could absorb more text, moving the boundary forward.  This
-    // happens in two cases:
-    //   - **Forward:** a keyword completion follows a wildcard that
-    //     was finalized at end-of-input (via `finalizeState`).  The
-    //     wildcard consumed everything up to EOI, but the user may
-    //     still be typing within it.
-    //   - **Backward:** completion backs up to a keyword that was
-    //     matched after a captured wildcard (`afterWildcard`).  The
-    //     wildcard's end was pinned by this keyword, but backing up
-    //     un-pins it — the wildcard could extend to absorb the
-    //     keyword text.
-    //
-    // When true, the caller should allow its anchor to slide forward
-    // (the "slide" policy) rather than re-fetching or giving up.
-    openWildcard: boolean;
-};
-
-function getGrammarCompletionProperty(
-    state: MatchState,
-    valueId: number,
-): GrammarCompletionProperty | undefined {
-    const temp = { ...state };
-
-    while (finalizeNestedRule(temp, undefined, true)) {}
-    if (temp.valueIds === null) {
-        // valueId would have been undefined
-        throw new Error(
-            "Internal Error: state for getGrammarCompletionProperty should not have valueIds be null",
-        );
-    }
-    const wildcardPropertyNames: string[] = [];
-    const match = createValue(
-        temp.value,
-        temp.valueIds,
-        temp.values,
-        "",
-        wildcardPropertyNames,
-        valueId,
-    );
-
-    return {
-        match,
-        propertyNames: wildcardPropertyNames,
-    };
 }
 
 function debugMatch(state: MatchState, msg: string) {
@@ -1569,542 +1283,4 @@ export function matchGrammar(grammar: Grammar, request: string) {
     }
 
     return results;
-}
-
-/**
- * Try to partially match leading words of a multi-word string part
- * against the prefix starting at `startIndex`.  Returns the consumed
- * length and the remaining (unmatched) words as the completion text.
- *
- * - All words matched → returns undefined (caller should treat as
- *   a full match, not a completion candidate).
- * - Some words matched → returns consumed length + next word.
- * - No words matched → returns startIndex + first word.
- *
- * When returning a non-undefined result, it contains exactly one
- * word as the completion text, providing one-word-at-a-time
- * progression.
- */
-function tryPartialStringMatch(
-    part: StringPart,
-    prefix: string,
-    startIndex: number,
-    spacingMode: CompiledSpacingMode,
-    direction?: "forward" | "backward",
-):
-    | {
-          consumedLength: number;
-          remainingText: string;
-          directionSensitive: boolean;
-      }
-    | undefined {
-    const words = part.value;
-    const { matchedWords, endIndex, prevEndIndex } = matchWordsGreedily(
-        words,
-        prefix,
-        startIndex,
-        spacingMode,
-    );
-
-    // Direction matters when at least one word fully matched and no
-    // trailing separator commits the last matched word.
-    const couldBackUp =
-        matchedWords > 0 &&
-        (spacingMode === "none" ||
-            nextNonSeparatorIndex(prefix, endIndex) === endIndex);
-
-    if (direction === "backward" && couldBackUp) {
-        return {
-            consumedLength: prevEndIndex,
-            remainingText: words[matchedWords - 1],
-            directionSensitive: true,
-        };
-    }
-    // Forward (default), or backward with no words fully matched
-    // (nothing to reconsider — e.g. input "pl" still offers "play").
-    // Return undefined when all words matched (exact match).
-    if (matchedWords >= words.length) {
-        return undefined;
-    }
-
-    return {
-        consumedLength: endIndex,
-        remainingText: words[matchedWords],
-        directionSensitive: couldBackUp,
-    };
-}
-
-/**
- * Given a grammar and a user-typed prefix string, determine what completions
- * are available.  The algorithm greedily matches as many grammar parts as
- * possible against the prefix (the "longest completable prefix"), then
- * reports completions from the *next* unmatched part.
- *
- * The function explores every alternative rule/state in the grammar (via the
- * `pending` work-list).  Each state is run through `matchState` which
- * consumes as many parts as the prefix allows.  The state then falls into
- * one of three categories:
- *
- * 1. **Exact match** — the prefix satisfies every part in the rule.
- *    No completion is needed, but `maxPrefixLength` is updated to
- *    the full input length so that completion candidates from shorter
- *    partial matches are eagerly discarded (via `updateMaxPrefixLength`).
- *
- * 2. **Partial match, finalized** — the prefix was consumed (possibly with
- *    trailing separators) but the rule still has remaining parts.
- *    `matchState` returns `false` (could not match the next part) and
- *    `finalizeState` returns `true` (no trailing non-separator junk).
- *    The next unmatched part produces a completion candidate:
- *      - String part → literal keyword completion (e.g. "music").
- *      - Wildcard / number → property completion (handled elsewhere).
- *
- * 3. **Partial match, NOT finalized** — either:
- *      a. A pending wildcard could not be finalized (trailing text is only
- *         separators with no wildcard content) → emit a property completion
- *         for the wildcard's entity type.
- *      b. Trailing text remains that didn't match any part →
- *         attempt word-by-word matching of the current string part
- *         against that text (via `tryPartialStringMatch`).  If some
- *         leading words match they advance the consumed prefix; the
- *         next unmatched word is emitted as a completion candidate.
- *         Candidates from shorter partial matches are automatically
- *         discarded when a longer match updates `maxPrefixLength`.
- *
- * During processing, whenever `maxPrefixLength` advances, all
- * previously accumulated candidates are cleared.  Only candidates
- * whose prefix length equals the current maximum are kept.  This
- * ensures completions from shorter partial matches are discarded
- * when a longer (or exact) match consumed more input.
- *
- * `matchedPrefixLength` tracks the furthest point consumed across all
- * states — including exact matches (via `Math.max`).  This tells the
- * caller where the completable portion of the input ends, so it can
- * position the completion insertion point correctly (especially important
- * for non-space-separated scripts like CJK).
- *
- * `separatorMode` (a {@link SeparatorMode}) indicates what kind of
- * separator is needed between the content at `matchedPrefixLength` and the
- * completion text.  It is determined by the spacing rules (the per-rule
- * {@link CompiledSpacingMode}) between the last character of the matched
- * prefix and the first character of the completion.
- *
- * Architecture: docs/architecture/completion.md — §1 Grammar Matcher
- */
-export function matchGrammarCompletion(
-    grammar: Grammar,
-    prefix: string,
-    minPrefixLength?: number,
-    direction?: "forward" | "backward",
-): GrammarCompletionResult {
-    debugCompletion(
-        `Start completion for prefix ${direction ?? "forward"}: "${prefix}"`,
-    );
-
-    // Seed the work-list with one MatchState per top-level grammar rule.
-    // matchState may push additional states (for nested rules, optional
-    // parts, wildcard extensions, repeat groups) during processing.
-    const pending = initialMatchState(grammar);
-
-    // Direct output arrays — candidates are added eagerly and cleared
-    // whenever maxPrefixLength increases, so no post-loop filtering is
-    // needed.  Only candidates whose prefix length equals the current
-    // maximum are kept.
-    const completions: string[] = [];
-    const properties: GrammarCompletionProperty[] = [];
-    let separatorMode: SeparatorMode | undefined;
-
-    // Whether the accumulated completions form a closed set — if the
-    // user types something not listed, no further completions can exist
-    // beyond it.  Starts true and is set to false when property/wildcard
-    // completions are emitted (entity values are external to the grammar).
-    // Reset to true whenever maxPrefixLength advances (old candidates are
-    // discarded, new batch starts fresh).
-    let closedSet: boolean = true;
-
-    // Track the furthest point the grammar consumed across all
-    // states (including exact matches).  This tells the caller where
-    // the "filter text" begins so it doesn't have to guess from
-    // whitespace (which breaks for CJK and other non-space scripts).
-    let maxPrefixLength = minPrefixLength ?? 0;
-
-    // Whether direction influenced the accumulated results.  Reset
-    // whenever maxPrefixLength advances (old candidates discarded).
-    let directionSensitive = false;
-
-    // Whether the matchedPrefixLength position is ambiguous — see
-    // the openWildcard comment on GrammarCompletionResult for the
-    // full definition of definite vs ambiguous positions.
-    let openWildcard = false;
-
-    // Helper: update maxPrefixLength.  When it increases, all previously
-    // accumulated completions from shorter matches are irrelevant
-    // — clear them.
-    function updateMaxPrefixLength(prefixLength: number): void {
-        if (prefixLength > maxPrefixLength) {
-            maxPrefixLength = prefixLength;
-            completions.length = 0;
-            properties.length = 0;
-            separatorMode = undefined;
-            closedSet = true;
-            directionSensitive = false;
-            openWildcard = false;
-        }
-    }
-
-    // Helper: emit a wildcard/entity property completion at a given
-    // prefix position.  Updates maxPrefixLength, separatorMode, and
-    // closedSet.
-    function emitPropertyCompletion(
-        state: MatchState,
-        valueId: number,
-        prefixPosition: number,
-    ): void {
-        const completionProperty = getGrammarCompletionProperty(state, valueId);
-        if (completionProperty === undefined) return;
-        updateMaxPrefixLength(prefixPosition);
-        if (prefixPosition !== maxPrefixLength) return;
-        properties.push(completionProperty);
-        closedSet = false;
-        let candidateNeedsSep = false;
-        if (prefixPosition > 0 && state.spacingMode !== "none") {
-            candidateNeedsSep = requiresSeparator(
-                prefix[prefixPosition - 1],
-                "a",
-                state.spacingMode,
-            );
-        }
-        separatorMode = mergeSeparatorMode(
-            separatorMode,
-            candidateNeedsSep,
-            state.spacingMode,
-        );
-    }
-
-    // Helper: emit a literal string completion at a given prefix
-    // position.  Updates maxPrefixLength and separatorMode.
-    function emitStringCompletion(
-        state: MatchState,
-        candidatePrefixLength: number,
-        completionText: string,
-    ): void {
-        updateMaxPrefixLength(candidatePrefixLength);
-        if (candidatePrefixLength !== maxPrefixLength) return;
-        let candidateNeedsSep = false;
-        if (
-            candidatePrefixLength > 0 &&
-            completionText.length > 0 &&
-            state.spacingMode !== "none"
-        ) {
-            candidateNeedsSep = requiresSeparator(
-                prefix[candidatePrefixLength - 1],
-                completionText[0],
-                state.spacingMode,
-            );
-        }
-        completions.push(completionText);
-        separatorMode = mergeSeparatorMode(
-            separatorMode,
-            candidateNeedsSep,
-            state.spacingMode,
-        );
-    }
-
-    // Helper: backward completion — back up to the last matched item
-    // (wildcard, literal word, or number).  If a wildcard was captured
-    // after the last matched part, prefer it; otherwise back up to
-    // the last matched part via tryPartialStringMatch (for strings)
-    // or emitPropertyCompletion (for numbers).
-    //
-    // Sets openWildcard=true when backing up to a part that was
-    // matched after a captured wildcard (afterWildcard) — that
-    // position is ambiguous because the wildcard could extend.
-    function emitBackwardCompletion(
-        state: MatchState,
-        savedWildcard: PendingWildcard | undefined,
-    ): void {
-        const wildcardStart = savedWildcard?.start;
-        const partStart = state.lastMatchedPartInfo?.start;
-        if (
-            savedWildcard !== undefined &&
-            savedWildcard.valueId !== undefined &&
-            (partStart === undefined ||
-                (wildcardStart !== undefined && wildcardStart >= partStart))
-        ) {
-            emitPropertyCompletion(
-                state,
-                savedWildcard.valueId,
-                savedWildcard.start,
-            );
-        } else if (state.lastMatchedPartInfo !== undefined) {
-            const info = state.lastMatchedPartInfo;
-            if (info.type === "string") {
-                const backResult = tryPartialStringMatch(
-                    info.part,
-                    prefix,
-                    info.start,
-                    state.spacingMode,
-                    "backward",
-                );
-                if (backResult !== undefined) {
-                    emitStringCompletion(
-                        state,
-                        backResult.consumedLength,
-                        backResult.remainingText,
-                    );
-                    if (info.afterWildcard) {
-                        openWildcard = true;
-                    }
-                } else {
-                    updateMaxPrefixLength(state.index);
-                }
-            } else {
-                // Number part — offer property completion for the
-                // number slot so the user can re-enter a value.
-                emitPropertyCompletion(state, info.valueId, info.start);
-                if (info.afterWildcard) {
-                    openWildcard = true;
-                }
-            }
-        }
-    }
-
-    // --- Main loop: process every pending state ---
-    while (pending.length > 0) {
-        const state = pending.pop()!;
-        debugMatch(state, `resume state`);
-
-        // Attempt to greedily match as many grammar parts as possible
-        // against the prefix.  `matched` is true only when ALL parts in
-        // the rule (including nested rules) were satisfied.  matchState
-        // may also push new derivative states onto `pending` (e.g. for
-        // alternative nested rules, optional-skip paths, wildcard
-        // extensions, repeat iterations).
-        const matched = matchState(state, prefix, pending);
-
-        // Save the pending wildcard before finalizeState clears it.
-        // Needed for backward completion of wildcards at the end of a rule.
-        const savedPendingWildcard: PendingWildcard | undefined =
-            state.pendingWildcard;
-
-        // finalizeState does two things:
-        //   1. If a wildcard is pending at the end, attempt to capture
-        //      all remaining input as its value.
-        //   2. Reject states that leave trailing non-separator characters
-        //      un-consumed (those states don't represent valid parses).
-        // It returns true when the state is "clean" — all input was
-        // consumed (or only trailing separators remain).
-        if (finalizeState(state, prefix)) {
-            // Would backward produce different results than forward?
-            // True when the prefix was fully consumed and there is a
-            // matched part (string/number) or wildcard to back up to.
-            const hasPartToReconsider =
-                state.index >= prefix.length &&
-                (savedPendingWildcard?.valueId !== undefined ||
-                    state.lastMatchedPartInfo !== undefined);
-
-            // --- Category 1: Exact match ---
-            // All parts matched AND prefix was fully consumed.
-            if (matched) {
-                if (direction === "backward" && hasPartToReconsider) {
-                    emitBackwardCompletion(state, savedPendingWildcard);
-                } else {
-                    debugCompletion("Matched. Nothing to complete.");
-                    updateMaxPrefixLength(state.index);
-                }
-                if (hasPartToReconsider) {
-                    directionSensitive = true;
-                }
-                continue;
-            }
-
-            // --- Category 2: Partial match (clean finalization) ---
-            // matchState stopped at state.partIndex because it couldn't
-            // match the next part against the (exhausted) prefix.
-            // That next part is what we offer as a completion.
-            const nextPart = state.parts[state.partIndex];
-
-            if (direction === "backward" && hasPartToReconsider) {
-                // When a wildcard absorbed text ending with a partial
-                // keyword prefix (e.g. "Never b" where "b" prefixes
-                // "by"), offer the keyword at the partial keyword
-                // position instead of backing up to the wildcard start.
-                // The partial keyword position has a higher
-                // matchedPrefixLength and is more useful to the user.
-                if (
-                    savedPendingWildcard?.valueId !== undefined &&
-                    nextPart.type === "string"
-                ) {
-                    const partialResult = findPartialKeywordInWildcard(
-                        prefix,
-                        savedPendingWildcard.start,
-                        nextPart,
-                        state.spacingMode,
-                    );
-                    if (partialResult !== undefined) {
-                        emitStringCompletion(
-                            state,
-                            partialResult.position,
-                            partialResult.completionWord,
-                        );
-                        openWildcard = true;
-                    } else {
-                        emitBackwardCompletion(state, savedPendingWildcard);
-                    }
-                } else {
-                    emitBackwardCompletion(state, savedPendingWildcard);
-                }
-            } else {
-                debugCompletion(
-                    `Completing ${nextPart.type} part ${state.name}`,
-                );
-                if (nextPart.type === "string") {
-                    const partial = tryPartialStringMatch(
-                        nextPart,
-                        prefix,
-                        state.index,
-                        state.spacingMode,
-                        direction,
-                    );
-                    if (partial !== undefined) {
-                        emitStringCompletion(
-                            state,
-                            partial.consumedLength,
-                            partial.remainingText,
-                        );
-                        if (partial.directionSensitive) {
-                            directionSensitive = true;
-                        }
-                    }
-                }
-                // A keyword completion at a position reached by
-                // finalizing a wildcard at end-of-input: the position
-                // is ambiguous (the wildcard could absorb more text).
-                if (savedPendingWildcard?.valueId !== undefined) {
-                    openWildcard = true;
-                }
-            }
-            if (hasPartToReconsider) {
-                directionSensitive = true;
-            }
-            // Note: non-string next parts (wildcard, number, rules) in
-            // Category 2 don't produce completions here — wildcards are
-            // handled by Category 3a (pending wildcard) and nested rules
-            // are expanded by matchState into separate pending states.
-        } else {
-            // --- Category 3: finalizeState failed ---
-            // Either (a) a pending wildcard couldn't capture meaningful
-            // content, or (b) trailing non-separator text remains that
-            // didn't match any grammar part.
-            const pendingWildcard = state.pendingWildcard;
-
-            if (
-                pendingWildcard !== undefined &&
-                pendingWildcard.valueId !== undefined
-            ) {
-                // --- Category 3a: Unfinalizable pending wildcard ---
-                // The grammar reached a wildcard slot but its capture
-                // region is empty or separator-only (e.g. prefix="play "
-                // with wildcard starting at index 4 — the space is not
-                // valid wildcard content).
-                if (
-                    direction === "backward" &&
-                    state.lastMatchedPartInfo !== undefined &&
-                    state.lastMatchedPartInfo.afterWildcard
-                ) {
-                    // Backward: the unfinalizable wildcard follows a
-                    // keyword that was matched after a captured
-                    // wildcard.  Back up to the keyword instead of
-                    // offering property completion for the unfilled
-                    // wildcard — the user hasn't started typing into
-                    // the unfilled slot yet.
-                    emitBackwardCompletion(state, undefined);
-                } else {
-                    // Forward (or backward with nothing to
-                    // reconsider): report a property completion
-                    // describing the wildcard's type so the caller can
-                    // provide entity-specific suggestions.
-                    debugCompletion("Completing wildcard part");
-                    emitPropertyCompletion(
-                        state,
-                        pendingWildcard.valueId,
-                        pendingWildcard.start,
-                    );
-                }
-                // Forward and backward produce different results when
-                // the last matched part followed a captured wildcard.
-                if (state.lastMatchedPartInfo?.afterWildcard) {
-                    directionSensitive = true;
-                }
-            } else if (!matched) {
-                // --- Category 3b: Completion after consumed prefix ---
-                // The grammar stopped at a string part it could not
-                // match.  Report the string part as a completion
-                // candidate regardless of any trailing text — the
-                // caller can use matchedPrefixLength to determine how
-                // much of the input was successfully consumed and
-                // filter completions by any trailing text beyond that
-                // point.  Candidates from shorter partial matches are
-                // automatically discarded when a longer match updates
-                // maxPrefixLength.
-                const currentPart = state.parts[state.partIndex];
-                if (
-                    currentPart !== undefined &&
-                    currentPart.type === "string"
-                ) {
-                    const partial = tryPartialStringMatch(
-                        currentPart,
-                        prefix,
-                        state.index,
-                        state.spacingMode,
-                        direction,
-                    );
-                    if (partial !== undefined) {
-                        emitStringCompletion(
-                            state,
-                            partial.consumedLength,
-                            partial.remainingText,
-                        );
-                        if (partial.directionSensitive) {
-                            directionSensitive = true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Advance past trailing separators so the reported prefix length
-    // includes any trailing whitespace the user typed.  This makes
-    // completion trailing-space-sensitive: "play music " reports
-    // matchedPrefixLength=11 (with the space) rather than 10.
-    //
-    // When advancing, demote separatorMode to "optional" — the
-    // trailing space is already consumed, so no additional separator
-    // is required between the anchor and the completion text.
-    //
-    // Skip this step for backward when directionSensitive is true:
-    // a backward backup may have set maxPrefixLength to a position
-    // within all-separator content (e.g., backing up to the start of
-    // a punctuation-only keyword like "...").  Advancing past the
-    // separators would push maxPrefixLength past the backup point,
-    // invalidating the backward completion.
-    if (direction !== "backward" || !directionSensitive) {
-        const advanced = consumeTrailingSeparators(prefix, maxPrefixLength);
-        if (advanced > maxPrefixLength) {
-            maxPrefixLength = advanced;
-            separatorMode = "optional";
-        }
-    }
-
-    const result: GrammarCompletionResult = {
-        completions,
-        properties,
-        matchedPrefixLength: maxPrefixLength,
-        separatorMode,
-        closedSet,
-        directionSensitive,
-        openWildcard,
-    };
-    debugCompletion(`Completed. ${JSON.stringify(result)}`);
-    return result;
 }

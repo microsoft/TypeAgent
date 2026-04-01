@@ -29,9 +29,13 @@ describe("Agent Grammar Registry", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: { type: "variable", name: "track" },
-                            },
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "track",
+                                    value: { type: "variable", name: "track" },
+                                },
+                            ],
                         },
                     },
                 ],
@@ -217,7 +221,7 @@ describe("Agent Grammar Registry", () => {
             expect(agentGrammar.match(["resume"]).matched).toBe(true);
 
             // Add third rule with entity declaration to test merging
-            const thirdRule = `entity Ordinal;
+            const thirdRule = `import { Ordinal };
 <Start> = <skip>;
 <skip> = skip;`;
 
@@ -355,9 +359,13 @@ describe("Agent Grammar Registry", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                track: { type: "variable", name: "track" },
-                            },
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "track",
+                                    value: { type: "variable", name: "track" },
+                                },
+                            ],
                         },
                     },
                 ],
@@ -378,9 +386,13 @@ describe("Agent Grammar Registry", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                event: { type: "variable", name: "event" },
-                            },
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "event",
+                                    value: { type: "variable", name: "event" },
+                                },
+                            ],
                         },
                     },
                 ],

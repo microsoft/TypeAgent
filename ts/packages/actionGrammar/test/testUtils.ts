@@ -1,11 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { isDeepStrictEqual } from "node:util";
+import { matchGrammar } from "../src/grammarMatcher.js";
 import {
-    matchGrammar,
     matchGrammarCompletion,
     type GrammarCompletionResult,
-} from "../src/grammarMatcher.js";
+} from "../src/grammarCompletion.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchGrammarWithNFA } from "../src/nfaMatcher.js";
 import { tokenizeRequest } from "../src/nfaMatcher.js";
@@ -140,7 +141,7 @@ function testCompletionDFA(
             propertyNames: [p.propertyPath],
         })),
         directionSensitive: false,
-        openWildcard: false,
+        afterWildcard: "none",
     };
 }
 
@@ -149,7 +150,7 @@ export function createTestCompletion(
 ): TestCompletionFn {
     switch (variant) {
         case "grammar":
-            return matchGrammarCompletion;
+            return withInvariantChecks(matchGrammarCompletion);
         case "nfa":
             return testCompletionNFA;
         case "dfa":
@@ -158,7 +159,7 @@ export function createTestCompletion(
 }
 
 const completionVariants: CompletionVariant[] = ["grammar"];
-// TODO: Enable "nfa" and "dfa" variants once they match grammarMatcher completion behavior.
+// TODO: Enable "nfa" and "dfa" variants once they match grammarCompletion behavior.
 // const completionVariants: CompletionVariant[] = ["grammar", "nfa", "dfa"];
 
 /**
@@ -173,4 +174,400 @@ export function describeForEachCompletion(
     describe.each(completionVariants)(`${name} [%s]`, (variant) => {
         fn(createTestCompletion(variant), variant);
     });
+}
+
+// ---------------------------------------------------------------------------
+// Completion invariant checking (dual-direction wrapper)
+//
+// Invariant index (see individual assertion functions for details):
+//
+//  Single-result (assertSingleResultInvariants):
+//   #1  matchedPrefixLength ∈ [minPrefixLength ?? 0, prefix.length]
+//   #2  closedSet=false ↔ properties is non-empty
+//
+//  Truncated-forward (assertTruncatedForwardInvariant):
+//   #3  matchedPrefixLength < prefix.length
+//       → result == completion(input[0..matchedPrefixLength], "forward")
+//
+//  Cross-direction (assertCrossDirectionInvariants):
+//   #4  equal matchedPrefixLength → identical results
+//   #5  !forward.directionSensitive → forward == backward on truncated
+//   #6  !backward.directionSensitive → backward == forward on truncated
+//   #7  forward.directionSensitive → backward backs up on truncated
+//   #8  divergent matchedPrefixLength + backward.directionSensitive
+//       → forward reaches backward's position on truncated
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether two completion results are deeply equal without throwing.
+ * Uses Node's built-in deep equality so this works outside a Jest context.
+ */
+function completionResultsEqual(
+    a: GrammarCompletionResult,
+    b: GrammarCompletionResult,
+): boolean {
+    return isDeepStrictEqual(a, b);
+}
+
+/**
+ * Return a copy of a completion result with completions sorted.
+ * Completion order is not significant — normalize before comparing.
+ */
+function normalizeCompletionResult(r: GrammarCompletionResult) {
+    return {
+        ...r,
+        completions: [...r.completions].sort(),
+    };
+}
+
+/**
+ * Assert invariants that must hold for any single completion result.
+ *
+ * Invariants checked:
+ * - #1: matchedPrefixLength ∈ [minPrefixLength ?? 0, prefix.length]
+ * - #2: closedSet=false ↔ properties is non-empty
+ */
+function assertSingleResultInvariants(
+    result: GrammarCompletionResult,
+    prefix: string,
+    direction: "forward" | "backward",
+    minPrefixLength?: number,
+): void {
+    const mpl = result.matchedPrefixLength ?? 0;
+    const ctx = `[${direction} prefix="${prefix}"]`;
+
+    // 1. matchedPrefixLength bounds
+    if (mpl < (minPrefixLength ?? 0)) {
+        throw new Error(
+            `Invariant: matchedPrefixLength (${mpl}) < minPrefixLength (${minPrefixLength ?? 0}) ${ctx}`,
+        );
+    }
+    if (mpl > prefix.length) {
+        throw new Error(
+            `Invariant: matchedPrefixLength (${mpl}) > prefix.length (${prefix.length}) ${ctx}`,
+        );
+    }
+
+    // 2. closedSet ↔ properties consistency
+    const hasProperties = (result.properties?.length ?? 0) > 0;
+    if (hasProperties && result.closedSet !== false) {
+        throw new Error(
+            `Invariant: properties present but closedSet=${result.closedSet} (should be false) ${ctx}`,
+        );
+    }
+    if (result.closedSet === false && !hasProperties) {
+        throw new Error(
+            `Invariant: closedSet=false but properties is empty ${ctx}`,
+        );
+    }
+}
+
+/**
+ * Assert that truncating input to a result's matchedPrefixLength and
+ * re-running forward produces the same result.
+ *
+ * - #3: result.matchedPrefixLength < prefix.length →
+ *       result === completion(input[0..matchedPrefixLength], "forward")
+ *
+ * Stripping unconsumed trailing input should not change the answer.
+ * For forward results this is a straightforward idempotency check.
+ * For backward results we guard on forward actually reaching the
+ * same position (otherwise a known forward gap would cause a false
+ * failure).
+ */
+function assertTruncatedForwardInvariant(
+    result: GrammarCompletionResult,
+    prefix: string,
+    direction: "forward" | "backward",
+    minPrefixLength: number | undefined,
+    grammar: Grammar,
+    baseFn: TestCompletionFn,
+): void {
+    const mpl = result.matchedPrefixLength ?? 0;
+    if (mpl >= prefix.length) {
+        return;
+    }
+
+    const truncated = prefix.substring(0, mpl);
+    const forwardOnTruncated = baseFn(
+        grammar,
+        truncated,
+        minPrefixLength,
+        "forward",
+    );
+
+    // For backward results, skip when forward can't reach the same
+    // position (known gap — see completion.md § Known gaps).
+    if (
+        direction === "backward" &&
+        (forwardOnTruncated.matchedPrefixLength ?? 0) < mpl
+    ) {
+        return;
+    }
+
+    const sortedResult = normalizeCompletionResult(result);
+    const sortedTruncated = normalizeCompletionResult(forwardOnTruncated);
+    if (!completionResultsEqual(sortedResult, sortedTruncated)) {
+        try {
+            expect(sortedTruncated).toEqual(sortedResult);
+        } catch (e) {
+            const err = e as Error;
+            err.message =
+                `Invariant #3: ${direction} result ≠ completion(input[0..${mpl}]="${truncated}", "forward") ` +
+                `when matchedPrefixLength (${mpl}) < prefix.length (${prefix.length}) ` +
+                `(prefix="${prefix}")\n\n${err.message}`;
+            throw err;
+        }
+    }
+}
+
+/**
+ * Assert cross-direction invariants between forward and backward results.
+ *
+ * On the original input we can only assert one thing:
+ *
+ * - #4: forward.matchedPrefixLength === backward.matchedPrefixLength →
+ *       forward deep-equals backward (equal consumption → identical)
+ *
+ * The remaining invariants are cross-query checks on *truncated* input:
+ *
+ * - #5: !forward.directionSensitive →
+ *       forward === completion(input[0..forward.matchedPrefixLength], "backward")
+ * - #6: !backward.directionSensitive →
+ *       backward === completion(input[0..backward.matchedPrefixLength], "forward")
+ * - #7: forward.directionSensitive →
+ *       completion(input[0..forward.matchedPrefixLength], "backward").matchedPrefixLength
+ *       < forward.matchedPrefixLength  (backward of truncated backs up)
+ * - #8: forward.matchedPrefixLength ≠ backward.matchedPrefixLength
+ *       AND backward.directionSensitive →
+ *       completion(input[0..backward.matchedPrefixLength], "forward").matchedPrefixLength
+ *       ≥ backward.matchedPrefixLength  (forward reaches backward's position)
+ */
+function assertCrossDirectionInvariants(
+    forward: GrammarCompletionResult,
+    backward: GrammarCompletionResult,
+    prefix: string,
+    grammar: Grammar,
+    baseFn: TestCompletionFn,
+): void {
+    const fwdMpl = forward.matchedPrefixLength ?? 0;
+    const bwdMpl = backward.matchedPrefixLength ?? 0;
+
+    // #4: equal matchedPrefixLength → identical results
+    //     If both directions consumed the same amount, all fields must agree.
+    if (fwdMpl === bwdMpl && !completionResultsEqual(forward, backward)) {
+        try {
+            expect(backward).toEqual(forward);
+        } catch (e) {
+            const err = e as Error;
+            err.message =
+                `Invariant #4: forward.matchedPrefixLength === backward.matchedPrefixLength ` +
+                `(${fwdMpl}) but results differ (prefix="${prefix}")\n\n${err.message}`;
+            throw err;
+        }
+    }
+
+    // #5: !forward.directionSensitive →
+    //     forward === completion(input[0..fwd.mpl], "backward")
+    //     When forward says direction doesn't matter at its position,
+    //     backward on the truncated input should produce the same result.
+    //     The cross-query is unconstrained (no minPrefixLength) because
+    //     directionSensitive answers "would backward at input[0..P]
+    //     differ from forward?" — a property of position P itself,
+    //     independent of any caller-imposed floor.
+    if (!forward.directionSensitive) {
+        const truncated = prefix.substring(0, fwdMpl);
+        const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
+        if (!completionResultsEqual(forward, backwardAtFwd)) {
+            try {
+                expect(backwardAtFwd).toEqual(forward);
+            } catch (e) {
+                const err = e as Error;
+                err.message =
+                    `Invariant #5: forward.directionSensitive=false but ` +
+                    `forward ≠ completion(input[0..${fwdMpl}]="${truncated}", "backward") ` +
+                    `(prefix="${prefix}")\n\n${err.message}`;
+                throw err;
+            }
+        }
+    }
+
+    // #6: !backward.directionSensitive →
+    //     backward === completion(input[0..bwd.mpl], "forward")
+    //     When backward says direction doesn't matter at its position,
+    //     forward on the truncated input should produce the same result.
+    if (!backward.directionSensitive) {
+        const truncated = prefix.substring(0, bwdMpl);
+        const forwardAtBwd = baseFn(grammar, truncated, undefined, "forward");
+        // Guard: only check when forward can reach backward's position.
+        // When forwardAtBwd.mpl < bwdMpl, the forward path has a known
+        // gap and can't reproduce backward's position.
+        if ((forwardAtBwd.matchedPrefixLength ?? 0) >= bwdMpl || bwdMpl === 0) {
+            if (!completionResultsEqual(backward, forwardAtBwd)) {
+                try {
+                    expect(forwardAtBwd).toEqual(backward);
+                } catch (e) {
+                    const err = e as Error;
+                    err.message =
+                        `Invariant #6: backward.directionSensitive=false but ` +
+                        `backward ≠ completion(input[0..${bwdMpl}]="${truncated}", "forward") ` +
+                        `(prefix="${prefix}")\n\n${err.message}`;
+                    throw err;
+                }
+            }
+        }
+    }
+
+    // #7: forward.directionSensitive →
+    //     completion(input[0..fwd.mpl], "backward").mpl < fwd.mpl
+    //     When forward says direction matters, backward on the truncated
+    //     input should back up to a shorter position.
+    if (forward.directionSensitive) {
+        const truncated = prefix.substring(0, fwdMpl);
+        const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
+        const backwardAtFwdMpl = backwardAtFwd.matchedPrefixLength ?? 0;
+        if (backwardAtFwdMpl >= fwdMpl) {
+            throw new Error(
+                `Invariant #7: forward.directionSensitive=true but ` +
+                    `completion(input[0..${fwdMpl}]="${truncated}", "backward").matchedPrefixLength ` +
+                    `(${backwardAtFwdMpl}) ≥ forward.matchedPrefixLength (${fwdMpl}) ` +
+                    `(prefix="${prefix}") — backward should back up`,
+            );
+        }
+    }
+
+    // #8: fwdMpl ≠ bwdMpl AND backward.directionSensitive →
+    //     completion(input[0..bwd.mpl], "forward").mpl ≥ bwd.mpl
+    //     When backward backs up to a different position and says direction
+    //     matters there, forward on the truncated input should consume at
+    //     least to backward's position (confirming it's reachable).
+    if (fwdMpl !== bwdMpl && backward.directionSensitive) {
+        const truncated = prefix.substring(0, bwdMpl);
+        const forwardAtBwd = baseFn(grammar, truncated, undefined, "forward");
+        const forwardAtBwdMpl = forwardAtBwd.matchedPrefixLength ?? 0;
+        // Guard: skip when forward can't reach backward's position
+        // at all (mpl=0).  This is a known gap — e.g. number-variable
+        // at EOI where forward doesn't call updateMaxPrefixLength.
+        // See completion.md § Known gaps.
+        if (forwardAtBwdMpl < bwdMpl && forwardAtBwdMpl > 0) {
+            throw new Error(
+                `Invariant #8: backward.directionSensitive=true but ` +
+                    `completion(input[0..${bwdMpl}]="${truncated}", "forward").matchedPrefixLength ` +
+                    `(${forwardAtBwdMpl}) < backward.matchedPrefixLength (${bwdMpl}) ` +
+                    `(prefix="${prefix}") — forward should reach backward's position`,
+            );
+        }
+    }
+}
+
+/**
+ * Wrap a completion function with automatic invariant checking.
+ *
+ * Every call runs both forward and backward internally, asserts
+ * single-result and cross-direction invariants, then returns the
+ * result for the requested direction.
+ */
+function withInvariantChecks(baseFn: TestCompletionFn): TestCompletionFn {
+    return (
+        grammar: Grammar,
+        prefix: string,
+        minPrefixLength?: number,
+        direction?: "forward" | "backward",
+    ): GrammarCompletionResult => {
+        const requestedDirection = direction ?? "forward";
+        const forward = baseFn(grammar, prefix, minPrefixLength, "forward");
+        const backward = baseFn(grammar, prefix, minPrefixLength, "backward");
+
+        assertSingleResultInvariants(
+            forward,
+            prefix,
+            "forward",
+            minPrefixLength,
+        );
+        assertSingleResultInvariants(
+            backward,
+            prefix,
+            "backward",
+            minPrefixLength,
+        );
+
+        assertTruncatedForwardInvariant(
+            forward,
+            prefix,
+            "forward",
+            minPrefixLength,
+            grammar,
+            baseFn,
+        );
+        assertTruncatedForwardInvariant(
+            backward,
+            prefix,
+            "backward",
+            minPrefixLength,
+            grammar,
+            baseFn,
+        );
+
+        assertCrossDirectionInvariants(
+            forward,
+            backward,
+            prefix,
+            grammar,
+            baseFn,
+        );
+
+        return requestedDirection === "backward" ? backward : forward;
+    };
+}
+
+/**
+ * Assert completion metadata fields in a canonical order.
+ * Only the fields present in `expected` are checked.
+ */
+export function expectMetadata(
+    result: GrammarCompletionResult,
+    expected: {
+        completions?: string[];
+        matchedPrefixLength?: number;
+        separatorMode?:
+            | "space"
+            | "spacePunctuation"
+            | "optional"
+            | "none"
+            | undefined;
+        closedSet?: boolean;
+        directionSensitive?: boolean;
+        afterWildcard?: string;
+        properties?: unknown[];
+        sortCompletions?: boolean;
+    },
+): void {
+    if ("completions" in expected) {
+        const actual = expected.sortCompletions
+            ? [...result.completions].sort()
+            : result.completions;
+        expect(actual).toEqual(expected.completions);
+    }
+    if ("matchedPrefixLength" in expected) {
+        expect(result.matchedPrefixLength).toBe(expected.matchedPrefixLength);
+    }
+    if ("separatorMode" in expected) {
+        if (expected.separatorMode === undefined) {
+            expect(result.separatorMode).toBeUndefined();
+        } else {
+            expect(result.separatorMode).toBe(expected.separatorMode);
+        }
+    }
+    if ("closedSet" in expected) {
+        expect(result.closedSet).toBe(expected.closedSet);
+    }
+    if ("directionSensitive" in expected) {
+        expect(result.directionSensitive).toBe(expected.directionSensitive);
+    }
+    if ("afterWildcard" in expected) {
+        expect(result.afterWildcard).toBe(expected.afterWildcard);
+    }
+    if ("properties" in expected) {
+        expect(result.properties).toEqual(expected.properties);
+    }
 }

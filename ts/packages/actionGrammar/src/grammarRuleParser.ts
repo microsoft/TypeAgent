@@ -33,9 +33,8 @@ type SpacingMode = CompiledSpacingMode | "auto";
 const debugParse = registerDebug("typeagent:grammar:parse");
 /**
  * The grammar for cache grammar files is defined as follows (in BNF and regular expressions):
- *   <AgentCacheGrammar> ::= (<EntityDeclaration> | <ImportStatement> | <RuleDefinition>)*
- *   <EntityDeclaration> ::= "entity" <Identifier> ("," <Identifier>)* ";"
- *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) "from" <StringLiteral> ";"
+ *   <AgentCacheGrammar> ::= (<ImportStatement> | <RuleDefinition>)*
+ *   <ImportStatement> ::= "import" (<ImportAll> | <ImportNames>) ("from" <StringLiteral>)? ";"
  *   <ImportAll> ::= "*"
  *   <ImportNames> ::= "{" <Identifier> ("," <Identifier>)* "}"
  *   <RuleDefinition> ::= "export"? <RuleName> <RuleAnnotation>? <ValueType>? "=" <Rules> ";"
@@ -88,9 +87,12 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <RuleRefExpr> ::= <RuleName>
  *   <GroupExpr> ::= "(" <Rules> ( ")" | ")?" | ")*" | ")+" )
  *
- *   <Value> = BooleanValue | NumberValue | StringValue | ObjectValue | ArrayValue | VarReference
+ *   // ── Value (basic mode: enableExpressions=false) ──────────────────────────
+ *   <Value> = <BooleanValue> | <NumberValue> | <StringValue>
+ *           | <ObjectValue> | <ArrayValue> | <VarReference>
  *   <ArrayValue> = "[" (<Value> ("," <Value>)* ","?)? "]"
- *   <ObjectValue> = "{" (<ObjectProperty> ("," <ObjectProperty>)* ","?)? "}"
+ *   <ObjectValue> = "{" (<ObjectElement> ("," <ObjectElement>)* ","?)? "}"
+ *   <ObjectElement> = <ObjectProperty> | <SpreadElement>
  *   <ObjectProperty> = <ObjectPropertyFull> | <ObjectPropertyShort>
  *   <ObjectPropertyFull> = <ObjectPropertyName> ":" <Value>
  *   <ObjectPropertyShort> = <VarReference>
@@ -99,6 +101,61 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   <NumberValue> = <NumberLiteral>
  *   <StringValue> = <StringLiteral>
  *   <VarReference> = <VarName>
+ *
+ *   // ── Value expressions (enableExpressions=true) ───────────────────────────
+ *   // When enableExpressions is true, the <Value> position (after "->")
+ *   // supports full JavaScript-like expressions with operator precedence.
+ *   // In this mode <Value> is replaced by <ValueExpr>.
+ *   //
+ *   // Operator precedence (lowest → highest):
+ *   //   1. Ternary              ? :
+ *   //   2. Nullish coalescing   ??    (cannot mix with || && without parens)
+ *   //   3. Logical OR           ||
+ *   //   4. Logical AND          &&
+ *   //   5. Equality             === !==
+ *   //   6. Comparison           < > <= >=
+ *   //   7. Additive             + -
+ *   //   8. Multiplicative       * / %
+ *   //   9. Unary                - ! typeof
+ *   //  10. Postfix              . ?. [] ?.[] ?.()
+ *   //  11. Primary              literals, identifiers, objects, arrays,
+ *   //                           template literals, (expr), ...expr
+ *   //
+ *   <ValueExpr> ::= <TernaryExpr>
+ *   <TernaryExpr> ::= <ShortCircuitExpr> ( "?" <TernaryExpr> ":" <TernaryExpr> )?
+ *
+ *   <ShortCircuitExpr> ::= <NullishExpr> | <LogicalExpr>
+ *   // Nullish and logical families cannot be mixed without parentheses.
+ *   <NullishExpr> ::= <EqualityExpr> ( "??" <EqualityExpr> )*
+ *   <LogicalExpr> ::= <LogicalAndExpr> ( "||" <LogicalAndExpr> )*
+ *   <LogicalAndExpr> ::= <EqualityExpr> ( "&&" <EqualityExpr> )*
+ *
+ *   <EqualityExpr> ::= <ComparisonExpr> ( ("===" | "!==") <ComparisonExpr> )*
+ *   <ComparisonExpr> ::= <AdditiveExpr> ( ("<" | ">" | "<=" | ">=") <AdditiveExpr> )*
+ *   <AdditiveExpr> ::= <MultiplicativeExpr> ( ("+" | "-") <MultiplicativeExpr> )*
+ *   <MultiplicativeExpr> ::= <UnaryExpr> ( ("*" | "/" | "%") <UnaryExpr> )*
+ *   <UnaryExpr> ::= ("-" | "!" | "typeof") <UnaryExpr> | <PostfixExpr>
+ *
+ *   <PostfixExpr> ::= <PrimaryExpr> <PostfixOp>*
+ *   <PostfixOp> ::= "." <Identifier> ( "(" <ArgList> ")" )?    // member access / method call
+ *                  | "?." <Identifier> ( "(" <ArgList> ")" )?   // optional member / method
+ *                  | "?." "[" <ValueExpr> "]"                   // optional computed access
+ *                  | "?." "(" <ArgList> ")"                     // optional call
+ *                  | "[" <ValueExpr> "]"                        // computed member access
+ *
+ *   <PrimaryExpr> ::= <SpreadElement>
+ *                    | <TemplateLiteral>
+ *                    | "(" <ValueExpr> ")"              // grouped expression
+ *                    | <ObjectValue>
+ *                    | <ArrayValue>
+ *                    | <StringLiteral>
+ *                    | <BooleanValue>
+ *                    | <Identifier>                     // variable reference
+ *                    | <NumberLiteral>
+ *
+ *   <SpreadElement> ::= "..." <ValueExpr>
+ *   <TemplateLiteral> ::= "`" ( <TemplateChars> | "${" <ValueExpr> "}" )* "`"
+ *   <ArgList> ::= <ValueExpr> ( "," <ValueExpr> )*
  *
  *   <VarName> = <Identifier>
  *   <TypeName> = <Identifier>
@@ -228,11 +285,26 @@ type VariableValueNode = CompiledVariableValueNode & {
 // trailingComments: same-line comments after the trailing ',' — block comments
 //   that close before the next newline and/or a final line comment.
 export type ObjectProperty = {
+    type: "property";
     key: string;
     value: ValueNode | null; // null = shorthand: { x } means { x: x }
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
 };
+// A spread element in an ObjectValueNode: { ...expr }.
+export type ObjectSpreadElement = {
+    type: "spread";
+    argument: ValueNode;
+    leadingComments?: Comment[] | undefined;
+    trailingComments?: Comment[] | undefined;
+};
+// A single element in an ObjectValueNode — either a named property or a spread.
+export type ObjectElement = ObjectProperty | ObjectSpreadElement;
+
+/** Type guard: true when the element is a spread (`{ ...expr }`). */
+export function isObjectSpread(e: ObjectElement): e is ObjectSpreadElement {
+    return e.type === "spread";
+}
 
 // A value node as it appears as an element in an array literal.
 // trailingComments: same-line comments after the trailing ','.
@@ -243,7 +315,7 @@ export type ArrayElement = {
 // ObjectValueNode and ArrayValueNode override the `value` field so it can
 // hold recursive ValueNode/ArrayElement references (not just CompiledValueNode).
 type ObjectValueNode = Omit<CompiledObjectValueNode, "value"> & {
-    value: ObjectProperty[];
+    value: ObjectElement[];
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined;
     trailingComments?: Comment[] | undefined;
@@ -290,7 +362,7 @@ export type RuleDefinition = {
 // Import types
 export type ImportStatement = {
     names: CommentedName[] | "*"; // Specific names or * for all
-    source: string; // File path or module name
+    source: string | undefined; // File path or module name; undefined for source-less (entity) imports
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined; // comments before "import"
     afterImportComments?: Comment[] | undefined; // after "import" keyword, before "{" or "*"
@@ -300,18 +372,9 @@ export type ImportStatement = {
     trailingComments?: Comment[] | undefined; // comments on same line as ";"
 };
 
-// Entity declaration — one "entity Foo, Bar;" statement
-export type EntityDeclaration = {
-    names: CommentedName[];
-    leadingComments?: Comment[] | undefined; // comments before "entity"
-    trailingComments?: Comment[] | undefined; // comments on same line as ";"
-};
-
-// Grammar Parse Result (includes entity declarations and imports)
+// Grammar Parse Result (includes imports)
 export type GrammarParseResult = {
-    entities: string[]; // Entity types this grammar depends on (flattened, backward compat)
-    entityDeclarations?: EntityDeclaration[] | undefined; // Structured entity statements with comments
-    imports: ImportStatement[]; // Import statements
+    imports: ImportStatement[]; // Import statements (includes source-less entity imports)
     definitions: RuleDefinition[];
     leadingComments?: Comment[] | undefined; // comments at top of file before first item
     trailingComments?: Comment[] | undefined; // comments after last definition (end of file)
@@ -856,7 +919,7 @@ class GrammarRuleParser implements ValueExprParserContext {
         let pendingLeading = this.parseComments();
 
         let first = true;
-        const obj: ObjectProperty[] = [];
+        const obj: ObjectElement[] = [];
         while (true) {
             if (this.isAtEnd()) {
                 this.throwError("Unexpected end of file in object value.");
@@ -892,11 +955,17 @@ class GrammarRuleParser implements ValueExprParserContext {
                 first = false;
             }
 
-            // Reject spread in objects — only array spread is supported
+            // Spread element: { ...expr }
             if (this.isAt("...")) {
-                this.throwError(
-                    "Spread is not supported in object literals. Use spread in arrays ([...x]) instead.",
-                );
+                this.skipWhitespace(3);
+                const argument = this.parseValueWithComments();
+                obj.push({
+                    type: "spread",
+                    argument,
+                    leadingComments: pendingLeading,
+                } satisfies ObjectSpreadElement);
+                pendingLeading = undefined;
+                continue;
             }
 
             // Parse property name (identifier or string literal)
@@ -923,6 +992,7 @@ class GrammarRuleParser implements ValueExprParserContext {
                 v = this.parseValueWithComments();
             }
             obj.push({
+                type: "property",
                 key: id,
                 value: v,
                 leadingComments: pendingLeading,
@@ -1294,38 +1364,10 @@ class GrammarRuleParser implements ValueExprParserContext {
         return this.tryConsumeTrailingComments(blockOnlyAtEOL);
     }
 
-    private parseEntityDeclaration(
-        leadingComments?: Comment[],
-    ): EntityDeclaration {
-        // entity Ordinal;
-        // entity Ordinal, CalendarDate;
-        this.skipWhitespace(6); // skip "entity"
-        const names: CommentedName[] = [];
-        // Collect leading comments before the first name (after "entity" keyword).
-        let pendingLeading = this.parseComments();
-        while (true) {
-            const name = this.parseId("entity name");
-            // Collect trailing comments after the name, before "," or ";".
-            const trailingComments = this.parseComments();
-            names.push({
-                name,
-                leadingComments: pendingLeading,
-                trailingComments,
-            });
-            if (!this.isAt(",")) break;
-            this.skipWhitespace(1); // skip ","
-            pendingLeading = this.parseComments();
-        }
-        const trailingComments = this.consumeWithTrailingComments(
-            ";",
-            "entity declaration",
-        );
-        return { names, leadingComments, trailingComments };
-    }
-
     private parseImportStatement(leadingComments?: Comment[]): ImportStatement {
-        // import { Name1, Name2 } from "file";
-        // import * from "file";
+        // import { Name1, Name2 } from "file";   (sourced import)
+        // import * from "file";                   (wildcard import)
+        // import { Name1, Name2 };                (source-less / entity import)
         this.skipWhitespace(6); // skip "import"
         const afterImportComments = this.parseComments();
         const pos = this.pos;
@@ -1390,22 +1432,25 @@ class GrammarRuleParser implements ValueExprParserContext {
             this.throwUnexpectedCharError("Expected '{' or '*' after 'import'");
         }
 
-        // Parse "from"
-        if (!this.isAt("from")) {
-            this.throwUnexpectedCharError(
-                "Expected 'from' keyword in import statement",
-            );
-        }
-        this.skipWhitespace(4); // skip "from"
-        const afterFromComments = this.parseComments();
+        // Parse optional "from" clause
+        let source: string | undefined;
+        let afterFromComments: Comment[] | undefined;
+        if (this.isAt("from")) {
+            this.skipWhitespace(4); // skip "from"
+            afterFromComments = this.parseComments();
 
-        // Parse source string
-        if (!this.isAtStringDelimiter()) {
+            // Parse source string
+            if (!this.isAtStringDelimiter()) {
+                this.throwUnexpectedCharError(
+                    "Expected string literal for import source",
+                );
+            }
+            source = this.parseStringLiteral();
+        } else if (names === "*") {
             this.throwUnexpectedCharError(
-                "Expected string literal for import source",
+                "Wildcard import ('import *') requires a 'from' clause",
             );
         }
-        const source = this.parseStringLiteral();
 
         const trailingComments = this.consumeWithTrailingComments(
             ";",
@@ -1426,8 +1471,6 @@ class GrammarRuleParser implements ValueExprParserContext {
     }
 
     public parse(): GrammarParseResult {
-        const entities: string[] = [];
-        const entityDeclarations: EntityDeclaration[] = [];
         const imports: ImportStatement[] = [];
         const definitions: RuleDefinition[] = [];
         let trailingComments: Comment[] | undefined;
@@ -1469,19 +1512,11 @@ class GrammarRuleParser implements ValueExprParserContext {
                 );
                 continue;
             }
-            if (this.isAt("entity")) {
-                const decl = this.parseEntityDeclaration(constructLeading);
-                entityDeclarations.push(decl);
-                entities.push(...decl.names.map((n) => n.name));
-                continue;
-            }
             this.throwUnexpectedCharError(
-                "Expected rule definition, 'import' statement, or 'entity' declaration",
+                "Expected rule definition or 'import' statement",
             );
         }
         return {
-            entities,
-            entityDeclarations,
             imports,
             definitions,
             leadingComments,

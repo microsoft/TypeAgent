@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CompletionDirection, SeparatorMode } from "@typeagent/agent-sdk";
+import {
+    CompletionDirection,
+    SeparatorMode,
+    AfterWildcard,
+} from "@typeagent/agent-sdk";
 import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     ExecutableAction,
@@ -95,18 +99,92 @@ export type CompletionResult = {
     // direction.  When false, the caller can skip re-fetching on
     // direction change.
     directionSensitive?: boolean | undefined;
-    // True when the completions are offered at a position where a
-    // wildcard was finalized at end-of-input.  The wildcard's extent
-    // is ambiguous — the user may still be typing within it — so the
-    // caller should allow the anchor to slide forward on further input
-    // rather than re-fetching or giving up.
-    openWildcard?: boolean | undefined;
+    // Describes how the grammar rules that produced completions at
+    // this position relate to wildcards.  See AfterWildcard in
+    // @typeagent/agent-sdk.
+    //   "none" — no wildcard; position is structurally pinned.
+    //   "some" — mixed; some rules used wildcards, some didn't.
+    //   "all"  — every rule used a wildcard; position can slide.
+    afterWildcard?: AfterWildcard | undefined;
 };
+
+/** The matched prefix reached end-of-input via a wildcard.
+ *  Both "some" and "all" are treated as EOI-wildcard because in both
+ *  cases at least one rule's wildcard absorbed to end-of-input, making
+ *  the longer matchedPrefixLength ambiguous.  shouldPreferNewResult
+ *  uses this to avoid letting an ambiguous longer result displace a
+ *  shorter result that is structurally anchored inside the input. */
+export function isEoiWildcard(
+    matchedLen: number,
+    prefixLength: number,
+    afterWildcard: AfterWildcard | undefined,
+): boolean {
+    return (
+        matchedLen >= prefixLength &&
+        afterWildcard !== undefined &&
+        afterWildcard !== "none"
+    );
+}
+
+/** The matched prefix stops before end-of-input (trailing text filters completions). */
+export function anchorsInsideInput(
+    matchedLen: number,
+    prefixLength: number,
+): boolean {
+    return matchedLen > 0 && matchedLen < prefixLength;
+}
+
+/**
+ * When two results have different matchedPrefixLengths, determine
+ * whether the candidate should be preferred over the incumbent.
+ *
+ * The normal rule is "longer wins", with one exception: a longer
+ * result at end-of-input with afterWildcard != "none" is displaced
+ * by a shorter result that anchors inside the input (the trailing
+ * text filters the shorter result's completions, making it more
+ * informative).
+ *
+ * Returns true when the candidate should replace the incumbent.
+ */
+export function shouldPreferNewResult(
+    currentLen: number,
+    currentAfterWildcard: AfterWildcard | undefined,
+    candidateLen: number,
+    candidateAfterWildcard: AfterWildcard | undefined,
+    prefixLength: number,
+): boolean {
+    if (candidateLen > currentLen) {
+        // Longer wins unless it's EOI wildcard displacing an anchored result.
+        return !(
+            isEoiWildcard(candidateLen, prefixLength, candidateAfterWildcard) &&
+            anchorsInsideInput(currentLen, prefixLength)
+        );
+    }
+    // candidateLen < currentLen (the equal case was handled by the caller).
+    // Shorter candidate wins only when anchored and current is EOI wildcard.
+    return (
+        anchorsInsideInput(candidateLen, prefixLength) &&
+        isEoiWildcard(currentLen, prefixLength, currentAfterWildcard)
+    );
+}
+
+/** Tri-state merge for afterWildcard:
+ *  equal → same; unequal → "some"; both undefined → undefined. */
+export function mergeAfterWildcard(
+    a: AfterWildcard | undefined,
+    b: AfterWildcard | undefined,
+): AfterWildcard | undefined {
+    if (a === undefined && b === undefined) return undefined;
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    return a === b ? a : "some";
+}
 
 // Architecture: docs/architecture/completion.md — §2 Cache Layer
 export function mergeCompletionResults(
     first: CompletionResult | undefined,
     second: CompletionResult | undefined,
+    prefixLength: number,
 ): CompletionResult | undefined {
     if (first === undefined) {
         return second;
@@ -117,13 +195,24 @@ export function mergeCompletionResults(
     // Eagerly discard shorter-prefix completions — consistent with the
     // grammar matcher's approach.  Only the source(s) with the longest
     // matchedPrefixLength contribute completions.
+    //
+    // Exception: when the longer result is at end-of-input with an open
+    // wildcard (the wildcard absorbed all remaining text), a shorter
+    // result that anchors inside the input is more informative — the
+    // trailing text acts as a filter for the shorter result's
+    // completions.  In that case, keep the shorter result.
     const firstLen = first.matchedPrefixLength ?? 0;
     const secondLen = second.matchedPrefixLength ?? 0;
-    if (firstLen > secondLen) {
-        return first;
-    }
-    if (secondLen > firstLen) {
-        return second;
+    if (firstLen !== secondLen) {
+        return shouldPreferNewResult(
+            firstLen,
+            first.afterWildcard,
+            secondLen,
+            second.afterWildcard,
+            prefixLength,
+        )
+            ? second
+            : first;
     }
     // Same prefix length — merge completions from both sources.
     const matchedPrefixLength =
@@ -155,13 +244,12 @@ export function mergeCompletionResults(
                 ? (first.directionSensitive ?? false) ||
                   (second.directionSensitive ?? false)
                 : undefined,
-        // Open wildcard if either source has one.
-        openWildcard:
-            first.openWildcard !== undefined ||
-            second.openWildcard !== undefined
-                ? (first.openWildcard ?? false) ||
-                  (second.openWildcard ?? false)
-                : undefined,
+        // Tri-state merge for afterWildcard:
+        // equal → same; unequal → "some"; both undefined → undefined.
+        afterWildcard: mergeAfterWildcard(
+            first.afterWildcard,
+            second.afterWildcard,
+        ),
     };
 }
 
@@ -400,19 +488,18 @@ export class ConstructionCache {
     }
 
     public completion(
-        requestPrefix: string,
+        input: string,
         options?: MatchOptions,
         direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
-        debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
+        debugCompletion(`Request completion for input: '${input}'`);
         const namespaceKeys = options?.namespaceKeys;
         debugCompletion(`Request completion namespace keys`, namespaceKeys);
 
         // Resolve direction to a boolean: true when the user is actively
         // backing up and no trailing separator has committed the last token.
-        const backward =
-            direction === "backward" && !/[\s\p{P}]$/u.test(requestPrefix);
-        const results = this.match(requestPrefix, options, true, backward);
+        const backward = direction === "backward" && !/[\s\p{P}]$/u.test(input);
+        const results = this.match(input, options, true, backward);
 
         debugCompletion(
             `Request completion construction match: ${results.length}`,
@@ -435,12 +522,10 @@ export class ConstructionCache {
         // are added (entity values are external).  Reset to true when
         // maxPrefixLength advances (old candidates discarded).
         let closedSet: boolean = true;
-        // Direction-sensitive when the opposite direction would produce
-        // different completions.  True when at least one construction
-        // at maxPrefixLength has matched parts to back up to and the
-        // prefix doesn't end with a commit signal (separator).
-        const noTrailingSeparator = !/[\s\p{P}]$/u.test(requestPrefix);
-        let directionSensitive = false;
+        // Whether at least one candidate at maxPrefixLength had a
+        // matched part to reconsider (partialPartCount >= 1).  Reset
+        // when maxPrefixLength advances.
+        let hasMatchedPart = false;
         const rejectReferences = options?.rejectReferences ?? true;
         const langTools = getLanguageTools("en");
 
@@ -451,7 +536,7 @@ export class ConstructionCache {
                 completionProperty.length = 0;
                 separatorMode = undefined;
                 closedSet = true;
-                directionSensitive = false;
+                hasMatchedPart = false;
             }
         }
 
@@ -489,9 +574,9 @@ export class ConstructionCache {
             } else {
                 // Forward: exact match means nothing to complete.
                 if (partialPartCount === construction.parts.length) {
-                    updateMaxPrefixLength(requestPrefix.length);
-                    if (noTrailingSeparator && partialPartCount >= 1) {
-                        directionSensitive = true;
+                    updateMaxPrefixLength(input.length);
+                    if (partialPartCount >= 1) {
+                        hasMatchedPart = true;
                     }
                     continue;
                 }
@@ -505,10 +590,9 @@ export class ConstructionCache {
                 continue; // Shorter than the best match — skip
             }
 
-            // Direction-sensitive when a matched part exists to back
-            // up to and the prefix has no trailing commit signal.
-            if (noTrailingSeparator && partialPartCount >= 1) {
-                directionSensitive = true;
+            // Track whether at least one candidate had matched parts.
+            if (partialPartCount >= 1) {
+                hasMatchedPart = true;
             }
 
             // --- Step 3: Offer literal completions from the part ---
@@ -532,7 +616,7 @@ export class ConstructionCache {
                             completionText.length > 0
                         ) {
                             const needsSep = needsSeparatorInAutoMode(
-                                requestPrefix[candidatePrefixLength - 1],
+                                input[candidatePrefixLength - 1],
                                 completionText[0],
                             );
                             separatorMode = mergeSeparatorMode(
@@ -575,7 +659,7 @@ export class ConstructionCache {
                         });
                         if (candidatePrefixLength > 0) {
                             const needsSep = needsSeparatorInAutoMode(
-                                requestPrefix[candidatePrefixLength - 1],
+                                input[candidatePrefixLength - 1],
                                 "a",
                             );
                             separatorMode = mergeSeparatorMode(
@@ -593,13 +677,26 @@ export class ConstructionCache {
         // length includes any trailing whitespace the user typed.
         // When advancing, demote separatorMode to "optional" — the
         // trailing space is already consumed.
-        if (maxPrefixLength < requestPrefix.length) {
-            const trailing = requestPrefix.substring(maxPrefixLength);
+        //
+        // Skip advancement when backward backed up: the backed-up
+        // position is where backward wants completions to anchor.
+        // Advancing past trailing separator chars would defeat the
+        // backup (e.g. separator-only keywords like "...").
+        if (!backward && maxPrefixLength < input.length) {
+            const trailing = input.substring(maxPrefixLength);
             if (/^[\s\p{P}]+$/u.test(trailing)) {
-                maxPrefixLength = requestPrefix.length;
+                maxPrefixLength = input.length;
                 separatorMode = "optional";
             }
         }
+
+        // Compute directionSensitive.
+        //
+        // Direction-sensitive when: at least one candidate at
+        // maxPrefixLength had a matched part to reconsider, AND no
+        // trailing separator in the input commits the match.
+        const noTrailingSeparator = !/[\s\p{P}]$/u.test(input);
+        const directionSensitive = hasMatchedPart && noTrailingSeparator;
 
         return {
             completions: requestText,

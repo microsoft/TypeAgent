@@ -32,9 +32,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playMusic" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playMusic" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -59,9 +63,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playMusic" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playMusic" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -93,12 +101,16 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: {
-                                type: "literal",
-                                value: "playWildcard",
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: {
+                                    type: "literal",
+                                    value: "playWildcard",
+                                },
                             },
-                        },
+                        ],
                     },
                 },
                 {
@@ -108,9 +120,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playMusic" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playMusic" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -183,12 +199,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: {
-                                type: "literal",
-                                value: "playTrack",
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playTrack" },
                             },
-                        },
+                        ],
                     },
                 },
             ],
@@ -219,12 +236,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: {
-                                type: "literal",
-                                value: "unchecked",
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "unchecked" },
                             },
-                        },
+                        ],
                     },
                 },
                 {
@@ -239,9 +257,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "checked" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "checked" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -301,10 +323,18 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playTrack" },
-                            track: { type: "variable", name: "track" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playTrack" },
+                            },
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -319,10 +349,18 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playId" },
-                            id: { type: "variable", name: "id" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playId" },
+                            },
+                            {
+                                type: "property",
+                                key: "id",
+                                value: { type: "variable", name: "id" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -364,14 +402,26 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: {
-                                type: "literal",
-                                value: "playTrackByArtist",
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: {
+                                    type: "literal",
+                                    value: "playTrackByArtist",
+                                },
                             },
-                            track: { type: "variable", name: "track" },
-                            artist: { type: "variable", name: "artist" },
-                        },
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                            {
+                                type: "property",
+                                key: "artist",
+                                value: { type: "variable", name: "artist" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -407,7 +457,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { track: { type: "variable", name: "track" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -422,7 +478,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { id: { type: "variable", name: "id" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "id",
+                                value: { type: "variable", name: "id" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -478,11 +540,26 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "twoWildcards" },
-                            x: { type: "variable", name: "x" },
-                            y: { type: "variable", name: "y" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: {
+                                    type: "literal",
+                                    value: "twoWildcards",
+                                },
+                            },
+                            {
+                                type: "property",
+                                key: "x",
+                                value: { type: "variable", name: "x" },
+                            },
+                            {
+                                type: "property",
+                                key: "y",
+                                value: { type: "variable", name: "y" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -498,10 +575,21 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "oneWildcard" },
-                            name: { type: "variable", name: "name" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: {
+                                    type: "literal",
+                                    value: "oneWildcard",
+                                },
+                            },
+                            {
+                                type: "property",
+                                key: "name",
+                                value: { type: "variable", name: "name" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -540,10 +628,18 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playTrack" },
-                            track: { type: "variable", name: "track" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playTrack" },
+                            },
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -558,13 +654,21 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: {
-                                type: "literal",
-                                value: "playTrackNumber",
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: {
+                                    type: "literal",
+                                    value: "playTrackNumber",
+                                },
                             },
-                            track: { type: "variable", name: "track" },
-                        },
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -596,9 +700,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playMusic" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playMusic" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -606,9 +714,13 @@ describe("DFA Compilation", () => {
                     parts: [{ type: "string", value: ["pause"] }],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "pause" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "pause" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -624,9 +736,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playTrack" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playTrack" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -662,9 +778,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playMusic" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playMusic" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -675,9 +795,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playSong" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playSong" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -714,9 +838,16 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playGeneric" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: {
+                                    type: "literal",
+                                    value: "playGeneric",
+                                },
+                            },
+                        ],
                     },
                 },
                 {
@@ -727,9 +858,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playMusic" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playMusic" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -761,12 +896,16 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: {
-                                type: "literal",
-                                value: "playFromCurrentTrackList",
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: {
+                                    type: "literal",
+                                    value: "playFromCurrentTrackList",
+                                },
                             },
-                        },
+                        ],
                     },
                 },
                 {
@@ -783,12 +922,16 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: {
-                                type: "literal",
-                                value: "playFromCurrentTrackList",
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: {
+                                    type: "literal",
+                                    value: "playFromCurrentTrackList",
+                                },
                             },
-                        },
+                        ],
                     },
                 },
                 {
@@ -811,9 +954,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: { type: "literal", value: "playTrack" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: { type: "literal", value: "playTrack" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -858,9 +1005,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: { type: "literal", value: "playTrack" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: { type: "literal", value: "playTrack" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -884,9 +1035,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: { type: "literal", value: "playTrack" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: { type: "literal", value: "playTrack" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -933,9 +1088,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: { type: "literal", value: "playTrack" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: { type: "literal", value: "playTrack" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -1001,12 +1160,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: {
-                                type: "literal",
-                                value: "playArtist",
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: { type: "literal", value: "playArtist" },
                             },
-                        },
+                        ],
                     },
                 },
                 {
@@ -1022,9 +1182,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: { type: "literal", value: "playTrack" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: { type: "literal", value: "playTrack" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -1040,9 +1204,13 @@ describe("DFA Compilation", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            actionName: { type: "literal", value: "playAlbum" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "actionName",
+                                value: { type: "literal", value: "playAlbum" },
+                            },
+                        ],
                     },
                 },
             ],

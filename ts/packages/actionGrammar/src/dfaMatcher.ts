@@ -2048,13 +2048,23 @@ function evaluateValueNode(
 
         case "object": {
             const result: Record<string, any> = {};
-            for (const [key, val] of Object.entries(node.value)) {
-                if (val === null) {
-                    // null means "use the variable with the same name as the key"
-                    result[key] = bindings.get(key);
-                } else {
-                    result[key] = evaluateValueNode(val, bindings);
+            for (const elem of node.value) {
+                if (elem.type === "property") {
+                    if (elem.value === null) {
+                        // null means "use the variable with the same name as the key"
+                        result[elem.key] = bindings.get(elem.key);
+                    } else {
+                        result[elem.key] = evaluateValueNode(
+                            elem.value,
+                            bindings,
+                        );
+                    }
                 }
+                // Spread elements are not evaluated in the DFA path.
+                // The current NFA and DFA matchers do not support value
+                // expressions; spread requires runtime evaluation of the
+                // argument, which is only implemented in the NFA
+                // interpreter (grammarMatcher.ts).
             }
             return result;
         }

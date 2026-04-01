@@ -1495,6 +1495,9 @@ importers:
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@4.3.6)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
       website-memory:
         specifier: workspace:*
         version: link:../../memory/website
@@ -1610,9 +1613,6 @@ importers:
       ts-loader:
         specifier: ^9.5.1
         version: 9.5.2(typescript@5.4.5)(webpack@5.105.0(esbuild@0.25.11))
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
       vite:
         specifier: ^6.4.1
         version: 6.4.1(@types/node@20.19.23)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.7.0)
@@ -2475,43 +2475,25 @@ importers:
 
   packages/agents/taskflow:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.12
-        version: 0.2.12(zod@4.3.6)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
-      '@typeagent/agent-server-client':
-        specifier: workspace:*
-        version: link:../../agentServer/client
-      '@typeagent/dispatcher-types':
-        specifier: workspace:*
-        version: link:../../dispatcher/types
-      html-to-text:
-        specifier: ^9.0.5
-        version: 9.0.5
+      debug:
+        specifier: ^4.3.4
+        version: 4.4.3(supports-color@8.1.1)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
     devDependencies:
-      '@typeagent/action-schema-compiler':
-        specifier: workspace:*
-        version: link:../../actionSchemaCompiler
-      '@types/html-to-text':
-        specifier: ^9.0.4
-        version: 9.0.4
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
-      concurrently:
-        specifier: ^9.1.2
-        version: 9.1.2
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
 
   packages/agents/test:
     dependencies:
@@ -4361,6 +4343,9 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
+      action-grammar:
+        specifier: workspace:*
+        version: link:../actionGrammar
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2

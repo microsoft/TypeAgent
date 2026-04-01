@@ -502,7 +502,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "ordinal",
             `
-            entity Ordinal;
+            import { Ordinal };
             <playNth> = play the $(n:Ordinal) song
                 -> { actionName: "playNth", parameters: { index: n } };
             <Start> = <playNth>;
@@ -541,7 +541,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "cardinal",
             `
-            entity Cardinal;
+            import { Cardinal };
             <skipN> = skip $(n:Cardinal) songs
                 -> { actionName: "skip", parameters: { count: n } };
             <Start> = <skipN>;
@@ -890,7 +890,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "ordinalContext",
             `
-            entity Ordinal;
+            import { Ordinal };
             <play> = play the $(n:Ordinal) track on my device
                 -> { actionName: "playNth", parameters: { index: n } };
             <Start> = <play>;
@@ -917,7 +917,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "twoEntities",
             `
-            entity Ordinal, Cardinal;
+            import { Ordinal, Cardinal };
             <playRange> = play from the $(start:Ordinal) to the $(end:Ordinal) track
                 -> { actionName: "playRange", parameters: { start, end } };
             <Start> = <playRange>;
@@ -1107,7 +1107,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "cardinalNested",
             `
-            entity Cardinal;
+            import { Cardinal };
             <Qty> = $(n:Cardinal) -> n;
             <skip> = skip $(count:<Qty>) songs
                 -> { actionName: "skip", parameters: { count } };
@@ -1176,7 +1176,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "mixedOptEntity",
             `
-            entity Ordinal;
+            import { Ordinal };
             <playWithRepeat> = play $(track:wildcard) the $(n:Ordinal) time
                 -> { actionName: "play", parameters: { track, repeat: n } };
             <playOnce> = play $(track:wildcard)
@@ -1202,7 +1202,7 @@ describe("NFA/DFA Parity", () => {
         const { nfa, dfa } = compile(
             "multiVarComp",
             `
-            entity Ordinal, Cardinal;
+            import { Ordinal, Cardinal };
             <playNth>   = play the $(n:Ordinal) song
                 -> { actionName: "playNth", parameters: { index: n } };
             <playTrack> = play $(track:wildcard) by $(artist:wildcard)
@@ -1349,7 +1349,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "ast-ordinal",
             `
-            entity Ordinal;
+            import { Ordinal };
             <skip> = play the $(n:Ordinal) track -> { actionName: "playTrack", parameters: { trackNumber: n } };
             <Start> = <skip>;
             `,
@@ -1408,7 +1408,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "ast-cardinal",
             `
-            entity Cardinal;
+            import { Cardinal };
             <playN> = play $(n:Cardinal) songs -> { actionName: "playN", parameters: { count: n } };
             <Start> = <playN>;
             `,
@@ -1427,7 +1427,7 @@ describe("NFA/DFA Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "counters",
             `
-            entity Cardinal;
+            import { Cardinal };
             <fixed>   = play the music      -> { actionName: "playFixed" };
             <checked> = play $(n:Cardinal) songs -> { actionName: "playN", parameters: { count: n } };
             <unchecked> = play $(track:wildcard) -> { actionName: "play", parameters: { track } };
@@ -1770,7 +1770,7 @@ describe("PhraseSet Completion Parity", () => {
     const { nfa, dfa } = compile(
         "phraseSetCompl",
         `
-        entity CalendarDate;
+        import { CalendarDate };
         <schedule> = <Polite> schedule $(desc:wildcard) for $(date:CalendarDate)
             -> { actionName: "scheduleEvent", parameters: { desc, date } };
         <find> = <Polite> find events on $(date:CalendarDate)
@@ -1874,7 +1874,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "calDate",
             `
-            entity CalendarDate;
+            import { CalendarDate };
             <schedule> = schedule meeting on $(date:CalendarDate)
                 -> { actionName: "schedule", parameters: { date } };
             <schedule2> = schedule meeting for $(date:CalendarDate)
@@ -1914,7 +1914,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "calTime",
             `
-            entity CalendarTime;
+            import { CalendarTime };
             <meetAt> = meet at $(time:CalendarTime)
                 -> { actionName: "meet", parameters: { time } };
             <Start> = <meetAt>;
@@ -1949,7 +1949,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "calTimeRange",
             `
-            entity CalendarTimeRange;
+            import { CalendarTimeRange };
             <block> = block $(range:CalendarTimeRange)
                 -> { actionName: "block", parameters: { range } };
             <Start> = <block>;
@@ -1976,7 +1976,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "calDayRange",
             `
-            entity CalendarDayRange;
+            import { CalendarDayRange };
             <events> = show events for $(range:CalendarDayRange)
                 -> { actionName: "showEvents", parameters: { range } };
             <Start> = <events>;
@@ -2013,7 +2013,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "ordinal",
             `
-            entity Ordinal;
+            import { Ordinal };
             <playNth> = play the $(n:Ordinal) track
                 -> { actionName: "playNth", parameters: { index: n } };
             <Start> = <playNth>;
@@ -2059,7 +2059,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "cardinal",
             `
-            entity Cardinal;
+            import { Cardinal };
             <skip> = skip $(n:Cardinal) songs
                 -> { actionName: "skip", parameters: { count: n } };
             <Start> = <skip>;
@@ -2089,7 +2089,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "percentage",
             `
-            entity Percentage;
+            import { Percentage };
             <vol> = set volume to $(level:Percentage)
                 -> { actionName: "setVolume", parameters: { level } };
             <Start> = <vol>;
@@ -2123,7 +2123,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "calCombined",
             `
-            entity CalendarDate, CalendarTime, CalendarTimeRange;
+            import { CalendarDate, CalendarTime, CalendarTimeRange };
             <schedule> = schedule $(desc:wildcard) on $(date:CalendarDate) at $(time:CalendarTime)
                 -> { actionName: "scheduleEvent", parameters: { desc, date, time } };
             <block> = block $(date:CalendarDate) $(range:CalendarTimeRange)
@@ -2149,7 +2149,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "phraseEntityCombo",
             `
-            entity CalendarDate, Ordinal;
+            import { CalendarDate, Ordinal };
             <schedule> = <Polite> schedule meeting on $(date:CalendarDate)
                 -> { actionName: "schedule", parameters: { date } };
             <playNth> = <Polite> play the $(n:Ordinal) track
@@ -2176,7 +2176,7 @@ describe("Rich Entity Matching Parity", () => {
         const { grammar, nfa, dfa } = compile(
             "phraseMatch",
             `
-            entity CalendarDate;
+            import { CalendarDate };
             <schedule> = <Polite> schedule $(desc:wildcard) for $(date:CalendarDate)
                 -> { actionName: "schedule", parameters: { desc, date } };
             <Start> = <schedule>;
@@ -2229,7 +2229,7 @@ describe("Rich Entity Matching Parity", () => {
         const { nfa, dfa } = compile(
             "entityCompl",
             `
-            entity CalendarDate, CalendarTime, Ordinal, Cardinal;
+            import { CalendarDate, CalendarTime, Ordinal, Cardinal };
             <schedule> = schedule $(desc:wildcard) on $(date:CalendarDate) at $(time:CalendarTime)
                 -> { actionName: "schedule", parameters: { desc, date, time } };
             <playNth> = play the $(n:Ordinal) track

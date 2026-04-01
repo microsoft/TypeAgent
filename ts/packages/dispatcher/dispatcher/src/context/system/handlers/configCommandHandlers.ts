@@ -255,16 +255,23 @@ function showAgentStatus(
 
     if (showSchema || showAction) {
         for (const name of agents.getSchemaNames()) {
+            const loading = agents.isSchemaLoading(name);
             if (showSchema) {
                 const state = agents.isSchemaEnabled(name);
                 const active = agents.isSchemaActive(name);
                 setStatus(status, "schemas", name, state, active, changes);
+                if (loading && status[name] !== undefined) {
+                    status[name]["schemas"] = "⏳";
+                }
             }
 
             if (showAction) {
                 const state = agents.isActionEnabled(name);
                 const active = agents.isActionActive(name);
                 setStatus(status, "actions", name, state, active, changes);
+                if (loading && status[name] !== undefined) {
+                    status[name]["actions"] = "⏳";
+                }
             }
         }
     }

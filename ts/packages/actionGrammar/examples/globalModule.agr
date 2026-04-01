@@ -4,7 +4,7 @@
 // This grammar demonstrates built-in entity types (Ordinal and Cardinal)
 // which are registered at runtime and don't need inline definitions
 
-entity Ordinal, Cardinal;
+import { Ordinal, Cardinal };
 
 // Example usage of built-in entities
 <Start> = <PlayTrackNumber>;

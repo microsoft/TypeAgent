@@ -148,7 +148,7 @@ export async function ensureWebsocketConnected(): Promise<
             },
         );
 
-        // Browser control channel (replaces the old custom browserControlChannel)
+        // Browser control channel
         const browserControlChannel =
             channelProvider.createChannel("browserControl");
         createExternalBrowserServer(browserControlChannel);

@@ -1,0 +1,11 @@
+{
+  "name": "dailyAgendaEmail",
+  "description": "Send yourself an email with today's calendar events",
+  "parameters": [],
+  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> {\n    const events = await api.callAction(\"calendar\", \"findTodaysEvents\", {});\n\n    if (!events.text || events.error) {\n        return { success: false, error: events.error || \"No events found\" };\n    }\n\n    const formatted = await api.queryLLM(\n        \"Format these calendar events as a clean daily agenda with times and titles. Use bullet points.\",\n        { input: events.text, model: \"claude-haiku-4-5-20251001\" },\n    );\n\n    const result = await api.callAction(\"email\", \"sendEmail\", {\n        subject: \"Daily Agenda\",\n        body: formatted.text,\n        to: [\"me\"],\n        genContent: { generateBody: false },\n    });\n\n    return { success: true, message: result.text };\n}",
+  "grammarPatterns": [
+    "send (me)? (my)? daily agenda email",
+    "email (me)? (my)? daily agenda",
+    "daily agenda email"
+  ]
+}

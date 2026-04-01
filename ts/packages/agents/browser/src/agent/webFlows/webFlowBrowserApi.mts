@@ -3,6 +3,12 @@
 
 import { BrowserControl } from "../../common/browserControl.mjs";
 import { WebFlowScope } from "./types.js";
+import { openai as ai } from "aiclient";
+import { createJsonTranslator, MultimodalPromptContent } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:browser:webflow:api");
 
 export interface ComponentDefinition {
     typeName: string;
@@ -40,6 +46,17 @@ export interface WebFlowBrowserAPI {
         componentDef: ComponentDefinition,
         userRequest?: string,
     ): Promise<T>;
+
+    checkPageState(expectedStateDescription: string): Promise<{
+        matched: boolean;
+        explanation: string;
+    }>;
+
+    queryContent(question: string): Promise<{
+        answered: boolean;
+        answerText?: string;
+        confidence?: number;
+    }>;
 }
 
 export class WebFlowBrowserAPIImpl implements WebFlowBrowserAPI {
@@ -146,6 +163,120 @@ export class WebFlowBrowserAPIImpl implements WebFlowBrowserAPI {
         const result = await this.extractComponentFn(componentDef, userRequest);
         return result as T;
     }
+
+    async checkPageState(expectedStateDescription: string): Promise<{
+        matched: boolean;
+        explanation: string;
+    }> {
+        return semanticPageQuery<{ matched: boolean; explanation: string }>(
+            this.browser,
+            "PageStateCheck",
+            `export type PageStateCheck = {
+    matched: boolean;
+    explanation: string;
+};`,
+            `Determine if the current page state matches the expected condition.
+Expected state: "${expectedStateDescription}"
+Analyze the page and set matched=true if the core aspects of the expected state are present.
+Provide a brief explanation of what you found.`,
+        );
+    }
+
+    async queryContent(question: string): Promise<{
+        answered: boolean;
+        answerText?: string;
+        confidence?: number;
+    }> {
+        return semanticPageQuery<{
+            answered: boolean;
+            answerText?: string;
+            confidence?: number;
+        }>(
+            this.browser,
+            "PageContentAnswer",
+            `export type PageContentAnswer = {
+    answered: boolean;
+    answerText?: string;
+    confidence?: number;
+};`,
+            `Answer the following question about the current page content.
+Question: "${question}"
+If the answer is found, set answered=true with the answerText and a confidence score (0-1).
+If not found, set answered=false.`,
+        );
+    }
+}
+
+async function semanticPageQuery<T extends object>(
+    browser: BrowserControl,
+    typeName: string,
+    schema: string,
+    instruction: string,
+): Promise<T> {
+    const htmlFragments = await browser.getHtmlFragments(
+        false,
+        "knowledgeExtraction",
+    );
+
+    let screenshot: string | undefined;
+    try {
+        screenshot = await browser.captureScreenshot();
+    } catch {
+        debug("Screenshot capture failed for semantic query");
+    }
+
+    const apiSettings = ai.azureApiSettingsFromEnv(
+        ai.ModelType.Chat,
+        undefined,
+        "GPT_4_O",
+    );
+    const model = ai.createChatModel(apiSettings);
+    const validator = createTypeScriptJsonValidator<T>(schema, typeName);
+    const translator = createJsonTranslator(model, validator);
+
+    const promptSections: any[] = [];
+
+    if (screenshot) {
+        promptSections.push({
+            type: "image_url",
+            image_url: { url: screenshot },
+        });
+    }
+
+    if (htmlFragments) {
+        const htmlText = Array.isArray(htmlFragments)
+            ? htmlFragments
+                  .map((f: any) => f.content || f.text || "")
+                  .join("\n")
+            : String(htmlFragments);
+        promptSections.push({
+            type: "text",
+            text: `Page HTML:\n${htmlText.substring(0, 30000)}`,
+        });
+    }
+
+    promptSections.push({
+        type: "text",
+        text: `${instruction}
+
+Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema:
+\`\`\`
+${translator.validator.getSchemaText()}
+\`\`\``,
+    });
+
+    const response = await translator.translate("", [
+        {
+            role: "user",
+            content: promptSections as MultimodalPromptContent[],
+        },
+    ]);
+
+    if (!response.success) {
+        throw new Error(`Semantic page query failed: ${response.message}`);
+    }
+
+    return response.data as T;
 }
 
 export function createFrozenBrowserApi(

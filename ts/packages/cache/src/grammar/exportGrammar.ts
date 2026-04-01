@@ -55,7 +55,6 @@ export async function convertConstructionFileToGrammar(fileName: string) {
     return writeGrammarRules({
         definitions: Array.from(state.definitions),
         imports: [],
-        entities: [],
     });
 }
 
@@ -69,7 +68,6 @@ export function convertConstructionsToGrammar(constructions: Construction[]) {
     return writeGrammarRules({
         definitions: Array.from(state.definitions),
         imports: [],
-        entities: [],
     });
 }
 
@@ -323,6 +321,7 @@ function convertToValueNode(entry: any, leafValues: ValueNode[]): ValueNode {
         return {
             type: "object",
             value: Object.entries(entry).map(([k, v]) => ({
+                type: "property" as const,
                 key: k,
                 value: convertToValueNode(v, leafValues),
             })),

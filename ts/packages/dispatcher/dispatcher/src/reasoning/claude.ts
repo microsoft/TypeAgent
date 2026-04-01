@@ -361,9 +361,11 @@ function getClaudeOptions(
                 "",
                 "TRIGGERS:",
                 "- 'learn: [task]' or 'remember how to [task]' or 'record [task]' → STANDARD recording",
+                "  If the task involves browser page interaction, use WebFlow recording (see below).",
+                "  Otherwise, use TaskFlow recording.",
                 "- 'dev: learn: [task]' or 'dev: record [task]' → DEV MODE recording (see below)",
                 "",
-                "STANDARD RECORDING STEPS (run in TypeAgent shell — do NOT write TypeScript here):",
+                "STANDARD RECORDING STEPS:",
                 "1. Call discover_actions for each agent schema needed.",
                 "2. SOURCE RESEARCH — required before recording any web fetch step:",
                 "   Goal: find a stable, server-side-rendered page whose URL can be templated with",
@@ -394,34 +396,26 @@ function getClaudeOptions(
                 "     readFile(path), writeFile(path, content),",
                 "     llmTransform(input, prompt, parseJson?, model?),",
                 "     claudeTask(goal, parseJson?, model?, maxTurns?)  ← EXPENSIVE, sparingly",
-                "5. Add a testValue to each parameter for use during compilation.",
+                "5. Add a testValue to each parameter for use during testing.",
                 "6. Note the expected output format of each step in observedOutputFormat if known.",
-                "7. Write recipe files — CHECK BEFORE WRITING:",
-                "   Use Read to check if the file already exists.",
-                "   If pending/ACTION_NAME.recipe.json already exists → append _v2, _v3, etc.",
-                "   and tell the user which name you used.",
-                "   a. packages/agents/taskflow/pending/ACTION_NAME.recipe.json",
-                "      — fast path: webFetch+llmTransform (or webSearch+llmTransform if no stable URL)",
-                "   b. packages/agents/taskflow/pending/ACTION_NAME_claude.recipe.json",
-                "      — comparison path using claudeTask for the research/data step",
-                "      — actionName must be ACTION_NAME + 'Claude' (e.g. createPlaylistClaude)",
-                "      — description: 'Comparison flow using claudeTask — compare latency/quality'",
-                "      — IMPORTANT: claudeTask only has WebSearch/WebFetch tools — it CANNOT call",
-                "        TypeAgent actions (no createPlaylist, no player, no agents). So the recipe",
-                "        must still have a separate callAction step for any TypeAgent action needed.",
-                "        Structure: [claudeTask step to research/fetch data, parseJson:true]",
-                "                 + [callAction step to act on the result (e.g. player.createPlaylist)]",
-                "      — always write this companion recipe so the two approaches can be A/B tested",
-                "8. If you noticed gaps (missing actions, output format issues), also write:",
-                "   packages/agents/taskflow/pending/suggestions/ACTION_NAME.suggestions.md",
-                "9. Tell user: 'Recipe saved. To compile, run from packages/agents/taskflow:'",
-                "   pnpm run compile",
+                "7. Register the flow by calling execute_action with schemaName 'taskflow',",
+                "   actionName 'executeTaskFlow' to test the recipe. The recipe is also auto-saved",
+                "   to instance storage after successful reasoning traces — no manual compile needed.",
+                "   If you need to write the recipe to disk for review, write it as a .recipe.json",
+                "   file in the current working directory (not in the package directory).",
+                "8. If you noticed gaps (missing actions, output format issues), write a suggestions",
+                "   file. Suggestions are stored in instance storage alongside the flow and reviewed",
+                "   when promoting pending recipes. Include:",
+                "   - Missing actions or parameters that would improve the flow",
+                "   - Actions that return text but should return JSON",
+                "   - Multi-step sequences that could be a single action",
+                "9. Tell user: 'Task flow registered: ACTION_NAME. It is now available for use.'",
                 "",
                 "DEV MODE RECORDING — interactive improvement loop:",
                 "When triggered with 'dev: learn: [task]':",
                 "- Follow standard recording steps 1-5",
                 "- BEFORE writing the recipe, surface improvement opportunities:",
-                "  * 'action X returns plain text — JSON output would let the compiled flow work with",
+                "  * 'action X returns plain text — JSON output would let the flow work with",
                 "    typed data. Want me to add outputFormat support to that action? (~5 min)'",
                 "  * 'there is no action for Y — want me to create one now?'",
                 "  * 'steps A and B could be a single action — want me to add a combined action?'",
@@ -436,45 +430,62 @@ function getClaudeOptions(
                 "",
                 "RECIPE FORMAT (write as JSON):",
                 "{",
-                '  "version": 1,',
-                '  "actionName": "camelCaseActionName",',
+                '  "name": "camelCaseActionName",',
                 '  "description": "what this flow does",',
                 '  "parameters": [',
                 '    { "name": "param", "type": "string|number|boolean", "required": true|false,',
                 '      "default": defaultValue, "description": "..." }',
                 "  ],",
-                '  "steps": [',
-                '    { "id": "stepId",',
-                '      "schemaName": "exactSchemaFromDiscover",',
-                '      "actionName": "exactActionFromDiscover",',
-                '      "parameters": {',
-                '        "key": "${paramName}",',
-                '        "nested": { "inner": "${paramName}" },',
-                '        "fromPriorStep": "${stepId.text}"',
-                "      }",
-                "    }",
-                "  ],",
+                '  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> { ... }",',
                 '  "grammarPatterns": [',
                 '    "3-5 natural invocation patterns with $(param:wildcard) or $(param:number) captures"',
                 "  ]",
                 "}",
                 "",
-                "STEP PARAMETER REFERENCES:",
-                '- "${paramName}"     → flow parameter value',
-                '- "${stepId.text}"   → prior step plain text output',
-                '- "${stepId.data}"   → prior step output parsed as JSON',
-                '- "prefix ${p} sfx" → interpolated string',
-                "- Static values (strings, numbers, booleans, objects, arrays) passed through as-is",
-                "- Nested objects and arrays resolve ${...} recursively",
+                "SCRIPT API — the `api` object has these methods:",
+                "- api.callAction(schemaName, actionName, params) → { text, data, error? }",
+                "- api.queryLLM(prompt, { input?, parseJson?, model? }) → { text, data, error? }",
+                "- api.webSearch(query) → { text, data, error? }",
+                "- api.webFetch(url) → { text, data, error? }",
                 "",
-                "LLM STEPS: use utility.llmTransform (not a 'query' step type):",
-                '  { "id": "summary", "schemaName": "utility", "actionName": "llmTransform",',
-                '    "parameters": { "input": "${priorStep.text}", "prompt": "Summarize...",',
-                '    "model": "claude-haiku-4-5-20251001" } }',
+                "SCRIPT RULES:",
+                "- Script MUST be TypeScript. Define: async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult>",
+                "- Do NOT add import statements — all types are provided globally.",
+                "- Return { success: true, message: '...' } on success",
+                "- Return { success: false, error: '...' } on failure",
+                "- Check step.error before using step.data",
+                "- Use api.queryLLM() for LLM interpretation, api.webSearch() for search, api.webFetch() for URL fetch",
+                "- Use api.callAction(schemaName, actionName, params) for all other agent actions",
+                "- Use template literals for interpolation: `Top ${params.quantity} songs`",
+                "- Default LLM model: 'claude-haiku-4-5-20251001'",
+                "- BLOCKED identifiers: eval, Function, require, import, fetch, setTimeout, process, window, document",
+                "",
+                "SCRIPT EXAMPLE — multi-step flow with error handling:",
+                "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> {",
+                "    const chart = await api.webFetch(",
+                "        `https://example.com/chart/${params.genre}/`,",
+                "    );",
+                "    const songs = await api.queryLLM(",
+                "        `Extract top ${params.quantity} songs as JSON array.`,",
+                "        { input: chart.text, parseJson: true },",
+                "    );",
+                "    if (!Array.isArray(songs.data) || songs.data.length === 0) {",
+                '        return { success: false, error: "Could not extract songs" };',
+                "    }",
+                '    const result = await api.callAction("player", "createPlaylist", {',
+                "        name: `Top ${params.quantity} ${params.genre}`,",
+                "        songs: songs.data,",
+                "    });",
+                "    return { success: true, message: result.text };",
+                "}",
                 "",
                 "GRAMMAR PATTERN RULES:",
                 "- ONLY TWO capture types exist: $(name:wildcard) for strings, $(name:number) for numbers",
                 "  NEVER write $(name:string) or $(name:integer) — those are invalid and will fail to compile",
+                "- Lead with 2-3 distinctive fixed tokens before any wildcard",
+                "- Include a flow-specific anchor keyword (e.g., 'playlist', 'digest', 'agenda')",
+                "- Make distinguishing tokens mandatory, not optional",
+                "- Avoid starting with verbs owned by other agents: 'search', 'play', 'email', 'find', 'send'",
                 "- Optional words: (word)?   Alternatives: word1 | word2",
                 "- Bare variable names in action body: { genre } not { genre: $genre }",
                 "",
@@ -482,9 +493,32 @@ function getClaudeOptions(
                 "- Required: domain-specific, no reasonable default (e.g. genre, recipient)",
                 "- Optional with default: sensible default exists (e.g. quantity=10, timePeriod='this month')",
                 "- Use exact schemaName from discover_actions; utility agent is schemaName 'utility'",
-                "- For query steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
+                "- For LLM steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
-                "- mkdir -p packages/agents/taskflow/pending packages/agents/taskflow/pending/suggestions",
+                "",
+                "# WebFlow Recording",
+                "",
+                "WHEN TO USE WEBFLOW instead of TaskFlow:",
+                "- The task involves interacting with a specific website (clicking, typing, navigating pages)",
+                "- The user mentions a URL, website name, or web page elements",
+                "- Keywords: 'on [site]', 'in the browser', 'on the page', 'click', 'fill in', 'search on [site]'",
+                "",
+                "WEBFLOW RECORDING STEPS:",
+                "1. Use execute_action with schemaName 'browser.webFlows', actionName 'startGoalDrivenTask'",
+                "   to execute the task in the browser. Parameters: { goal: 'description of what to do',",
+                "   startUrl: 'https://...' (optional), maxSteps: 30 }",
+                "2. If startGoalDrivenTask succeeds and returns a traceId, use execute_action with",
+                "   schemaName 'browser.webFlows', actionName 'generateWebFlow' to create a reusable flow.",
+                "   Parameters: { traceId: 'the-trace-id', name: 'camelCaseName', description: '...' }",
+                "3. The flow is automatically saved to instance storage with grammar patterns and",
+                "   becomes immediately available for grammar matching.",
+                "4. Tell user: 'WebFlow registered: ACTION_NAME. It is now available for use.'",
+                "",
+                "CHOOSING BETWEEN TASKFLOW AND WEBFLOW:",
+                "- TaskFlow: cross-agent action sequences (e.g., fetch data → transform → create playlist)",
+                "- WebFlow: browser page interaction (e.g., search on Amazon, customize Starbucks order)",
+                "- If unsure, prefer TaskFlow — it's more general and doesn't need a browser",
+                "",
                 ...(config.execution.scriptReuse === "enabled" &&
                 process.platform === "win32"
                     ? [
@@ -839,22 +873,27 @@ async function executeReasoningWithTracing(
                 const recipe = await recipeGen.generate(tracer.getTrace());
 
                 if (recipe) {
-                    const pendingDir = path.join(
-                        getRepoRoot(),
-                        "packages",
-                        "agents",
-                        "taskflow",
-                        "pending",
+                    const saved = await saveTaskFlowRecipeToInstanceStorage(
+                        recipe,
+                        systemContext,
                     );
-                    const { saveRecipe } = await import(
-                        "taskflow-typeagent/recipeCompiler"
-                    );
-                    const filePath = await saveRecipe(recipe, pendingDir);
-                    debug(`Recipe saved: ${filePath}`);
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: `\n✓ Recipe saved: ${recipe.actionName}.recipe.json`,
-                    });
+                    if (saved) {
+                        debug(`TaskFlow recipe saved: ${recipe.name}`);
+                        context.actionIO.appendDisplay({
+                            type: "text",
+                            content: `\n✓ Task flow registered: ${recipe.name}`,
+                        });
+                        try {
+                            await systemContext.agents.reloadAgentSchema(
+                                "taskflow",
+                                systemContext,
+                            );
+                        } catch {
+                            debug(
+                                "Failed to reload taskflow schema after saving recipe",
+                            );
+                        }
+                    }
                 }
             } catch (error) {
                 debug("Failed to generate recipe from trace:", error);
@@ -1017,10 +1056,24 @@ async function saveScriptRecipesAsActiveFlows(
         await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
         await storage.write(scriptPath, recipe.script.body);
 
-        // Generate grammar rule text
+        // Generate grammar rule text — use flow's own actionName
         const grammarRuleText = generateGrammarRuleTextForRecipe(
             actionName,
             recipe.grammarPatterns,
+        );
+
+        const parametersMeta = recipe.parameters.map(
+            (p: {
+                name: string;
+                type: string;
+                required: boolean;
+                description: string;
+            }) => ({
+                name: p.name,
+                type: p.type,
+                required: p.required,
+                description: p.description,
+            }),
         );
 
         const now = new Date().toISOString();
@@ -1031,6 +1084,7 @@ async function saveScriptRecipesAsActiveFlows(
             flowPath,
             scriptPath,
             grammarRuleText,
+            parameters: parametersMeta,
             created: now,
             updated: now,
             source: "reasoning",
@@ -1062,17 +1116,17 @@ function generateGrammarRuleTextForRecipe(
         const ruleName = pattern.isAlias
             ? `${actionName}Alias${++aliasIndex}`
             : actionName;
-        const rewritten = pattern.pattern.replace(
-            /\$\(\w+:wildcard\)/g,
-            "$(flowArgs:wildcard)",
+
+        // Preserve named captures — use flow's own actionName
+        const captures = [...pattern.pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
+            (m) => m[1],
         );
-        const hasArgs = rewritten.includes("$(flowArgs:wildcard)");
-        const paramJson = hasArgs
-            ? `{ flowName: "${actionName}", flowArgs }`
-            : `{ flowName: "${actionName}" }`;
+        const paramJson =
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
+
         rules.push(
-            `<${ruleName}> [spacing=optional] = ${rewritten}` +
-                ` -> { actionName: "executeScriptFlow", parameters: ${paramJson} };`,
+            `<${ruleName}> [spacing=optional] = ${pattern.pattern}` +
+                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
         );
     }
     return rules.join("\n");
@@ -1103,6 +1157,129 @@ async function writeDynamicGrammarForIndex(
         "grammar/dynamic.agr",
         `${startRule}\n\n${ruleTexts.join("\n\n")}`,
     );
+}
+
+/**
+ * Save a TaskFlow recipe directly to instance storage and register it as
+ * an active flow. Mirrors saveScriptRecipesAsActiveFlows but for TaskFlow.
+ */
+async function saveTaskFlowRecipeToInstanceStorage(
+    recipe: {
+        name: string;
+        description: string;
+        parameters: Array<{
+            name: string;
+            type: string;
+            required: boolean;
+            description: string;
+            default?: unknown;
+        }>;
+        script: string;
+        grammarPatterns: string[];
+        source?: { type: string; sourceId?: string; timestamp: string };
+    },
+    systemContext: CommandHandlerContext,
+): Promise<boolean> {
+    const storage =
+        systemContext.persistDir && systemContext.storageProvider
+            ? systemContext.storageProvider.getStorage(
+                  "taskflow",
+                  systemContext.persistDir,
+              )
+            : undefined;
+    if (!storage) {
+        debug("No instance storage available for taskflow");
+        return false;
+    }
+
+    // Read existing index
+    let index: {
+        version: 1;
+        flows: Record<string, unknown>;
+        deletedSamples: string[];
+        lastModified: string;
+    };
+    try {
+        const indexJson = await storage.read("index.json", "utf8");
+        index = JSON.parse(indexJson);
+    } catch {
+        index = {
+            version: 1,
+            flows: {},
+            deletedSamples: [],
+            lastModified: new Date().toISOString(),
+        };
+    }
+
+    const { name } = recipe;
+    if (index.flows[name]) {
+        debug(`TaskFlow '${name}' already exists, skipping`);
+        return false;
+    }
+
+    // Build flow definition (parameters as Record, not array)
+    const flowParams: Record<string, unknown> = {};
+    for (const p of recipe.parameters) {
+        const def: Record<string, unknown> = { type: p.type };
+        if (p.required !== undefined) def.required = p.required;
+        if (p.default !== undefined) def.default = p.default;
+        if (p.description) def.description = p.description;
+        flowParams[p.name] = def;
+    }
+
+    // Write flow metadata (without script)
+    const flowDef = {
+        name,
+        description: recipe.description,
+        parameters: flowParams,
+    };
+
+    const flowPath = `flows/${name}.flow.json`;
+    const scriptPath = `scripts/${name}.ts`;
+    await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+    await storage.write(scriptPath, recipe.script);
+
+    // Generate grammar rule text
+    const grammarRules: string[] = [];
+    for (const pattern of recipe.grammarPatterns) {
+        const captures = [...pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
+            (m) => m[1],
+        );
+        const paramJson =
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
+        grammarRules.push(
+            `<${name}> [spacing=optional] = ${pattern}` +
+                ` -> { actionName: "${name}", parameters: ${paramJson} };`,
+        );
+    }
+    const grammarRuleText = grammarRules.join("\n");
+
+    const parametersMeta = recipe.parameters.map((p) => ({
+        name: p.name,
+        type: p.type,
+        required: p.required,
+        description: p.description,
+    }));
+
+    const now = new Date().toISOString();
+    index.flows[name] = {
+        actionName: name,
+        description: recipe.description,
+        flowPath,
+        scriptPath,
+        grammarRuleText,
+        parameters: parametersMeta,
+        created: now,
+        updated: now,
+        source: "reasoning",
+        usageCount: 0,
+        enabled: true,
+    };
+    index.lastModified = now;
+
+    await storage.write("index.json", JSON.stringify(index, null, 2));
+    debug(`TaskFlow registered as active: ${name}`);
+    return true;
 }
 
 export interface ReasoningFallbackContext {

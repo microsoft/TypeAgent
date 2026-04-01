@@ -380,10 +380,44 @@ describe("Value Expression Parser", () => {
             expect(value.type).toBe("array");
         });
 
-        it("object spread is rejected at parse time", () => {
+        it("object spread parses", () => {
+            const r = parseWithExpressions(
+                `<Start> = $(x:string) -> { ...x };`,
+            );
+            const value = r.definitions[0].rules[0].value!;
+            expect(value.type).toBe("object");
+        });
+
+        it("object spread with properties before", () => {
+            const r = parseWithExpressions(
+                `<Start> = $(x:string) -> { a: 1, ...x };`,
+            );
+            const value = r.definitions[0].rules[0].value!;
+            expect(value.type).toBe("object");
+        });
+
+        it("object spread with properties after", () => {
+            const r = parseWithExpressions(
+                `<Start> = $(x:string) -> { ...x, b: 2 };`,
+            );
+            const value = r.definitions[0].rules[0].value!;
+            expect(value.type).toBe("object");
+        });
+
+        it("multiple object spreads", () => {
+            const r = parseWithExpressions(
+                `<Start> = $(x:string) $(y:string) -> { ...x, ...y };`,
+            );
+            const value = r.definitions[0].rules[0].value!;
+            expect(value.type).toBe("object");
+        });
+
+        it("object spread without comma between elements is rejected", () => {
             expect(() =>
-                parseWithExpressions(`<Start> = $(x:string) -> { ...x };`),
-            ).toThrow(/Spread is not supported in object literals/);
+                parseWithExpressions(
+                    `<Start> = $(x:string) $(y:string) -> { ...x ...y };`,
+                ),
+            ).toThrow();
         });
     });
 
@@ -680,6 +714,23 @@ describeForEachMatcher(
                     ["hello", "world", "extra"],
                 ]);
             });
+
+            it("object spread merges properties", () => {
+                // Use a sub-rule that produces an object, then spread it
+                const g = `<Base> = $(x:string) -> { name: x };\n<Start> = $(x:<Base>) -> { ...x, extra: "yes" };`;
+                const grammar = loadWithExpressions(g);
+                expect(testMatchGrammar(grammar, "hello")).toStrictEqual([
+                    { name: "hello", extra: "yes" },
+                ]);
+            });
+
+            it("object spread override semantics (later wins)", () => {
+                const g = `<Base> = $(x:string) -> { a: "from_base" };\n<Start> = $(x:<Base>) -> { a: "original", ...x };`;
+                const grammar = loadWithExpressions(g);
+                expect(testMatchGrammar(grammar, "hello")).toStrictEqual([
+                    { a: "from_base" },
+                ]);
+            });
         });
     },
 );
@@ -901,6 +952,14 @@ describe("Value Expression Round-trip", () => {
 
     it("spread in array", () => {
         assertRoundTrip(`<Start> = $(x:string) -> [...x.split(" "), "extra"];`);
+    });
+
+    it("spread in object", () => {
+        assertRoundTrip(`<Start> = $(x:string) -> { ...x };`);
+    });
+
+    it("spread in object with properties", () => {
+        assertRoundTrip(`<Start> = $(x:string) -> { a: 1, ...x, b: "two" };`);
     });
 
     it("optional chaining ?.", () => {
