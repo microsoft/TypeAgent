@@ -5,7 +5,7 @@ import child_process from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ProgramNameIndex, loadProgramNameIndex } from "./programNameIndex.js";
 import { Storage } from "@typeagent/agent-sdk";
-import registerDebug from "Debug";
+import registerDebug from "debug";
 import { AllDesktopActions } from "./allActionsSchema.js";
 import fs from "node:fs";
 import path from "node:path";
