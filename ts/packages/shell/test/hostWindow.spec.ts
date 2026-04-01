@@ -168,6 +168,9 @@ test.describe("Shell interface tests", () => {
             // get the input box
             const element = await getInputElementHandle(mainWindow);
 
+            // hit escape to clear out the input box and get us to a known state
+            await element.press("Escape");
+
             // go through the command back stack to the end and make sure we get the expected
             // results. (command and cursor location)
             for (let i = commands.length - 1; i >= -1; i--) {
