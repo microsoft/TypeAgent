@@ -162,6 +162,9 @@ test.describe("Shell interface tests", () => {
                 );
             }
 
+            // add the mock greeting command that gets injected into the command back stack on startup
+            commands.splice(0, 0, "@greeting --mock");
+
             // get the input box
             const element = await getInputElementHandle(mainWindow);
 
