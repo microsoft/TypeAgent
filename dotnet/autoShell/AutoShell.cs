@@ -24,7 +24,6 @@ internal partial class AutoShell
     // create a map of friendly names to executable paths
     private static Hashtable s_friendlyNameToPath = [];
     private static Hashtable s_friendlyNameToId = [];
-    private static double s_savedVolumePct = 0.0;
     private static SortedList<string, string[]> s_sortedList;
 
     private static IServiceProvider10 s_shell;
@@ -231,64 +230,6 @@ internal partial class AutoShell
         }
 
         return appIds;
-    }
-
-    private static void SetMasterVolume(int pct)
-    {
-        // Using Windows Core Audio API via COM interop
-        try
-        {
-            var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
-            deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
-            var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
-            device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
-            var audioEndpointVolume = (IAudioEndpointVolume)obj;
-            audioEndpointVolume.GetMasterVolumeLevelScalar(out float currentVolume);
-            s_savedVolumePct = currentVolume * 100.0;
-            audioEndpointVolume.SetMasterVolumeLevelScalar(pct / 100.0f, Guid.Empty);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine("Failed to set volume: " + ex.Message);
-        }
-    }
-
-    private static void RestoreMasterVolume()
-    {
-        // Using Windows Core Audio API via COM interop
-        try
-        {
-            var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
-            deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
-            var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
-            device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
-            var audioEndpointVolume = (IAudioEndpointVolume)obj;
-            audioEndpointVolume.SetMasterVolumeLevelScalar((float)(s_savedVolumePct / 100.0), Guid.Empty);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine("Failed to restore volume: " + ex.Message);
-        }
-    }
-
-    private static void SetMasterMute(bool mute)
-    {
-        // Using Windows Core Audio API via COM interop
-        try
-        {
-            var deviceEnumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
-            deviceEnumerator.GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out IMMDevice device);
-            var audioEndpointVolumeGuid = typeof(IAudioEndpointVolume).GUID;
-            device.Activate(ref audioEndpointVolumeGuid, 0, IntPtr.Zero, out object obj);
-            var audioEndpointVolume = (IAudioEndpointVolume)obj;
-            audioEndpointVolume.GetMute(out bool currentMute);
-            Debug.WriteLine("Current Mute:" + currentMute);
-            audioEndpointVolume.SetMute(mute, Guid.Empty);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine("Failed to set mute: " + ex.Message);
-        }
     }
 
     private static string ResolveProcessNameFromFriendlyName(string friendlyName)
