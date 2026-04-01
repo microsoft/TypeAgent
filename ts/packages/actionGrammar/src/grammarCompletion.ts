@@ -65,7 +65,7 @@ function matchWordsGreedily(
     text: string,
     startIndex: number,
     spacingMode: CompiledSpacingMode,
-    noLeadingSeparator: boolean = false,
+    suppressLeadingSeparator: boolean = false,
 ): { matchedWords: number; endIndex: number; prevEndIndex: number } {
     let index = startIndex;
     let prevIndex = startIndex;
@@ -75,13 +75,37 @@ function matchWordsGreedily(
         const word = words[k];
         const escaped = escapeMatch(word);
 
+        // Separator logic has two independent dimensions:
+        //
+        //   k === 0 (first word):
+        //     Governed by the *caller*, not spacingMode.  The caller
+        //     decides whether the leading separator (between the match
+        //     start position and the first keyword word) is allowed:
+        //       suppressLeadingSeparator=true  → bare word, no prefix
+        //         (used when leadingSpacingMode() returns "none")
+        //       suppressLeadingSeparator=false → [sep]*? lazy optional
+        //         prefix that skips any leading whitespace/punctuation.
+        //         The lazy quantifier matches zero-width when the
+        //         keyword starts immediately, so this is "allow but
+        //         don't require" leading whitespace.
+        //     Note: spacingMode is intentionally NOT consulted for
+        //     k=0.  Even when spacingMode is "none", callers like
+        //     matchKeywordWordsFrom (wildcard scanning) need the
+        //     optional leading separator to find keyword candidates
+        //     at separator-delimited positions within wildcard text.
+        //
+        //   k > 0 (subsequent words):
+        //     Governed by the rule's spacingMode:
+        //       "none"  → bare word, no inter-word separator
+        //       other   → separator required or optional per
+        //                 requiresSeparator() for the character pair
         let regExpStr: string;
-        if (k === 0 && noLeadingSeparator) {
+        if (k === 0) {
+            regExpStr = suppressLeadingSeparator
+                ? escaped
+                : `[${separatorRegExpStr}]*?${escaped}`;
+        } else if (spacingMode === "none") {
             regExpStr = escaped;
-        } else if (spacingMode === "none" && k > 0) {
-            regExpStr = escaped;
-        } else if (k === 0) {
-            regExpStr = `[${separatorRegExpStr}]*?${escaped}`;
         } else {
             const sep = requiresSeparator(
                 words[k - 1].at(-1)!,
@@ -392,7 +416,7 @@ function tryPartialStringMatch(
     spacingMode: CompiledSpacingMode,
     direction?: "forward" | "backward",
     effectivePrefixEnd?: number,
-    noLeadingSeparator: boolean = false,
+    suppressLeadingSeparator: boolean = false,
 ):
     | {
           consumedLength: number;
@@ -408,7 +432,7 @@ function tryPartialStringMatch(
         input,
         startIndex,
         spacingMode,
-        noLeadingSeparator,
+        suppressLeadingSeparator,
     );
 
     // Direction matters when at least one word fully matched and no
@@ -784,7 +808,7 @@ function tryCollectBackwardCandidate(
                 tryCollectStringCandidate(
                     ctx,
                     leadingSpacingMode(state),
-                    info.spacingMode,
+                    info.matchedSpacingMode,
                     info.part,
                     info.afterWildcard,
                     info.start,

@@ -260,14 +260,14 @@ export type MatchState = {
               readonly start: number;
               readonly part: StringPart;
               readonly afterWildcard: boolean;
-              readonly spacingMode: CompiledSpacingMode;
+              readonly matchedSpacingMode: CompiledSpacingMode;
           }
         | {
               readonly type: "number";
               readonly start: number;
               readonly valueId: number;
               readonly afterWildcard: boolean;
-              readonly spacingMode: CompiledSpacingMode;
+              readonly matchedSpacingMode: CompiledSpacingMode;
           }
         | undefined;
 };
@@ -842,7 +842,7 @@ function matchStringPartWithWildcard(
                 start: wildcardEnd,
                 part,
                 afterWildcard: true,
-                spacingMode: state.spacingMode,
+                matchedSpacingMode: state.spacingMode,
             };
             debugMatch(
                 state,
@@ -894,7 +894,7 @@ function matchStringPartWithoutWildcard(
         start: curr,
         part,
         afterWildcard: false,
-        spacingMode: state.spacingMode,
+        matchedSpacingMode: state.spacingMode,
     };
     state.index = newIndex;
     return true;
@@ -1039,7 +1039,7 @@ function matchVarNumberPartWithWildcard(
                     start: wildcardEnd,
                     valueId,
                     afterWildcard: true,
-                    spacingMode: state.spacingMode,
+                    matchedSpacingMode: state.spacingMode,
                 };
             }
             return true;
@@ -1093,7 +1093,7 @@ function matchVarNumberPartWithoutWildcard(
             start: curr,
             valueId,
             afterWildcard: false,
-            spacingMode: state.spacingMode,
+            matchedSpacingMode: state.spacingMode,
         };
     }
     state.index = newIndex;

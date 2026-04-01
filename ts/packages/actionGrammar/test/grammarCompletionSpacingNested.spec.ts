@@ -112,8 +112,9 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play ");
                 // "play " → "play" matched, trailing separator consumed.
                 // Next is <Track> whose first part is "ab".  Leading
-                // separator mode = parent's auto (Latin→Latin requires
-                // space).  But we already have a trailing separator.
+                // separator mode = parent's auto mode (compiles to
+                // spacePunctuation; Latin→Latin requires space).
+                // But we already have a trailing separator.
                 expectMetadata(result, {
                     completions: ["ab"],
                     matchedPrefixLength: 4,
@@ -146,8 +147,8 @@ describeForEachCompletion(
             it("exact match 'play abcd' backs up to last word (Category 1)", () => {
                 // "play abcd" → full match.  Category 1 exact match backs
                 // up to the last matched part.  The backup uses the nested
-                // rule's spacingMode (saved on lastMatchedPartInfo) so that
-                // the inter-word "none" mode is preserved across
+                // rule's spacingMode (saved as matchedSpacingMode on
+                // lastMatchedPartInfo) so that the inter-word "none" mode is preserved across
                 // finalizeNestedRule's parent-state restoration.
                 const result = matchGrammarCompletion(grammar, "play abcd");
                 expectMetadata(result, {
@@ -412,6 +413,130 @@ describeForEachCompletion(
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
+                    properties: [],
+                });
+            });
+        });
+
+        // ================================================================
+        // Section 9: Wildcard + keyword in spacing=none
+        //
+        // matchKeywordWordsFrom calls matchWordsGreedily without
+        // suppressLeadingSeparator.  When the rule uses spacing=none,
+        // the k=0 branch falls through to the optional leading
+        // separator regex ([\\s\\p{P}]*?).  Because the quantifier is
+        // lazy, it matches zero-width when the keyword immediately
+        // follows — so for callers that don't set
+        // suppressLeadingSeparator, behavior is equivalent to no
+        // separator in practice.
+        // ================================================================
+
+        describe("wildcard + keyword in spacing=none", () => {
+            const g = `
+                <Start> [spacing=none] = $(x:wildcard) done -> { x };
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("offers 'done' after wildcard input", () => {
+                const result = matchGrammarCompletion(grammar, "abc");
+                // "abc" is consumed by the wildcard.  "done" is the
+                // next keyword.  In spacing=none, the keyword must
+                // abut the wildcard content with no separator.
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    afterWildcard: "all",
+                    properties: [],
+                });
+            });
+
+            it("partial keyword abutting wildcard matches in none mode", () => {
+                // "abcdo" → wildcard absorbs "abc", "do" partially
+                // matches "done" with no separator (spacing=none).
+                const result = matchGrammarCompletion(grammar, "abcdo");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    afterWildcard: "all",
+                    properties: [],
+                });
+            });
+
+            it("wildcard absorbs spurious space in none mode (space not a separator)", () => {
+                // "abc do" — in spacing=none, the space is part of the
+                // wildcard content.  The wildcard scanning still finds
+                // "do" as a partial match of "done".
+                // matchedPrefixLength=3 reflects the wildcard end before
+                // the keyword candidate start.
+                const result = matchGrammarCompletion(grammar, "abc do");
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 3,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    afterWildcard: "all",
+                    properties: [],
+                });
+            });
+        });
+
+        // ================================================================
+        // Section 10: Deferred EOI/wildcard-string path with mixed modes
+        //
+        // When a wildcard is followed by a string part in a nested rule
+        // with mixed spacing modes, the deferred wildcard-string
+        // candidate path (post-processing) should still work correctly.
+        // ================================================================
+
+        describe("wildcard + string in nested rule with mixed spacing modes", () => {
+            // Use matching spacing modes (both none) so backward's
+            // path-dependent spacingMode matches forward's.
+            const g = `
+                <Inner> [spacing=none] = $(x:wildcard) done -> { x };
+                <Start> = play $(y:<Inner>) -> y;
+            `;
+            const grammar = loadGrammarRules("test.grammar", g);
+
+            it("offers 'done' after wildcard in nested none-mode rule", () => {
+                // "play something" → "play" matched in <Start> (auto),
+                // then " something" enters <Inner>.  The wildcard
+                // absorbs "something", and "done" is the next keyword.
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play something",
+                );
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 14,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    afterWildcard: "all",
+                    properties: [],
+                });
+            });
+
+            it("partial keyword in nested none-mode rule after wildcard", () => {
+                // "play somethingdo" → wildcard absorbs "something",
+                // "do" partially matches "done" (no separator, none mode).
+                const result = matchGrammarCompletion(
+                    grammar,
+                    "play somethingdo",
+                );
+                expectMetadata(result, {
+                    completions: ["done"],
+                    matchedPrefixLength: 14,
+                    separatorMode: "none",
+                    closedSet: true,
+                    directionSensitive: true,
+                    afterWildcard: "all",
                     properties: [],
                 });
             });
