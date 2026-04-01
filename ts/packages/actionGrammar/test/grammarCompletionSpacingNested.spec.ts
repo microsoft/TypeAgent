@@ -143,17 +143,17 @@ describeForEachCompletion(
                 });
             });
 
-            it("exact match 'play abcd' backs up to first word (Category 1)", () => {
+            it("exact match 'play abcd' backs up to last word (Category 1)", () => {
                 // "play abcd" → full match.  Category 1 exact match backs
-                // up to the last matched part.  After finalizeNestedRule restores
-                // the parent state, the backed-up first word is "ab".
-                // This is a pre-existing limitation: the nested rule's spacing
-                // mode is lost after state restoration.
+                // up to the last matched part.  The backup uses the nested
+                // rule's spacingMode (saved on lastMatchedPartInfo) so that
+                // the inter-word "none" mode is preserved across
+                // finalizeNestedRule's parent-state restoration.
                 const result = matchGrammarCompletion(grammar, "play abcd");
                 expectMetadata(result, {
-                    completions: ["ab"],
-                    matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    completions: ["cd"],
+                    matchedPrefixLength: 7,
+                    separatorMode: "none",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",

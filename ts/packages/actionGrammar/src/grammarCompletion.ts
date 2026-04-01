@@ -706,27 +706,22 @@ function collectPropertyCandidate(
 // candidate may still be discarded by the maxPrefixLength filter).
 function tryCollectStringCandidate(
     ctx: CompletionContext,
-    state: MatchState,
+    leadingMode: CompiledSpacingMode,
+    interWordMode: CompiledSpacingMode,
     part: StringPart,
     isAfterWildcard: boolean,
     startIndex: number,
     dir: "forward" | "backward" | undefined,
     effectivePrefixEnd?: number,
 ): boolean {
-    // At nested-rule boundaries the leading separator mode may differ
-    // from the rule's own spacingMode (see leadingSpacingMode in
-    // grammarMatcher.ts).  Use it for the first-word separator and
-    // for the candidate's spacingMode when the completion is the first
-    // word (consumedLength === startIndex).
-    const effectiveLeadingMode = leadingSpacingMode(state);
     const partial = tryPartialStringMatch(
         part,
         ctx.input,
         startIndex,
-        state.spacingMode,
+        interWordMode,
         dir,
         effectivePrefixEnd,
-        effectiveLeadingMode === "none",
+        leadingMode === "none",
     );
     if (partial !== undefined) {
         updateMaxPrefixLength(ctx, partial.consumedLength);
@@ -737,8 +732,8 @@ function tryCollectStringCandidate(
             // mode, not the rule's inter-word spacingMode.
             const candidateSpacingMode =
                 partial.consumedLength === startIndex
-                    ? effectiveLeadingMode
-                    : state.spacingMode;
+                    ? leadingMode
+                    : interWordMode;
             ctx.fixedCandidates.push({
                 kind: "string",
                 completionText: partial.remainingText,
@@ -788,7 +783,8 @@ function tryCollectBackwardCandidate(
             if (
                 tryCollectStringCandidate(
                     ctx,
-                    state,
+                    leadingSpacingMode(state),
+                    info.spacingMode,
                     info.part,
                     info.afterWildcard,
                     info.start,
@@ -942,7 +938,8 @@ function processCleanPartial(
         if (nextPart.type === "string" && !deferredToEoi) {
             tryCollectStringCandidate(
                 ctx,
-                state,
+                leadingSpacingMode(state),
+                state.spacingMode,
                 nextPart,
                 savedPendingWildcard?.valueId !== undefined,
                 state.index,
@@ -1042,7 +1039,8 @@ function processDirtyPartial(
         if (currentPart !== undefined && currentPart.type === "string") {
             tryCollectStringCandidate(
                 ctx,
-                state,
+                leadingSpacingMode(state),
+                state.spacingMode,
                 currentPart,
                 false,
                 state.index,
