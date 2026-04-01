@@ -41,7 +41,7 @@
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "shell:smoke": "npx playwright test simple.spec.ts",
-    "shell:test": "npx playwright test",
+    "shell:test": "pnpm run jest-esm && npx playwright test",
     "start": "npm run prepare-vite && cross-env NODE_OPTIONS=--disable-warning=DEP0190 electron-vite preview -- --env ../../.env",
     "start:connect": "npm run prepare-vite && cross-env NODE_OPTIONS=--disable-warning=DEP0190 electron-vite preview -- --env ../../.env --connect",
     "start:nosandbox": "npm run prepare-vite && electron-vite preview --noSandbox -- --env ../../.env",
