@@ -260,12 +260,14 @@ export type MatchState = {
               readonly start: number;
               readonly part: StringPart;
               readonly afterWildcard: boolean;
+              readonly matchedSpacingMode: CompiledSpacingMode;
           }
         | {
               readonly type: "number";
               readonly start: number;
               readonly valueId: number;
               readonly afterWildcard: boolean;
+              readonly matchedSpacingMode: CompiledSpacingMode;
           }
         | undefined;
 };
@@ -840,6 +842,7 @@ function matchStringPartWithWildcard(
                 start: wildcardEnd,
                 part,
                 afterWildcard: true,
+                matchedSpacingMode: state.spacingMode,
             };
             debugMatch(
                 state,
@@ -891,6 +894,7 @@ function matchStringPartWithoutWildcard(
         start: curr,
         part,
         afterWildcard: false,
+        matchedSpacingMode: state.spacingMode,
     };
     state.index = newIndex;
     return true;
@@ -911,7 +915,7 @@ function matchStringPartWithoutWildcard(
 // flex-space, we've reached the top-level rule — its spacing mode
 // determines the leading/trailing behavior (all modes except "none"
 // allow leading whitespace at the top level).
-function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
+export function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
     if (state.partIndex !== 0 || state.parent === undefined) {
         return state.spacingMode;
     }
@@ -1035,6 +1039,7 @@ function matchVarNumberPartWithWildcard(
                     start: wildcardEnd,
                     valueId,
                     afterWildcard: true,
+                    matchedSpacingMode: state.spacingMode,
                 };
             }
             return true;
@@ -1088,6 +1093,7 @@ function matchVarNumberPartWithoutWildcard(
             start: curr,
             valueId,
             afterWildcard: false,
+            matchedSpacingMode: state.spacingMode,
         };
     }
     state.index = newIndex;
