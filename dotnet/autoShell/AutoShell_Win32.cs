@@ -2,11 +2,8 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace autoShell
@@ -39,25 +36,25 @@ namespace autoShell
 
         // import GetWindowRect
         [DllImport("user32.dll")]
-        static extern bool GetWindowRect(IntPtr hWnd, ref RECT Rect);
+        private static extern bool GetWindowRect(IntPtr hWnd, ref RECT Rect);
 
         // import GetShellWindow
         [DllImport("user32.dll")]
-        static extern IntPtr GetShellWindow();
+        private static extern IntPtr GetShellWindow();
 
         // import GetDesktopWindow
         [DllImport("user32.dll")]
-        static extern IntPtr GetDesktopWindow();
+        private static extern IntPtr GetDesktopWindow();
 
         // import SetForegroundWindow
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
         [DllImport("user32.dll", EntryPoint = "SendMessage", SetLastError = true)]
-        static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, UInt32 wParam, IntPtr lParam);
+        private static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, UInt32 wParam, IntPtr lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        static extern IntPtr SendMessageTimeout(
+        private static extern IntPtr SendMessageTimeout(
             IntPtr hWnd,
             uint Msg,
             IntPtr wParam,
@@ -68,11 +65,11 @@ namespace autoShell
 
         // import SetWindowPos
         [DllImport("user32.dll")]
-        static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
         // import ShowWindow
         [DllImport("user32.dll")]
-        static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
+        private static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
 
         // import FindWindowEx
         [DllImport("user32.dll")]
@@ -334,17 +331,17 @@ namespace autoShell
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         internal static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool IsWindowVisible(IntPtr hWnd);
+        private static extern bool IsWindowVisible(IntPtr hWnd);
 
         [DllImport("user32.dll")]
-        static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
         // get handle of active window
         [DllImport("user32.dll")]
@@ -405,31 +402,31 @@ namespace autoShell
 
         // WLAN API P/Invoke declarations
         [DllImport("wlanapi.dll")]
-        static extern int WlanOpenHandle(uint dwClientVersion, IntPtr pReserved, out uint pdwNegotiatedVersion, out IntPtr phClientHandle);
+        private static extern int WlanOpenHandle(uint dwClientVersion, IntPtr pReserved, out uint pdwNegotiatedVersion, out IntPtr phClientHandle);
 
         [DllImport("wlanapi.dll")]
-        static extern int WlanCloseHandle(IntPtr hClientHandle, IntPtr pReserved);
+        private static extern int WlanCloseHandle(IntPtr hClientHandle, IntPtr pReserved);
 
         [DllImport("wlanapi.dll")]
-        static extern int WlanEnumInterfaces(IntPtr hClientHandle, IntPtr pReserved, out IntPtr ppInterfaceList);
+        private static extern int WlanEnumInterfaces(IntPtr hClientHandle, IntPtr pReserved, out IntPtr ppInterfaceList);
 
         [DllImport("wlanapi.dll")]
-        static extern int WlanGetAvailableNetworkList(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, IntPtr pReserved, out IntPtr ppAvailableNetworkList);
+        private static extern int WlanGetAvailableNetworkList(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, IntPtr pReserved, out IntPtr ppAvailableNetworkList);
 
         [DllImport("wlanapi.dll")]
-        static extern int WlanScan(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pDot11Ssid, IntPtr pIeData, IntPtr pReserved);
+        private static extern int WlanScan(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pDot11Ssid, IntPtr pIeData, IntPtr pReserved);
 
         [DllImport("wlanapi.dll")]
-        static extern void WlanFreeMemory(IntPtr pMemory);
+        private static extern void WlanFreeMemory(IntPtr pMemory);
 
         [DllImport("wlanapi.dll")]
-        static extern int WlanConnect(IntPtr hClientHandle, ref Guid pInterfaceGuid, ref WLAN_CONNECTION_PARAMETERS pConnectionParameters, IntPtr pReserved);
+        private static extern int WlanConnect(IntPtr hClientHandle, ref Guid pInterfaceGuid, ref WLAN_CONNECTION_PARAMETERS pConnectionParameters, IntPtr pReserved);
 
         [DllImport("wlanapi.dll")]
-        static extern int WlanDisconnect(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pReserved);
+        private static extern int WlanDisconnect(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pReserved);
 
         [DllImport("wlanapi.dll")]
-        static extern int WlanSetProfile(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, [MarshalAs(UnmanagedType.LPWStr)] string strProfileXml, [MarshalAs(UnmanagedType.LPWStr)] string strAllUserProfileSecurity, bool bOverwrite, IntPtr pReserved, out uint pdwReasonCode);
+        private static extern int WlanSetProfile(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, [MarshalAs(UnmanagedType.LPWStr)] string strProfileXml, [MarshalAs(UnmanagedType.LPWStr)] string strAllUserProfileSecurity, bool bOverwrite, IntPtr pReserved, out uint pdwReasonCode);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct WLAN_INTERFACE_INFO

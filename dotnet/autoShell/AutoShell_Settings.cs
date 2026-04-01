@@ -21,7 +21,7 @@ internal partial class AutoShell
     /// Toggles Bluetooth radio on or off
     /// Command: {"BluetoothToggle": "{\"enableBluetooth\":true}"}
     /// </summary>
-    static void HandleBluetoothToggle(string jsonParams)
+    private static void HandleBluetoothToggle(string jsonParams)
     {
         try
         {
@@ -67,9 +67,9 @@ internal partial class AutoShell
 
     /// <summary>
     /// Enables or disables WiFi
-    /// Command: {"enableWifi": "{\"enable\":true}"}
+    /// Command: {"EnableWifi": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnableWifi(string jsonParams)
+    private static void HandleEnableWifi(string jsonParams)
     {
         try
         {
@@ -99,9 +99,9 @@ internal partial class AutoShell
 
     /// <summary>
     /// Enables or disables metered connection
-    /// Command: {"enableMeteredConnections": "{\"enable\":true}"}
+    /// Command: {"EnableMeteredConnections": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnableMeteredConnections(string jsonParams)
+    private static void HandleEnableMeteredConnections(string jsonParams)
     {
         try
         {
@@ -131,7 +131,7 @@ internal partial class AutoShell
     /// Adjusts screen brightness (increase or decrease)
     /// Command: {"AdjustScreenBrightness": "{\"brightnessLevel\":\"increase\"}"}
     /// </summary>
-    static void HandleAdjustScreenBrightness(string jsonParams)
+    private static void HandleAdjustScreenBrightness(string jsonParams)
     {
         try
         {
@@ -158,7 +158,7 @@ internal partial class AutoShell
     /// Enables or configures Night Light (blue light filter) schedule
     /// Command: {"EnableBlueLightFilterSchedule": "{\"schedule\":\"sunset to sunrise\",\"nightLightScheduleDisabled\":false}"}
     /// </summary>
-    static void HandleEnableBlueLightFilterSchedule(string jsonParams)
+    private static void HandleEnableBlueLightFilterSchedule(string jsonParams)
     {
         try
         {
@@ -186,9 +186,9 @@ internal partial class AutoShell
 
     /// <summary>
     /// Adjusts the color temperature for Night Light
-    /// Command: {"adjustColorTemperature": "{\"filterEffect\":\"reduce\"}"}
+    /// Command: {"AdjustColorTemperature": "{\"filterEffect\":\"reduce\"}"}
     /// </summary>
-    static void HandleAdjustColorTemperature(string jsonParams)
+    private static void HandleAdjustColorTemperature(string jsonParams)
     {
         try
         {
@@ -214,7 +214,7 @@ internal partial class AutoShell
     /// Sets display scaling percentage
     /// Command: {"DisplayScaling": "{\"sizeOverride\":\"125\"}"}
     /// </summary>
-    static void HandleDisplayScaling(string jsonParams)
+    private static void HandleDisplayScaling(string jsonParams)
     {
         try
         {
@@ -248,7 +248,7 @@ internal partial class AutoShell
     /// Adjusts screen orientation
     /// Command: {"AdjustScreenOrientation": "{\"orientation\":\"landscape\"}"}
     /// </summary>
-    static void HandleAdjustScreenOrientation(string jsonParams)
+    private static void HandleAdjustScreenOrientation(string jsonParams)
     {
         try
         {
@@ -274,7 +274,7 @@ internal partial class AutoShell
     /// Adjusts display resolution
     /// Command: {"DisplayResolutionAndAspectRatio": "{\"resolutionChange\":\"increase\"}"}
     /// </summary>
-    static void HandleDisplayResolutionAndAspectRatio(string jsonParams)
+    private static void HandleDisplayResolutionAndAspectRatio(string jsonParams)
     {
         try
         {
@@ -300,7 +300,7 @@ internal partial class AutoShell
     /// Locks or unlocks screen rotation
     /// Command: {"RotationLock": "{\"enable\":true}"}
     /// </summary>
-    static void HandleRotationLock(string jsonParams)
+    private static void HandleRotationLock(string jsonParams)
     {
         try
         {
@@ -332,7 +332,7 @@ internal partial class AutoShell
     /// Sets system theme mode (dark or light)
     /// Command: {"SystemThemeMode": "{\"mode\":\"dark\"}"}
     /// </summary>
-    static void HandleSystemThemeMode(string jsonParams)
+    private static void HandleSystemThemeMode(string jsonParams)
     {
         try
         {
@@ -353,7 +353,7 @@ internal partial class AutoShell
     /// Enables or disables transparency effects
     /// Command: {"EnableTransparency": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnableTransparency(string jsonParams)
+    private static void HandleEnableTransparency(string jsonParams)
     {
         try
         {
@@ -380,7 +380,7 @@ internal partial class AutoShell
     /// Applies accent color to title bars
     /// Command: {"ApplyColorToTitleBar": "{\"enableColor\":true}"}
     /// </summary>
-    static void HandleApplyColorToTitleBar(string jsonParams)
+    private static void HandleApplyColorToTitleBar(string jsonParams)
     {
         try
         {
@@ -407,7 +407,7 @@ internal partial class AutoShell
     /// Enables high contrast theme
     /// Command: {"HighContrastTheme": "{}"}
     /// </summary>
-    static void HandleHighContrastTheme(string jsonParams)
+    private static void HandleHighContrastTheme(string jsonParams)
     {
         try
         {
@@ -434,7 +434,7 @@ internal partial class AutoShell
     /// Auto-hides the taskbar
     /// Command: {"AutoHideTaskbar": "{\"hideWhenNotUsing\":true,\"alwaysShow\":false}"}
     /// </summary>
-    static void HandleAutoHideTaskbar(string jsonParams)
+    private static void HandleAutoHideTaskbar(string jsonParams)
     {
         try
         {
@@ -474,7 +474,7 @@ internal partial class AutoShell
     /// Sets taskbar alignment (left or center)
     /// Command: {"TaskbarAlignment": "{\"alignment\":\"center\"}"}
     /// </summary>
-    static void HandleTaskbarAlignment(string jsonParams)
+    private static void HandleTaskbarAlignment(string jsonParams)
     {
         try
         {
@@ -504,7 +504,7 @@ internal partial class AutoShell
     /// Shows or hides the Task View button
     /// Command: {"TaskViewVisibility": "{\"visibility\":true}"}
     /// </summary>
-    static void HandleTaskViewVisibility(string jsonParams)
+    private static void HandleTaskViewVisibility(string jsonParams)
     {
         try
         {
@@ -532,7 +532,7 @@ internal partial class AutoShell
     /// Shows or hides the Widgets button
     /// Command: {"ToggleWidgetsButtonVisibility": "{\"visibility\":\"show\"}"}
     /// </summary>
-    static void HandleToggleWidgetsButtonVisibility(string jsonParams)
+    private static void HandleToggleWidgetsButtonVisibility(string jsonParams)
     {
         try
         {
@@ -561,7 +561,7 @@ internal partial class AutoShell
     /// Shows or hides badges on taskbar icons
     /// Command: {"ShowBadgesOnTaskbar": "{\"enableBadging\":true}"}
     /// </summary>
-    static void HandleShowBadgesOnTaskbar(string jsonParams)
+    private static void HandleShowBadgesOnTaskbar(string jsonParams)
     {
         try
         {
@@ -589,7 +589,7 @@ internal partial class AutoShell
     /// Shows taskbar on all monitors
     /// Command: {"DisplayTaskbarOnAllMonitors": "{\"enable\":true}"}
     /// </summary>
-    static void HandleDisplayTaskbarOnAllMonitors(string jsonParams)
+    private static void HandleDisplayTaskbarOnAllMonitors(string jsonParams)
     {
         try
         {
@@ -617,7 +617,7 @@ internal partial class AutoShell
     /// Shows seconds in the system tray clock
     /// Command: {"DisplaySecondsInSystrayClock": "{\"enable\":true}"}
     /// </summary>
-    static void HandleDisplaySecondsInSystrayClock(string jsonParams)
+    private static void HandleDisplaySecondsInSystrayClock(string jsonParams)
     {
         try
         {
@@ -649,7 +649,7 @@ internal partial class AutoShell
     /// Adjusts mouse cursor speed
     /// Command: {"MouseCursorSpeed": "{\"speedLevel\":10}"}
     /// </summary>
-    static void HandleMouseCursorSpeed(string jsonParams)
+    private static void HandleMouseCursorSpeed(string jsonParams)
     {
         try
         {
@@ -672,7 +672,7 @@ internal partial class AutoShell
     /// Sets the number of lines to scroll per mouse wheel notch
     /// Command: {"MouseWheelScrollLines": "{\"scrollLines\":3}"}
     /// </summary>
-    static void HandleMouseWheelScrollLines(string jsonParams)
+    private static void HandleMouseWheelScrollLines(string jsonParams)
     {
         try
         {
@@ -692,9 +692,9 @@ internal partial class AutoShell
 
     /// <summary>
     /// Sets the primary mouse button
-    /// Command: {"setPrimaryMouseButton": "{\"primaryButton\":\"left\"}"}
+    /// Command: {"SetPrimaryMouseButton": "{\"primaryButton\":\"left\"}"}
     /// </summary>
-    static void HandleSetPrimaryMouseButton(string jsonParams)
+    private static void HandleSetPrimaryMouseButton(string jsonParams)
     {
         try
         {
@@ -715,7 +715,7 @@ internal partial class AutoShell
     /// Enables or disables enhanced pointer precision (mouse acceleration)
     /// Command: {"EnhancePointerPrecision": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnhancePointerPrecision(string jsonParams)
+    private static void HandleEnhancePointerPrecision(string jsonParams)
     {
         try
         {
@@ -741,7 +741,7 @@ internal partial class AutoShell
     /// Adjusts mouse pointer size
     /// Command: {"AdjustMousePointerSize": "{\"sizeAdjustment\":\"increase\"}"}
     /// </summary>
-    static void HandleAdjustMousePointerSize(string jsonParams)
+    private static void HandleAdjustMousePointerSize(string jsonParams)
     {
         try
         {
@@ -765,9 +765,9 @@ internal partial class AutoShell
 
     /// <summary>
     /// Customizes mouse pointer color
-    /// Command: {"mousePointerCustomization": "{\"color\":\"#FF0000\"}"}
+    /// Command: {"MousePointerCustomization": "{\"color\":\"#FF0000\"}"}
     /// </summary>
-    static void HandleMousePointerCustomization(string jsonParams)
+    private static void HandleMousePointerCustomization(string jsonParams)
     {
         try
         {
@@ -797,7 +797,7 @@ internal partial class AutoShell
     /// Enables or disables the touchpad
     /// Command: {"EnableTouchPad": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnableTouchPad(string jsonParams)
+    private static void HandleEnableTouchPad(string jsonParams)
     {
         try
         {
@@ -823,7 +823,7 @@ internal partial class AutoShell
     /// Adjusts touchpad cursor speed
     /// Command: {"TouchpadCursorSpeed": "{\"speed\":5}"}
     /// </summary>
-    static void HandleTouchpadCursorSpeed(string jsonParams)
+    private static void HandleTouchpadCursorSpeed(string jsonParams)
     {
         try
         {
@@ -853,7 +853,7 @@ internal partial class AutoShell
     /// Manages microphone access for apps
     /// Command: {"ManageMicrophoneAccess": "{\"accessSetting\":\"allow\"}"}
     /// </summary>
-    static void HandleManageMicrophoneAccess(string jsonParams)
+    private static void HandleManageMicrophoneAccess(string jsonParams)
     {
         try
         {
@@ -881,7 +881,7 @@ internal partial class AutoShell
     /// Manages camera access for apps
     /// Command: {"ManageCameraAccess": "{\"accessSetting\":\"allow\"}"}
     /// </summary>
-    static void HandleManageCameraAccess(string jsonParams)
+    private static void HandleManageCameraAccess(string jsonParams)
     {
         try
         {
@@ -909,7 +909,7 @@ internal partial class AutoShell
     /// Manages location access for apps
     /// Command: {"ManageLocationAccess": "{\"accessSetting\":\"allow\"}"}
     /// </summary>
-    static void HandleManageLocationAccess(string jsonParams)
+    private static void HandleManageLocationAccess(string jsonParams)
     {
         try
         {
@@ -941,7 +941,7 @@ internal partial class AutoShell
     /// Sets the battery saver activation threshold
     /// Command: {"BatterySaverActivationLevel": "{\"thresholdValue\":20}"}
     /// </summary>
-    static void HandleBatterySaverActivationLevel(string jsonParams)
+    private static void HandleBatterySaverActivationLevel(string jsonParams)
     {
         try
         {
@@ -968,9 +968,9 @@ internal partial class AutoShell
 
     /// <summary>
     /// Sets power mode when plugged in
-    /// Command: {"setPowerModePluggedIn": "{\"powerMode\":\"bestPerformance\"}"}
+    /// Command: {"SetPowerModePluggedIn": "{\"powerMode\":\"bestPerformance\"}"}
     /// </summary>
-    static void HandleSetPowerModePluggedIn(string jsonParams)
+    private static void HandleSetPowerModePluggedIn(string jsonParams)
     {
         try
         {
@@ -996,7 +996,7 @@ internal partial class AutoShell
     /// Sets power mode when on battery
     /// Command: {"SetPowerModeOnBattery": "{\"mode\":\"balanced\"}"}
     /// </summary>
-    static void HandleSetPowerModeOnBattery(string jsonParams)
+    private static void HandleSetPowerModeOnBattery(string jsonParams)
     {
         try
         {
@@ -1024,9 +1024,9 @@ internal partial class AutoShell
 
     /// <summary>
     /// Enables or disables Game Mode
-    /// Command: {"enableGameMode": "{}"}
+    /// Command: {"EnableGameMode": "{}"}
     /// </summary>
-    static void HandleEnableGameMode(string jsonParams)
+    private static void HandleEnableGameMode(string jsonParams)
     {
         try
         {
@@ -1053,7 +1053,7 @@ internal partial class AutoShell
     /// Enables or disables Narrator
     /// Command: {"EnableNarratorAction": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnableNarratorAction(string jsonParams)
+    private static void HandleEnableNarratorAction(string jsonParams)
     {
         try
         {
@@ -1086,7 +1086,7 @@ internal partial class AutoShell
     /// Enables or disables Magnifier
     /// Command: {"EnableMagnifier": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnableMagnifier(string jsonParams)
+    private static void HandleEnableMagnifier(string jsonParams)
     {
         try
         {
@@ -1117,9 +1117,9 @@ internal partial class AutoShell
 
     /// <summary>
     /// Enables or disables Sticky Keys
-    /// Command: {"enableStickyKeys": "{\"enable\":true}"}
+    /// Command: {"EnableStickyKeys": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnableStickyKeysAction(string jsonParams)
+    private static void HandleEnableStickyKeysAction(string jsonParams)
     {
         try
         {
@@ -1146,7 +1146,7 @@ internal partial class AutoShell
     /// Enables or disables Filter Keys
     /// Command: {"EnableFilterKeysAction": "{\"enable\":true}"}
     /// </summary>
-    static void HandleEnableFilterKeysAction(string jsonParams)
+    private static void HandleEnableFilterKeysAction(string jsonParams)
     {
         try
         {
@@ -1173,7 +1173,7 @@ internal partial class AutoShell
     /// Enables or disables mono audio
     /// Command: {"MonoAudioToggle": "{\"enable\":true}"}
     /// </summary>
-    static void HandleMonoAudioToggle(string jsonParams)
+    private static void HandleMonoAudioToggle(string jsonParams)
     {
         try
         {
@@ -1204,7 +1204,7 @@ internal partial class AutoShell
     /// Shows or hides file extensions in File Explorer
     /// Command: {"ShowFileExtensions": "{\"enable\":true}"}
     /// </summary>
-    static void HandleShowFileExtensions(string jsonParams)
+    private static void HandleShowFileExtensions(string jsonParams)
     {
         try
         {
@@ -1233,7 +1233,7 @@ internal partial class AutoShell
     /// Shows or hides hidden and system files in File Explorer
     /// Command: {"ShowHiddenAndSystemFiles": "{\"enable\":true}"}
     /// </summary>
-    static void HandleShowHiddenAndSystemFiles(string jsonParams)
+    private static void HandleShowHiddenAndSystemFiles(string jsonParams)
     {
         try
         {
@@ -1268,7 +1268,7 @@ internal partial class AutoShell
     /// Enables or disables automatic time synchronization
     /// Command: {"AutomaticTimeSettingAction": "{\"enableAutoTimeSync\":true}"}
     /// </summary>
-    static void HandleAutomaticTimeSettingAction(string jsonParams)
+    private static void HandleAutomaticTimeSettingAction(string jsonParams)
     {
         try
         {
@@ -1294,7 +1294,7 @@ internal partial class AutoShell
     /// Enables or disables automatic DST adjustment
     /// Command: {"AutomaticDSTAdjustment": "{\"enable\":true}"}
     /// </summary>
-    static void HandleAutomaticDSTAdjustment(string jsonParams)
+    private static void HandleAutomaticDSTAdjustment(string jsonParams)
     {
         try
         {
@@ -1325,7 +1325,7 @@ internal partial class AutoShell
     /// Enables or disables Focus Assist (Quiet Hours)
     /// Command: {"EnableQuietHours": "{\"startHour\":22,\"endHour\":7}"}
     /// </summary>
-    static void HandleEnableQuietHours(string jsonParams)
+    private static void HandleEnableQuietHours(string jsonParams)
     {
         try
         {
@@ -1356,7 +1356,7 @@ internal partial class AutoShell
     /// Remembers window locations based on monitor configuration
     /// Command: {"RememberWindowLocations": "{\"enable\":true}"}
     /// </summary>
-    static void HandleRememberWindowLocationsAction(string jsonParams)
+    private static void HandleRememberWindowLocationsAction(string jsonParams)
     {
         try
         {
@@ -1382,7 +1382,7 @@ internal partial class AutoShell
     /// Minimizes windows when a monitor is disconnected
     /// Command: {"MinimizeWindowsOnMonitorDisconnectAction": "{\"enable\":true}"}
     /// </summary>
-    static void HandleMinimizeWindowsOnMonitorDisconnectAction(string jsonParams)
+    private static void HandleMinimizeWindowsOnMonitorDisconnectAction(string jsonParams)
     {
         try
         {
@@ -1411,7 +1411,7 @@ internal partial class AutoShell
     /// <summary>
     /// Gets the current brightness level
     /// </summary>
-    static byte GetCurrentBrightness()
+    private static byte GetCurrentBrightness()
     {
         try
         {
@@ -1435,7 +1435,7 @@ internal partial class AutoShell
     /// <summary>
     /// Sets the brightness level
     /// </summary>
-    static void SetBrightness(byte brightness)
+    private static void SetBrightness(byte brightness)
     {
         try
         {
@@ -1460,7 +1460,7 @@ internal partial class AutoShell
     /// <summary>
     /// Sets DPI scaling percentage
     /// </summary>
-    static void SetDpiScaling(int percentage)
+    private static void SetDpiScaling(int percentage)
     {
         try
         {
@@ -1480,7 +1480,7 @@ internal partial class AutoShell
     /// <summary>
     /// Refreshes the taskbar to apply changes
     /// </summary>
-    static void RefreshTaskbar()
+    private static void RefreshTaskbar()
     {
         try
         {
@@ -1493,7 +1493,7 @@ internal partial class AutoShell
     /// <summary>
     /// Refreshes File Explorer to apply changes
     /// </summary>
-    static void RefreshExplorer()
+    private static void RefreshExplorer()
     {
         try
         {
@@ -1510,7 +1510,7 @@ internal partial class AutoShell
     /// <summary>
     /// Sets a registry value
     /// </summary>
-    static void SetRegistryValue(string keyPath, string valueName, object value)
+    private static void SetRegistryValue(string keyPath, string valueName, object value)
     {
         try
         {
@@ -1524,27 +1524,92 @@ internal partial class AutoShell
 
     #endregion
 
+    #region Bridge Method
+
+    /// <summary>
+    /// Bridge method for SettingsCommandHandler — dispatches to individual settings handlers.
+    /// </summary>
+    internal static void HandleSettingsCommand(string key, string value)
+    {
+        switch (key)
+        {
+            case "BluetoothToggle": HandleBluetoothToggle(value); break;
+            case "EnableWifi": HandleEnableWifi(value); break;
+            case "EnableMeteredConnections": HandleEnableMeteredConnections(value); break;
+            case "AdjustScreenBrightness": HandleAdjustScreenBrightness(value); break;
+            case "EnableBlueLightFilterSchedule": HandleEnableBlueLightFilterSchedule(value); break;
+            case "AdjustColorTemperature": HandleAdjustColorTemperature(value); break;
+            case "DisplayScaling": HandleDisplayScaling(value); break;
+            case "AdjustScreenOrientation": HandleAdjustScreenOrientation(value); break;
+            case "DisplayResolutionAndAspectRatio": HandleDisplayResolutionAndAspectRatio(value); break;
+            case "RotationLock": HandleRotationLock(value); break;
+            case "SystemThemeMode": HandleSystemThemeMode(value); break;
+            case "EnableTransparency": HandleEnableTransparency(value); break;
+            case "ApplyColorToTitleBar": HandleApplyColorToTitleBar(value); break;
+            case "HighContrastTheme": HandleHighContrastTheme(value); break;
+            case "AutoHideTaskbar": HandleAutoHideTaskbar(value); break;
+            case "TaskbarAlignment": HandleTaskbarAlignment(value); break;
+            case "TaskViewVisibility": HandleTaskViewVisibility(value); break;
+            case "ToggleWidgetsButtonVisibility": HandleToggleWidgetsButtonVisibility(value); break;
+            case "ShowBadgesOnTaskbar": HandleShowBadgesOnTaskbar(value); break;
+            case "DisplayTaskbarOnAllMonitors": HandleDisplayTaskbarOnAllMonitors(value); break;
+            case "DisplaySecondsInSystrayClock": HandleDisplaySecondsInSystrayClock(value); break;
+            case "MouseCursorSpeed": HandleMouseCursorSpeed(value); break;
+            case "MouseWheelScrollLines": HandleMouseWheelScrollLines(value); break;
+            case "SetPrimaryMouseButton": HandleSetPrimaryMouseButton(value); break;
+            case "EnhancePointerPrecision": HandleEnhancePointerPrecision(value); break;
+            case "AdjustMousePointerSize": HandleAdjustMousePointerSize(value); break;
+            case "MousePointerCustomization": HandleMousePointerCustomization(value); break;
+            case "EnableTouchPad": HandleEnableTouchPad(value); break;
+            case "TouchpadCursorSpeed": HandleTouchpadCursorSpeed(value); break;
+            case "ManageMicrophoneAccess": HandleManageMicrophoneAccess(value); break;
+            case "ManageCameraAccess": HandleManageCameraAccess(value); break;
+            case "ManageLocationAccess": HandleManageLocationAccess(value); break;
+            case "BatterySaverActivationLevel": HandleBatterySaverActivationLevel(value); break;
+            case "SetPowerModePluggedIn": HandleSetPowerModePluggedIn(value); break;
+            case "SetPowerModeOnBattery": HandleSetPowerModeOnBattery(value); break;
+            case "EnableGameMode": HandleEnableGameMode(value); break;
+            case "EnableNarratorAction": HandleEnableNarratorAction(value); break;
+            case "EnableMagnifier": HandleEnableMagnifier(value); break;
+            case "EnableStickyKeys": HandleEnableStickyKeysAction(value); break;
+            case "EnableFilterKeysAction": HandleEnableFilterKeysAction(value); break;
+            case "MonoAudioToggle": HandleMonoAudioToggle(value); break;
+            case "ShowFileExtensions": HandleShowFileExtensions(value); break;
+            case "ShowHiddenAndSystemFiles": HandleShowHiddenAndSystemFiles(value); break;
+            case "AutomaticTimeSettingAction": HandleAutomaticTimeSettingAction(value); break;
+            case "AutomaticDSTAdjustment": HandleAutomaticDSTAdjustment(value); break;
+            case "EnableQuietHours": HandleEnableQuietHours(value); break;
+            case "RememberWindowLocations": HandleRememberWindowLocationsAction(value); break;
+            case "MinimizeWindowsOnMonitorDisconnectAction": HandleMinimizeWindowsOnMonitorDisconnectAction(value); break;
+            default:
+                Debug.WriteLine($"Unknown settings command: {key}");
+                break;
+        }
+    }
+
+    #endregion
+
     #region Win32 API Declarations for Settings
 
     // SystemParametersInfo constants (additional ones not in AutoShell_Win32.cs)
-    const int SPI_SETMOUSESPEED = 0x0071;
-    const int SPI_GETMOUSE = 0x0003;
-    const int SPI_SETMOUSE = 0x0004;
-    const int SPI_SETWHEELSCROLLLINES = 0x0069;
+    private const int SPI_SETMOUSESPEED = 0x0071;
+    private const int SPI_GETMOUSE = 0x0003;
+    private const int SPI_SETMOUSE = 0x0004;
+    private const int SPI_SETWHEELSCROLLLINES = 0x0069;
     // Note: SPIF_UPDATEINIFILE, SPIF_SENDCHANGE, WM_SETTINGCHANGE, HWND_BROADCAST
     // are already defined in AutoShell_Win32.cs
 
     [DllImport("user32.dll", SetLastError = true)]
-    static extern bool SystemParametersInfo(int uiAction, int uiParam, IntPtr pvParam, int fWinIni);
+    private static extern bool SystemParametersInfo(int uiAction, int uiParam, IntPtr pvParam, int fWinIni);
 
     [DllImport("user32.dll", SetLastError = true)]
-    static extern bool SystemParametersInfo(int uiAction, int uiParam, int[] pvParam, int fWinIni);
+    private static extern bool SystemParametersInfo(int uiAction, int uiParam, int[] pvParam, int fWinIni);
 
     [DllImport("user32.dll")]
-    static extern bool SwapMouseButton(int fSwap);
+    private static extern bool SwapMouseButton(int fSwap);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    static extern IntPtr SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    private static extern IntPtr SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     #endregion
 }
