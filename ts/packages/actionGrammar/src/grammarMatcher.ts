@@ -16,9 +16,10 @@ import {
 } from "./grammarTypes.js";
 
 // Separator mode for completion results.  Structurally identical to
-// SeparatorMode from @typeagent/agent-sdk; independently defined here so
-// actionGrammar does not depend on agentSdk.  The grammar matcher only
-// produces "spacePunctuation", "optional", and "none" — never "space"
+// SeparatorMode from @typeagent/agent-sdk (command.ts); independently
+// defined here so actionGrammar does not depend on agentSdk.  Keep
+// both definitions in sync.  The grammar matcher only produces
+// "spacePunctuation", "optional", and "none" — never "space"
 // (which is strictly command/flag-level).
 export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
 
@@ -252,7 +253,7 @@ export type MatchState = {
     // — i.e., a wildcard preceded this part and the part's position
     // was determined by scanning forward through the wildcard region.
     // When backward backs up to such a part, the position is ambiguous
-    // (see openWildcard on GrammarCompletionResult in grammarCompletion.ts).
+    // (see afterWildcard on GrammarCompletionResult in grammarCompletion.ts).
     lastMatchedPartInfo?:
         | {
               readonly type: "string";

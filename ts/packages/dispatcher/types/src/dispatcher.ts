@@ -9,6 +9,7 @@ import {
     SeparatorMode,
     TemplateSchema,
     TypeAgentAction,
+    AfterWildcard,
 } from "@typeagent/agent-sdk";
 import type { DisplayLogEntry } from "./displayLogEntry.js";
 
@@ -94,12 +95,13 @@ export type CommandCompletionResult = {
     // direction.  When false, the caller can skip re-fetching on
     // direction change.
     directionSensitive: boolean;
-    // True when the completions are offered at a position where a
-    // wildcard was finalized at end-of-input.  The wildcard's extent
-    // is ambiguous — the user may still be typing within it — so the
-    // caller should allow the anchor to slide forward on further input
-    // rather than re-fetching or giving up.
-    openWildcard: boolean;
+    // Describes how the grammar rules that produced completions at
+    // this position relate to wildcards.  See AfterWildcard in
+    // @typeagent/agent-sdk.
+    //   "none" — no wildcard; position is structurally pinned.
+    //   "some" — mixed; some rules used wildcards, some didn't.
+    //   "all"  — every rule used a wildcard; position can slide.
+    afterWildcard: AfterWildcard;
 };
 
 export type AppAgentStatus = {

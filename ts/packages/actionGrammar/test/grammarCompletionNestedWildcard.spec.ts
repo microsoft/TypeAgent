@@ -59,7 +59,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 matchedPrefixLength: 15,
                 separatorMode: "spacePunctuation",
-                openWildcard: true,
+                afterWildcard: "all",
             });
         });
 
@@ -69,7 +69,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 matchedPrefixLength: 14,
                 separatorMode: "spacePunctuation",
-                openWildcard: true,
+                afterWildcard: "all",
             });
         });
 

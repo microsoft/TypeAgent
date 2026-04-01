@@ -370,7 +370,7 @@ const handlers = {
                     separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
-                    openWildcard: true,
+                    afterWildcard: "all",
                 };
             },
         },
@@ -1850,35 +1850,35 @@ describe("Command Completion - startIndex", () => {
         });
     });
 
-    describe("openWildcard propagation", () => {
-        it("propagates openWildcard=true from agent result", async () => {
+    describe("afterWildcard propagation", () => {
+        it('propagates afterWildcard="all" from agent result', async () => {
             const result = await getCommandCompletion(
                 "@comptest wildcard hello",
                 "forward",
                 context,
             );
             expect(result).toBeDefined();
-            expect(result.openWildcard).toBe(true);
+            expect(result.afterWildcard).toBe("all");
         });
 
-        it("openWildcard defaults to false when agent does not set it", async () => {
+        it('afterWildcard defaults to "none" when agent does not set it', async () => {
             const result = await getCommandCompletion(
                 "@comptest run ",
                 "forward",
                 context,
             );
             expect(result).toBeDefined();
-            expect(result.openWildcard).toBe(false);
+            expect(result.afterWildcard).toBe("none");
         });
 
-        it("openWildcard is false for commands with no agent completion", async () => {
+        it('afterWildcard is "none" for commands with no agent completion', async () => {
             const result = await getCommandCompletion(
                 "@comptest noop",
                 "forward",
                 context,
             );
             expect(result).toBeDefined();
-            expect(result.openWildcard).toBe(false);
+            expect(result.afterWildcard).toBe("none");
         });
     });
 });

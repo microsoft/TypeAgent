@@ -318,14 +318,14 @@ describe("PartialCompletionSession — state transitions", () => {
     });
 });
 
-describe("PartialCompletionSession — openWildcard anchor sliding", () => {
-    test("openWildcard=true: non-separator after anchor slides anchor instead of re-fetching", async () => {
+describe("PartialCompletionSession — afterWildcard anchor sliding", () => {
+    test('afterWildcard="all": non-separator after anchor slides anchor instead of re-fetching', async () => {
         const menu = makeMenu();
         // Grammar: play $(track) by $(artist)
         // User typed "play my fav" → grammar returns "by" at position 11
         const result = makeCompletionResult(["by"], 11, {
             closedSet: true,
-            openWildcard: true,
+            afterWildcard: "all",
             separatorMode: "spacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
@@ -335,8 +335,8 @@ describe("PartialCompletionSession — openWildcard anchor sliding", () => {
         await Promise.resolve(); // → ACTIVE, anchor="play my fav"
 
         // User keeps typing the track name — non-separator char "o"
-        // Without openWildcard, this would trigger A3 re-fetch.
-        // With openWildcard, the anchor slides forward — no re-fetch.
+        // Without afterWildcard="all", this would trigger A3 re-fetch.
+        // With afterWildcard="all", the anchor slides forward — no re-fetch.
         session.update("play my favo", getPos);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
 
@@ -344,11 +344,11 @@ describe("PartialCompletionSession — openWildcard anchor sliding", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("openWildcard=true: separator after slide shows completions from trie", async () => {
+    test('afterWildcard="all": separator after slide shows completions from trie', async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["by"], 11, {
             closedSet: true,
-            openWildcard: true,
+            afterWildcard: "all",
             separatorMode: "spacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
@@ -368,11 +368,11 @@ describe("PartialCompletionSession — openWildcard anchor sliding", () => {
         expect(menu.updatePrefix).toHaveBeenCalled();
     });
 
-    test("openWildcard=true: typing the keyword triggers B4 unique match → re-fetch", async () => {
+    test('afterWildcard="all": typing the keyword triggers B4 unique match → re-fetch', async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["by"], 11, {
             closedSet: true,
-            openWildcard: true,
+            afterWildcard: "all",
             separatorMode: "spacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
@@ -387,11 +387,11 @@ describe("PartialCompletionSession — openWildcard anchor sliding", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
 
-    test("openWildcard=false: non-separator after anchor triggers normal re-fetch", async () => {
+    test('afterWildcard="none": non-separator after anchor triggers normal re-fetch', async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["song"], 4, {
             closedSet: true,
-            openWildcard: false,
+            afterWildcard: "none",
             separatorMode: "spacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
@@ -400,16 +400,37 @@ describe("PartialCompletionSession — openWildcard anchor sliding", () => {
         session.update("play", getPos);
         await Promise.resolve();
 
-        // Without openWildcard, non-separator char triggers A3 re-fetch
+        // Without afterWildcard="all", non-separator char triggers A3 re-fetch
         session.update("playx", getPos);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
 
-    test("openWildcard=true with optional separator: C6 slide when trie empty", async () => {
+    test('afterWildcard="some": non-separator after anchor triggers re-fetch, not slide', async () => {
+        const menu = makeMenu();
+        // "some" means mixed rules — some wildcard, some literal.
+        // The shell must re-fetch (not slide) so stale literal
+        // completions are replaced by fresh results at the new position.
+        const result = makeCompletionResult(["by", "music"], 11, {
+            closedSet: true,
+            afterWildcard: "some",
+            separatorMode: "spacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play my fav", getPos);
+        await Promise.resolve();
+
+        // Non-separator after anchor — afterWildcard="some" → re-fetch
+        session.update("play my favo", getPos);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+    });
+
+    test('afterWildcard="all" with optional separator: C6 slide when trie empty', async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["next"], 8, {
             closedSet: true,
-            openWildcard: true,
+            afterWildcard: "all",
             separatorMode: "optional",
         });
         const dispatcher = makeDispatcher(result);
@@ -420,7 +441,7 @@ describe("PartialCompletionSession — openWildcard anchor sliding", () => {
 
         // With optional separator, raw prefix goes straight to trie.
         // "bar" doesn't match "next" → trie empty → C6
-        // openWildcard=true → slide anchor, no re-fetch.
+        // afterWildcard="all" → slide anchor, no re-fetch.
         session.update("play foobar", getPos);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
