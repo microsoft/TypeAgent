@@ -94,10 +94,12 @@
       ]
     },
     "overrides": {
+      "express>path-to-regexp": "0.1.13",
       "hono": ">=4.12.8",
       "http-proxy-agent": ">=7.0.0",
       "node-gyp": "^12.2.0",
-      "serialize-javascript": ">=7.0.0"
+      "serialize-javascript": ">=7.0.0",
+      "undici": ">=7.24.0"
     },
     "ignoredBuiltDependencies": [
       "leveldown"
