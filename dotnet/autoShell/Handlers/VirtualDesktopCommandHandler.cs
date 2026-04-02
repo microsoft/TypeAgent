@@ -28,15 +28,15 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
 
     public VirtualDesktopCommandHandler(IAppRegistry appRegistry)
     {
-        _appRegistry = appRegistry;
+        this._appRegistry = appRegistry;
 
         // Desktop management COM initialization
-        _shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidImmersiveShell));
-        _virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)_shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
-        _virtualDesktopManagerInternal_BUGBUG = (IVirtualDesktopManagerInternal_BUGBUG)_shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
-        _virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidVirtualDesktopManager));
-        _applicationViewCollection = (IApplicationViewCollection)_shell.QueryService(typeof(IApplicationViewCollection).GUID, typeof(IApplicationViewCollection).GUID);
-        _virtualDesktopPinnedApps = (IVirtualDesktopPinnedApps)_shell.QueryService(s_clsidVirtualDesktopPinnedApps, typeof(IVirtualDesktopPinnedApps).GUID);
+        this._shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidImmersiveShell));
+        this._virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)this._shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
+        this._virtualDesktopManagerInternal_BUGBUG = (IVirtualDesktopManagerInternal_BUGBUG)this._shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
+        this._virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidVirtualDesktopManager));
+        this._applicationViewCollection = (IApplicationViewCollection)this._shell.QueryService(typeof(IApplicationViewCollection).GUID, typeof(IApplicationViewCollection).GUID);
+        this._virtualDesktopPinnedApps = (IVirtualDesktopPinnedApps)this._shell.QueryService(s_clsidVirtualDesktopPinnedApps, typeof(IVirtualDesktopPinnedApps).GUID);
     }
 
     /// <inheritdoc/>
@@ -56,27 +56,27 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
         switch (key)
         {
             case "CreateDesktop":
-                CreateDesktop(value);
+                this.CreateDesktop(value);
                 break;
 
             case "SwitchDesktop":
-                SwitchDesktop(value);
+                this.SwitchDesktop(value);
                 break;
 
             case "NextDesktop":
-                BumpDesktopIndex(1);
+                this.BumpDesktopIndex(1);
                 break;
 
             case "PreviousDesktop":
-                BumpDesktopIndex(-1);
+                this.BumpDesktopIndex(-1);
                 break;
 
             case "MoveWindowToDesktop":
-                MoveWindowToDesktop(rawValue);
+                this.MoveWindowToDesktop(rawValue);
                 break;
 
             case "PinWindow":
-                PinWindow(value);
+                this.PinWindow(value);
                 break;
         }
     }
@@ -99,7 +99,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
                 desktopNames = ["desktop X"];
             }
 
-            if (_virtualDesktopManagerInternal == null)
+            if (this._virtualDesktopManagerInternal == null)
             {
                 Debug.WriteLine($"Failed to get Virtual Desktop Manager Internal");
                 return;
@@ -113,7 +113,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
                 try
                 {
                     // Create a new virtual desktop
-                    IVirtualDesktop newDesktop = _virtualDesktopManagerInternal.CreateDesktop();
+                    IVirtualDesktop newDesktop = this._virtualDesktopManagerInternal.CreateDesktop();
 
                     if (newDesktop != null)
                     {
@@ -153,17 +153,17 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
         if (!int.TryParse(desktopIdentifier, out int index))
         {
             // Try to find the desktop by name
-            _virtualDesktopManagerInternal.SwitchDesktop(FindDesktopByName(desktopIdentifier));
+            this._virtualDesktopManagerInternal.SwitchDesktop(this.FindDesktopByName(desktopIdentifier));
         }
         else
         {
-            SwitchDesktop(index);
+            this.SwitchDesktop(index);
         }
     }
 
     private void SwitchDesktop(int index)
     {
-        _virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
         desktops.GetAt(index, typeof(IVirtualDesktop).GUID, out object od);
 
         // BUGBUG: different windows versions use different COM interfaces
@@ -172,17 +172,17 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
         {
             // Use the BUGBUG interface for Windows 11 22H2+
-            _virtualDesktopManagerInternal_BUGBUG.SwitchDesktopWithAnimation((IVirtualDesktop)od);
+            this._virtualDesktopManagerInternal_BUGBUG.SwitchDesktopWithAnimation((IVirtualDesktop)od);
         }
         else if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
         {
             // Windows 11 21H2 (build 22000)
-            _virtualDesktopManagerInternal.SwitchDesktopWithAnimation((IVirtualDesktop)od);
+            this._virtualDesktopManagerInternal.SwitchDesktopWithAnimation((IVirtualDesktop)od);
         }
         else
         {
             // Windows 10 - use the original interface
-            _virtualDesktopManagerInternal.SwitchDesktopAndMoveForegroundView((IVirtualDesktop)od);
+            this._virtualDesktopManagerInternal.SwitchDesktopAndMoveForegroundView((IVirtualDesktop)od);
         }
 
         Marshal.ReleaseComObject(desktops);
@@ -190,9 +190,9 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
 
     private void BumpDesktopIndex(int bump)
     {
-        IVirtualDesktop desktop = _virtualDesktopManagerInternal.GetCurrentDesktop();
+        IVirtualDesktop desktop = this._virtualDesktopManagerInternal.GetCurrentDesktop();
         int index = GetDesktopIndex(desktop);
-        int count = _virtualDesktopManagerInternal.GetCount();
+        int count = this._virtualDesktopManagerInternal.GetCount();
 
         if (index == -1)
         {
@@ -211,14 +211,14 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
             index = count - 1;
         }
 
-        SwitchDesktop(index);
+        this.SwitchDesktop(index);
     }
 
     private IVirtualDesktop FindDesktopByName(string name)
     {
-        int count = _virtualDesktopManagerInternal.GetCount();
+        int count = this._virtualDesktopManagerInternal.GetCount();
 
-        _virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
         for (int i = 0; i < count; i++)
         {
             desktops.GetAt(i, typeof(IVirtualDesktop).GUID, out object od);
@@ -237,9 +237,9 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
 
     private int GetDesktopIndex(IVirtualDesktop desktop)
     {
-        int count = _virtualDesktopManagerInternal.GetCount();
+        int count = this._virtualDesktopManagerInternal.GetCount();
 
-        _virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
         for (int i = 0; i < count; i++)
         {
             desktops.GetAt(i, typeof(IVirtualDesktop).GUID, out object od);
@@ -277,12 +277,12 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
             return;
         }
 
-        IntPtr hWnd = WindowCommandHandler.FindProcessWindowHandle(process, _appRegistry);
+        IntPtr hWnd = WindowCommandHandler.FindProcessWindowHandle(process, this._appRegistry);
 
         if (int.TryParse(desktop, out int desktopIndex))
         {
-            _virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
-            if (desktopIndex < 1 || desktopIndex > _virtualDesktopManagerInternal.GetCount())
+            this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+            if (desktopIndex < 1 || desktopIndex > this._virtualDesktopManagerInternal.GetCount())
             {
                 Debug.WriteLine("Desktop index out of range");
                 Marshal.ReleaseComObject(desktops);
@@ -290,7 +290,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
             }
             desktops.GetAt(desktopIndex - 1, typeof(IVirtualDesktop).GUID, out object od);
             Guid g = ((IVirtualDesktop)od).GetId();
-            _virtualDesktopManager.MoveWindowToDesktop(hWnd, ref g);
+            this._virtualDesktopManager.MoveWindowToDesktop(hWnd, ref g);
             Marshal.ReleaseComObject(desktops);
             return;
         }
@@ -299,21 +299,21 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
         if (ivd is not null)
         {
             Guid desktopGuid = ivd.GetId();
-            _virtualDesktopManager.MoveWindowToDesktop(hWnd, ref desktopGuid);
+            this._virtualDesktopManager.MoveWindowToDesktop(hWnd, ref desktopGuid);
         }
     }
 
     private void PinWindow(string processName)
     {
-        IntPtr hWnd = WindowCommandHandler.FindProcessWindowHandle(processName, _appRegistry);
+        IntPtr hWnd = WindowCommandHandler.FindProcessWindowHandle(processName, this._appRegistry);
 
         if (hWnd != IntPtr.Zero)
         {
-            _applicationViewCollection.GetViewForHwnd(hWnd, out IApplicationView view);
+            this._applicationViewCollection.GetViewForHwnd(hWnd, out IApplicationView view);
 
             if (view is not null)
             {
-                _virtualDesktopPinnedApps.PinView((IApplicationView)view);
+                this._virtualDesktopPinnedApps.PinView((IApplicationView)view);
             }
         }
         else

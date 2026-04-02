@@ -21,7 +21,7 @@ internal class WindowCommandHandler : ICommandHandler
 
     public WindowCommandHandler(IAppRegistry appRegistry)
     {
-        _appRegistry = appRegistry;
+        this._appRegistry = appRegistry;
     }
 
     /// <inheritdoc/>
@@ -39,22 +39,22 @@ internal class WindowCommandHandler : ICommandHandler
         switch (key)
         {
             case "Maximize":
-                MaximizeWindow(value);
+                this.MaximizeWindow(value);
                 break;
 
             case "Minimize":
-                MinimizeWindow(value);
+                this.MinimizeWindow(value);
                 break;
 
             case "SwitchTo":
-                RaiseWindow(value, _appRegistry);
+                RaiseWindow(value, this._appRegistry);
                 break;
 
             case "Tile":
                 string[] apps = value.Split(',');
                 if (apps.Length == 2)
                 {
-                    TileWindowPair(apps[0], apps[1]);
+                    this.TileWindowPair(apps[0], apps[1]);
                 }
                 break;
         }
@@ -94,7 +94,7 @@ internal class WindowCommandHandler : ICommandHandler
 
     private void MaximizeWindow(string friendlyName)
     {
-        string processName = _appRegistry.ResolveProcessName(friendlyName);
+        string processName = this._appRegistry.ResolveProcessName(friendlyName);
         Process[] processes = Process.GetProcessesByName(processName);
         foreach (Process p in processes)
         {
@@ -118,7 +118,7 @@ internal class WindowCommandHandler : ICommandHandler
 
     private void MinimizeWindow(string friendlyName)
     {
-        string processName = _appRegistry.ResolveProcessName(friendlyName);
+        string processName = this._appRegistry.ResolveProcessName(friendlyName);
         Process[] processes = Process.GetProcessesByName(processName);
         foreach (Process p in processes)
         {
@@ -141,7 +141,7 @@ internal class WindowCommandHandler : ICommandHandler
     private void TileWindowPair(string name1, string name2)
     {
         // TODO: Update this to account for UWP apps (e.g. calculator). UWPs are hosted by ApplicationFrameHost.exe
-        string processName1 = _appRegistry.ResolveProcessName(name1);
+        string processName1 = this._appRegistry.ResolveProcessName(name1);
         Process[] processes1 = Process.GetProcessesByName(processName1);
         IntPtr hWnd1 = IntPtr.Zero;
         IntPtr hWnd2 = IntPtr.Zero;
@@ -163,7 +163,7 @@ internal class WindowCommandHandler : ICommandHandler
             (hWnd1, pid1) = FindWindowByTitle(processName1);
         }
 
-        string processName2 = _appRegistry.ResolveProcessName(name2);
+        string processName2 = this._appRegistry.ResolveProcessName(name2);
         Process[] processes2 = Process.GetProcessesByName(processName2);
         foreach (Process p in processes2)
         {

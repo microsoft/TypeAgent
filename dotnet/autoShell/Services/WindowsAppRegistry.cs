@@ -26,7 +26,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
     {
         string userName = Environment.UserName;
 
-        _appMetadata = new SortedList<string, string[]>
+        this._appMetadata = new SortedList<string, string[]>
         {
             { "chrome", ["chrome.exe"] },
             { "power point", ["C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE"] },
@@ -56,9 +56,9 @@ internal sealed class WindowsAppRegistry : IAppRegistry
             { "github copilot", [$"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe\\copilot.exe", "GITHUB_COPILOT_ROOT_DIR", "--allow-all-tools"] },
         };
 
-        foreach (var kvp in _appMetadata)
+        foreach (var kvp in this._appMetadata)
         {
-            _friendlyNameToPath.Add(kvp.Key, kvp.Value[0]);
+            this._friendlyNameToPath.Add(kvp.Key, kvp.Value[0]);
         }
 
         try
@@ -66,7 +66,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
             var installedApps = GetAllInstalledAppIds();
             foreach (var kvp in installedApps)
             {
-                _friendlyNameToId.Add(kvp.Key, kvp.Value);
+                this._friendlyNameToId.Add(kvp.Key, kvp.Value);
             }
         }
         catch (Exception ex)
@@ -77,12 +77,12 @@ internal sealed class WindowsAppRegistry : IAppRegistry
 
     public string GetExecutablePath(string friendlyName)
     {
-        return (string)_friendlyNameToPath[friendlyName.ToLowerInvariant()];
+        return (string)this._friendlyNameToPath[friendlyName.ToLowerInvariant()];
     }
 
     public string GetAppUserModelId(string friendlyName)
     {
-        return (string)_friendlyNameToId[friendlyName.ToLowerInvariant()];
+        return (string)this._friendlyNameToId[friendlyName.ToLowerInvariant()];
     }
 
     public string ResolveProcessName(string friendlyName)
@@ -93,21 +93,21 @@ internal sealed class WindowsAppRegistry : IAppRegistry
 
     public string GetWorkingDirectoryEnvVar(string friendlyName)
     {
-        return _appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1
+        return this._appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1
             ? value[1]
             : null;
     }
 
     public string GetArguments(string friendlyName)
     {
-        return _appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 2
+        return this._appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 2
             ? string.Join(" ", value.Skip(2))
             : null;
     }
 
     public IEnumerable<string> GetAllAppNames()
     {
-        return _friendlyNameToId.Keys.Cast<string>();
+        return this._friendlyNameToId.Keys.Cast<string>();
     }
 
     private static SortedList<string, string> GetAllInstalledAppIds()

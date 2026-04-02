@@ -24,7 +24,7 @@ internal class SystemCommandHandler : ICommandHandler
 
     public SystemCommandHandler(IProcessService process)
     {
-        _process = process;
+        this._process = process;
     }
 
     /// <inheritdoc/>
@@ -33,7 +33,7 @@ internal class SystemCommandHandler : ICommandHandler
         switch (key)
         {
             case "ToggleNotifications":
-                _process.StartShellExecute("ms-actioncenter:");
+                this._process.StartShellExecute("ms-actioncenter:");
                 break;
 
             case "Debug":

@@ -93,12 +93,12 @@ internal class DisplayCommandHandler : ICommandHandler
             case "SetTextSize":
                 if (int.TryParse(value, out int textSizePct))
                 {
-                    SetTextSize(textSizePct);
+                    this.SetTextSize(textSizePct);
                 }
                 break;
 
             case "SetScreenResolution":
-                SetDisplayResolution(rawValue);
+                this.SetDisplayResolution(rawValue);
                 break;
 
             case "ListResolutions":

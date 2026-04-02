@@ -34,8 +34,8 @@ internal class DisplaySettingsHandler : ICommandHandler
 
     public DisplaySettingsHandler(IRegistryService registry, IProcessService process)
     {
-        _registry = registry;
-        _process = process;
+        this._registry = registry;
+        this._process = process;
     }
 
     /// <inheritdoc/>
@@ -48,28 +48,28 @@ internal class DisplaySettingsHandler : ICommandHandler
             switch (key)
             {
                 case "AdjustScreenBrightness":
-                    HandleAdjustScreenBrightness(param);
+                    this.HandleAdjustScreenBrightness(param);
                     break;
 
                 case "DisplayScaling":
-                    HandleDisplayScaling(param);
+                    this.HandleDisplayScaling(param);
                     break;
 
                 case "AdjustColorTemperature":
-                    _process.StartShellExecute("ms-settings:nightlight");
+                    this._process.StartShellExecute("ms-settings:nightlight");
                     break;
 
                 case "AdjustScreenOrientation":
                 case "DisplayResolutionAndAspectRatio":
-                    _process.StartShellExecute("ms-settings:display");
+                    this._process.StartShellExecute("ms-settings:display");
                     break;
 
                 case "EnableBlueLightFilterSchedule":
-                    HandleBlueLightFilter(param);
+                    this.HandleBlueLightFilter(param);
                     break;
 
                 case "RotationLock":
-                    HandleRotationLock(param);
+                    this.HandleRotationLock(param);
                     break;
             }
         }
@@ -109,7 +109,7 @@ internal class DisplaySettingsHandler : ICommandHandler
             };
 
             // DPI scaling requires opening settings
-            _process.StartShellExecute("ms-settings:display");
+            this._process.StartShellExecute("ms-settings:display");
             Debug.WriteLine($"Display scaling target: {percentage}%");
         }
     }
@@ -158,7 +158,7 @@ internal class DisplaySettingsHandler : ICommandHandler
             ? [0x02, 0x00, 0x00, 0x00]
             : [0x02, 0x00, 0x00, 0x01];
 
-        _registry.SetValue(
+        this._registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings",
             "Data",
             data,
@@ -168,7 +168,7 @@ internal class DisplaySettingsHandler : ICommandHandler
     private void HandleRotationLock(JObject param)
     {
         bool enable = param.Value<bool?>("enable") ?? true;
-        _registry.SetValue(
+        this._registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
             "RotationLockPreference",
             enable ? 1 : 0,

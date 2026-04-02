@@ -20,7 +20,7 @@ internal class NetworkCommandHandler : ICommandHandler
 {
     #region COM / P/Invoke
 
-    private static readonly Guid s_clsidRadioManagementAPI = new Guid(0x581333f6, 0x28db, 0x41be, 0xbc, 0x7a, 0xff, 0x20, 0x1f, 0x12, 0xf3, 0xf6);
+    private static readonly Guid s_clsidRadioManagementApi = new Guid(0x581333f6, 0x28db, 0x41be, 0xbc, 0x7a, 0xff, 0x20, 0x1f, 0x12, 0xf3, 0xf6);
 
     [ComImport]
     [Guid("db3afbfb-08e6-46c6-aa70-bf9a34c30ab7")]
@@ -176,7 +176,7 @@ internal class NetworkCommandHandler : ICommandHandler
         switch (key)
         {
             case "ToggleAirplaneMode":
-                SetAirplaneMode(bool.Parse(value));
+                this.SetAirplaneMode(bool.Parse(value));
                 break;
 
             case "ListWifiNetworks":
@@ -187,11 +187,11 @@ internal class NetworkCommandHandler : ICommandHandler
                 var netInfo = JObject.Parse(value);
                 string ssid = netInfo.Value<string>("ssid");
                 string password = netInfo["password"] is not null ? netInfo.Value<string>("password") : "";
-                ConnectToWifi(ssid, password);
+                this.ConnectToWifi(ssid, password);
                 break;
 
             case "DisconnectWifi":
-                DisconnectFromWifi();
+                this.DisconnectFromWifi();
                 break;
 
             case "BluetoothToggle":
@@ -211,7 +211,7 @@ internal class NetworkCommandHandler : ICommandHandler
         IRadioManager radioManager = null;
         try
         {
-            Type radioManagerType = Type.GetTypeFromCLSID(s_clsidRadioManagementAPI);
+            Type radioManagerType = Type.GetTypeFromCLSID(s_clsidRadioManagementApi);
             if (radioManagerType == null)
             {
                 Debug.WriteLine("Failed to get Radio Management API type");

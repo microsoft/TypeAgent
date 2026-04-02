@@ -21,7 +21,7 @@ internal class CommandDispatcher
         {
             foreach (string command in handler.SupportedCommands)
             {
-                _handlers[command] = handler;
+                this._handlers[command] = handler;
             }
         }
     }
@@ -45,7 +45,7 @@ internal class CommandDispatcher
 
             try
             {
-                if (_handlers.TryGetValue(key, out ICommandHandler handler))
+                if (this._handlers.TryGetValue(key, out ICommandHandler handler))
                 {
                     handler.Handle(key, value, kvp.Value);
                 }

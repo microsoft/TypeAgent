@@ -30,7 +30,7 @@ internal class SystemSettingsHandler : ICommandHandler
 
     public SystemSettingsHandler(IProcessService process)
     {
-        _process = process;
+        this._process = process;
     }
 
     /// <inheritdoc/>
@@ -45,20 +45,20 @@ internal class SystemSettingsHandler : ICommandHandler
                     break;
 
                 case "AutomaticTimeSettingAction":
-                    _process.StartShellExecute("ms-settings:dateandtime");
+                    this._process.StartShellExecute("ms-settings:dateandtime");
                     break;
 
                 case "EnableGameMode":
-                    _process.StartShellExecute("ms-settings:gaming-gamemode");
+                    this._process.StartShellExecute("ms-settings:gaming-gamemode");
                     break;
 
                 case "EnableQuietHours":
-                    _process.StartShellExecute("ms-settings:quiethours");
+                    this._process.StartShellExecute("ms-settings:quiethours");
                     break;
 
                 case "MinimizeWindowsOnMonitorDisconnectAction":
                 case "RememberWindowLocations":
-                    _process.StartShellExecute("ms-settings:display");
+                    this._process.StartShellExecute("ms-settings:display");
                     break;
             }
         }

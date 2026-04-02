@@ -20,8 +20,8 @@ internal class AppCommandHandler : ICommandHandler
 
     public AppCommandHandler(IAppRegistry appRegistry, IProcessService processService)
     {
-        _appRegistry = appRegistry;
-        _processService = processService;
+        this._appRegistry = appRegistry;
+        this._processService = processService;
     }
 
     /// <inheritdoc/>
@@ -38,28 +38,28 @@ internal class AppCommandHandler : ICommandHandler
         switch (key)
         {
             case "LaunchProgram":
-                OpenApplication(value);
+                this.OpenApplication(value);
                 break;
 
             case "CloseProgram":
-                CloseApplication(value);
+                this.CloseApplication(value);
                 break;
 
             case "ListAppNames":
-                Console.WriteLine(JsonConvert.SerializeObject(_appRegistry.GetAllAppNames()));
+                Console.WriteLine(JsonConvert.SerializeObject(this._appRegistry.GetAllAppNames()));
                 break;
         }
     }
 
     private void OpenApplication(string friendlyName)
     {
-        string processName = _appRegistry.ResolveProcessName(friendlyName);
-        Process[] processes = _processService.GetProcessesByName(processName);
+        string processName = this._appRegistry.ResolveProcessName(friendlyName);
+        Process[] processes = this._processService.GetProcessesByName(processName);
 
         if (processes.Length == 0)
         {
             Debug.WriteLine("Starting " + friendlyName);
-            string path = _appRegistry.GetExecutablePath(friendlyName);
+            string path = this._appRegistry.GetExecutablePath(friendlyName);
             if (path != null)
             {
                 var psi = new ProcessStartInfo
@@ -68,13 +68,13 @@ internal class AppCommandHandler : ICommandHandler
                     UseShellExecute = true
                 };
 
-                string workDirEnvVar = _appRegistry.GetWorkingDirectoryEnvVar(friendlyName);
+                string workDirEnvVar = this._appRegistry.GetWorkingDirectoryEnvVar(friendlyName);
                 if (workDirEnvVar != null)
                 {
                     psi.WorkingDirectory = Environment.ExpandEnvironmentVariables("%" + workDirEnvVar + "%") ?? string.Empty;
                 }
 
-                string arguments = _appRegistry.GetArguments(friendlyName);
+                string arguments = this._appRegistry.GetArguments(friendlyName);
                 if (arguments != null)
                 {
                     psi.Arguments = arguments;
@@ -82,22 +82,22 @@ internal class AppCommandHandler : ICommandHandler
 
                 try
                 {
-                    _processService.Start(psi);
+                    this._processService.Start(psi);
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
                     psi.FileName = friendlyName;
-                    _processService.Start(psi);
+                    this._processService.Start(psi);
                 }
             }
             else
             {
-                string appModelUserID = _appRegistry.GetAppUserModelId(friendlyName);
-                if (appModelUserID != null)
+                string appModelUserId = this._appRegistry.GetAppUserModelId(friendlyName);
+                if (appModelUserId != null)
                 {
                     try
                     {
-                        _processService.Start(new ProcessStartInfo("explorer.exe", @" shell:appsFolder\" + appModelUserID));
+                        this._processService.Start(new ProcessStartInfo("explorer.exe", @" shell:appsFolder\" + appModelUserId));
                     }
                     catch { }
                 }
@@ -106,14 +106,14 @@ internal class AppCommandHandler : ICommandHandler
         else
         {
             Debug.WriteLine("Raising " + friendlyName);
-            WindowCommandHandler.RaiseWindow(friendlyName, _appRegistry);
+            WindowCommandHandler.RaiseWindow(friendlyName, this._appRegistry);
         }
     }
 
     private void CloseApplication(string friendlyName)
     {
-        string processName = _appRegistry.ResolveProcessName(friendlyName);
-        Process[] processes = _processService.GetProcessesByName(processName);
+        string processName = this._appRegistry.ResolveProcessName(friendlyName);
+        Process[] processes = this._processService.GetProcessesByName(processName);
         if (processes.Length != 0)
         {
             Debug.WriteLine("Closing " + friendlyName);

@@ -64,11 +64,11 @@ internal partial class ThemeCommandHandler : ICommandHandler
 
     public ThemeCommandHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams)
     {
-        _registry = registry;
-        _process = process;
-        _systemParams = systemParams;
+        this._registry = registry;
+        this._process = process;
+        this._systemParams = systemParams;
 
-        LoadThemes();
+        this.LoadThemes();
     }
 
     /// <inheritdoc/>
@@ -77,20 +77,20 @@ internal partial class ThemeCommandHandler : ICommandHandler
         switch (key)
         {
             case "SetWallpaper":
-                _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, value, SPIF_UPDATEINIFILE_SENDCHANGE);
+                this._systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, value, SPIF_UPDATEINIFILE_SENDCHANGE);
                 break;
 
             case "ApplyTheme":
-                ApplyTheme(value);
+                this.ApplyTheme(value);
                 break;
 
             case "ListThemes":
-                var themes = GetInstalledThemes();
+                var themes = this.GetInstalledThemes();
                 Console.WriteLine(JsonConvert.SerializeObject(themes));
                 break;
 
             case "SetThemeMode":
-                HandleSetThemeMode(value);
+                this.HandleSetThemeMode(value);
                 break;
         }
     }
@@ -99,19 +99,19 @@ internal partial class ThemeCommandHandler : ICommandHandler
     {
         if (value.Equals("toggle", StringComparison.OrdinalIgnoreCase))
         {
-            ToggleLightDarkMode();
+            this.ToggleLightDarkMode();
         }
         else if (value.Equals("light", StringComparison.OrdinalIgnoreCase))
         {
-            SetLightDarkMode(true);
+            this.SetLightDarkMode(true);
         }
         else if (value.Equals("dark", StringComparison.OrdinalIgnoreCase))
         {
-            SetLightDarkMode(false);
+            this.SetLightDarkMode(false);
         }
         else if (bool.TryParse(value, out bool useLightMode))
         {
-            SetLightDarkMode(useLightMode);
+            this.SetLightDarkMode(useLightMode);
         }
     }
 
@@ -119,8 +119,8 @@ internal partial class ThemeCommandHandler : ICommandHandler
 
     private void LoadThemes()
     {
-        _themeDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        _themeDisplayNameDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        this._themeDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        this._themeDisplayNameDictionary = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         string[] themePaths =
         [
@@ -136,22 +136,22 @@ internal partial class ThemeCommandHandler : ICommandHandler
                 foreach (string themeFile in Directory.GetFiles(themesFolder, "*.theme"))
                 {
                     string themeName = Path.GetFileNameWithoutExtension(themeFile);
-                    if (!_themeDictionary.ContainsKey(themeName))
+                    if (!this._themeDictionary.ContainsKey(themeName))
                     {
-                        _themeDictionary[themeName] = themeFile;
+                        this._themeDictionary[themeName] = themeFile;
 
                         // Parse display name from theme file
                         string displayName = GetThemeDisplayName(themeFile);
-                        if (!string.IsNullOrEmpty(displayName) && !_themeDisplayNameDictionary.ContainsKey(displayName))
+                        if (!string.IsNullOrEmpty(displayName) && !this._themeDisplayNameDictionary.ContainsKey(displayName))
                         {
-                            _themeDisplayNameDictionary[displayName] = themeName;
+                            this._themeDisplayNameDictionary[displayName] = themeName;
                         }
                     }
                 }
             }
         }
 
-        _themeDictionary["previous"] = GetCurrentTheme();
+        this._themeDictionary["previous"] = this.GetCurrentTheme();
     }
 
     /// <summary>
@@ -233,8 +233,8 @@ internal partial class ThemeCommandHandler : ICommandHandler
     {
         HashSet<string> themes = [];
 
-        themes.UnionWith(_themeDictionary.Keys);
-        themes.UnionWith(_themeDisplayNameDictionary.Keys);
+        themes.UnionWith(this._themeDictionary.Keys);
+        themes.UnionWith(this._themeDisplayNameDictionary.Keys);
 
         return [.. themes];
     }
@@ -247,7 +247,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
         try
         {
             const string ThemesPath = @"Software\Microsoft\Windows\CurrentVersion\Themes";
-            string currentThemePath = _registry.GetValue(ThemesPath, "CurrentTheme") as string;
+            string currentThemePath = this._registry.GetValue(ThemesPath, "CurrentTheme") as string;
             if (!string.IsNullOrEmpty(currentThemePath))
             {
                 return Path.GetFileNameWithoutExtension(currentThemePath);
@@ -277,8 +277,8 @@ internal partial class ThemeCommandHandler : ICommandHandler
 
             if (!themeName.Equals("previous", StringComparison.OrdinalIgnoreCase))
             {
-                _process.StartShellExecute(themePath);
-                _previousTheme = previous;
+                this._process.StartShellExecute(themePath);
+                this._previousTheme = previous;
                 return true;
             }
             else
@@ -287,7 +287,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
 
                 if (success)
                 {
-                    _previousTheme = previous;
+                    this._previousTheme = previous;
                 }
 
                 return success;
@@ -304,12 +304,12 @@ internal partial class ThemeCommandHandler : ICommandHandler
     /// </summary>
     public bool RevertToPreviousTheme()
     {
-        if (string.IsNullOrEmpty(_previousTheme))
+        if (string.IsNullOrEmpty(this._previousTheme))
         {
             return false;
         }
 
-        string themePath = FindThemePath(_previousTheme);
+        string themePath = FindThemePath(this._previousTheme);
         if (string.IsNullOrEmpty(themePath))
         {
             return false;
@@ -317,7 +317,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
 
         try
         {
-            _process.StartShellExecute(themePath);
+            this._process.StartShellExecute(themePath);
             return true;
         }
         catch
@@ -331,7 +331,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
     /// </summary>
     public string GetPreviousTheme()
     {
-        return _previousTheme;
+        return this._previousTheme;
     }
 
     /// <summary>
@@ -340,15 +340,15 @@ internal partial class ThemeCommandHandler : ICommandHandler
     private string FindThemePath(string themeName)
     {
         // First check by file name
-        if (_themeDictionary.TryGetValue(themeName, out string themePath))
+        if (this._themeDictionary.TryGetValue(themeName, out string themePath))
         {
             return themePath;
         }
 
         // Then check by display name
-        if (_themeDisplayNameDictionary.TryGetValue(themeName, out string fileNameFromDisplay))
+        if (this._themeDisplayNameDictionary.TryGetValue(themeName, out string fileNameFromDisplay))
         {
-            if (_themeDictionary.TryGetValue(fileNameFromDisplay, out string themePathFromDisplay))
+            if (this._themeDictionary.TryGetValue(fileNameFromDisplay, out string themePathFromDisplay))
             {
                 return themePathFromDisplay;
             }
@@ -372,8 +372,8 @@ internal partial class ThemeCommandHandler : ICommandHandler
             const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
             int value = useLightMode ? 1 : 0;
 
-            _registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
-            _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
+            this._registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
+            this._registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
 
             // Broadcast settings change notification to update UI
             BroadcastSettingsChange();
@@ -393,7 +393,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
     public bool ToggleLightDarkMode()
     {
         bool? currentMode = GetCurrentLightMode();
-        return currentMode.HasValue && SetLightDarkMode(!currentMode.Value);
+        return currentMode.HasValue && this.SetLightDarkMode(!currentMode.Value);
     }
 
     /// <summary>
@@ -423,7 +423,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
         try
         {
             const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-            object value = _registry.GetValue(PersonalizePath, "AppsUseLightTheme");
+            object value = this._registry.GetValue(PersonalizePath, "AppsUseLightTheme");
             return value is int intValue ? intValue == 1 : null;
         }
         catch

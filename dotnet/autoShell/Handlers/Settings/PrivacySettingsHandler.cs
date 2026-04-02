@@ -28,7 +28,7 @@ internal class PrivacySettingsHandler : ICommandHandler
 
     public PrivacySettingsHandler(IRegistryService registry)
     {
-        _registry = registry;
+        this._registry = registry;
     }
 
     /// <inheritdoc/>
@@ -48,7 +48,7 @@ internal class PrivacySettingsHandler : ICommandHandler
 
             if (subKey != null)
             {
-                SetAccessSetting(param, subKey);
+                this.SetAccessSetting(param, subKey);
             }
         }
         catch (Exception ex)
@@ -62,7 +62,7 @@ internal class PrivacySettingsHandler : ICommandHandler
         string setting = param.Value<string>("accessSetting") ?? "Allow";
         string regValue = setting.Equals("deny", StringComparison.OrdinalIgnoreCase) ? "Deny" : "Allow";
 
-        _registry.SetValue(
+        this._registry.SetValue(
             ConsentStoreBase + @"\" + capability,
             "Value",
             regValue,

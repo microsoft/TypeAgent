@@ -27,8 +27,8 @@ internal class PowerSettingsHandler : ICommandHandler
 
     public PowerSettingsHandler(IRegistryService registry, IProcessService process)
     {
-        _registry = registry;
-        _process = process;
+        this._registry = registry;
+        this._process = process;
     }
 
     /// <inheritdoc/>
@@ -41,12 +41,12 @@ internal class PowerSettingsHandler : ICommandHandler
             switch (key)
             {
                 case "BatterySaverActivationLevel":
-                    HandleBatterySaverThreshold(param);
+                    this.HandleBatterySaverThreshold(param);
                     break;
 
                 case "SetPowerModeOnBattery":
                 case "SetPowerModePluggedIn":
-                    _process.StartShellExecute("ms-settings:powersleep");
+                    this._process.StartShellExecute("ms-settings:powersleep");
                     break;
             }
         }
@@ -59,7 +59,7 @@ internal class PowerSettingsHandler : ICommandHandler
     private void HandleBatterySaverThreshold(JObject param)
     {
         int threshold = param.Value<int?>("thresholdValue") ?? 20;
-        _registry.SetValue(
+        this._registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Power\BatterySaver",
             "ActivationThreshold",
             threshold,

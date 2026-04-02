@@ -25,7 +25,7 @@ internal class AudioCommandHandler : ICommandHandler
 
     public AudioCommandHandler(IAudioService audio)
     {
-        _audio = audio;
+        this._audio = audio;
     }
 
     /// <inheritdoc/>
@@ -36,17 +36,17 @@ internal class AudioCommandHandler : ICommandHandler
             case "Volume":
                 if (int.TryParse(value, out int pct))
                 {
-                    _savedVolumePct = _audio.GetVolume();
-                    _audio.SetVolume(pct);
+                    this._savedVolumePct = this._audio.GetVolume();
+                    this._audio.SetVolume(pct);
                 }
                 break;
             case "RestoreVolume":
-                _audio.SetVolume((int)_savedVolumePct);
+                this._audio.SetVolume((int)this._savedVolumePct);
                 break;
             case "Mute":
                 if (bool.TryParse(value, out bool mute))
                 {
-                    _audio.SetMute(mute);
+                    this._audio.SetMute(mute);
                 }
                 break;
         }
