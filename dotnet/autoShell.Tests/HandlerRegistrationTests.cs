@@ -95,4 +95,71 @@ public class HandlerRegistrationTests
             $"Duplicate commands across handlers: {string.Join("; ", duplicates)}");
     }
 
+    [Fact]
+    public void AllCommands_HaveAtLeastOneUnitTest()
+    {
+        // Commands that use P/Invoke, COM, or static APIs directly and cannot be
+        // unit-tested without further abstraction layers.
+        var untestableCommands = new HashSet<string>(StringComparer.Ordinal)
+        {
+            // WindowCommandHandler — direct P/Invoke
+            "Maximize", "Minimize", "SwitchTo", "Tile",
+            // VirtualDesktopCommandHandler — COM interop
+            "CreateDesktop", "MoveWindowToDesktop", "NextDesktop",
+            "PinWindow", "PreviousDesktop", "SwitchDesktop",
+            // NetworkCommandHandler — WLAN P/Invoke + COM
+            "BluetoothToggle", "ConnectWifi", "DisconnectWifi",
+            "EnableMeteredConnections", "EnableWifi", "ListWifiNetworks", "ToggleAirplaneMode",
+            // DisplayCommandHandler — direct P/Invoke
+            "ListResolutions", "SetScreenResolution", "SetTextSize",
+            // SystemCommandHandler.Debug — Debugger.Launch()
+            "Debug",
+            // MouseSettingsHandler.SetPrimaryMouseButton — native SwapMouseButton
+            "SetPrimaryMouseButton",
+            // DisplaySettingsHandler.AdjustScreenBrightness — WMI + direct Registry
+            "AdjustScreenBrightness",
+            // SystemSettingsHandler.AutomaticDSTAdjustment — direct Registry.LocalMachine
+            "AutomaticDSTAdjustment",
+        };
+
+        // Discover all test classes in this assembly
+        var testAssembly = typeof(HandlerRegistrationTests).Assembly;
+        var testMethods = testAssembly.GetTypes()
+            .Where(t => t.IsClass && t.IsPublic)
+            .SelectMany(t => t.GetMethods()
+                .Where(m => m.GetCustomAttributes(typeof(Xunit.FactAttribute), false).Length > 0
+                         || m.GetCustomAttributes(typeof(Xunit.TheoryAttribute), false).Length > 0)
+                .Select(m => new { ClassName = t.Name, MethodName = m.Name }))
+            .ToList();
+
+        var untested = new List<string>();
+
+        foreach (var handler in _handlers)
+        {
+            string handlerTypeName = handler.GetType().Name;
+            // Expected test class: "{HandlerTypeName}Tests"
+            string expectedTestClass = handlerTypeName + "Tests";
+
+            var classTests = testMethods
+                .Where(t => t.ClassName == expectedTestClass)
+                .ToList();
+
+            foreach (string command in handler.SupportedCommands)
+            {
+                bool hasCoverage = classTests.Any(t =>
+                    t.MethodName.StartsWith(command + "_", StringComparison.Ordinal) ||
+                    t.MethodName.Contains("_" + command + "_", StringComparison.Ordinal));
+
+                if (!hasCoverage && !untestableCommands.Contains(command))
+                {
+                    untested.Add($"{handlerTypeName}.{command}");
+                }
+            }
+        }
+
+        Assert.True(
+            untested.Count == 0,
+            $"Commands missing unit tests ({untested.Count}):\n  " + string.Join("\n  ", untested));
+    }
+
 }
