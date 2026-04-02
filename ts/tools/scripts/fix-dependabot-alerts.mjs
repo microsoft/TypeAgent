@@ -154,9 +154,9 @@ const clr = {
     fail: chalk.red, // status: fail ✗
     ok: chalk.greenBright, // status: success ✓
     warn: chalk.yellow, // status: warning ⚠
-    version: chalk.yellowBright, // versions, semver specs, upgrade hints
-    latestOk: chalk.greenBright, // latest version satisfies fix
-    latestBad: chalk.redBright, // latest version does NOT satisfy fix
+    version: chalk.yellowBright, // neutral version specs, upgrade hints
+    versionOk: chalk.greenBright, // version that satisfies fix
+    versionBad: chalk.redBright, // version that is vulnerable
     pkg: chalk.whiteBright, // package names (deps, parents, constraints)
     chain: chalk.blueBright, // dependency chain intermediate nodes
     root: chalk.blue, // workspace root names (dep chain leaves)
@@ -552,12 +552,12 @@ function specGuaranteesMinVersion(spec, minVersion) {
 // If the spec is too narrow for the required child version, an
 // `update-workspace` action is emitted (edit package.json + pnpm install).
 //
-// Possible actions produced:
-//   • pnpm-update       — all parent specs allow the fix; just run
+// Possible strategies:
+//   • update             — all parent specs allow the fix; just run
 //                          `pnpm update <pkg> -r`.
-//   • update-workspace  — a workspace package.json spec must be widened
+//   • workspace          — a workspace package.json spec must be widened
 //                          so a newer intermediate dep can be installed.
-//   • override          — no parent upgrade exists; add pnpm.overrides.
+//   • override           — no parent upgrade exists; add pnpm.overrides.
 //
 // Results are cached by (parent@version → child ≥ requiredVersion) to
 // avoid redundant npm-registry lookups across duplicate sub-trees.
@@ -989,12 +989,12 @@ function displayConstraints(constraintInfo, vulnPkg) {
                 ? specGuaranteesMinVersion(blockerLatestSpec, requiredChildVer)
                 : false;
             if (latestAllows) {
-                latestInfo = `latest ${blocker.parent}@${blockerLatest} allows ${blockerLatestSpec} ${clr.ok("✓")}`;
+                latestInfo = `latest ${blocker.parent}@${clr.versionOk(blockerLatest)} allows ${blockerLatestSpec} ${clr.versionOk("✓")}`;
             } else {
-                latestInfo = `latest ${blocker.parent}@${blockerLatest} still pins ${blockerLatestSpec}`;
+                latestInfo = `latest ${blocker.parent}@${clr.versionBad(blockerLatest)} still pins ${blockerLatestSpec}`;
             }
         } else {
-            latestInfo = `latest ${blocker.parent}@${blockerLatest} drops ${blocker.child} dep ${clr.ok("✓")}`;
+            latestInfo = `latest ${blocker.parent}@${clr.versionOk(blockerLatest)} drops ${blocker.child} dep ${clr.versionOk("✓")}`;
         }
         log(`       ${clr.meta(reqInfo + ", " + latestInfo)}`);
     }
@@ -1007,7 +1007,7 @@ function displayConstraints(constraintInfo, vulnPkg) {
             if (renderedUpgrades.has(lineKey)) continue;
             renderedUpgrades.add(lineKey);
             log(
-                `     ${clr.ok("\u2713")} ${clr.pkg(`${u.parent}@${u.parentVersion}`)} ${clr.meta("\u2192")} pnpm update ${clr.pkg(u.parent)} (${clr.fail(u.parentVersion)} ${clr.meta("\u2192")} ${clr.version(u.fixVersion)})`,
+                `     ${clr.ok("\u2713")} ${clr.pkg(`${u.parent}@${u.parentVersion}`)} ${clr.meta("\u2192")} pnpm update ${clr.pkg(u.parent)} (${clr.versionBad(u.parentVersion)} ${clr.meta("\u2192")} ${clr.versionOk(u.fixVersion)})`,
             );
         }
     }
@@ -1123,7 +1123,7 @@ function applyFixActions(actions) {
                     updated = true;
                     appliedCount++;
                     ok(
-                        `${u.workspace}: ${u.pkg} ${clr.fail(u.oldSpec)} \u2192 ${clr.ok(u.newSpec)} in ${u.depField}`,
+                        `${u.workspace}: ${u.pkg} ${clr.versionBad(u.oldSpec)} \u2192 ${clr.versionOk(u.newSpec)} in ${u.depField}`,
                     );
                 }
             }
@@ -1201,7 +1201,7 @@ function detectCrossMajorOverride(pkg, patchedVersion) {
 
 /**
  * Assess the risk of a fix action for a given analysis entry.
- * Works for both override and parent-update strategies.
+ * Works for both override and workspace strategies.
  * Returns { level: "low"|"medium"|"high", reason: string }.
  */
 function assessRisk(entry) {
@@ -1214,7 +1214,7 @@ function assessRisk(entry) {
         semver.valid(patched) &&
         isBreakingBump(currentVersion, patched);
 
-    if (strategy === "parent-update" || strategy === "mixed") {
+    if (strategy === "workspace" || strategy === "mixed") {
         const wsActions =
             entry.fixPlan?.unblockedActions?.filter(
                 (a) => a.type === "update-workspace",
@@ -1342,11 +1342,11 @@ function addOverrides(overridesMap) {
  * and classify the entry's strategy + blockingReasons.
  *
  * Four outcomes:
- *   1. No actions, no blocked versions → strategy = "pnpm-update"
+ *   1. No actions, no blocked versions → strategy = "update"
  *      All parent specs already allow the patched version; a simple
  *      `pnpm update <pkg> -r` will resolve the lockfile.
  *
- *   2. Has unblocked actions, no blocked versions → strategy = "parent-update"
+ *   2. Has unblocked actions, no blocked versions → strategy = "workspace"
  *      Some workspace package.json files need version bumps before the
  *      fix can propagate.  Requires --update-parents (or --auto-fix).
  *
@@ -1354,7 +1354,7 @@ function addOverrides(overridesMap) {
  *      Every resolved version's tree is blocked.  Requires pnpm.overrides.
  *
  *   4. Mixed: some unblocked, some blocked → strategy = "mixed"
- *      Unblocked subtrees get parent-update actions; blocked subtrees
+ *      Unblocked subtrees get workspace/update actions; blocked subtrees
  *      need pnpm.overrides.  Both --update-parents and --apply-overrides
  *      are needed for a full fix.
  */
@@ -1404,7 +1404,7 @@ function formatActions(entry) {
     let riskLine = null;
     if (
         strategy === "override" ||
-        strategy === "parent-update" ||
+        strategy === "workspace" ||
         strategy === "mixed"
     ) {
         const risk = assessRisk(entry);
@@ -1417,7 +1417,7 @@ function formatActions(entry) {
         riskLine = `Risk: ${riskIcon} ${clr.meta("—")} ${clr.meta(risk.reason)}`;
     }
 
-    if (strategy === "pnpm-update") {
+    if (strategy === "update") {
         lines.push(`Fix: ${clr.chrome(`pnpm update ${pkg} -r`)}`);
         return lines;
     }
@@ -1438,7 +1438,7 @@ function formatActions(entry) {
         ) || [];
     for (const act of wsActions) {
         lines.push(
-            `${clr.chrome("[workspace]")} ${clr.pkg(act.workspace)} depends on ${clr.pkg(act.pkg)} ${clr.fail(act.oldSpec)}, needs ${clr.version(act.newSpec)} for fix`,
+            `  ${clr.chrome("[workspace]")} ${clr.pkg(act.workspace)} depends on ${clr.pkg(act.pkg)} ${clr.versionBad(act.oldSpec)}, needs ${clr.versionOk(act.newSpec)} for fix`,
         );
     }
 
@@ -1462,7 +1462,7 @@ function formatActions(entry) {
             ? `depends on ${clr.pkg(constraint.child)} ${clr.version(constraint.requiredSpec)}, blocking fix`
             : `blocks ${clr.pkg(pkg)} from resolving`;
         lines.push(
-            `${clr.chrome("[update]")} ${clr.pkg(act.pkg)}${clr.meta("@")}${clr.fail(act.fromVersion)} ${reason} ${clr.meta("→")} ${clr.version(act.toVersion)} fixes it`,
+            `  ${clr.chrome("[update]")} ${clr.pkg(act.pkg)}${clr.meta("@")}${clr.versionBad(act.fromVersion)} ${reason} ${clr.meta("→")} ${clr.versionOk(act.toVersion)} fixes it`,
         );
     }
 
@@ -1488,7 +1488,7 @@ function formatActions(entry) {
                     ? ` ${clr.meta("(versions: " + fixPlan.blockedVersions.join(", ") + ")")}`
                     : "";
             lines.push(
-                `${clr.warn("[override]")} ${clr.pkg(b.parent)}${clr.meta("@")}${clr.fail(b.parentVersion)} ${specDesc}${latestNote} — no update available${scopeNote}`,
+                `  ${clr.chrome("[override]")} ${clr.pkg(b.parent)}${clr.meta("@")}${clr.versionBad(b.parentVersion)} ${specDesc}${latestNote} — no update available${scopeNote}`,
             );
         }
     }
@@ -1510,7 +1510,7 @@ function formatActions(entry) {
  * Render the compact analysis output for a single package.
  * Produces 1-4 lines depending on strategy:
  *   Line 1: Package identity, severity, version gap
- *   Line 2: "Why" — root cause (only for blocked/parent-update/mixed)
+ *   Line 2: "Why" — root cause (only for blocked/workspace/mixed)
  *   Line 3: "↳ used by" — workspace roots (only if relevant)
  *   Line 4: "Fix" — actionable command + inline risk
  *
@@ -1525,7 +1525,7 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
         const noPatchVersions = getResolvedVersions(whyData);
         const installedStr =
             noPatchVersions.length > 0
-                ? noPatchVersions.map((v) => clr.version(v)).join(", ")
+                ? noPatchVersions.map((v) => clr.versionBad(v)).join(", ")
                 : clr.meta("?");
         log(
             `\n  ${progress} \ud83d\udce6 ${clr.pkg.bold(pkg)} ${clr.fail("\u2717 no patch")} (${colorSeverity(severity)}) ${clr.meta("—")} installed: ${installedStr}, no fix published`,
@@ -1535,7 +1535,7 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
 
     if (strategy === "already-fixed") {
         log(
-            `\n  ${progress} \ud83d\udce6 ${clr.pkg.bold(pkg)} ${clr.ok("\u2713 fixed")} (${colorSeverity(severity)}) ${clr.meta("—")} all installed versions \u2265${clr.version(patched)}`,
+            `\n  ${progress} \ud83d\udce6 ${clr.pkg.bold(pkg)} ${clr.ok("\u2713 fixed")} (${colorSeverity(severity)}) ${clr.meta("—")} all installed versions \u2265${clr.versionOk(patched)}`,
         );
         return;
     }
@@ -1544,21 +1544,21 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
     const uniqueVersions = getResolvedVersions(whyData);
     const vulnVersions = uniqueVersions.filter((v) => semver.lt(v, patched));
     const versionGap = vulnVersions
-        .map((v) => clr.fail(`\u2717 ${v}`))
+        .map((v) => clr.versionBad(`\u2717 ${v}`))
         .join(", ");
 
     // Strategy icon
     let strategyIcon;
-    if (strategy === "pnpm-update") {
+    if (strategy === "update") {
         strategyIcon = clr.ok("\u2713");
-    } else if (strategy === "parent-update") {
+    } else if (strategy === "workspace") {
         strategyIcon = clr.warn("\u25B2");
     } else {
         strategyIcon = clr.fail("\u2717");
     }
 
     log(
-        `\n  ${progress} \ud83d\udce6 ${clr.pkg.bold(pkg)} (${colorSeverity(severity)}) ${clr.meta("—")} ${versionGap} ${clr.meta("\u2192")} need ${clr.version(`\u2265${patched}`)}`,
+        `\n  ${progress} \ud83d\udce6 ${clr.pkg.bold(pkg)} (${colorSeverity(severity)}) ${clr.meta("—")} ${versionGap} ${clr.meta("\u2192")} need ${clr.versionOk(`\u2265${patched}`)}`,
     );
 
     // ── Advisory IDs (verbose only) ──────────────────────────────────────
@@ -1572,7 +1572,7 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
     }
 
     // ── "Used by" — which workspace packages are affected ─────────────
-    if (strategy !== "pnpm-update") {
+    if (strategy !== "update") {
         const wsRoots = extractWorkspaceRoots(whyData);
         if (wsRoots.length > 0) {
             const rootsStr =
@@ -1616,9 +1616,9 @@ function classifyWithFixPlan(entry, whyData) {
     const hasBlockedVersions = fixPlan.blockedVersions.length > 0;
 
     if (!hasBlockedVersions && !hasUnblockedActions) {
-        entry.strategy = "pnpm-update";
+        entry.strategy = "update";
     } else if (!hasBlockedVersions && hasUnblockedActions) {
-        entry.strategy = "parent-update";
+        entry.strategy = "workspace";
         if (!flagAllows(UPDATE_PARENTS, pkg)) {
             entry.blockingReasons.push("--update-parents not specified");
         }
@@ -1819,7 +1819,7 @@ function analyzeVulnerabilities(byPackage) {
     return analyses;
 }
 
-/** Stage 5: Execute pnpm-update, parent-update, or override strategies. */
+/** Stage 5: Execute update, workspace, or override strategies. */
 function executeResolutions(analyses) {
     const actionable = analyses.filter(
         (a) =>
@@ -1873,7 +1873,7 @@ function executeResolutions(analyses) {
     for (const a of actionable) {
         const dryTag = DRY_RUN ? clr.meta("[dry-run] ") : "";
 
-        if (a.strategy === "pnpm-update") {
+        if (a.strategy === "update") {
             if (DRY_RUN) {
                 ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
             } else {
@@ -1888,7 +1888,7 @@ function executeResolutions(analyses) {
                 }
             }
             results.resolved.push(a);
-        } else if (a.strategy === "parent-update" || a.strategy === "mixed") {
+        } else if (a.strategy === "workspace" || a.strategy === "mixed") {
             const wsActions =
                 a.fixPlan?.unblockedActions?.filter(
                     (act) => act.type === "update-workspace",
@@ -1900,12 +1900,12 @@ function executeResolutions(analyses) {
             if (DRY_RUN) {
                 for (const act of wsActions) {
                     ok(
-                        `${dryTag}${act.workspace}: ${act.pkg} ${clr.fail(act.oldSpec)} \u2192 ${clr.ok(act.newSpec)}`,
+                        `${dryTag}${act.workspace}: ${act.pkg} ${clr.versionBad(act.oldSpec)} \u2192 ${clr.versionOk(act.newSpec)}`,
                     );
                 }
                 for (const act of intermediateActions) {
                     ok(
-                        `${dryTag}pnpm update ${act.pkg} -r (${clr.fail(act.fromVersion)} \u2192 ${clr.ok(act.toVersion)})`,
+                        `${dryTag}pnpm update ${act.pkg} -r (${clr.versionBad(act.fromVersion)} \u2192 ${clr.versionOk(act.toVersion)})`,
                     );
                 }
                 ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
@@ -1946,7 +1946,7 @@ function executeResolutions(analyses) {
                     // Expected: blocked versions remain — override handles them
                     a.blockingReasons.length = 0; // clear; override will fix
                 } else {
-                    // parent-update strategy but update didn't fully resolve
+                    // workspace strategy but update didn't fully resolve
                     results.blocked.push(a);
                     continue;
                 }
@@ -2011,6 +2011,28 @@ function executeResolutions(analyses) {
     return results;
 }
 
+/**
+ * Derive a summary action tag from the entry's actual fix plan actions,
+ * e.g. "[workspace+update]", "[update+override]", "[override]".
+ */
+function formatActionTag(entry) {
+    const parts = [];
+    const actions = entry.fixPlan?.unblockedActions || [];
+    if (actions.some((a) => a.type === "update-workspace")) {
+        parts.push("workspace");
+    }
+    if (
+        entry.strategy === "update" ||
+        actions.some((a) => a.type === "update-intermediate")
+    ) {
+        parts.push("update");
+    }
+    if (entry.strategy === "override" || entry.strategy === "mixed") {
+        parts.push("override");
+    }
+    return `[${parts.join("+")}]`;
+}
+
 /** Stage 6: Print summary and set exit code. */
 function printSummary(results) {
     header("Summary");
@@ -2037,7 +2059,7 @@ function printSummary(results) {
     if (results.blocked.length > 0) {
         log("");
         const parentBlocked = results.blocked.filter(
-            (a) => a.strategy === "parent-update",
+            (a) => a.strategy === "workspace",
         );
         const overrideBlocked = results.blocked.filter(
             (a) =>
@@ -2050,7 +2072,7 @@ function printSummary(results) {
         );
         const unfixable = results.blocked.filter(
             (a) =>
-                a.strategy !== "parent-update" &&
+                a.strategy !== "workspace" &&
                 a.strategy !== "mixed" &&
                 !a.blockingReasons.some(
                     (r) => r === "--apply-overrides not specified",
@@ -2107,26 +2129,19 @@ function printSummary(results) {
     const fixedEntries = results.resolved.filter(
         (a) =>
             a.strategy === "override" ||
-            a.strategy === "parent-update" ||
+            a.strategy === "workspace" ||
             a.strategy === "mixed" ||
-            a.strategy === "pnpm-update",
+            a.strategy === "update",
     );
     if (fixedEntries.length > 0) {
         log(clr.meta(`\n  Fixed packages:`));
         for (const a of fixedEntries) {
-            const strategyTag =
-                a.strategy === "pnpm-update"
-                    ? clr.chrome("[update]")
-                    : a.strategy === "parent-update"
-                      ? clr.chrome("[update]")
-                      : a.strategy === "mixed"
-                        ? clr.chrome("[update+override]")
-                        : clr.warn("[override]");
+            const strategyTag = clr.chrome(formatActionTag(a));
             const fromVer = a.currentVersion
                 ? `${clr.meta(a.currentVersion)} ${clr.meta("→")} `
                 : "";
             log(
-                `     ${clr.ok("✓")}  ${strategyTag} ${clr.pkg(a.pkg)} ${fromVer}${clr.version(`>=${a.patched}`)}`,
+                `     ${clr.ok("✓")}  ${strategyTag} ${clr.pkg(a.pkg)} ${fromVer}${clr.versionOk(`>=${a.patched}`)}`,
             );
         }
     }
@@ -2136,7 +2151,7 @@ function printSummary(results) {
     const riskEntries = results.blocked.filter(
         (a) =>
             a.strategy === "override" ||
-            a.strategy === "parent-update" ||
+            a.strategy === "workspace" ||
             a.strategy === "mixed",
     );
     if (riskEntries.length > 0) {
@@ -2157,14 +2172,9 @@ function printSummary(results) {
                     : risk.level === "medium"
                       ? clr.warn("■ medium")
                       : clr.ok("▽ low");
-            const strategyTag =
-                a.strategy === "parent-update"
-                    ? clr.chrome("[update]")
-                    : a.strategy === "mixed"
-                      ? clr.chrome("[update+override]")
-                      : clr.warn("[override]");
+            const strategyTag = clr.chrome(formatActionTag(a));
             log(
-                `     ${riskIcon}  ${strategyTag} ${clr.pkg(a.pkg)} ${clr.version(`>=${a.patched}`)}: ${clr.meta(risk.reason)}`,
+                `     ${riskIcon}  ${strategyTag} ${clr.pkg(a.pkg)} ${clr.versionOk(`>=${a.patched}`)}: ${clr.meta(risk.reason)}`,
             );
         }
     }
