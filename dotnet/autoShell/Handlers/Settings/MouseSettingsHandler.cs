@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using autoShell.Services;
 using Newtonsoft.Json.Linq;
 
-namespace autoShell.Handlers;
+namespace autoShell.Handlers.Settings;
 
 /// <summary>
 /// Handles mouse and touchpad settings: pointer size, precision, cursor speed, scroll lines,

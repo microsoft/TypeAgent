@@ -26,7 +26,7 @@ public class AppCommandHandlerTests
     public void LaunchProgram_AppNotRunning_StartsViaPath()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("chrome")).Returns("chrome");
-        _processMock.Setup(p => p.GetProcessesByName("chrome")).Returns(Array.Empty<Process>());
+        _processMock.Setup(p => p.GetProcessesByName("chrome")).Returns([]);
         _appRegistryMock.Setup(a => a.GetExecutablePath("chrome")).Returns("chrome.exe");
 
         Handle("LaunchProgram", "chrome");
@@ -39,7 +39,7 @@ public class AppCommandHandlerTests
     public void LaunchProgram_WithWorkingDir_SetsWorkingDirectory()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("github copilot")).Returns("github copilot");
-        _processMock.Setup(p => p.GetProcessesByName("github copilot")).Returns(Array.Empty<Process>());
+        _processMock.Setup(p => p.GetProcessesByName("github copilot")).Returns([]);
         _appRegistryMock.Setup(a => a.GetExecutablePath("github copilot")).Returns("copilot.exe");
         _appRegistryMock.Setup(a => a.GetWorkingDirectoryEnvVar("github copilot")).Returns("GITHUB_COPILOT_ROOT_DIR");
 
@@ -53,7 +53,7 @@ public class AppCommandHandlerTests
     public void LaunchProgram_WithArguments_SetsArguments()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("github copilot")).Returns("github copilot");
-        _processMock.Setup(p => p.GetProcessesByName("github copilot")).Returns(Array.Empty<Process>());
+        _processMock.Setup(p => p.GetProcessesByName("github copilot")).Returns([]);
         _appRegistryMock.Setup(a => a.GetExecutablePath("github copilot")).Returns("copilot.exe");
         _appRegistryMock.Setup(a => a.GetArguments("github copilot")).Returns("--allow-all-tools");
 
@@ -67,7 +67,7 @@ public class AppCommandHandlerTests
     public void LaunchProgram_NoPath_UsesAppUserModelId()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("calculator")).Returns("calculator");
-        _processMock.Setup(p => p.GetProcessesByName("calculator")).Returns(Array.Empty<Process>());
+        _processMock.Setup(p => p.GetProcessesByName("calculator")).Returns([]);
         _appRegistryMock.Setup(a => a.GetExecutablePath("calculator")).Returns((string)null!);
         _appRegistryMock.Setup(a => a.GetAppUserModelId("calculator")).Returns("Microsoft.WindowsCalculator");
 
@@ -83,7 +83,7 @@ public class AppCommandHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("notepad")).Returns("notepad");
         // Return a real (albeit useless in test) empty array to avoid null ref;
         // We cannot easily mock Process objects, so we verify the lookup was attempted.
-        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns(Array.Empty<Process>());
+        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
 
         Handle("CloseProgram", "notepad");
 
@@ -94,7 +94,7 @@ public class AppCommandHandlerTests
     public void CloseProgram_NotRunning_DoesNothing()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("notepad")).Returns("notepad");
-        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns(Array.Empty<Process>());
+        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
 
         var ex = Record.Exception(() => Handle("CloseProgram", "notepad"));
 
@@ -104,7 +104,7 @@ public class AppCommandHandlerTests
     [Fact]
     public void ListAppNames_CallsGetAllAppNames()
     {
-        _appRegistryMock.Setup(a => a.GetAllAppNames()).Returns(new List<string> { "notepad", "chrome" });
+        _appRegistryMock.Setup(a => a.GetAllAppNames()).Returns(["notepad", "chrome"]);
 
         Handle("ListAppNames", "");
 

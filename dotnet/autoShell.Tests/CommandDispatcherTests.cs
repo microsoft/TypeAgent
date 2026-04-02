@@ -53,7 +53,7 @@ public class CommandDispatcherTests
     [Fact]
     public void Dispatch_EmptyObject_ReturnsFalse()
     {
-        bool result = _dispatcher.Dispatch(new JObject());
+        bool result = _dispatcher.Dispatch([]);
         Assert.False(result);
     }
 

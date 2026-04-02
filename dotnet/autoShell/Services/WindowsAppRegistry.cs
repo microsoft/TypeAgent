@@ -93,20 +93,16 @@ internal sealed class WindowsAppRegistry : IAppRegistry
 
     public string GetWorkingDirectoryEnvVar(string friendlyName)
     {
-        if (_appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1)
-        {
-            return value[1];
-        }
-        return null;
+        return _appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1
+            ? value[1]
+            : null;
     }
 
     public string GetArguments(string friendlyName)
     {
-        if (_appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 2)
-        {
-            return string.Join(" ", value.Skip(2));
-        }
-        return null;
+        return _appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 2
+            ? string.Join(" ", value.Skip(2))
+            : null;
     }
 
     public IEnumerable<string> GetAllAppNames()

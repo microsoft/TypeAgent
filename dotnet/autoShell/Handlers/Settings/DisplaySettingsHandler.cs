@@ -4,11 +4,12 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using autoShell.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 
-namespace autoShell.Handlers;
+namespace autoShell.Handlers.Settings;
 
 /// <summary>
 /// Handles display settings: brightness, color temperature, orientation, resolution, scaling,
@@ -123,7 +124,9 @@ internal class DisplaySettingsHandler : ICommandHandler
             {
                 object value = key.GetValue("Data");
                 if (value is byte[] data && data.Length > 0)
+                {
                     return data[0];
+                }
             }
         }
         catch { }
@@ -137,9 +140,9 @@ internal class DisplaySettingsHandler : ICommandHandler
             using var searcher = new System.Management.ManagementObjectSearcher(
                 "root\\WMI", "SELECT * FROM WmiMonitorBrightnessMethods");
             using var objectCollection = searcher.Get();
-            foreach (System.Management.ManagementObject obj in objectCollection)
+            foreach (System.Management.ManagementObject obj in objectCollection.Cast<System.Management.ManagementObject>())
             {
-                obj.InvokeMethod("WmiSetBrightness", new object[] { 1, brightness });
+                obj.InvokeMethod("WmiSetBrightness", [1, brightness]);
             }
         }
         catch (Exception ex)
@@ -152,8 +155,8 @@ internal class DisplaySettingsHandler : ICommandHandler
     {
         bool disabled = param.Value<bool?>("nightLightScheduleDisabled") ?? false;
         byte[] data = disabled
-            ? new byte[] { 0x02, 0x00, 0x00, 0x00 }
-            : new byte[] { 0x02, 0x00, 0x00, 0x01 };
+            ? [0x02, 0x00, 0x00, 0x00]
+            : [0x02, 0x00, 0x00, 0x01];
 
         _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings",

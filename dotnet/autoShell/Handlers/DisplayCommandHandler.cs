@@ -134,9 +134,9 @@ internal class DisplayCommandHandler : ICommandHandler
                 UseShellExecute = true
             });
 
-            #pragma warning disable CS0618 // UIAutomation is intentionally marked obsolete as a last-resort approach
+#pragma warning disable CS0618 // UIAutomation is intentionally marked obsolete as a last-resort approach
             UIAutomation.SetTextSizeViaUIAutomation(percentage);
-            #pragma warning restore CS0618
+#pragma warning restore CS0618
         }
         catch (Exception ex)
         {

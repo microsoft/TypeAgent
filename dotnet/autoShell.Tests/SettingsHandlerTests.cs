@@ -4,6 +4,7 @@
 using System;
 using System.Diagnostics;
 using autoShell.Handlers;
+using autoShell.Handlers.Settings;
 using autoShell.Services;
 using Microsoft.Win32;
 using Moq;
@@ -27,7 +28,7 @@ public class PersonalizationSettingsHandlerTests
     [Fact]
     public void ApplyColorToTitleBar_Enable_SetsColorPrevalence1()
     {
-        Handle("ApplyColorToTitleBar", @"{""enableColor"":true}");
+        Handle("ApplyColorToTitleBar", """{"enableColor":true}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\DWM", "ColorPrevalence", 1, RegistryValueKind.DWord), Times.Once);
@@ -36,7 +37,7 @@ public class PersonalizationSettingsHandlerTests
     [Fact]
     public void ApplyColorToTitleBar_Disable_SetsColorPrevalence0()
     {
-        Handle("ApplyColorToTitleBar", @"{""enableColor"":false}");
+        Handle("ApplyColorToTitleBar", """{"enableColor":false}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\DWM", "ColorPrevalence", 0, RegistryValueKind.DWord), Times.Once);
@@ -45,7 +46,7 @@ public class PersonalizationSettingsHandlerTests
     [Fact]
     public void EnableTransparency_Enable_SetsTransparency1()
     {
-        Handle("EnableTransparency", @"{""enable"":true}");
+        Handle("EnableTransparency", """{"enable":true}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -55,7 +56,7 @@ public class PersonalizationSettingsHandlerTests
     [Fact]
     public void EnableTransparency_Disable_SetsTransparency0()
     {
-        Handle("EnableTransparency", @"{""enable"":false}");
+        Handle("EnableTransparency", """{"enable":false}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
@@ -65,27 +66,27 @@ public class PersonalizationSettingsHandlerTests
     [Fact]
     public void SystemThemeMode_Light_SetsBothKeys()
     {
-        Handle("SystemThemeMode", @"{""mode"":""light""}");
+        Handle("SystemThemeMode", """{"mode":"light"}""");
 
-        const string path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-        _registryMock.Verify(r => r.SetValue(path, "AppsUseLightTheme", 1, RegistryValueKind.DWord), Times.Once);
-        _registryMock.Verify(r => r.SetValue(path, "SystemUsesLightTheme", 1, RegistryValueKind.DWord), Times.Once);
+        const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(Path, "SystemUsesLightTheme", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     [Fact]
     public void SystemThemeMode_Dark_SetsBothKeys()
     {
-        Handle("SystemThemeMode", @"{""mode"":""dark""}");
+        Handle("SystemThemeMode", """{"mode":"dark"}""");
 
-        const string path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-        _registryMock.Verify(r => r.SetValue(path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
-        _registryMock.Verify(r => r.SetValue(path, "SystemUsesLightTheme", 0, RegistryValueKind.DWord), Times.Once);
+        const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(Path, "SystemUsesLightTheme", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     [Fact]
     public void HighContrastTheme_OpensSettings()
     {
-        Handle("HighContrastTheme", @"{}");
+        Handle("HighContrastTheme", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:easeofaccess-highcontrast"), Times.Once);
     }
@@ -113,7 +114,7 @@ public class PrivacySettingsHandlerTests
     [Fact]
     public void ManageCameraAccess_Deny_WritesDeny()
     {
-        Handle("ManageCameraAccess", @"{""accessSetting"":""deny""}");
+        Handle("ManageCameraAccess", """{"accessSetting":"deny"}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
@@ -123,7 +124,7 @@ public class PrivacySettingsHandlerTests
     [Fact]
     public void ManageCameraAccess_Allow_WritesAllow()
     {
-        Handle("ManageCameraAccess", @"{""accessSetting"":""allow""}");
+        Handle("ManageCameraAccess", """{"accessSetting":"allow"}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
@@ -133,7 +134,7 @@ public class PrivacySettingsHandlerTests
     [Fact]
     public void ManageMicrophoneAccess_Deny_WritesDeny()
     {
-        Handle("ManageMicrophoneAccess", @"{""accessSetting"":""deny""}");
+        Handle("ManageMicrophoneAccess", """{"accessSetting":"deny"}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone",
@@ -143,7 +144,7 @@ public class PrivacySettingsHandlerTests
     [Fact]
     public void ManageLocationAccess_Allow_WritesAllow()
     {
-        Handle("ManageLocationAccess", @"{""accessSetting"":""allow""}");
+        Handle("ManageLocationAccess", """{"accessSetting":"allow"}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
@@ -173,7 +174,7 @@ public class FileExplorerSettingsHandlerTests
     [Fact]
     public void ShowFileExtensions_Enable_SetsHideFileExt0()
     {
-        Handle("ShowFileExtensions", @"{""enable"":true}");
+        Handle("ShowFileExtensions", """{"enable":true}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
@@ -183,7 +184,7 @@ public class FileExplorerSettingsHandlerTests
     [Fact]
     public void ShowFileExtensions_Disable_SetsHideFileExt1()
     {
-        Handle("ShowFileExtensions", @"{""enable"":false}");
+        Handle("ShowFileExtensions", """{"enable":false}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced",
@@ -193,21 +194,21 @@ public class FileExplorerSettingsHandlerTests
     [Fact]
     public void ShowHiddenAndSystemFiles_Enable_SetsBothKeys()
     {
-        Handle("ShowHiddenAndSystemFiles", @"{""enable"":true}");
+        Handle("ShowHiddenAndSystemFiles", """{"enable":true}""");
 
-        const string path = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
-        _registryMock.Verify(r => r.SetValue(path, "Hidden", 1, RegistryValueKind.DWord), Times.Once);
-        _registryMock.Verify(r => r.SetValue(path, "ShowSuperHidden", 1, RegistryValueKind.DWord), Times.Once);
+        const string Path = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
+        _registryMock.Verify(r => r.SetValue(Path, "Hidden", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(Path, "ShowSuperHidden", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     [Fact]
     public void ShowHiddenAndSystemFiles_Disable_SetsBothKeys()
     {
-        Handle("ShowHiddenAndSystemFiles", @"{""enable"":false}");
+        Handle("ShowHiddenAndSystemFiles", """{"enable":false}""");
 
-        const string path = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
-        _registryMock.Verify(r => r.SetValue(path, "Hidden", 2, RegistryValueKind.DWord), Times.Once);
-        _registryMock.Verify(r => r.SetValue(path, "ShowSuperHidden", 0, RegistryValueKind.DWord), Times.Once);
+        const string Path = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
+        _registryMock.Verify(r => r.SetValue(Path, "Hidden", 2, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(Path, "ShowSuperHidden", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     private void Handle(string key, string jsonValue)
@@ -234,7 +235,7 @@ public class PowerSettingsHandlerTests
     [Fact]
     public void BatterySaverActivationLevel_SetsThreshold()
     {
-        Handle("BatterySaverActivationLevel", @"{""thresholdValue"":30}");
+        Handle("BatterySaverActivationLevel", """{"thresholdValue":30}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Power\BatterySaver",
@@ -244,7 +245,7 @@ public class PowerSettingsHandlerTests
     [Fact]
     public void SetPowerModeOnBattery_OpensSettings()
     {
-        Handle("SetPowerModeOnBattery", @"{}");
+        Handle("SetPowerModeOnBattery", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:powersleep"), Times.Once);
     }
@@ -252,7 +253,7 @@ public class PowerSettingsHandlerTests
     [Fact]
     public void SetPowerModePluggedIn_OpensSettings()
     {
-        Handle("SetPowerModePluggedIn", @"{}");
+        Handle("SetPowerModePluggedIn", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:powersleep"), Times.Once);
     }
@@ -281,7 +282,7 @@ public class AccessibilitySettingsHandlerTests
     [Fact]
     public void EnableStickyKeys_Enable_SetsFlags510()
     {
-        Handle("EnableStickyKeys", @"{""enable"":true}");
+        Handle("EnableStickyKeys", """{"enable":true}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Control Panel\Accessibility\StickyKeys",
@@ -291,7 +292,7 @@ public class AccessibilitySettingsHandlerTests
     [Fact]
     public void EnableStickyKeys_Disable_SetsFlags506()
     {
-        Handle("EnableStickyKeys", @"{""enable"":false}");
+        Handle("EnableStickyKeys", """{"enable":false}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Control Panel\Accessibility\StickyKeys",
@@ -301,7 +302,7 @@ public class AccessibilitySettingsHandlerTests
     [Fact]
     public void EnableFilterKeysAction_Enable_SetsFlags2()
     {
-        Handle("EnableFilterKeysAction", @"{""enable"":true}");
+        Handle("EnableFilterKeysAction", """{"enable":true}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Control Panel\Accessibility\Keyboard Response",
@@ -311,7 +312,7 @@ public class AccessibilitySettingsHandlerTests
     [Fact]
     public void EnableFilterKeysAction_Disable_SetsFlags126()
     {
-        Handle("EnableFilterKeysAction", @"{""enable"":false}");
+        Handle("EnableFilterKeysAction", """{"enable":false}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Control Panel\Accessibility\Keyboard Response",
@@ -321,7 +322,7 @@ public class AccessibilitySettingsHandlerTests
     [Fact]
     public void MonoAudioToggle_Enable_SetsMonoMix1()
     {
-        Handle("MonoAudioToggle", @"{""enable"":true}");
+        Handle("MonoAudioToggle", """{"enable":true}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Multimedia\Audio",
@@ -331,7 +332,7 @@ public class AccessibilitySettingsHandlerTests
     [Fact]
     public void EnableMagnifier_Enable_StartsProcess()
     {
-        Handle("EnableMagnifier", @"{""enable"":true}");
+        Handle("EnableMagnifier", """{"enable":true}""");
 
         _processMock.Verify(p => p.Start(It.Is<ProcessStartInfo>(
             psi => psi.FileName == "magnify.exe")), Times.Once);
@@ -340,7 +341,7 @@ public class AccessibilitySettingsHandlerTests
     [Fact]
     public void EnableNarratorAction_Enable_StartsNarrator()
     {
-        Handle("EnableNarratorAction", @"{""enable"":true}");
+        Handle("EnableNarratorAction", """{"enable":true}""");
 
         _processMock.Verify(p => p.Start(It.Is<ProcessStartInfo>(
             psi => psi.FileName == "narrator.exe")), Times.Once);
@@ -349,9 +350,9 @@ public class AccessibilitySettingsHandlerTests
     [Fact]
     public void EnableNarratorAction_Disable_CallsGetProcessesByName()
     {
-        _processMock.Setup(p => p.GetProcessesByName("Narrator")).Returns(Array.Empty<Process>());
+        _processMock.Setup(p => p.GetProcessesByName("Narrator")).Returns([]);
 
-        Handle("EnableNarratorAction", @"{""enable"":false}");
+        Handle("EnableNarratorAction", """{"enable":false}""");
 
         _processMock.Verify(p => p.GetProcessesByName("Narrator"), Times.Once);
     }
@@ -380,7 +381,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void MouseCursorSpeed_SetsSpeed()
     {
-        Handle("MouseCursorSpeed", @"{""speedLevel"":10}");
+        Handle("MouseCursorSpeed", """{"speedLevel":10}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
             0x0071, 0, (IntPtr)10, 3), Times.Once);
@@ -389,7 +390,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void MouseWheelScrollLines_SetsLines()
     {
-        Handle("MouseWheelScrollLines", @"{""scrollLines"":5}");
+        Handle("MouseWheelScrollLines", """{"scrollLines":5}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
             0x0069, 5, IntPtr.Zero, 3), Times.Once);
@@ -398,7 +399,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void EnhancePointerPrecision_Enable()
     {
-        Handle("EnhancePointerPrecision", @"{""enable"":true}");
+        Handle("EnhancePointerPrecision", """{"enable":true}""");
 
         _systemParamsMock.Verify(s => s.GetParameter(3, 0, It.IsAny<int[]>(), 0), Times.Once);
         _systemParamsMock.Verify(s => s.SetParameter(
@@ -408,7 +409,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void EnhancePointerPrecision_Disable()
     {
-        Handle("EnhancePointerPrecision", @"{""enable"":false}");
+        Handle("EnhancePointerPrecision", """{"enable":false}""");
 
         _systemParamsMock.Verify(s => s.GetParameter(3, 0, It.IsAny<int[]>(), 0), Times.Once);
         _systemParamsMock.Verify(s => s.SetParameter(
@@ -418,7 +419,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void AdjustMousePointerSize_OpensMouseSettings()
     {
-        Handle("AdjustMousePointerSize", @"{}");
+        Handle("AdjustMousePointerSize", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:easeofaccess-mouse"), Times.Once);
     }
@@ -426,7 +427,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void EnableTouchPad_OpensTouchpadSettings()
     {
-        Handle("EnableTouchPad", @"{}");
+        Handle("EnableTouchPad", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:devices-touchpad"), Times.Once);
     }
@@ -434,7 +435,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void MousePointerCustomization_OpensMouseSettings()
     {
-        Handle("MousePointerCustomization", @"{}");
+        Handle("MousePointerCustomization", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:easeofaccess-mouse"), Times.Once);
     }
@@ -442,7 +443,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void TouchpadCursorSpeed_OpensTouchpadSettings()
     {
-        Handle("TouchpadCursorSpeed", @"{}");
+        Handle("TouchpadCursorSpeed", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:devices-touchpad"), Times.Once);
     }
@@ -476,7 +477,7 @@ public class TaskbarSettingsHandlerTests
         byte[] settings = new byte[9];
         _registryMock.Setup(r => r.GetValue(StuckRects3, "Settings", null)).Returns(settings);
 
-        Handle("AutoHideTaskbar", @"{""hideWhenNotUsing"":true}");
+        Handle("AutoHideTaskbar", """{"hideWhenNotUsing":true}""");
 
         _registryMock.Verify(r => r.SetValue(StuckRects3, "Settings",
             It.Is<byte[]>(b => (b[8] & 0x01) == 0x01), RegistryValueKind.Binary), Times.Once);
@@ -489,7 +490,7 @@ public class TaskbarSettingsHandlerTests
         settings[8] = 0x01; // start with auto-hide on
         _registryMock.Setup(r => r.GetValue(StuckRects3, "Settings", null)).Returns(settings);
 
-        Handle("AutoHideTaskbar", @"{""hideWhenNotUsing"":false}");
+        Handle("AutoHideTaskbar", """{"hideWhenNotUsing":false}""");
 
         _registryMock.Verify(r => r.SetValue(StuckRects3, "Settings",
             It.Is<byte[]>(b => (b[8] & 0x01) == 0x00), RegistryValueKind.Binary), Times.Once);
@@ -498,7 +499,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void DisplaySecondsInSystrayClock_Enable_SetsShowSeconds1()
     {
-        Handle("DisplaySecondsInSystrayClock", @"{""enable"":true}");
+        Handle("DisplaySecondsInSystrayClock", """{"enable":true}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "ShowSecondsInSystemClock", 1, RegistryValueKind.DWord), Times.Once);
@@ -507,7 +508,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void DisplaySecondsInSystrayClock_Disable_SetsShowSeconds0()
     {
-        Handle("DisplaySecondsInSystrayClock", @"{""enable"":false}");
+        Handle("DisplaySecondsInSystrayClock", """{"enable":false}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "ShowSecondsInSystemClock", 0, RegistryValueKind.DWord), Times.Once);
@@ -516,7 +517,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void DisplayTaskbarOnAllMonitors_Enable_SetsMMTaskbar1()
     {
-        Handle("DisplayTaskbarOnAllMonitors", @"{""enable"":true}");
+        Handle("DisplayTaskbarOnAllMonitors", """{"enable":true}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "MMTaskbarEnabled", 1, RegistryValueKind.DWord), Times.Once);
@@ -525,7 +526,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void DisplayTaskbarOnAllMonitors_Disable_SetsMMTaskbar0()
     {
-        Handle("DisplayTaskbarOnAllMonitors", @"{""enable"":false}");
+        Handle("DisplayTaskbarOnAllMonitors", """{"enable":false}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "MMTaskbarEnabled", 0, RegistryValueKind.DWord), Times.Once);
@@ -534,7 +535,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void ShowBadgesOnTaskbar_Enable_SetsBadges1()
     {
-        Handle("ShowBadgesOnTaskbar", @"{""enableBadging"":true}");
+        Handle("ShowBadgesOnTaskbar", """{"enableBadging":true}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "TaskbarBadges", 1, RegistryValueKind.DWord), Times.Once);
@@ -543,7 +544,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void ShowBadgesOnTaskbar_Disable_SetsBadges0()
     {
-        Handle("ShowBadgesOnTaskbar", @"{""enableBadging"":false}");
+        Handle("ShowBadgesOnTaskbar", """{"enableBadging":false}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "TaskbarBadges", 0, RegistryValueKind.DWord), Times.Once);
@@ -552,7 +553,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void TaskbarAlignment_Center_SetsTaskbarAl1()
     {
-        Handle("TaskbarAlignment", @"{""alignment"":""center""}");
+        Handle("TaskbarAlignment", """{"alignment":"center"}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "TaskbarAl", 1, RegistryValueKind.DWord), Times.Once);
@@ -561,7 +562,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void TaskbarAlignment_Left_SetsTaskbarAl0()
     {
-        Handle("TaskbarAlignment", @"{""alignment"":""left""}");
+        Handle("TaskbarAlignment", """{"alignment":"left"}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "TaskbarAl", 0, RegistryValueKind.DWord), Times.Once);
@@ -570,7 +571,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void TaskViewVisibility_Show_SetsButton1()
     {
-        Handle("TaskViewVisibility", @"{""visibility"":true}");
+        Handle("TaskViewVisibility", """{"visibility":true}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "ShowTaskViewButton", 1, RegistryValueKind.DWord), Times.Once);
@@ -579,7 +580,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void TaskViewVisibility_Hide_SetsButton0()
     {
-        Handle("TaskViewVisibility", @"{""visibility"":false}");
+        Handle("TaskViewVisibility", """{"visibility":false}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "ShowTaskViewButton", 0, RegistryValueKind.DWord), Times.Once);
@@ -588,7 +589,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void ToggleWidgetsButtonVisibility_Show_SetsTaskbarDa1()
     {
-        Handle("ToggleWidgetsButtonVisibility", @"{""visibility"":""show""}");
+        Handle("ToggleWidgetsButtonVisibility", """{"visibility":"show"}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "TaskbarDa", 1, RegistryValueKind.DWord), Times.Once);
@@ -597,7 +598,7 @@ public class TaskbarSettingsHandlerTests
     [Fact]
     public void ToggleWidgetsButtonVisibility_Hide_SetsTaskbarDa0()
     {
-        Handle("ToggleWidgetsButtonVisibility", @"{""visibility"":""hide""}");
+        Handle("ToggleWidgetsButtonVisibility", """{"visibility":"hide"}""");
 
         _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
             "TaskbarDa", 0, RegistryValueKind.DWord), Times.Once);
@@ -627,7 +628,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void AdjustColorTemperature_OpensNightLightSettings()
     {
-        Handle("AdjustColorTemperature", @"{}");
+        Handle("AdjustColorTemperature", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:nightlight"), Times.Once);
     }
@@ -635,7 +636,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void AdjustScreenOrientation_OpensDisplaySettings()
     {
-        Handle("AdjustScreenOrientation", @"{}");
+        Handle("AdjustScreenOrientation", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }
@@ -643,7 +644,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void DisplayResolutionAndAspectRatio_OpensDisplaySettings()
     {
-        Handle("DisplayResolutionAndAspectRatio", @"{}");
+        Handle("DisplayResolutionAndAspectRatio", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }
@@ -651,7 +652,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void DisplayScaling_WithPercentage_OpensDisplaySettings()
     {
-        Handle("DisplayScaling", @"{""sizeOverride"":""150""}");
+        Handle("DisplayScaling", """{"sizeOverride":"150"}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }
@@ -659,7 +660,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void EnableBlueLightFilterSchedule_Enable_WritesEnableBytes()
     {
-        Handle("EnableBlueLightFilterSchedule", @"{""nightLightScheduleDisabled"":false}");
+        Handle("EnableBlueLightFilterSchedule", """{"nightLightScheduleDisabled":false}""");
 
         _registryMock.Verify(r => r.SetValue(
             It.Is<string>(s => s.Contains("bluelightreduction")),
@@ -671,7 +672,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void EnableBlueLightFilterSchedule_Disable_WritesDisableBytes()
     {
-        Handle("EnableBlueLightFilterSchedule", @"{""nightLightScheduleDisabled"":true}");
+        Handle("EnableBlueLightFilterSchedule", """{"nightLightScheduleDisabled":true}""");
 
         _registryMock.Verify(r => r.SetValue(
             It.Is<string>(s => s.Contains("bluelightreduction")),
@@ -683,7 +684,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void RotationLock_Enable_SetsPreference1()
     {
-        Handle("RotationLock", @"{""enable"":true}");
+        Handle("RotationLock", """{"enable":true}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
@@ -693,7 +694,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void RotationLock_Disable_SetsPreference0()
     {
-        Handle("RotationLock", @"{""enable"":false}");
+        Handle("RotationLock", """{"enable":false}""");
 
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
@@ -723,7 +724,7 @@ public class SystemSettingsHandlerTests
     [Fact]
     public void AutomaticTimeSettingAction_OpensDateTimeSettings()
     {
-        Handle("AutomaticTimeSettingAction", @"{}");
+        Handle("AutomaticTimeSettingAction", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:dateandtime"), Times.Once);
     }
@@ -731,7 +732,7 @@ public class SystemSettingsHandlerTests
     [Fact]
     public void EnableGameMode_OpensGamingSettings()
     {
-        Handle("EnableGameMode", @"{}");
+        Handle("EnableGameMode", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:gaming-gamemode"), Times.Once);
     }
@@ -739,7 +740,7 @@ public class SystemSettingsHandlerTests
     [Fact]
     public void EnableQuietHours_OpensQuietHoursSettings()
     {
-        Handle("EnableQuietHours", @"{}");
+        Handle("EnableQuietHours", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:quiethours"), Times.Once);
     }
@@ -747,7 +748,7 @@ public class SystemSettingsHandlerTests
     [Fact]
     public void MinimizeWindowsOnMonitorDisconnectAction_OpensDisplaySettings()
     {
-        Handle("MinimizeWindowsOnMonitorDisconnectAction", @"{}");
+        Handle("MinimizeWindowsOnMonitorDisconnectAction", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }
@@ -755,7 +756,7 @@ public class SystemSettingsHandlerTests
     [Fact]
     public void RememberWindowLocations_OpensDisplaySettings()
     {
-        Handle("RememberWindowLocations", @"{}");
+        Handle("RememberWindowLocations", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }

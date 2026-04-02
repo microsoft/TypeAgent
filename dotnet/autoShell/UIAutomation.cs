@@ -31,8 +31,8 @@ internal sealed class UIAutomation
         // UI Automation Pattern IDs
         const int UIA_RangeValuePatternId = 10003;
 
-        const int maxRetries = 10;
-        const int retryDelayMs = 500;
+        const int MaxRetries = 10;
+        const int RetryDelayMs = 500;
 
         try
         {
@@ -41,7 +41,7 @@ internal sealed class UIAutomation
             UIAutomationClient.IUIAutomationElement settingsWindow = null;
 
             // Wait for Settings window to appear and get it via FindWindow
-            for (int i = 0; i < maxRetries; i++)
+            for (int i = 0; i < MaxRetries; i++)
             {
                 // Find the Settings window by enumerating top-level windows with "Settings" in the title
                 // UWP apps use ApplicationFrameWindow class
@@ -65,7 +65,7 @@ internal sealed class UIAutomation
                     break;
                 }
 
-                System.Threading.Thread.Sleep(retryDelayMs);
+                System.Threading.Thread.Sleep(RetryDelayMs);
             }
 
             if (settingsWindow == null)
@@ -98,7 +98,7 @@ internal sealed class UIAutomation
                 "SystemSettings_EaseOfAccess_Experience_TextScalingDesktop_Slider");
 
             UIAutomationClient.IUIAutomationElement slider = null;
-            for (int i = 0; i < maxRetries; i++)
+            for (int i = 0; i < MaxRetries; i++)
             {
                 slider = settingsWindow.FindFirst(
                     UIAutomationClient.TreeScope.TreeScope_Descendants,
@@ -109,7 +109,7 @@ internal sealed class UIAutomation
                     break;
                 }
 
-                System.Threading.Thread.Sleep(retryDelayMs);
+                System.Threading.Thread.Sleep(RetryDelayMs);
             }
 
             if (slider == null)
@@ -166,7 +166,7 @@ internal sealed class UIAutomation
                 "SystemSettings_EaseOfAccess_Experience_TextScalingDesktop_ButtonRemove");
 
             UIAutomationClient.IUIAutomationElement applyButton = null;
-            for (int i = 0; i < maxRetries; i++)
+            for (int i = 0; i < MaxRetries; i++)
             {
                 applyButton = settingsWindow.FindFirst(
                     UIAutomationClient.TreeScope.TreeScope_Descendants,
@@ -177,7 +177,7 @@ internal sealed class UIAutomation
                     break;
                 }
 
-                System.Threading.Thread.Sleep(retryDelayMs);
+                System.Threading.Thread.Sleep(RetryDelayMs);
             }
 
             if (applyButton != null)

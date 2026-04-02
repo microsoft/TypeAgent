@@ -257,7 +257,7 @@ internal class WindowCommandHandler : ICommandHandler
                 if (title.Contains(titleSearch, StringComparison.OrdinalIgnoreCase))
                 {
                     foundHandle = hWnd;
-                    GetWindowThreadProcessId(hWnd, out uint pid);
+                    _ = GetWindowThreadProcessId(hWnd, out uint pid);
                     foundPid = (int)pid;
                     return false;
                 }

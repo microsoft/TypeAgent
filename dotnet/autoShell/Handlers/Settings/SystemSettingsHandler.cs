@@ -8,7 +8,7 @@ using autoShell.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 
-namespace autoShell.Handlers;
+namespace autoShell.Handlers.Settings;
 
 /// <summary>
 /// Handles miscellaneous system settings: time/region, focus assist, gaming, and multi-monitor.
@@ -74,10 +74,7 @@ internal class SystemSettingsHandler : ICommandHandler
         bool enable = param.Value<bool?>("enable") ?? true;
 
         using var key = Registry.LocalMachine.CreateSubKey(@"SYSTEM\CurrentControlSet\Control\TimeZoneInformation");
-        if (key != null)
-        {
-            key.SetValue("DynamicDaylightTimeDisabled", enable ? 0 : 1, RegistryValueKind.DWord);
-        }
+        key?.SetValue("DynamicDaylightTimeDisabled", enable ? 0 : 1, RegistryValueKind.DWord);
 
         Debug.WriteLine($"Automatic DST adjustment {(enable ? "enabled" : "disabled")}");
     }

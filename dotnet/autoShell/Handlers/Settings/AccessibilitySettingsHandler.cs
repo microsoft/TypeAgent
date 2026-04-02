@@ -7,7 +7,7 @@ using autoShell.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 
-namespace autoShell.Handlers;
+namespace autoShell.Handlers.Settings;
 
 /// <summary>
 /// Handles accessibility settings: filter keys, magnifier, narrator, sticky keys, and mono audio.

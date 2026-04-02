@@ -7,7 +7,7 @@ using autoShell.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 
-namespace autoShell.Handlers;
+namespace autoShell.Handlers.Settings;
 
 /// <summary>
 /// Handles power settings: battery saver threshold and power mode (on battery / plugged in).

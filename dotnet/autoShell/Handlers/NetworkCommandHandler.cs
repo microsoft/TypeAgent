@@ -20,7 +20,7 @@ internal class NetworkCommandHandler : ICommandHandler
 {
     #region COM / P/Invoke
 
-    private static readonly Guid CLSID_RadioManagementAPI = new Guid(0x581333f6, 0x28db, 0x41be, 0xbc, 0x7a, 0xff, 0x20, 0x1f, 0x12, 0xf3, 0xf6);
+    private static readonly Guid s_clsidRadioManagementAPI = new Guid(0x581333f6, 0x28db, 0x41be, 0xbc, 0x7a, 0xff, 0x20, 0x1f, 0x12, 0xf3, 0xf6);
 
     [ComImport]
     [Guid("db3afbfb-08e6-46c6-aa70-bf9a34c30ab7")]
@@ -211,7 +211,7 @@ internal class NetworkCommandHandler : ICommandHandler
         IRadioManager radioManager = null;
         try
         {
-            Type radioManagerType = Type.GetTypeFromCLSID(CLSID_RadioManagementAPI);
+            Type radioManagerType = Type.GetTypeFromCLSID(s_clsidRadioManagementAPI);
             if (radioManagerType == null)
             {
                 Debug.WriteLine("Failed to get Radio Management API type");
@@ -303,7 +303,7 @@ internal class NetworkCommandHandler : ICommandHandler
             {
                 WLAN_INTERFACE_INFO interfaceInfo = interfaceList.InterfaceInfo[i];
 
-                WlanScan(clientHandle, ref interfaceInfo.InterfaceGuid, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                _ = WlanScan(clientHandle, ref interfaceInfo.InterfaceGuid, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 
                 System.Threading.Thread.Sleep(100);
 
@@ -372,7 +372,7 @@ internal class NetworkCommandHandler : ICommandHandler
 
             if (clientHandle != IntPtr.Zero)
             {
-                WlanCloseHandle(clientHandle, IntPtr.Zero);
+                _ = WlanCloseHandle(clientHandle, IntPtr.Zero);
             }
         }
     }
@@ -456,7 +456,7 @@ internal class NetworkCommandHandler : ICommandHandler
 
             if (clientHandle != IntPtr.Zero)
             {
-                WlanCloseHandle(clientHandle, IntPtr.Zero);
+                _ = WlanCloseHandle(clientHandle, IntPtr.Zero);
             }
         }
     }
@@ -557,7 +557,7 @@ internal class NetworkCommandHandler : ICommandHandler
 
             if (clientHandle != IntPtr.Zero)
             {
-                WlanCloseHandle(clientHandle, IntPtr.Zero);
+                _ = WlanCloseHandle(clientHandle, IntPtr.Zero);
             }
         }
     }

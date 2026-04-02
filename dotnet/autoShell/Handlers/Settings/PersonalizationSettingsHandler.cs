@@ -7,7 +7,7 @@ using autoShell.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 
-namespace autoShell.Handlers;
+namespace autoShell.Handlers.Settings;
 
 /// <summary>
 /// Handles personalization settings: title bar color, transparency, high contrast, and theme mode.
@@ -89,8 +89,8 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         string mode = param.Value<string>("mode") ?? "dark";
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
-        const string personalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-        _registry.SetValue(personalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
-        _registry.SetValue(personalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
+        const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        _registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
+        _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
     }
 }

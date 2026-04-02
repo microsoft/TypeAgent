@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using autoShell.Handlers;
+using autoShell.Handlers.Settings;
 using autoShell.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;

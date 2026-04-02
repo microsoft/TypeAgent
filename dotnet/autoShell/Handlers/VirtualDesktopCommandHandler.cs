@@ -31,12 +31,12 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
         _appRegistry = appRegistry;
 
         // Desktop management COM initialization
-        _shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_ImmersiveShell));
-        _virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)_shell.QueryService(CLSID_VirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
-        _virtualDesktopManagerInternal_BUGBUG = (IVirtualDesktopManagerInternal_BUGBUG)_shell.QueryService(CLSID_VirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
-        _virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(Type.GetTypeFromCLSID(CLSID_VirtualDesktopManager));
+        _shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidImmersiveShell));
+        _virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)_shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
+        _virtualDesktopManagerInternal_BUGBUG = (IVirtualDesktopManagerInternal_BUGBUG)_shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
+        _virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidVirtualDesktopManager));
         _applicationViewCollection = (IApplicationViewCollection)_shell.QueryService(typeof(IApplicationViewCollection).GUID, typeof(IApplicationViewCollection).GUID);
-        _virtualDesktopPinnedApps = (IVirtualDesktopPinnedApps)_shell.QueryService(CLSID_VirtualDesktopPinnedApps, typeof(IVirtualDesktopPinnedApps).GUID);
+        _virtualDesktopPinnedApps = (IVirtualDesktopPinnedApps)_shell.QueryService(s_clsidVirtualDesktopPinnedApps, typeof(IVirtualDesktopPinnedApps).GUID);
     }
 
     /// <inheritdoc/>
@@ -237,7 +237,6 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
 
     private int GetDesktopIndex(IVirtualDesktop desktop)
     {
-        int index = -1;
         int count = _virtualDesktopManagerInternal.GetCount();
 
         _virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
@@ -328,9 +327,9 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
         try
         {
             IServiceProvider shellServiceProvider = (IServiceProvider)Activator.CreateInstance(
-                Type.GetTypeFromCLSID(CLSID_ImmersiveShell));
+                Type.GetTypeFromCLSID(s_clsidImmersiveShell));
 
-            Guid guidService = CLSID_VirtualDesktopManagerInternal;
+            Guid guidService = s_clsidVirtualDesktopManagerInternal;
             Guid riid = typeof(IVirtualDesktopManagerInternal).GUID;
             shellServiceProvider.QueryService(
                 ref guidService,
@@ -366,10 +365,10 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
     }
 
     // Virtual Desktop COM Interface GUIDs
-    private static readonly Guid CLSID_ImmersiveShell = new Guid("C2F03A33-21F5-47FA-B4BB-156362A2F239");
-    private static readonly Guid CLSID_VirtualDesktopManagerInternal = new Guid("C5E0CDCA-7B6E-41B2-9FC4-D93975CC467B");
-    private static readonly Guid CLSID_VirtualDesktopManager = new Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A");
-    private static readonly Guid CLSID_VirtualDesktopPinnedApps = new Guid("B5A399E7-1C87-46B8-88E9-FC5747B171BD");
+    private static readonly Guid s_clsidImmersiveShell = new Guid("C2F03A33-21F5-47FA-B4BB-156362A2F239");
+    private static readonly Guid s_clsidVirtualDesktopManagerInternal = new Guid("C5E0CDCA-7B6E-41B2-9FC4-D93975CC467B");
+    private static readonly Guid s_clsidVirtualDesktopManager = new Guid("AA509086-5CA9-4C25-8F95-589D3C07B48A");
+    private static readonly Guid s_clsidVirtualDesktopPinnedApps = new Guid("B5A399E7-1C87-46B8-88E9-FC5747B171BD");
 
     // IServiceProvider COM Interface
     [ComImport]

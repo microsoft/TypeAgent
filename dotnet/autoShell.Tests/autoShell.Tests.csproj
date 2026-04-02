@@ -6,6 +6,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- JSON002: raw JSON strings in test assertions are intentional -->
+    <NoWarn>$(NoWarn);JSON002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

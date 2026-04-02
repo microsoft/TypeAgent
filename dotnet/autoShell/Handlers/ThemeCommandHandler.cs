@@ -167,7 +167,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
                 {
                     string displayName = line["DisplayName=".Length..].Trim();
                     // Handle localized strings (e.g., @%SystemRoot%\System32\themeui.dll,-2013)
-                    if (displayName.StartsWith("@"))
+                    if (displayName.StartsWith('@'))
                     {
                         displayName = ResolveLocalizedString(displayName);
                     }
@@ -246,8 +246,8 @@ internal partial class ThemeCommandHandler : ICommandHandler
     {
         try
         {
-            const string themesPath = @"Software\Microsoft\Windows\CurrentVersion\Themes";
-            string currentThemePath = _registry.GetValue(themesPath, "CurrentTheme") as string;
+            const string ThemesPath = @"Software\Microsoft\Windows\CurrentVersion\Themes";
+            string currentThemePath = _registry.GetValue(ThemesPath, "CurrentTheme") as string;
             if (!string.IsNullOrEmpty(currentThemePath))
             {
                 return Path.GetFileNameWithoutExtension(currentThemePath);
@@ -275,7 +275,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
         {
             string previous = GetCurrentTheme();
 
-            if (!themeName.Equals("previous", StringComparison.InvariantCultureIgnoreCase))
+            if (!themeName.Equals("previous", StringComparison.OrdinalIgnoreCase))
             {
                 _process.StartShellExecute(themePath);
                 _previousTheme = previous;
@@ -369,11 +369,11 @@ internal partial class ThemeCommandHandler : ICommandHandler
     {
         try
         {
-            const string personalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+            const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
             int value = useLightMode ? 1 : 0;
 
-            _registry.SetValue(personalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
-            _registry.SetValue(personalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
+            _registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
+            _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
 
             // Broadcast settings change notification to update UI
             BroadcastSettingsChange();
@@ -393,7 +393,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
     public bool ToggleLightDarkMode()
     {
         bool? currentMode = GetCurrentLightMode();
-        return currentMode.HasValue ? SetLightDarkMode(!currentMode.Value) : false;
+        return currentMode.HasValue && SetLightDarkMode(!currentMode.Value);
     }
 
     /// <summary>
@@ -422,8 +422,8 @@ internal partial class ThemeCommandHandler : ICommandHandler
     {
         try
         {
-            const string personalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-            object value = _registry.GetValue(personalizePath, "AppsUseLightTheme");
+            const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+            object value = _registry.GetValue(PersonalizePath, "AppsUseLightTheme");
             return value is int intValue ? intValue == 1 : null;
         }
         catch

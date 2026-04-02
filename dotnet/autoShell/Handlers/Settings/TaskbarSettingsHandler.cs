@@ -9,7 +9,7 @@ using autoShell.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 
-namespace autoShell.Handlers;
+namespace autoShell.Handlers.Settings;
 
 /// <summary>
 /// Handles taskbar settings: auto-hide, alignment, task view, widgets, badges, multi-monitor, clock.
@@ -107,14 +107,17 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         bool hide = param.Value<bool>("hideWhenNotUsing");
 
         // Auto-hide uses a binary blob in a different registry path
-        var settings = _registry.GetValue(StuckRects3, "Settings", null) as byte[];
-        if (settings != null && settings.Length >= 9)
+        if (_registry.GetValue(StuckRects3, "Settings", null) is byte[] settings && settings.Length >= 9)
         {
             // Bit 0 of byte 8 controls auto-hide
             if (hide)
+            {
                 settings[8] |= 0x01;
+            }
             else
+            {
                 settings[8] &= 0xFE;
+            }
 
             _registry.SetValue(StuckRects3, "Settings", settings, RegistryValueKind.Binary);
         }

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using autoShell.Handlers;
+using autoShell.Handlers.Settings;
 
 namespace autoShell.Tests;
 

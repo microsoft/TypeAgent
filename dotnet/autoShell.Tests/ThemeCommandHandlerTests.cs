@@ -37,9 +37,9 @@ public class ThemeCommandHandlerTests
     {
         Handle("SetThemeMode", "dark");
 
-        const string path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-        _registryMock.Verify(r => r.SetValue(path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
-        _registryMock.Verify(r => r.SetValue(path, "SystemUsesLightTheme", 0, RegistryValueKind.DWord), Times.Once);
+        const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(Path, "SystemUsesLightTheme", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     [Fact]
@@ -47,9 +47,9 @@ public class ThemeCommandHandlerTests
     {
         Handle("SetThemeMode", "light");
 
-        const string path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-        _registryMock.Verify(r => r.SetValue(path, "AppsUseLightTheme", 1, RegistryValueKind.DWord), Times.Once);
-        _registryMock.Verify(r => r.SetValue(path, "SystemUsesLightTheme", 1, RegistryValueKind.DWord), Times.Once);
+        const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(Path, "SystemUsesLightTheme", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     [Fact]
