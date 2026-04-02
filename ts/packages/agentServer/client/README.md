@@ -11,6 +11,7 @@ Opens a WebSocket to an already-running agentServer at `url`, sets up the three 
 ### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)`
 
 Higher-level convenience wrapper:
+
 1. Checks whether a server is already listening on `ws://localhost:<port>` (default 8999).
 2. If not, calls `spawnAgentServer()` to start it as a detached child process.
 3. Polls until the server is ready (500 ms interval, 60 s timeout).
@@ -34,10 +35,13 @@ Spawns `packages/agentServer/server/dist/server.js` as a detached child process 
 import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
 
 const dispatcher = await ensureAndConnectDispatcher(
-  clientIO,   // your ClientIO implementation
-  8999,       // port (optional, defaults to 8999)
-  undefined,  // DispatcherConnectOptions (optional)
-  () => { console.error("Disconnected"); process.exit(1); }
+  clientIO, // your ClientIO implementation
+  8999, // port (optional, defaults to 8999)
+  undefined, // DispatcherConnectOptions (optional)
+  () => {
+    console.error("Disconnected");
+    process.exit(1);
+  },
 );
 
 await dispatcher.processCommand("help");

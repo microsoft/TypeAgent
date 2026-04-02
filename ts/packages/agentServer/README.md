@@ -2,11 +2,11 @@
 
 The agentServer hosts a **shared TypeAgent dispatcher** over WebSocket, allowing multiple clients (Shell, CLI, extensions) to share a single running dispatcher instance. It is split into three sub-packages:
 
-| Package | npm name | Purpose |
-|---|---|---|
+| Package     | npm name                | Purpose                                                      |
+| ----------- | ----------------------- | ------------------------------------------------------------ |
 | `protocol/` | `agent-server-protocol` | RPC channel names, join/shutdown types, client-type registry |
-| `client/` | `agent-server-client` | Client library: connect, auto-spawn, stop |
-| `server/` | `agent-server` | Long-running WebSocket server with shared dispatcher |
+| `client/`   | `agent-server-client`   | Client library: connect, auto-spawn, stop                    |
+| `server/`   | `agent-server`          | Long-running WebSocket server with shared dispatcher         |
 
 ---
 
@@ -37,17 +37,18 @@ Shell (Electron)              CLI (Node.js)
 
 Each WebSocket connection multiplexes three independent JSON-RPC channels:
 
-| Channel | Direction | Purpose |
-|---|---|---|
-| `AgentServer` | client → server | Lifecycle: `join()`, `shutdown()` |
-| `Dispatcher` | client → server | Commands: `processCommand()`, `getCommandCompletion()`, etc. |
-| `ClientIO` | server → client | Display/interaction callbacks: `setDisplay()`, `askYesNo()`, etc. |
+| Channel       | Direction       | Purpose                                                           |
+| ------------- | --------------- | ----------------------------------------------------------------- |
+| `AgentServer` | client → server | Lifecycle: `join()`, `shutdown()`                                 |
+| `Dispatcher`  | client → server | Commands: `processCommand()`, `getCommandCompletion()`, etc.      |
+| `ClientIO`    | server → client | Display/interaction callbacks: `setDisplay()`, `askYesNo()`, etc. |
 
 ### Shared dispatcher + routing ClientIO
 
 A single `Dispatcher` instance is created at server startup and shared by all connected clients. Each `processCommand()` call carries a `ClientRequestId = { connectionId, requestId }`. When the dispatcher (or an agent) calls a `ClientIO` method, the **routing ClientIO** layer uses `connectionId` to forward the callback to the correct client's WebSocket.
 
 This means:
+
 - Agents are loaded once and shared across clients.
 - Per-client state (session, cache) is isolated by `connectionId`.
 - Agents are unaware that multiple clients are connected.
@@ -108,17 +109,20 @@ Terminal ↔ EnhancedConsoleClientIO ↔ WebSocket ↔ agentServer
 ## Startup scenarios
 
 **Shell standalone (default)**
+
 ```
 Shell launches → createDispatcher() in-process → no server involved
 ```
 
 **Shell or CLI with running server**
+
 ```
 Client → ensureAndConnectDispatcher(port=8999)
        → server already running → connect → join() → get Dispatcher proxy
 ```
 
 **Server not yet running**
+
 ```
 Client → ensureAndConnectDispatcher(port=8999)
        → server not found → spawnAgentServer()
@@ -127,6 +131,7 @@ Client → ensureAndConnectDispatcher(port=8999)
 ```
 
 **Headless server only**
+
 ```
 node packages/agentServer/server/dist/server.js
 → listens on ws://localhost:8999

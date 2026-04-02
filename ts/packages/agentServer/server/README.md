@@ -30,6 +30,7 @@ node packages/agentServer/server/dist/server.js
 `createSharedDispatcher()` returns a `SharedDispatcher` that wraps a single underlying `Dispatcher` and manages multiple client connections.
 
 **On `join(clientIO, closeFn, options)`:**
+
 - Assigns a `connectionId` (auto-incrementing integer, as string).
 - Stores the client's `ClientIO` in a `clients` map.
 - Registers the client type in the protocol registry.
@@ -38,11 +39,11 @@ node packages/agentServer/server/dist/server.js
 **Routing ClientIO:**
 When the dispatcher or an agent calls a `ClientIO` method, the routing layer inspects `requestId.connectionId` to look up the correct entry in the `clients` map and forwards the call there. This isolates each client's display output even though they share one dispatcher.
 
-| Method type | Routing |
-|---|---|
-| Display (`setDisplay`, `appendDisplay`, `notify`, `setUserRequest`) | Forwarded to the client matching `connectionId` |
-| Interactive (`askYesNo`, `proposeAction`, `requestChoice`, `takeAction`) | Forwarded to the originating client; awaits response |
-| Broadcast | Can optionally be sent to all clients (filter flag controls this) |
+| Method type                                                              | Routing                                                           |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Display (`setDisplay`, `appendDisplay`, `notify`, `setUserRequest`)      | Forwarded to the client matching `connectionId`                   |
+| Interactive (`askYesNo`, `proposeAction`, `requestChoice`, `takeAction`) | Forwarded to the originating client; awaits response              |
+| Broadcast                                                                | Can optionally be sent to all clients (filter flag controls this) |
 
 ---
 

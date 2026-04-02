@@ -7,8 +7,8 @@ Defines the WebSocket RPC contract between agentServer clients and the server.
 ```typescript
 enum ChannelName {
   AgentServer = "AgentServer", // lifecycle: join / shutdown
-  Dispatcher  = "Dispatcher",  // command dispatch
-  ClientIO    = "ClientIO",    // display / interaction callbacks
+  Dispatcher = "Dispatcher", // command dispatch
+  ClientIO = "ClientIO", // display / interaction callbacks
 }
 ```
 
@@ -18,17 +18,17 @@ Each WebSocket connection uses all three channels independently.
 
 **`AgentServerInvokeFunctions`** — methods exposed on the `AgentServer` channel:
 
-| Method | Description |
-|---|---|
+| Method           | Description                                             |
+| ---------------- | ------------------------------------------------------- |
 | `join(options?)` | Register this connection; returns `connectionId` string |
-| `shutdown()` | Request graceful server shutdown |
+| `shutdown()`     | Request graceful server shutdown                        |
 
 **`DispatcherConnectOptions`** — options passed to `join()`:
 
-| Field | Type | Description |
-|---|---|---|
-| `clientType` | `string` | Identifies the client (`"shell"`, `"extension"`, etc.) |
-| `filter` | `boolean` | If true, only receive ClientIO messages for this connection's requests |
+| Field        | Type      | Description                                                            |
+| ------------ | --------- | ---------------------------------------------------------------------- |
+| `clientType` | `string`  | Identifies the client (`"shell"`, `"extension"`, etc.)                 |
+| `filter`     | `boolean` | If true, only receive ClientIO messages for this connection's requests |
 
 ## Client-type registry
 
