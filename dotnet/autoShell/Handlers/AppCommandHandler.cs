@@ -11,17 +11,19 @@ using Newtonsoft.Json.Linq;
 namespace autoShell.Handlers;
 
 /// <summary>
-/// Handles application lifecycle commands: launchProgram, closeProgram.
+/// Handles application lifecycle commands: CloseProgram, LaunchProgram, and ListAppNames.
 /// </summary>
 internal class AppCommandHandler : ICommandHandler
 {
     private readonly IAppRegistry _appRegistry;
     private readonly IProcessService _processService;
+    private readonly IWindowService _window;
 
-    public AppCommandHandler(IAppRegistry appRegistry, IProcessService processService)
+    public AppCommandHandler(IAppRegistry appRegistry, IProcessService processService, IWindowService window)
     {
         this._appRegistry = appRegistry;
         this._processService = processService;
+        this._window = window;
     }
 
     /// <inheritdoc/>
@@ -123,7 +125,9 @@ internal class AppCommandHandler : ICommandHandler
         else
         {
             Debug.WriteLine("Raising " + friendlyName);
-            WindowCommandHandler.RaiseWindow(friendlyName, this._appRegistry);
+            string processName2 = this._appRegistry.ResolveProcessName(friendlyName);
+            string path2 = this._appRegistry.GetExecutablePath(friendlyName);
+            this._window.RaiseWindow(processName2, path2);
         }
     }
 }

@@ -13,7 +13,7 @@ using Newtonsoft.Json.Linq;
 namespace autoShell.Handlers;
 
 /// <summary>
-/// Handles theme-related commands: applyTheme, listThemes, setThemeMode, setWallpaper.
+/// Handles theme-related commands: ApplyTheme, ListThemes, SetThemeMode, and SetWallpaper.
 /// Contains all Windows theme management logic including discovery, application,
 /// and light/dark mode toggling.
 /// </summary>

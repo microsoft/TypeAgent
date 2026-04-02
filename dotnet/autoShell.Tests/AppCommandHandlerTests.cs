@@ -13,11 +13,12 @@ public class AppCommandHandlerTests
 {
     private readonly Mock<IAppRegistry> _appRegistryMock = new();
     private readonly Mock<IProcessService> _processMock = new();
+    private readonly Mock<IWindowService> _windowMock = new();
     private readonly AppCommandHandler _handler;
 
     public AppCommandHandlerTests()
     {
-        _handler = new AppCommandHandler(_appRegistryMock.Object, _processMock.Object);
+        _handler = new AppCommandHandler(_appRegistryMock.Object, _processMock.Object, _windowMock.Object);
     }
 
     // --- LaunchProgram ---

@@ -42,41 +42,34 @@ internal class DisplaySettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        try
+        var param = JObject.Parse(value);
+
+        switch (key)
         {
-            var param = JObject.Parse(value);
+            case "AdjustColorTemperature":
+                this._process.StartShellExecute("ms-settings:nightlight");
+                break;
 
-            switch (key)
-            {
-                case "AdjustColorTemperature":
-                    this._process.StartShellExecute("ms-settings:nightlight");
-                    break;
+            case "AdjustScreenBrightness":
+                this.HandleAdjustScreenBrightness(param);
+                break;
 
-                case "AdjustScreenBrightness":
-                    this.HandleAdjustScreenBrightness(param);
-                    break;
+            case "AdjustScreenOrientation":
+            case "DisplayResolutionAndAspectRatio":
+                this._process.StartShellExecute("ms-settings:display");
+                break;
 
-                case "AdjustScreenOrientation":
-                case "DisplayResolutionAndAspectRatio":
-                    this._process.StartShellExecute("ms-settings:display");
-                    break;
+            case "DisplayScaling":
+                this.HandleDisplayScaling(param);
+                break;
 
-                case "DisplayScaling":
-                    this.HandleDisplayScaling(param);
-                    break;
+            case "EnableBlueLightFilterSchedule":
+                this.HandleBlueLightFilter(param);
+                break;
 
-                case "EnableBlueLightFilterSchedule":
-                    this.HandleBlueLightFilter(param);
-                    break;
-
-                case "RotationLock":
-                    this.HandleRotationLock(param);
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            AutoShell.LogError(ex);
+            case "RotationLock":
+                this.HandleRotationLock(param);
+                break;
         }
     }
 

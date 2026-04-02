@@ -39,26 +39,31 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
+        var param = JObject.Parse(value);
+
+        switch (key)
+        {
+            case "ShowFileExtensions":
+                this.HandleShowFileExtensions(param);
+                break;
+
+            case "ShowHiddenAndSystemFiles":
+                this.HandleShowHiddenAndSystemFiles(param);
+                break;
+        }
+
+        NotifySettingsChange();
+    }
+
+    private static void NotifySettingsChange()
+    {
         try
         {
-            var param = JObject.Parse(value);
-
-            switch (key)
-            {
-                case "ShowFileExtensions":
-                    this.HandleShowFileExtensions(param);
-                    break;
-
-                case "ShowHiddenAndSystemFiles":
-                    this.HandleShowHiddenAndSystemFiles(param);
-                    break;
-            }
-
             SendNotifyMessage((IntPtr)0xffff, 0x001A, IntPtr.Zero, IntPtr.Zero);
         }
-        catch (Exception ex)
+        catch (EntryPointNotFoundException)
         {
-            AutoShell.LogError(ex);
+            // P/Invoke may not be available in all environments
         }
     }
 

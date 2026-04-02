@@ -5,9 +5,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using autoShell.Handlers;
-using autoShell.Handlers.Settings;
-using autoShell.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -23,44 +20,11 @@ internal class AutoShell
 
     #endregion P/Invoke
 
-    private static CommandDispatcher s_dispatcher;
+    private static readonly CommandDispatcher s_dispatcher = CommandDispatcher.Create();
 
     /// <summary>
-    /// Constructor used to get system wide information required for specific commands.
+    /// Logs an exception to debug output and the console in red.
     /// </summary>
-    static AutoShell()
-    {
-        // Initialize command dispatcher with all handlers
-        var registry = new WindowsRegistryService();
-        var systemParams = new WindowsSystemParametersService();
-        var process = new WindowsProcessService();
-        var audio = new WindowsAudioService();
-        var appRegistry = new WindowsAppRegistry();
-        var debugger = new WindowsDebuggerService();
-        var brightness = new WindowsBrightnessService();
-
-        s_dispatcher = new CommandDispatcher();
-        s_dispatcher.Register(
-            new AudioCommandHandler(audio),
-            new AppCommandHandler(appRegistry, process),
-            new WindowCommandHandler(appRegistry),
-            new ThemeCommandHandler(registry, process, systemParams),
-            new VirtualDesktopCommandHandler(appRegistry),
-            new NetworkCommandHandler(),
-            new DisplayCommandHandler(),
-            new TaskbarSettingsHandler(registry),
-            new DisplaySettingsHandler(registry, process, brightness),
-            new PersonalizationSettingsHandler(registry, process),
-            new MouseSettingsHandler(systemParams, process),
-            new AccessibilitySettingsHandler(registry, process),
-            new PrivacySettingsHandler(registry),
-            new PowerSettingsHandler(registry, process),
-            new FileExplorerSettingsHandler(registry),
-            new SystemSettingsHandler(registry, process),
-            new SystemCommandHandler(process, debugger)
-        );
-    }
-
     internal static void LogError(Exception ex)
     {
         Debug.WriteLine(ex);
@@ -70,6 +34,9 @@ internal class AutoShell
         Console.ForegroundColor = previousColor;
     }
 
+    /// <summary>
+    /// Logs a warning message to debug output and the console in yellow.
+    /// </summary>
     internal static void LogWarning(string message)
     {
         Debug.WriteLine(message);

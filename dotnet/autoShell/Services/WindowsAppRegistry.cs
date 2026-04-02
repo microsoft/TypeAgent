@@ -75,22 +75,26 @@ internal sealed class WindowsAppRegistry : IAppRegistry
         }
     }
 
+    /// <inheritdoc/>
     public string GetExecutablePath(string friendlyName)
     {
         return (string)this._friendlyNameToPath[friendlyName.ToLowerInvariant()];
     }
 
+    /// <inheritdoc/>
     public string GetAppUserModelId(string friendlyName)
     {
         return (string)this._friendlyNameToId[friendlyName.ToLowerInvariant()];
     }
 
+    /// <inheritdoc/>
     public string ResolveProcessName(string friendlyName)
     {
         string path = GetExecutablePath(friendlyName);
         return path != null ? Path.GetFileNameWithoutExtension(path) : friendlyName;
     }
 
+    /// <inheritdoc/>
     public string GetWorkingDirectoryEnvVar(string friendlyName)
     {
         return this._appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1
@@ -98,6 +102,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
             : null;
     }
 
+    /// <inheritdoc/>
     public string GetArguments(string friendlyName)
     {
         return this._appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 2
@@ -105,6 +110,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
             : null;
     }
 
+    /// <inheritdoc/>
     public IEnumerable<string> GetAllAppNames()
     {
         return this._friendlyNameToId.Keys.Cast<string>();

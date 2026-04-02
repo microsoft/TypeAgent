@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 namespace autoShell.Handlers;
 
 /// <summary>
-/// Handles system/utility commands: debug, toggleNotifications.
+/// Handles system/utility commands: Debug and ToggleNotifications.
 /// </summary>
 internal class SystemCommandHandler : ICommandHandler
 {

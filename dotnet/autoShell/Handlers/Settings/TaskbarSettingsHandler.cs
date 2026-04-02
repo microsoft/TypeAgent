@@ -45,40 +45,45 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
+        var param = JObject.Parse(value);
+
+        switch (key)
+        {
+            case "AutoHideTaskbar":
+                this.HandleAutoHideTaskbar(param);
+                break;
+            case "DisplaySecondsInSystrayClock":
+                this.SetToggle(param, "enable", "ShowSecondsInSystemClock");
+                break;
+            case "DisplayTaskbarOnAllMonitors":
+                this.SetToggle(param, "enable", "MMTaskbarEnabled");
+                break;
+            case "ShowBadgesOnTaskbar":
+                this.SetToggle(param, "enableBadging", "TaskbarBadges");
+                break;
+            case "TaskbarAlignment":
+                this.HandleTaskbarAlignment(param);
+                break;
+            case "TaskViewVisibility":
+                this.SetToggle(param, "visibility", "ShowTaskViewButton");
+                break;
+            case "ToggleWidgetsButtonVisibility":
+                this.SetToggle(param, "visibility", "TaskbarDa", trueValue: "show");
+                break;
+        }
+
+        NotifySettingsChange();
+    }
+
+    private static void NotifySettingsChange()
+    {
         try
         {
-            var param = JObject.Parse(value);
-
-            switch (key)
-            {
-                case "AutoHideTaskbar":
-                    this.HandleAutoHideTaskbar(param);
-                    break;
-                case "DisplaySecondsInSystrayClock":
-                    this.SetToggle(param, "enable", "ShowSecondsInSystemClock");
-                    break;
-                case "DisplayTaskbarOnAllMonitors":
-                    this.SetToggle(param, "enable", "MMTaskbarEnabled");
-                    break;
-                case "ShowBadgesOnTaskbar":
-                    this.SetToggle(param, "enableBadging", "TaskbarBadges");
-                    break;
-                case "TaskbarAlignment":
-                    this.HandleTaskbarAlignment(param);
-                    break;
-                case "TaskViewVisibility":
-                    this.SetToggle(param, "visibility", "ShowTaskViewButton");
-                    break;
-                case "ToggleWidgetsButtonVisibility":
-                    this.SetToggle(param, "visibility", "TaskbarDa", trueValue: "show");
-                    break;
-            }
-
             SendNotifyMessage((IntPtr)0xffff, 0x001A, IntPtr.Zero, IntPtr.Zero);
         }
-        catch (Exception ex)
+        catch (EntryPointNotFoundException)
         {
-            AutoShell.LogError(ex);
+            // P/Invoke may not be available in all environments
         }
     }
 

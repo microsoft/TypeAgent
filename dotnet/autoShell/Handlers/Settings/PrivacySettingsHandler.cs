@@ -34,26 +34,19 @@ internal class PrivacySettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        try
-        {
-            var param = JObject.Parse(value);
+        var param = JObject.Parse(value);
 
-            string subKey = key switch
-            {
-                "ManageCameraAccess" => "webcam",
-                "ManageLocationAccess" => "location",
-                "ManageMicrophoneAccess" => "microphone",
-                _ => null,
-            };
-
-            if (subKey != null)
-            {
-                this.SetAccessSetting(param, subKey);
-            }
-        }
-        catch (Exception ex)
+        string subKey = key switch
         {
-            AutoShell.LogError(ex);
+            "ManageCameraAccess" => "webcam",
+            "ManageLocationAccess" => "location",
+            "ManageMicrophoneAccess" => "microphone",
+            _ => null,
+        };
+
+        if (subKey != null)
+        {
+            this.SetAccessSetting(param, subKey);
         }
     }
 

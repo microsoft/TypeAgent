@@ -35,32 +35,25 @@ internal class PersonalizationSettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        try
+        var param = JObject.Parse(value);
+
+        switch (key)
         {
-            var param = JObject.Parse(value);
+            case "ApplyColorToTitleBar":
+                this.HandleApplyColorToTitleBar(param);
+                break;
 
-            switch (key)
-            {
-                case "ApplyColorToTitleBar":
-                    this.HandleApplyColorToTitleBar(param);
-                    break;
+            case "EnableTransparency":
+                this.HandleEnableTransparency(param);
+                break;
 
-                case "EnableTransparency":
-                    this.HandleEnableTransparency(param);
-                    break;
+            case "HighContrastTheme":
+                this._process.StartShellExecute("ms-settings:easeofaccess-highcontrast");
+                break;
 
-                case "HighContrastTheme":
-                    this._process.StartShellExecute("ms-settings:easeofaccess-highcontrast");
-                    break;
-
-                case "SystemThemeMode":
-                    this.HandleSystemThemeMode(param);
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            AutoShell.LogError(ex);
+            case "SystemThemeMode":
+                this.HandleSystemThemeMode(param);
+                break;
         }
     }
 

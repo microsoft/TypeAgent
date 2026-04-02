@@ -36,36 +36,29 @@ internal class AccessibilitySettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        try
+        var param = JObject.Parse(value);
+
+        switch (key)
         {
-            var param = JObject.Parse(value);
+            case "EnableFilterKeysAction":
+                this.HandleFilterKeys(param);
+                break;
 
-            switch (key)
-            {
-                case "EnableFilterKeysAction":
-                    this.HandleFilterKeys(param);
-                    break;
+            case "EnableMagnifier":
+                this.HandleToggleProcess(param, "magnify.exe", "Magnify");
+                break;
 
-                case "EnableMagnifier":
-                    this.HandleToggleProcess(param, "magnify.exe", "Magnify");
-                    break;
+            case "EnableNarratorAction":
+                this.HandleToggleProcess(param, "narrator.exe", "Narrator");
+                break;
 
-                case "EnableNarratorAction":
-                    this.HandleToggleProcess(param, "narrator.exe", "Narrator");
-                    break;
+            case "EnableStickyKeys":
+                this.HandleStickyKeys(param);
+                break;
 
-                case "EnableStickyKeys":
-                    this.HandleStickyKeys(param);
-                    break;
-
-                case "MonoAudioToggle":
-                    this.HandleMonoAudio(param);
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            AutoShell.LogError(ex);
+            case "MonoAudioToggle":
+                this.HandleMonoAudio(param);
+                break;
         }
     }
 

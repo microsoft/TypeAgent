@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 namespace autoShell.Handlers;
 
 /// <summary>
-/// Handles volume, mute, and restoreVolume commands.
+/// Handles audio commands: Mute, RestoreVolume, and Volume.
 /// </summary>
 internal class AudioCommandHandler : ICommandHandler
 {

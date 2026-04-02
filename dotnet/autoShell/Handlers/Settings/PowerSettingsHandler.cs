@@ -34,25 +34,18 @@ internal class PowerSettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        try
-        {
-            var param = JObject.Parse(value);
+        var param = JObject.Parse(value);
 
-            switch (key)
-            {
-                case "BatterySaverActivationLevel":
-                    this.HandleBatterySaverThreshold(param);
-                    break;
-
-                case "SetPowerModeOnBattery":
-                case "SetPowerModePluggedIn":
-                    this._process.StartShellExecute("ms-settings:powersleep");
-                    break;
-            }
-        }
-        catch (Exception ex)
+        switch (key)
         {
-            AutoShell.LogError(ex);
+            case "BatterySaverActivationLevel":
+                this.HandleBatterySaverThreshold(param);
+                break;
+
+            case "SetPowerModeOnBattery":
+            case "SetPowerModePluggedIn":
+                this._process.StartShellExecute("ms-settings:powersleep");
+                break;
         }
     }
 

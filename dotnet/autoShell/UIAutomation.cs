@@ -35,6 +35,12 @@ internal sealed class UIAutomation
     [DllImport("user32.dll")]
     private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
     #endregion P/Invoke
 
     /// <summary>
@@ -65,10 +71,10 @@ internal sealed class UIAutomation
                 // UWP apps use ApplicationFrameWindow class
                 IntPtr hWnd = IntPtr.Zero;
                 while ((hWnd =
-                    Handlers.WindowCommandHandler.FindWindowEx(IntPtr.Zero, hWnd, "ApplicationFrameWindow", null)) != IntPtr.Zero)
+                    FindWindowEx(IntPtr.Zero, hWnd, "ApplicationFrameWindow", null)) != IntPtr.Zero)
                 {
                     StringBuilder windowTitle = new StringBuilder(256);
-                    int hr = Handlers.WindowCommandHandler.GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
+                    int hr = GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
                     Debug.WriteLine(windowTitle + $"(hResult: {hr})");
                     if (windowTitle.ToString().Contains("Settings", StringComparison.OrdinalIgnoreCase))
                     {

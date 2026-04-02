@@ -23,16 +23,20 @@ public class HandlerRegistrationTests
         var appRegistryMock = new Moq.Mock<Services.IAppRegistry>();
         var debuggerMock = new Moq.Mock<Services.IDebuggerService>();
         var brightnessMock = new Moq.Mock<Services.IBrightnessService>();
+        var displayMock = new Moq.Mock<Services.IDisplayService>();
+        var windowMock = new Moq.Mock<Services.IWindowService>();
+        var networkMock = new Moq.Mock<Services.INetworkService>();
+        var virtualDesktopMock = new Moq.Mock<Services.IVirtualDesktopService>();
 
         _handlers =
         [
             new AudioCommandHandler(audioMock.Object),
-            new AppCommandHandler(appRegistryMock.Object, processMock.Object),
-            new WindowCommandHandler(appRegistryMock.Object),
+            new AppCommandHandler(appRegistryMock.Object, processMock.Object, windowMock.Object),
+            new WindowCommandHandler(appRegistryMock.Object, windowMock.Object),
             new ThemeCommandHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
-            new VirtualDesktopCommandHandler(appRegistryMock.Object),
-            new NetworkCommandHandler(),
-            new DisplayCommandHandler(),
+            new VirtualDesktopCommandHandler(appRegistryMock.Object, processMock.Object, virtualDesktopMock.Object),
+            new NetworkCommandHandler(networkMock.Object),
+            new DisplayCommandHandler(displayMock.Object),
             new TaskbarSettingsHandler(registryMock.Object),
             new DisplaySettingsHandler(registryMock.Object, processMock.Object, brightnessMock.Object),
             new PersonalizationSettingsHandler(registryMock.Object, processMock.Object),
@@ -51,9 +55,7 @@ public class HandlerRegistrationTests
     {
         foreach (var handler in _handlers)
         {
-            Assert.True(
-                handler.SupportedCommands.Any(),
-                $"{handler.GetType().Name} has no supported commands");
+            Assert.NotEmpty(handler.SupportedCommands);
         }
     }
 
@@ -65,9 +67,7 @@ public class HandlerRegistrationTests
             var commands = handler.SupportedCommands.ToList();
             var duplicates = commands.GroupBy(c => c).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
 
-            Assert.True(
-                duplicates.Count == 0,
-                $"{handler.GetType().Name} has duplicate commands: {string.Join(", ", duplicates)}");
+            Assert.Empty(duplicates);
         }
     }
 
@@ -93,30 +93,12 @@ public class HandlerRegistrationTests
             }
         }
 
-        Assert.True(
-            duplicates.Count == 0,
-            $"Duplicate commands across handlers: {string.Join("; ", duplicates)}");
+        Assert.Empty(duplicates);
     }
 
     [Fact]
     public void AllCommands_HaveAtLeastOneUnitTest()
     {
-        // Commands that use P/Invoke, COM, or static APIs directly and cannot be
-        // unit-tested without further abstraction layers.
-        var untestableCommands = new HashSet<string>(StringComparer.Ordinal)
-        {
-            // WindowCommandHandler — direct P/Invoke
-            "Maximize", "Minimize", "SwitchTo", "Tile",
-            // VirtualDesktopCommandHandler — COM interop
-            "CreateDesktop", "MoveWindowToDesktop", "NextDesktop",
-            "PinWindow", "PreviousDesktop", "SwitchDesktop",
-            // NetworkCommandHandler — WLAN P/Invoke + COM
-            "BluetoothToggle", "ConnectWifi", "DisconnectWifi",
-            "EnableMeteredConnections", "EnableWifi", "ListWifiNetworks", "ToggleAirplaneMode",
-            // DisplayCommandHandler — direct P/Invoke
-            "ListResolutions", "SetScreenResolution", "SetTextSize",
-        };
-
         // Discover all test classes in this assembly
         var testAssembly = typeof(HandlerRegistrationTests).Assembly;
         var testMethods = testAssembly.GetTypes()
@@ -145,16 +127,14 @@ public class HandlerRegistrationTests
                     t.MethodName.StartsWith(command + "_", StringComparison.Ordinal) ||
                     t.MethodName.Contains("_" + command + "_", StringComparison.Ordinal));
 
-                if (!hasCoverage && !untestableCommands.Contains(command))
+                if (!hasCoverage)
                 {
                     untested.Add($"{handlerTypeName}.{command}");
                 }
             }
         }
 
-        Assert.True(
-            untested.Count == 0,
-            $"Commands missing unit tests ({untested.Count}):\n  " + string.Join("\n  ", untested));
+        Assert.Empty(untested);
     }
 
 }

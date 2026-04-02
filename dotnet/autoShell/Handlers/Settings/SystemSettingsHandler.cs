@@ -37,35 +37,28 @@ internal class SystemSettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        try
+        switch (key)
         {
-            switch (key)
-            {
-                case "AutomaticDSTAdjustment":
-                    HandleAutomaticDSTAdjustment(value);
-                    break;
+            case "AutomaticDSTAdjustment":
+                HandleAutomaticDSTAdjustment(value);
+                break;
 
-                case "AutomaticTimeSettingAction":
-                    this._process.StartShellExecute("ms-settings:dateandtime");
-                    break;
+            case "AutomaticTimeSettingAction":
+                this._process.StartShellExecute("ms-settings:dateandtime");
+                break;
 
-                case "EnableGameMode":
-                    this._process.StartShellExecute("ms-settings:gaming-gamemode");
-                    break;
+            case "EnableGameMode":
+                this._process.StartShellExecute("ms-settings:gaming-gamemode");
+                break;
 
-                case "EnableQuietHours":
-                    this._process.StartShellExecute("ms-settings:quiethours");
-                    break;
+            case "EnableQuietHours":
+                this._process.StartShellExecute("ms-settings:quiethours");
+                break;
 
-                case "MinimizeWindowsOnMonitorDisconnectAction":
-                case "RememberWindowLocations":
-                    this._process.StartShellExecute("ms-settings:display");
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            AutoShell.LogError(ex);
+            case "MinimizeWindowsOnMonitorDisconnectAction":
+            case "RememberWindowLocations":
+                this._process.StartShellExecute("ms-settings:display");
+                break;
         }
     }
 

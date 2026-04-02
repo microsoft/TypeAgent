@@ -50,46 +50,39 @@ internal class MouseSettingsHandler : ICommandHandler
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
-        try
+        var param = JObject.Parse(value);
+
+        switch (key)
         {
-            var param = JObject.Parse(value);
+            case "AdjustMousePointerSize":
+            case "MousePointerCustomization":
+                this._process.StartShellExecute("ms-settings:easeofaccess-mouse");
+                break;
 
-            switch (key)
-            {
-                case "AdjustMousePointerSize":
-                case "MousePointerCustomization":
-                    this._process.StartShellExecute("ms-settings:easeofaccess-mouse");
-                    break;
+            case "CursorTrail":
+                this.HandleMouseCursorTrail(value);
+                break;
 
-                case "CursorTrail":
-                    this.HandleMouseCursorTrail(value);
-                    break;
+            case "EnableTouchPad":
+            case "TouchpadCursorSpeed":
+                this._process.StartShellExecute("ms-settings:devices-touchpad");
+                break;
 
-                case "EnableTouchPad":
-                case "TouchpadCursorSpeed":
-                    this._process.StartShellExecute("ms-settings:devices-touchpad");
-                    break;
+            case "EnhancePointerPrecision":
+                this.HandleEnhancePointerPrecision(param);
+                break;
 
-                case "EnhancePointerPrecision":
-                    this.HandleEnhancePointerPrecision(param);
-                    break;
+            case "MouseCursorSpeed":
+                this.HandleMouseCursorSpeed(param);
+                break;
 
-                case "MouseCursorSpeed":
-                    this.HandleMouseCursorSpeed(param);
-                    break;
+            case "MouseWheelScrollLines":
+                this.HandleMouseWheelScrollLines(param);
+                break;
 
-                case "MouseWheelScrollLines":
-                    this.HandleMouseWheelScrollLines(param);
-                    break;
-
-                case "SetPrimaryMouseButton":
-                    HandleSetPrimaryMouseButton(param);
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            AutoShell.LogError(ex);
+            case "SetPrimaryMouseButton":
+                HandleSetPrimaryMouseButton(param);
+                break;
         }
     }
 
@@ -111,7 +104,7 @@ internal class MouseSettingsHandler : ICommandHandler
     /// <summary>
     /// Enables or disables the mouse cursor trail and sets its length.
     /// Command: {"CursorTrail": "{\"enable\":true,\"length\":7}"}
-    /// SPI_SETMOUSETRAILS: 0 or 1 = off, >= 2 = trail length
+    /// SPI_SETMOUSETRAILS: 0 = off, 2-12 = trail length
     /// </summary>
     private void HandleMouseCursorTrail(string jsonParams)
     {
