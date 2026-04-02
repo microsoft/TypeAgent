@@ -7,14 +7,21 @@ import { writeGrammarRules } from "../src/grammarRuleWriter.js";
 import { evaluateValueExpr } from "../src/grammarValueExprEvaluator.js";
 import { describeForEachMatcher } from "./testUtils.js";
 
-const enableExpressions = true;
+const enableValueExpressions = true;
 
 function loadWithExpressions(grammar: string) {
-    return loadGrammarRules("test.grammar", grammar, { enableExpressions });
+    return loadGrammarRules("test.grammar", grammar, {
+        enableValueExpressions,
+    });
 }
 
 function parseWithExpressions(grammar: string) {
-    return parseGrammarRules("test.agr", grammar, false, enableExpressions);
+    return parseGrammarRules(
+        "test.agr",
+        grammar,
+        false,
+        enableValueExpressions,
+    );
 }
 
 // ── Parser Tests ──────────────────────────────────────────────────────────────
@@ -489,7 +496,7 @@ describe("Value Expression Parser", () => {
                 "test.agr",
                 `<Start> = hello -> -3;`,
                 false,
-                false, // enableExpressions = false
+                false, // enableValueExpressions = false
             );
             const value = r.definitions[0].rules[0].value!;
             expect(value).toEqual({ type: "literal", value: -3 });
