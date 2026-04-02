@@ -26,7 +26,7 @@ describe("string literal type inference", () => {
         typeName === "ExprAction" ? ExprActionDef : undefined;
     const exprOpts = {
         schemaLoader: exprLoader,
-        enableExpressions: true,
+        enableValueExpressions: true,
     };
 
     it("literal + variable string is valid", () => {
@@ -204,7 +204,7 @@ describe("string literal type inference", () => {
         const errors: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: arrayLoader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBe(0);
     });
@@ -664,7 +664,7 @@ describe("Cross-field string-union assignments", () => {
         const errors: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: exprLoader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBe(0);
     });

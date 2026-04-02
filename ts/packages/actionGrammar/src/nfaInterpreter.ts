@@ -306,11 +306,14 @@ function seedQueue(
                     `    Environment slots: ${JSON.stringify(state.environment.slots)}`,
                 );
             }
-            if (state.actionValue && state.environment) {
+            if (state.actionValue) {
+                // Use the existing environment, or create an empty one for
+                // literal-only values that don't reference any variables.
+                const env = state.environment ?? createEnvironment(0);
                 try {
                     evaluatedActionValue = evaluateExpression(
                         state.actionValue,
-                        state.environment,
+                        env,
                     );
                     debugNFA(
                         `  Evaluated actionValue: ${JSON.stringify(evaluatedActionValue)}`,
@@ -788,7 +791,7 @@ function epsilonClosure(
             // This is a rule entry with an action value - use it
             currentActionValue = nfaState.actionValue;
         } else if (nfaState.actionValue !== undefined && !state.environment) {
-            // Legacy: top-level rule entry without environment (backwards compatibility)
+            // Top-level rule entry without environment (backwards compatibility)
             currentActionValue = nfaState.actionValue;
         }
         // Otherwise keep the current actionValue (we're inside the same rule)
