@@ -47,10 +47,10 @@ internal sealed class UIAutomation
                 // UWP apps use ApplicationFrameWindow class
                 IntPtr hWnd = IntPtr.Zero;
                 while ((hWnd =
-                    AutoShell.FindWindowEx(IntPtr.Zero, hWnd, "ApplicationFrameWindow", null)) != IntPtr.Zero)
+                    Handlers.WindowCommandHandler.FindWindowEx(IntPtr.Zero, hWnd, "ApplicationFrameWindow", null)) != IntPtr.Zero)
                 {
                     StringBuilder windowTitle = new StringBuilder(256);
-                    int hr = AutoShell.GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
+                    int hr = Handlers.WindowCommandHandler.GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
                     Debug.WriteLine(windowTitle + $"(hResult: {hr})");
                     if (windowTitle.ToString().Contains("Settings", StringComparison.OrdinalIgnoreCase))
                     {

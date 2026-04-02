@@ -19,14 +19,15 @@ public class HandlerRegistrationTests
         var registryMock = new Moq.Mock<Services.IRegistryService>();
         var systemParamsMock = new Moq.Mock<Services.ISystemParametersService>();
         var processMock = new Moq.Mock<Services.IProcessService>();
+        var appRegistryMock = new Moq.Mock<Services.IAppRegistry>();
 
         _handlers =
         [
             new AudioCommandHandler(audioMock.Object),
-            new AppCommandHandler(),
-            new WindowCommandHandler(),
+            new AppCommandHandler(appRegistryMock.Object, processMock.Object),
+            new WindowCommandHandler(appRegistryMock.Object),
             new ThemeCommandHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
-            new VirtualDesktopCommandHandler(),
+            new VirtualDesktopCommandHandler(appRegistryMock.Object),
             new NetworkCommandHandler(),
             new DisplayCommandHandler(),
             new TaskbarSettingsHandler(registryMock.Object),
