@@ -36,6 +36,8 @@ internal class AutoShell
         var process = new WindowsProcessService();
         var audio = new WindowsAudioService();
         var appRegistry = new WindowsAppRegistry();
+        var debugger = new WindowsDebuggerService();
+        var brightness = new WindowsBrightnessService();
 
         s_dispatcher = new CommandDispatcher();
         s_dispatcher.Register(
@@ -47,15 +49,15 @@ internal class AutoShell
             new NetworkCommandHandler(),
             new DisplayCommandHandler(),
             new TaskbarSettingsHandler(registry),
-            new DisplaySettingsHandler(registry, process),
+            new DisplaySettingsHandler(registry, process, brightness),
             new PersonalizationSettingsHandler(registry, process),
             new MouseSettingsHandler(systemParams, process),
             new AccessibilitySettingsHandler(registry, process),
             new PrivacySettingsHandler(registry),
             new PowerSettingsHandler(registry, process),
             new FileExplorerSettingsHandler(registry),
-            new SystemSettingsHandler(process),
-            new SystemCommandHandler(process)
+            new SystemSettingsHandler(registry, process),
+            new SystemCommandHandler(process, debugger)
         );
     }
 

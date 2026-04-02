@@ -23,4 +23,11 @@ internal class WindowsRegistryService : IRegistryService
         using var key = Registry.CurrentUser.CreateSubKey(keyPath);
         key?.SetValue(valueName, value, valueKind);
     }
+
+    /// <inheritdoc/>
+    public void SetValueLocalMachine(string keyPath, string valueName, object value, RegistryValueKind valueKind)
+    {
+        using var key = Registry.LocalMachine.CreateSubKey(keyPath);
+        key?.SetValue(valueName, value, valueKind);
+    }
 }

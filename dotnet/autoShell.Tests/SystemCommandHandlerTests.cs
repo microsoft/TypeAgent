@@ -11,11 +11,20 @@ namespace autoShell.Tests;
 public class SystemCommandHandlerTests
 {
     private readonly Mock<IProcessService> _processMock = new();
+    private readonly Mock<IDebuggerService> _debuggerMock = new();
     private readonly SystemCommandHandler _handler;
 
     public SystemCommandHandlerTests()
     {
-        _handler = new SystemCommandHandler(_processMock.Object);
+        _handler = new SystemCommandHandler(_processMock.Object, _debuggerMock.Object);
+    }
+
+    [Fact]
+    public void Debug_LaunchesDebugger()
+    {
+        Handle("Debug", "");
+
+        _debuggerMock.Verify(d => d.Launch(), Times.Once);
     }
 
     [Fact]

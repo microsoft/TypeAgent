@@ -45,4 +45,10 @@ internal interface ISystemParametersService
     /// <param name="vparam">Array to receive the value.</param>
     /// <param name="flags">Flags (typically 0 for get operations).</param>
     bool GetParameter(int action, int param, int[] vparam, int flags);
+
+    /// <summary>
+    /// Swaps the primary and secondary mouse buttons.
+    /// </summary>
+    /// <param name="swap">If true, swaps the buttons; if false, restores default.</param>
+    bool SwapMouseButton(bool swap);
 }

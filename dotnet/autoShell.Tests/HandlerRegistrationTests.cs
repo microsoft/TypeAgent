@@ -21,6 +21,8 @@ public class HandlerRegistrationTests
         var systemParamsMock = new Moq.Mock<Services.ISystemParametersService>();
         var processMock = new Moq.Mock<Services.IProcessService>();
         var appRegistryMock = new Moq.Mock<Services.IAppRegistry>();
+        var debuggerMock = new Moq.Mock<Services.IDebuggerService>();
+        var brightnessMock = new Moq.Mock<Services.IBrightnessService>();
 
         _handlers =
         [
@@ -32,15 +34,15 @@ public class HandlerRegistrationTests
             new NetworkCommandHandler(),
             new DisplayCommandHandler(),
             new TaskbarSettingsHandler(registryMock.Object),
-            new DisplaySettingsHandler(registryMock.Object, processMock.Object),
+            new DisplaySettingsHandler(registryMock.Object, processMock.Object, brightnessMock.Object),
             new PersonalizationSettingsHandler(registryMock.Object, processMock.Object),
             new MouseSettingsHandler(systemParamsMock.Object, processMock.Object),
             new AccessibilitySettingsHandler(registryMock.Object, processMock.Object),
             new PrivacySettingsHandler(registryMock.Object),
             new PowerSettingsHandler(registryMock.Object, processMock.Object),
             new FileExplorerSettingsHandler(registryMock.Object),
-            new SystemSettingsHandler(processMock.Object),
-            new SystemCommandHandler(processMock.Object),
+            new SystemSettingsHandler(registryMock.Object, processMock.Object),
+            new SystemCommandHandler(processMock.Object, debuggerMock.Object),
         ];
     }
 
@@ -113,14 +115,6 @@ public class HandlerRegistrationTests
             "EnableMeteredConnections", "EnableWifi", "ListWifiNetworks", "ToggleAirplaneMode",
             // DisplayCommandHandler — direct P/Invoke
             "ListResolutions", "SetScreenResolution", "SetTextSize",
-            // SystemCommandHandler.Debug — Debugger.Launch()
-            "Debug",
-            // MouseSettingsHandler.SetPrimaryMouseButton — native SwapMouseButton
-            "SetPrimaryMouseButton",
-            // DisplaySettingsHandler.AdjustScreenBrightness — WMI + direct Registry
-            "AdjustScreenBrightness",
-            // SystemSettingsHandler.AutomaticDSTAdjustment — direct Registry.LocalMachine
-            "AutomaticDSTAdjustment",
         };
 
         // Discover all test classes in this assembly

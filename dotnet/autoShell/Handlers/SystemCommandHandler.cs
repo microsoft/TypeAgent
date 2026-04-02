@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
-using System.Diagnostics;
 using autoShell.Services;
 using Newtonsoft.Json.Linq;
 
@@ -14,10 +13,12 @@ namespace autoShell.Handlers;
 internal class SystemCommandHandler : ICommandHandler
 {
     private readonly IProcessService _process;
+    private readonly IDebuggerService _debugger;
 
-    public SystemCommandHandler(IProcessService process)
+    public SystemCommandHandler(IProcessService process, IDebuggerService debugger)
     {
-        this._process = process;
+        _process = process;
+        _debugger = debugger;
     }
 
     /// <inheritdoc/>
@@ -33,11 +34,11 @@ internal class SystemCommandHandler : ICommandHandler
         switch (key)
         {
             case "Debug":
-                Debugger.Launch();
+                _debugger.Launch();
                 break;
 
             case "ToggleNotifications":
-                this._process.StartShellExecute("ms-actioncenter:");
+                _process.StartShellExecute("ms-actioncenter:");
                 break;
         }
     }

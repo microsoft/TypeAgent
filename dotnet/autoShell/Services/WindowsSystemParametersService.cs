@@ -11,9 +11,6 @@ namespace autoShell.Services;
 /// </summary>
 internal partial class WindowsSystemParametersService : ISystemParametersService
 {
-    private const int SPIF_UPDATEINIFILE = 0x01;
-    private const int SPIF_SENDCHANGE = 0x02;
-
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SystemParametersInfo(int uiAction, int uiParam, IntPtr pvParam, int fWinIni);
@@ -47,5 +44,15 @@ internal partial class WindowsSystemParametersService : ISystemParametersService
     public bool GetParameter(int action, int param, int[] vparam, int flags)
     {
         return SystemParametersInfo(action, param, vparam, flags);
+    }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SwapMouseButtonNative(int fSwap);
+
+    /// <inheritdoc/>
+    public bool SwapMouseButton(bool swap)
+    {
+        return SwapMouseButtonNative(swap ? 1 : 0);
     }
 }

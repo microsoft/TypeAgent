@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using autoShell.Services;
-using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
@@ -15,11 +14,13 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal class SystemSettingsHandler : ICommandHandler
 {
+    private readonly IRegistryService _registry;
     private readonly IProcessService _process;
 
-    public SystemSettingsHandler(IProcessService process)
+    public SystemSettingsHandler(IRegistryService registry, IProcessService process)
     {
-        this._process = process;
+        _registry = registry;
+        _process = process;
     }
 
     /// <inheritdoc/>
@@ -68,13 +69,16 @@ internal class SystemSettingsHandler : ICommandHandler
         }
     }
 
-    private static void HandleAutomaticDSTAdjustment(string jsonParams)
+    private void HandleAutomaticDSTAdjustment(string jsonParams)
     {
         var param = JObject.Parse(jsonParams);
         bool enable = param.Value<bool?>("enable") ?? true;
 
-        using var key = Registry.LocalMachine.CreateSubKey(@"SYSTEM\CurrentControlSet\Control\TimeZoneInformation");
-        key?.SetValue("DynamicDaylightTimeDisabled", enable ? 0 : 1, RegistryValueKind.DWord);
+        _registry.SetValueLocalMachine(
+            @"SYSTEM\CurrentControlSet\Control\TimeZoneInformation",
+            "DynamicDaylightTimeDisabled",
+            enable ? 0 : 1,
+            Microsoft.Win32.RegistryValueKind.DWord);
 
         Debug.WriteLine($"Automatic DST adjustment {(enable ? "enabled" : "disabled")}");
     }

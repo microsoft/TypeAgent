@@ -479,9 +479,11 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
 
         // Create slot map for this rule FIRST (needed to compile value expression)
         const slotMap = createRuleSlotMap(rule);
-        if (slotMap.size > 0) {
-            builder.setStateSlotInfo(ruleEntry, slotMap.size, slotMap);
-        }
+        // Always set slot info for Start rules — even rules with no variables
+        // need an environment so that nested sub-rules (e.g. optional groups
+        // normalized into passthrough wrappers) can correctly pop back to the
+        // Start rule's environment/actionValue on exit.
+        builder.setStateSlotInfo(ruleEntry, slotMap.size, slotMap);
 
         // Create type map for type conversion during evaluation
         const typeMap = createRuleTypeMap(rule);

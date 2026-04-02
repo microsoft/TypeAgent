@@ -4,7 +4,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using autoShell.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
@@ -19,11 +18,13 @@ internal class DisplaySettingsHandler : ICommandHandler
 {
     private readonly IRegistryService _registry;
     private readonly IProcessService _process;
+    private readonly IBrightnessService _brightness;
 
-    public DisplaySettingsHandler(IRegistryService registry, IProcessService process)
+    public DisplaySettingsHandler(IRegistryService registry, IProcessService process, IBrightnessService brightness)
     {
-        this._registry = registry;
-        this._process = process;
+        _registry = registry;
+        _process = process;
+        _brightness = brightness;
     }
 
     /// <inheritdoc/>
@@ -84,12 +85,12 @@ internal class DisplaySettingsHandler : ICommandHandler
         string level = param.Value<string>("brightnessLevel");
         bool increase = level == "increase";
 
-        byte currentBrightness = GetCurrentBrightness();
+        byte currentBrightness = _brightness.GetCurrentBrightness();
         byte newBrightness = increase
             ? (byte)Math.Min(100, currentBrightness + 10)
             : (byte)Math.Max(0, currentBrightness - 10);
 
-        SetBrightness(newBrightness);
+        _brightness.SetBrightness(newBrightness);
         Debug.WriteLine($"Brightness adjusted to: {newBrightness}%");
     }
 
@@ -136,42 +137,5 @@ internal class DisplaySettingsHandler : ICommandHandler
             "RotationLockPreference",
             enable ? 1 : 0,
             RegistryValueKind.DWord);
-    }
-
-    private static byte GetCurrentBrightness()
-    {
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(
-                @"Software\Microsoft\Windows\CurrentVersion\SettingSync\Settings\SystemSettings\Brightness");
-            if (key != null)
-            {
-                object value = key.GetValue("Data");
-                if (value is byte[] data && data.Length > 0)
-                {
-                    return data[0];
-                }
-            }
-        }
-        catch { }
-        return 50;
-    }
-
-    private static void SetBrightness(byte brightness)
-    {
-        try
-        {
-            using var searcher = new System.Management.ManagementObjectSearcher(
-                "root\\WMI", "SELECT * FROM WmiMonitorBrightnessMethods");
-            using var objectCollection = searcher.Get();
-            foreach (System.Management.ManagementObject obj in objectCollection.Cast<System.Management.ManagementObject>())
-            {
-                obj.InvokeMethod("WmiSetBrightness", [1, brightness]);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to set brightness: {ex.Message}");
-        }
     }
 }

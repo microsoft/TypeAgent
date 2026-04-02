@@ -446,6 +446,23 @@ public class MouseSettingsHandlerTests
         _processMock.Verify(p => p.StartShellExecute("ms-settings:devices-touchpad"), Times.Once);
     }
 
+    [Fact]
+    public void SetPrimaryMouseButton_Right_SwapsButtons()
+    {
+        Handle("SetPrimaryMouseButton", """{"primaryButton":"right"}""");
+
+        _systemParamsMock.Verify(s => s.SwapMouseButton(true), Times.Once);
+    }
+
+    [Fact]
+    public void CursorTrail_Enable_SetsTrailLength()
+    {
+        Handle("CursorTrail", """{"enable":true,"length":7}""");
+
+        _systemParamsMock.Verify(s => s.SetParameter(
+            0x005D, 7, IntPtr.Zero, 3), Times.Once);
+    }
+
     private void Handle(string key, string jsonValue)
     {
         _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
@@ -616,11 +633,12 @@ public class DisplaySettingsHandlerTests
 {
     private readonly Mock<IRegistryService> _registryMock = new();
     private readonly Mock<IProcessService> _processMock = new();
+    private readonly Mock<IBrightnessService> _brightnessMock = new();
     private readonly DisplaySettingsHandler _handler;
 
     public DisplaySettingsHandlerTests()
     {
-        _handler = new DisplaySettingsHandler(_registryMock.Object, _processMock.Object);
+        _handler = new DisplaySettingsHandler(_registryMock.Object, _processMock.Object, _brightnessMock.Object);
     }
 
     [Fact]
@@ -699,6 +717,15 @@ public class DisplaySettingsHandlerTests
             "RotationLockPreference", 0, RegistryValueKind.DWord), Times.Once);
     }
 
+    [Fact]
+    public void AdjustScreenBrightness_Increase_SetsBrightnessPlus10()
+    {
+        _brightnessMock.Setup(b => b.GetCurrentBrightness()).Returns(50);
+        Handle("AdjustScreenBrightness", """{"brightnessLevel":"increase"}""");
+
+        _brightnessMock.Verify(b => b.SetBrightness(60), Times.Once);
+    }
+
     private void Handle(string key, string jsonValue)
     {
         _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
@@ -711,12 +738,13 @@ public class DisplaySettingsHandlerTests
 
 public class SystemSettingsHandlerTests
 {
+    private readonly Mock<IRegistryService> _registryMock = new();
     private readonly Mock<IProcessService> _processMock = new();
     private readonly SystemSettingsHandler _handler;
 
     public SystemSettingsHandlerTests()
     {
-        _handler = new SystemSettingsHandler(_processMock.Object);
+        _handler = new SystemSettingsHandler(_registryMock.Object, _processMock.Object);
     }
 
     [Fact]
@@ -757,6 +785,16 @@ public class SystemSettingsHandlerTests
         Handle("RememberWindowLocations", """{}""");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
+    }
+
+    [Fact]
+    public void AutomaticDSTAdjustment_Enable_SetsRegistryValue()
+    {
+        Handle("AutomaticDSTAdjustment", """{"enable":true}""");
+
+        _registryMock.Verify(r => r.SetValueLocalMachine(
+            It.IsAny<string>(), "DynamicDaylightTimeDisabled",
+            0, Microsoft.Win32.RegistryValueKind.DWord), Times.Once);
     }
 
     private void Handle(string key, string jsonValue)

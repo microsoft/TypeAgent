@@ -21,7 +21,7 @@ const exprLoader: SchemaLoader = (typeName) =>
     typeName === "ExprAction" ? ExprActionDef : undefined;
 const exprOpts = {
     schemaLoader: exprLoader,
-    enableExpressions: true,
+    enableValueExpressions: true,
 };
 
 describe("expression type inference", () => {
@@ -344,7 +344,7 @@ describe("expression type inference", () => {
         const errors: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: arrayLoader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBeGreaterThan(0);
         expect(errors[0]).toContain("filter");
@@ -458,7 +458,7 @@ describe("expression type inference", () => {
         const errors: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: arrayLoader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBe(0);
     });
@@ -485,7 +485,7 @@ describe("expression type inference", () => {
         const errors: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: arrayLoader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBe(0);
     });
@@ -1169,7 +1169,7 @@ describe("operator type restrictions", () => {
         const warnings: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, warnings, {
             schemaLoader: optLoader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBe(0);
         // name is string | undefined, so ?. is legitimate
@@ -1233,7 +1233,7 @@ describe("expression structural conformance", () => {
         const errors: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: loader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBe(1);
         expect(errors[0]).toContain("number");
@@ -1262,7 +1262,7 @@ describe("expression structural conformance", () => {
         const errors: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: loader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBe(0);
     });
@@ -1398,7 +1398,7 @@ describe("expression structural conformance", () => {
         const errors: string[] = [];
         loadGrammarRulesNoThrow("test", grammarText, errors, undefined, {
             schemaLoader: loader,
-            enableExpressions: true,
+            enableValueExpressions: true,
         });
         expect(errors.length).toBe(0);
     });
