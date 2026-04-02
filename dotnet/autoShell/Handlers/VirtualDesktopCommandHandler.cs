@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using autoShell.Logging;
 using autoShell.Services;
 using Newtonsoft.Json.Linq;
 
@@ -16,12 +17,14 @@ namespace autoShell.Handlers;
 internal class VirtualDesktopCommandHandler : ICommandHandler
 {
     private readonly IAppRegistry _appRegistry;
+    private readonly ILogger _logger;
     private readonly IProcessService _process;
     private readonly IVirtualDesktopService _virtualDesktop;
 
-    public VirtualDesktopCommandHandler(IAppRegistry appRegistry, IProcessService process, IVirtualDesktopService virtualDesktop)
+    public VirtualDesktopCommandHandler(IAppRegistry appRegistry, IProcessService process, IVirtualDesktopService virtualDesktop, ILogger logger)
     {
         _appRegistry = appRegistry;
+        _logger = logger;
         _process = process;
         _virtualDesktop = virtualDesktop;
     }
@@ -73,7 +76,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
                 }
                 else
                 {
-                    Console.WriteLine($"The window handle for '{value}' could not be found");
+                    _logger.Warning($"The window handle for '{value}' could not be found");
                 }
                 break;
 

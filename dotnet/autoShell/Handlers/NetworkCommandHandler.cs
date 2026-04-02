@@ -3,7 +3,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using autoShell.Logging;
 using autoShell.Services;
 using Newtonsoft.Json.Linq;
 
@@ -16,10 +16,12 @@ namespace autoShell.Handlers;
 internal class NetworkCommandHandler : ICommandHandler
 {
     private readonly INetworkService _network;
+    private readonly ILogger _logger;
 
-    public NetworkCommandHandler(INetworkService network)
+    public NetworkCommandHandler(INetworkService network, ILogger logger)
     {
         _network = network;
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -43,7 +45,7 @@ internal class NetworkCommandHandler : ICommandHandler
             case "EnableMeteredConnections":
             case "EnableWifi":
                 // Not yet implemented — requires additional infrastructure
-                Debug.WriteLine($"Command not yet implemented: {key}");
+                _logger.Debug($"Command not yet implemented: {key}");
                 break;
 
             case "ConnectWifi":

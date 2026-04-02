@@ -2,13 +2,22 @@
 // Licensed under the MIT License.
 
 using autoShell.Handlers;
+using autoShell.Logging;
+using autoShell.Services;
+using Moq;
 using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
 public class CommandDispatcherTests
 {
-    private readonly CommandDispatcher _dispatcher = new();
+    private readonly Mock<ILogger> _loggerMock = new();
+    private readonly CommandDispatcher _dispatcher;
+
+    public CommandDispatcherTests()
+    {
+        _dispatcher = new CommandDispatcher(_loggerMock.Object);
+    }
 
     [Fact]
     public void Dispatch_QuitKey_ReturnsTrue()

@@ -4,9 +4,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using autoShell.Logging;
 using Microsoft.WindowsAPICodePack.Shell;
 
 namespace autoShell.Services;
@@ -18,12 +18,14 @@ namespace autoShell.Services;
 /// </summary>
 internal sealed class WindowsAppRegistry : IAppRegistry
 {
+    private readonly ILogger _logger;
     private readonly Hashtable _friendlyNameToPath = [];
     private readonly Hashtable _friendlyNameToId = [];
     private readonly SortedList<string, string[]> _appMetadata;
 
-    public WindowsAppRegistry()
+    public WindowsAppRegistry(ILogger logger)
     {
+        _logger = logger;
         string userName = Environment.UserName;
 
         this._appMetadata = new SortedList<string, string[]>
@@ -71,7 +73,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to enumerate installed apps: {ex.Message}");
+            _logger.Debug($"Failed to enumerate installed apps: {ex.Message}");
         }
     }
 
@@ -116,7 +118,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
         return this._friendlyNameToId.Keys.Cast<string>();
     }
 
-    private static SortedList<string, string> GetAllInstalledAppIds()
+    private SortedList<string, string> GetAllInstalledAppIds()
     {
         var FOLDERID_AppsFolder = new Guid("{1e87508d-89c2-42f0-8a7e-645a0f50ca58}");
         ShellObject appsFolder = (ShellObject)KnownFolderHelper.FromKnownFolderId(FOLDERID_AppsFolder);
@@ -127,7 +129,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
             string appName = app.Name.ToLowerInvariant();
             if (appIds.ContainsKey(appName))
             {
-                Debug.WriteLine("Key has multiple values: " + appName);
+                _logger.Debug("Key has multiple values: " + appName);
             }
             else
             {

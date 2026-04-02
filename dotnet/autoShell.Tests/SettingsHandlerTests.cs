@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using autoShell.Handlers.Settings;
+using autoShell.Logging;
 using autoShell.Services;
 using Microsoft.Win32;
 using Moq;
@@ -373,7 +374,7 @@ public class MouseSettingsHandlerTests
 
     public MouseSettingsHandlerTests()
     {
-        _handler = new MouseSettingsHandler(_systemParamsMock.Object, _processMock.Object);
+        _handler = new MouseSettingsHandler(_systemParamsMock.Object, _processMock.Object, new Mock<ILogger>().Object);
     }
 
     [Fact]
@@ -638,7 +639,7 @@ public class DisplaySettingsHandlerTests
 
     public DisplaySettingsHandlerTests()
     {
-        _handler = new DisplaySettingsHandler(_registryMock.Object, _processMock.Object, _brightnessMock.Object);
+        _handler = new DisplaySettingsHandler(_registryMock.Object, _processMock.Object, _brightnessMock.Object, new Mock<ILogger>().Object);
     }
 
     [Fact]
@@ -744,7 +745,7 @@ public class SystemSettingsHandlerTests
 
     public SystemSettingsHandlerTests()
     {
-        _handler = new SystemSettingsHandler(_registryMock.Object, _processMock.Object);
+        _handler = new SystemSettingsHandler(_registryMock.Object, _processMock.Object, new Mock<ILogger>().Object);
     }
 
     [Fact]

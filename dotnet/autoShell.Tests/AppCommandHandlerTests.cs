@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using autoShell.Handlers;
+using autoShell.Logging;
 using autoShell.Services;
 using Moq;
 using Newtonsoft.Json.Linq;
@@ -14,11 +15,12 @@ public class AppCommandHandlerTests
     private readonly Mock<IAppRegistry> _appRegistryMock = new();
     private readonly Mock<IProcessService> _processMock = new();
     private readonly Mock<IWindowService> _windowMock = new();
+    private readonly Mock<ILogger> _loggerMock = new();
     private readonly AppCommandHandler _handler;
 
     public AppCommandHandlerTests()
     {
-        _handler = new AppCommandHandler(_appRegistryMock.Object, _processMock.Object, _windowMock.Object);
+        _handler = new AppCommandHandler(_appRegistryMock.Object, _processMock.Object, _windowMock.Object, _loggerMock.Object);
     }
 
     // --- LaunchProgram ---

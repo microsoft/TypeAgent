@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using autoShell.Logging;
 using autoShell.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -18,12 +19,14 @@ internal class AppCommandHandler : ICommandHandler
     private readonly IAppRegistry _appRegistry;
     private readonly IProcessService _processService;
     private readonly IWindowService _window;
+    private readonly ILogger _logger;
 
-    public AppCommandHandler(IAppRegistry appRegistry, IProcessService processService, IWindowService window)
+    public AppCommandHandler(IAppRegistry appRegistry, IProcessService processService, IWindowService window, ILogger logger)
     {
         this._appRegistry = appRegistry;
         this._processService = processService;
         this._window = window;
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -59,7 +62,7 @@ internal class AppCommandHandler : ICommandHandler
         Process[] processes = this._processService.GetProcessesByName(processName);
         if (processes.Length != 0)
         {
-            Debug.WriteLine("Closing " + friendlyName);
+            _logger.Debug("Closing " + friendlyName);
             foreach (Process p in processes)
             {
                 if (p.MainWindowHandle != IntPtr.Zero)
@@ -77,7 +80,7 @@ internal class AppCommandHandler : ICommandHandler
 
         if (processes.Length == 0)
         {
-            Debug.WriteLine("Starting " + friendlyName);
+            _logger.Debug("Starting " + friendlyName);
             string path = this._appRegistry.GetExecutablePath(friendlyName);
             if (path != null)
             {
@@ -124,7 +127,7 @@ internal class AppCommandHandler : ICommandHandler
         }
         else
         {
-            Debug.WriteLine("Raising " + friendlyName);
+            _logger.Debug("Raising " + friendlyName);
             string processName2 = this._appRegistry.ResolveProcessName(friendlyName);
             string path2 = this._appRegistry.GetExecutablePath(friendlyName);
             this._window.RaiseWindow(processName2, path2);

@@ -18,7 +18,7 @@ public class VirtualDesktopCommandHandlerTests
 
     public VirtualDesktopCommandHandlerTests()
     {
-        _handler = new VirtualDesktopCommandHandler(_appRegistryMock.Object, _processMock.Object, _virtualDesktopMock.Object);
+        _handler = new VirtualDesktopCommandHandler(_appRegistryMock.Object, _processMock.Object, _virtualDesktopMock.Object, new Moq.Mock<autoShell.Logging.ILogger>().Object);
     }
 
     // --- CreateDesktop ---

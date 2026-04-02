@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using autoShell.Handlers;
+using autoShell.Logging;
 using autoShell.Services;
 using Moq;
 using Newtonsoft.Json.Linq;
@@ -11,11 +12,12 @@ namespace autoShell.Tests;
 public class NetworkCommandHandlerTests
 {
     private readonly Mock<INetworkService> _networkMock = new();
+    private readonly Mock<ILogger> _loggerMock = new();
     private readonly NetworkCommandHandler _handler;
 
     public NetworkCommandHandlerTests()
     {
-        _handler = new NetworkCommandHandler(_networkMock.Object);
+        _handler = new NetworkCommandHandler(_networkMock.Object, _loggerMock.Object);
     }
 
     // --- ConnectWifi ---

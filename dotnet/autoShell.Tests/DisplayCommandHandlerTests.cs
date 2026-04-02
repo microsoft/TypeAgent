@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using autoShell.Handlers;
+using autoShell.Logging;
 using autoShell.Services;
 using Moq;
 using Newtonsoft.Json.Linq;
@@ -11,11 +12,12 @@ namespace autoShell.Tests;
 public class DisplayCommandHandlerTests
 {
     private readonly Mock<IDisplayService> _displayMock = new();
+    private readonly Mock<ILogger> _loggerMock = new();
     private readonly DisplayCommandHandler _handler;
 
     public DisplayCommandHandlerTests()
     {
-        _handler = new DisplayCommandHandler(_displayMock.Object);
+        _handler = new DisplayCommandHandler(_displayMock.Object, _loggerMock.Object);
     }
 
     [Fact]

@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using autoShell.Logging;
 using UIAutomationClient = Interop.UIAutomationClient;
 
 namespace autoShell;
@@ -47,7 +47,7 @@ internal sealed class UIAutomation
     /// Uses UI Automation to navigate the Settings app and set the text size.
     /// </summary>
     /// <param name="percentage">The text scaling percentage (100-225).</param>
-    internal static void SetTextSizeViaUIAutomation(int percentage)
+    internal static void SetTextSizeViaUIAutomation(int percentage, ILogger logger)
     {
         // UI Automation Property IDs (from UIAutomationClient.h)
         const int UIA_AutomationIdPropertyId = 30011;
@@ -75,7 +75,7 @@ internal sealed class UIAutomation
                 {
                     StringBuilder windowTitle = new StringBuilder(256);
                     int hr = GetWindowText(hWnd, windowTitle, windowTitle.Capacity);
-                    Debug.WriteLine(windowTitle + $"(hResult: {hr})");
+                    logger.Debug(windowTitle + $"(hResult: {hr})");
                     if (windowTitle.ToString().Contains("Settings", StringComparison.OrdinalIgnoreCase))
                     {
                         // Get the automation element directly from the window handle
@@ -94,26 +94,26 @@ internal sealed class UIAutomation
 
             if (settingsWindow == null)
             {
-                AutoShell.LogWarning("Could not find Settings window.");
+                logger.Warning("Could not find Settings window.");
                 return;
             }
 
-            Debug.WriteLine("Found Settings window via FindWindowEx");
+            logger.Debug("Found Settings window via FindWindowEx");
 
             // Wait a moment for the UI to fully load
             System.Threading.Thread.Sleep(500);
 
             // Find and click the "Text Size" navigation item
-            var textSizeNavItem = FindTextSizeNavigationItem(uiAutomation, settingsWindow);
+            var textSizeNavItem = FindTextSizeNavigationItem(uiAutomation, settingsWindow, logger);
             if (textSizeNavItem != null)
             {
-                Debug.WriteLine("Found Text Size navigation item, clicking...");
-                ClickElement(textSizeNavItem);
+                logger.Debug("Found Text Size navigation item, clicking...");
+                ClickElement(textSizeNavItem, logger);
                 System.Threading.Thread.Sleep(500); // Wait for page to load
             }
             else
             {
-                Debug.WriteLine("Text Size navigation item not found, may already be on the page");
+                logger.Debug("Text Size navigation item not found, may already be on the page");
             }
 
             // Find the text size slider
@@ -138,11 +138,11 @@ internal sealed class UIAutomation
 
             if (slider == null)
             {
-                AutoShell.LogWarning("Could not find text size slider.");
+                logger.Warning("Could not find text size slider.");
                 return;
             }
 
-            Debug.WriteLine("Found text size slider");
+            logger.Debug("Found text size slider");
 
             // Set the slider value using RangeValue pattern
             var rangeValuePattern = (UIAutomationClient.IUIAutomationRangeValuePattern)slider.GetCurrentPattern(
@@ -150,12 +150,12 @@ internal sealed class UIAutomation
 
             if (rangeValuePattern != null)
             {
-                Debug.WriteLine($"Setting slider value to {percentage}");
+                logger.Debug($"Setting slider value to {percentage}");
                 rangeValuePattern.SetValue(percentage);
             }
             else
             {
-                AutoShell.LogWarning("Slider does not support RangeValue pattern.");
+                logger.Warning("Slider does not support RangeValue pattern.");
                 return;
             }
 
@@ -181,7 +181,7 @@ internal sealed class UIAutomation
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error simulating input on slider: {ex.Message}");
+                logger.Debug($"Error simulating input on slider: {ex.Message}");
             }
 
             // Find and click the Apply button
@@ -206,18 +206,18 @@ internal sealed class UIAutomation
 
             if (applyButton != null)
             {
-                Debug.WriteLine("Found Apply button, clicking...");
-                ClickElement(applyButton);
-                Console.WriteLine($"Text size set to {percentage}%");
+                logger.Debug("Found Apply button, clicking...");
+                ClickElement(applyButton, logger);
+                logger.Debug($"Text size set to {percentage}%");
             }
             else
             {
-                AutoShell.LogWarning("Could not find Apply button. The setting may need to be applied manually.");
+                logger.Warning("Could not find Apply button. The setting may need to be applied manually.");
             }
         }
         catch (Exception ex)
         {
-            AutoShell.LogError(ex);
+            logger.Error(ex);
         }
     }
 
@@ -226,7 +226,8 @@ internal sealed class UIAutomation
     /// </summary>
     private static UIAutomationClient.IUIAutomationElement FindTextSizeNavigationItem(
         UIAutomationClient.CUIAutomation uiAutomation,
-        UIAutomationClient.IUIAutomationElement settingsWindow)
+        UIAutomationClient.IUIAutomationElement settingsWindow,
+        ILogger logger)
     {
         // UI Automation Property IDs
         const int UIA_NamePropertyId = 30005;
@@ -270,7 +271,7 @@ internal sealed class UIAutomation
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error finding Text Size navigation item: {ex.Message}");
+            logger.Debug($"Error finding Text Size navigation item: {ex.Message}");
         }
 
         return null;
@@ -279,7 +280,7 @@ internal sealed class UIAutomation
     /// <summary>
     /// Clicks a UI Automation element using the Invoke pattern or simulated click.
     /// </summary>
-    private static void ClickElement(UIAutomationClient.IUIAutomationElement element)
+    private static void ClickElement(UIAutomationClient.IUIAutomationElement element, ILogger logger)
     {
         // UI Automation Pattern IDs
         const int UIA_InvokePatternId = 10000;
@@ -319,7 +320,7 @@ internal sealed class UIAutomation
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error clicking element: {ex.Message}");
+            logger.Debug($"Error clicking element: {ex.Message}");
         }
     }
 }

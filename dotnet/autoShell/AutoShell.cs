@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using autoShell.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -20,31 +20,8 @@ internal class AutoShell
 
     #endregion P/Invoke
 
-    private static readonly CommandDispatcher s_dispatcher = CommandDispatcher.Create();
-
-    /// <summary>
-    /// Logs an exception to debug output and the console in red.
-    /// </summary>
-    internal static void LogError(Exception ex)
-    {
-        Debug.WriteLine(ex);
-        ConsoleColor previousColor = Console.ForegroundColor;
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine("Error: " + ex.Message);
-        Console.ForegroundColor = previousColor;
-    }
-
-    /// <summary>
-    /// Logs a warning message to debug output and the console in yellow.
-    /// </summary>
-    internal static void LogWarning(string message)
-    {
-        Debug.WriteLine(message);
-        ConsoleColor previousColor = Console.ForegroundColor;
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("Warning: " + message);
-        Console.ForegroundColor = previousColor;
-    }
+    private static readonly ConsoleLogger s_logger = new ConsoleLogger();
+    private static readonly CommandDispatcher s_dispatcher = CommandDispatcher.Create(s_logger);
 
 
     /// <summary>
@@ -115,7 +92,7 @@ internal class AutoShell
             }
             catch (Exception ex)
             {
-                LogError(ex);
+                s_logger.Error(ex);
             }
         }
     }

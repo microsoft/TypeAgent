@@ -3,7 +3,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using autoShell.Logging;
 using autoShell.Services;
 using Newtonsoft.Json.Linq;
 
@@ -16,11 +16,13 @@ internal class SystemSettingsHandler : ICommandHandler
 {
     private readonly IRegistryService _registry;
     private readonly IProcessService _process;
+    private readonly ILogger _logger;
 
-    public SystemSettingsHandler(IRegistryService registry, IProcessService process)
+    public SystemSettingsHandler(IRegistryService registry, IProcessService process, ILogger logger)
     {
         _registry = registry;
         _process = process;
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -73,6 +75,6 @@ internal class SystemSettingsHandler : ICommandHandler
             enable ? 0 : 1,
             Microsoft.Win32.RegistryValueKind.DWord);
 
-        Debug.WriteLine($"Automatic DST adjustment {(enable ? "enabled" : "disabled")}");
+        _logger.Debug($"Automatic DST adjustment {(enable ? "enabled" : "disabled")}");
     }
 }

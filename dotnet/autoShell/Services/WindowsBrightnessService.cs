@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Diagnostics;
 using System.Linq;
+using autoShell.Logging;
 using Microsoft.Win32;
 
 namespace autoShell.Services;
@@ -13,6 +13,13 @@ namespace autoShell.Services;
 /// </summary>
 internal class WindowsBrightnessService : IBrightnessService
 {
+    private readonly ILogger _logger;
+
+    public WindowsBrightnessService(ILogger logger)
+    {
+        _logger = logger;
+    }
+
     /// <inheritdoc/>
     public byte GetCurrentBrightness()
     {
@@ -48,7 +55,7 @@ internal class WindowsBrightnessService : IBrightnessService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to set brightness: {ex.Message}");
+            _logger.Debug($"Failed to set brightness: {ex.Message}");
         }
     }
 }

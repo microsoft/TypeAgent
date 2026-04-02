@@ -3,7 +3,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using autoShell.Logging;
 using autoShell.Services;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
@@ -19,12 +19,14 @@ internal class DisplaySettingsHandler : ICommandHandler
     private readonly IRegistryService _registry;
     private readonly IProcessService _process;
     private readonly IBrightnessService _brightness;
+    private readonly ILogger _logger;
 
-    public DisplaySettingsHandler(IRegistryService registry, IProcessService process, IBrightnessService brightness)
+    public DisplaySettingsHandler(IRegistryService registry, IProcessService process, IBrightnessService brightness, ILogger logger)
     {
         _registry = registry;
         _process = process;
         _brightness = brightness;
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -84,7 +86,7 @@ internal class DisplaySettingsHandler : ICommandHandler
             : (byte)Math.Max(0, currentBrightness - 10);
 
         _brightness.SetBrightness(newBrightness);
-        Debug.WriteLine($"Brightness adjusted to: {newBrightness}%");
+        _logger.Debug($"Brightness adjusted to: {newBrightness}%");
     }
 
     private void HandleDisplayScaling(JObject param)
@@ -104,7 +106,7 @@ internal class DisplaySettingsHandler : ICommandHandler
 
             // DPI scaling requires opening settings
             this._process.StartShellExecute("ms-settings:display");
-            Debug.WriteLine($"Display scaling target: {percentage}%");
+            _logger.Debug($"Display scaling target: {percentage}%");
         }
     }
 

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using autoShell.Logging;
 using Newtonsoft.Json;
 
 namespace autoShell.Services;
@@ -75,6 +76,13 @@ internal class WindowsDisplayService : IDisplayService
     private static extern int ChangeDisplaySettings(ref DEVMODE devMode, int flags);
 
     #endregion P/Invoke
+
+    private readonly ILogger _logger;
+
+    public WindowsDisplayService(ILogger logger)
+    {
+        _logger = logger;
+    }
 
     /// <inheritdoc/>
     public string ListResolutions()
@@ -197,7 +205,7 @@ internal class WindowsDisplayService : IDisplayService
         });
 
 #pragma warning disable CS0618 // UIAutomation is intentionally marked obsolete as a last-resort approach
-        UIAutomation.SetTextSizeViaUIAutomation(percentage);
+        UIAutomation.SetTextSizeViaUIAutomation(percentage, _logger);
 #pragma warning restore CS0618
     }
 }

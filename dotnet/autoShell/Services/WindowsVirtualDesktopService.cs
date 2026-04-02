@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Windows;
+using autoShell.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -254,9 +254,11 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
     private readonly IVirtualDesktopManager _virtualDesktopManager;
     private readonly IApplicationViewCollection _applicationViewCollection;
     private readonly IVirtualDesktopPinnedApps _virtualDesktopPinnedApps;
+    private readonly ILogger _logger;
 
-    public WindowsVirtualDesktopService()
+    public WindowsVirtualDesktopService(ILogger logger)
     {
+        _logger = logger;
         _shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidImmersiveShell));
         _virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)_shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
         _virtualDesktopManagerInternal_BUGBUG = (IVirtualDesktopManagerInternal_BUGBUG)_shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
@@ -279,7 +281,7 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
 
             if (_virtualDesktopManagerInternal == null)
             {
-                Debug.WriteLine($"Failed to get Virtual Desktop Manager Internal");
+                _logger.Debug($"Failed to get Virtual Desktop Manager Internal");
                 return;
             }
 
@@ -298,27 +300,26 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
                             // TODO: debug & get working
                             // Works in .NET framework but not .NET
                             //s_virtualDesktopManagerInternal_BUGBUG.SetDesktopName(newDesktop, desktopName);
-                            //Debug.WriteLine($"Created virtual desktop: {desktopName}");
                         }
                         catch (Exception ex2)
                         {
-                            Debug.WriteLine($"Created virtual desktop (naming not supported on this Windows version): {ex2.Message}");
+                            _logger.Debug($"Created virtual desktop (naming not supported on this Windows version): {ex2.Message}");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Failed to create desktop '{desktopName}': {ex.Message}");
+                    _logger.Debug($"Failed to create desktop '{desktopName}': {ex.Message}");
                 }
             }
         }
         catch (JsonException ex)
         {
-            Debug.WriteLine($"Failed to parse desktop names JSON: {ex.Message}");
+            _logger.Debug($"Failed to parse desktop names JSON: {ex.Message}");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error creating desktops: {ex.Message}");
+            _logger.Debug($"Error creating desktops: {ex.Message}");
         }
     }
 
@@ -327,13 +328,13 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
     {
         if (hWnd == IntPtr.Zero)
         {
-            Debug.WriteLine("Invalid window handle");
+            _logger.Debug("Invalid window handle");
             return;
         }
 
         if (string.IsNullOrEmpty(desktopIdentifier))
         {
-            Debug.WriteLine("No desktop id supplied");
+            _logger.Debug("No desktop id supplied");
             return;
         }
 
@@ -342,7 +343,7 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
             _virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
             if (desktopIndex < 1 || desktopIndex > _virtualDesktopManagerInternal.GetCount())
             {
-                Debug.WriteLine("Desktop index out of range");
+                _logger.Debug("Desktop index out of range");
                 Marshal.ReleaseComObject(desktops);
                 return;
             }
@@ -381,7 +382,7 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
         }
         else
         {
-            Console.WriteLine("The window handle could not be found");
+            _logger.Warning("The window handle could not be found");
         }
     }
 
@@ -434,7 +435,7 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
 
         if (index == -1)
         {
-            Debug.WriteLine("Unable to get the index of the current desktop");
+            _logger.Debug("Unable to get the index of the current desktop");
             return;
         }
 

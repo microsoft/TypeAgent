@@ -3,10 +3,10 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using autoShell.Logging;
 using Newtonsoft.Json;
 
 namespace autoShell.Services;
@@ -156,6 +156,13 @@ internal class WindowsNetworkService : INetworkService
 
     #endregion COM / P/Invoke
 
+    private readonly ILogger _logger;
+
+    public WindowsNetworkService(ILogger logger)
+    {
+        _logger = logger;
+    }
+
     /// <inheritdoc/>
     public void ConnectToWifi(string ssid, string password)
     {
@@ -167,14 +174,14 @@ internal class WindowsNetworkService : INetworkService
             int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
             if (result != 0)
             {
-                AutoShell.LogWarning($"Failed to open WLAN handle: {result}");
+                _logger.Warning($"Failed to open WLAN handle: {result}");
                 return;
             }
 
             result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
             if (result != 0)
             {
-                AutoShell.LogWarning($"Failed to enumerate WLAN interfaces: {result}");
+                _logger.Warning($"Failed to enumerate WLAN interfaces: {result}");
                 return;
             }
 
@@ -182,7 +189,7 @@ internal class WindowsNetworkService : INetworkService
 
             if (interfaceList.dwNumberOfItems == 0)
             {
-                AutoShell.LogWarning("No wireless interfaces found.");
+                _logger.Warning("No wireless interfaces found.");
                 return;
             }
 
@@ -195,7 +202,7 @@ internal class WindowsNetworkService : INetworkService
                 result = WlanSetProfile(clientHandle, ref interfaceInfo.InterfaceGuid, 0, profileXml, null, true, IntPtr.Zero, out uint reasonCode);
                 if (result != 0)
                 {
-                    AutoShell.LogWarning($"Failed to set WiFi profile: {result}, reason: {reasonCode}");
+                    _logger.Warning($"Failed to set WiFi profile: {result}, reason: {reasonCode}");
                     return;
                 }
             }
@@ -213,16 +220,15 @@ internal class WindowsNetworkService : INetworkService
             result = WlanConnect(clientHandle, ref interfaceInfo.InterfaceGuid, ref connectionParams, IntPtr.Zero);
             if (result != 0)
             {
-                AutoShell.LogWarning($"Failed to connect to WiFi network '{ssid}': {result}");
+                _logger.Warning($"Failed to connect to WiFi network '{ssid}': {result}");
                 return;
             }
 
-            Debug.WriteLine($"Successfully initiated connection to WiFi network: {ssid}");
-            Console.WriteLine($"Connecting to WiFi network: {ssid}");
+            _logger.Debug($"Successfully initiated connection to WiFi network: {ssid}");
         }
         catch (Exception ex)
         {
-            AutoShell.LogError(ex);
+            _logger.Error(ex);
         }
         finally
         {
@@ -249,14 +255,14 @@ internal class WindowsNetworkService : INetworkService
             int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
             if (result != 0)
             {
-                AutoShell.LogWarning($"Failed to open WLAN handle: {result}");
+                _logger.Warning($"Failed to open WLAN handle: {result}");
                 return;
             }
 
             result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
             if (result != 0)
             {
-                AutoShell.LogWarning($"Failed to enumerate WLAN interfaces: {result}");
+                _logger.Warning($"Failed to enumerate WLAN interfaces: {result}");
                 return;
             }
 
@@ -264,7 +270,7 @@ internal class WindowsNetworkService : INetworkService
 
             if (interfaceList.dwNumberOfItems == 0)
             {
-                AutoShell.LogWarning("No wireless interfaces found.");
+                _logger.Warning("No wireless interfaces found.");
                 return;
             }
 
@@ -275,18 +281,17 @@ internal class WindowsNetworkService : INetworkService
                 result = WlanDisconnect(clientHandle, ref interfaceInfo.InterfaceGuid, IntPtr.Zero);
                 if (result != 0)
                 {
-                    AutoShell.LogWarning($"Failed to disconnect from WiFi on interface {i}: {result}");
+                    _logger.Warning($"Failed to disconnect from WiFi on interface {i}: {result}");
                 }
                 else
                 {
-                    Debug.WriteLine($"Successfully disconnected from WiFi on interface: {interfaceInfo.strInterfaceDescription}");
-                    Console.WriteLine("Disconnected from WiFi");
+                    _logger.Debug($"Successfully disconnected from WiFi on interface: {interfaceInfo.strInterfaceDescription}");
                 }
             }
         }
         catch (Exception ex)
         {
-            AutoShell.LogError(ex);
+            _logger.Error(ex);
         }
         finally
         {
@@ -314,14 +319,14 @@ internal class WindowsNetworkService : INetworkService
             int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
             if (result != 0)
             {
-                Debug.WriteLine($"Failed to open WLAN handle: {result}");
+                _logger.Debug($"Failed to open WLAN handle: {result}");
                 return "[]";
             }
 
             result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
             if (result != 0)
             {
-                Debug.WriteLine($"Failed to enumerate WLAN interfaces: {result}");
+                _logger.Debug($"Failed to enumerate WLAN interfaces: {result}");
                 return "[]";
             }
 
@@ -345,7 +350,7 @@ internal class WindowsNetworkService : INetworkService
                 result = WlanGetAvailableNetworkList(clientHandle, ref interfaceInfo.InterfaceGuid, 0, IntPtr.Zero, out networkList);
                 if (result != 0)
                 {
-                    Debug.WriteLine($"Failed to get network list: {result}");
+                    _logger.Debug($"Failed to get network list: {result}");
                     continue;
                 }
 
@@ -390,7 +395,7 @@ internal class WindowsNetworkService : INetworkService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Error listing WiFi networks: {ex.Message}");
+            _logger.Debug($"Error listing WiFi networks: {ex.Message}");
             return "[]";
         }
         finally
@@ -421,7 +426,7 @@ internal class WindowsNetworkService : INetworkService
             Type radioManagerType = Type.GetTypeFromCLSID(s_clsidRadioManagementApi);
             if (radioManagerType == null)
             {
-                Debug.WriteLine("Failed to get Radio Management API type");
+                _logger.Debug("Failed to get Radio Management API type");
                 return;
             }
 
@@ -430,37 +435,37 @@ internal class WindowsNetworkService : INetworkService
 
             if (radioManager == null)
             {
-                Debug.WriteLine("Failed to create Radio Manager instance");
+                _logger.Debug("Failed to create Radio Manager instance");
                 return;
             }
 
             int hr = radioManager.GetSystemRadioState(out int currentState, out int _, out int _);
             if (hr < 0)
             {
-                Debug.WriteLine($"Failed to get system radio state: HRESULT 0x{hr:X8}");
+                _logger.Debug($"Failed to get system radio state: HRESULT 0x{hr:X8}");
                 return;
             }
 
             bool airplaneModeCurrentlyOn = currentState == 0;
-            Debug.WriteLine($"Current airplane mode state: {(airplaneModeCurrentlyOn ? "on" : "off")}");
+            _logger.Debug($"Current airplane mode state: {(airplaneModeCurrentlyOn ? "on" : "off")}");
 
             int newState = enable ? 0 : 1;
             hr = radioManager.SetSystemRadioState(newState);
             if (hr < 0)
             {
-                Debug.WriteLine($"Failed to set system radio state: HRESULT 0x{hr:X8}");
+                _logger.Debug($"Failed to set system radio state: HRESULT 0x{hr:X8}");
                 return;
             }
 
-            Debug.WriteLine($"Airplane mode set to: {(enable ? "on" : "off")}");
+            _logger.Debug($"Airplane mode set to: {(enable ? "on" : "off")}");
         }
         catch (COMException ex)
         {
-            Debug.WriteLine($"COM Exception setting airplane mode: {ex.Message} (HRESULT: 0x{ex.HResult:X8})");
+            _logger.Debug($"COM Exception setting airplane mode: {ex.Message} (HRESULT: 0x{ex.HResult:X8})");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to set airplane mode: {ex.Message}");
+            _logger.Debug($"Failed to set airplane mode: {ex.Message}");
         }
         finally
         {

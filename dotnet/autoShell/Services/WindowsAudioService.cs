@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Diagnostics;
+using autoShell.Logging;
 
 namespace autoShell.Services;
 
@@ -11,6 +11,13 @@ namespace autoShell.Services;
 /// </summary>
 internal class WindowsAudioService : IAudioService
 {
+    private readonly ILogger _logger;
+
+    public WindowsAudioService(ILogger logger)
+    {
+        _logger = logger;
+    }
+
     /// <inheritdoc/>
     public void SetVolume(int percent)
     {
@@ -25,7 +32,7 @@ internal class WindowsAudioService : IAudioService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("Failed to set volume: " + ex.Message);
+            _logger.Debug("Failed to set volume: " + ex.Message);
         }
     }
 
@@ -44,7 +51,7 @@ internal class WindowsAudioService : IAudioService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("Failed to get volume: " + ex.Message);
+            _logger.Debug("Failed to get volume: " + ex.Message);
             return 0;
         }
     }
@@ -63,7 +70,7 @@ internal class WindowsAudioService : IAudioService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("Failed to set mute: " + ex.Message);
+            _logger.Debug("Failed to set mute: " + ex.Message);
         }
     }
 
@@ -82,7 +89,7 @@ internal class WindowsAudioService : IAudioService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine("Failed to get mute: " + ex.Message);
+            _logger.Debug("Failed to get mute: " + ex.Message);
             return false;
         }
     }

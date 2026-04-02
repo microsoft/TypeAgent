@@ -5,6 +5,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using autoShell.Logging;
 using Microsoft.VisualBasic;
 
 namespace autoShell.Services;
@@ -64,6 +65,13 @@ internal class WindowsWindowService : IWindowService
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     #endregion
+
+    private readonly ILogger _logger;
+
+    public WindowsWindowService(ILogger logger)
+    {
+        _logger = logger;
+    }
 
     /// <inheritdoc/>
     public void MaximizeWindow(string processName)
@@ -203,14 +211,14 @@ internal class WindowsWindowService : IWindowService
             }
             if (hWnd == IntPtr.Zero)
             {
-                Debug.WriteLine("Taskbar not found");
+                _logger.Debug("Taskbar not found");
                 return;
             }
             else
             {
                 RECT taskbarRect = new RECT();
                 GetWindowRect(hWnd, ref taskbarRect);
-                Debug.WriteLine("Taskbar Rect: " + taskbarRect.Left + ", " + taskbarRect.Top + ", " + taskbarRect.Right + ", " + taskbarRect.Bottom);
+                _logger.Debug("Taskbar Rect: " + taskbarRect.Left + ", " + taskbarRect.Top + ", " + taskbarRect.Right + ", " + taskbarRect.Bottom);
                 // TODO: handle left, top, right and nonexistent taskbars
                 desktopRect.Bottom -= (int)((taskbarRect.Bottom - taskbarRect.Top) / 2);
             }

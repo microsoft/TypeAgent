@@ -27,25 +27,26 @@ public class HandlerRegistrationTests
         var windowMock = new Moq.Mock<Services.IWindowService>();
         var networkMock = new Moq.Mock<Services.INetworkService>();
         var virtualDesktopMock = new Moq.Mock<Services.IVirtualDesktopService>();
+        var loggerMock = new Moq.Mock<Logging.ILogger>();
 
         _handlers =
         [
             new AudioCommandHandler(audioMock.Object),
-            new AppCommandHandler(appRegistryMock.Object, processMock.Object, windowMock.Object),
+            new AppCommandHandler(appRegistryMock.Object, processMock.Object, windowMock.Object, loggerMock.Object),
             new WindowCommandHandler(appRegistryMock.Object, windowMock.Object),
             new ThemeCommandHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
-            new VirtualDesktopCommandHandler(appRegistryMock.Object, processMock.Object, virtualDesktopMock.Object),
-            new NetworkCommandHandler(networkMock.Object),
-            new DisplayCommandHandler(displayMock.Object),
+            new VirtualDesktopCommandHandler(appRegistryMock.Object, processMock.Object, virtualDesktopMock.Object, loggerMock.Object),
+            new NetworkCommandHandler(networkMock.Object, loggerMock.Object),
+            new DisplayCommandHandler(displayMock.Object, loggerMock.Object),
             new TaskbarSettingsHandler(registryMock.Object),
-            new DisplaySettingsHandler(registryMock.Object, processMock.Object, brightnessMock.Object),
+            new DisplaySettingsHandler(registryMock.Object, processMock.Object, brightnessMock.Object, loggerMock.Object),
             new PersonalizationSettingsHandler(registryMock.Object, processMock.Object),
-            new MouseSettingsHandler(systemParamsMock.Object, processMock.Object),
+            new MouseSettingsHandler(systemParamsMock.Object, processMock.Object, loggerMock.Object),
             new AccessibilitySettingsHandler(registryMock.Object, processMock.Object),
             new PrivacySettingsHandler(registryMock.Object),
             new PowerSettingsHandler(registryMock.Object, processMock.Object),
             new FileExplorerSettingsHandler(registryMock.Object),
-            new SystemSettingsHandler(registryMock.Object, processMock.Object),
+            new SystemSettingsHandler(registryMock.Object, processMock.Object, loggerMock.Object),
             new SystemCommandHandler(processMock.Object, debuggerMock.Object),
         ];
     }

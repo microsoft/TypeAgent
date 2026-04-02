@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using autoShell.Logging;
 using autoShell.Services;
 using Newtonsoft.Json.Linq;
 
@@ -14,10 +15,12 @@ namespace autoShell.Handlers;
 internal class DisplayCommandHandler : ICommandHandler
 {
     private readonly IDisplayService _display;
+    private readonly ILogger _logger;
 
-    public DisplayCommandHandler(IDisplayService display)
+    public DisplayCommandHandler(IDisplayService display, ILogger logger)
     {
         _display = display;
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -40,7 +43,7 @@ internal class DisplayCommandHandler : ICommandHandler
                 }
                 catch (Exception ex)
                 {
-                    AutoShell.LogError(ex);
+                    _logger.Error(ex);
                 }
                 break;
 
@@ -66,13 +69,13 @@ internal class DisplayCommandHandler : ICommandHandler
                         string[] parts = resString.ToLowerInvariant().Split('x', '@');
                         if (parts.Length < 2)
                         {
-                            AutoShell.LogWarning("Invalid resolution format. Use 'WIDTHxHEIGHT' or 'WIDTHxHEIGHT@REFRESH' (e.g., '1920x1080' or '1920x1080@60')");
+                            _logger.Warning("Invalid resolution format. Use 'WIDTHxHEIGHT' or 'WIDTHxHEIGHT@REFRESH' (e.g., '1920x1080' or '1920x1080@60')");
                             return;
                         }
 
                         if (!uint.TryParse(parts[0].Trim(), out width) || !uint.TryParse(parts[1].Trim(), out height))
                         {
-                            AutoShell.LogWarning("Invalid resolution values. Width and height must be positive integers.");
+                            _logger.Warning("Invalid resolution values. Width and height must be positive integers.");
                             return;
                         }
 
@@ -87,7 +90,7 @@ internal class DisplayCommandHandler : ICommandHandler
                 }
                 catch (Exception ex)
                 {
-                    AutoShell.LogError(ex);
+                    _logger.Error(ex);
                 }
                 break;
 
@@ -101,7 +104,7 @@ internal class DisplayCommandHandler : ICommandHandler
                 }
                 catch (Exception ex)
                 {
-                    AutoShell.LogError(ex);
+                    _logger.Error(ex);
                 }
                 break;
         }

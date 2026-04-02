@@ -3,7 +3,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
+using autoShell.Logging;
 using autoShell.Services;
 using Newtonsoft.Json.Linq;
 
@@ -26,11 +26,13 @@ internal class MouseSettingsHandler : ICommandHandler
 
     private readonly ISystemParametersService _systemParams;
     private readonly IProcessService _process;
+    private readonly ILogger _logger;
 
-    public MouseSettingsHandler(ISystemParametersService systemParams, IProcessService process)
+    public MouseSettingsHandler(ISystemParametersService systemParams, IProcessService process, ILogger logger)
     {
         _systemParams = systemParams;
         _process = process;
+        _logger = logger;
     }
 
     /// <inheritdoc/>
@@ -118,7 +120,7 @@ internal class MouseSettingsHandler : ICommandHandler
         int trailValue = enable ? length : 0;
 
         this._systemParams.SetParameter(SPI_SETMOUSETRAILS, trailValue, IntPtr.Zero, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
-        Debug.WriteLine(enable
+        _logger.Debug(enable
             ? $"Cursor trail enabled with length {length}"
             : "Cursor trail disabled");
     }
