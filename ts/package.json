@@ -17,6 +17,8 @@
     "build": "fluid-build . -t build",
     "build:shell": "fluid-build agent-shell -t build --dep",
     "check:link": "git ls-tree -r --name-only HEAD .. | grep \\.md | xargs  markdown-link-check",
+    "check:dep": "node tools/scripts/fix-dependabot-alerts.mjs --dry-run",
+    "check:dep:fix": "node tools/scripts/fix-dependabot-alerts.mjs",
     "check:policy": "node tools/scripts/repo-policy-check.mjs",
     "check:policy:fix": "node tools/scripts/repo-policy-check.mjs --fix",
     "clean": "fluid-build . -t clean",
