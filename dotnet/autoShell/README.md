@@ -11,13 +11,17 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 - **Application Management**: Launch, close, and switch between applications using friendly names
 - **Window Management**: Maximize, minimize, and tile windows side-by-side
 - **Audio Control**: Set volume levels, mute/unmute, and restore previous volume
-- **Theme Management**: List and apply Windows themes
-- **Desktop Customization**: Set desktop wallpaper
-- **Virtual Desktop Management**: Create new virtual desktops
-- **Notification Center**: Toggle the Windows notification center
-- **Airplane Mode Control**: Enable or disable Windows airplane mode
-- **Wi-Fi Management**: Connect to Wi-Fi networks by SSID
-- **Display Resolution**: List available resolutions and change display settings
+- **Theme & Personalization**: Apply themes, set wallpaper, toggle transparency, and configure title bar colors
+- **Virtual Desktop Management**: Create, switch, pin, and move windows across virtual desktops
+- **Display Settings**: Set resolution, brightness, scaling, orientation, color temperature, and blue light filter
+- **Network & Connectivity**: Wi-Fi, Bluetooth, airplane mode, and metered connection controls
+- **Mouse & Touchpad**: Cursor speed, pointer size, scroll lines, touchpad settings, and cursor trail
+- **Taskbar Customization**: Alignment, auto-hide, badges, Task View, Widgets, and multi-monitor display
+- **Accessibility**: Narrator, Magnifier, Sticky Keys, Filter Keys, and mono audio
+- **Privacy Controls**: Manage camera, microphone, and location access
+- **Power Management**: Battery saver levels and power mode configuration
+- **System Settings**: Notifications, game mode, focus assist, time settings, and multi-monitor behavior
+- **File Explorer**: Toggle file extensions and hidden/system file visibility
 
 ## Requirements
 
@@ -40,35 +44,36 @@ Run the application and send JSON commands via stdin:
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `applyTheme` | Theme name | Applies a Windows theme |
-| `closeProgram` | Application name | Closes an application |
-| `connectWifi` | `{"ssid": "name", "password": "pass"}` | Connects to a Wi-Fi network |
-| `createDesktop` | JSON array of names | Creates one or more virtual desktops |
-| `disconnectWifi` | (none) | Disconnects from the current Wi-Fi network |
-| `launchProgram` | Application name | Opens an application (or raises if already running) |
-| `listAppNames` | (none) | Outputs installed applications as JSON |
-| `listResolutions` | (none) | Outputs available display resolutions as JSON |
-| `listThemes` | (none) | Outputs installed themes as JSON |
-| `listWifiNetworks` | (none) | Lists available Wi-Fi networks as JSON |
-| `maximize` | Application name | Maximizes the application window |
-| `minimize` | Application name | Minimizes the application window |
-| `moveWindowToDesktop` | `{"process": "app", "desktop": "name"}` | Moves a window to a specific virtual desktop |
-| `mute` | `true`/`false` | Mutes or unmutes system audio |
-| `nextDesktop` | (none) | Switches to the next virtual desktop |
-| `pinWindow` | Application name | Pins a window to appear on all virtual desktops |
-| `previousDesktop` | (none) | Switches to the previous virtual desktop |
+| `ApplyTheme` | Theme name | Applies a Windows theme |
+| `CloseProgram` | Application name | Closes an application |
+| `ConnectWifi` | `{"ssid": "name", "password": "pass"}` | Connects to a Wi-Fi network |
+| `CreateDesktop` | JSON array of names | Creates one or more virtual desktops |
+| `Debug` | (none) | Launches the debugger |
+| `DisconnectWifi` | (none) | Disconnects from the current Wi-Fi network |
+| `LaunchProgram` | Application name | Opens an application (or raises if already running) |
+| `ListAppNames` | (none) | Outputs installed applications as JSON |
+| `ListResolutions` | (none) | Outputs available display resolutions as JSON |
+| `ListThemes` | (none) | Outputs installed themes as JSON |
+| `ListWifiNetworks` | (none) | Lists available Wi-Fi networks as JSON |
+| `Maximize` | Application name | Maximizes the application window |
+| `Minimize` | Application name | Minimizes the application window |
+| `MoveWindowToDesktop` | `{"process": "app", "desktop": "name"}` | Moves a window to a specific virtual desktop |
+| `Mute` | `true`/`false` | Mutes or unmutes system audio |
+| `NextDesktop` | (none) | Switches to the next virtual desktop |
+| `PinWindow` | Application name | Pins a window to appear on all virtual desktops |
+| `PreviousDesktop` | (none) | Switches to the previous virtual desktop |
 | `quit` | (none) | Exits the application |
-| `restoreVolume` | (none) | Restores previously saved volume level |
-| `setScreenResolution` | `"WIDTHxHEIGHT"` or `{"width": W, "height": H}` | Sets the display resolution |
-| `setTextSize` | `100-225` | Sets system text scaling percentage |
-| `setThemeMode` | `"light"`, `"dark"`, `"toggle"`, or boolean | Sets light/dark mode |
-| `setWallpaper` | File path | Sets the desktop wallpaper |
-| `switchDesktop` | Index or name | Switches to a virtual desktop by index or name |
-| `switchTo` | Application name | Brings application window to foreground |
-| `tile` | `"app1,app2"` | Tiles two applications side-by-side |
-| `toggleAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
-| `toggleNotifications` | (none) | Toggles the Windows notification center |
-| `volume` | `0-100` | Sets system volume percentage |
+| `RestoreVolume` | (none) | Restores previously saved volume level |
+| `SetScreenResolution` | `"WIDTHxHEIGHT"` or `{"width": W, "height": H}` | Sets the display resolution |
+| `SetTextSize` | `100-225` | Sets system text scaling percentage |
+| `SetThemeMode` | `"light"`, `"dark"`, `"toggle"`, or boolean | Sets light/dark mode |
+| `SetWallpaper` | File path | Sets the desktop wallpaper |
+| `SwitchDesktop` | Index or name | Switches to a virtual desktop by index or name |
+| `SwitchTo` | Application name | Brings application window to foreground |
+| `Tile` | `"app1,app2"` | Tiles two applications side-by-side |
+| `ToggleAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
+| `ToggleNotifications` | (none) | Toggles the Windows notification center |
+| `Volume` | `0-100` | Sets system volume percentage |
 
 #### Settings Commands
 
@@ -77,91 +82,80 @@ Run the application and send JSON commands via stdin:
 | Command | Parameter | Description |
 |---------|-----------|-------------|
 | `BluetoothToggle` | `true`/`false` | Toggles Bluetooth on/off |
-| `enableWifi` | `true`/`false` | Enables or disables Wi-Fi |
-| `enableMeteredConnections` | `true`/`false` | Enables or disables metered connections |
+| `EnableMeteredConnections` | `true`/`false` | Enables or disables metered connections |
+| `EnableWifi` | `true`/`false` | Enables or disables Wi-Fi |
 
 ##### Display Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
+| `AdjustColorTemperature` | value | Adjusts color temperature |
 | `AdjustScreenBrightness` | value | Adjusts screen brightness |
-| `EnableBlueLightFilterSchedule` | `true`/`false` | Enables or disables blue light filter schedule |
-| `adjustColorTemperature` | value | Adjusts color temperature |
-| `DisplayScaling` | value | Sets display scaling |
 | `AdjustScreenOrientation` | value | Adjusts screen orientation |
 | `DisplayResolutionAndAspectRatio` | value | Sets display resolution and aspect ratio |
+| `DisplayScaling` | value | Sets display scaling |
+| `EnableBlueLightFilterSchedule` | `true`/`false` | Enables or disables blue light filter schedule |
 | `RotationLock` | `true`/`false` | Enables or disables rotation lock |
 
 ##### Personalization Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `SystemThemeMode` | value | Sets the system theme mode |
-| `EnableTransparency` | `true`/`false` | Enables or disables transparency effects |
 | `ApplyColorToTitleBar` | `true`/`false` | Applies accent color to title bars |
+| `EnableTransparency` | `true`/`false` | Enables or disables transparency effects |
 | `HighContrastTheme` | value | Sets high contrast theme |
+| `SystemThemeMode` | value | Sets the system theme mode |
 
 ##### Taskbar Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
 | `AutoHideTaskbar` | `true`/`false` | Auto-hides the taskbar |
+| `DisplaySecondsInSystrayClock` | `true`/`false` | Shows seconds in system tray clock |
+| `DisplayTaskbarOnAllMonitors` | `true`/`false` | Displays taskbar on all monitors |
+| `ShowBadgesOnTaskbar` | `true`/`false` | Shows or hides badges on taskbar |
 | `TaskbarAlignment` | value | Sets taskbar alignment |
 | `TaskViewVisibility` | `true`/`false` | Shows or hides Task View button |
 | `ToggleWidgetsButtonVisibility` | `true`/`false` | Shows or hides Widgets button |
-| `ShowBadgesOnTaskbar` | `true`/`false` | Shows or hides badges on taskbar |
-| `DisplayTaskbarOnAllMonitors` | `true`/`false` | Displays taskbar on all monitors |
-| `DisplaySecondsInSystrayClock` | `true`/`false` | Shows seconds in system tray clock |
 
-##### Mouse Settings
+##### Mouse & Touchpad Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `MouseCursorSpeed` | value | Sets mouse cursor speed |
-| `MouseWheelScrollLines` | value | Sets mouse wheel scroll lines |
-| `setPrimaryMouseButton` | value | Sets primary mouse button (left/right) |
-| `EnhancePointerPrecision` | `true`/`false` | Enables or disables pointer precision |
 | `AdjustMousePointerSize` | value | Adjusts mouse pointer size |
-| `mousePointerCustomization` | value | Customizes mouse pointer |
 | `CursorTrail` | `{"enable": true/false, "length": 2-12}` | Enables/disables cursor trail (length: 2–12) |
-
-##### Touchpad Settings
-
-| Command | Parameter | Description |
-|---------|-----------|-------------|
 | `EnableTouchPad` | `true`/`false` | Enables or disables touchpad |
+| `EnhancePointerPrecision` | `true`/`false` | Enables or disables pointer precision |
+| `MouseCursorSpeed` | value | Sets mouse cursor speed |
+| `MousePointerCustomization` | value | Customizes mouse pointer |
+| `MouseWheelScrollLines` | value | Sets mouse wheel scroll lines |
+| `SetPrimaryMouseButton` | value | Sets primary mouse button (left/right) |
 | `TouchpadCursorSpeed` | value | Sets touchpad cursor speed |
 
 ##### Privacy Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `ManageMicrophoneAccess` | `true`/`false` | Manages microphone access |
 | `ManageCameraAccess` | `true`/`false` | Manages camera access |
 | `ManageLocationAccess` | `true`/`false` | Manages location access |
+| `ManageMicrophoneAccess` | `true`/`false` | Manages microphone access |
 
 ##### Power Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
 | `BatterySaverActivationLevel` | value | Sets battery saver activation level |
-| `setPowerModePluggedIn` | value | Sets power mode when plugged in |
 | `SetPowerModeOnBattery` | value | Sets power mode on battery |
-
-##### Gaming Settings
-
-| Command | Parameter | Description |
-|---------|-----------|-------------|
-| `enableGameMode` | `true`/`false` | Enables or disables game mode |
+| `SetPowerModePluggedIn` | value | Sets power mode when plugged in |
 
 ##### Accessibility Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `EnableNarratorAction` | `true`/`false` | Enables or disables Narrator |
-| `EnableMagnifier` | `true`/`false` | Enables or disables Magnifier |
-| `enableStickyKeys` | `true`/`false` | Enables or disables Sticky Keys |
 | `EnableFilterKeysAction` | `true`/`false` | Enables or disables Filter Keys |
+| `EnableMagnifier` | `true`/`false` | Enables or disables Magnifier |
+| `EnableNarratorAction` | `true`/`false` | Enables or disables Narrator |
+| `EnableStickyKeys` | `true`/`false` | Enables or disables Sticky Keys |
 | `MonoAudioToggle` | `true`/`false` | Toggles mono audio |
 
 ##### File Explorer Settings
@@ -171,121 +165,112 @@ Run the application and send JSON commands via stdin:
 | `ShowFileExtensions` | `true`/`false` | Shows or hides file extensions |
 | `ShowHiddenAndSystemFiles` | `true`/`false` | Shows or hides hidden and system files |
 
-##### Time & Region Settings
+##### System Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `AutomaticTimeSettingAction` | `true`/`false` | Enables or disables automatic time setting |
 | `AutomaticDSTAdjustment` | `true`/`false` | Enables or disables automatic DST adjustment |
-
-##### Focus Assist Settings
-
-| Command | Parameter | Description |
-|---------|-----------|-------------|
+| `AutomaticTimeSettingAction` | `true`/`false` | Enables or disables automatic time setting |
+| `EnableGameMode` | `true`/`false` | Enables or disables game mode |
 | `EnableQuietHours` | `true`/`false` | Enables or disables quiet hours |
-
-##### Multi-Monitor Settings
-
-| Command | Parameter | Description |
-|---------|-----------|-------------|
-| `RememberWindowLocations` | `true`/`false` | Remembers window locations per monitor |
 | `MinimizeWindowsOnMonitorDisconnectAction` | `true`/`false` | Minimizes windows when monitor disconnects |
+| `RememberWindowLocations` | `true`/`false` | Remembers window locations per monitor |
 
 ### Examples
 
 Launch a program:
 ```json
-{"launchProgram": "notepad"} 
+{"LaunchProgram": "notepad"} 
 ```
 
 Set the system volume at 50%:
 ```json
-{"volume": 50} 
+{"Volume": 50} 
 ```
 
 Tile notepad on the left and calculator on the right of the screen:
 ```json
-{"tile": "notepad,calculator"} 
+{"Tile": "notepad,calculator"} 
 ```
 
 Apply the 'dark' Windows theme:
 ```json
-{"applyTheme": "dark"} 
+{"ApplyTheme": "dark"} 
 ```
 
 Set dark mode:
 ```json
-{"setThemeMode": "dark"}
+{"SetThemeMode": "dark"}
 ```
 
 Toggle between light and dark mode:
 ```json
-{"setThemeMode": "toggle"}
+{"SetThemeMode": "toggle"}
 ```
 
 Mute the system audio:
 ```json
-{"mute": true} 
+{"Mute": true} 
 ```
 
 Set the desktop wallpaper and then quit AutoShell:
 ```json
-{"setWallpaper": "C:\\Users\\Public\\Pictures\\wallpaper.jpg"} {"quit": true}
+{"SetWallpaper": "C:\\Users\\Public\\Pictures\\wallpaper.jpg"} {"quit": true}
 ```
 
 Create a new virtual desktop named "Design Work":
 ```json
-{"createDesktop": "Design Work"}
+{"CreateDesktop": "Design Work"}
 ```
 
 Toggle the Windows notification center:
 ```json
-{"toggleNotifications": true}
+{"ToggleNotifications": true}
 ```
 
 Enable airplane mode:
 ```json
-{"toggleAirplaneMode": true}
+{"ToggleAirplaneMode": true}
 ```
 
 Disable airplane mode:
 ```json
-{"toggleAirplaneMode": false}
+{"ToggleAirplaneMode": false}
 ```
 
 List available Wi-Fi networks:
 ```json
-{"listWifiNetworks": true}
+{"ListWifiNetworks": true}
 ```
 
 Connect to a Wi-Fi network:
 ```json
-{"connectWifi": {"ssid": "MyNetwork", "password": "MyPassword123"}}
+{"ConnectWifi": {"ssid": "MyNetwork", "password": "MyPassword123"}}
 ```
 
 Set system text size to 125%:
 ```json
-{"setTextSize": 125}
+{"SetTextSize": 125}
 ```
 
 List available display resolutions:
 ```json
-{"listResolutions": true}
+{"ListResolutions": true}
 ```
 
 Set display resolution to 1920x1080:
 ```json
-{"setScreenResolution": "1920x1080"}
+{"SetScreenResolution": "1920x1080"}
 ```
 
 Set display resolution with specific refresh rate:
 ```json
-{"setScreenResolution": "1920x1080@144"}
+{"SetScreenResolution": "1920x1080@144"}
 ```
 
 Set display resolution using JSON object:
 ```json
-{"setScreenResolution": {"width": 2560, "height": 1440, "refreshRate": 60}}
+{"SetScreenResolution": {"width": 2560, "height": 1440, "refreshRate": 60}}
 ```
 
 Enable cursor trail with length 7:
@@ -315,13 +300,57 @@ Additionally, AutoShell automatically discovers all installed Windows Store appl
 
 ## Architecture
 
-The application is structured as a partial class across multiple files:
+AutoShell uses a handler-based architecture with dependency injection. All platform-specific (P/Invoke, COM, WMI) code is isolated behind service interfaces, keeping handlers thin and fully unit-testable.
 
-- `AutoShell.cs` - Main logic, application management, audio control
-- `AutoShell_Themes.cs` - Windows theme management
-- `AutoShell_Win32.cs` - Win32 API P/Invoke declarations
-- `AutoShell_Settings.cs` - Windows settings management
-- `UIAutomation.cs` - UI Automation helpers
+```
+autoShell/
+├── AutoShell.cs              # Entry point — stdin/stdout command loop
+├── CommandDispatcher.cs      # Routes JSON keys to handlers; Create() wires all dependencies
+├── CoreAudioInterop.cs       # COM interop definitions for Windows audio
+├── UIAutomation.cs           # UI Automation helpers (last-resort, marked [Obsolete])
+├── Handlers/
+│   ├── ICommandHandler.cs    # Handler interface (SupportedCommands + Handle)
+│   ├── AppCommandHandler.cs          # LaunchProgram, CloseProgram, ListAppNames
+│   ├── AudioCommandHandler.cs        # Volume, Mute, RestoreVolume
+│   ├── DisplayCommandHandler.cs      # SetScreenResolution, ListResolutions, SetTextSize
+│   ├── NetworkCommandHandler.cs      # ConnectWifi, ToggleAirplaneMode, etc.
+│   ├── SystemCommandHandler.cs       # Debug, ToggleNotifications
+│   ├── ThemeCommandHandler.cs        # ApplyTheme, ListThemes, SetThemeMode, SetWallpaper
+│   ├── VirtualDesktopCommandHandler.cs  # CreateDesktop, SwitchDesktop, PinWindow, etc.
+│   ├── WindowCommandHandler.cs       # Maximize, Minimize, SwitchTo, Tile
+│   └── Settings/
+│       ├── AccessibilitySettingsHandler.cs
+│       ├── DisplaySettingsHandler.cs
+│       ├── FileExplorerSettingsHandler.cs
+│       ├── MouseSettingsHandler.cs
+│       ├── PersonalizationSettingsHandler.cs
+│       ├── PowerSettingsHandler.cs
+│       ├── PrivacySettingsHandler.cs
+│       ├── SystemSettingsHandler.cs
+│       └── TaskbarSettingsHandler.cs
+├── Services/                 # Interfaces + Windows implementations
+│   ├── IAppRegistry.cs / WindowsAppRegistry.cs
+│   ├── IAudioService.cs / WindowsAudioService.cs
+│   ├── IBrightnessService.cs / WindowsBrightnessService.cs
+│   ├── IDebuggerService.cs / WindowsDebuggerService.cs
+│   ├── IDisplayService.cs / WindowsDisplayService.cs
+│   ├── INetworkService.cs / WindowsNetworkService.cs
+│   ├── IProcessService.cs / WindowsProcessService.cs
+│   ├── IRegistryService.cs / WindowsRegistryService.cs
+│   ├── ISystemParametersService.cs / WindowsSystemParametersService.cs
+│   ├── IVirtualDesktopService.cs / WindowsVirtualDesktopService.cs
+│   └── IWindowService.cs / WindowsWindowService.cs
+└── Logging/
+    ├── ILogger.cs            # Logging interface (Error, Warning, Debug)
+    └── ConsoleLogger.cs      # Colored console + diagnostics output
+```
+
+### Key design decisions
+
+- **CommandDispatcher.Create()** is the composition root — it creates all concrete services and wires them into handlers. Tests bypass this and inject mocks directly.
+- **Handlers are thin** — they parse JSON parameters and delegate to services. No P/Invoke or COM code lives in handlers.
+- **Services own all platform calls** — P/Invoke, COM, WMI, and registry access are encapsulated behind interfaces (`I*Service` / `Windows*Service`).
+- **ILogger** abstracts all diagnostic output. `ConsoleLogger` preserves the original colored error/warning formatting.
 
 ## License
 
