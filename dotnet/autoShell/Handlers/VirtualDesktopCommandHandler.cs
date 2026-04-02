@@ -18,334 +18,6 @@ namespace autoShell.Handlers;
 /// </summary>
 internal class VirtualDesktopCommandHandler : ICommandHandler
 {
-    private readonly IAppRegistry _appRegistry;
-    private readonly IServiceProvider10 _shell;
-    private readonly IVirtualDesktopManagerInternal _virtualDesktopManagerInternal;
-    private readonly IVirtualDesktopManagerInternal_BUGBUG _virtualDesktopManagerInternal_BUGBUG;
-    private readonly IVirtualDesktopManager _virtualDesktopManager;
-    private readonly IApplicationViewCollection _applicationViewCollection;
-    private readonly IVirtualDesktopPinnedApps _virtualDesktopPinnedApps;
-
-    public VirtualDesktopCommandHandler(IAppRegistry appRegistry)
-    {
-        this._appRegistry = appRegistry;
-
-        // Desktop management COM initialization
-        this._shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidImmersiveShell));
-        this._virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)this._shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
-        this._virtualDesktopManagerInternal_BUGBUG = (IVirtualDesktopManagerInternal_BUGBUG)this._shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
-        this._virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidVirtualDesktopManager));
-        this._applicationViewCollection = (IApplicationViewCollection)this._shell.QueryService(typeof(IApplicationViewCollection).GUID, typeof(IApplicationViewCollection).GUID);
-        this._virtualDesktopPinnedApps = (IVirtualDesktopPinnedApps)this._shell.QueryService(s_clsidVirtualDesktopPinnedApps, typeof(IVirtualDesktopPinnedApps).GUID);
-    }
-
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "CreateDesktop",
-        "MoveWindowToDesktop",
-        "NextDesktop",
-        "PinWindow",
-        "PreviousDesktop",
-        "SwitchDesktop",
-    ];
-
-    /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
-    {
-        switch (key)
-        {
-            case "CreateDesktop":
-                this.CreateDesktop(value);
-                break;
-
-            case "SwitchDesktop":
-                this.SwitchDesktop(value);
-                break;
-
-            case "NextDesktop":
-                this.BumpDesktopIndex(1);
-                break;
-
-            case "PreviousDesktop":
-                this.BumpDesktopIndex(-1);
-                break;
-
-            case "MoveWindowToDesktop":
-                this.MoveWindowToDesktop(rawValue);
-                break;
-
-            case "PinWindow":
-                this.PinWindow(value);
-                break;
-        }
-    }
-
-    #region Virtual Desktop Methods
-
-    /// <summary>
-    /// Creates virtual desktops from a JSON array of desktop names.
-    /// </summary>
-    /// <param name="jsonValue">JSON array containing desktop names, e.g., ["Work", "Personal", "Gaming"]</param>
-    private void CreateDesktop(string jsonValue)
-    {
-        try
-        {
-            // Parse the JSON array of desktop names
-            JArray desktopNames = JArray.Parse(jsonValue);
-
-            if (desktopNames == null || desktopNames.Count == 0)
-            {
-                desktopNames = ["desktop X"];
-            }
-
-            if (this._virtualDesktopManagerInternal == null)
-            {
-                Debug.WriteLine($"Failed to get Virtual Desktop Manager Internal");
-                return;
-            }
-
-            foreach (JToken desktopNameToken in desktopNames)
-            {
-                string desktopName = desktopNameToken.ToString();
-
-
-                try
-                {
-                    // Create a new virtual desktop
-                    IVirtualDesktop newDesktop = this._virtualDesktopManagerInternal.CreateDesktop();
-
-                    if (newDesktop != null)
-                    {
-                        // Set the desktop name (Windows 10 build 20231+ / Windows 11)
-                        try
-                        {
-                            // TODO: debug & get working
-                            // Works in .NET framework but not .NET
-                            //s_virtualDesktopManagerInternal_BUGBUG.SetDesktopName(newDesktop, desktopName);
-                            //Debug.WriteLine($"Created virtual desktop: {desktopName}");
-                        }
-                        catch (Exception ex2)
-                        {
-                            // Older Windows version - name setting not supported
-                            Debug.WriteLine($"Created virtual desktop (naming not supported on this Windows version): {ex2.Message}");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Failed to create desktop '{desktopName}': {ex.Message}");
-                }
-            }
-        }
-        catch (JsonException ex)
-        {
-            Debug.WriteLine($"Failed to parse desktop names JSON: {ex.Message}");
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Error creating desktops: {ex.Message}");
-        }
-    }
-
-    private void SwitchDesktop(string desktopIdentifier)
-    {
-        if (!int.TryParse(desktopIdentifier, out int index))
-        {
-            // Try to find the desktop by name
-            this._virtualDesktopManagerInternal.SwitchDesktop(this.FindDesktopByName(desktopIdentifier));
-        }
-        else
-        {
-            this.SwitchDesktop(index);
-        }
-    }
-
-    private void SwitchDesktop(int index)
-    {
-        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
-        desktops.GetAt(index, typeof(IVirtualDesktop).GUID, out object od);
-
-        // BUGBUG: different windows versions use different COM interfaces
-        // Different Windows versions use different COM interfaces for desktop switching
-        // Windows 11 22H2 (build 22621) and later use the updated interface
-        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
-        {
-            // Use the BUGBUG interface for Windows 11 22H2+
-            this._virtualDesktopManagerInternal_BUGBUG.SwitchDesktopWithAnimation((IVirtualDesktop)od);
-        }
-        else if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
-        {
-            // Windows 11 21H2 (build 22000)
-            this._virtualDesktopManagerInternal.SwitchDesktopWithAnimation((IVirtualDesktop)od);
-        }
-        else
-        {
-            // Windows 10 - use the original interface
-            this._virtualDesktopManagerInternal.SwitchDesktopAndMoveForegroundView((IVirtualDesktop)od);
-        }
-
-        Marshal.ReleaseComObject(desktops);
-    }
-
-    private void BumpDesktopIndex(int bump)
-    {
-        IVirtualDesktop desktop = this._virtualDesktopManagerInternal.GetCurrentDesktop();
-        int index = GetDesktopIndex(desktop);
-        int count = this._virtualDesktopManagerInternal.GetCount();
-
-        if (index == -1)
-        {
-            Debug.WriteLine("Undable to get the index of the current desktop");
-            return;
-        }
-
-        index += bump;
-
-        if (index > count)
-        {
-            index = 0;
-        }
-        else if (index < 0)
-        {
-            index = count - 1;
-        }
-
-        this.SwitchDesktop(index);
-    }
-
-    private IVirtualDesktop FindDesktopByName(string name)
-    {
-        int count = this._virtualDesktopManagerInternal.GetCount();
-
-        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
-        for (int i = 0; i < count; i++)
-        {
-            desktops.GetAt(i, typeof(IVirtualDesktop).GUID, out object od);
-
-            if (string.Equals(((IVirtualDesktop)od).GetName(), name, StringComparison.OrdinalIgnoreCase))
-            {
-                Marshal.ReleaseComObject(desktops);
-                return (IVirtualDesktop)od;
-            }
-        }
-
-        Marshal.ReleaseComObject(desktops);
-
-        return null;
-    }
-
-    private int GetDesktopIndex(IVirtualDesktop desktop)
-    {
-        int count = this._virtualDesktopManagerInternal.GetCount();
-
-        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
-        for (int i = 0; i < count; i++)
-        {
-            desktops.GetAt(i, typeof(IVirtualDesktop).GUID, out object od);
-
-            if (desktop.GetId() == ((IVirtualDesktop)od).GetId())
-            {
-                Marshal.ReleaseComObject(desktops);
-                return i;
-            }
-        }
-
-        Marshal.ReleaseComObject(desktops);
-
-        return -1;
-    }
-
-    /// <summary>
-    /// 
-    /// </summary>
-    /// <param name="value"></param>
-    /// <remarks>Currently not working correction, returns ACCESS_DENIED // TODO: investigate</remarks>
-    private void MoveWindowToDesktop(JToken value)
-    {
-        string process = value.SelectToken("process").ToString();
-        string desktop = value.SelectToken("desktop").ToString();
-        if (string.IsNullOrEmpty(process))
-        {
-            Debug.WriteLine("No process name supplied");
-            return;
-        }
-
-        if (string.IsNullOrEmpty(desktop))
-        {
-            Debug.WriteLine("No desktop id supplied");
-            return;
-        }
-
-        IntPtr hWnd = WindowCommandHandler.FindProcessWindowHandle(process, this._appRegistry);
-
-        if (int.TryParse(desktop, out int desktopIndex))
-        {
-            this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
-            if (desktopIndex < 1 || desktopIndex > this._virtualDesktopManagerInternal.GetCount())
-            {
-                Debug.WriteLine("Desktop index out of range");
-                Marshal.ReleaseComObject(desktops);
-                return;
-            }
-            desktops.GetAt(desktopIndex - 1, typeof(IVirtualDesktop).GUID, out object od);
-            Guid g = ((IVirtualDesktop)od).GetId();
-            this._virtualDesktopManager.MoveWindowToDesktop(hWnd, ref g);
-            Marshal.ReleaseComObject(desktops);
-            return;
-        }
-
-        IVirtualDesktop ivd = FindDesktopByName(desktop);
-        if (ivd is not null)
-        {
-            Guid desktopGuid = ivd.GetId();
-            this._virtualDesktopManager.MoveWindowToDesktop(hWnd, ref desktopGuid);
-        }
-    }
-
-    private void PinWindow(string processName)
-    {
-        IntPtr hWnd = WindowCommandHandler.FindProcessWindowHandle(processName, this._appRegistry);
-
-        if (hWnd != IntPtr.Zero)
-        {
-            this._applicationViewCollection.GetViewForHwnd(hWnd, out IApplicationView view);
-
-            if (view is not null)
-            {
-                this._virtualDesktopPinnedApps.PinView((IApplicationView)view);
-            }
-        }
-        else
-        {
-            Console.WriteLine($"The window handle for '{processName}' could not be found");
-        }
-    }
-
-    private IVirtualDesktopManagerInternal GetVirtualDesktopManagerInternal()
-    {
-        try
-        {
-            IServiceProvider shellServiceProvider = (IServiceProvider)Activator.CreateInstance(
-                Type.GetTypeFromCLSID(s_clsidImmersiveShell));
-
-            Guid guidService = s_clsidVirtualDesktopManagerInternal;
-            Guid riid = typeof(IVirtualDesktopManagerInternal).GUID;
-            shellServiceProvider.QueryService(
-                ref guidService,
-                ref riid,
-                out object objVirtualDesktopManagerInternal);
-
-            return (IVirtualDesktopManagerInternal)objVirtualDesktopManagerInternal;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    #endregion
-
     #region Virtual Desktop COM Interfaces
 
     private enum APPLICATION_VIEW_CLOAK_TYPE : int
@@ -575,6 +247,334 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
     {
         [return: MarshalAs(UnmanagedType.IUnknown)]
         object QueryService(ref Guid service, ref Guid riid);
+    }
+
+    #endregion
+
+    private readonly IAppRegistry _appRegistry;
+    private readonly IServiceProvider10 _shell;
+    private readonly IVirtualDesktopManagerInternal _virtualDesktopManagerInternal;
+    private readonly IVirtualDesktopManagerInternal_BUGBUG _virtualDesktopManagerInternal_BUGBUG;
+    private readonly IVirtualDesktopManager _virtualDesktopManager;
+    private readonly IApplicationViewCollection _applicationViewCollection;
+    private readonly IVirtualDesktopPinnedApps _virtualDesktopPinnedApps;
+
+    public VirtualDesktopCommandHandler(IAppRegistry appRegistry)
+    {
+        this._appRegistry = appRegistry;
+
+        // Desktop management COM initialization
+        this._shell = (IServiceProvider10)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidImmersiveShell));
+        this._virtualDesktopManagerInternal = (IVirtualDesktopManagerInternal)this._shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
+        this._virtualDesktopManagerInternal_BUGBUG = (IVirtualDesktopManagerInternal_BUGBUG)this._shell.QueryService(s_clsidVirtualDesktopManagerInternal, typeof(IVirtualDesktopManagerInternal).GUID);
+        this._virtualDesktopManager = (IVirtualDesktopManager)Activator.CreateInstance(Type.GetTypeFromCLSID(s_clsidVirtualDesktopManager));
+        this._applicationViewCollection = (IApplicationViewCollection)this._shell.QueryService(typeof(IApplicationViewCollection).GUID, typeof(IApplicationViewCollection).GUID);
+        this._virtualDesktopPinnedApps = (IVirtualDesktopPinnedApps)this._shell.QueryService(s_clsidVirtualDesktopPinnedApps, typeof(IVirtualDesktopPinnedApps).GUID);
+    }
+
+    /// <inheritdoc/>
+    public IEnumerable<string> SupportedCommands { get; } =
+    [
+        "CreateDesktop",
+        "MoveWindowToDesktop",
+        "NextDesktop",
+        "PinWindow",
+        "PreviousDesktop",
+        "SwitchDesktop",
+    ];
+
+    /// <inheritdoc/>
+    public void Handle(string key, string value, JToken rawValue)
+    {
+        switch (key)
+        {
+            case "CreateDesktop":
+                this.CreateDesktop(value);
+                break;
+
+            case "MoveWindowToDesktop":
+                this.MoveWindowToDesktop(rawValue);
+                break;
+
+            case "NextDesktop":
+                this.BumpDesktopIndex(1);
+                break;
+
+            case "PinWindow":
+                this.PinWindow(value);
+                break;
+
+            case "PreviousDesktop":
+                this.BumpDesktopIndex(-1);
+                break;
+
+            case "SwitchDesktop":
+                this.SwitchDesktop(value);
+                break;
+        }
+    }
+
+    #region Virtual Desktop Methods
+
+    /// <summary>
+    /// Creates virtual desktops from a JSON array of desktop names.
+    /// </summary>
+    /// <param name="jsonValue">JSON array containing desktop names, e.g., ["Work", "Personal", "Gaming"]</param>
+    private void CreateDesktop(string jsonValue)
+    {
+        try
+        {
+            // Parse the JSON array of desktop names
+            JArray desktopNames = JArray.Parse(jsonValue);
+
+            if (desktopNames == null || desktopNames.Count == 0)
+            {
+                desktopNames = ["desktop X"];
+            }
+
+            if (this._virtualDesktopManagerInternal == null)
+            {
+                Debug.WriteLine($"Failed to get Virtual Desktop Manager Internal");
+                return;
+            }
+
+            foreach (JToken desktopNameToken in desktopNames)
+            {
+                string desktopName = desktopNameToken.ToString();
+
+
+                try
+                {
+                    // Create a new virtual desktop
+                    IVirtualDesktop newDesktop = this._virtualDesktopManagerInternal.CreateDesktop();
+
+                    if (newDesktop != null)
+                    {
+                        // Set the desktop name (Windows 10 build 20231+ / Windows 11)
+                        try
+                        {
+                            // TODO: debug & get working
+                            // Works in .NET framework but not .NET
+                            //s_virtualDesktopManagerInternal_BUGBUG.SetDesktopName(newDesktop, desktopName);
+                            //Debug.WriteLine($"Created virtual desktop: {desktopName}");
+                        }
+                        catch (Exception ex2)
+                        {
+                            // Older Windows version - name setting not supported
+                            Debug.WriteLine($"Created virtual desktop (naming not supported on this Windows version): {ex2.Message}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to create desktop '{desktopName}': {ex.Message}");
+                }
+            }
+        }
+        catch (JsonException ex)
+        {
+            Debug.WriteLine($"Failed to parse desktop names JSON: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error creating desktops: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="value"></param>
+    /// <remarks>Currently not working correction, returns ACCESS_DENIED // TODO: investigate</remarks>
+    private void MoveWindowToDesktop(JToken value)
+    {
+        string process = value.SelectToken("process").ToString();
+        string desktop = value.SelectToken("desktop").ToString();
+        if (string.IsNullOrEmpty(process))
+        {
+            Debug.WriteLine("No process name supplied");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(desktop))
+        {
+            Debug.WriteLine("No desktop id supplied");
+            return;
+        }
+
+        IntPtr hWnd = WindowCommandHandler.FindProcessWindowHandle(process, this._appRegistry);
+
+        if (int.TryParse(desktop, out int desktopIndex))
+        {
+            this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+            if (desktopIndex < 1 || desktopIndex > this._virtualDesktopManagerInternal.GetCount())
+            {
+                Debug.WriteLine("Desktop index out of range");
+                Marshal.ReleaseComObject(desktops);
+                return;
+            }
+            desktops.GetAt(desktopIndex - 1, typeof(IVirtualDesktop).GUID, out object od);
+            Guid g = ((IVirtualDesktop)od).GetId();
+            this._virtualDesktopManager.MoveWindowToDesktop(hWnd, ref g);
+            Marshal.ReleaseComObject(desktops);
+            return;
+        }
+
+        IVirtualDesktop ivd = FindDesktopByName(desktop);
+        if (ivd is not null)
+        {
+            Guid desktopGuid = ivd.GetId();
+            this._virtualDesktopManager.MoveWindowToDesktop(hWnd, ref desktopGuid);
+        }
+    }
+
+    private void PinWindow(string processName)
+    {
+        IntPtr hWnd = WindowCommandHandler.FindProcessWindowHandle(processName, this._appRegistry);
+
+        if (hWnd != IntPtr.Zero)
+        {
+            this._applicationViewCollection.GetViewForHwnd(hWnd, out IApplicationView view);
+
+            if (view is not null)
+            {
+                this._virtualDesktopPinnedApps.PinView((IApplicationView)view);
+            }
+        }
+        else
+        {
+            Console.WriteLine($"The window handle for '{processName}' could not be found");
+        }
+    }
+
+    private void SwitchDesktop(string desktopIdentifier)
+    {
+        if (!int.TryParse(desktopIdentifier, out int index))
+        {
+            // Try to find the desktop by name
+            this._virtualDesktopManagerInternal.SwitchDesktop(this.FindDesktopByName(desktopIdentifier));
+        }
+        else
+        {
+            this.SwitchDesktop(index);
+        }
+    }
+
+    private void SwitchDesktop(int index)
+    {
+        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        desktops.GetAt(index, typeof(IVirtualDesktop).GUID, out object od);
+
+        // BUGBUG: different windows versions use different COM interfaces
+        // Different Windows versions use different COM interfaces for desktop switching
+        // Windows 11 22H2 (build 22621) and later use the updated interface
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
+        {
+            // Use the BUGBUG interface for Windows 11 22H2+
+            this._virtualDesktopManagerInternal_BUGBUG.SwitchDesktopWithAnimation((IVirtualDesktop)od);
+        }
+        else if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            // Windows 11 21H2 (build 22000)
+            this._virtualDesktopManagerInternal.SwitchDesktopWithAnimation((IVirtualDesktop)od);
+        }
+        else
+        {
+            // Windows 10 - use the original interface
+            this._virtualDesktopManagerInternal.SwitchDesktopAndMoveForegroundView((IVirtualDesktop)od);
+        }
+
+        Marshal.ReleaseComObject(desktops);
+    }
+
+    private void BumpDesktopIndex(int bump)
+    {
+        IVirtualDesktop desktop = this._virtualDesktopManagerInternal.GetCurrentDesktop();
+        int index = GetDesktopIndex(desktop);
+        int count = this._virtualDesktopManagerInternal.GetCount();
+
+        if (index == -1)
+        {
+            Debug.WriteLine("Undable to get the index of the current desktop");
+            return;
+        }
+
+        index += bump;
+
+        if (index > count)
+        {
+            index = 0;
+        }
+        else if (index < 0)
+        {
+            index = count - 1;
+        }
+
+        this.SwitchDesktop(index);
+    }
+
+    private IVirtualDesktop FindDesktopByName(string name)
+    {
+        int count = this._virtualDesktopManagerInternal.GetCount();
+
+        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        for (int i = 0; i < count; i++)
+        {
+            desktops.GetAt(i, typeof(IVirtualDesktop).GUID, out object od);
+
+            if (string.Equals(((IVirtualDesktop)od).GetName(), name, StringComparison.OrdinalIgnoreCase))
+            {
+                Marshal.ReleaseComObject(desktops);
+                return (IVirtualDesktop)od;
+            }
+        }
+
+        Marshal.ReleaseComObject(desktops);
+
+        return null;
+    }
+
+    private int GetDesktopIndex(IVirtualDesktop desktop)
+    {
+        int count = this._virtualDesktopManagerInternal.GetCount();
+
+        this._virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
+        for (int i = 0; i < count; i++)
+        {
+            desktops.GetAt(i, typeof(IVirtualDesktop).GUID, out object od);
+
+            if (desktop.GetId() == ((IVirtualDesktop)od).GetId())
+            {
+                Marshal.ReleaseComObject(desktops);
+                return i;
+            }
+        }
+
+        Marshal.ReleaseComObject(desktops);
+
+        return -1;
+    }
+
+    private IVirtualDesktopManagerInternal GetVirtualDesktopManagerInternal()
+    {
+        try
+        {
+            IServiceProvider shellServiceProvider = (IServiceProvider)Activator.CreateInstance(
+                Type.GetTypeFromCLSID(s_clsidImmersiveShell));
+
+            Guid guidService = s_clsidVirtualDesktopManagerInternal;
+            Guid riid = typeof(IVirtualDesktopManagerInternal).GUID;
+            shellServiceProvider.QueryService(
+                ref guidService,
+                ref riid,
+                out object objVirtualDesktopManagerInternal);
+
+            return (IVirtualDesktopManagerInternal)objVirtualDesktopManagerInternal;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     #endregion

@@ -59,7 +59,7 @@ internal class NetworkCommandHandler : ICommandHandler
     private static extern int WlanGetAvailableNetworkList(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, IntPtr pReserved, out IntPtr ppAvailableNetworkList);
 
     [DllImport("wlanapi.dll")]
-    private static extern int WlanScan(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pDot11Ssid, IntPtr pIeData, IntPtr pReserved);
+    private static extern int WlanScan(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pDOT11_SSID, IntPtr pIeData, IntPtr pReserved);
 
     [DllImport("wlanapi.dll")]
     private static extern void WlanFreeMemory(IntPtr pMemory);
@@ -134,7 +134,7 @@ internal class NetworkCommandHandler : ICommandHandler
         public WLAN_CONNECTION_MODE wlanConnectionMode;
         [MarshalAs(UnmanagedType.LPWStr)]
         public string strProfile;
-        public IntPtr pDot11Ssid;
+        public IntPtr pDOT11_SSID;
         public IntPtr pDesiredBssidList;
         public DOT11_BSS_TYPE dot11BssType;
         public uint dwFlags;
@@ -175,12 +175,11 @@ internal class NetworkCommandHandler : ICommandHandler
     {
         switch (key)
         {
-            case "ToggleAirplaneMode":
-                this.SetAirplaneMode(bool.Parse(value));
-                break;
-
-            case "ListWifiNetworks":
-                ListWifiNetworks();
+            case "BluetoothToggle":
+            case "EnableMeteredConnections":
+            case "EnableWifi":
+                // Not yet implemented — requires additional infrastructure
+                Debug.WriteLine($"Command not yet implemented: {key}");
                 break;
 
             case "ConnectWifi":
@@ -194,72 +193,162 @@ internal class NetworkCommandHandler : ICommandHandler
                 this.DisconnectFromWifi();
                 break;
 
-            case "BluetoothToggle":
-            case "EnableWifi":
-            case "EnableMeteredConnections":
-                // Not yet implemented — requires additional infrastructure
-                Debug.WriteLine($"Command not yet implemented: {key}");
+            case "ListWifiNetworks":
+                ListWifiNetworks();
+                break;
+
+            case "ToggleAirplaneMode":
+                this.SetAirplaneMode(bool.Parse(value));
                 break;
         }
     }
 
     /// <summary>
-    /// Sets the airplane mode state using the Radio Management API.
+    /// Connects to a WiFi network by name (SSID).
     /// </summary>
-    private void SetAirplaneMode(bool enable)
+    private void ConnectToWifi(string ssid, string password = null)
     {
-        IRadioManager radioManager = null;
+        IntPtr clientHandle = IntPtr.Zero;
+        IntPtr wlanInterfaceList = IntPtr.Zero;
+
         try
         {
-            Type radioManagerType = Type.GetTypeFromCLSID(s_clsidRadioManagementApi);
-            if (radioManagerType == null)
+            int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
+            if (result != 0)
             {
-                Debug.WriteLine("Failed to get Radio Management API type");
+                AutoShell.LogWarning($"Failed to open WLAN handle: {result}");
                 return;
             }
 
-            object obj = Activator.CreateInstance(radioManagerType);
-            radioManager = (IRadioManager)obj;
-
-            if (radioManager == null)
+            result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
+            if (result != 0)
             {
-                Debug.WriteLine("Failed to create Radio Manager instance");
+                AutoShell.LogWarning($"Failed to enumerate WLAN interfaces: {result}");
                 return;
             }
 
-            int hr = radioManager.GetSystemRadioState(out int currentState, out int _, out int _);
-            if (hr < 0)
+            WLAN_INTERFACE_INFO_LIST interfaceList = Marshal.PtrToStructure<WLAN_INTERFACE_INFO_LIST>(wlanInterfaceList);
+
+            if (interfaceList.dwNumberOfItems == 0)
             {
-                Debug.WriteLine($"Failed to get system radio state: HRESULT 0x{hr:X8}");
+                AutoShell.LogWarning("No wireless interfaces found.");
                 return;
             }
 
-            bool airplaneModeCurrentlyOn = currentState == 0;
-            Debug.WriteLine($"Current airplane mode state: {(airplaneModeCurrentlyOn ? "on" : "off")}");
+            WLAN_INTERFACE_INFO interfaceInfo = interfaceList.InterfaceInfo[0];
 
-            int newState = enable ? 0 : 1;
-            hr = radioManager.SetSystemRadioState(newState);
-            if (hr < 0)
+            if (!string.IsNullOrEmpty(password))
             {
-                Debug.WriteLine($"Failed to set system radio state: HRESULT 0x{hr:X8}");
+                string profileXml = GenerateWifiProfileXml(ssid, password);
+
+                result = WlanSetProfile(clientHandle, ref interfaceInfo.InterfaceGuid, 0, profileXml, null, true, IntPtr.Zero, out uint reasonCode);
+                if (result != 0)
+                {
+                    AutoShell.LogWarning($"Failed to set WiFi profile: {result}, reason: {reasonCode}");
+                    return;
+                }
+            }
+
+            WLAN_CONNECTION_PARAMETERS connectionParams = new WLAN_CONNECTION_PARAMETERS
+            {
+                wlanConnectionMode = WLAN_CONNECTION_MODE.wlan_connection_mode_profile,
+                strProfile = ssid,
+                pDOT11_SSID = IntPtr.Zero,
+                pDesiredBssidList = IntPtr.Zero,
+                dot11BssType = DOT11_BSS_TYPE.dot11_BSS_type_any,
+                dwFlags = 0
+            };
+
+            result = WlanConnect(clientHandle, ref interfaceInfo.InterfaceGuid, ref connectionParams, IntPtr.Zero);
+            if (result != 0)
+            {
+                AutoShell.LogWarning($"Failed to connect to WiFi network '{ssid}': {result}");
                 return;
             }
 
-            Debug.WriteLine($"Airplane mode set to: {(enable ? "on" : "off")}");
-        }
-        catch (COMException ex)
-        {
-            Debug.WriteLine($"COM Exception setting airplane mode: {ex.Message} (HRESULT: 0x{ex.HResult:X8})");
+            Debug.WriteLine($"Successfully initiated connection to WiFi network: {ssid}");
+            Console.WriteLine($"Connecting to WiFi network: {ssid}");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to set airplane mode: {ex.Message}");
+            AutoShell.LogError(ex);
         }
         finally
         {
-            if (radioManager != null)
+            if (wlanInterfaceList != IntPtr.Zero)
             {
-                Marshal.ReleaseComObject(radioManager);
+                WlanFreeMemory(wlanInterfaceList);
+            }
+
+            if (clientHandle != IntPtr.Zero)
+            {
+                _ = WlanCloseHandle(clientHandle, IntPtr.Zero);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Disconnects from the currently connected WiFi network.
+    /// </summary>
+    private void DisconnectFromWifi()
+    {
+        IntPtr clientHandle = IntPtr.Zero;
+        IntPtr wlanInterfaceList = IntPtr.Zero;
+
+        try
+        {
+            int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
+            if (result != 0)
+            {
+                AutoShell.LogWarning($"Failed to open WLAN handle: {result}");
+                return;
+            }
+
+            result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
+            if (result != 0)
+            {
+                AutoShell.LogWarning($"Failed to enumerate WLAN interfaces: {result}");
+                return;
+            }
+
+            WLAN_INTERFACE_INFO_LIST interfaceList = Marshal.PtrToStructure<WLAN_INTERFACE_INFO_LIST>(wlanInterfaceList);
+
+            if (interfaceList.dwNumberOfItems == 0)
+            {
+                AutoShell.LogWarning("No wireless interfaces found.");
+                return;
+            }
+
+            for (int i = 0; i < interfaceList.dwNumberOfItems; i++)
+            {
+                WLAN_INTERFACE_INFO interfaceInfo = interfaceList.InterfaceInfo[i];
+
+                result = WlanDisconnect(clientHandle, ref interfaceInfo.InterfaceGuid, IntPtr.Zero);
+                if (result != 0)
+                {
+                    AutoShell.LogWarning($"Failed to disconnect from WiFi on interface {i}: {result}");
+                }
+                else
+                {
+                    Debug.WriteLine($"Successfully disconnected from WiFi on interface: {interfaceInfo.strInterfaceDescription}");
+                    Console.WriteLine("Disconnected from WiFi");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AutoShell.LogError(ex);
+        }
+        finally
+        {
+            if (wlanInterfaceList != IntPtr.Zero)
+            {
+                WlanFreeMemory(wlanInterfaceList);
+            }
+
+            if (clientHandle != IntPtr.Zero)
+            {
+                _ = WlanCloseHandle(clientHandle, IntPtr.Zero);
             }
         }
     }
@@ -378,85 +467,62 @@ internal class NetworkCommandHandler : ICommandHandler
     }
 
     /// <summary>
-    /// Connects to a WiFi network by name (SSID).
+    /// Sets the airplane mode state using the Radio Management API.
     /// </summary>
-    private void ConnectToWifi(string ssid, string password = null)
+    private void SetAirplaneMode(bool enable)
     {
-        IntPtr clientHandle = IntPtr.Zero;
-        IntPtr wlanInterfaceList = IntPtr.Zero;
-
+        IRadioManager radioManager = null;
         try
         {
-            int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
-            if (result != 0)
+            Type radioManagerType = Type.GetTypeFromCLSID(s_clsidRadioManagementApi);
+            if (radioManagerType == null)
             {
-                AutoShell.LogWarning($"Failed to open WLAN handle: {result}");
+                Debug.WriteLine("Failed to get Radio Management API type");
                 return;
             }
 
-            result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
-            if (result != 0)
+            object obj = Activator.CreateInstance(radioManagerType);
+            radioManager = (IRadioManager)obj;
+
+            if (radioManager == null)
             {
-                AutoShell.LogWarning($"Failed to enumerate WLAN interfaces: {result}");
+                Debug.WriteLine("Failed to create Radio Manager instance");
                 return;
             }
 
-            WLAN_INTERFACE_INFO_LIST interfaceList = Marshal.PtrToStructure<WLAN_INTERFACE_INFO_LIST>(wlanInterfaceList);
-
-            if (interfaceList.dwNumberOfItems == 0)
+            int hr = radioManager.GetSystemRadioState(out int currentState, out int _, out int _);
+            if (hr < 0)
             {
-                AutoShell.LogWarning("No wireless interfaces found.");
+                Debug.WriteLine($"Failed to get system radio state: HRESULT 0x{hr:X8}");
                 return;
             }
 
-            WLAN_INTERFACE_INFO interfaceInfo = interfaceList.InterfaceInfo[0];
+            bool airplaneModeCurrentlyOn = currentState == 0;
+            Debug.WriteLine($"Current airplane mode state: {(airplaneModeCurrentlyOn ? "on" : "off")}");
 
-            if (!string.IsNullOrEmpty(password))
+            int newState = enable ? 0 : 1;
+            hr = radioManager.SetSystemRadioState(newState);
+            if (hr < 0)
             {
-                string profileXml = GenerateWifiProfileXml(ssid, password);
-
-                result = WlanSetProfile(clientHandle, ref interfaceInfo.InterfaceGuid, 0, profileXml, null, true, IntPtr.Zero, out uint reasonCode);
-                if (result != 0)
-                {
-                    AutoShell.LogWarning($"Failed to set WiFi profile: {result}, reason: {reasonCode}");
-                    return;
-                }
-            }
-
-            WLAN_CONNECTION_PARAMETERS connectionParams = new WLAN_CONNECTION_PARAMETERS
-            {
-                wlanConnectionMode = WLAN_CONNECTION_MODE.wlan_connection_mode_profile,
-                strProfile = ssid,
-                pDot11Ssid = IntPtr.Zero,
-                pDesiredBssidList = IntPtr.Zero,
-                dot11BssType = DOT11_BSS_TYPE.dot11_BSS_type_any,
-                dwFlags = 0
-            };
-
-            result = WlanConnect(clientHandle, ref interfaceInfo.InterfaceGuid, ref connectionParams, IntPtr.Zero);
-            if (result != 0)
-            {
-                AutoShell.LogWarning($"Failed to connect to WiFi network '{ssid}': {result}");
+                Debug.WriteLine($"Failed to set system radio state: HRESULT 0x{hr:X8}");
                 return;
             }
 
-            Debug.WriteLine($"Successfully initiated connection to WiFi network: {ssid}");
-            Console.WriteLine($"Connecting to WiFi network: {ssid}");
+            Debug.WriteLine($"Airplane mode set to: {(enable ? "on" : "off")}");
+        }
+        catch (COMException ex)
+        {
+            Debug.WriteLine($"COM Exception setting airplane mode: {ex.Message} (HRESULT: 0x{ex.HResult:X8})");
         }
         catch (Exception ex)
         {
-            AutoShell.LogError(ex);
+            Debug.WriteLine($"Failed to set airplane mode: {ex.Message}");
         }
         finally
         {
-            if (wlanInterfaceList != IntPtr.Zero)
+            if (radioManager != null)
             {
-                WlanFreeMemory(wlanInterfaceList);
-            }
-
-            if (clientHandle != IntPtr.Zero)
-            {
-                _ = WlanCloseHandle(clientHandle, IntPtr.Zero);
+                Marshal.ReleaseComObject(radioManager);
             }
         }
     }
@@ -494,71 +560,5 @@ internal class NetworkCommandHandler : ICommandHandler
         </security>
     </MSM>
 </WLANProfile>";
-    }
-
-    /// <summary>
-    /// Disconnects from the currently connected WiFi network.
-    /// </summary>
-    private void DisconnectFromWifi()
-    {
-        IntPtr clientHandle = IntPtr.Zero;
-        IntPtr wlanInterfaceList = IntPtr.Zero;
-
-        try
-        {
-            int result = WlanOpenHandle(2, IntPtr.Zero, out uint negotiatedVersion, out clientHandle);
-            if (result != 0)
-            {
-                AutoShell.LogWarning($"Failed to open WLAN handle: {result}");
-                return;
-            }
-
-            result = WlanEnumInterfaces(clientHandle, IntPtr.Zero, out wlanInterfaceList);
-            if (result != 0)
-            {
-                AutoShell.LogWarning($"Failed to enumerate WLAN interfaces: {result}");
-                return;
-            }
-
-            WLAN_INTERFACE_INFO_LIST interfaceList = Marshal.PtrToStructure<WLAN_INTERFACE_INFO_LIST>(wlanInterfaceList);
-
-            if (interfaceList.dwNumberOfItems == 0)
-            {
-                AutoShell.LogWarning("No wireless interfaces found.");
-                return;
-            }
-
-            for (int i = 0; i < interfaceList.dwNumberOfItems; i++)
-            {
-                WLAN_INTERFACE_INFO interfaceInfo = interfaceList.InterfaceInfo[i];
-
-                result = WlanDisconnect(clientHandle, ref interfaceInfo.InterfaceGuid, IntPtr.Zero);
-                if (result != 0)
-                {
-                    AutoShell.LogWarning($"Failed to disconnect from WiFi on interface {i}: {result}");
-                }
-                else
-                {
-                    Debug.WriteLine($"Successfully disconnected from WiFi on interface: {interfaceInfo.strInterfaceDescription}");
-                    Console.WriteLine("Disconnected from WiFi");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            AutoShell.LogError(ex);
-        }
-        finally
-        {
-            if (wlanInterfaceList != IntPtr.Zero)
-            {
-                WlanFreeMemory(wlanInterfaceList);
-            }
-
-            if (clientHandle != IntPtr.Zero)
-            {
-                _ = WlanCloseHandle(clientHandle, IntPtr.Zero);
-            }
-        }
     }
 }

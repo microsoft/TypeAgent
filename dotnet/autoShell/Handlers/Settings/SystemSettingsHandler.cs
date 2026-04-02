@@ -15,6 +15,13 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal class SystemSettingsHandler : ICommandHandler
 {
+    private readonly IProcessService _process;
+
+    public SystemSettingsHandler(IProcessService process)
+    {
+        this._process = process;
+    }
+
     /// <inheritdoc/>
     public IEnumerable<string> SupportedCommands { get; } =
     [
@@ -25,13 +32,6 @@ internal class SystemSettingsHandler : ICommandHandler
         "MinimizeWindowsOnMonitorDisconnectAction",
         "RememberWindowLocations",
     ];
-
-    private readonly IProcessService _process;
-
-    public SystemSettingsHandler(IProcessService process)
-    {
-        this._process = process;
-    }
 
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)

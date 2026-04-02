@@ -14,6 +14,15 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal class AccessibilitySettingsHandler : ICommandHandler
 {
+    private readonly IRegistryService _registry;
+    private readonly IProcessService _process;
+
+    public AccessibilitySettingsHandler(IRegistryService registry, IProcessService process)
+    {
+        this._registry = registry;
+        this._process = process;
+    }
+
     /// <inheritdoc/>
     public IEnumerable<string> SupportedCommands { get; } =
     [
@@ -23,15 +32,6 @@ internal class AccessibilitySettingsHandler : ICommandHandler
         "EnableStickyKeys",
         "MonoAudioToggle",
     ];
-
-    private readonly IRegistryService _registry;
-    private readonly IProcessService _process;
-
-    public AccessibilitySettingsHandler(IRegistryService registry, IProcessService process)
-    {
-        this._registry = registry;
-        this._process = process;
-    }
 
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)

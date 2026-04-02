@@ -37,17 +37,34 @@ internal class AppCommandHandler : ICommandHandler
     {
         switch (key)
         {
-            case "LaunchProgram":
-                this.OpenApplication(value);
-                break;
-
             case "CloseProgram":
                 this.CloseApplication(value);
+                break;
+
+            case "LaunchProgram":
+                this.OpenApplication(value);
                 break;
 
             case "ListAppNames":
                 Console.WriteLine(JsonConvert.SerializeObject(this._appRegistry.GetAllAppNames()));
                 break;
+        }
+    }
+
+    private void CloseApplication(string friendlyName)
+    {
+        string processName = this._appRegistry.ResolveProcessName(friendlyName);
+        Process[] processes = this._processService.GetProcessesByName(processName);
+        if (processes.Length != 0)
+        {
+            Debug.WriteLine("Closing " + friendlyName);
+            foreach (Process p in processes)
+            {
+                if (p.MainWindowHandle != IntPtr.Zero)
+                {
+                    p.CloseMainWindow();
+                }
+            }
         }
     }
 
@@ -107,23 +124,6 @@ internal class AppCommandHandler : ICommandHandler
         {
             Debug.WriteLine("Raising " + friendlyName);
             WindowCommandHandler.RaiseWindow(friendlyName, this._appRegistry);
-        }
-    }
-
-    private void CloseApplication(string friendlyName)
-    {
-        string processName = this._appRegistry.ResolveProcessName(friendlyName);
-        Process[] processes = this._processService.GetProcessesByName(processName);
-        if (processes.Length != 0)
-        {
-            Debug.WriteLine("Closing " + friendlyName);
-            foreach (Process p in processes)
-            {
-                if (p.MainWindowHandle != IntPtr.Zero)
-                {
-                    p.CloseMainWindow();
-                }
-            }
         }
     }
 }

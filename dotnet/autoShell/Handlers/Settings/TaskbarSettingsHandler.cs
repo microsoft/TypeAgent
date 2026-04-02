@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using autoShell.Services;
 using Microsoft.Win32;
@@ -16,11 +15,20 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal partial class TaskbarSettingsHandler : ICommandHandler
 {
+    #region P/Invoke
     private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
     private const string StuckRects3 = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3";
 
     [LibraryImport("user32.dll")]
     private static partial IntPtr SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+    #endregion P/Invoke
+
+    private readonly IRegistryService _registry;
+
+    public TaskbarSettingsHandler(IRegistryService registry)
+    {
+        this._registry = registry;
+    }
 
     /// <inheritdoc/>
     public IEnumerable<string> SupportedCommands { get; } =
@@ -34,13 +42,6 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         "ToggleWidgetsButtonVisibility",
     ];
 
-    private readonly IRegistryService _registry;
-
-    public TaskbarSettingsHandler(IRegistryService registry)
-    {
-        this._registry = registry;
-    }
-
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
@@ -53,6 +54,15 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
                 case "AutoHideTaskbar":
                     this.HandleAutoHideTaskbar(param);
                     break;
+                case "DisplaySecondsInSystrayClock":
+                    this.SetToggle(param, "enable", "ShowSecondsInSystemClock");
+                    break;
+                case "DisplayTaskbarOnAllMonitors":
+                    this.SetToggle(param, "enable", "MMTaskbarEnabled");
+                    break;
+                case "ShowBadgesOnTaskbar":
+                    this.SetToggle(param, "enableBadging", "TaskbarBadges");
+                    break;
                 case "TaskbarAlignment":
                     this.HandleTaskbarAlignment(param);
                     break;
@@ -62,15 +72,6 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
                 case "ToggleWidgetsButtonVisibility":
                     this.SetToggle(param, "visibility", "TaskbarDa", trueValue: "show");
                     break;
-                case "ShowBadgesOnTaskbar":
-                    this.SetToggle(param, "enableBadging", "TaskbarBadges");
-                    break;
-                case "DisplayTaskbarOnAllMonitors":
-                    this.SetToggle(param, "enable", "MMTaskbarEnabled");
-                    break;
-                case "DisplaySecondsInSystrayClock":
-                    this.SetToggle(param, "enable", "ShowSecondsInSystemClock");
-                    break;
             }
 
             SendNotifyMessage((IntPtr)0xffff, 0x001A, IntPtr.Zero, IntPtr.Zero);
@@ -79,27 +80,6 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         {
             AutoShell.LogError(ex);
         }
-    }
-
-    /// <summary>
-    /// Sets a DWord toggle in Explorer\Advanced.
-    /// For bool JSON values, true=1 false=0.
-    /// For string JSON values, compares against <paramref name="trueValue"/>.
-    /// </summary>
-    private void SetToggle(JObject param, string jsonProperty, string registryValue, string trueValue = null)
-    {
-        int regValue;
-        if (trueValue != null)
-        {
-            string val = param.Value<string>(jsonProperty) ?? "";
-            regValue = val.Equals(trueValue, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-        }
-        else
-        {
-            regValue = (param.Value<bool?>(jsonProperty) ?? true) ? 1 : 0;
-        }
-
-        this._registry.SetValue(ExplorerAdvanced, registryValue, regValue, RegistryValueKind.DWord);
     }
 
     private void HandleAutoHideTaskbar(JObject param)
@@ -128,5 +108,26 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         string alignment = param.Value<string>("alignment") ?? "center";
         bool useCenter = alignment.Equals("center", StringComparison.OrdinalIgnoreCase);
         this._registry.SetValue(ExplorerAdvanced, "TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
+    }
+
+    /// <summary>
+    /// Sets a DWord toggle in Explorer\Advanced.
+    /// For bool JSON values, true=1 false=0.
+    /// For string JSON values, compares against <paramref name="trueValue"/>.
+    /// </summary>
+    private void SetToggle(JObject param, string jsonProperty, string registryValue, string trueValue = null)
+    {
+        int regValue;
+        if (trueValue != null)
+        {
+            string val = param.Value<string>(jsonProperty) ?? "";
+            regValue = val.Equals(trueValue, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        }
+        else
+        {
+            regValue = (param.Value<bool?>(jsonProperty) ?? true) ? 1 : 0;
+        }
+
+        this._registry.SetValue(ExplorerAdvanced, registryValue, regValue, RegistryValueKind.DWord);
     }
 }

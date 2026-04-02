@@ -15,6 +15,7 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal partial class MouseSettingsHandler : ICommandHandler
 {
+    #region P/Invoke
     private const int SPI_GETMOUSE = 3;
     private const int SPI_SETMOUSE = 4;
     private const int SPI_SETMOUSESPEED = 0x0071;
@@ -24,6 +25,16 @@ internal partial class MouseSettingsHandler : ICommandHandler
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SwapMouseButton(int fSwap);
+    #endregion P/Invoke
+
+    private readonly ISystemParametersService _systemParams;
+    private readonly IProcessService _process;
+
+    public MouseSettingsHandler(ISystemParametersService systemParams, IProcessService process)
+    {
+        this._systemParams = systemParams;
+        this._process = process;
+    }
 
     /// <inheritdoc/>
     public IEnumerable<string> SupportedCommands { get; } =
@@ -37,15 +48,6 @@ internal partial class MouseSettingsHandler : ICommandHandler
         "SetPrimaryMouseButton",
         "TouchpadCursorSpeed",
     ];
-
-    private readonly ISystemParametersService _systemParams;
-    private readonly IProcessService _process;
-
-    public MouseSettingsHandler(ISystemParametersService systemParams, IProcessService process)
-    {
-        this._systemParams = systemParams;
-        this._process = process;
-    }
 
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
@@ -70,10 +72,6 @@ internal partial class MouseSettingsHandler : ICommandHandler
                     this.HandleEnhancePointerPrecision(param);
                     break;
 
-                case "SetPrimaryMouseButton":
-                    HandleSetPrimaryMouseButton(param);
-                    break;
-
                 case "MouseCursorSpeed":
                     this.HandleMouseCursorSpeed(param);
                     break;
@@ -81,12 +79,25 @@ internal partial class MouseSettingsHandler : ICommandHandler
                 case "MouseWheelScrollLines":
                     this.HandleMouseWheelScrollLines(param);
                     break;
+
+                case "SetPrimaryMouseButton":
+                    HandleSetPrimaryMouseButton(param);
+                    break;
             }
         }
         catch (Exception ex)
         {
             AutoShell.LogError(ex);
         }
+    }
+
+    private void HandleEnhancePointerPrecision(JObject param)
+    {
+        bool enable = param.Value<bool?>("enable") ?? true;
+        int[] mouseParams = new int[3];
+        this._systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
+        mouseParams[2] = enable ? 1 : 0;
+        this._systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
     private void HandleMouseCursorSpeed(JObject param)
@@ -99,15 +110,6 @@ internal partial class MouseSettingsHandler : ICommandHandler
     {
         int lines = param.Value<int?>("scrollLines") ?? 3;
         this._systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
-    }
-
-    private void HandleEnhancePointerPrecision(JObject param)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
-        int[] mouseParams = new int[3];
-        this._systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
-        mouseParams[2] = enable ? 1 : 0;
-        this._systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
     private static void HandleSetPrimaryMouseButton(JObject param)

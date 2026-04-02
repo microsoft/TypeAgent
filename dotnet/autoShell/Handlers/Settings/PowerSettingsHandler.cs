@@ -14,14 +14,6 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal class PowerSettingsHandler : ICommandHandler
 {
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "BatterySaverActivationLevel",
-        "SetPowerModeOnBattery",
-        "SetPowerModePluggedIn",
-    ];
-
     private readonly IRegistryService _registry;
     private readonly IProcessService _process;
 
@@ -30,6 +22,14 @@ internal class PowerSettingsHandler : ICommandHandler
         this._registry = registry;
         this._process = process;
     }
+
+    /// <inheritdoc/>
+    public IEnumerable<string> SupportedCommands { get; } =
+    [
+        "BatterySaverActivationLevel",
+        "SetPowerModeOnBattery",
+        "SetPowerModePluggedIn",
+    ];
 
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)

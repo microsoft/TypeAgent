@@ -16,11 +16,14 @@ namespace autoShell;
 
 internal class AutoShell
 {
+    #region P/Invoke
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr GetCommandLineW();
 
-    private static CommandDispatcher s_dispatcher;
+    #endregion P/Invoke
 
+    private static CommandDispatcher s_dispatcher;
 
     /// <summary>
     /// Constructor used to get system wide information required for specific commands.
@@ -56,6 +59,25 @@ internal class AutoShell
         );
     }
 
+    internal static void LogError(Exception ex)
+    {
+        Debug.WriteLine(ex);
+        ConsoleColor previousColor = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("Error: " + ex.Message);
+        Console.ForegroundColor = previousColor;
+    }
+
+    internal static void LogWarning(string message)
+    {
+        Debug.WriteLine(message);
+        ConsoleColor previousColor = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("Warning: " + message);
+        Console.ForegroundColor = previousColor;
+    }
+
+
     /// <summary>
     /// Program entry point
     /// </summary>
@@ -89,12 +111,12 @@ internal class AutoShell
                 JArray commands = JArray.Parse(cmdLine);
                 foreach (JObject jo in commands.Children<JObject>())
                 {
-                    execLine(jo);
+                    ExecLine(jo);
                 }
             }
             catch (JsonReaderException)
             {
-                execLine(JObject.Parse(cmdLine));
+                ExecLine(JObject.Parse(cmdLine));
             }
 
             // exit
@@ -120,7 +142,7 @@ internal class AutoShell
                 JObject root = JObject.Parse(line);
 
                 // execute the line
-                quit = execLine(root);
+                quit = ExecLine(root);
             }
             catch (Exception ex)
             {
@@ -129,26 +151,7 @@ internal class AutoShell
         }
     }
 
-    internal static void LogError(Exception ex)
-    {
-        Debug.WriteLine(ex);
-        ConsoleColor previousColor = Console.ForegroundColor;
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine("Error: " + ex.Message);
-        Console.ForegroundColor = previousColor;
-    }
-
-    internal static void LogWarning(string message)
-    {
-        Debug.WriteLine(message);
-        ConsoleColor previousColor = Console.ForegroundColor;
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("Warning: " + message);
-        Console.ForegroundColor = previousColor;
-    }
-
-
-    private static bool execLine(JObject root)
+    private static bool ExecLine(JObject root)
         => s_dispatcher.Dispatch(root);
 
 }

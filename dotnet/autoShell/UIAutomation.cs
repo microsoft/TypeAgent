@@ -2,12 +2,9 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
 using UIAutomationClient = Interop.UIAutomationClient;
 
 namespace autoShell;
@@ -19,6 +16,27 @@ namespace autoShell;
 [Obsolete("UIAutomation is a last-resort method and should be avoided in production code.")]
 internal sealed class UIAutomation
 {
+    #region P/Invoke
+
+    // Mouse event constants for simulated clicks
+    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+    private const uint MOUSEEVENTF_LEFTUP = 0x0004;
+
+    // Keyboard event constants
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const byte VK_DELETE = 0x2E;
+
+    [DllImport("user32.dll")]
+    private static extern bool SetCursorPos(int X, int Y);
+
+    [DllImport("user32.dll")]
+    private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
+
+    #endregion P/Invoke
+
     /// <summary>
     /// Uses UI Automation to navigate the Settings app and set the text size.
     /// </summary>
@@ -200,7 +218,7 @@ internal sealed class UIAutomation
     /// <summary>
     /// Finds the "Text Size" navigation item in the Settings window.
     /// </summary>
-    static UIAutomationClient.IUIAutomationElement FindTextSizeNavigationItem(
+    private static UIAutomationClient.IUIAutomationElement FindTextSizeNavigationItem(
         UIAutomationClient.CUIAutomation uiAutomation,
         UIAutomationClient.IUIAutomationElement settingsWindow)
     {
@@ -255,7 +273,7 @@ internal sealed class UIAutomation
     /// <summary>
     /// Clicks a UI Automation element using the Invoke pattern or simulated click.
     /// </summary>
-    static void ClickElement(UIAutomationClient.IUIAutomationElement element)
+    private static void ClickElement(UIAutomationClient.IUIAutomationElement element)
     {
         // UI Automation Pattern IDs
         const int UIA_InvokePatternId = 10000;
@@ -298,22 +316,4 @@ internal sealed class UIAutomation
             Debug.WriteLine($"Error clicking element: {ex.Message}");
         }
     }
-
-    // Mouse event constants for simulated clicks
-    private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
-    private const uint MOUSEEVENTF_LEFTUP = 0x0004;
-
-    // Keyboard event constants
-    private const uint KEYEVENTF_KEYUP = 0x0002;
-    private const byte VK_DELETE = 0x2E;
-
-    [DllImport("user32.dll")]
-    private static extern bool SetCursorPos(int X, int Y);
-
-    [DllImport("user32.dll")]
-    private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);
-
-    [DllImport("user32.dll")]
-    private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
-
 }

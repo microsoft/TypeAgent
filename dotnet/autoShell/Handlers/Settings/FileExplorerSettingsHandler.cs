@@ -15,17 +15,12 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal partial class FileExplorerSettingsHandler : ICommandHandler
 {
+    #region P/Invoke
     private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
 
     [LibraryImport("user32.dll")]
     private static partial IntPtr SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "ShowFileExtensions",
-        "ShowHiddenAndSystemFiles",
-    ];
+    #endregion P/Invoke
 
     private readonly IRegistryService _registry;
 
@@ -33,6 +28,13 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     {
         this._registry = registry;
     }
+
+    /// <inheritdoc/>
+    public IEnumerable<string> SupportedCommands { get; } =
+    [
+        "ShowFileExtensions",
+        "ShowHiddenAndSystemFiles",
+    ];
 
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)

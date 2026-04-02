@@ -13,13 +13,6 @@ namespace autoShell.Handlers;
 /// </summary>
 internal class SystemCommandHandler : ICommandHandler
 {
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "Debug",
-        "ToggleNotifications",
-    ];
-
     private readonly IProcessService _process;
 
     public SystemCommandHandler(IProcessService process)
@@ -28,16 +21,23 @@ internal class SystemCommandHandler : ICommandHandler
     }
 
     /// <inheritdoc/>
+    public IEnumerable<string> SupportedCommands { get; } =
+    [
+        "Debug",
+        "ToggleNotifications",
+    ];
+
+    /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
         switch (key)
         {
-            case "ToggleNotifications":
-                this._process.StartShellExecute("ms-actioncenter:");
-                break;
-
             case "Debug":
                 Debugger.Launch();
+                break;
+
+            case "ToggleNotifications":
+                this._process.StartShellExecute("ms-actioncenter:");
                 break;
         }
     }

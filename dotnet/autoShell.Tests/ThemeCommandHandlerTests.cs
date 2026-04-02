@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
 using autoShell.Handlers;
 using autoShell.Services;
 using Microsoft.Win32;

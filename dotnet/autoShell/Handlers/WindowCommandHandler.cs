@@ -17,6 +17,57 @@ namespace autoShell.Handlers;
 /// </summary>
 internal class WindowCommandHandler : ICommandHandler
 {
+    #region P/Invoke
+
+    private const uint WM_SYSCOMMAND = 0x112;
+    private const uint SC_MAXIMIZE = 0xF030;
+    private const uint SC_MINIMIZE = 0xF020;
+
+    internal struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, ref RECT rect);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDesktopWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessage", SetLastError = true)]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, uint wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
+
+    internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    internal static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    #endregion
+
     private readonly IAppRegistry _appRegistry;
 
     public WindowCommandHandler(IAppRegistry appRegistry)
@@ -57,38 +108,6 @@ internal class WindowCommandHandler : ICommandHandler
                     this.TileWindowPair(apps[0], apps[1]);
                 }
                 break;
-        }
-    }
-
-    internal static void RaiseWindow(string friendlyName, IAppRegistry appRegistry)
-    {
-        string processName = appRegistry.ResolveProcessName(friendlyName);
-        Process[] processes = Process.GetProcessesByName(processName);
-        foreach (Process p in processes)
-        {
-            if (p.MainWindowHandle != IntPtr.Zero)
-            {
-                SetForegroundWindow(p.MainWindowHandle);
-                Interaction.AppActivate(p.Id);
-                return;
-            }
-        }
-
-        // All processes are background-only (e.g. Edge, Chrome). Try launching by path.
-        string path = appRegistry.GetExecutablePath(friendlyName);
-        if (path != null)
-        {
-            Process.Start(path);
-        }
-        else
-        {
-            // Try to find by window title
-            (nint hWnd1, int pid) = FindWindowByTitle(processName);
-            if (hWnd1 != nint.Zero)
-            {
-                SetForegroundWindow(hWnd1);
-                Interaction.AppActivate(pid);
-            }
         }
     }
 
@@ -135,6 +154,38 @@ internal class WindowCommandHandler : ICommandHandler
             SendMessage(hWnd, WM_SYSCOMMAND, SC_MINIMIZE, IntPtr.Zero);
             SetForegroundWindow(hWnd);
             Interaction.AppActivate(pid);
+        }
+    }
+
+    internal static void RaiseWindow(string friendlyName, IAppRegistry appRegistry)
+    {
+        string processName = appRegistry.ResolveProcessName(friendlyName);
+        Process[] processes = Process.GetProcessesByName(processName);
+        foreach (Process p in processes)
+        {
+            if (p.MainWindowHandle != IntPtr.Zero)
+            {
+                SetForegroundWindow(p.MainWindowHandle);
+                Interaction.AppActivate(p.Id);
+                return;
+            }
+        }
+
+        // All processes are background-only (e.g. Edge, Chrome). Try launching by path.
+        string path = appRegistry.GetExecutablePath(friendlyName);
+        if (path != null)
+        {
+            Process.Start(path);
+        }
+        else
+        {
+            // Try to find by window title
+            (nint hWnd1, int pid) = FindWindowByTitle(processName);
+            if (hWnd1 != nint.Zero)
+            {
+                SetForegroundWindow(hWnd1);
+                Interaction.AppActivate(pid);
+            }
         }
     }
 
@@ -286,57 +337,6 @@ internal class WindowCommandHandler : ICommandHandler
 
         return FindWindowByTitle(processName).hWnd;
     }
-
-    #endregion
-
-    #region P/Invoke
-
-    private const uint WM_SYSCOMMAND = 0x112;
-    private const uint SC_MAXIMIZE = 0xF030;
-    private const uint SC_MINIMIZE = 0xF020;
-
-    internal struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [DllImport("user32.dll")]
-    private static extern bool GetWindowRect(IntPtr hWnd, ref RECT rect);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetDesktopWindow();
-
-    [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll", EntryPoint = "SendMessage", SetLastError = true)]
-    private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, uint wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
-
-    [DllImport("user32.dll")]
-    private static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
-
-    [DllImport("user32.dll")]
-    internal static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
-
-    internal delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    internal static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     #endregion
 }

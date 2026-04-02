@@ -90,57 +90,20 @@ internal class DisplayCommandHandler : ICommandHandler
     {
         switch (key)
         {
-            case "SetTextSize":
-                if (int.TryParse(value, out int textSizePct))
-                {
-                    this.SetTextSize(textSizePct);
-                }
-                break;
-
-            case "SetScreenResolution":
-                this.SetDisplayResolution(rawValue);
-                break;
-
             case "ListResolutions":
                 ListDisplayResolutions();
                 break;
-        }
-    }
 
-    /// <summary>
-    /// Sets the system text scaling factor (percentage).
-    /// </summary>
-    private void SetTextSize(int percentage)
-    {
-        try
-        {
-            if (percentage == -1)
-            {
-                percentage = new Random().Next(100, 225 + 1);
-            }
+            case "SetScreenResolution":
+                SetDisplayResolution(rawValue);
+                break;
 
-            if (percentage < 100)
-            {
-                percentage = 100;
-            }
-            else if (percentage > 225)
-            {
-                percentage = 225;
-            }
-
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "ms-settings:easeofaccess",
-                UseShellExecute = true
-            });
-
-#pragma warning disable CS0618 // UIAutomation is intentionally marked obsolete as a last-resort approach
-            UIAutomation.SetTextSizeViaUIAutomation(percentage);
-#pragma warning restore CS0618
-        }
-        catch (Exception ex)
-        {
-            AutoShell.LogError(ex);
+            case "SetTextSize":
+                if (int.TryParse(value, out int textSizePct))
+                {
+                    SetTextSize(textSizePct);
+                }
+                break;
         }
     }
 
@@ -296,6 +259,43 @@ internal class DisplayCommandHandler : ICommandHandler
                     AutoShell.LogWarning($"Failed to change resolution. Error code: {result}");
                     break;
             }
+        }
+        catch (Exception ex)
+        {
+            AutoShell.LogError(ex);
+        }
+    }
+
+    /// <summary>
+    /// Sets the system text scaling factor (percentage).
+    /// </summary>
+    private void SetTextSize(int percentage)
+    {
+        try
+        {
+            if (percentage == -1)
+            {
+                percentage = new Random().Next(100, 225 + 1);
+            }
+
+            if (percentage < 100)
+            {
+                percentage = 100;
+            }
+            else if (percentage > 225)
+            {
+                percentage = 225;
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "ms-settings:easeofaccess",
+                UseShellExecute = true
+            });
+
+#pragma warning disable CS0618 // UIAutomation is intentionally marked obsolete as a last-resort approach
+            UIAutomation.SetTextSizeViaUIAutomation(percentage);
+#pragma warning restore CS0618
         }
         catch (Exception ex)
         {

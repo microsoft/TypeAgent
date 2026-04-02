@@ -17,6 +17,15 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal class DisplaySettingsHandler : ICommandHandler
 {
+    private readonly IRegistryService _registry;
+    private readonly IProcessService _process;
+
+    public DisplaySettingsHandler(IRegistryService registry, IProcessService process)
+    {
+        this._registry = registry;
+        this._process = process;
+    }
+
     /// <inheritdoc/>
     public IEnumerable<string> SupportedCommands { get; } =
     [
@@ -29,15 +38,6 @@ internal class DisplaySettingsHandler : ICommandHandler
         "RotationLock",
     ];
 
-    private readonly IRegistryService _registry;
-    private readonly IProcessService _process;
-
-    public DisplaySettingsHandler(IRegistryService registry, IProcessService process)
-    {
-        this._registry = registry;
-        this._process = process;
-    }
-
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
@@ -47,21 +47,21 @@ internal class DisplaySettingsHandler : ICommandHandler
 
             switch (key)
             {
-                case "AdjustScreenBrightness":
-                    this.HandleAdjustScreenBrightness(param);
-                    break;
-
-                case "DisplayScaling":
-                    this.HandleDisplayScaling(param);
-                    break;
-
                 case "AdjustColorTemperature":
                     this._process.StartShellExecute("ms-settings:nightlight");
+                    break;
+
+                case "AdjustScreenBrightness":
+                    this.HandleAdjustScreenBrightness(param);
                     break;
 
                 case "AdjustScreenOrientation":
                 case "DisplayResolutionAndAspectRatio":
                     this._process.StartShellExecute("ms-settings:display");
+                    break;
+
+                case "DisplayScaling":
+                    this.HandleDisplayScaling(param);
                     break;
 
                 case "EnableBlueLightFilterSchedule":
@@ -114,6 +114,30 @@ internal class DisplaySettingsHandler : ICommandHandler
         }
     }
 
+    private void HandleBlueLightFilter(JObject param)
+    {
+        bool disabled = param.Value<bool?>("nightLightScheduleDisabled") ?? false;
+        byte[] data = disabled
+            ? [0x02, 0x00, 0x00, 0x00]
+            : [0x02, 0x00, 0x00, 0x01];
+
+        this._registry.SetValue(
+            @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings",
+            "Data",
+            data,
+            RegistryValueKind.Binary);
+    }
+
+    private void HandleRotationLock(JObject param)
+    {
+        bool enable = param.Value<bool?>("enable") ?? true;
+        this._registry.SetValue(
+            @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
+            "RotationLockPreference",
+            enable ? 1 : 0,
+            RegistryValueKind.DWord);
+    }
+
     private static byte GetCurrentBrightness()
     {
         try
@@ -149,29 +173,5 @@ internal class DisplaySettingsHandler : ICommandHandler
         {
             Debug.WriteLine($"Failed to set brightness: {ex.Message}");
         }
-    }
-
-    private void HandleBlueLightFilter(JObject param)
-    {
-        bool disabled = param.Value<bool?>("nightLightScheduleDisabled") ?? false;
-        byte[] data = disabled
-            ? [0x02, 0x00, 0x00, 0x00]
-            : [0x02, 0x00, 0x00, 0x01];
-
-        this._registry.SetValue(
-            @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings",
-            "Data",
-            data,
-            RegistryValueKind.Binary);
-    }
-
-    private void HandleRotationLock(JObject param)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
-        this._registry.SetValue(
-            @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
-            "RotationLockPreference",
-            enable ? 1 : 0,
-            RegistryValueKind.DWord);
     }
 }

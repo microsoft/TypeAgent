@@ -12,14 +12,6 @@ namespace autoShell.Handlers;
 /// </summary>
 internal class AudioCommandHandler : ICommandHandler
 {
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "Mute",
-        "RestoreVolume",
-        "Volume",
-    ];
-
     private readonly IAudioService _audio;
     private double _savedVolumePct;
 
@@ -29,24 +21,32 @@ internal class AudioCommandHandler : ICommandHandler
     }
 
     /// <inheritdoc/>
+    public IEnumerable<string> SupportedCommands { get; } =
+    [
+        "Mute",
+        "RestoreVolume",
+        "Volume",
+    ];
+
+    /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
     {
         switch (key)
         {
-            case "Volume":
-                if (int.TryParse(value, out int pct))
+            case "Mute":
+                if (bool.TryParse(value, out bool mute))
                 {
-                    this._savedVolumePct = this._audio.GetVolume();
-                    this._audio.SetVolume(pct);
+                    this._audio.SetMute(mute);
                 }
                 break;
             case "RestoreVolume":
                 this._audio.SetVolume((int)this._savedVolumePct);
                 break;
-            case "Mute":
-                if (bool.TryParse(value, out bool mute))
+            case "Volume":
+                if (int.TryParse(value, out int pct))
                 {
-                    this._audio.SetMute(mute);
+                    this._savedVolumePct = this._audio.GetVolume();
+                    this._audio.SetVolume(pct);
                 }
                 break;
         }

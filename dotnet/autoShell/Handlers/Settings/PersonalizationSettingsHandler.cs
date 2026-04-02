@@ -14,15 +14,6 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal class PersonalizationSettingsHandler : ICommandHandler
 {
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "ApplyColorToTitleBar",
-        "EnableTransparency",
-        "HighContrastTheme",
-        "SystemThemeMode",
-    ];
-
     private readonly IRegistryService _registry;
     private readonly IProcessService _process;
 
@@ -31,6 +22,15 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         this._registry = registry;
         this._process = process;
     }
+
+    /// <inheritdoc/>
+    public IEnumerable<string> SupportedCommands { get; } =
+    [
+        "ApplyColorToTitleBar",
+        "EnableTransparency",
+        "HighContrastTheme",
+        "SystemThemeMode",
+    ];
 
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)

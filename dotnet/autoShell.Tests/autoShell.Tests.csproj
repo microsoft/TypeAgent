@@ -7,7 +7,8 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <!-- JSON002: raw JSON strings in test assertions are intentional -->
-    <NoWarn>$(NoWarn);JSON002</NoWarn>
+    <!-- IDE1006: naming convention inherited from main project editorconfig -->
+    <NoWarn>$(NoWarn);JSON002;IDE1006</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

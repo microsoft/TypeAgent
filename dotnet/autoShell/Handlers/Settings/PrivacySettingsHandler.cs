@@ -16,6 +16,13 @@ internal class PrivacySettingsHandler : ICommandHandler
 {
     private const string ConsentStoreBase = @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore";
 
+    private readonly IRegistryService _registry;
+
+    public PrivacySettingsHandler(IRegistryService registry)
+    {
+        this._registry = registry;
+    }
+
     /// <inheritdoc/>
     public IEnumerable<string> SupportedCommands { get; } =
     [
@@ -23,13 +30,6 @@ internal class PrivacySettingsHandler : ICommandHandler
         "ManageLocationAccess",
         "ManageMicrophoneAccess",
     ];
-
-    private readonly IRegistryService _registry;
-
-    public PrivacySettingsHandler(IRegistryService registry)
-    {
-        this._registry = registry;
-    }
 
     /// <inheritdoc/>
     public void Handle(string key, string value, JToken rawValue)
