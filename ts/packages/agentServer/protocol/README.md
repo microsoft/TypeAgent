@@ -1,6 +1,46 @@
 # agent-server-protocol
 
-Agent server protocol
+Defines the WebSocket RPC contract between agentServer clients and the server.
+
+## Channel names
+
+```typescript
+enum ChannelName {
+  AgentServer = "AgentServer", // lifecycle: join / shutdown
+  Dispatcher  = "Dispatcher",  // command dispatch
+  ClientIO    = "ClientIO",    // display / interaction callbacks
+}
+```
+
+Each WebSocket connection uses all three channels independently.
+
+## RPC types
+
+**`AgentServerInvokeFunctions`** — methods exposed on the `AgentServer` channel:
+
+| Method | Description |
+|---|---|
+| `join(options?)` | Register this connection; returns `connectionId` string |
+| `shutdown()` | Request graceful server shutdown |
+
+**`DispatcherConnectOptions`** — options passed to `join()`:
+
+| Field | Type | Description |
+|---|---|---|
+| `clientType` | `string` | Identifies the client (`"shell"`, `"extension"`, etc.) |
+| `filter` | `boolean` | If true, only receive ClientIO messages for this connection's requests |
+
+## Client-type registry
+
+A module-level registry maps `connectionId → clientType`, populated when a client calls `join()`. Agents and the dispatcher can call `getClientType(connectionId)` to adapt behavior per client.
+
+```typescript
+registerClientType(connectionId: string, clientType: string): void
+getClientType(connectionId: string): string | undefined
+unregisterClient(connectionId: string): void
+```
+
+---
 
 ## Trademarks
 
