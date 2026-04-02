@@ -154,5 +154,86 @@ describeForEachMatcher(
                 ).toStrictEqual([{ genre: "metal", suffix: "tunes" }]);
             });
         });
+
+        describe("Default value for single-part captured sub-rules", () => {
+            it("single string part produces default value (non-wildcard path)", () => {
+                // <Verb> = play; is captured as $(v:<Verb>) — no wildcard
+                // anywhere, so the non-wildcard path in
+                // matchStringPartWithoutWildcard must assign the default.
+                const g = `
+                    <Start> = $(v:<Verb>) -> v;
+                    <Verb> = play;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "play")).toStrictEqual([
+                    "play",
+                ]);
+            });
+
+            it("single string part with multiple alternatives (non-wildcard)", () => {
+                const g = `
+                    <Start> = $(v:<Action>) -> v;
+                    <Action> = play | pause | stop;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "play")).toStrictEqual([
+                    "play",
+                ]);
+                expect(testMatchGrammar(grammar, "pause")).toStrictEqual([
+                    "pause",
+                ]);
+                expect(testMatchGrammar(grammar, "stop")).toStrictEqual([
+                    "stop",
+                ]);
+            });
+
+            it("single number part produces default value (non-wildcard path)", () => {
+                // <Num> has a single $(n:number) part and no explicit value.
+                // The number variable capture provides the rule's value.
+                const g = `
+                    <Start> = set $(v:<Num>) -> v;
+                    <Num> = $(n:number);
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "set 42")).toStrictEqual([42]);
+            });
+
+            it("single wildcard part produces default value (no explicit ->)", () => {
+                // <Any> has a single $(wc) part and no explicit value.
+                // The wildcard variable capture provides the rule's value.
+                const g = `
+                    <Start> = find $(v:<Any>) -> v;
+                    <Any> = $(wc);
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(
+                    testMatchGrammar(grammar, "find something"),
+                ).toStrictEqual(["something"]);
+            });
+
+            it("single number part in captured sub-rule with wildcard sibling", () => {
+                // Ensures the wildcard path for number parts also works
+                // when a pending wildcard leaks from a sibling rule.
+                const g = `
+                    <Start> = $(v0:<Label>) $(v1:<Count>)
+                            -> { label: v0, count: v1 };
+                    <Label> = items -> "items"
+                            | $(wc) -> wc;
+                    <Count> = $(n:number);
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+
+                // Known label — non-wildcard path
+                expect(testMatchGrammar(grammar, "items 5")).toContainEqual({
+                    label: "items",
+                    count: 5,
+                });
+
+                // Unknown label — wildcard leaks into <Count>
+                expect(testMatchGrammar(grammar, "widgets 10")).toStrictEqual([
+                    { label: "widgets", count: 10 },
+                ]);
+            });
+        });
     },
 );
