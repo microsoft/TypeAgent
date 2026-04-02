@@ -20,6 +20,7 @@ import {
     finalizeNestedRule,
     matchState,
     initialMatchState,
+    leadingSpacingMode,
 } from "./grammarMatcher.js";
 
 const debugCompletion = registerDebug("typeagent:grammar:completion");
@@ -64,6 +65,7 @@ function matchWordsGreedily(
     text: string,
     startIndex: number,
     spacingMode: CompiledSpacingMode,
+    suppressLeadingSeparator: boolean = false,
 ): { matchedWords: number; endIndex: number; prevEndIndex: number } {
     let index = startIndex;
     let prevIndex = startIndex;
@@ -73,11 +75,37 @@ function matchWordsGreedily(
         const word = words[k];
         const escaped = escapeMatch(word);
 
+        // Separator logic has two independent dimensions:
+        //
+        //   k === 0 (first word):
+        //     Governed by the *caller*, not spacingMode.  The caller
+        //     decides whether the leading separator (between the match
+        //     start position and the first keyword word) is allowed:
+        //       suppressLeadingSeparator=true  → bare word, no prefix
+        //         (used when leadingSpacingMode() returns "none")
+        //       suppressLeadingSeparator=false → [sep]*? lazy optional
+        //         prefix that skips any leading whitespace/punctuation.
+        //         The lazy quantifier matches zero-width when the
+        //         keyword starts immediately, so this is "allow but
+        //         don't require" leading whitespace.
+        //     Note: spacingMode is intentionally NOT consulted for
+        //     k=0.  Even when spacingMode is "none", callers like
+        //     matchKeywordWordsFrom (wildcard scanning) need the
+        //     optional leading separator to find keyword candidates
+        //     at separator-delimited positions within wildcard text.
+        //
+        //   k > 0 (subsequent words):
+        //     Governed by the rule's spacingMode:
+        //       "none"  → bare word, no inter-word separator
+        //       other   → separator required or optional per
+        //                 requiresSeparator() for the character pair
         let regExpStr: string;
-        if (spacingMode === "none") {
+        if (k === 0) {
+            regExpStr = suppressLeadingSeparator
+                ? escaped
+                : `[${separatorRegExpStr}]*?${escaped}`;
+        } else if (spacingMode === "none") {
             regExpStr = escaped;
-        } else if (k === 0) {
-            regExpStr = `[${separatorRegExpStr}]*?${escaped}`;
         } else {
             const sep = requiresSeparator(
                 words[k - 1].at(-1)!,
@@ -388,6 +416,7 @@ function tryPartialStringMatch(
     spacingMode: CompiledSpacingMode,
     direction?: "forward" | "backward",
     effectivePrefixEnd?: number,
+    suppressLeadingSeparator: boolean = false,
 ):
     | {
           consumedLength: number;
@@ -403,6 +432,7 @@ function tryPartialStringMatch(
         input,
         startIndex,
         spacingMode,
+        suppressLeadingSeparator,
     );
 
     // Direction matters when at least one word fully matched and no
@@ -679,11 +709,15 @@ function collectPropertyCandidate(
 ): void {
     updateMaxPrefixLength(ctx, prefixPosition);
     if (prefixPosition !== ctx.maxPrefixLength) return;
+    // At the leading edge of a nested rule, the separator between
+    // the matched prefix and the property slot is governed by the
+    // parent's spacing mode, not the nested rule's own mode.
+    const effectiveMode = leadingSpacingMode(state);
     ctx.fixedCandidates.push({
         kind: "property",
         valueId,
         state: { ...state },
-        spacingMode: state.spacingMode,
+        spacingMode: effectiveMode,
         isAfterWildcard,
         partialKeywordBackup: false,
     });
@@ -696,7 +730,8 @@ function collectPropertyCandidate(
 // candidate may still be discarded by the maxPrefixLength filter).
 function tryCollectStringCandidate(
     ctx: CompletionContext,
-    state: MatchState,
+    leadingMode: CompiledSpacingMode,
+    interWordMode: CompiledSpacingMode,
     part: StringPart,
     isAfterWildcard: boolean,
     startIndex: number,
@@ -707,17 +742,26 @@ function tryCollectStringCandidate(
         part,
         ctx.input,
         startIndex,
-        state.spacingMode,
+        interWordMode,
         dir,
         effectivePrefixEnd,
+        leadingMode === "none",
     );
     if (partial !== undefined) {
         updateMaxPrefixLength(ctx, partial.consumedLength);
         if (partial.consumedLength === ctx.maxPrefixLength) {
+            // When no words were consumed (completion is the first
+            // word of the part), the separator between the matched
+            // prefix and the completion is governed by the leading
+            // mode, not the rule's inter-word spacingMode.
+            const candidateSpacingMode =
+                partial.consumedLength === startIndex
+                    ? leadingMode
+                    : interWordMode;
             ctx.fixedCandidates.push({
                 kind: "string",
                 completionText: partial.remainingText,
-                spacingMode: state.spacingMode,
+                spacingMode: candidateSpacingMode,
                 isAfterWildcard,
                 partialKeywordBackup: false,
             });
@@ -763,7 +807,8 @@ function tryCollectBackwardCandidate(
             if (
                 tryCollectStringCandidate(
                     ctx,
-                    state,
+                    leadingSpacingMode(state),
+                    info.matchedSpacingMode,
                     info.part,
                     info.afterWildcard,
                     info.start,
@@ -917,7 +962,8 @@ function processCleanPartial(
         if (nextPart.type === "string" && !deferredToEoi) {
             tryCollectStringCandidate(
                 ctx,
-                state,
+                leadingSpacingMode(state),
+                state.spacingMode,
                 nextPart,
                 savedPendingWildcard?.valueId !== undefined,
                 state.index,
@@ -1017,7 +1063,8 @@ function processDirtyPartial(
         if (currentPart !== undefined && currentPart.type === "string") {
             tryCollectStringCandidate(
                 ctx,
-                state,
+                leadingSpacingMode(state),
+                state.spacingMode,
                 currentPart,
                 false,
                 state.index,
