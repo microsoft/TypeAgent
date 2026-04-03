@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using Microsoft.Win32;
 
 namespace autoShell.Services;
@@ -30,4 +31,25 @@ internal class WindowsRegistryService : IRegistryService
         using var key = Registry.LocalMachine.CreateSubKey(keyPath);
         key?.SetValue(valueName, value, valueKind);
     }
+
+    /// <inheritdoc/>
+    public void BroadcastSettingChange(string setting = null)
+    {
+        const int HWND_BROADCAST = 0xffff;
+        const uint WM_SETTINGCHANGE = 0x001A;
+        const uint SMTO_ABORTIFHUNG = 0x0002;
+        SendMessageTimeout(
+            (IntPtr)HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            IntPtr.Zero,
+            setting,
+            SMTO_ABORTIFHUNG,
+            1000,
+            out _);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr SendMessageTimeout(
+        IntPtr hWnd, uint Msg, IntPtr wParam, string lParam,
+        uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
 }

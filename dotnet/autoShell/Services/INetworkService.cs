@@ -19,6 +19,11 @@ internal interface INetworkService
     void DisconnectFromWifi();
 
     /// <summary>
+    /// Enables or disables the Wi-Fi network interface.
+    /// </summary>
+    void EnableWifi(bool enable);
+
+    /// <summary>
     /// Lists available WiFi networks as a JSON string.
     /// </summary>
     string ListWifiNetworks();
@@ -27,4 +32,9 @@ internal interface INetworkService
     /// Sets the airplane mode state.
     /// </summary>
     void SetAirplaneMode(bool enable);
+
+    /// <summary>
+    /// Toggles Bluetooth radio on or off.
+    /// </summary>
+    void ToggleBluetooth(bool enable);
 }

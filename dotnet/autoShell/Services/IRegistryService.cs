@@ -33,4 +33,10 @@ internal interface IRegistryService
     /// <param name="value">The data to store.</param>
     /// <param name="valueKind">The registry data type.</param>
     void SetValueLocalMachine(string keyPath, string valueName, object value, Microsoft.Win32.RegistryValueKind valueKind);
+
+    /// <summary>
+    /// Broadcasts a WM_SETTINGCHANGE message to notify the system of a setting change.
+    /// </summary>
+    /// <param name="setting">The setting name to broadcast (e.g., "ImmersiveColorSet"), or null for a generic notification.</param>
+    void BroadcastSettingChange(string setting = null);
 }

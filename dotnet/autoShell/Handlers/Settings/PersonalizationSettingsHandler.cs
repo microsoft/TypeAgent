@@ -85,5 +85,6 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
         _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
+        _registry.BroadcastSettingChange("ImmersiveColorSet");
     }
 }

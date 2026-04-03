@@ -52,6 +52,7 @@ internal class PowerSettingsHandler : ICommandHandler
     private void HandleBatterySaverThreshold(JObject param)
     {
         int threshold = param.Value<int?>("thresholdValue") ?? 20;
+        threshold = Math.Clamp(threshold, 0, 100);
         _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Power\BatterySaver",
             "ActivationThreshold",

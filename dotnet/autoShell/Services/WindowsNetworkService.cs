@@ -476,6 +476,45 @@ internal class WindowsNetworkService : INetworkService
         }
     }
 
+    /// <inheritdoc/>
+    public void EnableWifi(bool enable)
+    {
+        string command = enable ? "interface set interface \"Wi-Fi\" enabled" :
+                                 "interface set interface \"Wi-Fi\" disabled";
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "netsh",
+                Arguments = command,
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
+            System.Diagnostics.Process.Start(psi)?.WaitForExit();
+            _logger.Debug($"WiFi set to: {(enable ? "enabled" : "disabled")}");
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug($"Failed to set WiFi state: {ex.Message}");
+        }
+    }
+
+    /// <inheritdoc/>
+    public void ToggleBluetooth(bool enable)
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(
+                @"SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Radio Support");
+            key?.SetValue("SupportDLL", enable ? 1 : 0, Microsoft.Win32.RegistryValueKind.DWord);
+            _logger.Debug($"Bluetooth set to: {(enable ? "on" : "off")}");
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug($"Failed to toggle Bluetooth: {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// Generates a WiFi profile XML for WPA2-Personal (PSK) networks.
     /// </summary>

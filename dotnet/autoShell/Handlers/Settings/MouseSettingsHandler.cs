@@ -100,6 +100,7 @@ internal class MouseSettingsHandler : ICommandHandler
     private void HandleMouseCursorSpeed(JObject param)
     {
         int speed = param.Value<int?>("speedLevel") ?? 10;
+        speed = Math.Clamp(speed, 1, 20);
         _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
@@ -128,6 +129,7 @@ internal class MouseSettingsHandler : ICommandHandler
     private void HandleMouseWheelScrollLines(JObject param)
     {
         int lines = param.Value<int?>("scrollLines") ?? 3;
+        lines = Math.Clamp(lines, 1, 100);
         _systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 

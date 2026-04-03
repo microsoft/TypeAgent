@@ -16,11 +16,13 @@ namespace autoShell.Handlers;
 internal class NetworkCommandHandler : ICommandHandler
 {
     private readonly INetworkService _network;
+    private readonly IProcessService _process;
     private readonly ILogger _logger;
 
-    public NetworkCommandHandler(INetworkService network, ILogger logger)
+    public NetworkCommandHandler(INetworkService network, IProcessService process, ILogger logger)
     {
         _network = network;
+        _process = process;
         _logger = logger;
     }
 
@@ -42,10 +44,19 @@ internal class NetworkCommandHandler : ICommandHandler
         switch (key)
         {
             case "BluetoothToggle":
+                var btParam = JObject.Parse(value);
+                bool enableBt = btParam.Value<bool?>("enableBluetooth") ?? true;
+                _network.ToggleBluetooth(enableBt);
+                break;
+
             case "EnableMeteredConnections":
+                _process.StartShellExecute("ms-settings:network-status");
+                break;
+
             case "EnableWifi":
-                // Not yet implemented — requires additional infrastructure
-                _logger.Debug($"Command not yet implemented: {key}");
+                var wifiParam = JObject.Parse(value);
+                bool enableWifi = wifiParam.Value<bool?>("enable") ?? true;
+                _network.EnableWifi(enableWifi);
                 break;
 
             case "ConnectWifi":

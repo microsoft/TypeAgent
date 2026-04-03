@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using autoShell.Logging;
 using autoShell.Services;
 using Newtonsoft.Json.Linq;
@@ -18,15 +17,15 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
 {
     private readonly IAppRegistry _appRegistry;
     private readonly ILogger _logger;
-    private readonly IProcessService _process;
     private readonly IVirtualDesktopService _virtualDesktop;
+    private readonly IWindowService _window;
 
-    public VirtualDesktopCommandHandler(IAppRegistry appRegistry, IProcessService process, IVirtualDesktopService virtualDesktop, ILogger logger)
+    public VirtualDesktopCommandHandler(IAppRegistry appRegistry, IWindowService window, IVirtualDesktopService virtualDesktop, ILogger logger)
     {
         _appRegistry = appRegistry;
         _logger = logger;
-        _process = process;
         _virtualDesktop = virtualDesktop;
+        _window = window;
     }
 
     /// <inheritdoc/>
@@ -55,7 +54,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
                 if (!string.IsNullOrEmpty(process) && !string.IsNullOrEmpty(desktop))
                 {
                     string resolvedName = _appRegistry.ResolveProcessName(process);
-                    IntPtr hWnd = FindMainWindowHandle(resolvedName);
+                    IntPtr hWnd = _window.FindProcessWindowHandle(resolvedName);
                     if (hWnd != IntPtr.Zero)
                     {
                         _virtualDesktop.MoveWindowToDesktop(hWnd, desktop);
@@ -69,7 +68,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
 
             case "PinWindow":
                 string pinProcess = _appRegistry.ResolveProcessName(value);
-                IntPtr pinHWnd = FindMainWindowHandle(pinProcess);
+                IntPtr pinHWnd = _window.FindProcessWindowHandle(pinProcess);
                 if (pinHWnd != IntPtr.Zero)
                 {
                     _virtualDesktop.PinWindow(pinHWnd);
@@ -88,15 +87,5 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
                 _virtualDesktop.SwitchDesktop(value);
                 break;
         }
-    }
-
-    private IntPtr FindMainWindowHandle(string processName)
-    {
-        foreach (Process p in _process.GetProcessesByName(processName))
-        {
-            if (p.MainWindowHandle != IntPtr.Zero)
-                return p.MainWindowHandle;
-        }
-        return IntPtr.Zero;
     }
 }

@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Diagnostics;
 using autoShell.Handlers;
 using autoShell.Services;
 using Moq;
@@ -12,13 +11,13 @@ namespace autoShell.Tests;
 public class VirtualDesktopCommandHandlerTests
 {
     private readonly Mock<IAppRegistry> _appRegistryMock = new();
-    private readonly Mock<IProcessService> _processMock = new();
+    private readonly Mock<IWindowService> _windowMock = new();
     private readonly Mock<IVirtualDesktopService> _virtualDesktopMock = new();
     private readonly VirtualDesktopCommandHandler _handler;
 
     public VirtualDesktopCommandHandlerTests()
     {
-        _handler = new VirtualDesktopCommandHandler(_appRegistryMock.Object, _processMock.Object, _virtualDesktopMock.Object, new Moq.Mock<autoShell.Logging.ILogger>().Object);
+        _handler = new VirtualDesktopCommandHandler(_appRegistryMock.Object, _windowMock.Object, _virtualDesktopMock.Object, new Mock<autoShell.Logging.ILogger>().Object);
     }
 
     // --- CreateDesktop ---
@@ -88,39 +87,38 @@ public class VirtualDesktopCommandHandlerTests
     // --- MoveWindowToDesktop ---
 
     /// <summary>
-    /// Verifies that MoveWindowToDesktop resolves the process name and looks up its running processes.
+    /// Verifies that MoveWindowToDesktop resolves the process name and looks up its window handle.
     /// Note: the actual MoveWindowToDesktop service call cannot be verified because
-    /// Process.MainWindowHandle is not virtual and cannot be mocked to return a non-zero handle.
+    /// FindProcessWindowHandle returns IntPtr.Zero by default from the mock.
     /// </summary>
     [Fact]
-    public void MoveWindowToDesktop_ResolvesProcessNameAndLooksUpProcesses()
+    public void MoveWindowToDesktop_ResolvesProcessNameAndLooksUpWindowHandle()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
-        var mockProcess = new Mock<Process>();
-        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
+        _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
         var json = JToken.Parse("""{"process":"Notepad","desktop":"2"}""");
         _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
 
         _appRegistryMock.Verify(a => a.ResolveProcessName("Notepad"), Times.Once);
-        _processMock.Verify(p => p.GetProcessesByName("notepad"), Times.Once);
+        _windowMock.Verify(w => w.FindProcessWindowHandle("notepad"), Times.Once);
     }
 
     // --- PinWindow ---
 
     /// <summary>
-    /// Verifies that PinWindow resolves the process name and looks up its running processes.
+    /// Verifies that PinWindow resolves the process name and looks up its window handle.
     /// </summary>
     [Fact]
-    public void PinWindow_ResolvesProcessName()
+    public void PinWindow_ResolvesProcessNameAndLooksUpWindowHandle()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
-        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
+        _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
         _handler.Handle("PinWindow", "Notepad", JToken.FromObject("Notepad"));
 
         _appRegistryMock.Verify(a => a.ResolveProcessName("Notepad"), Times.Once);
-        _processMock.Verify(p => p.GetProcessesByName("notepad"), Times.Once);
+        _windowMock.Verify(w => w.FindProcessWindowHandle("notepad"), Times.Once);
     }
 
     /// <summary>
@@ -154,12 +152,28 @@ public class VirtualDesktopCommandHandlerTests
     public void MoveWindowToDesktop_NoWindowHandle_DoesNotCallService()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
-        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
+        _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
         var json = JToken.Parse("""{"process":"Notepad","desktop":"2"}""");
         _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
 
         _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(It.IsAny<IntPtr>(), It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that MoveWindowToDesktop calls the service when a valid window handle is found.
+    /// </summary>
+    [Fact]
+    public void MoveWindowToDesktop_ValidHandle_CallsService()
+    {
+        var handle = new IntPtr(12345);
+        _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
+        _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(handle);
+
+        var json = JToken.Parse("""{"process":"Notepad","desktop":"2"}""");
+        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
+
+        _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(handle, "2"), Times.Once);
     }
 
     /// <summary>
@@ -169,10 +183,25 @@ public class VirtualDesktopCommandHandlerTests
     public void PinWindow_NoWindowHandle_DoesNotCallPinWindow()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
-        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
+        _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
         _handler.Handle("PinWindow", "Notepad", JToken.FromObject("Notepad"));
 
         _virtualDesktopMock.Verify(v => v.PinWindow(It.IsAny<IntPtr>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that PinWindow calls the service when a valid window handle is found.
+    /// </summary>
+    [Fact]
+    public void PinWindow_ValidHandle_CallsService()
+    {
+        var handle = new IntPtr(12345);
+        _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
+        _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(handle);
+
+        _handler.Handle("PinWindow", "Notepad", JToken.FromObject("Notepad"));
+
+        _virtualDesktopMock.Verify(v => v.PinWindow(handle), Times.Once);
     }
 }

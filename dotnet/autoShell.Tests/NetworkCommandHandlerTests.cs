@@ -12,12 +12,13 @@ namespace autoShell.Tests;
 public class NetworkCommandHandlerTests
 {
     private readonly Mock<INetworkService> _networkMock = new();
+    private readonly Mock<IProcessService> _processMock = new();
     private readonly Mock<ILogger> _loggerMock = new();
     private readonly NetworkCommandHandler _handler;
 
     public NetworkCommandHandlerTests()
     {
-        _handler = new NetworkCommandHandler(_networkMock.Object, _loggerMock.Object);
+        _handler = new NetworkCommandHandler(_networkMock.Object, _processMock.Object, _loggerMock.Object);
     }
 
     // --- ConnectWifi ---
@@ -95,39 +96,65 @@ public class NetworkCommandHandlerTests
     // --- BluetoothToggle ---
 
     /// <summary>
-    /// Verifies that the unimplemented BluetoothToggle command does not call any service methods.
+    /// Verifies that BluetoothToggle calls ToggleBluetooth with the parsed enable value.
     /// </summary>
     [Fact]
-    public void BluetoothToggle_NotImplemented_DoesNotCallService()
+    public void BluetoothToggle_Enable_CallsToggleBluetooth()
     {
-        _handler.Handle("BluetoothToggle", "true", JToken.FromObject("true"));
+        var json = JToken.Parse("""{"enableBluetooth":true}""");
+        _handler.Handle("BluetoothToggle", json.ToString(), json);
 
-        _networkMock.VerifyNoOtherCalls();
+        _networkMock.Verify(n => n.ToggleBluetooth(true), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that BluetoothToggle defaults to true when the parameter is missing.
+    /// </summary>
+    [Fact]
+    public void BluetoothToggle_DefaultsToTrue()
+    {
+        var json = JToken.Parse("{}");
+        _handler.Handle("BluetoothToggle", json.ToString(), json);
+
+        _networkMock.Verify(n => n.ToggleBluetooth(true), Times.Once);
     }
 
     // --- EnableWifi ---
 
     /// <summary>
-    /// Verifies that the unimplemented EnableWifi command does not call any service methods.
+    /// Verifies that EnableWifi calls the network service with the parsed enable value.
     /// </summary>
     [Fact]
-    public void EnableWifi_NotImplemented_DoesNotCallService()
+    public void EnableWifi_Enable_CallsService()
     {
-        _handler.Handle("EnableWifi", "true", JToken.FromObject("true"));
+        var json = JToken.Parse("""{"enable":true}""");
+        _handler.Handle("EnableWifi", json.ToString(), json);
 
-        _networkMock.VerifyNoOtherCalls();
+        _networkMock.Verify(n => n.EnableWifi(true), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that EnableWifi with enable=false disables wifi.
+    /// </summary>
+    [Fact]
+    public void EnableWifi_Disable_CallsService()
+    {
+        var json = JToken.Parse("""{"enable":false}""");
+        _handler.Handle("EnableWifi", json.ToString(), json);
+
+        _networkMock.Verify(n => n.EnableWifi(false), Times.Once);
     }
 
     // --- EnableMeteredConnections ---
 
     /// <summary>
-    /// Verifies that the unimplemented EnableMeteredConnections command does not call any service methods.
+    /// Verifies that EnableMeteredConnections opens the network settings URI.
     /// </summary>
     [Fact]
-    public void EnableMeteredConnections_NotImplemented_DoesNotCallService()
+    public void EnableMeteredConnections_OpensSettingsUri()
     {
         _handler.Handle("EnableMeteredConnections", "true", JToken.FromObject("true"));
 
-        _networkMock.VerifyNoOtherCalls();
+        _processMock.Verify(p => p.StartShellExecute("ms-settings:network-status"), Times.Once);
     }
 }
