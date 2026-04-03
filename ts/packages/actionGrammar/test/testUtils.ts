@@ -343,7 +343,7 @@ function assertTruncatedForwardInvariant(
  *       backward === completion(input[0..backward.matchedPrefixLength], "forward")
  * - #7: forward.directionSensitive →
  *       completion(input[0..forward.matchedPrefixLength], "backward").matchedPrefixLength
- *       < forward.matchedPrefixLength  (backward of truncated backs up)
+ *       < forward.matchedPrefixLength  (backward backs up on truncated)
  * - #8: forward.matchedPrefixLength ≠ backward.matchedPrefixLength
  *       AND backward.directionSensitive →
  *       completion(input[0..backward.matchedPrefixLength], "forward").matchedPrefixLength
@@ -434,24 +434,19 @@ function assertCrossDirectionInvariants(
     }
 
     // #7: forward.directionSensitive →
-    //     completion(input[0..fwd.mpl], "backward").mpl ≤ fwd.mpl
+    //     completion(input[0..fwd.mpl], "backward").mpl < fwd.mpl
     //     When forward says direction matters, backward on the truncated
-    //     input should back up to a shorter-or-equal position.
-    //     Equality is allowed: separator conflict filtering may advance
-    //     backward's P to match forward's (e.g. trailing-separator
-    //     filtering drops none-mode candidates and advances P past the
-    //     separator).  directionSensitive = P > 0 is a conservative
-    //     approximation that doesn't account for this.
+    //     input should back up to a strictly shorter position.
     if (forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
         const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
         const backwardAtFwdMpl = backwardAtFwd.matchedPrefixLength ?? 0;
-        if (backwardAtFwdMpl > fwdMpl) {
+        if (backwardAtFwdMpl >= fwdMpl) {
             throw new Error(
                 `Invariant #7: forward.directionSensitive=true but ` +
                     `completion(input[0..${fwdMpl}]="${truncated}", "backward").matchedPrefixLength ` +
-                    `(${backwardAtFwdMpl}) > forward.matchedPrefixLength (${fwdMpl}) ` +
-                    `(prefix="${prefix}") — backward should not exceed forward`,
+                    `(${backwardAtFwdMpl}) ≥ forward.matchedPrefixLength (${fwdMpl}) ` +
+                    `(prefix="${prefix}") — backward should back up`,
             );
         }
     }

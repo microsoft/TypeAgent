@@ -723,16 +723,11 @@ type CompletionContext = {
     deferredShadowCandidates: DeferredShadowCandidate[];
     /** True when fixedCandidates have a separator mode conflict
      *  (some require a separator, others reject it).
-     *  Set by filterSepConflicts. */
+     *  Set by filterSepConflicts.  Implies candidates were dropped. */
     hasSepConflict: boolean;
     /** True when trailing separator characters follow maxPrefixLength
      *  during a separator conflict.  Set by filterSepConflicts. */
     hasTrailingSep: boolean;
-    /** True when candidates were dropped due to separator conflict
-     *  filtering.  Accumulates (false→true) — set by
-     *  filterSepConflicts and may also be set during range candidate
-     *  processing in materializeCandidates. */
-    droppedCandidates: boolean;
 };
 
 // Update maxPrefixLength.  When it increases, all previously
@@ -1199,7 +1194,6 @@ function collectCandidates(
         deferredShadowCandidates: [],
         hasSepConflict: false,
         hasTrailingSep: false,
-        droppedCandidates: false,
     };
 
     // Seed the work-list with one MatchState per top-level grammar rule.
@@ -1463,42 +1457,27 @@ function filterSepConflicts(ctx: CompletionContext): void {
     ctx.hasTrailingSep =
         nextNonSeparatorIndex(input, ctx.maxPrefixLength) > ctx.maxPrefixLength;
 
-    // Filter fixed candidates in place using the pre-computed
-    // modes, avoiding a second computeCandidateSepMode call.
-    ctx.fixedCandidates = fixedCandidates.filter((_, i) => {
-        const mode = modes[i];
-        if (ctx.hasTrailingSep) {
-            // Trailing separator: drop "none" (rejects separator).
-            // Keep "spacePunctuation" and "optional".
-            if (mode === "none") {
-                ctx.droppedCandidates = true;
-                return false;
-            }
-            return true;
-        } else {
-            // No trailing separator: drop requiring modes.
-            // Keep "optional" and "none".
-            if (isRequiringSepMode(mode)) {
-                ctx.droppedCandidates = true;
-                return false;
-            }
-            return true;
-        }
-    });
-
-    // When trailing separator is present and we actually dropped
-    // candidates, advance maxPrefixLength past exactly one separator
-    // character so the shell anchor includes it.  This ensures
-    // backspace triggers an anchor-diverged re-fetch.
-    //
-    // Only one character (not all consecutive separators) is consumed:
-    // each backspace in a multi-separator run produces a distinct
-    // anchor, giving the shell a re-fetch opportunity at every
-    // keystroke.  Any remaining separators are stripped by the shell's
-    // separator handling for "optional" mode, so the trie sees a clean
-    // prefix and the menu stays visible.
-    if (ctx.hasTrailingSep && ctx.droppedCandidates) {
+    // Backward resolves the conflict as if there were no trailing
+    // separator: it will return mpl at the scan position (before the
+    // separator), so the separator is beyond its anchor and should not
+    // influence which candidates survive.  Treating hasTrailingSep as
+    // false for backward makes its candidate set match what forward
+    // would compute on input[0..mpl] (no trailing sep), satisfying
+    // Invariant #3.
+    if (ctx.direction !== "backward" && ctx.hasTrailingSep) {
+        // Trailing separator: drop "none" (rejects separator).
+        ctx.fixedCandidates = fixedCandidates.filter(
+            (_, i) => modes[i] !== "none",
+        );
+        // Advance P past one separator so backspace triggers re-fetch.
+        // Only one character (not all consecutive separators) is
+        // consumed: each backspace produces a distinct anchor.
         ctx.maxPrefixLength += 1;
+    } else {
+        // No trailing separator (or backward): drop requiring modes.
+        ctx.fixedCandidates = fixedCandidates.filter(
+            (_, i) => !isRequiringSepMode(modes[i]),
+        );
     }
 }
 
@@ -1684,7 +1663,11 @@ function computeRangeNeedsSep(
         );
     if (ctx.hasSepConflict) {
         const mode = candidateSeparatorMode(needsSep, spacingMode);
-        if (ctx.hasTrailingSep ? mode === "none" : isRequiringSepMode(mode)) {
+        // Use the same trailing-sep view as filterSepConflicts: backward
+        // treats the separator as absent (stays before it).
+        const hasTrailingSep =
+            ctx.direction !== "backward" && ctx.hasTrailingSep;
+        if (hasTrailingSep ? mode === "none" : isRequiringSepMode(mode)) {
             return undefined;
         }
     }
@@ -1787,9 +1770,14 @@ function materializeCandidates(
     // mergeSepMode may have computed "spacePunctuation" because
     // input[P-1] is a separator character, but that separator is the
     // one we consumed, not a new requirement.
+    //
+    // Not applied for backward: backward does not advance P past the
+    // separator (see filterSepConflicts), so input[P-1] is still the
+    // last matched character (not a separator), and no override is needed.
     if (
         ctx.hasTrailingSep &&
-        ctx.droppedCandidates &&
+        ctx.hasSepConflict &&
+        ctx.direction !== "backward" &&
         separatorMode !== undefined
     ) {
         separatorMode = "optional";
@@ -1859,7 +1847,6 @@ function materializeCandidates(
                         c.spacingMode,
                     );
                     if (needsSep === undefined) {
-                        ctx.droppedCandidates = true;
                         continue;
                     }
                     completions.add(partial.remainingText);
@@ -1882,7 +1869,6 @@ function materializeCandidates(
                         c.spacingMode,
                     );
                     if (needsSep === undefined) {
-                        ctx.droppedCandidates = true;
                         continue;
                     }
                     properties.push(completionProperty);
@@ -1901,7 +1887,7 @@ function materializeCandidates(
     // If candidates were dropped due to separator conflict,
     // force closedSet=false so the shell re-fetches when the
     // separator state changes (typing/deleting a space).
-    if (ctx.droppedCandidates) {
+    if (ctx.hasSepConflict) {
         closedSet = false;
     }
 
@@ -1925,7 +1911,7 @@ function materializeCandidates(
           ? "some"
           : "all";
     const afterWildcard: AfterWildcard =
-        ctx.droppedCandidates && rawAfterWildcard === "all"
+        ctx.hasSepConflict && rawAfterWildcard === "all"
             ? "some"
             : rawAfterWildcard;
 
