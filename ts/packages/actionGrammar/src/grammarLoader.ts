@@ -2,13 +2,15 @@
 // Licensed under the MIT License.
 
 import { defaultFileLoader } from "./defaultFileLoader.js";
-import { compileGrammar, FileLoader } from "./grammarCompiler.js";
+import { compileGrammar, FileLoader, SchemaLoader } from "./grammarCompiler.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
 
-type LoadGrammarRulesOptions = {
+export type LoadGrammarRulesOptions = {
     start?: string; // Optional start symbol (default: "Start")
     startValueRequired?: boolean; // Whether the start rule must produce a value (default: true)
+    schemaLoader?: SchemaLoader; // Optional loader for resolving .ts type imports
+    enableValueExpressions?: boolean; // Enable JavaScript-like value expressions (default: false)
 };
 
 function parseAndCompileGrammar(
@@ -33,7 +35,13 @@ function parseAndCompileGrammar(
 
     const start = options?.start ?? "Start";
     const startValueRequired = options?.startValueRequired ?? true;
-    const parseResult = parseGrammarRules(displayPath, content);
+    const enableValueExpressions = options?.enableValueExpressions ?? false;
+    const parseResult = parseGrammarRules(
+        displayPath,
+        content,
+        undefined,
+        enableValueExpressions,
+    );
     const grammar = compileGrammar(
         displayPath,
         content,
@@ -45,20 +53,8 @@ function parseAndCompileGrammar(
         errors,
         warnings,
         parseResult.imports,
-        parseResult.entities.length > 0 ? parseResult.entities : undefined,
+        options?.schemaLoader,
     );
-    if (errors.length === 0) {
-        // Add entity declarations to the grammar.
-        // This includes both explicit "entity Foo;" declarations and
-        // types imported from .ts files that are used as variable types.
-        // The latter bridges @import with the entity validation system.
-        const allEntities = grammar.entities
-            ? [...parseResult.entities, ...grammar.entities]
-            : parseResult.entities;
-        if (allEntities.length > 0) {
-            grammar.entities = allEntities;
-        }
-    }
     return grammar;
 }
 

@@ -20,6 +20,7 @@ import {
     mergeCompletionResults,
     NamespaceKeyFilter,
 } from "../constructions/constructionCache.js";
+import { CompletionDirection } from "@typeagent/agent-sdk";
 import {
     PrintOptions,
     printConstructionCache,
@@ -395,17 +396,28 @@ export class ConstructionStoreImpl implements ConstructionStore {
         return sortedMatches;
     }
 
+    // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
-        requestPrefix: string | undefined,
+        input: string,
         options?: MatchOptions,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ) {
-        const cacheCompletion = this.cache?.completion(requestPrefix, options);
-        const builtInCompletion = this.builtInCache?.completion(
-            requestPrefix,
+        const cacheCompletion = this.cache?.completion(
+            input,
             options,
+            direction,
+        );
+        const builtInCompletion = this.builtInCache?.completion(
+            input,
+            options,
+            direction,
         );
 
-        return mergeCompletionResults(cacheCompletion, builtInCompletion);
+        return mergeCompletionResults(
+            cacheCompletion,
+            builtInCompletion,
+            input.length,
+        );
     }
 
     public async prune(filter: (namespaceKey: string) => boolean) {

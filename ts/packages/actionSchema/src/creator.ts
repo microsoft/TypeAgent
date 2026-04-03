@@ -13,9 +13,12 @@ import {
     SchemaTypeDefinition,
     SchemaTypeNumber,
     SchemaTypeBoolean,
+    SchemaTypeTrue,
+    SchemaTypeFalse,
     SchemaTypeString,
     SchemaTypeUnion,
     SchemaTypeAny,
+    SchemaTypeUndefined,
 } from "./type.js";
 
 export function any(): SchemaTypeAny {
@@ -41,6 +44,18 @@ export function number(): SchemaTypeNumber {
 
 export function boolean(): SchemaTypeBoolean {
     return { type: "boolean" };
+}
+
+export function true_(): SchemaTypeTrue {
+    return { type: "true" };
+}
+
+export function false_(): SchemaTypeFalse {
+    return { type: "false" };
+}
+
+export function undefined_(): SchemaTypeUndefined {
+    return { type: "undefined" };
 }
 
 export function array<T extends SchemaType>(

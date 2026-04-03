@@ -697,25 +697,15 @@ export class CommandServer {
                     `Action '${request.actionName}' not found in agent '${agent.name}'.\n\nAvailable actions: ${allActions}`,
                 );
             }
-            if (!subSchema.schemaFilePath) {
+            if (!subSchema.schemaText) {
                 return toolResult(
-                    `TypeScript source not available for action '${request.actionName}'.`,
+                    `TypeScript schema not available for action '${request.actionName}'.`,
                 );
             }
-            try {
-                const source = fs.readFileSync(
-                    subSchema.schemaFilePath,
-                    "utf-8",
-                );
-                return toolResult(
-                    `TypeScript schema for **${subSchema.schemaName}** (action: ${request.actionName}):\n\n` +
-                        `\`\`\`typescript\n${source}\n\`\`\``,
-                );
-            } catch {
-                return toolResult(
-                    `Could not read schema file: ${subSchema.schemaFilePath}`,
-                );
-            }
+            return toolResult(
+                `TypeScript schema for **${subSchema.schemaName}** (action: ${request.actionName}):\n\n` +
+                    `\`\`\`typescript\n${subSchema.schemaText}\n\`\`\``,
+            );
         }
 
         // Level 2 — sub-schema groups with schemaName + action names+descriptions
@@ -758,9 +748,62 @@ export class CommandServer {
             );
         }
 
+        // Remap webflow schema calls to browser agent actions
+        let schemaName = request.schemaName;
+        let actionName = request.actionName;
+        let parameters = request.parameters;
+
+        if (schemaName === "webflow" && actionName === "run_draft") {
+            schemaName = "browser";
+            actionName = "executeAdHocScript";
+            const p = parameters as any;
+            parameters = {
+                script: p?.script,
+                ...(p?.params && {
+                    params:
+                        typeof p.params === "string"
+                            ? p.params
+                            : JSON.stringify(p.params),
+                }),
+                ...(p?.parameters && {
+                    params:
+                        typeof p.parameters === "string"
+                            ? p.parameters
+                            : JSON.stringify(p.parameters),
+                }),
+                ...(p?.timeout && { timeout: p.timeout }),
+            };
+        } else if (schemaName === "webflow" && actionName === "list") {
+            // Route to discovery handler which returns webflows
+            const p = parameters as any;
+            if (p?.domain) {
+                schemaName = "browser";
+                actionName = "getWebFlowsForDomain";
+                parameters = { domain: p.domain };
+            } else {
+                schemaName = "browser";
+                actionName = "getAllWebFlows";
+                parameters = {};
+            }
+        } else if (schemaName === "webflow" && actionName === "execute") {
+            const p = parameters as any;
+            const flowName = p?.flowName;
+            let flowParams = p?.parameters;
+            if (typeof flowParams === "string") {
+                try {
+                    flowParams = JSON.parse(flowParams);
+                } catch {
+                    flowParams = {};
+                }
+            }
+            schemaName = "browser.webFlows";
+            actionName = flowName || actionName;
+            parameters = flowParams || {};
+        }
+
         const paramStr =
-            request.parameters && Object.keys(request.parameters).length > 0
-                ? `--parameters '${JSON.stringify(request.parameters).replaceAll("'", "\\u0027")}'`
+            parameters && Object.keys(parameters).length > 0
+                ? `--parameters '${JSON.stringify(parameters).replaceAll("'", "\\u0027")}'`
                 : "";
 
         const nlStr = request.naturalLanguage
@@ -768,7 +811,7 @@ export class CommandServer {
             : "";
 
         const actionCommand =
-            `@action ${request.schemaName} ${request.actionName} ${paramStr} ${nlStr}`.trim();
+            `@action ${schemaName} ${actionName} ${paramStr} ${nlStr}`.trim();
 
         this.logger.log(`Dispatching: ${actionCommand}`);
         this.responseCollector.messages = [];

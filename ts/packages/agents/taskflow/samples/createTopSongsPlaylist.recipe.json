@@ -1,0 +1,32 @@
+{
+  "name": "createTopSongsPlaylist",
+  "description": "Find top streaming songs in a music genre and create a Spotify playlist from them",
+  "parameters": [
+    {
+      "name": "genre",
+      "type": "string",
+      "required": true,
+      "description": "Music genre (e.g. bluegrass, jazz, country, rock, hip-hop)"
+    },
+    {
+      "name": "quantity",
+      "type": "number",
+      "required": false,
+      "default": 10,
+      "description": "Number of top songs to include"
+    },
+    {
+      "name": "timePeriod",
+      "type": "string",
+      "required": false,
+      "default": "this month",
+      "description": "Chart time period (e.g. 'this month', 'this week', '2024')"
+    }
+  ],
+  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> {\n    const chartPage = await api.webFetch(\n        `https://www.chosic.com/genre-chart/${params.genre}/tracks/2025/`,\n    );\n\n    const songs = await api.queryLLM(\n        `Extract song titles and artists from the following page. Return ONLY a JSON array of objects with \"trackName\" and \"artist\" fields, limited to the top ${params.quantity}. If you cannot find any songs with both a title and artist, return an empty array []. Output nothing except the JSON array.`,\n        { input: chartPage.text, parseJson: true },\n    );\n\n    if (!Array.isArray(songs.data) || songs.data.length === 0) {\n        return { success: false, error: \"Could not extract songs from the chart page\" };\n    }\n\n    const result = await api.callAction(\"player\", \"createPlaylist\", {\n        name: `Top ${params.quantity} ${params.genre} \\u2013 ${params.timePeriod}`,\n        songs: songs.data,\n    });\n\n    return { success: true, message: result.text, data: result.data };\n}",
+  "grammarPatterns": [
+    "create (a)? (top)? $(quantity:number) $(genre:wildcard) (songs)? playlist (for | from) (the)? $(timePeriod:wildcard)",
+    "make (a)? $(genre:wildcard) playlist (with)? $(quantity:number) (songs)?",
+    "top $(quantity:number) $(genre:wildcard) songs playlist"
+  ]
+}

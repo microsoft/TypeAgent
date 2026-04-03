@@ -6,7 +6,6 @@ import {
     HtmlFragments,
 } from "../discovery/translator.mjs";
 import { PageDescription } from "../discovery/schema/pageSummary.mjs";
-import { UserActionsList } from "../discovery/schema/userActionsPool.mjs";
 import { UnifiedActionsList } from "../discovery/schema/unifiedActions.mjs";
 import { DetectedAction } from "./schema/knowledgeExtraction.mjs";
 import { ExtractionMode } from "website-memory";
@@ -148,12 +147,13 @@ export class ActionDetectionAdapter {
 
             // Phase 2: Get candidate actions from schemas
             console.time("Phase 2: Candidate Actions");
+            const emptySchema = `export type CandidateActions = never;\nexport type CandidateActionList = { actions: CandidateActions[]; };`;
             const candidateActionsResponse =
                 await agent.getCandidateUserActions(
-                    undefined, // userRequest
+                    emptySchema,
                     htmlFragments,
                     screenshots,
-                    JSON.stringify(pageDescription), // Pass page summary as context
+                    JSON.stringify(pageDescription),
                 );
             console.timeEnd("Phase 2: Candidate Actions");
 
@@ -165,8 +165,9 @@ export class ActionDetectionAdapter {
                 return null;
             }
 
-            const candidateActions =
-                candidateActionsResponse.data as UserActionsList;
+            const candidateActions = candidateActionsResponse.data as {
+                actions: any[];
+            };
             console.log(
                 `Phase 2 complete: Found ${candidateActions.actions?.length || 0} candidate actions`,
             );

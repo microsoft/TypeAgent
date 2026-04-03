@@ -77,6 +77,11 @@ export type BrowserControlInvokeFunctions = {
         imageDescription?: string,
         filename?: string,
     ): Promise<string>;
+    runBrowserAction(
+        actionName: string,
+        parameters: any,
+        schemaName?: string,
+    ): Promise<any>;
 };
 
 export type BrowserControlCallFunctions = {

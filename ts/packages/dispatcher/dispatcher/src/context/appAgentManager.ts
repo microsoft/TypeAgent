@@ -20,7 +20,6 @@ import {
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import { createSessionContext } from "../execute/sessionContext.js";
 import { AppAgentProvider } from "../agentProvider/agentProvider.js";
-import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import registerDebug from "debug";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
 import {
@@ -41,6 +40,7 @@ import {
     AgentGrammarRegistry,
     compileGrammarToNFA,
     enrichGrammarWithCheckedVariables,
+    loadGrammarRulesNoThrow,
 } from "action-grammar";
 import fs from "node:fs";
 import { FlowDefinition } from "../execute/flowInterpreter.js";
@@ -120,6 +120,7 @@ function loadGrammar(actionConfig: ActionConfig): Grammar | undefined {
 export class AppAgentManager implements ActionConfigProvider {
     private readonly agents = new Map<string, AppAgentRecord>();
     private readonly actionConfigs = new Map<string, ActionConfig>();
+    private readonly loadingSchemas = new Set<string>();
     private readonly flowRegistry = new Map<string, FlowDefinition>();
     private readonly transientAgents: Record<string, boolean | undefined> = {};
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
@@ -147,6 +148,10 @@ export class AppAgentManager implements ActionConfigProvider {
     }
     public getAppAgentNames(): string[] {
         return Array.from(this.agents.keys());
+    }
+
+    public isSchemaLoading(schemaName: string): boolean {
+        return this.loadingSchemas.has(schemaName);
     }
 
     public getAppAgentDescription(appAgentName: string) {
@@ -276,6 +281,7 @@ export class AppAgentManager implements ActionConfigProvider {
         actionEmbeddingCache?: EmbeddingCache,
         agentGrammarRegistry?: AgentGrammarRegistry,
         useNFAGrammar?: boolean,
+        stateRefreshFn?: () => Promise<void>,
     ) {
         const agentNames = provider.getAppAgentNames();
         const semanticMapP: Promise<void>[] = [];
@@ -296,6 +302,94 @@ export class AppAgentManager implements ActionConfigProvider {
         debug("Waiting for action embeddings");
         await Promise.all(semanticMapP);
         debug("Finish action embeddings");
+
+        if (provider.onSchemaReady && stateRefreshFn) {
+            // Mark only the agents that are actually loading asynchronously (e.g.
+            // serverCommand MCP agents with slow startup).  Agents that failed
+            // synchronously should show ❌, not ⏳.
+            const loadingNames = new Set(
+                provider.getLoadingAgentNames?.() ?? [],
+            );
+            for (const name of agentNames) {
+                if (!loadingNames.has(name)) {
+                    continue;
+                }
+                const record = this.agents.get(name);
+                if (record) {
+                    for (const schemaName of Object.keys(
+                        convertToActionConfig(name, record.manifest),
+                    )) {
+                        this.loadingSchemas.add(schemaName);
+                    }
+                }
+            }
+
+            provider.onSchemaReady(async (agentName, manifest) => {
+                try {
+                    const refreshSemanticMapP: Promise<void>[] = [];
+                    this.refreshAgentSchema(
+                        agentName,
+                        manifest,
+                        refreshSemanticMapP,
+                        actionGrammarStore,
+                        actionEmbeddingCache,
+                        agentGrammarRegistry,
+                        useNFAGrammar,
+                    );
+                    await Promise.all(refreshSemanticMapP);
+                    await stateRefreshFn();
+                } catch (e) {
+                    debugError(
+                        `Failed to refresh schema for agent '${agentName}': ${e}`,
+                    );
+                }
+            });
+        }
+    }
+
+    private refreshAgentSchema(
+        appAgentName: string,
+        manifest: AppAgentManifest,
+        semanticMapP: Promise<void>[],
+        actionGrammarStore: GrammarStore | undefined,
+        actionEmbeddingCache?: EmbeddingCache,
+        agentGrammarRegistry?: AgentGrammarRegistry,
+        useNFAGrammar?: boolean,
+    ) {
+        const record = this.agents.get(appAgentName);
+        if (record === undefined) {
+            throw new Error(`Agent not found: ${appAgentName}`);
+        }
+
+        // Update the manifest (emoji, schema, etc.)
+        record.manifest = manifest;
+
+        const actionConfigs = convertToActionConfig(appAgentName, manifest);
+        for (const [schemaName, config] of Object.entries(actionConfigs)) {
+            debug(`Refreshing action config: ${schemaName}`);
+            this.actionConfigs.set(schemaName, config);
+            if (config.transient) {
+                this.transientAgents[schemaName] = false;
+            }
+            try {
+                const actionSchemaFile =
+                    this.actionSchemaFileCache.getActionSchemaFile(config);
+                if (this.actionSemanticMap) {
+                    semanticMapP.push(
+                        this.actionSemanticMap.addActionSchemaFile(
+                            config,
+                            actionSchemaFile,
+                            actionEmbeddingCache,
+                        ),
+                    );
+                }
+                record.schemaErrors.delete(schemaName);
+                this.loadingSchemas.delete(schemaName);
+            } catch (e: any) {
+                record.schemaErrors.set(schemaName, e);
+                this.loadingSchemas.delete(schemaName);
+            }
+        }
     }
 
     private addAgentManifest(
@@ -373,24 +467,19 @@ export class AppAgentManager implements ActionConfigProvider {
                         // Add to NFA grammar registry if using NFA system
                         if (useNFAGrammar && agentGrammarRegistry) {
                             try {
-                                // Enrich grammar with checked variables from .pas.json if available
-                                if (config.compiledSchemaFilePath) {
-                                    try {
-                                        const pasJsonPath = getPackageFilePath(
-                                            config.compiledSchemaFilePath,
-                                        );
-                                        enrichGrammarWithCheckedVariables(
-                                            g,
-                                            pasJsonPath,
-                                        );
-                                        debug(
-                                            `Enriched grammar with checked variables for schema: ${schemaName}`,
-                                        );
-                                    } catch (enrichError) {
-                                        debug(
-                                            `Could not enrich grammar with checked variables for ${schemaName}: ${enrichError}`,
-                                        );
-                                    }
+                                // Enrich grammar with checked variables from parsed schema
+                                try {
+                                    enrichGrammarWithCheckedVariables(
+                                        g,
+                                        actionSchemaFile.parsedActionSchema,
+                                    );
+                                    debug(
+                                        `Enriched grammar with checked variables for schema: ${schemaName}`,
+                                    );
+                                } catch (enrichError) {
+                                    debug(
+                                        `Could not enrich grammar with checked variables for ${schemaName}: ${enrichError}`,
+                                    );
                                 }
 
                                 const nfa = compileGrammarToNFA(g, schemaName);
@@ -673,16 +762,24 @@ export class AppAgentManager implements ActionConfigProvider {
             );
             if (enableSchema !== record.schemas.has(name)) {
                 if (enableSchema) {
-                    const e = record.schemaErrors.get(name);
-                    if (e !== undefined) {
-                        failedSchemas.push([name, enableSchema, e]);
-                        debugError(
-                            `Schema '${name}' is not enabled because of error: ${e.message}`,
+                    if (this.loadingSchemas.has(name)) {
+                        // Schema is still loading (e.g. slow MCP server start).
+                        // Skip for now; refreshAgentSchema will re-run setState once ready.
+                        debug(
+                            `Schema '${name}' is still loading, skipping enable`,
                         );
                     } else {
-                        record.schemas.add(name);
-                        changedSchemas.push([name, enableSchema]);
-                        debug(`Schema enabled ${name}`);
+                        const e = record.schemaErrors.get(name);
+                        if (e !== undefined) {
+                            failedSchemas.push([name, enableSchema, e]);
+                            debugError(
+                                `Schema '${name}' is not enabled because of error: ${e.message}`,
+                            );
+                        } else {
+                            record.schemas.add(name);
+                            changedSchemas.push([name, enableSchema]);
+                            debug(`Schema enabled ${name}`);
+                        }
                     }
                 } else {
                     record.schemas.delete(name);
@@ -699,21 +796,26 @@ export class AppAgentManager implements ActionConfigProvider {
                 failedActions,
             );
             if (enableAction !== record.actions.has(name)) {
-                p.push(
-                    (async () => {
-                        try {
-                            await this.updateAction(
-                                name,
-                                record,
-                                enableAction,
-                                context,
-                            );
-                            changedActions.push([name, enableAction]);
-                        } catch (e: any) {
-                            failedActions.push([name, enableAction, e]);
-                        }
-                    })(),
-                );
+                if (enableAction && this.loadingSchemas.has(name)) {
+                    // Action agent is still loading — skip to avoid blocking on server startup.
+                    debug(`Action '${name}' is still loading, skipping enable`);
+                } else {
+                    p.push(
+                        (async () => {
+                            try {
+                                await this.updateAction(
+                                    name,
+                                    record,
+                                    enableAction,
+                                    context,
+                                );
+                                changedActions.push([name, enableAction]);
+                            } catch (e: any) {
+                                failedActions.push([name, enableAction, e]);
+                            }
+                        })(),
+                    );
+                }
             }
         }
 
@@ -807,6 +909,116 @@ export class AppAgentManager implements ActionConfigProvider {
         await Promise.all(closeP);
     }
 
+    private async loadDynamicGrammar(
+        schemaName: string,
+        appAgent: AppAgent,
+        sessionContext: SessionContext,
+        context: CommandHandlerContext,
+    ): Promise<void> {
+        let dynamicGrammar: Grammar | undefined;
+
+        // Prefer the agent callback over file-based convention
+        if (appAgent.getDynamicGrammar) {
+            const grammarContent = await appAgent.getDynamicGrammar(
+                sessionContext,
+                schemaName,
+            );
+            if (grammarContent?.content?.trim()) {
+                if (grammarContent.format === "ag") {
+                    dynamicGrammar = grammarFromJson(
+                        JSON.parse(grammarContent.content),
+                    );
+                } else {
+                    // "agr" format — raw grammar rule text
+                    const errors: string[] = [];
+                    dynamicGrammar =
+                        loadGrammarRulesNoThrow(
+                            `${schemaName}-dynamic.agr`,
+                            grammarContent.content,
+                            errors,
+                        ) ?? undefined;
+                    if (errors.length > 0) {
+                        debugError(
+                            `Failed to parse dynamic grammar for ${schemaName}: ${errors.join(", ")}`,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Fallback: read grammar/dynamic.agr from instance storage
+        if (dynamicGrammar === undefined) {
+            const instanceStorage = sessionContext.instanceStorage;
+            if (instanceStorage) {
+                try {
+                    const agrText = await instanceStorage.read(
+                        "grammar/dynamic.agr",
+                        "utf8",
+                    );
+                    if (agrText?.trim()) {
+                        const errors: string[] = [];
+                        dynamicGrammar =
+                            loadGrammarRulesNoThrow(
+                                `${schemaName}-dynamic.agr`,
+                                agrText,
+                                errors,
+                            ) ?? undefined;
+                        if (errors.length > 0) {
+                            debugError(
+                                `Failed to parse dynamic grammar for ${schemaName}: ${errors.join(", ")}`,
+                            );
+                        }
+                    }
+                } catch {
+                    // No dynamic grammar file
+                }
+            }
+        }
+
+        if (!dynamicGrammar || dynamicGrammar.rules.length === 0) return;
+
+        const config = this.actionConfigs.get(schemaName);
+        const staticGrammar = config ? loadGrammar(config) : undefined;
+
+        const merged: Grammar = {
+            rules: [...(staticGrammar?.rules ?? []), ...dynamicGrammar.rules],
+        };
+
+        context.agentCache.grammarStore.addGrammar(schemaName, merged);
+        debug(
+            `Loaded dynamic grammar for ${schemaName} (${dynamicGrammar.rules.length} dynamic rules merged with ${staticGrammar?.rules.length ?? 0} static rules)`,
+        );
+    }
+
+    private async loadDynamicSchema(
+        schemaName: string,
+        appAgent: AppAgent,
+        sessionContext: SessionContext,
+        context: CommandHandlerContext,
+    ): Promise<void> {
+        if (!appAgent.getDynamicSchema) return;
+
+        const schemaContent = await appAgent.getDynamicSchema(
+            sessionContext,
+            schemaName,
+        );
+        if (!schemaContent?.content) return;
+
+        const config = this.actionConfigs.get(schemaName);
+        if (!config) return;
+
+        // Replace the schema content with the dynamic version
+        config.schemaFile = schemaContent;
+
+        // Invalidate cached parsed schema so it gets re-parsed from new content
+        this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+
+        // Clear translator cache so next translation uses the updated schema
+        context.translatorCache.clear();
+
+        debug(`Loaded dynamic schema for ${schemaName}`);
+    }
+
     private async updateAction(
         schemaName: string,
         record: AppAgentRecord,
@@ -830,6 +1042,19 @@ export class AppAgentManager implements ActionConfigProvider {
                         sessionContext,
                         schemaName,
                     ),
+                );
+                // Load dynamic schema and grammar from agent callbacks
+                await this.loadDynamicSchema(
+                    schemaName,
+                    record.appAgent!,
+                    sessionContext,
+                    context,
+                );
+                await this.loadDynamicGrammar(
+                    schemaName,
+                    record.appAgent!,
+                    sessionContext,
+                    context,
                 );
             } catch (e) {
                 // Rollback if there is a exception
@@ -980,6 +1205,38 @@ export class AppAgentManager implements ActionConfigProvider {
         config: ActionConfig,
     ): ActionSchemaFile {
         return this.actionSchemaFileCache.getActionSchemaFile(config);
+    }
+
+    public async reloadAgentSchema(
+        appAgentName: string,
+        context: CommandHandlerContext,
+    ): Promise<void> {
+        const record = this.getRecord(appAgentName);
+        if (record.provider === undefined) {
+            return;
+        }
+
+        // Unload cached schema files so they get reloaded from disk
+        for (const schemaName of this.actionConfigs.keys()) {
+            if (getAppAgentName(schemaName) === appAgentName) {
+                this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+            }
+        }
+
+        // Get fresh manifest from provider and refresh schemas
+        const manifest =
+            await record.provider.getAppAgentManifest(appAgentName);
+        const semanticMapP: Promise<void>[] = [];
+        this.refreshAgentSchema(
+            appAgentName,
+            manifest,
+            semanticMapP,
+            undefined,
+        );
+        await Promise.all(semanticMapP);
+
+        // Clear translator cache to force re-translation with new schema
+        context.translatorCache.clear();
     }
 
     public setTraceNamespaces(namespaces: string) {

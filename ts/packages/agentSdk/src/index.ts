@@ -29,7 +29,11 @@ export {
     CommandDescriptors,
     CommandDescriptorTable,
     AppAgentCommandInterface,
+    CompletionDirection,
     CompletionGroup,
+    CompletionGroups,
+    SeparatorMode,
+    AfterWildcard,
 } from "./command.js";
 
 export {
@@ -51,7 +55,6 @@ export {
     TypedDisplayContent,
     DisplayAppendMode,
     DisplayMessageKind,
-    getContentForType,
 } from "./display.js";
 
 export {

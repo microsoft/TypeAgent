@@ -160,6 +160,7 @@ function registerClient(
                 if (seq !== undefined) {
                     maxSeqSeen = Math.max(maxSeqSeen, seq);
                 }
+                chatView.setActiveRequestId(requestId.requestId);
                 // For remote clients or replay, creates a new MessageGroup
                 // keyed by UUID. For local clients, this is a no-op because
                 // addRemoteUserMessage skips pending locals — they get promoted
@@ -412,9 +413,30 @@ function registerClient(
                 }
                 maxSeqSeen = Math.max(maxSeqSeen, entry.seq);
             }
+
+            // Mark every message currently in the scroll container as historical.
+            // This covers both the HTML chat history loaded at startup (already
+            // marked by initializeChatHistory) and any display-log entries that
+            // were just replayed above (from previous sessions). Marking them
+            // here prevents them from appearing in the command back-stack.
+            for (const child of Array.from(
+                chatView.getScrollContainer().children,
+            )) {
+                (child as HTMLElement).classList.add("history");
+            }
+
             replayPending = false;
             for (const fn of replayQueue) fn();
             replayQueue.length = 0;
+
+            // Signal that the dispatcher is fully initialised, all historical
+            // messages have been replayed and marked, and the replay queue has
+            // been drained.  Tests wait for this attribute before sending the
+            // first request to avoid racing with the replay mechanism (which
+            // would queue IPC callbacks and delay metrics updates).
+            chatView
+                .getScrollContainer()
+                .setAttribute("data-dispatcher-ready", "true");
         },
         updateRegisterAgents(updatedAgents: [string, string][]): void {
             agents.clear();

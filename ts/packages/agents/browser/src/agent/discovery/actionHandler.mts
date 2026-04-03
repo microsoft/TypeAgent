@@ -1,47 +1,42 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { AppAgentManifest, SessionContext } from "@typeagent/agent-sdk";
-import { BrowserActionContext, getBrowserControl } from "../browserActions.mjs";
-import { BrowserConnector } from "../browserConnector.mjs";
+import { SessionContext } from "@typeagent/agent-sdk";
+import {
+    BrowserActionContext,
+    getBrowserControl,
+    getCurrentPageScreenshot,
+} from "../browserActions.mjs";
+import { BrowserControl } from "../../common/browserControl.mjs";
 import { createDiscoveryPageTranslator } from "./translator.mjs";
 import {
     ActionSchemaTypeDefinition,
     ActionSchemaObject,
     ActionParamType,
     generateActionSchema,
-    parseActionSchemaSource,
-    generateSchemaTypeDefinition,
 } from "@typeagent/action-schema";
 import { SchemaCreator as sc } from "@typeagent/action-schema";
-import path from "path";
-import fs from "fs";
-import { fileURLToPath } from "url";
-import { UserActionsList } from "./schema/userActionsPool.mjs";
-import { PageDescription } from "./schema/pageSummary.mjs";
-import { createTempAgentForSchema } from "./tempAgentActionHandler.mjs";
 import {
-    GetIntentFromRecording,
     SchemaDiscoveryActions,
-    GetMacrosForUrl,
-    DeleteMacro,
-    GetAllMacros,
+    CreateWebFlowFromRecording,
+    GetWebFlowsForDomain,
+    GetAllWebFlows,
+    DeleteWebFlow,
 } from "./schema/discoveryActions.mjs";
-import { UserIntent } from "./schema/recordedActions.mjs";
-import { createSchemaAuthoringAgent } from "./authoringActionHandler.mjs";
 import registerDebug from "debug";
-import { YAMLMacroStoreExtension } from "./yamlMacro/macroStoreExtension.mjs";
+import { WebFlowDefinition } from "../webFlows/types.js";
 import {
-    convertParametersToYAML,
-    convertStepsToYAML,
-    extractParametersFromIntent,
-    filterUnusedParameters,
-} from "./yamlMacro/macroHelper.mjs";
-import { MacroConverter } from "./yamlMacro/converter.mjs";
-import { ArtifactsStorage } from "./yamlMacro/artifactsStorage.mjs";
-import { MinimalYAMLParser } from "./yamlMacro/minimalParser.mjs";
+    normalizeRecording,
+    RecordingData,
+} from "../webFlows/recordingNormalizer.mjs";
+import {
+    generateWebFlowFromTrace,
+    ScriptGenerationOptions,
+} from "../webFlows/scriptGenerator.mjs";
+import { sendWebFlowRefreshToClient } from "../browserActionHandler.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
+const debugPerf = registerDebug("typeagent:browser:discover:perf");
 
 // Entity collection infrastructure for discovery actions
 export interface EntityInfo {
@@ -81,7 +76,7 @@ export class EntityCollector {
 
 // Context interface for discovery action handler functions
 interface DiscoveryActionHandlerContext {
-    browser: BrowserConnector;
+    browser: BrowserControl;
     agent: any;
     entities: EntityCollector;
     sessionContext: SessionContext<BrowserActionContext>;
@@ -91,266 +86,139 @@ async function handleFindUserActions(
     action: any,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
+    const url = await getBrowserControl(
+        ctx.sessionContext.agentContext,
+    ).getPageUrl();
+
+    // Get existing WebFlows for this domain
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    let candidateFlows: WebFlowDefinition[] = [];
+    if (webFlowStore && url) {
+        try {
+            const domain = new URL(url).hostname;
+            candidateFlows =
+                await webFlowStore.listForDomainWithDetails(domain);
+        } catch {
+            // URL parsing failed
+        }
+    }
+
+    if (candidateFlows.length === 0) {
+        return {
+            displayText:
+                "No actions configured. Record a new action to get started.",
+            entities: ctx.entities.getEntities(),
+            data: { actions: [] },
+        };
+    }
+
+    // Build a TypeScript schema from the candidate WebFlows for TypeChat
+    const discoverySchema = generateDiscoverySchema(candidateFlows);
+    const totalStart = Date.now();
+
+    const htmlStart = Date.now();
     const htmlFragments = await ctx.browser.getHtmlFragments();
-    let screenshot = "";
-    try {
-        screenshot = await ctx.browser.getCurrentPageScreenshot();
-    } catch (error) {
-        console.warn(
-            "Screenshot capture failed, continuing without screenshot:",
-            (error as Error)?.message,
-        );
-    }
-    let pageSummary = "";
-
-    const summaryResponse = await ctx.agent.getPageSummary(
-        undefined,
-        htmlFragments,
-        [screenshot],
+    const totalChars = htmlFragments.reduce(
+        (sum: number, f: any) => sum + (f.content?.length || 0),
+        0,
+    );
+    debugPerf(
+        `getHtmlFragments: ${Date.now() - htmlStart}ms, ${htmlFragments.length} fragments, ${totalChars} chars`,
     );
 
-    let schemaDescription =
-        "A schema that enables interactions with the current page";
-    if (summaryResponse.success) {
-        pageSummary =
-            "Page summary: \n" + JSON.stringify(summaryResponse.data, null, 2);
-        schemaDescription += (summaryResponse.data as PageDescription)
-            .description;
-    }
-
-    const timerName = `Analyzing page actions`;
-    console.time(timerName);
-
+    const candidateStart = Date.now();
     const response = await ctx.agent.getCandidateUserActions(
-        undefined,
+        discoverySchema,
         htmlFragments,
-        [screenshot],
-        pageSummary,
     );
+    debugPerf(
+        `getCandidateUserActions LLM: ${Date.now() - candidateStart}ms, success=${response.success}`,
+    );
+    debugPerf(`handleFindUserActions total: ${Date.now() - totalStart}ms`);
 
     if (!response.success) {
-        console.error("Attempt to get page actions failed");
-        console.error(response.message);
+        debug("Discovery LLM call failed: %s", response.message);
         return {
             displayText: "Action could not be completed",
             entities: ctx.entities.getEntities(),
         };
     }
 
-    console.timeEnd(timerName);
+    // The LLM returns a CandidateActionList with the subset of flows
+    // that actually apply to this page.
+    const selected = response.data as { actions: { actionName: string }[] };
+    const selectedNames = new Set(selected.actions.map((a) => a.actionName));
 
-    const selected = response.data as UserActionsList;
-    const uniqueItems = new Map(
-        selected.actions.map((action) => [action.actionName, action]),
+    // Filter the full WebFlowDefinitions to only those the LLM selected
+    const applicableFlows = candidateFlows.filter((f) =>
+        selectedNames.has(f.name),
     );
 
-    let message =
-        "Possible user actions: \n" +
-        JSON.stringify(Array.from(uniqueItems.values()), null, 2);
-
-    const actionNames = [...new Set(uniqueItems.keys())];
-
-    const { schema, typeDefinitions } = await getDynamicSchema(actionNames);
-    message += `\n =========== \n Discovered actions schema: \n ${schema} `;
-
-    const url = await getBrowserControl(
-        ctx.sessionContext.agentContext,
-    ).getPageUrl();
-    const hostName = new URL(url!).hostname.replace(/\./g, "_");
-    const agentName = `temp_${hostName}`;
-
-    if (action.parameters?.registerAgent) {
-        const manifest: AppAgentManifest = {
-            emojiChar: "🚧",
-            description: schemaDescription,
-            schema: {
-                description: schemaDescription,
-                schemaType: "DynamicUserPageActions",
-                schemaFile: { content: schema, format: "ts" },
-            },
-        };
-
-        // register agent after request is processed to avoid a deadlock
-        setTimeout(async () => {
-            try {
-                await ctx.sessionContext.removeDynamicAgent(agentName);
-            } catch {}
-
-            await ctx.sessionContext.addDynamicAgent(
-                agentName,
-                manifest,
-                createTempAgentForSchema(
-                    ctx.browser,
-                    ctx.agent,
-                    ctx.sessionContext,
-                ),
-            );
-        }, 1000);
-    }
-
-    // AUTO-SAVE: Save discovered actions immediately
-    if (uniqueItems.size > 0) {
-        try {
-            debug("[YAML_DEBUG] About to call getPageUrl()...");
-            const url = await getBrowserControl(
-                ctx.sessionContext.agentContext,
-            ).getPageUrl();
-            debug(`[YAML_DEBUG] getPageUrl() returned: ${url}`);
-
-            // Direct save to MacroStore (no longer using separate handler)
-            if (!ctx.sessionContext.agentContext.macrosStore) {
-                throw new Error("MacroStore not available");
-            }
-
-            const domain = new URL(url!).hostname;
-            let savedCount = 0;
-            let skippedCount = 0;
-
-            // Get existing actions for this URL to check for duplicates
-            const existingActions =
-                await ctx.sessionContext.agentContext.macrosStore.getMacrosForUrl(
-                    url!,
-                );
-            const existingActionNames = new Set(
-                existingActions
-                    .filter((action: any) => action.author === "discovered")
-                    .map((action: any) => action.name),
-            );
-
-            for (const actionData of Array.from(uniqueItems.values()) as any) {
-                if (!actionData.actionName) continue;
-
-                // Check if action with same name already exists for this URL
-                if (existingActionNames.has(actionData.actionName)) {
-                    skippedCount++;
-                    debug(
-                        `Skipping duplicate discovered action: ${actionData.actionName}`,
-                    );
-                    continue;
-                }
-
-                debug(
-                    `[YAML_DEBUG] LLM-generated actionData for ${actionData.actionName}:`,
-                    JSON.stringify(actionData, null, 2),
-                );
-
-                const storedMacro =
-                    ctx.sessionContext.agentContext.macrosStore.createDefaultMacro(
-                        {
-                            name: actionData.actionName,
-                            description: `Auto-discovered: ${actionData.actionName}`,
-                            category: "utility",
-                            author: "discovered",
-                            scope: {
-                                type: "domain",
-                                domain: domain,
-                                priority: 60,
-                            },
-                            definition: {
-                                detectedSchema: actionData,
-                                ...(typeDefinitions?.[
-                                    actionData.actionName
-                                ] && {
-                                    intentSchema:
-                                        typeof typeDefinitions[
-                                            actionData.actionName
-                                        ] === "string"
-                                            ? (typeDefinitions[
-                                                  actionData.actionName
-                                              ] as unknown as string)
-                                            : JSON.stringify(
-                                                  typeDefinitions[
-                                                      actionData.actionName
-                                                  ],
-                                              ),
-                                }),
-                                macroDefinition:
-                                    typeDefinitions[actionData.actionName],
-                            },
-                        },
-                    );
-
-                debug(
-                    `[YAML_DEBUG] StoredMacro before save for ${actionData.actionName}:`,
-                    JSON.stringify(storedMacro, null, 2),
-                );
-
-                const result =
-                    await ctx.sessionContext.agentContext.macrosStore.saveMacro(
-                        storedMacro,
-                    );
-                if (result.success) {
-                    savedCount++;
-                } else {
-                    console.error(
-                        `Failed to save discovered action ${actionData.actionName}:`,
-                        result.error,
-                    );
-                }
-            }
-
-            debug(
-                `Auto-saved ${savedCount} new discovered actions for ${domain} (skipped ${skippedCount} existing)`,
-            );
-        } catch (error) {
-            debug("Failed to auto-save discovered actions:", error);
-            // Continue without failing the discovery operation
-        }
-    }
+    debug(
+        `Discovery: ${candidateFlows.length} candidates → ${applicableFlows.length} applicable to page`,
+    );
 
     return {
-        displayText: message,
+        displayText: `Found ${applicableFlows.length} applicable actions`,
         entities: ctx.entities.getEntities(),
-        data: {
-            schema: Array.from(uniqueItems.values()),
-            typeDefinitions: typeDefinitions,
-        },
+        data: { actions: applicableFlows },
     };
 }
 
-async function getDynamicSchema(actionNames: string[]) {
-    const packageRoot = path.join("..", "..", "..");
+function generateDiscoverySchema(flows: WebFlowDefinition[]): string {
+    const typeNames: string[] = [];
+    const typeDefs: string[] = [];
 
-    const userActionsPoolSchema = await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(
-                    packageRoot,
-                    "./src/agent/discovery/schema/userActionsPool.mts",
-                ),
-                import.meta.url,
-            ),
-        ),
-        "utf8",
-    );
-    const parsed = parseActionSchemaSource(
-        userActionsPoolSchema,
-        "dynamicUserActions",
-        "UserPageActions",
-    );
+    for (const flow of flows) {
+        const typeName = capitalize(flow.name);
+        typeNames.push(typeName);
 
-    let typeDefinitions = new Map<string, ActionSchemaTypeDefinition>();
-    actionNames.forEach((name) => {
-        if (parsed.actionSchemas.has(name)) {
-            typeDefinitions.set(name, parsed.actionSchemas.get(name)!);
+        const paramFields: string[] = [];
+        for (const [name, param] of Object.entries(flow.parameters)) {
+            const tsType =
+                param.type === "number"
+                    ? "number"
+                    : param.type === "boolean"
+                      ? "boolean"
+                      : "string";
+            const optional = param.required ? "" : "?";
+            const comment = param.description ? ` // ${param.description}` : "";
+            paramFields.push(
+                `        ${name}${optional}: ${tsType};${comment}`,
+            );
         }
-    });
 
-    const union = sc.union(
-        Array.from(typeDefinitions.values()).map((definition) =>
-            sc.ref(definition),
-        ),
-    );
-    const entry = sc.type("DynamicUserPageActions", union);
-    entry.exported = true;
-    const actionSchemas = new Map<string, ActionSchemaTypeDefinition>();
-    const order = new Map<string, number>();
-    const schema = await generateActionSchema(
-        { entry, actionSchemas, order },
-        { exact: true },
-    );
+        const description = flow.description ? `// ${flow.description}\n` : "";
+        const paramsBlock =
+            paramFields.length > 0
+                ? `    parameters: {\n${paramFields.join("\n")}\n    };`
+                : "";
 
-    return { schema, typeDefinitions: Object.fromEntries(typeDefinitions) };
+        typeDefs.push(
+            `${description}export type ${typeName} = {\n` +
+                `    actionName: "${flow.name}";\n` +
+                (paramsBlock ? `${paramsBlock}\n` : "") +
+                `};`,
+        );
+    }
+
+    const unionMembers = typeNames.join("\n    | ");
+    const union =
+        typeNames.length > 0
+            ? `export type CandidateActions = \n    | ${unionMembers};`
+            : `export type CandidateActions = never;`;
+
+    return (
+        typeDefs.join("\n\n") +
+        "\n\n" +
+        union +
+        "\n\n" +
+        `export type CandidateActionList = {\n    actions: CandidateActions[];\n};`
+    );
+}
+
+function capitalize(name: string): string {
+    return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 async function handleGetPageSummary(
@@ -360,18 +228,24 @@ async function handleGetPageSummary(
     const htmlFragments = await ctx.browser.getHtmlFragments();
     let screenshot = "";
     try {
-        screenshot = await ctx.browser.getCurrentPageScreenshot();
+        screenshot = await getCurrentPageScreenshot(ctx.browser);
     } catch (error) {
         console.warn(
             "Screenshot capture failed, continuing without screenshot:",
             (error as Error)?.message,
         );
     }
+
+    // Only include screenshot if it's not empty
+    const screenshots = screenshot ? [screenshot] : [];
+
     const timerName = `Summarizing page`;
     console.time(timerName);
-    const response = await ctx.agent.getPageSummary(undefined, htmlFragments, [
-        screenshot,
-    ]);
+    const response = await ctx.agent.getPageSummary(
+        undefined,
+        htmlFragments,
+        screenshots,
+    );
 
     if (!response.success) {
         console.error("Attempt to get page summary failed");
@@ -391,106 +265,6 @@ async function handleGetPageSummary(
     };
 }
 
-async function getIntentSchemaFromJSON(
-    userIntentJson: UserIntent,
-    actionDescription: string,
-) {
-    let fields: Map<string, any> = new Map<string, any>();
-
-    userIntentJson.parameters.forEach((param) => {
-        let paramType: ActionParamType = sc.string();
-        switch (param.type) {
-            case "string":
-                paramType = sc.string();
-                break;
-            case "number":
-                paramType = sc.number();
-                break;
-            case "boolean":
-                paramType = sc.number();
-                break;
-        }
-
-        if (param.required && !param.defaultValue) {
-            fields.set(param.shortName, sc.field(paramType, param.description));
-        } else {
-            fields.set(
-                param.shortName,
-                sc.optional(paramType, param.description),
-            );
-        }
-    });
-
-    const obj: ActionSchemaObject = sc.obj({
-        actionName: sc.string(userIntentJson.actionName),
-        parameters: sc.obj(Object.fromEntries(fields)),
-    } as const);
-
-    const schema = sc.type(
-        userIntentJson.actionName,
-        obj,
-        actionDescription,
-        true,
-    );
-
-    return {
-        actionSchema: generateSchemaTypeDefinition(schema, { exact: true }),
-        typeDefinition: schema,
-    };
-}
-
-async function handleRegisterAuthoringAgent(
-    action: any,
-    ctx: DiscoveryActionHandlerContext,
-): Promise<DiscoveryActionResult> {
-    const packageRoot = path.join("..", "..", "..");
-    const schemaFilePath = fileURLToPath(
-        new URL(
-            path.join(
-                packageRoot,
-                "./src/agent/discovery/schema/authoringActions.mts",
-            ),
-            import.meta.url,
-        ),
-    );
-
-    const agentName = `actionAuthor`;
-    const schemaDescription = `A schema that enables authoring new actions for the web automation plans`;
-
-    const manifest: AppAgentManifest = {
-        emojiChar: "🧑‍🔧",
-        description: schemaDescription,
-        schema: {
-            description: schemaDescription,
-            schemaType: "PlanAuthoringActions",
-            schemaFile: schemaFilePath,
-            cached: false,
-        },
-    };
-
-    // register agent after request is processed to avoid a deadlock
-    setTimeout(async () => {
-        try {
-            await ctx.sessionContext.removeDynamicAgent(agentName);
-        } catch {}
-
-        await ctx.sessionContext.addDynamicAgent(
-            agentName,
-            manifest,
-            createSchemaAuthoringAgent(
-                ctx.browser,
-                ctx.agent,
-                ctx.sessionContext,
-            ),
-        );
-    }, 1000);
-
-    return {
-        displayText: "OK",
-        entities: ctx.entities.getEntities(),
-    };
-}
-
 async function handleRegisterSiteSchema(
     action: any,
     ctx: DiscoveryActionHandlerContext,
@@ -499,32 +273,45 @@ async function handleRegisterSiteSchema(
         ctx.sessionContext.agentContext,
     ).getPageUrl();
 
-    if (!ctx.sessionContext.agentContext.macrosStore) {
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    if (!webFlowStore) {
         throw new Error(
-            "ActionsStore not available - please ensure TypeAgent server is running",
+            "WebFlowStore not available - please ensure TypeAgent server is running",
         );
     }
 
-    debug("Using MacroStore for schema registration");
-    const urlActions =
-        await ctx.sessionContext.agentContext.macrosStore.getMacrosForUrl(url!);
+    debug("Building schema from WebFlowStore");
+    const domain = new URL(url!).hostname;
+    const eligibleFlows = await webFlowStore.listForDomain(domain);
+    const typeDefinitions: ActionSchemaTypeDefinition[] = [];
 
-    const detectedActions = new Map<string, any>();
-    const authoredActions = new Map<string, any>();
+    for (const flowName of eligibleFlows) {
+        const flow = await webFlowStore.get(flowName);
+        if (!flow) continue;
 
-    for (const storedMacro of urlActions) {
-        if (storedMacro.definition.macroDefinition) {
-            detectedActions.set(
-                storedMacro.name,
-                storedMacro.definition.macroDefinition,
-            );
+        const paramFields: Map<string, any> = new Map();
+        for (const [k, v] of Object.entries(flow.parameters)) {
+            let paramType: ActionParamType = sc.string();
+            if (v.type === "number") paramType = sc.number();
+            if (v.type === "boolean") paramType = sc.number();
+            if (v.required) {
+                paramFields.set(k, sc.field(paramType, v.description));
+            } else {
+                paramFields.set(k, sc.optional(paramType, v.description));
+            }
         }
+        const obj: ActionSchemaObject = sc.obj({
+            actionName: sc.string(flow.name),
+            parameters: sc.obj(Object.fromEntries(paramFields)),
+        } as const);
+        const typeDef = sc.type(
+            capitalize(flow.name),
+            obj,
+            flow.description,
+            true,
+        );
+        typeDefinitions.push(typeDef);
     }
-
-    const typeDefinitions: ActionSchemaTypeDefinition[] = [
-        ...detectedActions.values(),
-        ...authoredActions.values(),
-    ];
 
     if (typeDefinitions.length === 0) {
         debug("No actions for this schema.");
@@ -546,58 +333,8 @@ async function handleRegisterSiteSchema(
         { exact: true },
     );
 
-    const hostName = new URL(url!).hostname.replace(/\./g, "_");
-    const agentName = `temp_${hostName}`;
-    const schemaDescription = `A schema that enables interactions with the ${hostName} page`;
-
-    const manifest: AppAgentManifest = {
-        emojiChar: "🚧",
-        description: schemaDescription,
-        schema: {
-            description: schemaDescription,
-            schemaType: "DynamicUserPageActions",
-            schemaFile: { content: schema, format: "ts" },
-        },
-    };
-
-    // register agent after request is processed to avoid a deadlock
-    setTimeout(async () => {
-        try {
-            await ctx.sessionContext.removeDynamicAgent(agentName);
-            debug(`Successfully removed existing agent: ${agentName}`);
-        } catch (error) {
-            console.warn(
-                `Normal removal failed for ${agentName}, attempting force cleanup:`,
-                error,
-            );
-
-            try {
-                await ctx.sessionContext.forceCleanupDynamicAgent(agentName);
-                debug(`Force cleanup successful for: ${agentName}`);
-            } catch (forceError) {
-                console.error(
-                    `Force cleanup also failed for ${agentName}:`,
-                    forceError,
-                );
-            }
-        }
-
-        try {
-            await ctx.sessionContext.addDynamicAgent(
-                agentName,
-                manifest,
-                createTempAgentForSchema(
-                    ctx.browser,
-                    ctx.agent,
-                    ctx.sessionContext,
-                ),
-            );
-            debug(`Successfully registered agent: ${agentName}`);
-        } catch (error) {
-            console.error("Failed to register dynamic agent:", error);
-            // Don't throw - this setTimeout runs async and shouldn't break the main flow
-        }
-    }, 1000);
+    // Tell the browser-side WebFlowAgent to re-fetch and register
+    sendWebFlowRefreshToClient(ctx.sessionContext);
 
     return {
         displayText: "Schema registered successfully",
@@ -606,406 +343,165 @@ async function handleRegisterSiteSchema(
     };
 }
 
-async function handleGetIntentFromReccording(
-    action: GetIntentFromRecording,
+async function handleCreateWebFlowFromRecording(
+    action: CreateWebFlowFromRecording,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
-    let recordedSteps = action.parameters.recordedActionSteps;
-    if (
-        recordedSteps === undefined ||
-        recordedSteps === "" ||
-        recordedSteps === "[]"
-    ) {
-        const descriptionResponse =
-            await ctx.agent.getDetailedStepsFromDescription(
-                action.parameters.recordedActionName,
-                action.parameters.recordedActionDescription,
-                action.parameters.fragments,
-                action.parameters.screenshots,
-            );
-        if (descriptionResponse.success) {
-            debug(descriptionResponse.data);
-            recordedSteps = JSON.stringify(
-                (descriptionResponse.data as any).actions,
-            );
-        }
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    if (!webFlowStore) {
+        throw new Error("WebFlowStore not available");
     }
 
-    let existingActionNames = action.parameters.existingActionNames;
-    const url = await getBrowserControl(
-        ctx.sessionContext.agentContext,
-    ).getPageUrl();
+    const rawSteps = JSON.parse(action.parameters.recordedSteps || "[]");
+    const url = action.parameters.startUrl;
 
-    if (!existingActionNames || existingActionNames.length === 0) {
-        const existingActions =
-            await ctx.sessionContext.agentContext.macrosStore?.getMacrosForUrl(
-                url!,
-            );
-        if (existingActions) {
-            const dedupedActionNames = new Set(
-                existingActions.map((action: any) => action.name),
-            );
-            existingActionNames = [...dedupedActionNames];
-        }
-    }
+    const recordingForNorm: RecordingData = {
+        actions: rawSteps,
+        startUrl: url,
+        description: action.parameters.actionDescription,
+    };
 
-    const timerName = `Getting intent schema`;
-    console.time(timerName);
-    const intentResponse = await ctx.agent.getIntentSchemaFromRecording(
-        action.parameters.recordedActionName,
-        existingActionNames,
-        action.parameters.recordedActionDescription,
-        recordedSteps,
-        action.parameters.fragments,
-        action.parameters.screenshots,
+    const trace = normalizeRecording(recordingForNorm);
+    debug(
+        `WebFlow from recording: normalized ${rawSteps.length} raw steps → ${trace.steps.length} trace steps`,
     );
 
-    if (!intentResponse.success) {
-        console.error("Attempt to process recorded action failed");
-        console.error(intentResponse.message);
+    const pageHtml = action.parameters.fragments
+        ?.map((f) => f.content)
+        .filter(Boolean);
+
+    const genOptions: ScriptGenerationOptions = {
+        suggestedName: action.parameters.actionName,
+        description: action.parameters.actionDescription,
+    };
+    if (pageHtml && pageHtml.length > 0) {
+        genOptions.pageHtml = pageHtml;
+    }
+
+    const flow = await generateWebFlowFromTrace(trace, genOptions);
+
+    if (!flow) {
         return {
-            displayText: "Action could not be completed",
+            displayText: "Failed to generate action from recording",
             entities: ctx.entities.getEntities(),
+            data: { success: false },
         };
     }
 
-    console.timeEnd(timerName);
+    flow.source = { type: "recording", timestamp: new Date().toISOString() };
 
-    const intentData = intentResponse.data as UserIntent;
+    await webFlowStore.save(flow);
+    debug(`Saved webFlow from recording: ${flow.name}`);
 
-    // Ensure action name is unique by adding a number suffix if needed
-    if (
-        existingActionNames &&
-        existingActionNames.includes(intentData.actionName)
-    ) {
-        const baseName = intentData.actionName;
-        let suffix = 2;
-        let uniqueName = `${baseName}${suffix}`;
-
-        while (existingActionNames.includes(uniqueName)) {
-            suffix++;
-            uniqueName = `${baseName}${suffix}`;
-        }
-
-        debug(
-            `LLM returned duplicate action name "${baseName}", using "${uniqueName}" instead`,
-        );
-        intentData.actionName = uniqueName;
-    }
-
-    const { actionSchema, typeDefinition } = await getIntentSchemaFromJSON(
-        intentData,
-        action.parameters.recordedActionDescription,
-    );
-
-    let message = "Intent schema: \n" + actionSchema;
-
-    const timerName2 = `Getting action schema`;
-    console.time(timerName2);
-    const stepsResponse = await ctx.agent.getActionStepsSchemaFromRecording(
-        intentData.actionName,
-        action.parameters.recordedActionDescription,
-        intentData,
-        recordedSteps,
-        action.parameters.fragments,
-        action.parameters.screenshots,
-    );
-
-    if (!stepsResponse.success) {
-        console.error("Attempt to process recorded action failed");
-        console.error(stepsResponse.message);
-        return {
-            displayText: "Action could not be completed",
-            entities: ctx.entities.getEntities(),
-            data: {
-                intent: intentResponse.data,
-            },
-        };
-    }
-
-    console.timeEnd(timerName2);
-
-    // AUTO-SAVE: Save authored action immediately using YAML format
-    let actionId = null;
-    if (intentResponse.success && stepsResponse.success) {
-        try {
-            debug(
-                "JSON RESPONSE: Intent :\n",
-                JSON.stringify(intentResponse.data),
-            );
-            debug(
-                "JSON RESPONSE: STEPS :\n",
-                JSON.stringify(stepsResponse.data),
-            );
-
-            // Direct save to ActionsStore (no longer using separate handler)
-            if (!ctx.sessionContext.agentContext.macrosStore) {
-                throw new Error("ActionsStore not available");
-            }
-
-            const domain = new URL(url).hostname;
-
-            // Get macros base path - use actionsStore directory for artifacts
-            const macrosBasePath = "actionsStore/macros";
-
-            // Create YAML extension with sessionStorage for proper path handling
-            const yamlExt = new YAMLMacroStoreExtension(
-                ctx.sessionContext.agentContext.macrosStore,
-                macrosBasePath,
-                ctx.sessionContext.sessionStorage,
-            );
-
-            // Convert steps to YAML format first (needed for parameter filtering)
-            // stepsResponse.data is a macrosJson object with a steps property
-            const stepsArray = stepsResponse.data?.steps || [];
-
-            // Validate: Ensure all steps have actionName (LLM sometimes omits this)
-            for (let i = 0; i < stepsArray.length; i++) {
-                const step = stepsArray[i];
-                if (!step.actionName || typeof step.actionName !== "string") {
-                    console.error(
-                        `Invalid step at index ${i}:`,
-                        JSON.stringify(step, null, 2),
-                    );
-                    throw new Error(
-                        `LLM returned invalid step without actionName at index ${i}. ` +
-                            `Description: "${step.description || "none"}". ` +
-                            `This indicates a problem with the LLM prompt or response parsing.`,
-                    );
-                }
-            }
-
-            // Extract parameters first so we can pass them to convertStepsToYAML
-            const parsedParams = extractParametersFromIntent(intentData);
-
-            // Convert steps to YAML, passing parameters so values can be replaced with parameter names
-            const yamlSteps = Array.isArray(stepsArray)
-                ? convertStepsToYAML(stepsArray, parsedParams)
-                : [];
-
-            // Filter to only parameters actually used in steps
-            const filteredParams = filterUnusedParameters(
-                parsedParams,
-                yamlSteps,
-            );
-            const yamlParameters = convertParametersToYAML(filteredParams);
-
-            // Create full YAML macro from recording using tested converter
-            const { yamlMacro, recordingId } =
-                await yamlExt.createYAMLFromRecording({
-                    name: intentData.actionName,
-                    description:
-                        action.parameters.recordedActionDescription ||
-                        `User action: ${intentData.actionName}`,
-                    author: "user",
-                    category: "utility",
-                    domain,
-                    url,
-                    parameters: yamlParameters,
-                    steps: yamlSteps,
-                    ...(action.parameters.screenshots && {
-                        screenshots: action.parameters.screenshots,
-                    }),
-                    recordedSteps: JSON.parse(recordedSteps || "[]"),
-                });
-
-            // Convert to minimal format for storage
-            const artifactsStorage = new ArtifactsStorage(
-                macrosBasePath,
-                ctx.sessionContext.sessionStorage,
-            );
-            const converter = new MacroConverter(artifactsStorage);
-            const minimalYaml = converter.convertFullToMinimal(yamlMacro);
-
-            // Save minimal YAML directly to MacroStore
-            const metadata: {
-                category?: any;
-                author?: any;
-                tags?: string[];
-                recordingId?: string;
-            } = {
-                author: yamlMacro.macro.author as any,
-                category: yamlMacro.macro.category as any,
-                recordingId,
-            };
-            if (yamlMacro.macro.tags) {
-                metadata.tags = yamlMacro.macro.tags;
-            }
-            const macroId =
-                await ctx.sessionContext.agentContext.macrosStore.saveMinimalMacro(
-                    minimalYaml,
-                    metadata,
-                );
-
-            const result = { success: true, macroId };
-
-            if (result.success) {
-                actionId = result.macroId;
-                debug(
-                    `Auto-saved authored action as minimal YAML: ${action.parameters.recordedActionName} (ID: ${macroId})`,
-                );
-
-                // Log minimal YAML for debugging
-                const minimalParser = new MinimalYAMLParser();
-                const minimalYamlString = minimalParser.stringify(minimalYaml);
-                debug("Minimal YAML macro:\n", minimalYamlString);
-            }
-        } catch (error) {
-            console.warn("Failed to auto-save authored action:", error);
-            // Continue without failing the intent creation
-        }
-    }
+    sendWebFlowRefreshToClient(ctx.sessionContext);
 
     return {
-        displayText: message,
+        displayText: `Created action: ${flow.name}`,
         entities: ctx.entities.getEntities(),
         data: {
-            intent: actionSchema,
-            intentJson: intentResponse.data,
-            intentTypeDefinition: typeDefinition,
-            actions: stepsResponse.data,
-            macroId: actionId, // Include for UI feedback
+            success: true,
+            webFlowName: flow.name,
+            script: flow.script,
+            parameters: flow.parameters,
+            description: flow.description,
+            grammarPatterns: flow.grammarPatterns,
         },
     };
 }
 
-async function handleGetAllMacros(
-    action: GetAllMacros,
+async function handleGetWebFlowsForDomain(
+    action: GetWebFlowsForDomain,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
-    return handleGetMacrosForUrl(
-        {
-            actionName: "getMacrosForUrl",
-            parameters: {
-                url: "",
-                includeGlobal: true,
-            },
-        } as GetMacrosForUrl,
-        ctx,
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    if (!webFlowStore) {
+        throw new Error("WebFlowStore not available");
+    }
+
+    const flows = await webFlowStore.listForDomainWithDetails(
+        action.parameters.domain,
     );
+
+    return {
+        displayText: `Found ${flows.length} actions`,
+        entities: ctx.entities.getEntities(),
+        data: {
+            actions: flows.map((f) => ({
+                name: f.name,
+                description: f.description,
+                parameters: f.parameters,
+                script: f.script,
+                source: f.source,
+                scope: f.scope,
+            })),
+        },
+    };
 }
 
-async function handleGetMacrosForUrl(
-    action: GetMacrosForUrl,
+async function handleGetAllWebFlows(
+    action: GetAllWebFlows,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
-    if (!ctx.sessionContext.agentContext.macrosStore) {
-        throw new Error("MacroStore not available");
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    if (!webFlowStore) {
+        throw new Error("WebFlowStore not available");
     }
 
-    const { url, includeGlobal = true, author } = action.parameters;
+    const flows = await webFlowStore.listAllWithDetails();
 
-    try {
-        let actions = [];
-        if (!url) {
-            actions =
-                await ctx.sessionContext.agentContext.macrosStore.getAllMacros();
-        } else {
-            actions =
-                await ctx.sessionContext.agentContext.macrosStore.getMacrosForUrl(
-                    url,
-                );
-        }
-
-        if (author) {
-            actions = actions.filter((a: any) => a.author === author);
-        }
-
-        if (actions.length > 0) {
-            const uniqueItems = new Map(
-                actions.map((action) => [action.name, action]),
-            );
-            actions = Array.from(uniqueItems.values());
-        }
-
-        if (includeGlobal && !author) {
-            const globalMacros =
-                await ctx.sessionContext.agentContext.macrosStore.getGlobalMacros();
-            actions.push(...globalMacros);
-        }
-
-        debug(`Retrieved ${actions.length} macros for URL: ${url}`);
-        return {
-            displayText: `Found ${actions.length} macros`,
-            entities: ctx.entities.getEntities(),
-            data: {
-                actions: actions,
-                count: actions.length,
-            },
-        };
-    } catch (error) {
-        console.error("Failed to get macros for URL:", error);
-        return {
-            displayText: "Failed to retrieve macros",
-            entities: ctx.entities.getEntities(),
-            data: {
-                actions: [],
-                count: 0,
-                error: error instanceof Error ? error.message : "Unknown error",
-            },
-        };
-    }
+    return {
+        displayText: `Found ${flows.length} actions`,
+        entities: ctx.entities.getEntities(),
+        data: {
+            actions: flows.map((f) => ({
+                name: f.name,
+                description: f.description,
+                parameters: f.parameters,
+                script: f.script,
+                source: f.source,
+                scope: f.scope,
+            })),
+        },
+    };
 }
 
-async function handleDeleteMacro(
-    action: DeleteMacro,
+async function handleDeleteWebFlow(
+    action: DeleteWebFlow,
     ctx: DiscoveryActionHandlerContext,
 ): Promise<DiscoveryActionResult> {
-    if (!ctx.sessionContext.agentContext.macrosStore) {
-        throw new Error("MacroStore not available");
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    if (!webFlowStore) {
+        throw new Error("WebFlowStore not available");
     }
 
-    const { macroId } = action.parameters;
+    const deleted = await webFlowStore.delete(action.parameters.name);
 
-    try {
-        const result =
-            await ctx.sessionContext.agentContext.macrosStore.deleteMacro(
-                macroId,
-            );
-
-        if (result.success) {
-            debug(`Deleted macro: ${macroId}`);
-            return {
-                displayText: "Macro deleted successfully",
-                entities: ctx.entities.getEntities(),
-                data: {
-                    success: true,
-                    macroId: macroId,
-                },
-            };
-        } else {
-            console.error(`Failed to delete macro ${macroId}:`, result.error);
-            return {
-                displayText: "Failed to delete macro",
-                entities: ctx.entities.getEntities(),
-                data: {
-                    success: false,
-                    error: result.error,
-                },
-            };
-        }
-    } catch (error) {
-        console.error("Failed to delete macro:", error);
-        return {
-            displayText: "Failed to delete macro",
-            entities: ctx.entities.getEntities(),
-            data: {
-                success: false,
-                error: error instanceof Error ? error.message : "Unknown error",
-            },
-        };
+    if (deleted) {
+        debug(`Deleted webFlow: ${action.parameters.name}`);
+        sendWebFlowRefreshToClient(ctx.sessionContext);
     }
+
+    return {
+        displayText: deleted
+            ? "Action deleted successfully"
+            : "Action not found",
+        entities: ctx.entities.getEntities(),
+        data: {
+            success: deleted,
+            name: action.parameters.name,
+        },
+    };
 }
 
 export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
     context: SessionContext<BrowserActionContext>,
 ) {
-    if (!context.agentContext.browserConnector) {
+    if (!context.agentContext.browserControl) {
         throw new Error("No connection to browser session.");
     }
 
-    const browser: BrowserConnector = context.agentContext.browserConnector;
+    const browser: BrowserControl = context.agentContext.browserControl;
     const agent = await createDiscoveryPageTranslator("GPT_5_2");
 
     // Create entity collector and action context
@@ -1026,29 +522,23 @@ export async function handleSchemaDiscoveryAction(
         case "summarizePage":
             result = await handleGetPageSummary(action, discoveryContext);
             break;
-        case "getIntentFromRecording":
-            result = await handleGetIntentFromReccording(
-                action,
-                discoveryContext,
-            );
-            break;
         case "registerPageDynamicAgent":
             result = await handleRegisterSiteSchema(action, discoveryContext);
             break;
-        case "startAuthoringSession":
-            result = await handleRegisterAuthoringAgent(
+        case "createWebFlowFromRecording":
+            result = await handleCreateWebFlowFromRecording(
                 action,
                 discoveryContext,
             );
             break;
-        case "getMacrosForUrl":
-            result = await handleGetMacrosForUrl(action, discoveryContext);
+        case "getWebFlowsForDomain":
+            result = await handleGetWebFlowsForDomain(action, discoveryContext);
             break;
-        case "getAllMacros":
-            result = await handleGetAllMacros(action, discoveryContext);
+        case "getAllWebFlows":
+            result = await handleGetAllWebFlows(action, discoveryContext);
             break;
-        case "deleteMacro":
-            result = await handleDeleteMacro(action, discoveryContext);
+        case "deleteWebFlow":
+            result = await handleDeleteWebFlow(action, discoveryContext);
             break;
         default:
             result = {

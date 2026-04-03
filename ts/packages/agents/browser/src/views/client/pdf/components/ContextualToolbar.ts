@@ -224,7 +224,7 @@ export class ContextualToolbar {
                 true,
             ); // Use capture phase to run before document handler
 
-            this.colorDropdown.appendChild(colorOption);
+            this.colorDropdown!.appendChild(colorOption);
         });
 
         // Add elements to document

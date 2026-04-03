@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { CompiledSpacingMode, CompiledValueNode } from "./grammarTypes.js";
+import { evaluateValueExpr } from "./grammarValueExprEvaluator.js";
 import registerDebug from "debug";
 // REVIEW: switch to RegExp.escape() when it becomes available.
 import escapeMatch from "regexp.escape";
@@ -14,14 +15,21 @@ import {
     VarStringPart,
 } from "./grammarTypes.js";
 
+// Separator mode for completion results.  Structurally identical to
+// SeparatorMode from @typeagent/agent-sdk (command.ts); independently
+// defined here so actionGrammar does not depend on agentSdk.  Keep
+// both definitions in sync.  The grammar matcher only produces
+// "spacePunctuation", "optional", and "none" — never "space"
+// (which is strictly command/flag-level).
+export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
-const debugCompletion = registerDebug("typeagent:grammar:completion");
 
 // Treats spaces and punctuation as word separators
-const separatorRegExpStr = "\\s\\p{P}";
+export const separatorRegExpStr = "\\s\\p{P}";
 const separatorRegExp = new RegExp(`[${separatorRegExpStr}]+`, "yu");
 const wildcardTrimRegExp = new RegExp(
-    `[${separatorRegExpStr}]*(.+?)[${separatorRegExpStr}]*$`,
+    `[${separatorRegExpStr}]*([^${separatorRegExpStr}](?:.*[^${separatorRegExpStr}])?)[${separatorRegExpStr}]*$`,
     "yu",
 );
 
@@ -45,8 +53,9 @@ const digitRe = /[0-9]/;
 // while still requiring them when both sides use word spaces
 // (e.g. Latin followed by Latin).
 function isWordBoundaryScript(c: string): boolean {
-    // Fast path: all ASCII letters are Latin-script (boundary required).
-    // ASCII digits and punctuation/space fall through to return false here
+    // Fast path: all ASCII characters are handled here without the regex.
+    // ASCII letters are Latin-script (boundary required).
+    // ASCII digits, punctuation, and space return false
     // (digits are handled separately by digitRe, punctuation/space never need a boundary).
     const code = c.charCodeAt(0);
     if (code < 128) {
@@ -54,13 +63,13 @@ function isWordBoundaryScript(c: string): boolean {
     }
     return wordBoundaryScriptRe.test(c);
 }
-function needsSeparatorInAutoMode(a: string, b: string): boolean {
+export function needsSeparatorInAutoMode(a: string, b: string): boolean {
     if (digitRe.test(a) && digitRe.test(b)) {
         return true;
     }
     return isWordBoundaryScript(a) && isWordBoundaryScript(b);
 }
-function requiresSeparator(
+export function requiresSeparator(
     a: string,
     b: string,
     mode: CompiledSpacingMode,
@@ -82,7 +91,55 @@ function requiresSeparator(
     }
 }
 
-function isBoundarySatisfied(
+// Convert a per-candidate (needsSep, spacingMode) pair into a
+// SeparatorMode value.  When needsSep is true (separator required),
+// the grammar always uses spacePunctuation separators.
+// When needsSep is false: "none" spacingMode → "none", otherwise
+// → "optional" (covers auto mode/CJK/mixed and explicit "optional").
+function candidateSeparatorMode(
+    needsSep: boolean,
+    spacingMode: CompiledSpacingMode,
+): SeparatorMode {
+    if (needsSep) {
+        return "spacePunctuation";
+    }
+    if (spacingMode === "none") {
+        return "none";
+    }
+    return "optional";
+}
+
+// Merge a new candidate's separator mode into the running aggregate.
+// The mode requiring the strongest separator wins (i.e. the mode that
+// demands the most from the user): space > spacePunctuation > optional > none.
+export function mergeSeparatorMode(
+    current: SeparatorMode | undefined,
+    needsSep: boolean,
+    spacingMode: CompiledSpacingMode,
+): SeparatorMode {
+    const candidateMode = candidateSeparatorMode(needsSep, spacingMode);
+    if (current === undefined) {
+        return candidateMode;
+    }
+    // "space" requires strict whitespace — strongest requirement.
+    if (current === "space" || candidateMode === "space") {
+        return "space";
+    }
+    // "spacePunctuation" requires a separator — next strongest.
+    if (
+        current === "spacePunctuation" ||
+        candidateMode === "spacePunctuation"
+    ) {
+        return "spacePunctuation";
+    }
+    // "optional" is a stronger requirement than "none".
+    if (current === "optional" || candidateMode === "optional") {
+        return "optional";
+    }
+    return "none";
+}
+
+export function isBoundarySatisfied(
     request: string,
     index: number,
     mode: CompiledSpacingMode,
@@ -103,11 +160,13 @@ function isBoundarySatisfied(
         case "optional":
         case "none":
             // In both "optional" and "none" modes there is no constraint on
-            // the outer boundary.  "none" enforces zero-width flex-space
-            // *between* tokens (handled by the regex builder in
-            // matchStringPart), but must not reject a match simply because a
-            // literal space from an escaped character (e.g. "\ ") happens to
-            // sit at the boundary.
+            // the outer boundary.  For top-level "none" rules, leading
+            // whitespace is rejected (via leadingSpacingMode) and trailing
+            // content is rejected (via finalizeState).  For nested rules,
+            // the nearest ancestor with a flex-space boundary — or the
+            // top-level rule if none — controls leading/trailing spacing
+            // around the nested match (see leadingSpacingMode).  The
+            // boundary check itself always passes.
             return true;
         case undefined: // auto: requires a separator only when BOTH characters
             // adjacent to the boundary belong to word-boundary scripts.  If
@@ -155,7 +214,15 @@ type ParentMatchState = {
     repeatPartIndex?: number | undefined; // defined for ()* / )+ — holds the part index to loop back to
     spacingMode: CompiledSpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
 };
-type MatchState = {
+
+// A wildcard slot awaiting its capture value.  Used on MatchState.pendingWildcard
+// and saved across finalizeState calls for backward completion.
+export type PendingWildcard = {
+    readonly start: number;
+    readonly valueId: number | undefined;
+};
+
+export type MatchState = {
     // Current context
     name: string; // For debugging
     parts: GrammarPart[];
@@ -175,10 +242,32 @@ type MatchState = {
     spacingMode: CompiledSpacingMode; // active spacing mode for this rule
 
     index: number;
-    pendingWildcard?:
+    pendingWildcard?: PendingWildcard | undefined;
+
+    // Completion support: tracks the last matched non-wildcard part
+    // (string or number).  Used by backward completion to back up to
+    // the most recently matched item.
+    //
+    // `afterWildcard` indicates the part was matched via wildcard
+    // scanning (matchStringPartWithWildcard / matchVarNumberPartWithWildcard)
+    // — i.e., a wildcard preceded this part and the part's position
+    // was determined by scanning forward through the wildcard region.
+    // When backward backs up to such a part, the position is ambiguous
+    // (see afterWildcard on GrammarCompletionResult in grammarCompletion.ts).
+    lastMatchedPartInfo?:
         | {
+              readonly type: "string";
               readonly start: number;
-              readonly valueId: number | undefined;
+              readonly part: StringPart;
+              readonly afterWildcard: boolean;
+              readonly matchedSpacingMode: CompiledSpacingMode;
+          }
+        | {
+              readonly type: "number";
+              readonly start: number;
+              readonly valueId: number;
+              readonly afterWildcard: boolean;
+              readonly matchedSpacingMode: CompiledSpacingMode;
           }
         | undefined;
 };
@@ -302,7 +391,7 @@ function createValueForVariable(
     );
 }
 
-function createValue(
+export function createValue(
     node: CompiledValueNode | undefined,
     valueIds: ValueIdNode | undefined,
     values: MatchedValueEntry | undefined,
@@ -338,24 +427,45 @@ function createValue(
         case "object": {
             const obj: Record<string, any> = {};
 
-            for (const [k, v] of Object.entries(node.value)) {
-                if (v === null) {
-                    // Shorthand form: { k } means { k: k }
-                    obj[k] = createValueForVariable(
-                        k,
+            for (const elem of node.value) {
+                if (elem.type === "spread") {
+                    // Spread: evaluate the argument and merge into the object.
+                    const inner = createValue(
+                        elem.argument,
                         valueIds,
                         values,
-                        propertyName ? `${propertyName}.${k}` : k,
+                        propertyName,
+                        wildcardPropertyNames,
+                        partialValueId,
+                        stat,
+                    );
+                    if (inner === undefined) {
+                        // Partial match — the spread argument's variable
+                        // hasn't been captured yet.  Skip silently.
+                    } else if (typeof inner === "object") {
+                        Object.assign(obj, inner);
+                    } else {
+                        throw new Error(
+                            `Internal error: spread argument must produce an object, got ${typeof inner}`,
+                        );
+                    }
+                } else if (elem.value === null) {
+                    // Shorthand form: { k } means { k: k }
+                    obj[elem.key] = createValueForVariable(
+                        elem.key,
+                        valueIds,
+                        values,
+                        propertyName ? `${propertyName}.${elem.key}` : elem.key,
                         wildcardPropertyNames,
                         partialValueId,
                         stat,
                     );
                 } else {
-                    obj[k] = createValue(
-                        v,
+                    obj[elem.key] = createValue(
+                        elem.value,
                         valueIds,
                         values,
-                        propertyName ? `${propertyName}.${k}` : k,
+                        propertyName ? `${propertyName}.${elem.key}` : elem.key,
                         wildcardPropertyNames,
                         partialValueId,
                         stat,
@@ -367,9 +477,10 @@ function createValue(
         case "array": {
             const arr: any[] = [];
             for (const [index, v] of node.value.entries()) {
-                arr.push(
-                    createValue(
-                        v,
+                if (v.type === "spreadElement") {
+                    // Spread: evaluate the argument and flatten into the array.
+                    const inner = createValue(
+                        v.argument,
                         valueIds,
                         values,
                         propertyName
@@ -378,8 +489,27 @@ function createValue(
                         wildcardPropertyNames,
                         partialValueId,
                         stat,
-                    ),
-                );
+                    );
+                    if (Array.isArray(inner)) {
+                        arr.push(...inner);
+                    } else {
+                        arr.push(inner);
+                    }
+                } else {
+                    arr.push(
+                        createValue(
+                            v,
+                            valueIds,
+                            values,
+                            propertyName
+                                ? `${propertyName}.${index}`
+                                : index.toString(),
+                            wildcardPropertyNames,
+                            partialValueId,
+                            stat,
+                        ),
+                    );
+                }
             }
             return arr;
         }
@@ -394,10 +524,36 @@ function createValue(
                 stat,
             );
         }
+        default: {
+            // Expression node (binaryExpression, unaryExpression, etc.).
+            // All expression node types are handled by evaluateValueExpr,
+            // which throws on unknown types — no silent fallthrough risk.
+            // The evalBase callback routes base nodes (literal, variable,
+            // object, array) back through createValue so variable resolution
+            // and wildcard extraction work correctly.
+            return evaluateValueExpr(node, (baseNode) =>
+                createValue(
+                    baseNode,
+                    valueIds,
+                    values,
+                    propertyName,
+                    wildcardPropertyNames,
+                    partialValueId,
+                    stat,
+                ),
+            );
+        }
     }
 }
 
-function getWildcardStr(
+// Extract and trim a wildcard capture from `request[start..end)`.  In the
+// default spacing modes the result is stripped of leading/trailing separators
+// (whitespace and punctuation).  Returns `undefined` when the capture is empty
+// or consists *entirely* of separator characters — e.g. a lone " " — so that
+// the matcher rejects wildcard slots that contain no meaningful content.
+// In "none" mode no trimming is performed; only a truly zero-length capture
+// is rejected.
+export function getWildcardStr(
     request: string,
     start: number,
     end: number,
@@ -485,7 +641,7 @@ function addValue(
     }
 }
 
-function nextNonSeparatorIndex(request: string, index: number) {
+export function nextNonSeparatorIndex(request: string, index: number) {
     if (request.length <= index) {
         return request.length;
     }
@@ -498,7 +654,7 @@ function nextNonSeparatorIndex(request: string, index: number) {
 
 // Finalize the state to capture the last wildcard if any
 // and make sure to reject any trailing un-matched non-separator characters.
-function finalizeState(state: MatchState, request: string) {
+export function finalizeState(state: MatchState, request: string) {
     const pendingWildcard = state.pendingWildcard;
     if (pendingWildcard !== undefined) {
         const value = getWildcardStr(
@@ -517,6 +673,19 @@ function finalizeState(state: MatchState, request: string) {
         }
     }
     if (state.index < request.length) {
+        // In "none" mode the match must be exact — no trailing content
+        // is tolerated.  This applies to the top-level rule's spacing
+        // mode (by the time finalizeState runs, nested rules have been
+        // unwound and the spacing mode has been restored to the
+        // top-level rule's mode).
+        if (state.spacingMode === "none") {
+            debugMatch(
+                state,
+                `Reject trailing content in none mode at ${state.index}: ${request.slice(state.index)}`,
+            );
+            return false;
+        }
+
         // Detect trailing separators
         const nonSepIndex = nextNonSeparatorIndex(request, state.index);
         if (nonSepIndex < request.length) {
@@ -573,7 +742,7 @@ function finalizeMatch(
     results.push(matchResult);
 }
 
-function finalizeNestedRule(
+export function finalizeNestedRule(
     state: MatchState,
     pending?: MatchState[],
     partial: boolean = false,
@@ -668,6 +837,27 @@ function matchStringPartWithWildcard(
         }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex, pending)) {
+            // Assign default string value for single-part rules without
+            // an explicit value expression — same logic as the non-wildcard
+            // path in matchStringPartWithoutWildcard.  Without this, a
+            // pending wildcard from a parent rule that leaks into a
+            // single-part child rule would bypass the default value
+            // assignment and cause "No value assign to variable" at
+            // finalizeNestedRule time.
+            if (
+                state.value === undefined &&
+                state.parts.length === 1 &&
+                state.valueIds !== null
+            ) {
+                addValue(state, undefined, part.value.join(" "));
+            }
+            state.lastMatchedPartInfo = {
+                type: "string",
+                start: wildcardEnd,
+                part,
+                afterWildcard: true,
+                matchedSpacingMode: state.spacingMode,
+            };
             debugMatch(
                 state,
                 `Matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
@@ -713,8 +903,51 @@ function matchStringPartWithoutWildcard(
         // default string part value
         addValue(state, undefined, part.value.join(" "));
     }
+    state.lastMatchedPartInfo = {
+        type: "string",
+        start: curr,
+        part,
+        afterWildcard: false,
+        matchedSpacingMode: state.spacingMode,
+    };
     state.index = newIndex;
     return true;
+}
+
+// Determine the spacing mode that governs the leading separator prefix
+// ([\s\p{P}]*?) for a part at the current position.
+//
+// For subsequent parts within a rule (partIndex > 0), the rule's own
+// spacingMode applies — there is a flex-space boundary between the
+// previous part and this one.
+//
+// For the first part of a nested rule (partIndex === 0, parent exists),
+// we walk up the parent chain looking for the nearest ancestor that has
+// a flex-space boundary before the rule reference (parent.partIndex > 1
+// means the rule ref was not the first part).  That ancestor's spacing
+// mode controls the separator.  If no ancestor has a preceding
+// flex-space, we've reached the top-level rule — its spacing mode
+// determines the leading/trailing behavior (all modes except "none"
+// allow leading whitespace at the top level).
+export function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
+    if (state.partIndex !== 0 || state.parent === undefined) {
+        return state.spacingMode;
+    }
+    let parent: ParentMatchState | undefined = state.parent;
+    while (parent !== undefined) {
+        if (parent.partIndex > 1) {
+            // The rule reference had a preceding part in this ancestor
+            // — use this ancestor's spacing mode for the flex-space.
+            return parent.spacingMode;
+        }
+        if (parent.parent === undefined) {
+            // Reached the top-level rule with no preceding flex-space.
+            return parent.spacingMode;
+        }
+        parent = parent.parent;
+    }
+    // Should not reach here (the loop terminates when parent.parent is undefined).
+    return state.spacingMode;
 }
 
 function matchStringPart(
@@ -754,11 +987,13 @@ function matchStringPart(
         regexpSegments.push(sep, escaped[i]);
     }
     const joined = regexpSegments.join("");
-    // In "none" mode no leading separator is consumed; the match must start
-    // exactly at the current position (or, for wildcards, at whatever index
-    // the global scan finds the pattern text).
+    // Whether to add a leading separator prefix is determined by
+    // leadingSpacingMode: for the first part of a nested rule, the
+    // parent's spacing mode decides; otherwise the rule's own mode.
+    // In "none" mode no leading separator is consumed; the match must
+    // start exactly at the current position.
     const regExpStr =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? joined
             : `[${separatorRegExpStr}]*?${joined}`;
     return state.pendingWildcard !== undefined
@@ -779,7 +1014,7 @@ function matchVarNumberPartWithWildcard(
 ) {
     const curr = state.index;
     const re =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? matchNumberPartWithWildcardNoSepRegExp
             : matchNumberPartWithWildcardRegExp;
     re.lastIndex = curr;
@@ -810,7 +1045,17 @@ function matchVarNumberPartWithWildcard(
                 `Matched number at ${wildcardEnd} to ${newIndex}`,
             );
 
-            addValue(state, part.variable, n);
+            const valueId = addValueId(state, part.variable);
+            if (valueId !== undefined) {
+                addValueWithId(state, valueId, n, false);
+                state.lastMatchedPartInfo = {
+                    type: "number",
+                    start: wildcardEnd,
+                    valueId,
+                    afterWildcard: true,
+                    matchedSpacingMode: state.spacingMode,
+                };
+            }
             return true;
         }
         debugMatch(
@@ -832,7 +1077,7 @@ function matchVarNumberPartWithoutWildcard(
 ) {
     const curr = state.index;
     const re =
-        state.spacingMode === "none"
+        leadingSpacingMode(state) === "none"
             ? matchNumberPartNoSepRegexp
             : matchNumberPartRegexp;
     re.lastIndex = curr;
@@ -854,7 +1099,17 @@ function matchVarNumberPartWithoutWildcard(
 
     debugMatch(state, `Matched number to ${newIndex}`);
 
-    addValue(state, part.variable, n);
+    const valueId = addValueId(state, part.variable);
+    if (valueId !== undefined) {
+        addValueWithId(state, valueId, n, false);
+        state.lastMatchedPartInfo = {
+            type: "number",
+            start: curr,
+            valueId,
+            afterWildcard: false,
+            matchedSpacingMode: state.spacingMode,
+        };
+    }
     state.index = newIndex;
     return true;
 }
@@ -880,14 +1135,19 @@ function matchVarStringPart(state: MatchState, part: VarStringPart) {
         return false;
     }
 
+    const valueId = addValueId(state, part.variable, part.typeName);
     state.pendingWildcard = {
-        valueId: addValueId(state, part.variable, part.typeName),
+        valueId,
         start: state.index,
     };
     return true;
 }
 
-function matchState(state: MatchState, request: string, pending: MatchState[]) {
+export function matchState(
+    state: MatchState,
+    request: string,
+    pending: MatchState[],
+) {
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
@@ -1003,7 +1263,7 @@ function matchState(state: MatchState, request: string, pending: MatchState[]) {
     }
 }
 
-function initialMatchState(grammar: Grammar): MatchState[] {
+export function initialMatchState(grammar: Grammar): MatchState[] {
     return grammar.rules
         .map((r, i) => ({
             name: `<Start>[${i}]`,
@@ -1016,45 +1276,6 @@ function initialMatchState(grammar: Grammar): MatchState[] {
             spacingMode: r.spacingMode,
         }))
         .reverse();
-}
-
-export type GrammarCompletionProperty = {
-    match: unknown;
-    propertyNames: string[];
-};
-
-export type GrammarCompletionResult = {
-    completions: string[];
-    properties?: GrammarCompletionProperty[] | undefined;
-};
-
-function getGrammarCompletionProperty(
-    state: MatchState,
-    valueId: number,
-): GrammarCompletionProperty | undefined {
-    const temp = { ...state };
-    if (temp.valueIds === null) {
-        // valueId would have been undefined
-        throw new Error(
-            "Internal Error: state for getGrammarCompletionProperty should not have valueIds be null",
-        );
-    }
-    const wildcardPropertyNames: string[] = [];
-
-    while (finalizeNestedRule(temp, undefined, true)) {}
-    const match = createValue(
-        temp.value,
-        temp.valueIds,
-        temp.values,
-        "",
-        wildcardPropertyNames,
-        valueId,
-    );
-
-    return {
-        match,
-        propertyNames: wildcardPropertyNames,
-    };
 }
 
 function debugMatch(state: MatchState, msg: string) {
@@ -1082,103 +1303,4 @@ export function matchGrammar(grammar: Grammar, request: string) {
     }
 
     return results;
-}
-
-/**
- * Check if the remaining input text is a case-insensitive prefix of a rule's
- * string part. Used for completions when the user has partially typed a keyword.
- * For example, prefix "p" should match and complete "play".
- */
-function isPartialPrefixOfStringPart(
-    prefix: string,
-    index: number,
-    part: StringPart,
-): boolean {
-    // Get the remaining text after any leading separators
-    const remaining = prefix.slice(index).trimStart().toLowerCase();
-    if (remaining.length === 0) {
-        return false; // No partial text - handled by the normal completion path
-    }
-    const partText = part.value.join(" ").toLowerCase();
-    return partText.startsWith(remaining) && remaining.length < partText.length;
-}
-
-export function matchGrammarCompletion(
-    grammar: Grammar,
-    prefix: string,
-): GrammarCompletionResult {
-    debugCompletion(`Start completion for prefix: "${prefix}"`);
-    const pending = initialMatchState(grammar);
-    const completions: string[] = [];
-    const properties: GrammarCompletionProperty[] = [];
-    while (pending.length > 0) {
-        const state = pending.pop()!;
-        debugMatch(state, `resume state`);
-        const matched = matchState(state, prefix, pending);
-
-        if (finalizeState(state, prefix)) {
-            if (matched) {
-                debugCompletion("Matched. Nothing to complete.");
-                // Matched exactly, nothing to complete.
-                continue;
-            }
-            // Completion with the current part
-            const nextPart = state.parts[state.partIndex];
-
-            debugCompletion(`Completing ${nextPart.type} part ${state.name}`);
-            if (nextPart.type === "string") {
-                debugCompletion(
-                    `Adding completion text: "${nextPart.value.join(" ")}"`,
-                );
-                completions.push(nextPart.value.join(" "));
-            }
-        } else {
-            // We can't finalize the state because of empty pending wildcard
-            // or because there's trailing unmatched text.
-            const pendingWildcard = state.pendingWildcard;
-            if (
-                pendingWildcard !== undefined &&
-                pendingWildcard.valueId !== undefined
-            ) {
-                debugCompletion("Completing wildcard part");
-                const completionProperty = getGrammarCompletionProperty(
-                    state,
-                    pendingWildcard.valueId,
-                );
-                if (completionProperty !== undefined) {
-                    debugCompletion(
-                        `Adding completion property: ${JSON.stringify(completionProperty)}`,
-                    );
-                    properties.push(completionProperty);
-                }
-            } else if (!matched) {
-                // matchState failed on a string part and there's trailing text.
-                // Check if the remaining input is a partial prefix of the
-                // current string part (e.g. "p" is a prefix of "play").
-                const currentPart = state.parts[state.partIndex];
-                if (
-                    currentPart !== undefined &&
-                    currentPart.type === "string" &&
-                    isPartialPrefixOfStringPart(
-                        prefix,
-                        state.index,
-                        currentPart,
-                    )
-                ) {
-                    const fullText = currentPart.value.join(" ");
-                    debugCompletion(
-                        `Adding partial prefix completion: "${fullText}"`,
-                    );
-                    completions.push(fullText);
-                }
-            }
-        }
-    }
-
-    const result = {
-        completions,
-        properties,
-    };
-    debugCompletion(`Completed. ${JSON.stringify(result)}`);
-    return result;
 }

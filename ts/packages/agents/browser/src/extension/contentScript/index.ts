@@ -24,20 +24,13 @@ import "./types";
 /**
  * Injects the tabId into the MAIN world so WebAgents can access it.
  * This is needed because chrome.runtime APIs are not available in the MAIN world.
- * Uses both script injection and postMessage for reliability.
+ * Uses postMessage which the platformAdapter listens for to set window._tabId.
  */
 async function injectTabIdIntoMainWorld(): Promise<void> {
     try {
         const response = await chrome.runtime.sendMessage({ type: "getTabId" });
         const tabId = response?.tabId;
         if (tabId) {
-            // Method 1: Inject script to set window._tabId directly
-            const script = document.createElement("script");
-            script.textContent = `window._tabId = "${tabId}";`;
-            (document.head || document.documentElement).appendChild(script);
-            script.remove();
-
-            // Method 2: Post message for any listeners waiting for tabId
             window.postMessage(
                 { type: "typeagent-tabId", tabId },
                 window.location.origin,

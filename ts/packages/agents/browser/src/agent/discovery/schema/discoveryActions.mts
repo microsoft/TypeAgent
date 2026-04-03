@@ -20,10 +20,6 @@ export type RegisterPageDynamicAgent = {
     };
 };
 
-export type StartAuthoringSession = {
-    actionName: "startAuthoringSession";
-};
-
 export type HtmlFragments = {
     frameId: string;
     content: string;
@@ -31,48 +27,43 @@ export type HtmlFragments = {
     cssSelector?: string;
 };
 
-export type GetIntentFromRecording = {
-    actionName: "getIntentFromRecording";
+export type CreateWebFlowFromRecording = {
+    actionName: "createWebFlowFromRecording";
     parameters: {
-        recordedActionName: string;
-        recordedActionDescription: string;
-        recordedActionSteps?: string;
-        existingActionNames: string[];
-        fragments?: HtmlFragments[];
+        actionName: string;
+        actionDescription: string;
+        recordedSteps: string;
+        existingActionNames?: string[];
+        startUrl: string;
         screenshots?: string[];
+        fragments?: HtmlFragments[];
     };
 };
 
-export type GetMacrosForUrl = {
-    actionName: "getMacrosForUrl";
+export type GetWebFlowsForDomain = {
+    actionName: "getWebFlowsForDomain";
     parameters: {
-        url: string;
-        includeGlobal?: boolean;
-        author?: "discovered" | "user";
+        domain: string;
     };
 };
 
-export type GetAllMacros = {
-    actionName: "getAllMacros";
+export type DeleteWebFlow = {
+    actionName: "deleteWebFlow";
     parameters: {
-        includeGlobal?: boolean;
-        author?: "discovered" | "user";
+        name: string;
     };
 };
 
-export type DeleteMacro = {
-    actionName: "deleteMacro";
-    parameters: {
-        macroId: string;
-    };
+export type GetAllWebFlows = {
+    actionName: "getAllWebFlows";
+    parameters: {};
 };
 
 export type SchemaDiscoveryActions =
     | DetectPageActions
     | RegisterPageDynamicAgent
     | SummarizePage
-    | StartAuthoringSession
-    | GetIntentFromRecording
-    | GetMacrosForUrl
-    | GetAllMacros
-    | DeleteMacro;
+    | CreateWebFlowFromRecording
+    | GetWebFlowsForDomain
+    | GetAllWebFlows
+    | DeleteWebFlow;

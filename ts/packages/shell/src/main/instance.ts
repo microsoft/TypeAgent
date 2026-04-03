@@ -32,9 +32,9 @@ import {
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { setPendingUpdateCallback } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
-import { isProd } from "./index.js";
+import { isProd, isTest } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
-import { connectDispatcher } from "@typeagent/agent-server-client";
+import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -127,16 +127,18 @@ async function initializeDispatcher(
         let newDispatcher: Dispatcher;
         if (connect !== undefined) {
             // Connect to remote dispatcher instead of creating one
-            newDispatcher = await connectDispatcher(
+            newDispatcher = await ensureAndConnectDispatcher(
                 clientIO,
-                `ws://localhost:${connect}`,
+                connect,
                 undefined,
                 () => {
-                    dialog.showErrorBox(
-                        "Disconnected",
-                        "The connection to the dispatcher was lost.",
-                    );
-                    app.quit();
+                    if (!quitting) {
+                        dialog.showErrorBox(
+                            "Disconnected",
+                            "The connection to the dispatcher was lost.",
+                        );
+                        app.quit();
+                    }
                 },
             );
             debugShellInit(
@@ -149,13 +151,16 @@ async function initializeDispatcher(
                     "instanceDir is required when not in connect mode",
                 );
             }
-            const indexingServiceRegistry =
-                await getIndexingServiceRegistry(instanceDir);
+            const configName = isTest ? "test" : undefined;
+            const indexingServiceRegistry = await getIndexingServiceRegistry(
+                instanceDir,
+                configName,
+            );
 
             newDispatcher = await createDispatcher("shell", {
                 appAgentProviders: [
                     createShellAgentProvider(shellWindow),
-                    ...getDefaultAppAgentProviders(instanceDir),
+                    ...getDefaultAppAgentProviders(instanceDir, configName),
                 ],
                 agentInitOptions: {
                     browser: browserControl.control,
@@ -248,7 +253,12 @@ async function initializeDispatcher(
 
         return dispatcher;
     } catch (e: any) {
-        dialog.showErrorBox("Exception initializing dispatcher", e.stack);
+        if (isTest) {
+            // In test mode, avoid blocking dialogs so the process can exit cleanly
+            console.error("Exception initializing dispatcher:", e.stack);
+        } else {
+            dialog.showErrorBox("Exception initializing dispatcher", e.stack);
+        }
         return undefined;
     }
 }

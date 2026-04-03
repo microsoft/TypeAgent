@@ -5,7 +5,7 @@ import { NFA, NFATransition } from "./nfa.js";
 import {
     GrammarCompletionResult,
     GrammarCompletionProperty,
-} from "./grammarMatcher.js";
+} from "./grammarCompletion.js";
 import registerDebug from "debug";
 
 const debugCompletion = registerDebug("typeagent:nfa:completion");
@@ -261,7 +261,11 @@ export function computeNFACompletions(
 
     if (reachableStates.length === 0) {
         debugCompletion(`  → no reachable states, returning empty`);
-        return { completions: [] };
+        return {
+            completions: [],
+            directionSensitive: false,
+            afterWildcard: "none",
+        };
     }
 
     // Explore completions from reachable states
@@ -285,6 +289,11 @@ export function computeNFACompletions(
 
     const result: GrammarCompletionResult = {
         completions: uniqueCompletions,
+        directionSensitive: false,
+        // TODO: The NFA path does not yet track wildcard-at-EOI states.
+        // If NFA grammars gain wildcard support, this should be computed
+        // dynamically like the DFA path in grammarCompletion.ts.
+        afterWildcard: "none",
     };
     const grammarProperties = buildGrammarProperties(nfa, properties);
     if (grammarProperties.length > 0) {

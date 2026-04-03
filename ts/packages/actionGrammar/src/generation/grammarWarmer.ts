@@ -778,7 +778,7 @@ function assembleGrammar(
         }
     }
     if (entityTypes.size > 0) {
-        output += `entity ${Array.from(entityTypes).join(", ")};\n\n`;
+        output += `import { ${Array.from(entityTypes).join(", ")} };\n\n`;
     }
 
     // Per-action rules

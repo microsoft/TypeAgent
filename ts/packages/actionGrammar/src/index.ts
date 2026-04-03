@@ -9,6 +9,8 @@ export type {
 export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
+export type { LoadGrammarRulesOptions } from "./grammarLoader.js";
+export type { SchemaLoader } from "./grammarCompiler.js";
 
 // Parser (for tooling — formatter, linters, etc.)
 export { parseGrammarRules } from "./grammarRuleParser.js";
@@ -21,12 +23,13 @@ export type {
 // Writer / formatter
 export { writeGrammarRules } from "./grammarRuleWriter.js";
 
+export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
+
 export {
-    matchGrammar,
-    GrammarMatchResult,
     matchGrammarCompletion,
     GrammarCompletionResult,
-} from "./grammarMatcher.js";
+} from "./grammarCompletion.js";
+export type { AfterWildcard } from "./grammarCompletion.js";
 
 // Entity system
 export type { EntityValidator, EntityConverter } from "./entityRegistry.js";

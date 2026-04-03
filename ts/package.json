@@ -47,6 +47,7 @@
     "shell:test": "pnpm -C packages/shell run shell:test",
     "start:agent-server": "pnpm -C packages/agentServer/server run start",
     "start:mcp": "pnpm -C packages/commandExecutor run start",
+    "stop:agent-server": "pnpm -C packages/agentServer/server run stop",
     "test": "pnpm run test:local && pnpm run test:live && pnpm run shell:test",
     "test:keys": "npx tsx tools/scripts/testServiceKeys.ts",
     "test:live": "pnpm -r ---no-bail  -no-sort --stream --workspace-concurrency=1 run test:live",
@@ -60,7 +61,7 @@
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
-  "packageManager": "pnpm@10.30.3+sha512.c961d1e0a2d8e354ecaa5166b822516668b7f44cb5bd95122d590dd81922f606f5473b6d23ec4a5be05e7fcd18e8488d47d978bbe981872f1145d06e9a740017",
+  "packageManager": "pnpm@10.32.1+sha512.a706938f0e89ac1456b6563eab4edf1d1faf3368d1191fc5c59790e96dc918e4456ab2e67d613de1043d2e8c81f87303e6b40d4ffeca9df15ef1ad567348f2be",
   "engines": {
     "node": ">=20",
     "pnpm": ">=10"
@@ -93,7 +94,15 @@
       ]
     },
     "overrides": {
-      "node-gyp": "^12.2.0"
+      "@azure/core-xml": ">=1.5.0 <2.0.0",
+      "express>path-to-regexp": "0.1.13",
+      "fast-xml-parser": ">=5.5.7 <6.0.0",
+      "hono": ">=4.12.8 <5.0.0",
+      "http-proxy-agent": ">=7.0.0 <8.0.0",
+      "node-forge": ">=1.4.0 <2.0.0",
+      "node-gyp": "^12.2.0",
+      "router>path-to-regexp": ">=8.4.0 <9.0.0",
+      "serialize-javascript": ">=7.0.5 <8.0.0"
     },
     "ignoredBuiltDependencies": [
       "leveldown"
@@ -101,7 +110,8 @@
   },
   "peerDependencyRules": {
     "ignoreMissing": [
-      "eslint"
+      "eslint",
+      "zod"
     ],
     "allowedVersions": {
       "zod": "*",

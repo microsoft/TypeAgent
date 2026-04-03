@@ -3,7 +3,8 @@
 import { build } from "vite";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { copyFileSync, mkdirSync, cpSync } from "fs";
+import { copyFileSync, mkdirSync, cpSync, existsSync } from "fs";
+import { execSync } from "child_process";
 import chalk from "chalk";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -56,20 +57,20 @@ const sharedScripts = {
     webTypeAgentMain: "webTypeAgentMain.ts",
     webTypeAgentContentScript: "webTypeAgentContentScript.ts",
     "views/options": "views/options.ts",
-    "views/pageMacros": "views/pageMacros.ts",
     "views/macrosLibrary": "views/macrosLibrary.ts",
     "views/entityGraphView": "views/entityGraphView.ts",
     "views/topicGraphView": "views/topicGraphView.ts",
-    "views/pageKnowledge": "views/pageKnowledge.ts",
-    "views/pageQnA": "views/pageQnA.ts",
     "views/annotationsLibrary": "views/annotationsLibrary.ts",
     "views/knowledgeLibrary": "views/knowledgeLibrary.ts",
     "views/pdfView": "views/pdfView.ts",
     "views/chatPanel": "views/chatPanel.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
+    "sites/crossword": "sites/crossword.ts",
+    "sites/commerce": "sites/commerce.ts",
+    "sites/instacart": "sites/instacart.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
+    "sites/webflow": "sites/webflow.ts",
     "offscreen/contentProcessor": "offscreen/contentProcessor.ts",
-    "offscreen/screenshotCapture": "offscreen/screenshotCapture.ts",
 };
 
 const electronOnlyScripts = {
@@ -124,12 +125,6 @@ const libraryAssets = [
     "views/macrosLibrary.html",
     "views/options.css",
     "views/options.html",
-    "views/pageKnowledge.css",
-    "views/pageKnowledge.html",
-    "views/pageMacros.css",
-    "views/pageMacros.html",
-    "views/pageQnA.css",
-    "views/pageQnA.html",
     "views/pdfView.css",
     "views/pdfView.html",
     "views/chatPanel.css",
@@ -157,10 +152,6 @@ function copyCommonStaticAssets(outDir) {
         `${srcDir}/offscreen/offscreen.html`,
         `${outDir}/offscreen/offscreen.html`,
     );
-    copyFileSync(
-        `${srcDir}/offscreen/screenshotCapture.html`,
-        `${outDir}/offscreen/screenshotCapture.html`,
-    );
 
     mkdirSync(`${outDir}/sites`, { recursive: true });
     copyFileSync(
@@ -184,6 +175,12 @@ if (verbose)
             `\n🔨 Building in ${buildMode.toUpperCase()} mode...\n`,
         ),
     );
+
+// Path to crossword grammar source (used later for compilation)
+const crosswordAgrPath = resolve(
+    srcDir,
+    "webagent/crossword/crosswordSchema.agr",
+);
 
 //
 // ------------------------
@@ -230,6 +227,35 @@ for (const [name, relPath] of Object.entries(sharedScripts)) {
 if (verbose) console.log(chalk.cyan("\n📁 Copying Chrome static files..."));
 copyFileSync(`${srcDir}/manifest.json`, `${chromeOutDir}/manifest.json`);
 copyCommonStaticAssets(chromeOutDir);
+
+// Compile and copy WebAgent grammars
+if (verbose) console.log(chalk.cyan("📝 Compiling WebAgent grammars..."));
+const chromeGrammarPath = resolve(
+    chromeOutDir,
+    "webagent/crossword/crosswordSchema.ag.json",
+);
+if (existsSync(crosswordAgrPath)) {
+    mkdirSync(dirname(chromeGrammarPath), { recursive: true });
+    try {
+        execSync(`npx agc -i "${crosswordAgrPath}" -o "${chromeGrammarPath}"`, {
+            cwd: resolve(__dirname, ".."),
+            stdio: verbose ? "inherit" : "pipe",
+        });
+        if (verbose) console.log(chalk.green("✅ Crossword grammar compiled"));
+    } catch (error) {
+        console.error(
+            chalk.red("❌ Failed to compile crossword grammar:"),
+            error.message,
+        );
+        process.exit(1);
+    }
+} else {
+    if (verbose)
+        console.log(
+            chalk.yellow("⚠️  Crossword grammar file not found, skipping"),
+        );
+}
+
 if (verbose) console.log(chalk.green("✅ Chrome static assets copied"));
 
 //
@@ -282,6 +308,19 @@ copyFileSync(
     `${electronOutDir}/manifest.json`,
 );
 copyCommonStaticAssets(electronOutDir);
+
+// Copy compiled WebAgent grammars to electron output
+if (existsSync(chromeGrammarPath)) {
+    const electronGrammarDir = resolve(electronOutDir, "webagent/crossword");
+    mkdirSync(electronGrammarDir, { recursive: true });
+    copyFileSync(
+        chromeGrammarPath,
+        resolve(electronGrammarDir, "crosswordSchema.ag.json"),
+    );
+    if (verbose)
+        console.log(chalk.green("✅ Crossword grammar copied to Electron"));
+}
+
 if (verbose) console.log(chalk.green("✅ Electron static assets copied\n"));
 
 // Update build hash to mark successful completion

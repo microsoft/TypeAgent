@@ -1,0 +1,55 @@
+[
+  {
+    "id": "crud-01",
+    "category": "flow-crud",
+    "description": "Delete a seeded flow",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "delete task flow playPopularKpopSong",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "deleteTaskFlow",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Deleted"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "crud-02",
+    "category": "flow-crud",
+    "description": "List after delete shows fewer flows",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputNotContains": ["playPopularKpopSong"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "crud-03",
+    "category": "flow-crud",
+    "description": "Deleted flow no longer matches grammar",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "play the top kpop song this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null
+        }
+      }
+    ]
+  }
+]

@@ -22,6 +22,10 @@ import {
     compileGrammarToNFA,
     loadGrammarRules,
 } from "action-grammar";
+import {
+    fromJSONParsedActionSchema,
+    ParsedActionSchemaJSON,
+} from "@typeagent/action-schema";
 import { describeIf, hasTestKeys } from "test-lib";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -824,6 +828,63 @@ describe("Grammar Integration", () => {
         });
     });
 
+    describe("Cross-grammar merge: anchored partial keyword vs EOI wildcard", () => {
+        it("should prefer anchored partial keyword over EOI wildcard from another grammar", () => {
+            // Grammar 1: player — has a "by" keyword after a wildcard
+            const playerGrammarText = `<Start> = <play>;
+<play> = play $(trackName:<TrackPhrase>) by $(artist:string) -> {
+    actionName: "play",
+    parameters: {
+        trackName,
+        artist
+    }
+};
+<TrackPhrase> = $(trackName:string) <TrackTerm> | $(trackName:string);
+<TrackTerm> = track | song;`;
+
+            // Grammar 2: localPlayer — wildcard absorbs everything
+            const localPlayerGrammarText = `<Start> = <play>;
+<play> = play $(n:string) <TrackTerm> -> {
+    actionName: "localPlay",
+    parameters: {
+        n
+    }
+};
+<TrackTerm> = track | song;`;
+
+            const playerGrammar = loadGrammarRules("player", playerGrammarText);
+            const localPlayerGrammar = loadGrammarRules(
+                "localPlayer",
+                localPlayerGrammarText,
+            );
+            const cache = new AgentCache(
+                "test",
+                mockExplainerFactory,
+                undefined,
+            );
+
+            cache.grammarStore.addGrammar("player", playerGrammar);
+            cache.grammarStore.addGrammar("localPlayer", localPlayerGrammar);
+
+            cache.configureGrammarGeneration(undefined, undefined, false);
+
+            const namespaceKeys = cache.getNamespaceKeys(
+                ["player", "localPlayer"],
+                undefined,
+            );
+
+            const prefix = "play This Train b";
+            const completions = cache.completion(prefix, { namespaceKeys });
+            expect(completions).toBeDefined();
+
+            // The partial keyword "by" anchors at position 15 (trailing
+            // separator before "b" is stripped), NOT at 17 (EOI where
+            // localPlayer's wildcard absorbs everything)
+            expect(completions!.matchedPrefixLength).toBe(15);
+            expect(completions!.completions).toContain("by");
+        });
+    });
+
     describeIf(
         "Grammar Generation via populateCache",
         () => hasTestKeys(),
@@ -873,12 +934,18 @@ describe("Grammar Integration", () => {
 
                 console.log(`Using player schema: ${playerSchemaPath};`);
 
-                // Configure with schema path getter
+                // Load the parsed action schema from the .pas.json file
+                const pasJson: ParsedActionSchemaJSON = JSON.parse(
+                    fs.readFileSync(playerSchemaPath, "utf8"),
+                );
+                const parsedSchema = fromJSONParsedActionSchema(pasJson);
+
+                // Configure with parsed schema getter
                 cache.configureGrammarGeneration(
                     agentGrammarRegistry,
                     persistedStore,
                     true,
-                    (schemaName: string) => playerSchemaPath,
+                    (schemaName: string) => parsedSchema,
                 );
 
                 const namespaceKeys = cache.getNamespaceKeys(
@@ -904,7 +971,7 @@ describe("Grammar Integration", () => {
                             actionName: "pause",
                             parameters: {},
                         },
-                        schemaPath: playerSchemaPath,
+                        parsedSchema,
                     });
 
                     console.log("populateCache result:", genResult);

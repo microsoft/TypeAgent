@@ -5,6 +5,7 @@
  * Grammar generation module for creating Action Grammar rules from schemas and examples
  */
 
+import { ParsedActionSchema } from "@typeagent/action-schema";
 import { Cardinal } from "../builtInEntities.js";
 
 export {
@@ -44,6 +45,7 @@ export {
 
 export {
     loadSchemaInfo,
+    getSchemaInfoFromParsedSchema,
     SchemaInfo,
     ActionInfo,
     ParameterValidationInfo,
@@ -65,7 +67,10 @@ export {
 } from "./grammarWarmer.js";
 
 import { ClaudeGrammarGenerator, GrammarAnalysis } from "./grammarGenerator.js";
-import { loadSchemaInfo } from "./schemaReader.js";
+import {
+    getSchemaInfoFromParsedSchema,
+    loadSchemaInfo,
+} from "./schemaReader.js";
 import { GrammarTestCase } from "./testTypes.js";
 import { loadGrammarRulesNoThrow } from "../grammarLoader.js";
 import { compileGrammarToNFA } from "../nfaCompiler.js";
@@ -199,7 +204,9 @@ export interface CachePopulationRequest {
         parameters: Record<string, any>;
     };
     // Path to the .pas.json schema file for validation info
-    schemaPath: string;
+    schemaPath?: string;
+    // Already-loaded parsed action schema (preferred over schemaPath)
+    parsedSchema?: ParsedActionSchema;
 }
 
 /**
@@ -276,7 +283,17 @@ export async function populateCache(
 ): Promise<CachePopulationResult> {
     try {
         // Load schema information
-        const schemaInfo = loadSchemaInfo(request.schemaPath);
+        if (!request.parsedSchema && !request.schemaPath) {
+            throw new Error(
+                "Either parsedSchema or schemaPath must be provided",
+            );
+        }
+        const schemaInfo = request.parsedSchema
+            ? getSchemaInfoFromParsedSchema(
+                  request.schemaName,
+                  request.parsedSchema,
+              )
+            : loadSchemaInfo(request.schemaPath!);
 
         // Validate that parameter values appear in the request.
         // If a value was inferred by the LLM (not in the request), strip it

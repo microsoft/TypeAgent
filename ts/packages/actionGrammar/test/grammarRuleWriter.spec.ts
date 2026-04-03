@@ -311,6 +311,16 @@ describe("Grammar Rule Writer", () => {
     it("with object value", () => {
         validateRoundTrip(`<test> = hello -> { b: true, n: 12, s: "string" };`);
     });
+    it("with object spread value", () => {
+        validateRoundTrip(
+            `<test> = hello $(x:<other>) -> { ...x, extra: 1 };\n<other> = world -> { a: 2 };`,
+        );
+    });
+    it("with object spread only", () => {
+        validateRoundTrip(
+            `<test> = hello $(x:<other>) -> { ...x };\n<other> = world -> { a: 2 };`,
+        );
+    });
     it("with array value", () => {
         validateRoundTrip(`<test> = hello -> [true, 34.3, "string"];`);
     });
@@ -384,6 +394,37 @@ import { RuleX } from "grammarB";
         validateRoundTrip(`<rule1> [spacing=required] = hello world;
 <rule2> = hello world;`);
     });
+    it("with value type annotation", () => {
+        validateRoundTrip(`<test> : MyType = hello world;`);
+    });
+    it("with value type and spacing annotation", () => {
+        validateRoundTrip(`<test> [spacing=required] : MyType = hello world;`);
+    });
+    it("with value type and value expression", () => {
+        validateRoundTrip(
+            `<test> : MyType = hello $(x:number) -> { actionName: "greet", x };`,
+        );
+    });
+    it("with export and value type", () => {
+        validateRoundTrip(`export <test> : MyType = hello world;`);
+    });
+    it("with export, spacing, and value type", () => {
+        validateRoundTrip(
+            `export <test> [spacing=required] : MyType = hello world;`,
+        );
+    });
+    it("with union value type", () => {
+        validateRoundTrip(`<test> : TypeA | TypeB = hello world;`);
+    });
+    it("with three-way union value type", () => {
+        validateRoundTrip(`<test> : A | B | C = hello world;`);
+    });
+    it("with union value type and spacing", () => {
+        validateRoundTrip(`<test> [spacing=required] : A | B = hello world;`);
+    });
+    it("with export and union value type", () => {
+        validateRoundTrip(`export <test> : A | B | C = hello world;`);
+    });
 });
 
 // ─── Comment preservation round-trips ─────────────────────────────────────────
@@ -451,9 +492,9 @@ import * from "other.agr"; // imp comment
 `);
     });
 
-    it("entity declaration with leading and trailing comments", () => {
+    it("source-less import with leading and trailing comments", () => {
         roundTrip(`// entities
-entity Foo, Bar; // the entities
+import { Foo, Bar }; // the entities
 <A> = x;
 `);
     });
@@ -845,56 +886,58 @@ x
     });
 });
 
-// ─── Entity and import block formatting ───────────────────────────────────────
+// ─── Source-less import and import block formatting ──────────────────────────
 
-describe("Entity block formatting", () => {
-    it("short entity list stays flat", () => {
-        expect(fmt("entity Foo, Bar;", 40)).toBe("entity Foo, Bar;\n\n");
+describe("Source-less import block formatting", () => {
+    it("short import list stays flat", () => {
+        expect(fmt("import { Foo, Bar };", 40)).toBe(
+            "import { Foo, Bar };\n\n",
+        );
     });
 
-    it("single entity stays flat", () => {
-        expect(fmt("entity Foo;", 40)).toBe("entity Foo;\n\n");
+    it("single import stays flat", () => {
+        expect(fmt("import { Foo };", 40)).toBe("import { Foo };\n\n");
     });
 
-    it("long entity list breaks into block", () => {
+    it("long import list breaks into block", () => {
         expect(
-            fmt("entity VeryLongName, AnotherLongName, YetAnother;", 30),
+            fmt("import { VeryLongName, AnotherLongName, YetAnother };", 30),
         ).toBe(
-            "entity\n  VeryLongName,\n  AnotherLongName,\n  YetAnother;\n\n",
+            "import {\n  VeryLongName,\n  AnotherLongName,\n  YetAnother\n};\n\n",
         );
     });
 
-    it("entity block round-trips", () => {
+    it("source-less import block round-trips", () => {
         roundTrip(
-            "entity VeryLongEntityName, AnotherLongEntityName, ThirdEntity;",
+            "import { VeryLongEntityName, AnotherLongEntityName, ThirdEntity };",
             30,
         );
     });
 
-    it("entity block with trailing comment", () => {
-        // Trailing comment stays on same line as ";"
-        expect(fmt("entity VeryLongName, AnotherLongName; // note", 30)).toBe(
-            "entity\n  VeryLongName,\n  AnotherLongName; // note\n\n",
-        );
+    it("source-less import block with trailing comment", () => {
+        expect(
+            fmt("import { VeryLongName, AnotherLongName }; // note", 30),
+        ).toBe("import {\n  VeryLongName,\n  AnotherLongName\n}; // note\n\n");
     });
 
-    it("entity block with trailing comment round-trips", () => {
-        roundTrip("entity VeryLongName, AnotherLongName; // note", 30);
+    it("source-less import block with trailing comment round-trips", () => {
+        roundTrip("import { VeryLongName, AnotherLongName }; // note", 30);
     });
 
-    it("entity block with block comments on names", () => {
+    it("source-less import block with block comments on names", () => {
         roundTrip(
-            "entity /* a */ VeryLongName /* b */, /* c */ AnotherLong /* d */;",
+            "import { /* a */ VeryLongName /* b */, /* c */ AnotherLong /* d */ };",
             30,
         );
     });
 
-    it("multi-line entity input round-trips", () => {
+    it("multi-line source-less import round-trips", () => {
         roundTrip(
-            `entity
+            `import {
   Foo,
   Bar,
-  Baz;
+  Baz,
+};
 <A> = x;
 `,
             80,
@@ -1224,5 +1267,38 @@ describe("Comment preservation round-trips (structural positions)", () => {
 
     it("comments inside empty array value", () => {
         roundTrip(`<A> = x -> [ /* only comment */ ];\n`);
+    });
+
+    // Export keyword round-trips
+    it("exported rule definition", () => {
+        roundTrip(`export <Rule1> = hello;
+`);
+    });
+
+    it("multiple rules with mixed export", () => {
+        roundTrip(`export <Rule1> = hello;
+<Rule2> = world;
+`);
+    });
+
+    it("export with leading comment", () => {
+        roundTrip(`// export comment
+export <Rule1> = hello;
+`);
+    });
+
+    it("export with trailing comment", () => {
+        roundTrip(`export <Rule1> = hello; // trailing
+`);
+    });
+
+    it("export with comment after export keyword", () => {
+        roundTrip(`export /* after-export */ <Rule1> = hello;
+`);
+    });
+
+    it("export with spacing annotation", () => {
+        roundTrip(`export <Rule1> [spacing=required] = hello;
+`);
     });
 });

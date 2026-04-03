@@ -3,9 +3,11 @@
 
 // Grammar rules for Local Music Player
 
-entity Ordinal, Cardinal;
+import { Ordinal, Cardinal };
 
-<Start> = <Pause>
+import { LocalPlayerActions } from "./localPlayerSchema.ts";
+
+<Start> : LocalPlayerActions = <Pause>
           | <Resume>
           | <Stop>
           | <Next>

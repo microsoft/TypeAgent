@@ -4,7 +4,9 @@
 // Email Management Grammar
 // Covers: sendEmail, replyEmail, forwardEmail, findEmail actions
 
-<Start> = <sendEmail> | <replyEmail> | <forwardEmail> | <findEmail>;
+import { EmailAction } from "./emailActionsSchema.ts";
+
+<Start> : EmailAction = <sendEmail> | <replyEmail> | <forwardEmail> | <findEmail>;
 
 // ===== Main Action Rules =====
 

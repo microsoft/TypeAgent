@@ -28,23 +28,10 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import {
-    getBoardSchema,
-    handleCrosswordAction,
-} from "./crossword/actionHandler.mjs";
-
-import { BrowserConnector } from "./browserConnector.mjs";
 import { BrowserClient } from "./agentWebSocketServer.mjs";
-import { handleCommerceAction } from "./commerce/actionHandler.mjs";
 import { extractPageComponent } from "./componentExtractor.mjs";
+import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
-import type {
-    ElementDescriptionResult,
-    PageStateMatchResult,
-    PageContentQueryResult,
-} from "./browserQueryResults.mjs";
-import { createTypeScriptJsonValidator } from "typechat/ts";
-import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { ChildProcess, fork } from "child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -59,31 +46,22 @@ import {
 
 import registerDebug from "debug";
 
-import { handleInstacartAction } from "./instacart/actionHandler.mjs";
 import * as website from "website-memory";
 import { createGraphologyPersistenceManager } from "./knowledge/utils/graphologyPersistence.mjs";
-import { handleKnowledgeAction } from "./knowledge/actions/knowledgeActionRouter.mjs";
 import { ExtractKnowledgeHandler } from "./knowledge/extractKnowledgeCommand.mjs";
 import {
     performKnowledgeExtraction,
-    performKnowledgeExtractionWithNotifications,
     shouldRunKnowledgeExtraction,
     checkKnowledgeInIndex,
     saveKnowledgeToIndex,
     getActiveKnowledgeExtraction,
 } from "./knowledge/actions/extractionActions.mjs";
 import { initializeWebSocketBridge } from "./knowledge/progress/knowledgeWebSocketBridge.mjs";
-import { handleKnowledgeExtractionProgress } from "./knowledge/progress/extractionProgressManager.mjs";
 import {
-    generateDetailedKnowledgeCards,
+    generateLiveKnowledgePreview,
     generateDynamicKnowledgeHtml,
 } from "./knowledge/ui/knowledgeCardRenderer.mjs";
-import { actionContextCache } from "./knowledge/cache/actionContextCache.mjs";
-import {
-    normalizeUrlForIndex,
-    runningExtractionsCache,
-    shouldReExtract,
-} from "./knowledge/cache/extractionCache.mjs";
+import { runningExtractionsCache } from "./knowledge/cache/extractionCache.mjs";
 import {
     searchWebMemories,
     SearchWebMemoriesResponse,
@@ -98,11 +76,13 @@ import {
     processWebAgentMessage,
 } from "./webTypeAgent.mjs";
 import {
-    isWebAgentMessage,
     isBuiltInWebAgentRpcRequest,
     BuiltInWebAgentRpcResponse,
+    WebFlowRefreshMessage,
 } from "../common/webAgentMessageTypes.mjs";
 import { handleSchemaDiscoveryAction } from "./discovery/actionHandler.mjs";
+import { handleWebFlowAction } from "./webFlows/actionHandler.mjs";
+import { WebFlowActions } from "./webFlows/schema/webFlowActions.mjs";
 import {
     BrowserActions,
     OpenWebPage,
@@ -118,22 +98,14 @@ import {
     getWebsiteStats,
 } from "./websiteMemory.mjs";
 import { initializeImportWebSocketHandler } from "./import/importWebSocketHandler.mjs";
-import { CrosswordActions } from "./crossword/schema/userActions.mjs";
-import { InstacartActions } from "./instacart/schema/userActions.mjs";
-import { ShoppingActions } from "./commerce/schema/userActions.mjs";
 import { SchemaDiscoveryActions } from "./discovery/schema/discoveryActions.mjs";
 import { ExternalBrowserActions } from "./externalBrowserActionSchema.mjs";
-import {
-    generatePageQuestions,
-    generateGraphQuestions,
-} from "./knowledge/actions/pageQnAActions.mjs";
 import {
     BrowserControl,
     defaultSearchProviders,
 } from "../common/browserControl.mjs";
 import { openai } from "aiclient";
 import { urlResolver } from "azure-ai-foundry";
-import { deleteCachedSchema } from "./crossword/cachedSchema.mjs";
 import {
     SearchProviderCommandHandlerTable,
     SetCommandHandler,
@@ -141,7 +113,6 @@ import {
 import {
     BrowserActionContext,
     getActionBrowserControl,
-    getSessionBrowserControl,
     saveSettings,
 } from "./browserActions.mjs";
 import {
@@ -155,10 +126,14 @@ import {
     LookupAndAnswerInternet,
 } from "./lookupAndAnswerSchema.mjs";
 import { createExternalBrowserClient } from "./rpc/externalBrowserControlClient.mjs";
+import { createAgentInvokeHandlers } from "./agentServiceHandlers.mjs";
 
 const debug = registerDebug("typeagent:browser:action");
-const debugWebSocket = registerDebug("typeagent:browser:ws");
 const debugClientRouting = registerDebug("typeagent:browser:client-routing");
+
+// Module-level reference to WebFlowStore for getDynamicGrammar/getDynamicSchema callbacks
+let _webFlowStore: any | undefined;
+let _webFlowStoreInitializing: Promise<void> | undefined;
 
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
@@ -287,6 +262,21 @@ export function instantiate(): AppAgent {
         executeAction: executeBrowserAction,
         resolveEntity,
         getDynamicDisplay: getDynamicDisplayImpl,
+        async getDynamicGrammar(_context, schemaName) {
+            if (schemaName !== "browser.webFlows") return undefined;
+            if (!_webFlowStore) return undefined;
+            const text = _webFlowStore.getDynamicGrammarText();
+            if (!text) return undefined;
+            return { format: "agr" as const, content: text };
+        },
+        async getDynamicSchema(_context, schemaName) {
+            if (schemaName !== "browser.webFlows") return undefined;
+            if (!_webFlowStore) return undefined;
+            return {
+                format: "ts" as const,
+                content: _webFlowStore.generateDynamicSchemaText(),
+            };
+        },
         ...getCommandInterface(handlers),
     };
 }
@@ -318,7 +308,6 @@ async function initializeBrowserContext(
             clientBrowserControl === undefined ? "extension" : "electron",
         index: undefined,
         localHostPort,
-        macrosStore: undefined,
         resolverSettings: {
             searchResolver: true,
             keywordResolver: true,
@@ -335,29 +324,46 @@ async function updateBrowserContext(
     context: SessionContext<BrowserActionContext>,
     schemaName: string,
 ): Promise<void> {
+    // Initialize WebFlowStore for any browser schema activation.
+    // Use a shared promise to prevent concurrent initialization from
+    // parallel updateAction calls for different sub-schemas.
+    if (enable && !_webFlowStore && context.instanceStorage) {
+        if (!_webFlowStoreInitializing) {
+            _webFlowStoreInitializing = (async () => {
+                try {
+                    const { WebFlowStore } = await import(
+                        "./webFlows/store/webFlowStore.mjs"
+                    );
+                    const store = new WebFlowStore(context.instanceStorage);
+                    await store.initialize();
+
+                    const { ensureSampleFlowsRegistered } = await import(
+                        "./webFlows/actionHandler.mjs"
+                    );
+                    await ensureSampleFlowsRegistered(store);
+
+                    context.agentContext.webFlowStore = store;
+                    _webFlowStore = store;
+
+                    const names = await store.getFlowNames();
+                    debug(
+                        `WebFlowStore initialized: ${names.length} flows seeded`,
+                    );
+                } catch (error) {
+                    debug("Failed to initialize WebFlowStore:", error);
+                }
+            })();
+        }
+        await _webFlowStoreInitializing;
+    }
+
     if (schemaName !== "browser") {
-        // REVIEW: ignore sub-translator updates.
         return;
     }
     if (enable) {
         await loadAllowDynamicAgentDomains(context);
         if (!context.agentContext.tabTitleIndex) {
             context.agentContext.tabTitleIndex = createTabTitleIndex();
-        }
-
-        // Initialize MacroStore
-        if (!context.agentContext.macrosStore && context.sessionStorage) {
-            try {
-                const { MacroStore } = await import("./storage/index.mjs");
-                context.agentContext.macrosStore = new MacroStore(
-                    context.sessionStorage,
-                );
-                await context.agentContext.macrosStore.initialize();
-                debug("ActionsStore initialized successfully");
-            } catch (error) {
-                debug("Failed to initialize ActionsStore:", error);
-                // Continue without ActionsStore - will fall back to legacy storage
-            }
         }
 
         // Load the website index from disk
@@ -382,6 +388,11 @@ async function updateBrowserContext(
             );
             context.agentContext.agentWebSocketServer =
                 new AgentWebSocketServer(8081);
+
+            // Register agentRpc invoke handlers for channel-multiplexed messages
+            context.agentContext.agentWebSocketServer.setAgentInvokeHandlers(
+                createAgentInvokeHandlers(context),
+            );
 
             context.agentContext.agentWebSocketServer.getPreferredClientType =
                 () => {
@@ -418,16 +429,8 @@ async function updateBrowserContext(
                 }
             };
 
-            context.agentContext.agentWebSocketServer.onClientMessage = async (
-                client: BrowserClient,
-                message: string,
-            ) => {
-                const data = JSON.parse(message);
-                debugWebSocket(
-                    `Received message from browser client ${client.id}: ${message}`,
-                );
-
-                if (isWebAgentMessage(data)) {
+            context.agentContext.agentWebSocketServer.onWebAgentMessage =
+                async (client: BrowserClient, data: any) => {
                     // Check for built-in RPC requests (crossword, commerce, etc.)
                     if (
                         data.method === "webAgent/message" &&
@@ -454,41 +457,7 @@ async function updateBrowserContext(
                     }
 
                     await processWebAgentMessage(data, context);
-                    return;
-                }
-
-                if (data.error) {
-                    console.error(data.error);
-                    throw new Error(data.error);
-                }
-
-                if (data.method) {
-                    const browserControls = context.agentContext
-                        .useExternalBrowserControl
-                        ? context.agentContext.externalBrowserControl?.control
-                        : context.agentContext.clientBrowserControl;
-
-                    if (
-                        (context.agentContext.useExternalBrowserControl &&
-                            client.type === "extension") ||
-                        (!context.agentContext.useExternalBrowserControl &&
-                            client.type === "electron")
-                    ) {
-                        if (browserControls) {
-                            await processBrowserAgentMessage(
-                                data,
-                                browserControls,
-                                context,
-                                client,
-                            );
-                        }
-                    } else {
-                        debug(
-                            `ignoring ${client.type} browser message when in ${context.agentContext.useExternalBrowserControl ? "external" : "internal"} browser control mode`,
-                        );
-                    }
-                }
-            };
+                };
         }
 
         // Initialize external browser control using the AgentWebSocketServer
@@ -502,21 +471,14 @@ async function updateBrowserContext(
                 );
         }
 
-        if (!context.agentContext.browserConnector) {
+        if (!context.agentContext.browserControl) {
             const browserControls = context.agentContext
                 .useExternalBrowserControl
                 ? context.agentContext.externalBrowserControl?.control
                 : context.agentContext.clientBrowserControl;
 
-            if (browserControls && context.agentContext.agentWebSocketServer) {
-                debugClientRouting(
-                    `Creating BrowserConnector with preferredClientType = '${context.agentContext.preferredClientType}'`,
-                );
-                context.agentContext.browserConnector = new BrowserConnector(
-                    context.agentContext.agentWebSocketServer,
-                    browserControls,
-                    context.agentContext.preferredClientType,
-                );
+            if (browserControls) {
+                context.agentContext.browserControl = browserControls;
             }
         }
 
@@ -578,313 +540,6 @@ async function updateBrowserContext(
     }
 }
 
-async function processBrowserAgentMessage(
-    data: any,
-    browserControls: BrowserControl,
-    context: SessionContext<BrowserActionContext>,
-    client: BrowserClient,
-) {
-    debugClientRouting(
-        `processBrowserAgentMessage: method='${data.method}', client type='${client.type}', id='${client.id}', preferredClientType='${context.agentContext.preferredClientType}'`,
-    );
-
-    switch (data.method) {
-        case "knowledgeExtractionProgress": {
-            await handleKnowledgeExtractionProgress(data.params, context);
-            break;
-        }
-        case "enableSiteTranslator": {
-            const targetTranslator = data.params.translator;
-            if (targetTranslator == "browser.crossword") {
-                // initialize crossword state
-                browserControls.setAgentStatus(
-                    true,
-                    `Initializing ${targetTranslator}`,
-                );
-
-                const notificationId = `crossword-${Date.now()}`;
-                context.notify(
-                    AppAgentEvent.Inline,
-                    {
-                        type: "text",
-                        content: `Loading the crossword agent to get it ready for interaction...`,
-                    },
-                    notificationId,
-                );
-
-                try {
-                    debugClientRouting(
-                        `Calling getBoardSchema with client.id='${client.id}'`,
-                    );
-                    context.agentContext.crossWordState = await getBoardSchema(
-                        context,
-                        client.id,
-                    );
-
-                    browserControls.setAgentStatus(
-                        false,
-                        `Finished initializing ${targetTranslator}`,
-                    );
-                } catch (e) {
-                    browserControls.setAgentStatus(
-                        false,
-                        `Failed to initialize ${targetTranslator}`,
-                    );
-
-                    debug(
-                        `Failed to initialize ${targetTranslator}. Details ${e}`,
-                    );
-                }
-
-                if (context.agentContext.crossWordState) {
-                    const acrossClues =
-                        context.agentContext.crossWordState.across?.length || 0;
-                    const downClues =
-                        context.agentContext.crossWordState.down?.length || 0;
-
-                    // Send schema to browser extension/electron for observer installation
-                    const schema = context.agentContext.crossWordState;
-                    const allClues = [...schema.across, ...schema.down];
-                    const sampleClues = allClues.slice(0, 5);
-
-                    if (client && client.socket && sampleClues.length > 0) {
-                        try {
-                            client.socket.send(
-                                JSON.stringify({
-                                    method: "browser.crossword/schemaReady",
-                                    params: {
-                                        selectors: sampleClues.map(
-                                            (c) => c.cssSelector,
-                                        ),
-                                        texts: sampleClues.map((c) => c.text),
-                                    },
-                                }),
-                            );
-                        } catch (e) {
-                            debug(
-                                "Failed to send crossword schema to client",
-                                e,
-                            );
-                        }
-                    }
-
-                    context.notify(
-                        AppAgentEvent.Inline,
-                        {
-                            type: "text",
-                            content: `The crossword is fully loaded and ready for interaction with ${acrossClues} across and ${downClues} down clues. Try asking questions like "What is the clue for 1 across?" or "Enter 'Foo' in the answer for 2 down."`,
-                        },
-                        notificationId,
-                    );
-                } else {
-                    context.notify(
-                        AppAgentEvent.Inline,
-                        {
-                            type: "text",
-                            content: `There was an error when initializing the crossword. Try re-loading the page.`,
-                        },
-                        notificationId,
-                    );
-                }
-            }
-            await context.toggleTransientAgent(targetTranslator, true);
-            break;
-        }
-        case "disableSiteTranslator": {
-            const targetTranslator = data.params.translator;
-            await context.toggleTransientAgent(targetTranslator, false);
-            break;
-        }
-        case "removeCrosswordPageCache": {
-            await deleteCachedSchema(context, data.params.url);
-            break;
-        }
-        case "addTabIdToIndex":
-        case "deleteTabIdFromIndex":
-        case "getTabIdFromIndex":
-        case "resetTabIdToIndex": {
-            await handleTabIndexActions(
-                {
-                    actionName: data.method,
-                    parameters: data.params,
-                },
-                context,
-                data.id,
-            );
-            break;
-        }
-
-        case "detectPageActions":
-        case "registerPageDynamicAgent":
-        case "getIntentFromRecording":
-        case "getMacrosForUrl":
-        case "getAllMacros":
-        case "deleteMacro": {
-            const discoveryResult = await handleSchemaDiscoveryAction(
-                {
-                    actionName: data.method,
-                    parameters: data.params,
-                },
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: discoveryResult.data,
-                }),
-            );
-            break;
-        }
-
-        case "extractKnowledgeFromPage":
-        case "extractKnowledgeFromPageStreaming":
-        case "indexWebPageContent":
-        case "checkPageIndexStatus":
-        case "getPageIndexedKnowledge":
-        case "getRecentKnowledgeItems":
-        case "getAnalyticsData":
-        case "getDiscoverInsights":
-        case "getKnowledgeIndexStats":
-        case "clearKnowledgeIndex":
-        case "getKnowledgeGraphStatus":
-        case "buildKnowledgeGraph":
-        case "rebuildKnowledgeGraph":
-        case "getAllRelationships":
-        case "getAllCommunities":
-        case "getAllEntitiesWithMetrics":
-        case "getEntityNeighborhood":
-        case "getGlobalImportanceLayer":
-        case "getImportanceStatistics":
-        case "getHierarchicalTopics":
-        case "getTopicImportanceLayer":
-        case "getTopicViewportNeighborhood":
-        case "getTopicMetrics":
-        case "getTopicTimelines":
-        case "getViewportBasedNeighborhood":
-        case "mergeTopicHierarchies":
-        case "discoverRelatedKnowledge":
-        case "getTopicDetails":
-        case "getEntityDetails":
-        case "getUrlContentBreakdown": {
-            const knowledgeResult = await handleKnowledgeAction(
-                data.method,
-                data.params,
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: knowledgeResult,
-                }),
-            );
-            break;
-        }
-
-        case "handlePageNavigation": {
-            await handlePageNavigation(context, data.params);
-            break;
-        }
-
-        case "generatePageQuestions": {
-            const pageQuestionsResult = await generatePageQuestions(
-                data.params,
-                context,
-            );
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: pageQuestionsResult,
-                }),
-            );
-            break;
-        }
-
-        case "generateGraphQuestions": {
-            const graphQuestionsResult = await generateGraphQuestions(
-                data.params,
-                context,
-            );
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: graphQuestionsResult,
-                }),
-            );
-            break;
-        }
-
-        case "importWebsiteData":
-        case "importWebsiteDataWithProgress":
-        case "importHtmlFolder":
-        case "getWebsiteStats":
-        case "searchWebMemories":
-        case "searchByEntities":
-        case "searchByTopics":
-        case "hybridSearch": {
-            const websiteResult = await handleWebsiteAction(
-                data.method,
-                data.params,
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: websiteResult,
-                }),
-            );
-            break;
-        }
-
-        case "getLibraryStats": {
-            const libraryStatsResult = await handleWebsiteLibraryStats(
-                data.params,
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: libraryStatsResult,
-                }),
-            );
-            break;
-        }
-
-        case "recordActionUsage":
-        case "getActionStatistics": {
-            const macrosResult = await handleMacroStoreAction(
-                data.method,
-                data.params,
-                context,
-            );
-
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: macrosResult,
-                }),
-            );
-            break;
-        }
-
-        case "getViewHostUrl": {
-            const actionsResult = {
-                url: `http://localhost:${context.agentContext.localHostPort}`,
-            };
-            client.socket.send(
-                JSON.stringify({
-                    id: data.id,
-                    result: actionsResult,
-                }),
-            );
-            break;
-        }
-    }
-}
-
 async function handleWebAgentRpc(
     method: string,
     params: any,
@@ -894,7 +549,7 @@ async function handleWebAgentRpc(
     switch (method) {
         case "extractCrosswordSchema": {
             try {
-                const schema = await getBoardSchema(context, clientId);
+                const schema = await extractCrosswordSchema(context, clientId);
                 if (!schema) {
                     return {
                         success: false,
@@ -949,12 +604,12 @@ async function handleWebAgentRpc(
         case "extractComponent": {
             try {
                 const { typeName, schema, userRequest } = params;
-                const browserConnector = context.agentContext.browserConnector;
+                const browserCtrl = context.agentContext.browserControl;
 
-                if (!browserConnector) {
+                if (!browserCtrl) {
                     return {
                         success: false,
-                        error: "Browser connector not available",
+                        error: "Browser control not available",
                     };
                 }
 
@@ -965,10 +620,9 @@ async function handleWebAgentRpc(
                     };
                 }
 
-                const htmlFragments = await browserConnector.getHtmlFragments(
+                const htmlFragments = await browserCtrl.getHtmlFragments(
                     false,
                     "knowledgeExtraction",
-                    clientId,
                 );
 
                 if (!htmlFragments || htmlFragments.length === 0) {
@@ -998,6 +652,66 @@ async function handleWebAgentRpc(
             }
         }
 
+        case "getWebFlowsForDomain": {
+            try {
+                const { domain, ifModifiedSince } = params;
+                if (!domain) {
+                    return {
+                        success: false,
+                        error: "domain parameter is required",
+                    };
+                }
+
+                const webFlowStore = context.agentContext.webFlowStore;
+                if (!webFlowStore) {
+                    return {
+                        success: true,
+                        data: { flows: [], lastUpdated: "" },
+                    };
+                }
+
+                const index = webFlowStore.getIndex();
+                const lastUpdated = index.lastUpdated;
+
+                if (ifModifiedSince && lastUpdated === ifModifiedSince) {
+                    return {
+                        success: true,
+                        data: {
+                            flows: [],
+                            lastUpdated,
+                            notModified: true,
+                        },
+                    };
+                }
+
+                const flows =
+                    await webFlowStore.listForDomainWithDetails(domain);
+                // Only include site-scoped flows in the per-site
+                // WebFlowAgent schema. Global sample flows are already
+                // available through the browser.webFlows agent.
+                const siteFlows = flows.filter((f) => f.scope.type === "site");
+                const transportFlows = siteFlows.map((f) => ({
+                    name: f.name,
+                    description: f.description,
+                    parameters: f.parameters,
+                    script: f.script,
+                }));
+
+                return {
+                    success: true,
+                    data: { flows: transportFlows, lastUpdated },
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error
+                            ? error.message
+                            : "Failed to get webFlows for domain",
+                };
+            }
+        }
+
         case "notify": {
             const { message, notificationId } = params;
             const id = notificationId || `webagent-${Date.now()}`;
@@ -1017,6 +731,34 @@ async function handleWebAgentRpc(
                 success: false,
                 error: `Unknown webAgentRpc method: ${method}`,
             };
+    }
+}
+
+/**
+ * Send a refresh notification to the browser-side WebFlowAgent.
+ * This tells the agent to re-fetch flows from the server and
+ * re-register its TypeAgent with updated schema.
+ */
+export function sendWebFlowRefreshToClient(
+    context: SessionContext<BrowserActionContext>,
+): void {
+    const wsServer = context.agentContext.agentWebSocketServer;
+    if (!wsServer) return;
+
+    const client = wsServer.getActiveClient();
+    if (!client) return;
+
+    const message: WebFlowRefreshMessage = {
+        source: "dispatcher",
+        method: "webAgent/message",
+        type: "webFlowRefresh",
+    };
+
+    try {
+        client.socket.send(JSON.stringify(message));
+        debug("Sent webFlowRefresh to active client");
+    } catch (error) {
+        debug("Failed to send webFlowRefresh:", error);
     }
 }
 
@@ -1308,14 +1050,6 @@ async function resolveWebPage(
 
         case "turtlegraphics":
             return ["http://localhost:9000/"];
-        case "planviewer":
-            // handle browser views
-            const browserPort = await context.getSharedLocalHostPort("browser");
-            if (browserPort !== undefined) {
-                debug(`Resolved local site on PORT ${browserPort}`);
-
-                return [`http://localhost:${browserPort}/plans`];
-            }
         case "chatview":
             // handle browser views
             const shellPort = await context.getSharedLocalHostPort("shell");
@@ -1490,17 +1224,29 @@ async function openWebPage(
         const topicsCount = existingKnowledge.topics?.length || 0;
         const relationshipsCount = existingKnowledge.relationships?.length || 0;
 
-        // Display existing knowledge with detailed cards
-        const knowledgeMarkdown =
-            generateDetailedKnowledgeCards(existingKnowledge);
+        // Display existing knowledge with HTML bubble cards
+        const knowledgeHtml = generateLiveKnowledgePreview(
+            {
+                entities: existingKnowledge.entities || [],
+                topics:
+                    existingKnowledge.topics ||
+                    existingKnowledge.keyTopics ||
+                    [],
+                relationships: existingKnowledge.relationships || [],
+            },
+            "complete",
+        );
         context.actionIO.appendDisplay(
             {
-                type: "markdown",
-                content: `> 📖 **Existing Knowledge Found**
->
-> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from previous extraction
-
-${knowledgeMarkdown}`,
+                type: "html",
+                content: `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 8px 0; padding: 12px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
+                    <div style="font-weight: 600; color: #0c5460;">📖 Existing Knowledge Found</div>
+                    <div style="font-size: 13px; color: #0c5460; margin-top: 4px;">
+                        Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from previous extraction
+                    </div>
+                </div>
+                ${knowledgeHtml}`,
             },
             "block",
         );
@@ -1761,10 +1507,6 @@ async function changeSearchProvider(
         const params: ParsedCommandParams<any> = {
             args: { provider: `${action.parameters.name}` },
             flags: {},
-            tokens: [],
-            lastCompletableParam: undefined,
-            lastParamImplicitQuotes: false,
-            nextArgs: [],
         };
 
         await cmd.run(context, params);
@@ -1783,11 +1525,9 @@ async function executeBrowserAction(
         | TypeAgentAction<BrowserActions | DisabledBrowserActions, "browser">
         | TypeAgentAction<BrowserActions, "browser">
         | TypeAgentAction<ExternalBrowserActions, "browser.external">
-        | TypeAgentAction<CrosswordActions, "browser.crossword">
-        | TypeAgentAction<ShoppingActions, "browser.commerce">
-        | TypeAgentAction<InstacartActions, "browser.instacart">
         | TypeAgentAction<SchemaDiscoveryActions, "browser.actionDiscovery">
-        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">,
+        | TypeAgentAction<LookupAndAnswerActions, "browser.lookupAndAnswer">
+        | TypeAgentAction<WebFlowActions, "browser.webFlows">,
 
     context: ActionContext<BrowserActionContext>,
 ) {
@@ -1913,67 +1653,81 @@ async function executeBrowserAction(
                         },
                     });
                 }
-                case "enterTextInElement": {
-                    const control = getActionBrowserControl(context);
-                    await control.enterTextIn(
-                        action.parameters.cssSelector,
-                        action.parameters.value,
+                case "executeAdHocScript": {
+                    const adHocBrowser = getActionBrowserControl(context);
+                    const { createFrozenBrowserApi } = await import(
+                        "./webFlows/webFlowBrowserApi.mjs"
                     );
-                    return;
-                }
-                case "setDropdownValue": {
-                    const control = getActionBrowserControl(context);
-                    await control.setDropdown(
-                        action.parameters.cssSelector,
-                        action.parameters.optionLabel,
+                    const { executeWebFlowScript } = await import(
+                        "./webFlows/scriptExecutor.mjs"
                     );
-                    return;
-                }
-                case "clickOnElement": {
-                    const control = getActionBrowserControl(context);
-                    await control.clickOn(action.parameters.cssSelector);
-                    return;
-                }
-                case "awaitPageLoad": {
-                    const control = getActionBrowserControl(context);
-                    await control.awaitPageLoad();
-                    return;
-                }
-                case "getHTML": {
-                    const control = getActionBrowserControl(context);
-                    const fragments = await control.getHtmlFragments(
-                        false,
-                        "knowledgeExtraction",
+                    // Wire up extract component function so scripts
+                    // can use browser.extractComponent() and LLM-based methods
+                    const extractFn = await (async () => {
+                        try {
+                            const { createDiscoveryPageTranslator } =
+                                await import("./discovery/translator.mjs");
+                            return async (
+                                componentDef: any,
+                                userRequest?: string,
+                            ) => {
+                                const agent =
+                                    await createDiscoveryPageTranslator(
+                                        "GPT_5_2",
+                                    );
+                                const htmlFragments =
+                                    await adHocBrowser.getHtmlFragments();
+                                let screenshot = "";
+                                try {
+                                    screenshot =
+                                        await adHocBrowser.captureScreenshot();
+                                } catch {}
+                                const screenshots = screenshot
+                                    ? [screenshot]
+                                    : [];
+                                const response =
+                                    await agent.getPageComponentSchema(
+                                        componentDef.typeName ||
+                                            componentDef.type ||
+                                            "Element",
+                                        userRequest,
+                                        htmlFragments,
+                                        screenshots,
+                                    );
+                                if (!response.success) {
+                                    throw new Error(
+                                        response.message ||
+                                            "Component extraction failed",
+                                    );
+                                }
+                                return response.data;
+                            };
+                        } catch {
+                            return undefined;
+                        }
+                    })();
+                    const browserApi = createFrozenBrowserApi(
+                        adHocBrowser,
+                        { type: "global" },
+                        extractFn,
                     );
-                    return createActionResult(JSON.stringify(fragments));
-                }
-                case "getElementByDescription": {
-                    const result = await handleGetElementByDescription(
-                        action.parameters,
-                        context,
+                    let scriptParams: Record<string, unknown> = {};
+                    if (action.parameters.params) {
+                        try {
+                            scriptParams = JSON.parse(action.parameters.params);
+                        } catch {
+                            throw new Error("Invalid JSON in params field");
+                        }
+                    }
+                    const scriptResult = await executeWebFlowScript(
+                        action.parameters.script,
+                        browserApi,
+                        scriptParams,
+                        {
+                            timeout: action.parameters.timeout || 120000,
+                        },
                     );
-                    return result;
-                }
-                case "isPageStateMatched": {
-                    const result = await handleIsPageStateMatched(
-                        action.parameters,
-                        context,
-                    );
-                    return result;
-                }
-                case "queryPageContent": {
-                    const result = await handleQueryPageContent(
-                        action.parameters,
-                        context,
-                    );
-                    return result;
-                }
-                case "downloadImage": {
-                    const result = await handleDownloadImage(
-                        action.parameters,
-                        context,
-                    );
-                    return result;
+                    return createActionResult(JSON.stringify(scriptResult));
                 }
                 default:
                     // Should never happen.
@@ -2001,46 +1755,11 @@ async function executeBrowserAction(
                 }
             }
     }
-    const connector = context.sessionContext.agentContext.browserConnector;
-    if (connector) {
+    const browserCtrl = context.sessionContext.agentContext.browserControl;
+    if (browserCtrl) {
         try {
-            // context.actionIO.setDisplay("Running remote action.");
-
             let schemaName = "browser";
-            if (action.schemaName === "browser.crossword") {
-                const crosswordResult = await handleCrosswordAction(
-                    action,
-                    context.sessionContext,
-                );
-                return createActionResult(crosswordResult);
-            } else if (action.schemaName === "browser.commerce") {
-                const commerceResult = await handleCommerceAction(
-                    action,
-                    context,
-                );
-                if (commerceResult !== undefined) {
-                    if (commerceResult instanceof String) {
-                        return createActionResult(
-                            commerceResult as unknown as string,
-                        );
-                    } else {
-                        return commerceResult as ActionResult;
-                    }
-                }
-            } else if (action.schemaName === "browser.instacart") {
-                const instacartResult = await handleInstacartAction(
-                    action,
-                    context.sessionContext,
-                );
-
-                return createActionResult(
-                    instacartResult.displayText,
-                    undefined,
-                    instacartResult.entities,
-                );
-
-                // return createActionResult(instacartResult);
-            } else if (action.schemaName === "browser.actionDiscovery") {
+            if (action.schemaName === "browser.actionDiscovery") {
                 const discoveryResult = await handleSchemaDiscoveryAction(
                     action,
                     context.sessionContext,
@@ -2049,7 +1768,20 @@ async function executeBrowserAction(
                 return createActionResult(discoveryResult.displayText);
             }
 
-            await connector?.sendActionToBrowser(action, schemaName);
+            if (action.schemaName === "browser.webFlows") {
+                const webFlowResult = await handleWebFlowAction(
+                    action,
+                    context.sessionContext,
+                );
+
+                return createActionResult(webFlowResult.displayText);
+            }
+
+            await browserCtrl.runBrowserAction(
+                action.actionName,
+                action.parameters,
+                schemaName,
+            );
         } catch (ex: any) {
             if (ex instanceof Error) {
                 console.error(ex);
@@ -2058,7 +1790,7 @@ async function executeBrowserAction(
             }
         }
     } else {
-        console.error("No WebSocket server available.");
+        console.error("No browser control available.");
     }
     return undefined;
 }
@@ -2195,354 +1927,9 @@ async function lookup(
     }
 }
 
-async function handlePageNavigation(
-    context: SessionContext<BrowserActionContext>,
-    params: { url: string; title: string; tabId?: number },
-): Promise<void> {
-    const { url, title } = params;
-
-    try {
-        // Normalize URL for consistent checking (keep query params)
-        const normalizedUrl = normalizeUrlForIndex(url);
-
-        // Check if extraction is already running for this URL
-        if (runningExtractionsCache.isRunning(url)) {
-            const running = runningExtractionsCache.getRunning(url);
-            debug(
-                `Extraction already running for ${url} (ID: ${running?.extractionId}), skipping duplicate`,
-            );
-
-            // Optionally notify about ongoing extraction
-            const cachedContext = actionContextCache.get(url);
-            if (cachedContext) {
-                displayStatus(
-                    `Knowledge extraction in progress for ${url}`,
-                    cachedContext,
-                );
-            } else {
-                context.notify(
-                    AppAgentEvent.Inline,
-                    `Knowledge extraction in progress for ${url}`,
-                );
-            }
-            return;
-        }
-
-        // Check if we already have recent knowledge for this URL
-        if (!shouldReExtract(normalizedUrl)) {
-            debug(`Skipping extraction for ${url} - recently extracted`);
-
-            // Try to load and display existing knowledge from index
-            const existingKnowledge = await checkKnowledgeInIndex(url, context);
-            const cachedContext = actionContextCache.get(url);
-
-            if (existingKnowledge) {
-                const entitiesCount = existingKnowledge.entities?.length || 0;
-                const topicsCount = existingKnowledge.topics?.length || 0;
-                const relationshipsCount =
-                    existingKnowledge.relationships?.length || 0;
-
-                if (cachedContext) {
-                    // Display existing knowledge details using action context
-                    cachedContext.actionIO.appendDisplay(
-                        {
-                            type: "markdown",
-                            content: `> 📖 **Existing Knowledge Found**
->
-> Loading ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships from index
-
-${generateDetailedKnowledgeCards(existingKnowledge)}`,
-                        },
-                        "block",
-                    );
-                }
-            } else if (cachedContext) {
-                displayStatus(
-                    `Using cached knowledge for ${url}`,
-                    cachedContext,
-                );
-            } else {
-                context.notify(
-                    AppAgentEvent.Inline,
-                    `Using cached knowledge for ${url}`,
-                );
-            }
-            return;
-        }
-
-        // Check if we should run extraction
-        const cachedContext = actionContextCache.get(url);
-
-        // Determine if extraction should run
-        let shouldExtract = false;
-        let extractionMode = "content";
-
-        shouldExtract = await shouldRunKnowledgeExtraction(url, context);
-
-        const browserControl = getSessionBrowserControl(context);
-        const settings = await browserControl.getBrowserSettings();
-
-        extractionMode = settings?.extractionMode || "content";
-
-        if (!shouldExtract) {
-            return;
-        }
-
-        // Send simple navigation notification
-        context.notify(
-            AppAgentEvent.Inline,
-            `Navigated to "${title}". Analyzing the page ...`,
-        );
-
-        // Check for existing knowledge in index before starting new extraction
-        const existingKnowledge = await checkKnowledgeInIndex(url, context);
-        if (existingKnowledge) {
-            const entitiesCount = existingKnowledge.entities?.length || 0;
-            const topicsCount = existingKnowledge.topics?.length || 0;
-            const relationshipsCount =
-                existingKnowledge.relationships?.length || 0;
-
-            if (cachedContext) {
-                // Display existing knowledge first using ActionContext, then extraction will update it
-                cachedContext.actionIO.appendDisplay(
-                    {
-                        type: "markdown",
-                        content: `> 🔄 **Updating Existing Knowledge**
->
-> Found ${entitiesCount} entities, ${topicsCount} topics, and ${relationshipsCount} relationships. Extracting updated knowledge...
-
-${generateDetailedKnowledgeCards(existingKnowledge)}`,
-                    },
-                    "block",
-                );
-            } else {
-                // Use notification when no ActionContext available
-                context.notify(
-                    AppAgentEvent.Inline,
-                    `Updating existing knowledge for ${url}: ${entitiesCount} entities, ${topicsCount} topics, ${relationshipsCount} relationships`,
-                );
-            }
-        }
-
-        // Get page contents
-        const htmlFragments =
-            await context.agentContext.browserConnector?.getHtmlFragments(
-                false,
-                "knowledgeExtraction",
-            );
-
-        if (!htmlFragments) {
-            return;
-        }
-
-        // Create extraction parameters
-        let extractionId = `navigation-${Date.now()}`;
-
-        const cachedDynamicDisplayId =
-            actionContextCache.getDynamicDisplayId(url);
-        if (cachedDynamicDisplayId) {
-            extractionId = cachedDynamicDisplayId.replace(
-                "knowledge-extraction-",
-                "",
-            );
-        }
-
-        const parameters = {
-            url,
-            title,
-            htmlFragments,
-            extractionId,
-            mode: extractionMode,
-        };
-
-        // Start extraction using the running extractions cache
-        const extractionPromise = cachedContext
-            ? performKnowledgeExtraction(url, cachedContext, extractionMode)
-            : performKnowledgeExtractionWithNotifications(
-                  url,
-                  context,
-                  extractionMode,
-                  parameters,
-              );
-
-        await runningExtractionsCache.startExtraction(
-            url,
-            extractionId,
-            extractionPromise,
-        );
-    } catch (error) {
-        // Send error notification
-        context.notify(
-            AppAgentEvent.Error,
-            `Failed to extract knowledge for ${title}: ${(error as any).message}`,
-        );
-    }
-}
-
-async function handleTabIndexActions(
-    action: any,
-    context: SessionContext<BrowserActionContext>,
-    requestId: string | undefined,
-) {
-    const agentServer = context.agentContext.agentWebSocketServer;
-    const tabTitleIndex = context.agentContext.tabTitleIndex;
-
-    if (agentServer && tabTitleIndex) {
-        try {
-            const actionName =
-                action.actionName ?? action.fullActionName.split(".").at(-1);
-            let responseBody;
-
-            switch (actionName) {
-                case "getTabIdFromIndex": {
-                    const matchedTabs = await tabTitleIndex.search(
-                        action.parameters.query,
-                        1,
-                    );
-                    let foundId = -1;
-                    if (matchedTabs && matchedTabs.length > 0) {
-                        foundId = matchedTabs[0].item.value;
-                    }
-                    responseBody = foundId;
-                    break;
-                }
-                case "addTabIdToIndex": {
-                    await tabTitleIndex.addOrUpdate(
-                        action.parameters.title,
-                        action.parameters.id,
-                    );
-                    responseBody = "OK";
-                    break;
-                }
-                case "deleteTabIdFromIndex": {
-                    await tabTitleIndex.remove(action.parameters.id);
-                    responseBody = "OK";
-                    break;
-                }
-                case "resetTabIdToIndex": {
-                    await tabTitleIndex.reset();
-                    responseBody = "OK";
-                    break;
-                }
-            }
-
-            const activeClient = agentServer.getActiveClient();
-            if (activeClient) {
-                activeClient.socket.send(
-                    JSON.stringify({
-                        id: requestId,
-                        result: responseBody,
-                    }),
-                );
-            }
-        } catch (ex: any) {
-            if (ex instanceof Error) {
-                console.error(ex);
-            } else {
-                console.error(JSON.stringify(ex));
-            }
-        }
-    } else {
-        console.error("No WebSocket server available.");
-    }
-    return undefined;
-}
-
 /**
  * Progress update helper function
  */
-
-/**
- * Setup IPC communication with view service for action retrieval
- */
-function setupViewServiceIPC(
-    viewServiceProcess: ChildProcess,
-    context: SessionContext<BrowserActionContext>,
-): void {
-    viewServiceProcess.on("message", async (message: any) => {
-        try {
-            if (message.type === "getAction") {
-                await handleGetActionRequest(
-                    message,
-                    viewServiceProcess,
-                    context,
-                );
-            }
-        } catch (error) {
-            debug("Error handling IPC message:", error);
-        }
-    });
-
-    viewServiceProcess.on("error", (error: Error) => {
-        debug("View service process error:", error);
-    });
-}
-
-/**
- * Handle action retrieval request from view service
- */
-async function handleGetActionRequest(
-    message: any,
-    viewServiceProcess: ChildProcess,
-    context: SessionContext<BrowserActionContext>,
-): Promise<void> {
-    const { actionId, requestId } = message;
-    const startTime = Date.now();
-
-    try {
-        if (!actionId || !requestId) {
-            throw new Error(
-                "Missing required parameters: actionId or requestId",
-            );
-        }
-
-        if (typeof actionId !== "string") {
-            throw new Error("Invalid actionId format");
-        }
-
-        debug(`Handling macro request for ID: ${actionId}`);
-
-        // Get the macros store from context
-        const macrosStore = context.agentContext.macrosStore;
-        if (!macrosStore) {
-            throw new Error("MacroStore not available");
-        }
-
-        const macro = await macrosStore.getMacro(actionId);
-
-        if (!macro) {
-            viewServiceProcess.send({
-                type: "getActionResponse",
-                requestId,
-                success: false,
-                error: "Action not found",
-                timestamp: Date.now(),
-            });
-            return;
-        }
-
-        viewServiceProcess.send({
-            type: "getActionResponse",
-            requestId,
-            success: true,
-            action: macro,
-            timestamp: Date.now(),
-        });
-
-        const duration = Date.now() - startTime;
-        debug(`Action request completed in ${duration}ms`);
-    } catch (error) {
-        debug("Error handling action request:", error);
-
-        viewServiceProcess.send({
-            type: "getActionResponse",
-            requestId,
-            success: false,
-            error: (error as Error).message || "Unknown error",
-            timestamp: Date.now(),
-        });
-    }
-}
 
 async function createViewServiceHost(
     context: SessionContext<BrowserActionContext>,
@@ -2578,9 +1965,6 @@ async function createViewServiceHost(
                         TYPEAGENT_BROWSER_FILES: folderPath,
                     },
                 });
-
-                // Setup IPC message handling for action retrieval
-                setupViewServiceIPC(childProcess, context);
 
                 childProcess.on("message", function (message) {
                     if (message === "Success") {
@@ -2734,7 +2118,7 @@ class CloseWebPageHandler implements CommandHandlerNoParams {
     }
 }
 
-async function handleWebsiteAction(
+export async function handleWebsiteAction(
     actionName: string,
     parameters: any,
     context: SessionContext<BrowserActionContext>,
@@ -2802,89 +2186,6 @@ async function handleWebsiteAction(
     }
 }
 
-async function handleMacroStoreAction(
-    actionName: string,
-    parameters: any,
-    context: SessionContext<BrowserActionContext>,
-): Promise<any> {
-    const macrosStore = context.agentContext.macrosStore;
-
-    if (!macrosStore) {
-        return {
-            success: false,
-            error: "MacroStore not available",
-        };
-    }
-
-    try {
-        switch (actionName) {
-            case "recordActionUsage": {
-                const { actionId } = parameters;
-                if (!actionId) {
-                    return {
-                        success: false,
-                        error: "Missing actionId parameter",
-                    };
-                }
-
-                await macrosStore.recordUsage(actionId);
-                debug(`Recorded usage for macro: ${actionId}`);
-
-                return {
-                    success: true,
-                    macroId: actionId,
-                };
-            }
-
-            case "getActionStatistics": {
-                const { url } = parameters;
-                let macros: any[] = [];
-                let totalMacros = 0;
-
-                if (url) {
-                    // Get macros for specific URL
-                    macros = await macrosStore.getMacrosForUrl(url);
-                    totalMacros = macros.length;
-                } else {
-                    // Get all macros
-                    macros = await macrosStore.getAllMacros();
-                    totalMacros = macros.length;
-                }
-
-                debug(`Retrieved statistics: ${totalMacros} total macros`);
-
-                return {
-                    success: true,
-                    totalMacros: totalMacros,
-                    macros: macros.map((macro) => ({
-                        id: macro.id,
-                        name: macro.name,
-                        author: macro.author,
-                        category: macro.category,
-                        usageCount: macro.metadata.usageCount,
-                        lastUsed: macro.metadata.lastUsed,
-                    })),
-                };
-            }
-
-            default:
-                return {
-                    success: false,
-                    error: `Unknown ActionsStore action: ${actionName}`,
-                };
-        }
-    } catch (error) {
-        console.error(
-            `Failed to execute ActionsStore action ${actionName}:`,
-            error,
-        );
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : "Unknown error",
-        };
-    }
-}
-
 function formatLibraryStatsResponse(text: string) {
     const defaultStats = {
         totalWebsites: 0,
@@ -2941,7 +2242,7 @@ function formatLibraryStatsResponse(text: string) {
     }
 }
 
-async function handleWebsiteLibraryStats(
+export async function handleWebsiteLibraryStats(
     parameters: any,
     context: SessionContext<BrowserActionContext>,
 ): Promise<any> {
@@ -3028,458 +2329,234 @@ async function handleWebsiteLibraryStats(
 }
 
 // ============================================================================
-// Browser Semantic Query Action Handlers
-// ============================================================================
-
-/**
- * Helper function to load schema file contents
- */
-async function getBrowserQuerySchemaContents(
-    fileName: string,
-): Promise<string> {
-    const packageRoot = path.join("..", "..");
-    return await fs.promises.readFile(
-        fileURLToPath(
-            new URL(
-                path.join(packageRoot, "./src/agent", fileName),
-                import.meta.url,
-            ),
-        ),
-        "utf8",
-    );
-}
-
-/**
- * Create a TypeChat translator for browser query result types
- */
-function createBrowserQueryTranslator<T extends object>(
-    resultType: string,
-    schema: string,
-    context: ActionContext<BrowserActionContext>,
-) {
-    const apiSettings = openai.azureApiSettingsFromEnv(
-        openai.ModelType.Chat,
-        undefined,
-        "GPT_5_2",
-    );
-    const model = openai.createChatModel(apiSettings, undefined, undefined, [
-        "browser-query",
-    ]);
-    const validator = createTypeScriptJsonValidator<T>(schema, resultType);
-    const translator = createJsonTranslator(model, validator);
-
-    // Override createRequestPrompt to suppress TypeChat's default prompt
-    translator.createRequestPrompt = () => "";
-
-    return translator;
-}
-
-/**
- * Build prompt sections for HTML fragments
- */
-function buildHtmlPromptSection(fragments: any[] | undefined) {
-    const sections: any[] = [];
-    if (fragments && fragments.length > 0) {
-        const htmlContent = fragments
-            .map((f, i) => `Fragment ${i + 1}:\n${f.content || f.html || ""}`)
-            .join("\n\n");
-        sections.push({
-            type: "text",
-            text: `Here are HTML fragments from the page:\n\`\`\`\n${htmlContent}\n\`\`\``,
-        });
-    }
-    return sections;
-}
-
-/**
- * Build prompt sections for screenshot
- */
-function buildScreenshotPromptSection(screenshot: string | undefined) {
-    const sections: any[] = [];
-    if (screenshot) {
-        sections.push({
-            type: "text",
-            text: "Here is a screenshot of the currently visible webpage:",
-        });
-        sections.push({
-            type: "image_url",
-            image_url: { url: screenshot },
-        });
-    }
-    return sections;
-}
-
-/**
- * Handle getElementByDescription action
- */
-async function handleGetElementByDescription(
-    parameters: { elementDescription: string; elementType?: string },
-    context: ActionContext<BrowserActionContext>,
-): Promise<ActionResult> {
-    const browserControl = getActionBrowserControl(context);
-
-    try {
-        // Get HTML fragments for analysis
-        const htmlFragments = await browserControl.getHtmlFragments(
-            false,
-            "knowledgeExtraction",
-        );
-
-        // Attempt to capture screenshot (optional)
-        let screenshot: string | undefined;
-        try {
-            screenshot = await browserControl.captureScreenshot();
-        } catch (error) {
-            console.warn(
-                "Screenshot capture failed:",
-                (error as Error)?.message,
-            );
+class RecordActionHandler implements CommandHandler {
+    public readonly description =
+        "Record a new browser action by capturing user interactions";
+    public readonly parameters = {
+        args: {
+            name: {
+                description: "Name for the action to record",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const actionName = params.args.name;
+        if (!actionName) {
+            context.actionIO.setDisplay({
+                type: "text",
+                content:
+                    "Please provide a name for the action. Example: @browser actions record Search for products",
+            });
+            return;
         }
 
-        // Load schema and create translator
-        const schema = await getBrowserQuerySchemaContents(
-            "browserQueryResults.mts",
+        context.actionIO.setDisplay({
+            type: "markdown",
+            content:
+                `### Recording: "${actionName}"\n\n` +
+                "Perform the action on the web page. When you're done, use the buttons below to save or cancel.\n\n" +
+                "*Recording user interactions...*",
+        });
+
+        // The actual startRecording/stopRecording calls happen via the
+        // chatPanelStartRecording/chatPanelStopRecording RPC from the
+        // browser extension service worker. This command just sets up
+        // the context. The chat panel UI will show recording controls.
+    }
+}
+
+class StopRecordingHandler implements CommandHandler {
+    public readonly description = "Stop recording and create a WebFlow";
+    public readonly parameters = {
+        args: {
+            description: {
+                description: "Description of what the recorded action does",
+                implicitQuotes: true,
+                optional: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        context.actionIO.setDisplay({
+            type: "markdown",
+            content:
+                "Recording stopped." +
+                (params.args.description
+                    ? ` Description: ${params.args.description}`
+                    : ""),
+        });
+    }
+}
+
+class AskAboutPageHandler implements CommandHandler {
+    public readonly description =
+        "Ask a question about the current web page using extracted knowledge";
+    public readonly parameters = {
+        args: {
+            question: {
+                description: "Question to ask about the page",
+                implicitQuotes: true,
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<BrowserActionContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const agentContext = context.sessionContext.agentContext;
+        if (!agentContext.browserControl) {
+            displayError("No browser connection available.", context);
+            return;
+        }
+
+        const question = params.args.question;
+        if (!question) {
+            context.actionIO.setDisplay({
+                type: "text",
+                content:
+                    "Please provide a question. Example: @browser ask What is this page about?",
+            });
+            return;
+        }
+
+        context.actionIO.appendDisplay(
+            "Searching page knowledge...",
+            "temporary",
         );
-        const translator =
-            createBrowserQueryTranslator<ElementDescriptionResult>(
-                "ElementDescriptionResult",
-                schema,
-                context,
+
+        try {
+            const url = await agentContext.browserControl.getPageUrl();
+            if (!url) {
+                displayError("No active page found.", context);
+                return;
+            }
+
+            // Query knowledge for this page
+            const { handleKnowledgeAction } = await import(
+                "./knowledge/actions/knowledgeActionRouter.mjs"
+            );
+            const result = await handleKnowledgeAction(
+                "searchWebMemories",
+                {
+                    query: question,
+                    searchScope: "current_page",
+                    metadata: { url },
+                },
+                context.sessionContext,
             );
 
-        // Build prompt
-        const screenshotSection = buildScreenshotPromptSection(screenshot);
-        const htmlSection = buildHtmlPromptSection(htmlFragments);
+            if (result?.error) {
+                displayError(
+                    `Knowledge query failed: ${result.error}`,
+                    context,
+                );
+                return;
+            }
 
-        const promptSections = [
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `# Task: Locate Element by Description
-
-You are tasked with finding a specific UI element on the webpage based on a natural language description.
-
-## Element to Find
-Description: "${parameters.elementDescription}"
-${parameters.elementType ? `Type Hint: ${parameters.elementType}` : ""}
-
-## Instructions
-1. Examine the HTML fragments and screenshot provided
-2. Identify the element that best matches the description
-3. Extract the following information:
-   - Element name (short descriptive label)
-   - Element HTML (complete outerHTML of the element)
-   - CSS selector (prefer ID-based, fallback to other unique selectors)
-   - Element type (button, input, link, div, etc.)
-   - Visible text content (if any)
-   - Key attributes (id, class, data-*, aria-*, etc.)
-
-4. If the element cannot be found:
-   - Set found: false
-   - Provide a clear reason in notFoundReason
-
-## CSS Selector Guidelines
-- Prefer selectors in this order:
-  1. ID-based: #element-id
-  2. Data attribute: [data-testid="value"]
-  3. Unique class: .unique-class-name
-  4. Combination: button.class-name[type="submit"]
-- Ensure selector is specific enough to uniquely identify the element
-- Test mentally: would this selector match only one element?
-
-Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
-
-\`\`\`
-${translator.validator.getSchemaText()}
-\`\`\`
-
-The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
-            },
-        ];
-
-        const response = await translator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-
-        if (response.success && response.data) {
-            const result = response.data;
-            let displayText: string;
-            if (result.found) {
-                displayText = `Found element: ${result.elementName}`;
-                if (result.elementCssSelector) {
-                    displayText += `\nCSS Selector: ${result.elementCssSelector}`;
-                }
-                if (result.elementText) {
-                    displayText += `\nText: ${result.elementText}`;
+            // Format the answer
+            let md = "";
+            if (result?.answer) {
+                md += `${result.answer}\n\n`;
+            } else if (result?.websites && result.websites.length > 0) {
+                for (const site of result.websites.slice(0, 3)) {
+                    md += `**${site.title || site.url}**\n`;
+                    if (site.summary) md += `${site.summary}\n`;
+                    md += "\n";
                 }
             } else {
-                displayText = `Element not found: ${result.notFoundReason || "Unknown reason"}`;
+                md += "No relevant knowledge found for this page. ";
+                md +=
+                    "Try extracting knowledge first with `@browser extractKnowledge`.\n";
             }
-            context.actionIO.setDisplay(displayText);
-            return createActionResult(JSON.stringify(result));
-        } else {
-            const errorMsg = "Failed to analyze page";
-            context.actionIO.setDisplay(errorMsg);
-            return createActionResultFromError(errorMsg);
-        }
-    } catch (error) {
-        const errorMsg = `Error in getElementByDescription: ${(error as Error).message}`;
-        context.actionIO.setDisplay(errorMsg);
-        return createActionResultFromError(errorMsg);
-    }
-}
 
-/**
- * Handle isPageStateMatched action
- */
-async function handleIsPageStateMatched(
-    parameters: { expectedStateDescription: string },
-    context: ActionContext<BrowserActionContext>,
-): Promise<ActionResult> {
-    const browserControl = getActionBrowserControl(context);
+            if (
+                result?.suggestedFollowups &&
+                result.suggestedFollowups.length > 0
+            ) {
+                md += "\n**You might also ask:**\n";
+                for (const q of result.suggestedFollowups.slice(0, 3)) {
+                    md += `- ${q}\n`;
+                }
+            }
 
-    try {
-        // Get HTML fragments for analysis
-        const htmlFragments = await browserControl.getHtmlFragments(
-            false,
-            "knowledgeExtraction",
-        );
-
-        // Attempt to capture screenshot (optional)
-        let screenshot: string | undefined;
-        try {
-            screenshot = await browserControl.captureScreenshot();
-        } catch (error) {
-            console.warn(
-                "Screenshot capture failed:",
-                (error as Error)?.message,
+            context.actionIO.setDisplay({
+                type: "markdown",
+                content: md,
+            });
+        } catch (error: any) {
+            displayError(
+                `Failed to query page: ${error?.message || error}`,
+                context,
             );
         }
-
-        // Load schema and create translator
-        const schema = await getBrowserQuerySchemaContents(
-            "browserQueryResults.mts",
-        );
-        const translator = createBrowserQueryTranslator<PageStateMatchResult>(
-            "PageStateMatchResult",
-            schema,
-            context,
-        );
-
-        // Build prompt
-        const screenshotSection = buildScreenshotPromptSection(screenshot);
-        const htmlSection = buildHtmlPromptSection(htmlFragments);
-
-        const promptSections = [
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `# Task: Verify Page State
-
-You are tasked with determining if the current page state matches an expected condition.
-
-## Expected State
-"${parameters.expectedStateDescription}"
-
-## Instructions
-1. Analyze the current page using the HTML fragments and screenshot
-2. Determine the current page state:
-   - Page type (e.g., homePage, searchResults, productDetails, shoppingCart)
-   - Description of what's currently shown
-   - Key elements visible on the page
-   - Possible user actions
-
-3. Compare current state to expected state:
-   - Does the page type match?
-   - Are the expected elements present?
-   - Does the content align with expectations?
-   - Calculate confidence score (0.0 to 1.0)
-
-4. Set matched: true only if:
-   - Core aspects of expected state are present
-   - Confidence >= 0.7
-
-5. Provide clear explanation:
-   - If matched: "The page shows [current state] which matches the expected [expected state]"
-   - If not matched: "The page shows [current state] but expected [expected state]. Missing: [details]"
-
-Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
-
-\`\`\`
-${translator.validator.getSchemaText()}
-\`\`\`
-
-The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
-            },
-        ];
-
-        const response = await translator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-
-        if (response.success && response.data) {
-            const result = response.data;
-            const displayText = result.matched
-                ? `✅ Page state matched: ${result.explanation}`
-                : `❌ Page state not matched: ${result.explanation}`;
-            context.actionIO.setDisplay(displayText);
-            return createActionResult(JSON.stringify(result));
-        } else {
-            const errorMsg = "Failed to analyze page state";
-            context.actionIO.setDisplay(errorMsg);
-            return createActionResultFromError(errorMsg);
-        }
-    } catch (error) {
-        const errorMsg = `Error in isPageStateMatched: ${(error as Error).message}`;
-        context.actionIO.setDisplay(errorMsg);
-        return createActionResultFromError(errorMsg);
     }
 }
 
-/**
- * Handle queryPageContent action
- */
-async function handleQueryPageContent(
-    parameters: { query: string },
-    context: ActionContext<BrowserActionContext>,
-): Promise<ActionResult> {
-    const browserControl = getActionBrowserControl(context);
+class DiscoverActionsHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Discover available actions on the current web page";
+    public async run(context: ActionContext<BrowserActionContext>) {
+        const agentContext = context.sessionContext.agentContext;
+        if (!agentContext.browserControl) {
+            displayError("No browser connection available.", context);
+            return;
+        }
 
-    try {
-        // Get HTML fragments for analysis
-        const htmlFragments = await browserControl.getHtmlFragments(
-            false,
-            "knowledgeExtraction",
-        );
+        context.actionIO.appendDisplay("Analyzing page...", "temporary");
 
-        // Attempt to capture screenshot (optional)
-        let screenshot: string | undefined;
         try {
-            screenshot = await browserControl.captureScreenshot();
-        } catch (error) {
-            console.warn(
-                "Screenshot capture failed:",
-                (error as Error)?.message,
+            // Run discovery — calls the LLM to detect page actions,
+            // auto-saves them to the WebFlowStore scoped to the domain,
+            // and returns site-scoped actions in data.actions.
+            const discoveryResult = await handleSchemaDiscoveryAction(
+                {
+                    actionName: "detectPageActions",
+                    parameters: {},
+                } as any,
+                context.sessionContext,
+            );
+
+            const actions: any[] = discoveryResult.data?.actions || [];
+
+            if (actions.length === 0) {
+                context.actionIO.setDisplay({
+                    type: "text",
+                    content: "No actions found on this page.",
+                });
+                return;
+            }
+
+            let md = `### Actions available on this page (${actions.length})\n\n`;
+            for (const action of actions) {
+                const params = action.parameters
+                    ? Object.keys(action.parameters)
+                    : [];
+                const paramStr =
+                    params.length > 0 ? ` *(${params.join(", ")})*` : "";
+                md += `- **${action.name}**${paramStr}`;
+                if (action.description) {
+                    md += ` — ${action.description}`;
+                }
+                md += "\n";
+            }
+
+            context.actionIO.setDisplay({
+                type: "markdown",
+                content: md,
+            });
+        } catch (error: any) {
+            displayError(
+                `Discovery failed: ${error?.message || error}`,
+                context,
             );
         }
-
-        // Load schema and create translator
-        const schema = await getBrowserQuerySchemaContents(
-            "browserQueryResults.mts",
-        );
-        const translator = createBrowserQueryTranslator<PageContentQueryResult>(
-            "PageContentQueryResult",
-            schema,
-            context,
-        );
-
-        // Build prompt
-        const screenshotSection = buildScreenshotPromptSection(screenshot);
-        const htmlSection = buildHtmlPromptSection(htmlFragments);
-
-        const promptSections = [
-            ...screenshotSection,
-            ...htmlSection,
-            {
-                type: "text",
-                text: `# Task: Answer Question About Page Content
-
-You are tasked with answering a question about the current webpage content.
-
-## Question
-"${parameters.query}"
-
-## Instructions
-1. Analyze the HTML fragments and screenshot provided
-2. Find the answer to the question in the page content
-3. If answered:
-   - Provide a clear, concise answer
-   - Extract relevant text snippets as evidence
-   - Include CSS selectors pointing to source elements
-   - Assign confidence score (0.0 to 1.0)
-   - Be precise: use exact values, include units (e.g., "$24.99" not "about 25")
-
-4. If unable to answer:
-   - Set answered: false
-   - Explain why (e.g., "Information not found on page", "Question ambiguous")
-   - Suggest next steps if applicable
-
-5. Answer Guidelines:
-   - Extract exact values from the page
-   - Include units for measurements, prices, quantities
-   - If multiple answers exist, list them clearly
-   - Cite specific locations in the page
-
-Generate a SINGLE "${translator.validator.getTypeName()}" response using the schema below:
-
-\`\`\`
-${translator.validator.getSchemaText()}
-\`\`\`
-
-The following is the COMPLETE JSON response object with 2 spaces of indentation and no properties with the value undefined:`,
-            },
-        ];
-
-        const response = await translator.translate("", [
-            {
-                role: "user",
-                content: promptSections as MultimodalPromptContent[],
-            },
-        ]);
-
-        if (response.success && response.data) {
-            const result = response.data;
-            const displayText = result.answered
-                ? `Answer: ${result.answerText}`
-                : `Unable to answer: ${result.unableToAnswerReason || "No information found"}`;
-            context.actionIO.setDisplay(displayText);
-            return createActionResult(JSON.stringify(result));
-        } else {
-            const errorMsg = "Failed to query page content";
-            context.actionIO.setDisplay(errorMsg);
-            return createActionResultFromError(errorMsg);
-        }
-    } catch (error) {
-        const errorMsg = `Error in queryPageContent: ${(error as Error).message}`;
-        context.actionIO.setDisplay(errorMsg);
-        return createActionResultFromError(errorMsg);
-    }
-}
-
-/**
- * Handle downloadImage action
- */
-async function handleDownloadImage(
-    parameters: {
-        cssSelector?: string;
-        imageDescription?: string;
-        filename?: string;
-    },
-    context: ActionContext<BrowserActionContext>,
-): Promise<ActionResult> {
-    const browserControl = getActionBrowserControl(context);
-
-    try {
-        const filePath = await browserControl.downloadImage(
-            parameters.cssSelector,
-            parameters.imageDescription,
-            parameters.filename,
-        );
-        const displayText = `Image downloaded to: ${filePath}`;
-        context.actionIO.setDisplay(displayText);
-        return createActionResult(filePath);
-    } catch (error) {
-        const errorMsg = `Error downloading image: ${(error as Error).message}`;
-        context.actionIO.setDisplay(errorMsg);
-        return createActionResultFromError(errorMsg);
     }
 }
 
@@ -3536,22 +2613,11 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
 
-                        // Recreate BrowserConnector with new preferredClientType
-                        const browserControls =
+                        // Update browserControl to use external browser
+                        const externalControl =
                             agentContext.externalBrowserControl?.control;
-                        if (
-                            browserControls &&
-                            agentContext.agentWebSocketServer
-                        ) {
-                            debugClientRouting(
-                                "[@browser external on] Recreating BrowserConnector with preferredClientType = 'extension'",
-                            );
-                            agentContext.browserConnector =
-                                new BrowserConnector(
-                                    agentContext.agentWebSocketServer,
-                                    browserControls,
-                                    agentContext.preferredClientType,
-                                );
+                        if (externalControl) {
+                            agentContext.browserControl = externalControl;
                         }
 
                         await context.queueToggleTransientAgent(
@@ -3592,22 +2658,10 @@ export const handlers: CommandHandlerTable = {
                             );
                         }
 
-                        // Recreate BrowserConnector with new preferredClientType
-                        const browserControls =
-                            agentContext.clientBrowserControl;
-                        if (
-                            browserControls &&
-                            agentContext.agentWebSocketServer
-                        ) {
-                            debugClientRouting(
-                                "[@browser external off] Recreating BrowserConnector with preferredClientType = 'electron'",
-                            );
-                            agentContext.browserConnector =
-                                new BrowserConnector(
-                                    agentContext.agentWebSocketServer,
-                                    browserControls,
-                                    agentContext.preferredClientType,
-                                );
+                        // Update browserControl to use client browser
+                        if (agentContext.clientBrowserControl) {
+                            agentContext.browserControl =
+                                agentContext.clientBrowserControl;
                         }
 
                         await context.queueToggleTransientAgent(
@@ -3687,6 +2741,21 @@ export const handlers: CommandHandlerTable = {
             },
         },
         extractKnowledge: new ExtractKnowledgeHandler(),
+        ask: new AskAboutPageHandler(),
+        actions: {
+            description: "Manage page actions (discover, record, author)",
+            defaultSubCommand: "discover",
+            commands: {
+                discover: new DiscoverActionsHandler(),
+                record: new RecordActionHandler(),
+                stop: {
+                    description: "Stop operations",
+                    commands: {
+                        recording: new StopRecordingHandler(),
+                    },
+                },
+            },
+        },
         search: new SearchProviderCommandHandlerTable(),
     },
 };

@@ -4,12 +4,15 @@
 // Desktop Input Settings Grammar
 // Mouse and touchpad settings
 
-<Start> = <MouseCursorSpeed>
+import { DesktopInputActions } from "./inputActionsSchema.ts";
+
+<Start> : DesktopInputActions = <MouseCursorSpeed>
           | <MouseWheelScrollLines>
           | <SetPrimaryMouseButton>
           | <EnhancePointerPrecision>
           | <AdjustMousePointerSize>
           | <MousePointerCustomization>
+          | <CursorTrail>
           | <EnableTouchPad>
           | <TouchpadCursorSpeed>;
 
@@ -47,9 +50,19 @@
   | smaller cursor -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "decrease" } };
 
 <MousePointerCustomization> =
-    customize mouse pointer -> { actionName: "mousePointerCustomization", parameters: {} }
-  | change mouse pointer style -> { actionName: "mousePointerCustomization", parameters: {} }
-  | open pointer settings -> { actionName: "mousePointerCustomization", parameters: {} };
+    customize mouse pointer to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } }
+  | change mouse pointer (style)? to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } }
+  | set mouse pointer color to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } };
+
+<CursorTrail> =
+    enable cursor trail -> { actionName: "CursorTrail", parameters: { enable: true } }
+  | disable cursor trail -> { actionName: "CursorTrail", parameters: { enable: false } }
+  | turn on cursor trail -> { actionName: "CursorTrail", parameters: { enable: true } }
+  | turn off cursor trail -> { actionName: "CursorTrail", parameters: { enable: false } }
+  | enable mouse trail -> { actionName: "CursorTrail", parameters: { enable: true } }
+  | disable mouse trail -> { actionName: "CursorTrail", parameters: { enable: false } }
+  | set cursor trail length to $(length:number) -> { actionName: "CursorTrail", parameters: { enable: true, length } }
+  | cursor trail $(length:number) -> { actionName: "CursorTrail", parameters: { enable: true, length } };
 
 <EnableTouchPad> =
     enable touchpad -> { actionName: "EnableTouchPad", parameters: { enable: true } }

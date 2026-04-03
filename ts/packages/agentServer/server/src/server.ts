@@ -60,7 +60,7 @@ async function main() {
         instanceDir,
     );
 
-    await createWebSocketChannelServer(
+    const wss = await createWebSocketChannelServer(
         { port: 8999 },
         (channelProvider: ChannelProvider, closeFn: () => void) => {
             // Track which sessions this WebSocket connection has joined
@@ -162,6 +162,12 @@ async function main() {
                         joinedSessions.delete(sessionId);
                     }
                     return sessionManager.deleteSession(sessionId);
+                },
+                shutdown: async () => {
+                    console.log("Shutdown requested, stopping agent server...");
+                    wss.close();
+                    await sharedDispatcher.close();
+                    process.exit(0);
                 },
             };
 

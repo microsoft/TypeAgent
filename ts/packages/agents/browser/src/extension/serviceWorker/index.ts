@@ -6,12 +6,16 @@ import {
     ensureWebsocketConnected,
     getWebSocket,
     reconnectWebSocket,
+    sendActionToAgent,
 } from "./websocket";
 import { toggleSiteTranslator } from "./siteTranslator";
 import { showBadgeError, showBadgeHealthy } from "./ui";
 import { getActiveTab } from "./tabManager";
-import { handleMessage } from "./messageHandlers";
 import { screenshotCoordinator } from "./screenshotCoordinator";
+import { createChromeRpcServer } from "./chromeRpcServer";
+import { createAllHandlers } from "./serviceWorkerRpcHandlers";
+import { setChatPanelRpc } from "./dispatcherConnection";
+import { setContextMenuRpcSend } from "./contextMenu";
 
 import {
     isWebAgentMessage,
@@ -46,6 +50,11 @@ export async function initialize(): Promise<void> {
     // Initialize context menu
     initializeContextMenu();
 
+    // Set up RPC server for typed view communication
+    const { rpc } = createChromeRpcServer(createAllHandlers());
+    setChatPanelRpc(rpc as any);
+    setContextMenuRpcSend((rpc as any).send.bind(rpc));
+
     // Set up event listeners
     setupEventListeners();
 }
@@ -54,8 +63,20 @@ export async function initialize(): Promise<void> {
  * Sets up all event listeners
  */
 function setupEventListeners(): void {
+    // Handle simple content script messages (not RPC)
+    chrome.runtime.onMessage.addListener(
+        (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
+            if (message.type === "getTabId") {
+                sendResponse({
+                    tabId: sender.tab?.id ? String(sender.tab.id) : null,
+                });
+                return false;
+            }
+        },
+    );
+
     // Browser action click
-    chrome.action?.onClicked.addListener(async (tab) => {
+    chrome.action?.onClicked.addListener(async (tab: any) => {
         try {
             const connected = await ensureWebsocketConnected();
             if (!connected) {
@@ -73,7 +94,7 @@ function setupEventListeners(): void {
     });
 
     // Tab activation
-    chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    chrome.tabs.onActivated.addListener(async (activeInfo: any) => {
         const targetTab = await chrome.tabs.get(activeInfo.tabId);
         await toggleSiteTranslator(targetTab);
     });
@@ -101,7 +122,7 @@ function setupEventListeners(): void {
                     title: tab.title,
                 },
             };
-            await sendActionToTabIndex(addTabAction);
+            await sendActionToAgent(addTabAction).catch(() => {});
         }
     });
 
@@ -118,7 +139,7 @@ function setupEventListeners(): void {
                 title: tab.title,
             },
         };
-        await sendActionToTabIndex(addTabAction);
+        await sendActionToAgent(addTabAction).catch(() => {});
     });
 
     // Tab removal
@@ -129,7 +150,7 @@ function setupEventListeners(): void {
                 id: tabId,
             },
         };
-        await sendActionToTabIndex(removeTabAction);
+        await sendActionToAgent(removeTabAction).catch(() => {});
     });
 
     let embeddingsInitializedWindowId: number;
@@ -164,7 +185,7 @@ function setupEventListeners(): void {
                             title: tab.title,
                         },
                     };
-                    await sendActionToTabIndex(addTabAction);
+                    await sendActionToAgent(addTabAction).catch(() => {});
                 }
             });
 
@@ -196,19 +217,6 @@ function setupEventListeners(): void {
             reconnectWebSocket();
         }
     });
-
-    // Message handling
-    chrome.runtime.onMessage.addListener(
-        (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
-            const handleAction = async () => {
-                const result = await handleMessage(message, sender);
-                sendResponse(result);
-            };
-
-            handleAction();
-            return true; // Important: indicates we'll send response asynchronously
-        },
-    );
 
     // Command shortcuts
     chrome.commands?.onCommand.addListener(async (command) => {
@@ -330,56 +338,6 @@ function setupEventListeners(): void {
     });
 }
 
-/**
- * Sends an action to the tab index
- * This is a temporary function that will be replaced when the circular dependency is resolved
- */
-async function sendActionToTabIndex(action: any): Promise<string | undefined> {
-    const webSocket = getWebSocket();
-    if (!webSocket) {
-        return undefined;
-    }
-
-    return new Promise<string | undefined>((resolve, reject) => {
-        try {
-            const callId = new Date().getTime().toString();
-
-            webSocket.send(
-                JSON.stringify({
-                    method: action.actionName,
-                    id: callId,
-                    params: action.parameters,
-                }),
-            );
-
-            const handler = async (event: MessageEvent) => {
-                let text: string;
-                if (typeof event.data === "string") {
-                    text = event.data;
-                } else if (event.data instanceof Blob) {
-                    text = await event.data.text();
-                } else if (event.data instanceof ArrayBuffer) {
-                    text = new TextDecoder().decode(event.data);
-                } else {
-                    console.warn("Unknown message type:", typeof event.data);
-                    return;
-                }
-
-                const data = JSON.parse(text);
-                if (data.id == callId && data.result) {
-                    webSocket.removeEventListener("message", handler);
-                    resolve(data.result);
-                }
-            };
-
-            webSocket.addEventListener("message", handler);
-        } catch (error) {
-            console.error("Unable to contact dispatcher backend:", error);
-            reject("Unable to contact dispatcher backend.");
-        }
-    });
-}
-
 // Start initialization
 initialize();
 
@@ -395,18 +353,12 @@ async function sendNavigationMessage(
     title: string,
     tabId?: number,
 ): Promise<void> {
-    const webSocket = getWebSocket();
-    if (!webSocket) {
-        return;
-    }
-
     try {
         // Debounce rapid navigation events
         const navigationKey = `${tabId}-${url}`;
         if (recentNavigations.has(navigationKey)) {
             const lastNav = recentNavigations.get(navigationKey);
             if (lastNav && Date.now() - lastNav < 2000) {
-                // 2 second debounce
                 console.log(`Debouncing navigation to ${url}`);
                 return;
             }
@@ -415,26 +367,21 @@ async function sendNavigationMessage(
 
         // Clean up old entries periodically
         if (recentNavigations.size > 100) {
-            const cutoff = Date.now() - 60000; // 1 minute
+            const cutoff = Date.now() - 60000;
             for (const [key, time] of recentNavigations.entries()) {
                 if (time < cutoff) {
                     recentNavigations.delete(key);
                 }
             }
         }
-        webSocket.send(
-            JSON.stringify({
-                method: "handlePageNavigation",
-                params: {
-                    url,
-                    title,
-                    tabId,
-                },
-            }),
-        );
+
+        await sendActionToAgent({
+            actionName: "handlePageNavigation",
+            parameters: { url, title, tabId },
+        });
     } catch (error) {
         console.error("Error sending navigation message:", error);
     }
 }
 
-export { sendActionToTabIndex, sendNavigationMessage };
+export { sendNavigationMessage };

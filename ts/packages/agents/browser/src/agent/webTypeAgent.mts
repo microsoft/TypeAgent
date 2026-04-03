@@ -85,7 +85,7 @@ export async function loadAllowDynamicAgentDomains(
     }
 }
 
-async function addAllowDynamicAgentDomains(
+export async function addAllowDynamicAgentDomains(
     domain: string,
     context: SessionContext<BrowserActionContext>,
 ) {

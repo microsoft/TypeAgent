@@ -9,6 +9,7 @@ import {
     StringPart,
     CompiledSpacingMode,
     CompiledValueNode,
+    CompiledObjectElement,
 } from "./grammarTypes.js";
 import {
     Rule,
@@ -16,10 +17,22 @@ import {
     ImportStatement,
     parseGrammarRules,
     ValueNode,
+    isObjectSpread,
 } from "./grammarRuleParser.js";
 import { getLineCol } from "./utils.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
+import type {
+    SchemaTypeDefinition,
+    SchemaType,
+} from "@typeagent/action-schema";
+import {
+    validateValueType,
+    validateExprTypes,
+    validateVariableType,
+    buildVariableTypeMap,
+    classifyRuleValue,
+} from "./grammarValueTypeValidator.js";
 
 export type FileLoader = {
     resolvePath: (name: string, ref?: string) => string;
@@ -27,12 +40,26 @@ export type FileLoader = {
     readContent: (fullPath: string) => string;
 };
 
+/**
+ * Resolves a type name imported from a .ts file to its parsed schema definition.
+ * @param typeName - The type name to resolve (e.g., "PlayAction")
+ * @param source - The resolved absolute path to the source file. The compiler
+ *   resolves relative import paths (e.g., "./schema.ts") against the grammar
+ *   file's location before calling this function.
+ * @returns The resolved type definition, or undefined if not found
+ */
+export type SchemaLoader = (
+    typeName: string,
+    source: string,
+) => SchemaTypeDefinition | undefined;
+
 type DefinitionRecord = {
     definitions: RuleDefinition[];
     grammarRules?: GrammarRule[];
     hasValue: boolean;
     compiling: boolean; // true while grammarRules is being populated
     nullable?: boolean; // set after compilation; true if any alternative matches ε
+    valueType?: string[] | undefined; // declared return type names (e.g. <Rule> : A | B = ...)
 };
 
 type ResolvedDefinitionRecord = DefinitionRecord & {
@@ -51,12 +78,15 @@ type CompileContext = {
     content: string;
     displayPath: string;
     ruleDefMap: DefinitionMap;
+    exportedNames: Set<string>; // Only rules with export keyword are importable
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
-    knownTypeNames: Set<string>; // Type names imported from .ts files
-    importedTypeNames: Map<string, number | undefined>; // Explicitly named .ts type imports with positions (excludes entity names and wildcards)
-    usedImportedTypes: Set<string>; // Imported .ts types actually referenced in variables
+    importedTypeNames: Map<string, number | undefined>; // All imported type names with positions (source-less entity imports + .ts type imports)
+    usedImportedTypes: Set<string>; // Imported types actually referenced in variables (entity + .ts type imports)
+    resolvedTypes: Map<string, SchemaTypeDefinition>; // Parsed schema types resolved via SchemaLoader
     hasStarImport: boolean; // Indicates if there's a star import
     currentDefinition?: string | undefined;
+    valuePositions: Map<CompiledValueNode, number>; // source positions of value nodes for error reporting (compile-time only)
+    derivedTypes: Map<GrammarRule[], SchemaType>; // cached derived output types for rule arrays (compile-time only)
     errors: GrammarCompileError[];
     warnings: GrammarCompileError[];
 };
@@ -65,12 +95,9 @@ function createImportCompileContext(
     fileLoader: FileLoader,
     grammarFileMap: Map<string, CompileContext>,
     referencingFileName: string,
-    importStmt: ImportStatement,
+    source: string,
 ): CompileContext {
-    const fullPath = fileLoader.resolvePath(
-        importStmt.source,
-        referencingFileName,
-    );
+    const fullPath = fileLoader.resolvePath(source, referencingFileName);
     if (grammarFileMap.has(fullPath)) {
         return grammarFileMap.get(fullPath)!;
     }
@@ -97,22 +124,25 @@ function createCompileContext(
     fileUtils: FileLoader | undefined,
     definitions: RuleDefinition[],
     imports?: ImportStatement[],
-    entityNames?: string[],
+    schemaLoader?: SchemaLoader,
 ): CompileContext {
     const ruleDefMap: DefinitionMap = new Map();
 
-    // Build separate sets of imported rule names and type names
+    // Build imported rule names and type names
     const importedRuleMap = new Map<string, CompileContext>();
-    const knownTypeNames = new Set<string>();
-
-    // Entity declarations (e.g., "entity CalendarDate;") are valid type names
-    if (entityNames) {
-        for (const name of entityNames) {
-            knownTypeNames.add(name);
-        }
-    }
     const importedTypeNames = new Map<string, number | undefined>();
     const usedImportedTypes = new Set<string>();
+    const resolvedTypes = new Map<string, SchemaTypeDefinition>();
+
+    // Build exportedNames from definitions with exported: true
+    // Only rules explicitly marked with export are importable
+    const exportedNames = new Set<string>();
+    for (const def of definitions) {
+        if (def.exported) {
+            exportedNames.add(def.definitionName.name);
+        }
+    }
+
     // Create the context early and add to the map BEFORE processing anything
     // This prevents infinite recursion on circular dependencies
     const context: CompileContext = {
@@ -120,11 +150,14 @@ function createCompileContext(
         content,
         displayPath,
         ruleDefMap,
+        exportedNames,
         importedRuleMap,
-        knownTypeNames,
         importedTypeNames,
         usedImportedTypes,
+        resolvedTypes,
         hasStarImport: false,
+        valuePositions: new Map(),
+        derivedTypes: new Map(),
         errors: [],
         warnings: [],
     };
@@ -140,6 +173,7 @@ function createCompileContext(
                 // Set this to true to allow recursion to assume that it has value.
                 hasValue: true,
                 compiling: false,
+                valueType: def.valueType?.map((vt) => vt.name),
             });
         } else {
             existing.definitions.push(def);
@@ -152,6 +186,15 @@ function createCompileContext(
     // Process imports AFTER definitions - this populates importedRuleMap
     if (imports) {
         for (const importStmt of imports) {
+            // Source-less imports are entity declarations: import { Ordinal, Cardinal };
+            if (importStmt.source === undefined) {
+                if (importStmt.names !== "*") {
+                    for (const { name } of importStmt.names) {
+                        importedTypeNames.set(name, importStmt.pos);
+                    }
+                }
+                continue;
+            }
             // Determine if this is a type import (.ts) or grammar import (.agr)
             const isGrammarImport = importStmt.source.endsWith(".agr");
             if (isGrammarImport) {
@@ -162,7 +205,7 @@ function createCompileContext(
                     fileUtils,
                     grammarFileMap,
                     fullPath,
-                    importStmt,
+                    importStmt.source,
                 );
 
                 const ruleNames =
@@ -171,6 +214,19 @@ function createCompileContext(
                         : importStmt.names.map((n) => n.name);
 
                 for (const ruleName of ruleNames) {
+                    // Check if the rule is exported from the source file
+                    if (!importContext.exportedNames.has(ruleName)) {
+                        // Rule is not exported from the source file
+                        if (importStmt.names !== "*") {
+                            // Only error for named imports; wildcard silently skips
+                            context.errors.push({
+                                message: `Rule '<${ruleName}>' is not exported from '${importStmt.source}'.`,
+                                definition: ruleName,
+                                pos: importStmt.pos,
+                            });
+                        }
+                        continue;
+                    }
                     // Check if we're trying to import a rule that's already defined locally
                     if (ruleDefMap.has(ruleName)) {
                         context.errors.push({
@@ -191,6 +247,31 @@ function createCompileContext(
                 } else {
                     for (const { name } of importStmt.names) {
                         importedTypeNames.set(name, importStmt.pos);
+                        // Resolve type via SchemaLoader if available
+                        if (schemaLoader) {
+                            // Resolve relative source path against the grammar file
+                            const resolvedSource = fileUtils
+                                ? fileUtils.resolvePath(
+                                      importStmt.source,
+                                      fullPath,
+                                  )
+                                : importStmt.source;
+                            const def = schemaLoader(name, resolvedSource);
+                            if (def !== undefined) {
+                                if (!def.exported) {
+                                    context.errors.push({
+                                        message: `Type '${name}' is not exported from '${importStmt.source}'`,
+                                        pos: importStmt.pos,
+                                    });
+                                }
+                                resolvedTypes.set(name, def);
+                            } else {
+                                context.errors.push({
+                                    message: `Cannot resolve type '${name}' from '${importStmt.source}'`,
+                                    pos: importStmt.pos,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -211,7 +292,7 @@ export function compileGrammar(
     errors: string[],
     warnings?: string[],
     imports?: ImportStatement[],
-    entityNames?: string[],
+    schemaLoader?: SchemaLoader,
 ): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
@@ -222,7 +303,7 @@ export function compileGrammar(
         fileUtils,
         definitions,
         imports,
-        entityNames,
+        schemaLoader,
     );
 
     const { grammarRules, hasValue } = createNamedGrammarRules(context, start);
@@ -235,7 +316,10 @@ export function compileGrammar(
     }
 
     for (const [name, record] of context.ruleDefMap.entries()) {
-        if (record.grammarRules === undefined) {
+        if (
+            record.grammarRules === undefined &&
+            !context.exportedNames.has(name)
+        ) {
             context.warnings.push({
                 message: `Rule '<${name}>' is defined but never used.`,
                 pos: record.definitions[0]?.pos,
@@ -272,17 +356,24 @@ export function compileGrammar(
         );
     }
 
-    // Collect all imported .ts types used as variable types across all contexts
-    const usedImportedTypes = new Set<string>();
+    // TODO: Find a better way to discover entities instead of deriving them
+    // from import statements.
+    // Collect entity names from two sources:
+    // 1. Source-less imports: import { Ordinal, Cardinal };
+    // 2. Imported .ts types used as variable types across all contexts
+    const allEntities = new Set<string>();
+    for (const name of context.importedTypeNames.keys()) {
+        allEntities.add(name);
+    }
     for (const [, compileContext] of context.grammarFileMap) {
         for (const t of compileContext.usedImportedTypes) {
-            usedImportedTypes.add(t);
+            allEntities.add(t);
         }
     }
 
     const grammar: Grammar = { rules: grammarRules };
-    if (usedImportedTypes.size > 0) {
-        grammar.entities = Array.from(usedImportedTypes);
+    if (allEntities.size > 0) {
+        grammar.entities = Array.from(allEntities);
     }
     return grammar;
 }
@@ -308,36 +399,63 @@ function validateAndCompileValueNode(
     node: ValueNode,
     availableVariables: Set<string>,
 ): CompiledValueNode {
+    let result: CompiledValueNode;
     switch (node.type) {
         case "literal":
-            return { type: "literal", value: node.value };
+            result = { type: "literal", value: node.value };
+            break;
         case "variable":
-            validateVariableReference(context, node.name, availableVariables);
-            return { type: "variable", name: node.name };
+            if (!availableVariables.has(node.name)) {
+                context.errors.push({
+                    message: `Variable '${node.name}' is referenced in the value but not defined in the rule`,
+                    definition: context.currentDefinition,
+                });
+            }
+            result = { type: "variable", name: node.name };
+            break;
         case "object": {
-            const value: { [key: string]: CompiledValueNode | null } = {};
-            for (const prop of node.value) {
-                if (prop.value === null) {
+            const elements: CompiledObjectElement[] = [];
+            for (const elem of node.value) {
+                if (isObjectSpread(elem)) {
+                    elements.push({
+                        type: "spread",
+                        argument: validateAndCompileValueNode(
+                            context,
+                            elem.argument,
+                            availableVariables,
+                        ),
+                    });
+                } else if (elem.value === null) {
                     // Shorthand form: { key } means { key: key }
                     // Validate that 'key' is an available variable
-                    validateVariableReference(
-                        context,
-                        prop.key,
-                        availableVariables,
-                    );
-                    value[prop.key] = null;
+                    if (!availableVariables.has(elem.key)) {
+                        context.errors.push({
+                            message: `Variable '${elem.key}' is referenced in the value but not defined in the rule`,
+                            definition: context.currentDefinition,
+                        });
+                    }
+                    elements.push({
+                        type: "property",
+                        key: elem.key,
+                        value: null,
+                    });
                 } else {
-                    value[prop.key] = validateAndCompileValueNode(
-                        context,
-                        prop.value,
-                        availableVariables,
-                    );
+                    elements.push({
+                        type: "property",
+                        key: elem.key,
+                        value: validateAndCompileValueNode(
+                            context,
+                            elem.value,
+                            availableVariables,
+                        ),
+                    });
                 }
             }
-            return { type: "object", value };
+            result = { type: "object", value: elements };
+            break;
         }
         case "array":
-            return {
+            result = {
                 type: "array",
                 value: node.value.map((elem) =>
                     validateAndCompileValueNode(
@@ -347,7 +465,125 @@ function validateAndCompileValueNode(
                     ),
                 ),
             };
+            break;
+
+        // ── Value expression nodes ────────────────────────────────────
+        case "binaryExpression":
+            result = {
+                type: "binaryExpression",
+                operator: node.operator,
+                left: validateAndCompileValueNode(
+                    context,
+                    node.left,
+                    availableVariables,
+                ),
+                right: validateAndCompileValueNode(
+                    context,
+                    node.right,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "unaryExpression":
+            result = {
+                type: "unaryExpression",
+                operator: node.operator,
+                operand: validateAndCompileValueNode(
+                    context,
+                    node.operand,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "conditionalExpression":
+            result = {
+                type: "conditionalExpression",
+                test: validateAndCompileValueNode(
+                    context,
+                    node.test,
+                    availableVariables,
+                ),
+                consequent: validateAndCompileValueNode(
+                    context,
+                    node.consequent,
+                    availableVariables,
+                ),
+                alternate: validateAndCompileValueNode(
+                    context,
+                    node.alternate,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "memberExpression":
+            result = {
+                type: "memberExpression",
+                object: validateAndCompileValueNode(
+                    context,
+                    node.object,
+                    availableVariables,
+                ),
+                property:
+                    typeof node.property === "string"
+                        ? node.property
+                        : validateAndCompileValueNode(
+                              context,
+                              node.property,
+                              availableVariables,
+                          ),
+                computed: node.computed,
+                optional: node.optional,
+            };
+            break;
+        case "callExpression":
+            result = {
+                type: "callExpression",
+                callee: validateAndCompileValueNode(
+                    context,
+                    node.callee,
+                    availableVariables,
+                ),
+                arguments: node.arguments.map((arg) =>
+                    validateAndCompileValueNode(
+                        context,
+                        arg,
+                        availableVariables,
+                    ),
+                ),
+                ...(node.optional ? { optional: true } : {}),
+            };
+            break;
+        case "spreadElement":
+            result = {
+                type: "spreadElement",
+                argument: validateAndCompileValueNode(
+                    context,
+                    node.argument,
+                    availableVariables,
+                ),
+            };
+            break;
+        case "templateLiteral":
+            result = {
+                type: "templateLiteral",
+                quasis: node.quasis,
+                expressions: node.expressions.map((expr) =>
+                    validateAndCompileValueNode(
+                        context,
+                        expr,
+                        availableVariables,
+                    ),
+                ),
+            };
+            break;
+        default:
+            throw new Error(`Unknown value node type '${(node as any).type}'`);
     }
+    // Track source position of the value node for error reporting
+    if (node.pos !== undefined) {
+        context.valuePositions.set(result, node.pos);
+    }
+    return result;
 }
 
 // Sentinel for missing rule definitions. Pre-populated grammarRules suppress
@@ -359,22 +595,6 @@ const emptyRecord: ResolvedDefinitionRecord = {
     compiling: false,
     nullable: false,
 };
-
-/**
- * Validate that a variable reference exists in the available variables set
- */
-function validateVariableReference(
-    context: CompileContext,
-    variableName: string,
-    availableVariables: Set<string>,
-): void {
-    if (!availableVariables.has(variableName)) {
-        context.errors.push({
-            message: `Variable '${variableName}' is referenced in the value but not defined in the rule`,
-            definition: context.currentDefinition,
-        });
-    }
-}
 
 // ε-reachable cycle detection
 //
@@ -469,6 +689,136 @@ function createNamedGrammarRules(
         record.compiling = false;
         record.nullable = nullable;
         context.currentDefinition = prev;
+
+        // Track valueType entries as used imported types
+        if (record.valueType !== undefined) {
+            for (const typeName of record.valueType) {
+                // Verify the type was actually imported
+                if (
+                    !context.importedTypeNames.has(typeName) &&
+                    !context.hasStarImport
+                ) {
+                    context.errors.push({
+                        message: `Type '${typeName}' in value type annotation is not imported`,
+                        definition: name,
+                    });
+                }
+                context.usedImportedTypes.add(typeName);
+            }
+
+            // Collect all leaf value nodes from the rule tree,
+            // including those in sub-rules referenced via RulesPart.
+            //
+            // Why per-leaf instead of deriving the whole rule's type and doing
+            // a single isTypeAssignable check?  Semantically equivalent, but
+            // per-leaf validation yields much better diagnostics:
+            //   1. Source positions — each leaf carries a pos, so errors point
+            //      to the specific -> expression, not just the rule name.
+            //   2. Structural detail — object leaves get field-level messages
+            //      (missing required property, extraneous property, type mismatch).
+            //   3. Per-alternative isolation — if one of N alternatives is wrong,
+            //      the error identifies that alternative rather than failing the
+            //      whole union.
+            const leafValues = collectLeafValues(
+                record.grammarRules,
+                context.valuePositions,
+            );
+
+            // Pass 1: Expression-internal consistency (always runs).
+            // Catches operator constraint violations and inference errors
+            // regardless of whether a schema loader resolved types.
+            // Only expression-typed leaves will produce errors here;
+            // validateExprTypes early-returns for non-expression nodes.
+            // "variable" leaves have no value node to validate internally.
+            const leafExprTypes = new Map<CompiledValueNode, SchemaType>();
+            const leafVarTypes = new Map<
+                CompiledValueNode,
+                Map<string, SchemaType>
+            >();
+            for (const leaf of leafValues) {
+                if (leaf.kind !== "value") continue;
+                const varTypes = buildVariableTypeMap(
+                    leaf.parts,
+                    context.derivedTypes,
+                );
+                leafVarTypes.set(leaf.value, varTypes);
+                const result = validateExprTypes(leaf.value, varTypes);
+                for (const error of result.errors) {
+                    context.errors.push({
+                        message: error,
+                        definition: name,
+                        pos: leaf.pos,
+                    });
+                }
+                for (const warning of result.warnings) {
+                    context.warnings.push({
+                        message: warning,
+                        definition: name,
+                        pos: leaf.pos,
+                    });
+                }
+                if (result.inferredType !== undefined) {
+                    leafExprTypes.set(leaf.value, result.inferredType);
+                }
+            }
+
+            // Pass 2: Conformance against declared type (only when resolved).
+            if (context.resolvedTypes.size > 0) {
+                const declaredTypes: SchemaType[] = [];
+                for (const typeName of record.valueType) {
+                    const def = context.resolvedTypes.get(typeName);
+                    if (def !== undefined) {
+                        declaredTypes.push(def.type);
+                    }
+                }
+                if (declaredTypes.length > 0) {
+                    const expectedType: SchemaType =
+                        declaredTypes.length === 1
+                            ? declaredTypes[0]
+                            : { type: "type-union", types: declaredTypes };
+
+                    for (const leaf of leafValues) {
+                        let errors: string[];
+                        if (leaf.kind === "value") {
+                            const varTypes = leafVarTypes.get(leaf.value)!;
+                            errors = validateValueType(
+                                leaf.value,
+                                expectedType,
+                                varTypes,
+                                "",
+                                leafExprTypes.get(leaf.value),
+                            );
+                        } else {
+                            // "variable" leaf — check variable type directly
+                            const varTypes = buildVariableTypeMap(
+                                leaf.parts,
+                                context.derivedTypes,
+                            );
+                            const varType = varTypes.get(leaf.variableName);
+                            if (varType !== undefined) {
+                                errors = validateVariableType(
+                                    leaf.variableName,
+                                    varType,
+                                    expectedType,
+                                );
+                            } else {
+                                errors = [];
+                            }
+                        }
+                        for (const error of errors) {
+                            context.errors.push({
+                                message: error,
+                                definition: name,
+                                pos:
+                                    leaf.kind === "value"
+                                        ? leaf.pos
+                                        : undefined,
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (referenceVariable !== undefined && !record.hasValue) {
@@ -479,6 +829,69 @@ function createNamedGrammarRules(
         });
     }
     return record as ResolvedDefinitionRecord;
+}
+
+type LeafValue =
+    | {
+          kind: "value";
+          value: CompiledValueNode;
+          parts: GrammarPart[];
+          pos?: number | undefined;
+      }
+    | {
+          kind: "variable";
+          variableName: string;
+          parts: GrammarPart[];
+      };
+
+/**
+ * Recursively collects all leaf value nodes from a grammar rule tree.
+ * A "leaf" is a GrammarRule that has a direct value expression (-> { ... })
+ * or a single-variable implicit rule whose variable type must be validated.
+ * Rules that pass through to sub-rules (single RulesPart, no variables,
+ * no explicit value) are traversed recursively.
+ *
+ * Uses `classifyRuleValue` from the validator to keep classification
+ * logic in sync with `deriveAlternativeType`.
+ */
+function collectLeafValues(
+    rules: GrammarRule[],
+    valuePositions: Map<CompiledValueNode, number>,
+    visited: Set<GrammarRule[]> = new Set(),
+): LeafValue[] {
+    if (visited.has(rules)) {
+        return []; // Avoid infinite loops on circular rule references
+    }
+    visited.add(rules);
+
+    const results: LeafValue[] = [];
+    for (const rule of rules) {
+        const kind = classifyRuleValue(rule);
+        switch (kind.kind) {
+            case "explicit":
+                results.push({
+                    kind: "value",
+                    value: rule.value!,
+                    parts: rule.parts,
+                    pos: valuePositions.get(rule.value!),
+                });
+                break;
+            case "variable":
+                results.push({
+                    kind: "variable",
+                    variableName: kind.variableName,
+                    parts: rule.parts,
+                });
+                break;
+            case "passthrough":
+                results.push(
+                    ...collectLeafValues(kind.rules, valuePositions, visited),
+                );
+                break;
+            // "none": multi-var with no explicit value — already warned
+        }
+    }
+    return results;
 }
 
 function createGrammarRules(
@@ -509,11 +922,18 @@ function createGrammarRule(
     rule: Rule,
     epsilonReachable: Set<string>,
     spacingMode: CompiledSpacingMode,
-): { grammarRule: GrammarRule; hasValue: boolean; nullable: boolean } {
+): {
+    grammarRule: GrammarRule;
+    hasValue: boolean;
+    nullable: boolean;
+} {
     const { expressions, value } = rule;
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();
     let variableCount = 0;
+    // Whether the last part can implicitly produce a value (string literal
+    // or rule reference). Used for zero-variable, single-part rules where
+    // the matched text or referenced rule's value is the implicit output.
     let defaultValue = false;
     // A rule alternative is nullable if ALL of its parts can match ε.
     let ruleNullable = true;
@@ -596,7 +1016,6 @@ function createGrammarRule(
                     if (!isBuiltInType) {
                         const isImportedType =
                             context.hasStarImport ||
-                            context.knownTypeNames.has(referencedName) ||
                             context.importedTypeNames.has(referencedName) ||
                             globalEntityRegistry.getConverter(
                                 referencedName,

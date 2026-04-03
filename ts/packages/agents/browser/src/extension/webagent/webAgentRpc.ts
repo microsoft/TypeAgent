@@ -113,7 +113,6 @@ export async function extractComponent<T>(
     let schema: string;
 
     if (typeof componentDef === "string") {
-        // String name - look up in common components
         const builtIn = COMMON_COMPONENTS[componentDef];
         if (!builtIn) {
             throw new Error(
@@ -124,28 +123,28 @@ export async function extractComponent<T>(
         typeName = builtIn.typeName;
         schema = builtIn.schema;
     } else {
-        // PageComponentDefinition object
         typeName = componentDef.typeName;
         schema = componentDef.schema;
     }
 
+    const rpcStart = performance.now();
     const response = await sendRpcToAgent("extractComponent", {
         typeName,
         schema,
         userRequest,
         url: window.location.href,
     });
+    const rpcElapsed = (performance.now() - rpcStart).toFixed(0);
 
     if (!response.success) {
+        console.log(
+            `[WebAgentRpc] extractComponent(${typeName}) failed in ${rpcElapsed}ms`,
+        );
         throw new Error(response.error || "Failed to extract component");
     }
 
     console.log(
-        `[WebAgentRpc] Extracted component of type ${typeName}: Full response: `,
-        response,
-    );
-    console.log(
-        `[WebAgentRpc] Extracted component of type ${typeName}:`,
+        `[WebAgentRpc] extractComponent(${typeName}) completed in ${rpcElapsed}ms`,
         response.data,
     );
 
@@ -163,16 +162,24 @@ export async function getPageState(): Promise<PageState> {
 const CROSSWORD_SCHEMA_TIMEOUT = 90000;
 
 export async function extractCrosswordSchema(): Promise<CrosswordSchema> {
+    const rpcStart = performance.now();
     const response = await sendRpcToAgent(
         "extractCrosswordSchema",
         { url: window.location.href },
         CROSSWORD_SCHEMA_TIMEOUT,
     );
+    const rpcElapsed = (performance.now() - rpcStart).toFixed(0);
 
     if (!response.success) {
+        console.log(
+            `[WebAgentRpc] extractCrosswordSchema failed in ${rpcElapsed}ms`,
+        );
         throw new Error(response.error || "Failed to extract crossword schema");
     }
 
+    console.log(
+        `[WebAgentRpc] extractCrosswordSchema completed in ${rpcElapsed}ms`,
+    );
     return response.data as CrosswordSchema;
 }
 

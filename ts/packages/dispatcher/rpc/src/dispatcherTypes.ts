@@ -14,6 +14,7 @@ import type {
     DispatcherStatus,
     ProcessCommandOptions,
 } from "@typeagent/dispatcher-types";
+import type { CompletionDirection } from "@typeagent/agent-sdk";
 
 export type DispatcherInvokeFunctions = {
     processCommand(
@@ -43,7 +44,8 @@ export type DispatcherInvokeFunctions = {
 
     getCommandCompletion(
         prefix: string,
-    ): Promise<CommandCompletionResult | undefined>;
+        direction: CompletionDirection,
+    ): Promise<CommandCompletionResult>;
 
     checkCache(request: string): Promise<CommandResult | undefined>;
 
@@ -59,4 +61,8 @@ export type DispatcherInvokeFunctions = {
     ): Promise<CommandResult | undefined>;
 
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
+};
+
+export type DispatcherCallFunctions = {
+    cancelCommand(requestId: string): void;
 };

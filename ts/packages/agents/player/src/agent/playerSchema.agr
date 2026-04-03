@@ -1,9 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-entity Ordinal, Cardinal;
+import { Ordinal, Cardinal };
+import { PlayerActions } from "./playerSchema.ts";
 
-<Start> = <Pause>
+<Start> : PlayerActions = <Pause>
           | <Resume>
           | <Next>
           | <PlayCommand>
@@ -14,9 +15,9 @@ entity Ordinal, Cardinal;
 <Resume> = resume   ->  { actionName: "resume" }
            | resume music   ->  { actionName: "resume" }
            | resume the music   ->  { actionName: "resume" };
-<Next> = next   ->  { actionName: "nextTrack" }
-         | skip   ->  { actionName: "nextTrack" }
-         | skip <TrackTerm>   ->  { actionName: "nextTrack" };
+<Next> = next   ->  { actionName: "next" }
+         | skip   ->  { actionName: "next" }
+         | skip <TrackTerm>   ->  { actionName: "next" };
 <PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>;
 <PlayTrackNumberCommand> =
     play (the)? $(n:Ordinal) (<Item>)? -> {

@@ -1,0 +1,77 @@
+[
+  {
+    "id": "lt-01",
+    "category": "llm-translation",
+    "description": "Paraphrased playlist creation",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "make me a playlist of the best 15 bluegrass tracks this year",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "createTopSongsPlaylist"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-02",
+    "category": "llm-translation",
+    "description": "Paraphrased kpop request",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "I want to hear the number one Korean pop hit",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "playPopularKpopSong"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-03",
+    "category": "llm-translation",
+    "description": "Paraphrased email digest",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "catch me up on my emails from the past week",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "weeklyEmailDigest"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-04",
+    "category": "llm-translation",
+    "description": "Informal playlist request",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "compile a top 10 rock playlist",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "createTopSongsPlaylist"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lt-05",
+    "category": "llm-translation",
+    "description": "Colloquial inbox summary",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "give me a summary of what's in my inbox",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "weeklyEmailDigest"
+        }
+      }
+    ]
+  }
+]

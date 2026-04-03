@@ -33,6 +33,28 @@ import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
 
 const debug = registerDebug("typeagent:dispatcher:reasoning:copilot");
 
+function withAbortSignal<T>(
+    promise: Promise<T>,
+    signal: AbortSignal | undefined,
+): Promise<T> {
+    if (!signal) return promise;
+    if (signal.aborted) return Promise.reject(signal.reason);
+    return new Promise<T>((resolve, reject) => {
+        const onAbort = () => reject(signal.reason);
+        signal.addEventListener("abort", onAbort, { once: true });
+        promise.then(
+            (value) => {
+                signal.removeEventListener("abort", onAbort);
+                resolve(value);
+            },
+            (err) => {
+                signal.removeEventListener("abort", onAbort);
+                reject(err);
+            },
+        );
+    });
+}
+
 const defaultModel = "gpt-4o";
 
 // Track Copilot clients per dispatcher instance (WeakMap for GC)
@@ -631,7 +653,10 @@ async function executeReasoningWithoutPlanning(
             throw new Error("Prompt is undefined or empty");
         }
 
-        const response = await session.sendAndWait({ prompt });
+        const response: any = await withAbortSignal(
+            session.sendAndWait({ prompt }),
+            context.abortSignal,
+        );
         debug("Received response from Copilot");
         debug("Response:", JSON.stringify(response, null, 2));
 
@@ -881,7 +906,10 @@ async function executeReasoningWithTracing(
             const prompt = buildPromptWithContext(originalRequest, context);
             debug(`Sending prompt: ${prompt.substring(0, 100)}...`);
 
-            const response = await session.sendAndWait({ prompt });
+            const response: any = await withAbortSignal(
+                session.sendAndWait({ prompt }),
+                context.abortSignal,
+            );
             debug("Received response from Copilot");
             debug("Response:", JSON.stringify(response, null, 2));
 
@@ -909,29 +937,34 @@ async function executeReasoningWithTracing(
             // Save trace
             await tracer.saveTrace();
 
-            // Auto-generate recipe from successful trace
+            // Auto-generate recipe from successful trace and save to instance storage
             if (tracer.wasSuccessful()) {
                 try {
                     const recipeGen = new ReasoningRecipeGenerator();
                     const recipe = await recipeGen.generate(tracer.getTrace());
 
                     if (recipe) {
-                        const pendingDir = path.join(
-                            getRepoRoot(),
-                            "packages",
-                            "agents",
-                            "taskflow",
-                            "pending",
+                        const saved = await saveTaskFlowRecipeToStorage(
+                            recipe,
+                            systemContext,
                         );
-                        const { saveRecipe } = await import(
-                            "taskflow-typeagent/recipeCompiler"
-                        );
-                        const filePath = await saveRecipe(recipe, pendingDir);
-                        debug(`Recipe saved: ${filePath}`);
-                        context.actionIO.appendDisplay({
-                            type: "text",
-                            content: `\n✓ Recipe saved: ${recipe.actionName}.recipe.json`,
-                        });
+                        if (saved) {
+                            debug(`TaskFlow recipe saved: ${recipe.name}`);
+                            context.actionIO.appendDisplay({
+                                type: "text",
+                                content: `\n✓ Task flow registered: ${recipe.name}`,
+                            });
+                            try {
+                                await systemContext.agents.reloadAgentSchema(
+                                    "taskflow",
+                                    systemContext,
+                                );
+                            } catch {
+                                debug(
+                                    "Failed to reload taskflow schema after saving recipe",
+                                );
+                            }
+                        }
                     }
                 } catch (error) {
                     debug("Failed to generate recipe from trace:", error);
@@ -954,6 +987,124 @@ async function executeReasoningWithTracing(
         await tracer.saveTrace();
         throw error;
     }
+}
+
+/**
+ * Save a TaskFlow script recipe to instance storage and register as active flow.
+ */
+async function saveTaskFlowRecipeToStorage(
+    recipe: {
+        name: string;
+        description: string;
+        parameters: Array<{
+            name: string;
+            type: string;
+            required: boolean;
+            description: string;
+            default?: unknown;
+        }>;
+        script: string;
+        grammarPatterns: string[];
+        source?: { type: string; sourceId?: string; timestamp: string };
+    },
+    systemContext: CommandHandlerContext,
+): Promise<boolean> {
+    const storage =
+        systemContext.persistDir && systemContext.storageProvider
+            ? systemContext.storageProvider.getStorage(
+                  "taskflow",
+                  systemContext.persistDir,
+              )
+            : undefined;
+    if (!storage) {
+        debug("No instance storage available for taskflow");
+        return false;
+    }
+
+    let index: {
+        version: 1;
+        flows: Record<string, unknown>;
+        deletedSamples: string[];
+        lastModified: string;
+    };
+    try {
+        const indexJson = await storage.read("index.json", "utf8");
+        index = JSON.parse(indexJson);
+    } catch {
+        index = {
+            version: 1,
+            flows: {},
+            deletedSamples: [],
+            lastModified: new Date().toISOString(),
+        };
+    }
+
+    const { name } = recipe;
+    if (index.flows[name]) {
+        debug(`TaskFlow '${name}' already exists, skipping`);
+        return false;
+    }
+
+    const flowParams: Record<string, unknown> = {};
+    for (const p of recipe.parameters) {
+        const def: Record<string, unknown> = { type: p.type };
+        if (p.required !== undefined) def.required = p.required;
+        if (p.default !== undefined) def.default = p.default;
+        if (p.description) def.description = p.description;
+        flowParams[p.name] = def;
+    }
+
+    // Write flow metadata (without script)
+    const flowDef = {
+        name,
+        description: recipe.description,
+        parameters: flowParams,
+    };
+
+    const flowPath = `flows/${name}.flow.json`;
+    const scriptPath = `scripts/${name}.js`;
+    await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+    await storage.write(scriptPath, recipe.script);
+
+    const grammarRules: string[] = [];
+    for (const pattern of recipe.grammarPatterns) {
+        const captures = [...pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
+            (m) => m[1],
+        );
+        const paramJson =
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
+        grammarRules.push(
+            `<${name}> [spacing=optional] = ${pattern}` +
+                ` -> { actionName: "${name}", parameters: ${paramJson} };`,
+        );
+    }
+
+    const parametersMeta = recipe.parameters.map((p) => ({
+        name: p.name,
+        type: p.type,
+        required: p.required,
+        description: p.description,
+    }));
+
+    const now = new Date().toISOString();
+    index.flows[name] = {
+        actionName: name,
+        description: recipe.description,
+        flowPath,
+        scriptPath,
+        grammarRuleText: grammarRules.join("\n"),
+        parameters: parametersMeta,
+        created: now,
+        updated: now,
+        source: "reasoning",
+        usageCount: 0,
+        enabled: true,
+    };
+    index.lastModified = now;
+
+    await storage.write("index.json", JSON.stringify(index, null, 2));
+    debug(`TaskFlow registered as active: ${name}`);
+    return true;
 }
 
 /**

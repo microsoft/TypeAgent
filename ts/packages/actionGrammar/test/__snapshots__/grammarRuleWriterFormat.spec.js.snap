@@ -3,11 +3,10 @@
 exports[`Comprehensive formatting exercise default maxLineLength (80) output matches snapshot 1`] = `
 "// Copyright (c) Example.
 // All formatting patterns in one grammar.
-// entities section
-entity Artist, Album; // known types
+// entities section (source-less imports)
+import { Artist, Album }; // known types
 // long entity list (breaks at maxLineLength=40)
-entity LongEntityAlpha, LongEntityBeta, LongEntityGamma;
-
+import { LongEntityAlpha, LongEntityBeta, LongEntityGamma };
 // wildcard import
 import * from "baseGrammar"; // base rules
 // named import
@@ -154,14 +153,14 @@ import { LongRuleAlpha, LongRuleBeta, LongRuleGamma } from "longRules";
 exports[`Comprehensive formatting exercise maxLineLength=40 (all broken modes) output matches snapshot 1`] = `
 "// Copyright (c) Example.
 // All formatting patterns in one grammar.
-// entities section
-entity Artist, Album; // known types
+// entities section (source-less imports)
+import { Artist, Album }; // known types
 // long entity list (breaks at maxLineLength=40)
-entity
+import {
   LongEntityAlpha,
   LongEntityBeta,
-  LongEntityGamma;
-
+  LongEntityGamma
+};
 // wildcard import
 import * from "baseGrammar"; // base rules
 // named import
@@ -399,9 +398,8 @@ import {
 
 exports[`Structural comment positions output matches snapshot 1`] = `
 "// Grammar exercising comment preservation at all structural positions.
-// entity: per-name leading and trailing block comments
-entity /* eL1 */ Artist /* eT1 */, /* eL2 */ Album;
-
+// source-less import: per-name leading and trailing block comments
+import { /* eL1 */ Artist /* eT1 */, /* eL2 */ Album };
 // import: after-keyword, per-name leading/trailing, after-brace comments
 import /* kw */ { /* nL1 */ PhraseA /* nT1 */, /* nL2 */ PhraseB /* nT2 */ } /* brace */ from "phrases";
 // import wildcard: after-star comment

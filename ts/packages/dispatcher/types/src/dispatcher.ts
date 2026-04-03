@@ -2,11 +2,14 @@
 // Licensed under the MIT License.
 
 import {
+    CompletionDirection,
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
+    SeparatorMode,
     TemplateSchema,
     TypeAgentAction,
+    AfterWildcard,
 } from "@typeagent/agent-sdk";
 import type { DisplayLogEntry } from "./displayLogEntry.js";
 
@@ -62,15 +65,43 @@ export type CommandResult = {
     // last error message
     lastError?: string;
 
+    // True if the command was cancelled via cancelCommand().
+    cancelled?: boolean;
+
     // Actions that were executed as part of the command.
     actions?: TypeAgentAction[];
     metrics?: RequestMetrics;
     tokenUsage?: CompletionUsageStats;
 };
 
+// Architecture: docs/architecture/completion.md — Data flow / Key types
 export type CommandCompletionResult = {
-    startIndex: number; // index of first character of the filter text (after the last space)
+    // Index into the input where the resolved prefix ends and the
+    // filter/completion region begins.  input[0..startIndex) is fully
+    // resolved; completions describe what can follow after that prefix.
+    startIndex: number;
     completions: CompletionGroup[]; // completions available at the current position
+    // What kind of separator is required between the matched prefix and
+    // the completion text.  When omitted, defaults to "space".
+    // See SeparatorMode in @typeagent/agent-sdk.
+    separatorMode?: SeparatorMode | undefined;
+    // True when the completions form a closed set — if the user types
+    // something not in the list, no further completions can exist
+    // beyond it.  When true and the user types something that doesn't
+    // prefix-match any completion, the caller can skip refetching since
+    // no other valid input exists.
+    closedSet: boolean;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.
+    directionSensitive: boolean;
+    // Describes how the grammar rules that produced completions at
+    // this position relate to wildcards.  See AfterWildcard in
+    // @typeagent/agent-sdk.
+    //   "none" — no wildcard; position is structurally pinned.
+    //   "some" — mixed; some rules used wildcards, some didn't.
+    //   "all"  — every rule used a wildcard; position can slide.
+    afterWildcard: AfterWildcard;
 };
 
 export type AppAgentStatus = {
@@ -100,8 +131,8 @@ export type AgentSubSchemaInfo = {
     /** Exact schemaName to supply to @action dispatch, e.g. "desktop.desktop-taskbar" */
     schemaName: string;
     description: string;
-    /** Absolute path to the TypeScript source file for this sub-schema, if available. */
-    schemaFilePath: string | undefined;
+    /** Generated TypeScript schema text for this sub-schema, if available. */
+    schemaText: string | undefined;
     actions: ActionInfo[];
 };
 
@@ -177,7 +208,8 @@ export interface Dispatcher {
     // APIs to get command completion for intellisense like functionality.
     getCommandCompletion(
         prefix: string,
-    ): Promise<CommandCompletionResult | undefined>;
+        direction: CompletionDirection,
+    ): Promise<CommandCompletionResult>;
 
     // Check if a request can be handled by cache without executing
     checkCache(request: string): Promise<CommandResult | undefined>;
@@ -205,4 +237,16 @@ export interface Dispatcher {
      * @param afterSeq if provided, return only entries with seq > afterSeq
      */
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
+
+    /**
+     * Cancel an in-flight command. If the command identified by requestId is
+     * currently executing, its AbortController is triggered, causing the
+     * command pipeline to stop at the next cancellation checkpoint.
+     *
+     * This is a fire-and-forget operation — the in-flight processCommand()
+     * call will resolve with `{ cancelled: true }`.
+     *
+     * @param requestId the requestId string of the command to cancel
+     */
+    cancelCommand(requestId: string): void;
 }

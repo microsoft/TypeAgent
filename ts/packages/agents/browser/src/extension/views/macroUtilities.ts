@@ -3,80 +3,11 @@
 
 import { createExtensionService } from "./knowledgeUtilities";
 
-export interface StoredMacro {
-    id: string;
-    name: string;
-    description?: string;
-    author: "user" | "discovered";
-    scope?: { pattern: string };
-    urlPattern?: string;
-    definition?: MacroDefinition;
-    steps?: MacroStep[];
-    screenshot?: string[];
-    html?: string[];
-}
-
-export interface MacroDefinition {
-    intentSchema?: string;
-    screenshot?: string[];
-    htmlFragments?: string[];
-    steps?: string | MacroStep[];
-}
-
-export interface MacroStep {
-    type: string;
-    timestamp: number;
-    [key: string]: any;
-}
-
-export interface MacroQueryOptions {
-    includeGlobal?: boolean;
-    author?: "discovered" | "user";
-}
-
 export interface FilterOptions {
     searchQuery?: string;
     author?: string;
     domain?: string;
     category?: string;
-}
-
-export interface NotificationConfig {
-    message: string;
-    type: "success" | "error" | "warning" | "info";
-    duration?: number;
-    persistent?: boolean;
-}
-
-export interface ModalConfig {
-    title: string;
-    body: string | HTMLElement;
-    buttons?: ModalButton[];
-    size?: "sm" | "lg" | "xl";
-    dismissible?: boolean;
-}
-
-export interface ModalButton {
-    text: string;
-    className: string;
-    handler?: () => void;
-}
-
-export interface DeleteMacroResult {
-    success: boolean;
-    error?: string;
-    macroId: string;
-}
-
-export interface BulkDeleteResult {
-    successCount: number;
-    errorCount: number;
-    errors: Array<{ macroId: string; error: string }>;
-}
-
-export interface ActionStats {
-    totalMacros: number;
-    macros: StoredMacro[];
 }
 
 export type MacroCategory =
@@ -89,56 +20,19 @@ export type MacroCategory =
     | "Other";
 export type NotificationType = "success" | "error" | "warning" | "info";
 
-// Create global extension service instance
 const extensionService = createExtensionService();
 
-export async function getMacrosForUrl(
-    url: string,
-    options: MacroQueryOptions = {},
-): Promise<StoredMacro[]> {
-    return await extensionService.getMacrosForUrl(url, options);
+export async function getAllWebFlows(): Promise<any[]> {
+    return await extensionService.getAllWebFlows();
 }
 
-export async function getAllMacros(): Promise<StoredMacro[]> {
-    return await extensionService.getAllMacros();
+export async function deleteWebFlow(
+    name: string,
+): Promise<{ success: boolean; error?: string }> {
+    return await extensionService.deleteWebFlow(name);
 }
 
-export async function getMacroDomains(): Promise<string[]> {
-    return await extensionService.getMacroDomains();
-}
-export async function deleteMacro(macroId: string): Promise<DeleteMacroResult> {
-    return await extensionService.deleteMacro(macroId);
-}
-
-export async function deleteMultipleMacros(
-    macroIds: string[],
-): Promise<BulkDeleteResult> {
-    const result: BulkDeleteResult = {
-        successCount: 0,
-        errorCount: 0,
-        errors: [],
-    };
-
-    for (const macroId of macroIds) {
-        const deleteResult = await deleteMacro(macroId);
-        if (deleteResult.success) {
-            result.successCount++;
-        } else {
-            result.errorCount++;
-            result.errors.push({
-                macroId,
-                error: deleteResult.error || "Unknown error",
-            });
-        }
-    }
-
-    return result;
-}
-
-export function filterMacros(
-    macros: StoredMacro[],
-    options: FilterOptions,
-): StoredMacro[] {
+export function filterMacros(macros: any[], options: FilterOptions): any[] {
     let filtered = [...macros];
 
     if (options.searchQuery) {
@@ -249,7 +143,12 @@ export function showErrorState(container: HTMLElement, message: string): void {
         </div>
     `;
 }
-export function extractDomain(macro: StoredMacro): string | null {
+export function extractDomain(macro: any): string | null {
+    // WebFlow scope format
+    if (macro.scope?.domains?.length > 0) {
+        return macro.scope.domains[0];
+    }
+    // Legacy StoredMacro format
     const pattern = macro.scope?.pattern || macro.urlPattern;
     if (pattern) {
         try {
@@ -297,7 +196,7 @@ export function getDomainFromUrl(url: string): string | null {
     }
 }
 
-export function categorizeMacro(macro: StoredMacro): MacroCategory {
+export function categorizeMacro(macro: any): MacroCategory {
     const text = `${macro.name} ${macro.description || ""}`.toLowerCase();
 
     if (text.includes("search") || text.includes("find")) return "Search";
@@ -336,10 +235,8 @@ export function categorizeMacro(macro: StoredMacro): MacroCategory {
     return "Other";
 }
 
-export function groupMacrosByDomain(
-    macros: StoredMacro[],
-): Map<string, StoredMacro[]> {
-    const grouped = new Map<string, StoredMacro[]>();
+export function groupMacrosByDomain(macros: any[]): Map<string, any[]> {
+    const grouped = new Map<string, any[]>();
 
     macros.forEach((macro) => {
         const domain = extractDomain(macro) || "unknown";
@@ -403,7 +300,7 @@ export function createButton(
     return `<button class="${classes}" ${attrs}>${text}</button>`;
 }
 
-export function extractCategories(macros: StoredMacro[]): string[] {
+export function extractCategories(macros: any[]): string[] {
     const categories = new Set<string>();
 
     macros.forEach((macro) => {

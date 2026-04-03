@@ -6,6 +6,7 @@ const PREFIX = "__typeagent_wa_";
 export const TTL = {
     CONTINUATION: 5 * 60 * 1000, // 5 minutes
     CROSSWORD_SCHEMA: 6 * 60 * 60 * 1000, // 6 hours
+    AGENT_REGISTERED: 60 * 60 * 1000, // 1 hour
 };
 
 interface StoredItem<T> {
@@ -148,6 +149,20 @@ export const crosswordSchemaStorage = {
     remove(url: string): void {
         const key = `crossword_${normalizeUrl(url)}`;
         webAgentStorage.remove(key);
+    },
+};
+
+export const registrationStorage = {
+    markRegistered(agentName: string): void {
+        webAgentStorage.set(
+            `registered_${agentName}`,
+            true,
+            TTL.AGENT_REGISTERED,
+        );
+    },
+
+    wasRecentlyRegistered(agentName: string): boolean {
+        return webAgentStorage.get<boolean>(`registered_${agentName}`) === true;
     },
 };
 

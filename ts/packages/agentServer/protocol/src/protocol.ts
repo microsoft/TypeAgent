@@ -28,6 +28,7 @@ export type AgentServerInvokeFunctions = {
     listSessions: () => Promise<SessionInfo[]>;
     renameSession: (sessionId: string, newName: string) => Promise<void>;
     deleteSession: (sessionId: string) => Promise<void>;
+    shutdown: () => Promise<void>;
 };
 
 export const enum ChannelName {

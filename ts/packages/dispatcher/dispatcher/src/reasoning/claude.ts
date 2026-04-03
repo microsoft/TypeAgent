@@ -30,6 +30,12 @@ import { ClientIO, IAgentMessage } from "@typeagent/dispatcher-types";
 import { createActionResultNoDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { ReasoningTraceCollector } from "./tracing/traceCollector.js";
 import { ReasoningRecipeGenerator } from "./recipeGenerator.js";
+import { ScriptRecipeGenerator } from "./scriptRecipeGenerator.js";
+import {
+    formatParams as sharedFormatParams,
+    formatToolResultDisplay as sharedFormatToolResultDisplay,
+    formatThinkingDisplay as sharedFormatThinkingDisplay,
+} from "./reasoningLoopBase.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 
 const model = "claude-sonnet-4-5-20250929";
@@ -112,43 +118,64 @@ function getRecentChatContext(
 function buildPromptWithContext(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): string {
+    const parts: string[] = [];
     const chatContext = getRecentChatContext(context);
     if (chatContext) {
-        return `${chatContext}\n\n[Current request]\n${originalRequest}`;
+        parts.push(chatContext);
     }
-    return originalRequest;
+    if (fallbackContext) {
+        const lines = ["[Fallback context — a prior action failed]"];
+        if (fallbackContext.failedSchema && fallbackContext.failedAction) {
+            lines.push(
+                `Failed action: ${fallbackContext.failedSchema}.${fallbackContext.failedAction}`,
+            );
+        }
+        if (fallbackContext.failedFlowName) {
+            lines.push(`Failed flow: ${fallbackContext.failedFlowName}`);
+        }
+        if (fallbackContext.error) {
+            lines.push(`Error: ${fallbackContext.error}`);
+        }
+        lines.push(
+            "You MUST use scriptflow actions (discover_actions, listScriptFlows, executeScriptFlow, createScriptFlow, editScriptFlow, deleteScriptFlow) to handle this request. Do NOT use the Bash tool for operations that scriptflow can handle.",
+        );
+        if (fallbackContext.failedFlowName) {
+            lines.push(
+                `IMPORTANT: The flow '${fallbackContext.failedFlowName}' failed. Use editScriptFlow to fix its script rather than creating a duplicate flow. Only create a new flow if the existing one's parameters/grammar are fundamentally wrong.`,
+            );
+        }
+        parts.push(lines.join("\n"));
+    }
+
+    // Reinforce scriptflow usage for Windows even when not in fallback mode.
+    // Without this, reasoning often uses Bash + PowerShell directly and
+    // never creates a reusable scriptflow.
+    const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
+    if (
+        !fallbackContext &&
+        config.execution.scriptReuse === "enabled" &&
+        process.platform === "win32"
+    ) {
+        parts.push(
+            "[ScriptFlow reminder] For system operations (file listing, process management, text search), " +
+                "use scriptflow actions (discover_actions → listScriptFlows → executeScriptFlow/createScriptFlow) " +
+                "instead of the Bash tool. This creates reusable flows for future requests.",
+        );
+    }
+
+    parts.push(
+        parts.length > 0
+            ? `[Current request]\n${originalRequest}`
+            : originalRequest,
+    );
+    return parts.join("\n\n");
 }
 
-/**
- * Render tool input parameters as a compact inline string.
- * Omits undefined/null values; truncates long strings.
- */
-function formatParams(params: Record<string, any> | undefined): string {
-    if (!params || Object.keys(params).length === 0) return "";
-    const MAX_VALUE_LEN = 60;
-    const pairs = Object.entries(params)
-        .filter(([, v]) => v !== undefined && v !== null)
-        .map(([k, v]) => {
-            let s: string;
-            if (typeof v === "string") {
-                s =
-                    v.length > MAX_VALUE_LEN
-                        ? `"${v.slice(0, MAX_VALUE_LEN)}…"`
-                        : `"${v}"`;
-            } else if (typeof v === "object") {
-                const j = JSON.stringify(v);
-                s =
-                    j.length > MAX_VALUE_LEN
-                        ? `${j.slice(0, MAX_VALUE_LEN)}…`
-                        : j;
-            } else {
-                s = String(v);
-            }
-            return `${k}: ${s}`;
-        });
-    return pairs.length > 0 ? ` \`{ ${pairs.join(", ")} }\`` : "";
-}
+// Delegate to shared formatting utilities from reasoningLoopBase
+const formatParams = sharedFormatParams;
 
 /**
  * Format a tool call as a persistent display line.
@@ -170,56 +197,36 @@ function formatToolCallDisplay(toolName: string, input: any): string {
     return `**Tool:** ${toolName}${params}`;
 }
 
-/**
- * Format a tool result for display. Truncates long results and strips noise.
- */
-function formatToolResultDisplay(content: string, isError: boolean): string {
-    const MAX_LEN = 120;
-    let preview = content.trim().replace(/\n+/g, " ");
-    if (preview.length > MAX_LEN) {
-        preview = preview.slice(0, MAX_LEN) + "…";
-    }
-    const label = isError ? "**Error:**" : "**↳**";
-    return `${label} \`${preview || "(empty)"}\``;
-}
-
-/**
- * Render thinking content as a collapsible HTML details/summary block.
- */
-function formatThinkingDisplay(thinkingText: string): string {
-    // Escape HTML entities in thinking text for safe embedding
-    const escaped = thinkingText
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    return [
-        `<details class="reasoning-thinking">`,
-        `<summary>Thinking</summary>`,
-        `<pre>${escaped}</pre>`,
-        `</details>`,
-    ].join("");
-}
+const formatToolResultDisplay = sharedFormatToolResultDisplay;
+const formatThinkingDisplay = sharedFormatThinkingDisplay;
 
 function getClaudeOptions(
     context: ActionContext<CommandHandlerContext>,
 ): Options {
     const systemContext = context.sessionContext.agentContext;
+    const config = systemContext.session.getConfig();
     const activeSchemas = systemContext.agents.getActiveSchemas();
     const schemaDescriptions: string[] = [];
-    const validators = new Map<string, TypeAgentJsonValidator<AppAction>>();
+    const validatorSchemas = new Set<string>();
     for (const schemaName of activeSchemas) {
         const actionConfig = systemContext.agents.getActionConfig(schemaName);
         if (getActionSchemaTypeName(actionConfig.schemaType) === undefined) {
             continue;
         }
         schemaDescriptions.push(`- ${schemaName}: ${actionConfig.description}`);
-        validators.set(
-            schemaName,
-            createActionSchemaJsonValidator(
-                composeActionSchema([actionConfig], [], systemContext.agents, {
-                    activity: false,
-                }),
-            ),
+        validatorSchemas.add(schemaName);
+    }
+    // Build validators on demand so they always reflect the current schema
+    // (e.g., after reloadAgentSchema() updates actionConfig.schemaFile).
+    function getValidator(
+        schemaName: string,
+    ): TypeAgentJsonValidator<AppAction> | undefined {
+        if (!validatorSchemas.has(schemaName)) return undefined;
+        const actionConfig = systemContext.agents.getActionConfig(schemaName);
+        return createActionSchemaJsonValidator(
+            composeActionSchema([actionConfig], [], systemContext.agents, {
+                activity: false,
+            }),
         );
     }
 
@@ -236,7 +243,7 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: discoverSchema,
         handler: async (args) => {
-            const validator = validators.get(args.schemaName);
+            const validator = getValidator(args.schemaName);
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
             }
@@ -264,7 +271,7 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: executeSchema,
         handler: async (args) => {
-            const validator = validators.get(args.schemaName);
+            const validator = getValidator(args.schemaName);
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
             }
@@ -354,9 +361,11 @@ function getClaudeOptions(
                 "",
                 "TRIGGERS:",
                 "- 'learn: [task]' or 'remember how to [task]' or 'record [task]' → STANDARD recording",
+                "  If the task involves browser page interaction, use WebFlow recording (see below).",
+                "  Otherwise, use TaskFlow recording.",
                 "- 'dev: learn: [task]' or 'dev: record [task]' → DEV MODE recording (see below)",
                 "",
-                "STANDARD RECORDING STEPS (run in TypeAgent shell — do NOT write TypeScript here):",
+                "STANDARD RECORDING STEPS:",
                 "1. Call discover_actions for each agent schema needed.",
                 "2. SOURCE RESEARCH — required before recording any web fetch step:",
                 "   Goal: find a stable, server-side-rendered page whose URL can be templated with",
@@ -387,34 +396,26 @@ function getClaudeOptions(
                 "     readFile(path), writeFile(path, content),",
                 "     llmTransform(input, prompt, parseJson?, model?),",
                 "     claudeTask(goal, parseJson?, model?, maxTurns?)  ← EXPENSIVE, sparingly",
-                "5. Add a testValue to each parameter for use during compilation.",
+                "5. Add a testValue to each parameter for use during testing.",
                 "6. Note the expected output format of each step in observedOutputFormat if known.",
-                "7. Write recipe files — CHECK BEFORE WRITING:",
-                "   Use Read to check if the file already exists.",
-                "   If pending/ACTION_NAME.recipe.json already exists → append _v2, _v3, etc.",
-                "   and tell the user which name you used.",
-                "   a. packages/agents/taskflow/pending/ACTION_NAME.recipe.json",
-                "      — fast path: webFetch+llmTransform (or webSearch+llmTransform if no stable URL)",
-                "   b. packages/agents/taskflow/pending/ACTION_NAME_claude.recipe.json",
-                "      — comparison path using claudeTask for the research/data step",
-                "      — actionName must be ACTION_NAME + 'Claude' (e.g. createPlaylistClaude)",
-                "      — description: 'Comparison flow using claudeTask — compare latency/quality'",
-                "      — IMPORTANT: claudeTask only has WebSearch/WebFetch tools — it CANNOT call",
-                "        TypeAgent actions (no createPlaylist, no player, no agents). So the recipe",
-                "        must still have a separate callAction step for any TypeAgent action needed.",
-                "        Structure: [claudeTask step to research/fetch data, parseJson:true]",
-                "                 + [callAction step to act on the result (e.g. player.createPlaylist)]",
-                "      — always write this companion recipe so the two approaches can be A/B tested",
-                "8. If you noticed gaps (missing actions, output format issues), also write:",
-                "   packages/agents/taskflow/pending/suggestions/ACTION_NAME.suggestions.md",
-                "9. Tell user: 'Recipe saved. To compile, run from packages/agents/taskflow:'",
-                "   pnpm run compile",
+                "7. Register the flow by calling execute_action with schemaName 'taskflow',",
+                "   actionName 'executeTaskFlow' to test the recipe. The recipe is also auto-saved",
+                "   to instance storage after successful reasoning traces — no manual compile needed.",
+                "   If you need to write the recipe to disk for review, write it as a .recipe.json",
+                "   file in the current working directory (not in the package directory).",
+                "8. If you noticed gaps (missing actions, output format issues), write a suggestions",
+                "   file. Suggestions are stored in instance storage alongside the flow and reviewed",
+                "   when promoting pending recipes. Include:",
+                "   - Missing actions or parameters that would improve the flow",
+                "   - Actions that return text but should return JSON",
+                "   - Multi-step sequences that could be a single action",
+                "9. Tell user: 'Task flow registered: ACTION_NAME. It is now available for use.'",
                 "",
                 "DEV MODE RECORDING — interactive improvement loop:",
                 "When triggered with 'dev: learn: [task]':",
                 "- Follow standard recording steps 1-5",
                 "- BEFORE writing the recipe, surface improvement opportunities:",
-                "  * 'action X returns plain text — JSON output would let the compiled flow work with",
+                "  * 'action X returns plain text — JSON output would let the flow work with",
                 "    typed data. Want me to add outputFormat support to that action? (~5 min)'",
                 "  * 'there is no action for Y — want me to create one now?'",
                 "  * 'steps A and B could be a single action — want me to add a combined action?'",
@@ -429,45 +430,62 @@ function getClaudeOptions(
                 "",
                 "RECIPE FORMAT (write as JSON):",
                 "{",
-                '  "version": 1,',
-                '  "actionName": "camelCaseActionName",',
+                '  "name": "camelCaseActionName",',
                 '  "description": "what this flow does",',
                 '  "parameters": [',
                 '    { "name": "param", "type": "string|number|boolean", "required": true|false,',
                 '      "default": defaultValue, "description": "..." }',
                 "  ],",
-                '  "steps": [',
-                '    { "id": "stepId",',
-                '      "schemaName": "exactSchemaFromDiscover",',
-                '      "actionName": "exactActionFromDiscover",',
-                '      "parameters": {',
-                '        "key": "${paramName}",',
-                '        "nested": { "inner": "${paramName}" },',
-                '        "fromPriorStep": "${stepId.text}"',
-                "      }",
-                "    }",
-                "  ],",
+                '  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> { ... }",',
                 '  "grammarPatterns": [',
                 '    "3-5 natural invocation patterns with $(param:wildcard) or $(param:number) captures"',
                 "  ]",
                 "}",
                 "",
-                "STEP PARAMETER REFERENCES:",
-                '- "${paramName}"     → flow parameter value',
-                '- "${stepId.text}"   → prior step plain text output',
-                '- "${stepId.data}"   → prior step output parsed as JSON',
-                '- "prefix ${p} sfx" → interpolated string',
-                "- Static values (strings, numbers, booleans, objects, arrays) passed through as-is",
-                "- Nested objects and arrays resolve ${...} recursively",
+                "SCRIPT API — the `api` object has these methods:",
+                "- api.callAction(schemaName, actionName, params) → { text, data, error? }",
+                "- api.queryLLM(prompt, { input?, parseJson?, model? }) → { text, data, error? }",
+                "- api.webSearch(query) → { text, data, error? }",
+                "- api.webFetch(url) → { text, data, error? }",
                 "",
-                "LLM STEPS: use utility.llmTransform (not a 'query' step type):",
-                '  { "id": "summary", "schemaName": "utility", "actionName": "llmTransform",',
-                '    "parameters": { "input": "${priorStep.text}", "prompt": "Summarize...",',
-                '    "model": "claude-haiku-4-5-20251001" } }',
+                "SCRIPT RULES:",
+                "- Script MUST be TypeScript. Define: async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult>",
+                "- Do NOT add import statements — all types are provided globally.",
+                "- Return { success: true, message: '...' } on success",
+                "- Return { success: false, error: '...' } on failure",
+                "- Check step.error before using step.data",
+                "- Use api.queryLLM() for LLM interpretation, api.webSearch() for search, api.webFetch() for URL fetch",
+                "- Use api.callAction(schemaName, actionName, params) for all other agent actions",
+                "- Use template literals for interpolation: `Top ${params.quantity} songs`",
+                "- Default LLM model: 'claude-haiku-4-5-20251001'",
+                "- BLOCKED identifiers: eval, Function, require, import, fetch, setTimeout, process, window, document",
+                "",
+                "SCRIPT EXAMPLE — multi-step flow with error handling:",
+                "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> {",
+                "    const chart = await api.webFetch(",
+                "        `https://example.com/chart/${params.genre}/`,",
+                "    );",
+                "    const songs = await api.queryLLM(",
+                "        `Extract top ${params.quantity} songs as JSON array.`,",
+                "        { input: chart.text, parseJson: true },",
+                "    );",
+                "    if (!Array.isArray(songs.data) || songs.data.length === 0) {",
+                '        return { success: false, error: "Could not extract songs" };',
+                "    }",
+                '    const result = await api.callAction("player", "createPlaylist", {',
+                "        name: `Top ${params.quantity} ${params.genre}`,",
+                "        songs: songs.data,",
+                "    });",
+                "    return { success: true, message: result.text };",
+                "}",
                 "",
                 "GRAMMAR PATTERN RULES:",
                 "- ONLY TWO capture types exist: $(name:wildcard) for strings, $(name:number) for numbers",
                 "  NEVER write $(name:string) or $(name:integer) — those are invalid and will fail to compile",
+                "- Lead with 2-3 distinctive fixed tokens before any wildcard",
+                "- Include a flow-specific anchor keyword (e.g., 'playlist', 'digest', 'agenda')",
+                "- Make distinguishing tokens mandatory, not optional",
+                "- Avoid starting with verbs owned by other agents: 'search', 'play', 'email', 'find', 'send'",
                 "- Optional words: (word)?   Alternatives: word1 | word2",
                 "- Bare variable names in action body: { genre } not { genre: $genre }",
                 "",
@@ -475,9 +493,82 @@ function getClaudeOptions(
                 "- Required: domain-specific, no reasonable default (e.g. genre, recipient)",
                 "- Optional with default: sensible default exists (e.g. quantity=10, timePeriod='this month')",
                 "- Use exact schemaName from discover_actions; utility agent is schemaName 'utility'",
-                "- For query steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
+                "- For LLM steps: default 'claude-haiku-4-5-20251001'; 'claude-sonnet-4-6' only for",
                 "  genuinely complex multi-step reasoning",
-                "- mkdir -p packages/agents/taskflow/pending packages/agents/taskflow/pending/suggestions",
+                "",
+                "# WebFlow Recording",
+                "",
+                "WHEN TO USE WEBFLOW instead of TaskFlow:",
+                "- The task involves interacting with a specific website (clicking, typing, navigating pages)",
+                "- The user mentions a URL, website name, or web page elements",
+                "- Keywords: 'on [site]', 'in the browser', 'on the page', 'click', 'fill in', 'search on [site]'",
+                "",
+                "WEBFLOW RECORDING STEPS:",
+                "1. Use execute_action with schemaName 'browser.webFlows', actionName 'startGoalDrivenTask'",
+                "   to execute the task in the browser. Parameters: { goal: 'description of what to do',",
+                "   startUrl: 'https://...' (optional), maxSteps: 30 }",
+                "2. If startGoalDrivenTask succeeds and returns a traceId, use execute_action with",
+                "   schemaName 'browser.webFlows', actionName 'generateWebFlow' to create a reusable flow.",
+                "   Parameters: { traceId: 'the-trace-id', name: 'camelCaseName', description: '...' }",
+                "3. The flow is automatically saved to instance storage with grammar patterns and",
+                "   becomes immediately available for grammar matching.",
+                "4. Tell user: 'WebFlow registered: ACTION_NAME. It is now available for use.'",
+                "",
+                "CHOOSING BETWEEN TASKFLOW AND WEBFLOW:",
+                "- TaskFlow: cross-agent action sequences (e.g., fetch data → transform → create playlist)",
+                "- WebFlow: browser page interaction (e.g., search on Amazon, customize Starbucks order)",
+                "- If unsure, prefer TaskFlow — it's more general and doesn't need a browser",
+                "",
+                ...(config.execution.scriptReuse === "enabled" &&
+                process.platform === "win32"
+                    ? [
+                          "",
+                          "# PowerShell Script Generation Guidelines (Windows)",
+                          "",
+                          "You are running on Windows. When the task involves file system operations, process",
+                          "management, text search, system queries, or similar operations that PowerShell handles",
+                          "natively:",
+                          "",
+                          "1. **Prefer PowerShell scripts** over other approaches when the task is a good fit for shell scripting.",
+                          "2. **Parameterize scripts for reuse.** Instead of hardcoding paths, filenames, or search terms, use PowerShell parameters:",
+                          "   ```powershell",
+                          "   param([string]$Path = '.', [string]$Filter = '*')",
+                          "   Get-ChildItem -Path $Path -Filter $Filter",
+                          "   ```",
+                          "3. **Use standard PowerShell cmdlets** (Get-ChildItem, Get-Content, Select-String, Get-Process, Test-Path, etc.) rather than .NET calls or COM objects.",
+                          "4. **Structure multi-step scripts as functions** with clear param() blocks for extractability.",
+                          "5. **Output structured data** when possible (objects, not formatted strings).",
+                          '6. Execute scripts via Bash tool: `powershell -NoProfile -Command "& { <script> }"`',
+                          "",
+                          "# ScriptFlow Integration (MANDATORY)",
+                          "",
+                          "**IMPORTANT: You MUST use scriptflow actions instead of Bash/PowerShell for file system operations,",
+                          "process management, text search, and system queries. Do NOT use the Bash tool for these tasks.**",
+                          "",
+                          "Required workflow:",
+                          "1. discover_actions('scriptflow') to see available actions",
+                          "2. execute_action scriptflow.listScriptFlows to see registered flows",
+                          "3. If an existing flow fits, use scriptflow.executeScriptFlow with named flowParameters",
+                          "4. If a flow exists but its script is broken, use scriptflow.editScriptFlow to fix it, then execute",
+                          "5. If no flow fits, create one with scriptflow.createScriptFlow then execute it",
+                          "6. Use scriptflow.deleteScriptFlow to remove obsolete or duplicate flows",
+                          "",
+                          "PARAMETER PASSING (CRITICAL):",
+                          "- Use flowParametersJson (JSON string of named params) instead of flowArgs when the flow has multiple parameters.",
+                          '  Example: { "flowName": "listFiles", "flowParametersJson": "{\\"path\\":\\"C:\\\\\\\\Users\\\\\\\\name\\\\\\\\Downloads\\",\\"filter\\":\\"*safenet*\\"}" }',
+                          "- Parameter names are CASE-INSENSITIVE but should match the flow's parameter names from listScriptFlows.",
+                          "  The listFiles flow has params: path (directory) and filter (wildcard pattern).",
+                          "  The listDownloadsWithFilter flow has param: FilterPattern (name filter).",
+                          "- Use real Windows paths (C:\\\\Users\\\\...), NOT PowerShell variables like $env:USERPROFILE.",
+                          "- Extract paths and filters from the user's request as separate parameters.",
+                          "  e.g. 'list files in downloads with safenet' → path: 'C:\\\\Users\\\\name\\\\Downloads', filter: '*safenet*'",
+                          "",
+                          "When invoked as a fallback from a failed scriptflow action, the [Fallback context] in your",
+                          "prompt tells you which action failed and why. Parse the original request to extract the correct",
+                          "parameters (path, filter, etc.) and re-invoke the scriptflow action with corrected parameters,",
+                          "or create a new scriptflow if the existing one doesn't support the request.",
+                      ]
+                    : []),
             ].join("\n"),
         },
         mcpServers: {
@@ -508,13 +599,18 @@ function generateRequestId(): string {
 async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): Promise<any> {
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
 
     // Create query to Claude Agent SDK with chat history context
     const queryInstance = query({
-        prompt: buildPromptWithContext(originalRequest, context),
+        prompt: buildPromptWithContext(
+            originalRequest,
+            context,
+            fallbackContext,
+        ),
         options: getClaudeOptions(context),
     });
 
@@ -522,6 +618,7 @@ async function executeReasoningWithoutPlanning(
 
     // Process streaming response
     for await (const message of queryInstance) {
+        context.abortSignal?.throwIfAborted();
         debug(message);
         // Capture session ID from first message for future resume
         if ("session_id" in message && !getSessionId(context)) {
@@ -616,6 +713,7 @@ async function executeReasoningWithoutPlanning(
 async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
+    fallbackContext?: ReasoningFallbackContext,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
@@ -644,14 +742,20 @@ async function executeReasoningWithTracing(
 
         // Create query to Claude Agent SDK with chat history context
         const queryInstance = query({
-            prompt: buildPromptWithContext(originalRequest, context),
+            prompt: buildPromptWithContext(
+                originalRequest,
+                context,
+                fallbackContext,
+            ),
             options: getClaudeOptions(context),
         });
 
         let finalResult: string | undefined = undefined;
+        const toolUseIdToName = new Map<string, string>();
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
+            context.abortSignal?.throwIfAborted();
             debug(message);
             // Capture session ID from first message for future resume
             if ("session_id" in message && !getSessionId(context)) {
@@ -670,6 +774,8 @@ async function executeReasoningWithTracing(
                             content: content.text,
                         });
                     } else if (content.type === "tool_use") {
+                        // Track tool_use_id → name for matching results
+                        toolUseIdToName.set(content.id, content.name);
                         // Record tool call for tracing
                         tracer.recordToolCall(content.name, content.input);
 
@@ -713,6 +819,17 @@ async function executeReasoningWithTracing(
                             } else if (typeof block.content === "string") {
                                 content = block.content;
                             }
+
+                            // Record tool result in trace for script extraction
+                            const toolName =
+                                toolUseIdToName.get(block.tool_use_id) ??
+                                "unknown";
+                            tracer.recordToolResult(
+                                toolName,
+                                content,
+                                isError ? content : undefined,
+                            );
+
                             context.actionIO.appendDisplay(
                                 {
                                     type: "markdown",
@@ -756,25 +873,75 @@ async function executeReasoningWithTracing(
                 const recipe = await recipeGen.generate(tracer.getTrace());
 
                 if (recipe) {
-                    const pendingDir = path.join(
-                        getRepoRoot(),
-                        "packages",
-                        "agents",
-                        "taskflow",
-                        "pending",
+                    const saved = await saveTaskFlowRecipeToInstanceStorage(
+                        recipe,
+                        systemContext,
                     );
-                    const { saveRecipe } = await import(
-                        "taskflow-typeagent/recipeCompiler"
-                    );
-                    const filePath = await saveRecipe(recipe, pendingDir);
-                    debug(`Recipe saved: ${filePath}`);
-                    context.actionIO.appendDisplay({
-                        type: "text",
-                        content: `\n✓ Recipe saved: ${recipe.actionName}.recipe.json`,
-                    });
+                    if (saved) {
+                        debug(`TaskFlow recipe saved: ${recipe.name}`);
+                        context.actionIO.appendDisplay({
+                            type: "text",
+                            content: `\n✓ Task flow registered: ${recipe.name}`,
+                        });
+                        try {
+                            await systemContext.agents.reloadAgentSchema(
+                                "taskflow",
+                                systemContext,
+                            );
+                        } catch {
+                            debug(
+                                "Failed to reload taskflow schema after saving recipe",
+                            );
+                        }
+                    }
                 }
             } catch (error) {
                 debug("Failed to generate recipe from trace:", error);
+            }
+
+            // Auto-generate script recipes from PowerShell scripts in trace
+            // and register them as active scriptflows for immediate reuse.
+            const scriptReuseEnabled =
+                systemContext.session.getConfig().execution.scriptReuse ===
+                "enabled";
+            if (scriptReuseEnabled && process.platform === "win32") {
+                try {
+                    const scriptGen = new ScriptRecipeGenerator();
+                    const scriptRecipes = await scriptGen.generate(
+                        tracer.getTrace(),
+                    );
+
+                    if (scriptRecipes.length > 0) {
+                        const saved = await saveScriptRecipesAsActiveFlows(
+                            scriptRecipes,
+                            systemContext,
+                        );
+                        for (const name of saved) {
+                            context.actionIO.appendDisplay({
+                                type: "text",
+                                content: `\n✓ Script flow registered: ${name}`,
+                            });
+                        }
+                        if (saved.length > 0) {
+                            // Reload schema so the new flows are available
+                            try {
+                                await systemContext.agents.reloadAgentSchema(
+                                    "scriptflow",
+                                    systemContext,
+                                );
+                            } catch {
+                                debug(
+                                    "Failed to reload scriptflow schema after saving recipes",
+                                );
+                            }
+                        }
+                    }
+                } catch (error) {
+                    debug(
+                        "Failed to generate script recipe from trace:",
+                        error,
+                    );
+                }
             }
         }
 
@@ -808,13 +975,318 @@ export async function executeReasoningAction(
     const request = action.parameters.originalRequest;
     debug(`Received reasoning request: ${request}`);
 
-    // Check if plan reuse is enabled
+    // Check if plan reuse or script reuse is enabled (either triggers tracing)
     const planReuseEnabled = config.execution.planReuse === "enabled";
+    const scriptReuseEnabled = config.execution.scriptReuse === "enabled";
 
     return executeReasoning(request, context, {
-        planReuseEnabled,
+        planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
     });
+}
+
+import type { Storage } from "@typeagent/agent-sdk";
+import type { ScriptRecipe as CapturedScriptRecipe } from "./scriptRecipeGenerator.js";
+
+/**
+ * Save captured script recipes as active scriptflows by writing directly
+ * to the scriptflow agent's instance storage in the format its store expects.
+ * This avoids a dependency on the scriptflow package.
+ */
+async function saveScriptRecipesAsActiveFlows(
+    recipes: CapturedScriptRecipe[],
+    systemContext: CommandHandlerContext,
+): Promise<string[]> {
+    const storage =
+        systemContext.persistDir && systemContext.storageProvider
+            ? systemContext.storageProvider.getStorage(
+                  "scriptflow",
+                  systemContext.persistDir,
+              )
+            : undefined;
+    if (!storage) {
+        debug("No instance storage available for scriptflow");
+        return [];
+    }
+
+    // Read existing index
+    let index: {
+        version: 1;
+        flows: Record<string, unknown>;
+        deletedSamples: string[];
+        lastModified: string;
+    };
+    try {
+        const indexJson = await storage.read("index.json", "utf8");
+        index = JSON.parse(indexJson);
+    } catch {
+        index = {
+            version: 1,
+            flows: {},
+            deletedSamples: [],
+            lastModified: new Date().toISOString(),
+        };
+    }
+
+    const saved: string[] = [];
+    for (const recipe of recipes) {
+        const { actionName } = recipe;
+        // Skip if flow already exists
+        if (index.flows[actionName]) {
+            debug(`Flow '${actionName}' already exists, skipping`);
+            continue;
+        }
+
+        const flowPath = `flows/${actionName}.flow.json`;
+        const scriptPath = `scripts/${actionName}.ps1`;
+
+        // Write flow definition
+        const flowDef = {
+            version: 1,
+            actionName,
+            displayName: recipe.displayName,
+            description: recipe.description,
+            parameters: recipe.parameters,
+            scriptRef: scriptPath,
+            expectedOutputFormat: recipe.script.expectedOutputFormat,
+            grammarPatterns: recipe.grammarPatterns,
+            sandbox: recipe.sandbox,
+            source: recipe.source,
+        };
+        await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+        await storage.write(scriptPath, recipe.script.body);
+
+        // Generate grammar rule text — use flow's own actionName
+        const grammarRuleText = generateGrammarRuleTextForRecipe(
+            actionName,
+            recipe.grammarPatterns,
+        );
+
+        const parametersMeta = recipe.parameters.map(
+            (p: {
+                name: string;
+                type: string;
+                required: boolean;
+                description: string;
+            }) => ({
+                name: p.name,
+                type: p.type,
+                required: p.required,
+                description: p.description,
+            }),
+        );
+
+        const now = new Date().toISOString();
+        index.flows[actionName] = {
+            actionName,
+            displayName: recipe.displayName,
+            description: recipe.description,
+            flowPath,
+            scriptPath,
+            grammarRuleText,
+            parameters: parametersMeta,
+            created: now,
+            updated: now,
+            source: "reasoning",
+            usageCount: 0,
+            enabled: true,
+        };
+        index.lastModified = now;
+        saved.push(actionName);
+        debug(`Script flow registered as active: ${actionName}`);
+    }
+
+    if (saved.length > 0) {
+        await storage.write("index.json", JSON.stringify(index, null, 2));
+
+        // Regenerate grammar file
+        await writeDynamicGrammarForIndex(storage, index);
+    }
+
+    return saved;
+}
+
+function generateGrammarRuleTextForRecipe(
+    actionName: string,
+    patterns: { pattern: string; isAlias: boolean }[],
+): string {
+    const rules: string[] = [];
+    let aliasIndex = 0;
+    for (const pattern of patterns) {
+        const ruleName = pattern.isAlias
+            ? `${actionName}Alias${++aliasIndex}`
+            : actionName;
+
+        // Preserve named captures — use flow's own actionName
+        const captures = [...pattern.pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
+            (m) => m[1],
+        );
+        const paramJson =
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
+
+        rules.push(
+            `<${ruleName}> [spacing=optional] = ${pattern.pattern}` +
+                ` -> { actionName: "${actionName}", parameters: ${paramJson} };`,
+        );
+    }
+    return rules.join("\n");
+}
+
+async function writeDynamicGrammarForIndex(
+    storage: Storage,
+    index: { flows: Record<string, any> },
+): Promise<void> {
+    const ruleNames: string[] = [];
+    const ruleTexts: string[] = [];
+    for (const entry of Object.values(index.flows)) {
+        if (!entry.enabled || !entry.grammarRuleText) continue;
+        ruleTexts.push(entry.grammarRuleText);
+        for (const line of (entry.grammarRuleText as string).split("\n")) {
+            const m = line.match(/^<(\w+)>/);
+            if (m && !ruleNames.includes(m[1])) {
+                ruleNames.push(m[1]);
+            }
+        }
+    }
+    if (ruleNames.length === 0) {
+        await storage.write("grammar/dynamic.agr", "");
+        return;
+    }
+    const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
+    await storage.write(
+        "grammar/dynamic.agr",
+        `${startRule}\n\n${ruleTexts.join("\n\n")}`,
+    );
+}
+
+/**
+ * Save a TaskFlow recipe directly to instance storage and register it as
+ * an active flow. Mirrors saveScriptRecipesAsActiveFlows but for TaskFlow.
+ */
+async function saveTaskFlowRecipeToInstanceStorage(
+    recipe: {
+        name: string;
+        description: string;
+        parameters: Array<{
+            name: string;
+            type: string;
+            required: boolean;
+            description: string;
+            default?: unknown;
+        }>;
+        script: string;
+        grammarPatterns: string[];
+        source?: { type: string; sourceId?: string; timestamp: string };
+    },
+    systemContext: CommandHandlerContext,
+): Promise<boolean> {
+    const storage =
+        systemContext.persistDir && systemContext.storageProvider
+            ? systemContext.storageProvider.getStorage(
+                  "taskflow",
+                  systemContext.persistDir,
+              )
+            : undefined;
+    if (!storage) {
+        debug("No instance storage available for taskflow");
+        return false;
+    }
+
+    // Read existing index
+    let index: {
+        version: 1;
+        flows: Record<string, unknown>;
+        deletedSamples: string[];
+        lastModified: string;
+    };
+    try {
+        const indexJson = await storage.read("index.json", "utf8");
+        index = JSON.parse(indexJson);
+    } catch {
+        index = {
+            version: 1,
+            flows: {},
+            deletedSamples: [],
+            lastModified: new Date().toISOString(),
+        };
+    }
+
+    const { name } = recipe;
+    if (index.flows[name]) {
+        debug(`TaskFlow '${name}' already exists, skipping`);
+        return false;
+    }
+
+    // Build flow definition (parameters as Record, not array)
+    const flowParams: Record<string, unknown> = {};
+    for (const p of recipe.parameters) {
+        const def: Record<string, unknown> = { type: p.type };
+        if (p.required !== undefined) def.required = p.required;
+        if (p.default !== undefined) def.default = p.default;
+        if (p.description) def.description = p.description;
+        flowParams[p.name] = def;
+    }
+
+    // Write flow metadata (without script)
+    const flowDef = {
+        name,
+        description: recipe.description,
+        parameters: flowParams,
+    };
+
+    const flowPath = `flows/${name}.flow.json`;
+    const scriptPath = `scripts/${name}.ts`;
+    await storage.write(flowPath, JSON.stringify(flowDef, null, 2));
+    await storage.write(scriptPath, recipe.script);
+
+    // Generate grammar rule text
+    const grammarRules: string[] = [];
+    for (const pattern of recipe.grammarPatterns) {
+        const captures = [...pattern.matchAll(/\$\((\w+):\w+\)/g)].map(
+            (m) => m[1],
+        );
+        const paramJson =
+            captures.length > 0 ? `{ ${captures.join(", ")} }` : "{}";
+        grammarRules.push(
+            `<${name}> [spacing=optional] = ${pattern}` +
+                ` -> { actionName: "${name}", parameters: ${paramJson} };`,
+        );
+    }
+    const grammarRuleText = grammarRules.join("\n");
+
+    const parametersMeta = recipe.parameters.map((p) => ({
+        name: p.name,
+        type: p.type,
+        required: p.required,
+        description: p.description,
+    }));
+
+    const now = new Date().toISOString();
+    index.flows[name] = {
+        actionName: name,
+        description: recipe.description,
+        flowPath,
+        scriptPath,
+        grammarRuleText,
+        parameters: parametersMeta,
+        created: now,
+        updated: now,
+        source: "reasoning",
+        usageCount: 0,
+        enabled: true,
+    };
+    index.lastModified = now;
+
+    await storage.write("index.json", JSON.stringify(index, null, 2));
+    debug(`TaskFlow registered as active: ${name}`);
+    return true;
+}
+
+export interface ReasoningFallbackContext {
+    failedAction?: string | undefined;
+    failedSchema?: string | undefined;
+    failedFlowName?: string | undefined;
+    error?: string | undefined;
 }
 
 export async function executeReasoning(
@@ -823,6 +1295,7 @@ export async function executeReasoning(
     options?: {
         planReuseEnabled?: boolean; // false by default
         engine?: "claude"; // default is "claude" for now
+        fallbackContext?: ReasoningFallbackContext;
     },
 ) {
     const engine = options?.engine ?? "claude";
@@ -830,10 +1303,15 @@ export async function executeReasoning(
         throw new Error(`Unsupported reasoning engine: ${engine}`);
     }
     const planReuseEnabled = options?.planReuseEnabled ?? false;
+    const fallbackContext = options?.fallbackContext;
     if (!planReuseEnabled) {
-        return executeReasoningWithoutPlanning(request, context);
+        return executeReasoningWithoutPlanning(
+            request,
+            context,
+            fallbackContext,
+        );
     }
 
     // Trace capture + auto recipe generation
-    return executeReasoningWithTracing(request, context);
+    return executeReasoningWithTracing(request, context, fallbackContext);
 }

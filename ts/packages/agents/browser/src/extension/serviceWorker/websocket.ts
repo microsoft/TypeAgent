@@ -1,12 +1,19 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
-import type { WebSocketMessageV2 } from "websocket-utils";
 import { AppAction } from "./types";
 import { getSettings } from "./storage";
 import { showBadgeError, showBadgeHealthy } from "./ui";
-import { runBrowserAction } from "./browserActions";
-import { createChannelAdapter } from "@typeagent/agent-rpc/channel";
+import {
+    createChannelProviderAdapter,
+    type ChannelProviderAdapter,
+} from "@typeagent/agent-rpc/channel";
+import { createRpc } from "@typeagent/agent-rpc/rpc";
 import { createExternalBrowserServer } from "./externalBrowserControlServer";
+import type {
+    BrowserAgentInvokeFunctions,
+    BrowserAgentCallFunctions,
+} from "../../common/serviceTypes.mjs";
+import { broadcastEvent } from "./extensionEventHelpers";
 
 import registerDebug from "debug";
 const debugWebSocket = registerDebug("typeagent:browser:ws");
@@ -15,6 +22,16 @@ const debugWebSocketError = registerDebug("typeagent:browser:ws:error");
 let webSocket: WebSocket | undefined;
 let settings: Record<string, any>;
 let connectionInProgress: boolean = false;
+let channelProvider: ChannelProviderAdapter | undefined;
+let agentRpc: any | undefined;
+
+/**
+ * Gets the agentRpc client for invoking agent-side operations.
+ * Replaces the legacy sendActionToAgent() function.
+ */
+export function getAgentRpc(): any | undefined {
+    return agentRpc;
+}
 
 /**
  * Broadcasts WebSocket connection status changes to all extension pages
@@ -34,55 +51,26 @@ function broadcastConnectionStatus(connected: boolean): void {
         });
     });
 
-    chrome.runtime
-        .sendMessage({
-            type: "connectionStatusChanged",
-            connected: connected,
-            timestamp: Date.now(),
-        })
-        .catch(() => {});
+    broadcastEvent("connectionStatusChanged", {
+        connected,
+        timestamp: Date.now(),
+    });
 }
 
-/**
- * Handles browser.crossword/* messages
- */
-async function handleCrosswordMessage(
-    actionName: string,
-    params: any,
-): Promise<void> {
-    switch (actionName) {
-        case "schemaReady": {
-            if (params && params.selectors && params.texts) {
-                try {
-                    const { getActiveTab } = await import("./tabManager");
-                    const tab = await getActiveTab();
-                    if (tab?.id) {
-                        chrome.tabs.sendMessage(tab.id, {
-                            type: "setupCrosswordObserver",
-                            selectors: params.selectors,
-                            texts: params.texts,
-                        });
-                        debugWebSocket(
-                            "Sent crossword observer installation to content script",
-                        );
-                    }
-                } catch (error) {
-                    debugWebSocketError(
-                        "Failed to install crossword observer:",
-                        error,
-                    );
-                }
-            }
-            break;
-        }
-        default:
-            debugWebSocket(`Unknown browser.crossword action: ${actionName}`);
+async function parseWebSocketData(data: any): Promise<string> {
+    if (typeof data === "string") {
+        return data;
+    } else if (data instanceof Blob) {
+        return data.text();
+    } else if (data instanceof ArrayBuffer) {
+        return new TextDecoder().decode(data);
     }
+    console.warn("Unknown message type:", typeof data);
+    return "";
 }
 
 /**
  * Creates a new WebSocket connection
- * @returns Promise resolving to the WebSocket or undefined
  */
 export async function createWebSocket(): Promise<WebSocket | undefined> {
     if (!settings) {
@@ -114,13 +102,11 @@ export async function createWebSocket(): Promise<WebSocket | undefined> {
 
 /**
  * Ensures a WebSocket connection is established
- * @returns Promise resolving to the WebSocket or undefined
  */
 export async function ensureWebsocketConnected(): Promise<
     WebSocket | undefined
 > {
     return new Promise<WebSocket | undefined>(async (resolve, reject) => {
-        // Prevent multiple simultaneous connection attempts
         if (connectionInProgress) {
             debugWebSocket("Connection attempt already in progress, skipping");
             resolve(webSocket);
@@ -152,121 +138,85 @@ export async function ensureWebsocketConnected(): Promise<
         keepWebSocketAlive(webSocket);
         broadcastConnectionStatus(true);
 
-        const browserControlChannel = createChannelAdapter((message: any) => {
-            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                const text = JSON.stringify({
-                    source: "browserExtension",
-                    method: "browserControl/message",
-                    params: message,
-                });
-                webSocket.send(text);
-            }
-        });
-        createExternalBrowserServer(browserControlChannel.channel);
-        webSocket.onmessage = async (event: MessageEvent) => {
-            let text: string;
+        // Create channel provider for multiplexing over this WebSocket
+        channelProvider = createChannelProviderAdapter(
+            "browser:agent",
+            (message: any) => {
+                if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                    webSocket.send(JSON.stringify(message));
+                }
+            },
+        );
 
-            if (typeof event.data === "string") {
-                text = event.data;
-            } else if (event.data instanceof Blob) {
-                text = await event.data.text();
-            } else if (event.data instanceof ArrayBuffer) {
-                text = new TextDecoder().decode(event.data);
-            } else {
-                console.warn("Unknown message type:", typeof event.data);
+        // Browser control channel
+        const browserControlChannel =
+            channelProvider.createChannel("browserControl");
+        createExternalBrowserServer(browserControlChannel);
+
+        // Agent service RPC client (replaces sendActionToAgent)
+        const agentServiceChannel =
+            channelProvider.createChannel("agentService");
+        agentRpc = createRpc<
+            BrowserAgentInvokeFunctions,
+            BrowserAgentCallFunctions
+        >(
+            "browser:agentService",
+            agentServiceChannel,
+            undefined, // no invoke handlers — we're the client
+            {
+                // Call handlers for fire-and-forget events from agent
+                importProgress(params: { importId: string; progress: any }) {
+                    broadcastEvent("importProgress", {
+                        importId: params.importId,
+                        progress: params.progress,
+                    });
+                },
+                knowledgeExtractionProgress(params: {
+                    extractionId: string;
+                    progress: any;
+                }) {
+                    import("./messageHandlers")
+                        .then(({ handleKnowledgeExtractionProgress }) => {
+                            handleKnowledgeExtractionProgress(
+                                params.extractionId,
+                                params.progress,
+                            );
+                        })
+                        .catch((error) => {
+                            console.error(
+                                "Failed to handle knowledge extraction progress:",
+                                error,
+                            );
+                        });
+                },
+            },
+        );
+
+        webSocket.onmessage = async (event: MessageEvent) => {
+            const text = await parseWebSocketData(event.data);
+            if (!text) return;
+
+            const data = JSON.parse(text);
+
+            // All messages should be channel-multiplexed format
+            if (data.name !== undefined) {
+                channelProvider!.notifyMessage(data);
                 return;
             }
 
-            const data = JSON.parse(text) as WebSocketMessageV2;
             if (data.error) {
                 debugWebSocketError(data.error);
-                return;
-            }
-            if (data.method === "browserControl/message") {
-                if (data.source === "browserAgent") {
-                    browserControlChannel.notifyMessage(data.params);
-                }
-                return;
-            }
-
-            if (data.method === "importProgress") {
-                // Handle progress updates from the agent
-                if (data.source === "browserAgent" && data.params) {
-                    // Forward progress update to UI
-                    try {
-                        chrome.runtime
-                            .sendMessage({
-                                type: "importProgress",
-                                importId: data.params.importId,
-                                progress: data.params.progress,
-                            })
-                            .catch((error) => {
-                                console.log(
-                                    "No listeners for progress update:",
-                                    error,
-                                );
-                            });
-                    } catch (error) {
-                        console.error(
-                            "Failed to forward progress update:",
-                            error,
-                        );
-                    }
-                }
-                return;
-            }
-
-            if (data.method === "knowledgeExtractionProgress") {
-                // Handle knowledge extraction progress updates from the agent
-                if (data.source === "browserAgent" && data.params) {
-                    // Forward progress update directly to the registered callback
-                    try {
-                        const { handleKnowledgeExtractionProgress } =
-                            await import("./messageHandlers");
-                        handleKnowledgeExtractionProgress(
-                            data.params.extractionId,
-                            data.params.progress,
-                        );
-                    } catch (error) {
-                        console.error(
-                            "Failed to handle knowledge extraction progress:",
-                            error,
-                        );
-                    }
-                }
-                return;
-            }
-
-            if (data.method && data.method.indexOf("/") > 0) {
-                const [schema, actionName] = data.method?.split("/");
-
-                // Handle browser actions
-                if (schema == "browser") {
-                    const response = await runBrowserAction({
-                        actionName: actionName,
-                        parameters: data.params,
-                    });
-
-                    webSocket?.send(
-                        JSON.stringify({
-                            id: data.id,
-                            result: response,
-                        }),
-                    );
-                    return;
-                }
-
-                // Handle browser.crossword actions
-                if (schema === "browser.crossword") {
-                    await handleCrosswordMessage(actionName, data.params);
-                    return;
-                }
             }
         };
 
         webSocket.onclose = (event: CloseEvent) => {
             debugWebSocket("websocket connection closed");
+            if (channelProvider) {
+                channelProvider.notifyDisconnected();
+            }
             webSocket = undefined;
+            channelProvider = undefined;
+            agentRpc = undefined;
             showBadgeError();
             broadcastConnectionStatus(false);
             if (event.reason !== "duplicate") {
@@ -280,7 +230,6 @@ export async function ensureWebsocketConnected(): Promise<
 
 /**
  * Keeps the WebSocket connection alive with periodic pings
- * @param webSocket The WebSocket to keep alive
  */
 export function keepWebSocketAlive(webSocket: WebSocket): void {
     const keepAliveIntervalId = setInterval(() => {
@@ -316,65 +265,22 @@ export function reconnectWebSocket(): void {
 }
 
 /**
- * Sends an action to the agent
- * @param action The action to send
- * @returns Promise resolving to the result or undefined
+ * Sends an action to the agent via agentRpc.
  */
 export async function sendActionToAgent(
     action: AppAction,
 ): Promise<any | undefined> {
-    return new Promise<any | undefined>((resolve, reject) => {
-        if (webSocket) {
-            try {
-                const callId =
-                    new Date().getTime().toString() + "_" + action.actionName;
-
-                webSocket.send(
-                    JSON.stringify({
-                        id: callId,
-                        method: action.actionName,
-                        params: action.parameters,
-                    }),
-                );
-
-                const handler = async (event: MessageEvent) => {
-                    let text: string;
-
-                    if (typeof event.data === "string") {
-                        text = event.data;
-                    } else if (event.data instanceof Blob) {
-                        text = await event.data.text();
-                    } else if (event.data instanceof ArrayBuffer) {
-                        text = new TextDecoder().decode(event.data);
-                    } else {
-                        console.warn(
-                            "Unknown message type:",
-                            typeof event.data,
-                        );
-                        return;
-                    }
-
-                    const data = JSON.parse(text);
-                    if (data.id == callId && data.result) {
-                        webSocket!.removeEventListener("message", handler);
-                        resolve(data.result);
-                    }
-                };
-
-                webSocket.addEventListener("message", handler);
-            } catch {
-                debugWebSocketError("Unable to contact agent backend.");
-                reject("Unable to contact agent backend.");
-            }
-        } else {
-            throw new Error("No websocket connection.");
-        }
-    });
+    if (!agentRpc) {
+        throw new Error(
+            "No agent RPC connection. Ensure WebSocket is connected.",
+        );
+    }
+    const methodName = action.actionName as keyof BrowserAgentInvokeFunctions;
+    return agentRpc.invoke(methodName, action.parameters);
 }
 
 /**
  * Gets the current WebSocket instance
- * @returns The WebSocket instance or null
  */
 export function getWebSocket(): WebSocket | undefined {
     return webSocket;
@@ -382,7 +288,6 @@ export function getWebSocket(): WebSocket | undefined {
 
 /**
  * Sets the WebSocket instance
- * @param socket The WebSocket instance
  */
 export function setWebSocket(socket: WebSocket | undefined): void {
     webSocket = socket;
@@ -390,7 +295,6 @@ export function setWebSocket(socket: WebSocket | undefined): void {
 
 /**
  * Gets the current settings
- * @returns The settings
  */
 export function getCurrentSettings(): Record<string, any> {
     return settings;
@@ -398,7 +302,6 @@ export function getCurrentSettings(): Record<string, any> {
 
 /**
  * Sets the current settings
- * @param newSettings The new settings
  */
 export function setCurrentSettings(newSettings: Record<string, any>): void {
     settings = newSettings;

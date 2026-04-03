@@ -2,12 +2,19 @@
 // Licensed under the MIT License.
 
 import {
+    CompletionDirection,
+    SeparatorMode,
+    AfterWildcard,
+} from "@typeagent/agent-sdk";
+import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
+import {
     ExecutableAction,
     HistoryContext,
 } from "../explanation/requestAction.js";
 import {
     Construction,
     ConstructionMatchResult,
+    ConstructionPart,
     WildcardMode,
 } from "./constructions.js";
 import { MatchPart, MatchSet, isMatchPart } from "./matchPart.js";
@@ -23,9 +30,14 @@ import {
     ConstructionCacheJSON,
     constructionCacheJSONVersion,
 } from "./constructionJSONTypes.js";
+import {
+    getLanguageTools,
+    needsSeparatorInAutoMode,
+} from "../utils/language.js";
 const debugConst = registerDebug("typeagent:const");
 const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 const debugCompletion = registerDebug("typeagent:const:completion");
+
 // Agent Cache define the namespace policy.  At the cache, it just combine the keys into a string for lookup.
 function getConstructionNamespace(namespaceKeys: string[]) {
     // Combine the namespace keys into a string using | as the separator.  Use to filter easily when
@@ -73,11 +85,106 @@ export type CompletionProperty = {
 export type CompletionResult = {
     completions: string[];
     properties?: CompletionProperty[] | undefined;
+    // Characters consumed by the grammar before the completion point.
+    matchedPrefixLength?: number | undefined;
+    // What kind of separator is required between the already-typed prefix
+    // and the completion text.  See SeparatorMode in @typeagent/agent-sdk.
+    separatorMode?: SeparatorMode | undefined;
+    // True when the completions form a closed set — if the user types
+    // something not in the list, no further completions can exist
+    // beyond it.  False or undefined means the parser can continue
+    // past unrecognized input and find more completions.
+    closedSet?: boolean | undefined;
+    // True when the result would differ if queried with the opposite
+    // direction.  When false, the caller can skip re-fetching on
+    // direction change.
+    directionSensitive?: boolean | undefined;
+    // Describes how the grammar rules that produced completions at
+    // this position relate to wildcards.  See AfterWildcard in
+    // @typeagent/agent-sdk.
+    //   "none" — no wildcard; position is structurally pinned.
+    //   "some" — mixed; some rules used wildcards, some didn't.
+    //   "all"  — every rule used a wildcard; position can slide.
+    afterWildcard?: AfterWildcard | undefined;
 };
 
+/** The matched prefix reached end-of-input via a wildcard.
+ *  Both "some" and "all" are treated as EOI-wildcard because in both
+ *  cases at least one rule's wildcard absorbed to end-of-input, making
+ *  the longer matchedPrefixLength ambiguous.  shouldPreferNewResult
+ *  uses this to avoid letting an ambiguous longer result displace a
+ *  shorter result that is structurally anchored inside the input. */
+export function isEoiWildcard(
+    matchedLen: number,
+    prefixLength: number,
+    afterWildcard: AfterWildcard | undefined,
+): boolean {
+    return (
+        matchedLen >= prefixLength &&
+        afterWildcard !== undefined &&
+        afterWildcard !== "none"
+    );
+}
+
+/** The matched prefix stops before end-of-input (trailing text filters completions). */
+export function anchorsInsideInput(
+    matchedLen: number,
+    prefixLength: number,
+): boolean {
+    return matchedLen > 0 && matchedLen < prefixLength;
+}
+
+/**
+ * When two results have different matchedPrefixLengths, determine
+ * whether the candidate should be preferred over the incumbent.
+ *
+ * The normal rule is "longer wins", with one exception: a longer
+ * result at end-of-input with afterWildcard != "none" is displaced
+ * by a shorter result that anchors inside the input (the trailing
+ * text filters the shorter result's completions, making it more
+ * informative).
+ *
+ * Returns true when the candidate should replace the incumbent.
+ */
+export function shouldPreferNewResult(
+    currentLen: number,
+    currentAfterWildcard: AfterWildcard | undefined,
+    candidateLen: number,
+    candidateAfterWildcard: AfterWildcard | undefined,
+    prefixLength: number,
+): boolean {
+    if (candidateLen > currentLen) {
+        // Longer wins unless it's EOI wildcard displacing an anchored result.
+        return !(
+            isEoiWildcard(candidateLen, prefixLength, candidateAfterWildcard) &&
+            anchorsInsideInput(currentLen, prefixLength)
+        );
+    }
+    // candidateLen < currentLen (the equal case was handled by the caller).
+    // Shorter candidate wins only when anchored and current is EOI wildcard.
+    return (
+        anchorsInsideInput(candidateLen, prefixLength) &&
+        isEoiWildcard(currentLen, prefixLength, currentAfterWildcard)
+    );
+}
+
+/** Tri-state merge for afterWildcard:
+ *  equal → same; unequal → "some"; both undefined → undefined. */
+export function mergeAfterWildcard(
+    a: AfterWildcard | undefined,
+    b: AfterWildcard | undefined,
+): AfterWildcard | undefined {
+    if (a === undefined && b === undefined) return undefined;
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    return a === b ? a : "some";
+}
+
+// Architecture: docs/architecture/completion.md — §2 Cache Layer
 export function mergeCompletionResults(
     first: CompletionResult | undefined,
     second: CompletionResult | undefined,
+    prefixLength: number,
 ): CompletionResult | undefined {
     if (first === undefined) {
         return second;
@@ -85,6 +192,34 @@ export function mergeCompletionResults(
     if (second === undefined) {
         return first;
     }
+    // Eagerly discard shorter-prefix completions — consistent with the
+    // grammar matcher's approach.  Only the source(s) with the longest
+    // matchedPrefixLength contribute completions.
+    //
+    // Exception: when the longer result is at end-of-input with an open
+    // wildcard (the wildcard absorbed all remaining text), a shorter
+    // result that anchors inside the input is more informative — the
+    // trailing text acts as a filter for the shorter result's
+    // completions.  In that case, keep the shorter result.
+    const firstLen = first.matchedPrefixLength ?? 0;
+    const secondLen = second.matchedPrefixLength ?? 0;
+    if (firstLen !== secondLen) {
+        return shouldPreferNewResult(
+            firstLen,
+            first.afterWildcard,
+            secondLen,
+            second.afterWildcard,
+            prefixLength,
+        )
+            ? second
+            : first;
+    }
+    // Same prefix length — merge completions from both sources.
+    const matchedPrefixLength =
+        first.matchedPrefixLength !== undefined ||
+        second.matchedPrefixLength !== undefined
+            ? firstLen
+            : undefined;
     return {
         completions: [...first.completions, ...second.completions],
         properties: first.properties
@@ -92,8 +227,32 @@ export function mergeCompletionResults(
                 ? [...first.properties, ...second.properties]
                 : first.properties
             : second.properties,
+        matchedPrefixLength,
+        separatorMode: mergeSeparatorMode(
+            first.separatorMode,
+            second.separatorMode,
+        ),
+        // Closed set only when both sources are closed sets.
+        closedSet:
+            first.closedSet !== undefined || second.closedSet !== undefined
+                ? (first.closedSet ?? false) && (second.closedSet ?? false)
+                : undefined,
+        // Direction-sensitive if either source is.
+        directionSensitive:
+            first.directionSensitive !== undefined ||
+            second.directionSensitive !== undefined
+                ? (first.directionSensitive ?? false) ||
+                  (second.directionSensitive ?? false)
+                : undefined,
+        // Tri-state merge for afterWildcard:
+        // equal → same; unequal → "some"; both undefined → undefined.
+        afterWildcard: mergeAfterWildcard(
+            first.afterWildcard,
+            second.afterWildcard,
+        ),
     };
 }
+
 export class ConstructionCache {
     private readonly matchSetsByUid = new Map<string, MatchSet>();
 
@@ -285,45 +444,12 @@ export class ConstructionCache {
         return count;
     }
 
-    // For completion
-    private getPrefix(namespaceKeys?: string[]): string[] {
-        if (namespaceKeys?.length === 0) {
-            return [];
-        }
-        const prefix = new Set<string>();
-        const filter = namespaceKeys ? new Set(namespaceKeys) : undefined;
-        for (const [
-            name,
-            constructionNamespace,
-        ] of this.constructionNamespaces.entries()) {
-            const keys = getNamespaceKeys(name);
-            if (filter && keys.some((key) => !filter.has(key))) {
-                continue;
-            }
-
-            for (const construction of constructionNamespace.constructions) {
-                for (const part of construction.parts) {
-                    if (part.optional) {
-                        continue;
-                    }
-                    if (isMatchPart(part) && part.matchSet) {
-                        // For match parts, we can use the match set name as the prefix
-                        for (const match of part.matchSet.matches.values()) {
-                            prefix.add(match);
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-        return [...prefix.values()];
-    }
-
     // For matching
     public match(
         request: string,
         options?: MatchOptions,
         partial?: boolean,
+        needMatchedStarts?: boolean,
     ): ConstructionMatchResult[] {
         const namespaceKeys = options?.namespaceKeys;
         if (namespaceKeys?.length === 0) {
@@ -337,6 +463,7 @@ export class ConstructionCache {
             conflicts: options?.conflicts,
             matchPartsCache: createMatchPartsCache(request),
             partial: partial ?? false, // default to false.
+            needMatchedStarts: needMatchedStarts ?? false,
         };
 
         // If the useTranslators is undefined use all the translators
@@ -361,86 +488,223 @@ export class ConstructionCache {
     }
 
     public completion(
-        requestPrefix: string | undefined,
+        input: string,
         options?: MatchOptions,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
-        debugCompletion(`Request completion for prefix: '${requestPrefix}'`);
+        debugCompletion(`Request completion for input: '${input}'`);
         const namespaceKeys = options?.namespaceKeys;
         debugCompletion(`Request completion namespace keys`, namespaceKeys);
-        if (!requestPrefix) {
-            const completions = this.getPrefix(namespaceKeys);
 
-            return completions.length > 0
-                ? {
-                      completions,
-                  }
-                : undefined;
-        }
-
-        const results = this.match(requestPrefix, options, true);
+        // Resolve direction to a boolean: true when the user is actively
+        // backing up and no trailing separator has committed the last token.
+        const backward = direction === "backward" && !/[\s\p{P}]$/u.test(input);
+        const results = this.match(input, options, true, backward);
 
         debugCompletion(
             `Request completion construction match: ${results.length}`,
         );
 
+        if (results.length === 0) {
+            return undefined;
+        }
+
+        // Track the furthest character position consumed across all
+        // matching constructions.  When a longer match is found, all
+        // previously accumulated completions from shorter matches are
+        // discarded — mirroring the grammar matcher's approach.
+        let maxPrefixLength = 0;
         const completionProperty: CompletionProperty[] = [];
         const requestText: string[] = [];
+        let separatorMode: SeparatorMode | undefined;
+        // Whether the accumulated completions form a closed set.
+        // Starts true; set to false when property/wildcard completions
+        // are added (entity values are external).  Reset to true when
+        // maxPrefixLength advances (old candidates discarded).
+        let closedSet: boolean = true;
+        // Whether at least one candidate at maxPrefixLength had a
+        // matched part to reconsider (partialPartCount >= 1).  Reset
+        // when maxPrefixLength advances.
+        let hasMatchedPart = false;
+        const rejectReferences = options?.rejectReferences ?? true;
+        const langTools = getLanguageTools("en");
+
+        function updateMaxPrefixLength(prefixLength: number): void {
+            if (prefixLength > maxPrefixLength) {
+                maxPrefixLength = prefixLength;
+                requestText.length = 0;
+                completionProperty.length = 0;
+                separatorMode = undefined;
+                closedSet = true;
+                hasMatchedPart = false;
+            }
+        }
+
         for (const result of results) {
-            const { construction, partialPartCount } = result;
+            const { construction, partialPartCount, partialMatchedCurrent } =
+                result;
             if (partialPartCount === undefined) {
                 throw new Error(
                     "Internal Error: Partial part count is undefined",
                 );
             }
 
-            if (partialPartCount === construction.parts.length) {
-                continue; // No more parts to complete
-            }
+            // --- Step 1: Determine which part to complete and the
+            //     prefix length up to that point. ---
+            let completionPart: ConstructionPart | undefined;
+            let candidatePrefixLength: number;
 
-            const nextPart = construction.parts[partialPartCount];
-            // Only include part completion if it is not a checked or entity wildcard.
-            if (nextPart.wildcardMode <= WildcardMode.Enabled) {
-                const partCompletions = nextPart.getCompletion();
-                if (partCompletions) {
-                    requestText.push(...partCompletions);
+            if (backward) {
+                // Walk matchedStarts backwards to find the last part
+                // that actually matched (skip optional parts = -1).
+                const matchedStarts = result.matchedStarts;
+                candidatePrefixLength = -1;
+                if (matchedStarts !== undefined && partialPartCount > 0) {
+                    for (let i = partialPartCount - 1; i >= 0; i--) {
+                        if (matchedStarts[i] >= 0) {
+                            completionPart = construction.parts[i];
+                            candidatePrefixLength = matchedStarts[i];
+                            break;
+                        }
+                    }
                 }
+                if (candidatePrefixLength < 0) {
+                    continue; // Nothing matched to back up to
+                }
+            } else {
+                // Forward: exact match means nothing to complete.
+                if (partialPartCount === construction.parts.length) {
+                    updateMaxPrefixLength(input.length);
+                    if (partialPartCount >= 1) {
+                        hasMatchedPart = true;
+                    }
+                    continue;
+                }
+                completionPart = construction.parts[partialPartCount];
+                candidatePrefixLength = partialMatchedCurrent ?? 0;
             }
 
-            // TODO: assuming the partial action doesn't change the possible values.
-            const nextPartPropertyNames = nextPart.getPropertyNames();
+            // --- Step 2: Check against maxPrefixLength ---
+            updateMaxPrefixLength(candidatePrefixLength);
+            if (candidatePrefixLength !== maxPrefixLength) {
+                continue; // Shorter than the best match — skip
+            }
+
+            // Track whether at least one candidate had matched parts.
+            if (partialPartCount >= 1) {
+                hasMatchedPart = true;
+            }
+
+            // --- Step 3: Offer literal completions from the part ---
             if (
-                nextPartPropertyNames !== undefined &&
-                nextPartPropertyNames.length > 0
+                completionPart !== undefined &&
+                completionPart.wildcardMode <= WildcardMode.Enabled
             ) {
-                // Detect multi-part properties
-                const allPropertyNames = new Map<string, number>();
-                for (const part of construction.parts) {
-                    const names = part.getPropertyNames();
-                    if (names === undefined) {
-                        continue; // No property names for this part
-                    }
-                    for (const name of names) {
-                        const count = allPropertyNames.get(name) ?? 0;
-                        allPropertyNames.set(name, count + 1);
+                const partCompletions = completionPart.getCompletion();
+                if (partCompletions) {
+                    for (const completionText of partCompletions) {
+                        if (
+                            completionPart.capture &&
+                            rejectReferences &&
+                            langTools?.possibleReferentialPhrase(completionText)
+                        ) {
+                            continue;
+                        }
+                        requestText.push(completionText);
+                        if (
+                            candidatePrefixLength > 0 &&
+                            completionText.length > 0
+                        ) {
+                            const needsSep = needsSeparatorInAutoMode(
+                                input[candidatePrefixLength - 1],
+                                completionText[0],
+                            );
+                            separatorMode = mergeSeparatorMode(
+                                separatorMode,
+                                needsSep ? "spacePunctuation" : "optional",
+                            );
+                        }
                     }
                 }
+            }
 
-                const queryPropertyNames = nextPartPropertyNames.filter(
-                    (name) => allPropertyNames.get(name) === 1,
-                );
-                if (queryPropertyNames.length === 0) {
-                    continue; // No single-part properties to complete
+            // --- Step 4: Offer property completions for entity parts ---
+            if (completionPart !== undefined) {
+                const partPropertyNames = completionPart.getPropertyNames();
+                if (
+                    partPropertyNames !== undefined &&
+                    partPropertyNames.length > 0
+                ) {
+                    // Filter out properties that appear in multiple parts
+                    // so we only offer single-part properties.
+                    const allPropertyNames = new Map<string, number>();
+                    for (const part of construction.parts) {
+                        const names = part.getPropertyNames();
+                        if (names === undefined) {
+                            continue;
+                        }
+                        for (const name of names) {
+                            const count = allPropertyNames.get(name) ?? 0;
+                            allPropertyNames.set(name, count + 1);
+                        }
+                    }
+
+                    const queryPropertyNames = partPropertyNames.filter(
+                        (name: string) => allPropertyNames.get(name) === 1,
+                    );
+                    if (queryPropertyNames.length > 0) {
+                        completionProperty.push({
+                            actions: result.match.actions,
+                            names: queryPropertyNames,
+                        });
+                        if (candidatePrefixLength > 0) {
+                            const needsSep = needsSeparatorInAutoMode(
+                                input[candidatePrefixLength - 1],
+                                "a",
+                            );
+                            separatorMode = mergeSeparatorMode(
+                                separatorMode,
+                                needsSep ? "spacePunctuation" : "optional",
+                            );
+                        }
+                        closedSet = false;
+                    }
                 }
-                completionProperty.push({
-                    actions: result.match.actions,
-                    names: queryPropertyNames,
-                });
             }
         }
+
+        // Advance past trailing separators so that the reported prefix
+        // length includes any trailing whitespace the user typed.
+        // When advancing, demote separatorMode to "optional" — the
+        // trailing space is already consumed.
+        //
+        // Skip advancement when backward backed up: the backed-up
+        // position is where backward wants completions to anchor.
+        // Advancing past trailing separator chars would defeat the
+        // backup (e.g. separator-only keywords like "...").
+        if (!backward && maxPrefixLength < input.length) {
+            const trailing = input.substring(maxPrefixLength);
+            if (/^[\s\p{P}]+$/u.test(trailing)) {
+                maxPrefixLength = input.length;
+                separatorMode = "optional";
+            }
+        }
+
+        // Compute directionSensitive.
+        //
+        // Direction-sensitive when: at least one candidate at
+        // maxPrefixLength had a matched part to reconsider, AND no
+        // trailing separator in the input commits the match.
+        const noTrailingSeparator = !/[\s\p{P}]$/u.test(input);
+        const directionSensitive = hasMatchedPart && noTrailingSeparator;
 
         return {
             completions: requestText,
             properties: completionProperty,
+            matchedPrefixLength: maxPrefixLength,
+            separatorMode,
+            closedSet,
+            directionSensitive,
         };
     }
 

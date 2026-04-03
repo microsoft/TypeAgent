@@ -3,21 +3,11 @@
 
 import type { AnswerEnhancement } from "../../agent/search/schema/answerEnhancement.mjs";
 import type {
-    StoredMacro,
-    MacroQueryOptions,
-    DeleteMacroResult,
-} from "./macroUtilities";
-import type {
     ImportOptions,
     ImportResult,
     ProgressCallback,
 } from "../interfaces/websiteImport.types";
-import type {
-    KnowledgeExtractionProgress,
-    KnowledgeProgressCallback,
-    KnowledgeExtractionResult,
-} from "../interfaces/knowledgeExtraction.types";
-import { url } from "inspector/promises";
+import type { KnowledgeProgressCallback } from "../interfaces/knowledgeExtraction.types";
 
 // ===================================================================
 // INTERFACE DEFINITIONS
@@ -114,7 +104,8 @@ export interface EntityMatch {
 }
 
 /**
- * Abstract base class for extension services
+ * Abstract base class for extension services.
+ * Subclasses route messages through typed RPC clients internally.
  */
 export abstract class ExtensionServiceBase {
     // ===================================================================
@@ -266,39 +257,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async extractPageKnowledgeStreaming(
-        url: string,
-        mode: string,
-        extractionSettings: any,
-        streamingEnabled: boolean = true,
-        extractionId: string,
-        saveToIndex: boolean = false,
-    ): Promise<any> {
-        try {
-            const response = await this.sendMessage({
-                type: "extractPageKnowledgeStreaming",
-                url,
-                mode,
-                extractionSettings,
-                streamingEnabled,
-                extractionId,
-                saveToIndex,
-            });
-
-            if (!response) {
-                return { extractionId, success: false };
-            }
-
-            return response;
-        } catch (error) {
-            return {
-                extractionId,
-                success: false,
-                error: (error as Error).message || String(error),
-            };
-        }
-    }
-
     async queryKnowledge(parameters: any): Promise<any> {
         return this.sendMessage({
             type: "queryKnowledge",
@@ -346,40 +304,6 @@ export abstract class ExtensionServiceBase {
             extractedKnowledge,
             mode,
             timestamp,
-        });
-    }
-
-    async generatePageQuestions(url: string, pageKnowledge: any): Promise<any> {
-        return this.sendMessage({
-            type: "generatePageQuestions",
-            url,
-            pageKnowledge,
-        });
-    }
-
-    async generateGraphQuestions(
-        url: string,
-        relatedEntities: any[],
-        relatedTopics: any[],
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "generateGraphQuestions",
-            url,
-            relatedEntities,
-            relatedTopics,
-        });
-    }
-
-    async discoverRelatedKnowledge(
-        entities: any[],
-        topics: string[],
-        depth: number = 2,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "discoverRelatedKnowledge",
-            entities,
-            topics,
-            depth,
         });
     }
 
@@ -446,12 +370,6 @@ export abstract class ExtensionServiceBase {
         return this.sendMessage({
             type: "searchWebMemoriesAdvanced",
             parameters,
-        });
-    }
-
-    async checkAIModelAvailability(): Promise<any> {
-        return this.sendMessage({
-            type: "checkAIModelAvailability",
         });
     }
 
@@ -601,13 +519,6 @@ export abstract class ExtensionServiceBase {
         });
     }
 
-    async getRecentKnowledgeItems(limit?: number): Promise<any> {
-        return this.sendMessage({
-            type: "getRecentKnowledgeItems",
-            limit,
-        });
-    }
-
     async extractKnowledge(url: string): Promise<any> {
         return this.sendMessage({
             type: "extractKnowledge",
@@ -627,17 +538,6 @@ export abstract class ExtensionServiceBase {
             type: "getRecentSearches",
         });
         return response?.searches || [];
-    }
-
-    async getDiscoverInsights(
-        limit?: number,
-        timeframe?: string,
-    ): Promise<any> {
-        return this.sendMessage({
-            type: "getDiscoverInsights",
-            limit,
-            timeframe,
-        });
     }
 
     async saveSearch(query: string, results: any): Promise<void> {
@@ -715,47 +615,35 @@ export abstract class ExtensionServiceBase {
         this.onExtractionProgressImpl(extractionId, callback);
     }
 
-    // Macro methods
-    async getMacrosForUrl(
-        url: string,
-        options: MacroQueryOptions = {},
-    ): Promise<StoredMacro[]> {
-        const response = await this.sendMessage<{ actions?: StoredMacro[] }>({
-            type: "getMacrosForUrl",
-            url: url,
-            includeGlobal: options.includeGlobal ?? true,
-            author: options.author,
+    async getAllWebFlows(): Promise<any[]> {
+        const response = await this.sendMessage<{ actions?: any[] }>({
+            type: "getAllWebFlows",
         });
         return response?.actions || [];
     }
 
-    async getAllMacros(): Promise<StoredMacro[]> {
-        const response = await this.sendMessage<{ actions?: StoredMacro[] }>({
-            type: "getAllMacros",
-        });
-        return response?.actions || [];
-    }
-
-    async getMacroDomains(): Promise<string[]> {
-        const response = await this.sendMessage<{ domains?: string[] }>({
-            type: "getMacroDomains",
-        });
-        return response?.domains || [];
-    }
-
-    async deleteMacro(macroId: string): Promise<DeleteMacroResult> {
+    async deleteWebFlow(name: string): Promise<{
+        success: boolean;
+        error?: string;
+    }> {
         const response = await this.sendMessage<{
             success?: boolean;
             error?: string;
         }>({
-            type: "deleteMacro",
-            macroId: macroId,
+            type: "deleteWebFlow",
+            name,
         });
         return {
             success: response?.success || false,
             error: response?.error,
-            macroId: macroId,
         };
+    }
+
+    async settingsUpdated(settings: any): Promise<void> {
+        await this.sendMessage({
+            type: "settingsUpdated",
+            settings,
+        });
     }
 
     // ===================================================================

@@ -1,0 +1,53 @@
+[
+  {
+    "id": "err-01",
+    "category": "error-handling",
+    "description": "Non-taskflow utterance does not match any flow grammar",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "do something completely unrelated to any flow",
+        "expected": {
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "err-02",
+    "category": "error-handling",
+    "description": "Delete non-existent flow returns error",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "delete task flow doesNotExist",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "deleteTaskFlow",
+          "execution": {
+            "shouldSucceed": false,
+            "outputContains": ["not found"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "err-03",
+    "category": "error-handling",
+    "description": "List flows when store has flows still succeeds",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  }
+]

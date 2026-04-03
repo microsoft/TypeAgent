@@ -4,15 +4,16 @@
 import {
     Comment,
     CommentedName,
-    EntityDeclaration,
     Expr,
     GrammarParseResult,
     isExpressionSpecialChar,
+    isObjectSpread,
     isWhitespace,
     Rule,
     RuleDefinition,
     ValueNode,
 } from "./grammarRuleParser.js";
+import { writeValueExprNode } from "./grammarValueExprWriter.js";
 
 export type GrammarWriterOptions = {
     maxLineLength?: number; // Maximum line length before breaking (default: 80)
@@ -665,40 +666,6 @@ function writeCommentedNameItem(
     writeValueComments(result, n.trailingComments, indent, true);
 }
 
-// Writes an entity declaration using emitGroup for flat/broken layout.
-// Flat:   entity Foo, Bar, Baz;
-// Broken: entity
-//           Foo,
-//           Bar,
-//           Baz;
-function writeEntityDeclaration(
-    result: GrammarWriter,
-    decl: EntityDeclaration,
-): void {
-    const indent = " ".repeat(result.indentSize);
-    result.emitGroup(
-        // flat
-        () => {
-            result.write("entity ");
-            for (let i = 0; i < decl.names.length; i++) {
-                if (i > 0) result.write(", ");
-                writeCommentedNameItem(result, decl.names[i], "");
-            }
-            result.write(";");
-        },
-        // broken
-        () => {
-            result.write("entity");
-            for (let i = 0; i < decl.names.length; i++) {
-                result.writeNewLine(indent);
-                writeCommentedNameItem(result, decl.names[i], indent);
-                if (i < decl.names.length - 1) result.write(",");
-            }
-            result.write(";");
-        },
-    );
-}
-
 // Writes the { Name1, Name2, ... } portion of an import statement using
 // emitBlock for flat/broken layout.
 // Flat:   import { Name1, Name2 } from "file";
@@ -735,22 +702,6 @@ export function writeGrammarRules(
     // File-level leading comments (e.g. copyright header)
     writeLeadingComments(result, grammar.leadingComments);
 
-    // Entity declarations — use entityDeclarations if present (preserves comments),
-    // fall back to flat entities array for backward compat with hand-crafted results.
-    const entityDeclarations = grammar.entityDeclarations;
-    if (entityDeclarations && entityDeclarations.length > 0) {
-        for (const decl of entityDeclarations) {
-            writeLeadingComments(result, decl.leadingComments);
-            writeEntityDeclaration(result, decl);
-            writeTrailingComments(result, decl.trailingComments);
-            result.writeLine();
-        }
-        result.writeLine();
-    } else if (grammar.entities.length > 0) {
-        result.writeLine(`entity ${grammar.entities.join(", ")};`);
-        result.writeLine();
-    }
-
     if (grammar.imports.length > 0) {
         for (const imp of grammar.imports) {
             writeLeadingComments(result, imp.leadingComments);
@@ -763,9 +714,12 @@ export function writeGrammarRules(
                 writeImportNameBlock(result, imp.names);
                 writeInlineComments(result, imp.afterCloseBraceComments, true);
             }
-            result.write(" from");
-            writeInlineComments(result, imp.afterFromComments, true);
-            result.write(` "${imp.source}";`);
+            if (imp.source !== undefined) {
+                result.write(" from");
+                writeInlineComments(result, imp.afterFromComments, true);
+                result.write(` "${imp.source}"`);
+            }
+            result.write(";");
             writeTrailingComments(result, imp.trailingComments);
             result.writeLine();
         }
@@ -784,6 +738,11 @@ export function writeGrammarRules(
 
 function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
     writeLeadingComments(result, def.leadingComments);
+    if (def.exported) {
+        result.write("export");
+        writeInlineComments(result, def.afterExportComments, true);
+        result.write(" ");
+    }
     writeBracketedName(result, def.definitionName);
     writeInlineComments(result, def.beforeAnnotationComments, true);
     if (def.spacingMode !== undefined) {
@@ -796,6 +755,19 @@ function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
         result.write(def.spacingMode);
         writeInlineComments(result, def.annotationAfterValueComments);
         result.write("]");
+    }
+    if (def.valueType !== undefined) {
+        writeInlineComments(result, def.beforeValueTypeComments, true);
+        result.write(" :");
+        for (let i = 0; i < def.valueType.length; i++) {
+            if (i > 0) {
+                result.write(" |");
+            }
+            const vt = def.valueType[i];
+            writeInlineComments(result, vt.leadingComments, true);
+            result.write(` ${vt.name}`);
+            writeInlineComments(result, vt.trailingComments);
+        }
     }
     writeInlineComments(result, def.beforeEqualsComments, true);
     result.write(` = `);
@@ -1074,25 +1046,32 @@ function writeValueNode(
                 close: "}",
                 flatSep: ", ",
                 brokenBaseCol: baseCol,
-                emitItem: (prop) => {
+                emitItem: (elem) => {
                     writeValueComments(
                         result,
-                        prop.leadingComments,
+                        elem.leadingComments,
                         entryIndent,
                     );
-                    if (prop.value === null) {
-                        result.write(prop.key);
-                    } else {
-                        result.write(`${prop.key}: `);
+                    if (isObjectSpread(elem)) {
+                        result.write("...");
                         writeValueNode(
                             result,
-                            prop.value,
+                            elem.argument,
+                            baseCol + result.indentSize,
+                        );
+                    } else if (elem.value === null) {
+                        result.write(elem.key);
+                    } else {
+                        result.write(`${elem.key}: `);
+                        writeValueNode(
+                            result,
+                            elem.value,
                             baseCol + result.indentSize,
                         );
                     }
                 },
-                getItemTrailingText: (prop) =>
-                    trailingCommentText(prop.trailingComments),
+                getItemTrailingText: (elem) =>
+                    trailingCommentText(elem.trailingComments),
                 ...(objClosing ? { closingLines: objClosing } : {}),
             });
             break;
@@ -1122,6 +1101,16 @@ function writeValueNode(
             });
             break;
         }
+        default:
+            // Value expression node — delegate to the expression writer.
+            writeValueExprNode(
+                {
+                    write: (text: string) => result.write(text),
+                    writeBase: (node) => writeValueNode(result, node, baseCol),
+                },
+                value,
+            );
+            break;
     }
     writeValueComments(result, value.trailingComments, indent, true);
 }

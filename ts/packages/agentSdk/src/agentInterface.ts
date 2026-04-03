@@ -50,7 +50,7 @@ export type SchemaTypeNames = {
 };
 
 export type SchemaFormat = "ts" | "pas";
-export type GrammarFormat = "ag";
+export type GrammarFormat = "ag" | "agr";
 
 export type SchemaContent = {
     format: SchemaFormat;
@@ -63,9 +63,9 @@ export type GrammarContent = { format: GrammarFormat; content: string };
 export type SchemaManifest = {
     description: string;
     schemaType: string | SchemaTypeNames; // string if there are only action schemas
-    schemaFile: string | SchemaContent;
-    compiledSchemaFile?: string; // path to .pas.json file for grammar generation metadata extraction
-    grammarFile?: string | GrammarContent;
+    schemaFile: string | SchemaContent; // path relative to the manifest file (resolved to absolute at load time)
+    originalSchemaFile?: string; // path to the original .ts schema source for code paths not yet converted to use .pas format (relative to the manifest file)
+    grammarFile?: string | GrammarContent; // path relative to the manifest file (resolved to absolute at load time)
     injected?: boolean; // whether the translator is injected into other domains, default is false
     cached?: boolean; // whether the translator's action should be cached, default is true
     streamingActions?: string[];
@@ -161,6 +161,17 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
         dynamicDisplayId: string,
         context: SessionContext,
     ): Promise<DynamicDisplay>;
+
+    // Dynamic schema/grammar — allows agents to modify their schema and grammar at runtime.
+    // Called by the dispatcher during updateAgentContext and when the agent calls reloadAgentSchema().
+    getDynamicSchema?(
+        context: SessionContext,
+        schemaName: string,
+    ): Promise<SchemaContent | undefined>;
+    getDynamicGrammar?(
+        context: SessionContext,
+        schemaName: string,
+    ): Promise<GrammarContent | undefined>;
 }
 
 //==============================================================================
@@ -208,6 +219,10 @@ export interface SessionContext<T = unknown> {
     removeDynamicAgent(agentName: string): Promise<void>;
 
     forceCleanupDynamicAgent(agentName: string): Promise<void>;
+
+    // Notify the dispatcher that this agent's schema and/or grammar has changed.
+    // The dispatcher will call getDynamicSchema/getDynamicGrammar to get the updated content.
+    reloadAgentSchema(): Promise<void>;
 
     // Experimental: get the shared local host port
     getSharedLocalHostPort(agentName: string): Promise<number>;
@@ -262,6 +277,7 @@ export interface ActionContext<T = void> {
     readonly activityContext: ActivityContext | undefined;
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
+    readonly abortSignal?: AbortSignal | undefined;
 
     // queue up toggle transient agent to be executed at the end of the commands
     queueToggleTransientAgent(

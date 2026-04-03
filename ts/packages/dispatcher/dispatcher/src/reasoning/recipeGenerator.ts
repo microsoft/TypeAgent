@@ -9,15 +9,14 @@ const debug = registerDebug("typeagent:dispatcher:reasoning:recipeGenerator");
 
 const RECIPE_MODEL = "claude-sonnet-4-5-20250929";
 
-export interface Recipe {
-    version: 1;
-    actionName: string;
+export interface ScriptRecipe {
+    name: string;
     description: string;
     parameters: RecipeParameter[];
-    steps: RecipeStep[];
+    script: string;
     grammarPatterns: string[];
     source?: {
-        type: "reasoning" | "browser" | "webtask" | "manual";
+        type: "reasoning" | "manual" | "seed";
         sourceId?: string;
         timestamp: string;
     };
@@ -29,26 +28,56 @@ export interface RecipeParameter {
     required: boolean;
     description: string;
     default?: unknown;
-    testValue?: unknown;
 }
 
-export interface RecipeStep {
-    id: string;
-    schemaName: string;
-    actionName: string;
-    parameters: Record<string, unknown>;
-    observedOutputFormat?: string;
+const TASKFLOW_API_SCHEMA = `interface ActionStepResult {
+    text: string;
+    data: unknown;
+    error?: string;
 }
+
+interface TaskFlowScriptAPI {
+    callAction(schemaName: string, actionName: string, params: Record<string, unknown>):
+        Promise<ActionStepResult>;
+    queryLLM(prompt: string, options?: { input?: string; parseJson?: boolean; model?: string }):
+        Promise<ActionStepResult>;
+    webSearch(query: string): Promise<ActionStepResult>;
+    webFetch(url: string): Promise<ActionStepResult>;
+}
+
+interface TaskFlowScriptResult {
+    success: boolean;
+    message?: string;
+    data?: unknown;
+    error?: string;
+}`;
+
+const BLOCKED_IDENTIFIERS = [
+    "eval",
+    "Function",
+    "require",
+    "import",
+    "fetch",
+    "XMLHttpRequest",
+    "WebSocket",
+    "window",
+    "document",
+    "globalThis",
+    "setTimeout",
+    "setInterval",
+    "process",
+    "Buffer",
+].join(", ");
 
 /**
- * Generates a TaskFlow recipe from a successful ReasoningTrace.
+ * Generates a TaskFlow script recipe from a successful ReasoningTrace.
  *
  * Filters trace steps to only `execute_action` tool calls, extracts
- * schemaName/actionName/parameters, and uses an LLM to determine which
- * parameter values should be generalized into recipe parameters.
+ * schemaName/actionName/parameters, and uses an LLM to produce a
+ * reusable async function execute(api, params) script.
  */
 export class ReasoningRecipeGenerator {
-    async generate(trace: ReasoningTrace): Promise<Recipe | null> {
+    async generate(trace: ReasoningTrace): Promise<ScriptRecipe | null> {
         if (!trace.result.success) {
             debug("Trace was not successful, skipping recipe generation");
             return null;
@@ -77,13 +106,41 @@ export class ReasoningRecipeGenerator {
 
         try {
             const recipe = await this.generateWithLLM(prompt);
-            if (recipe) {
-                recipe.source = {
-                    type: "reasoning",
-                    sourceId: trace.session.requestId,
-                    timestamp: new Date().toISOString(),
-                };
+            if (!recipe) return null;
+
+            // Validate the generated script
+            const validationErrors = this.validateScript(recipe.script);
+            if (validationErrors.length > 0) {
+                debug(
+                    "Generated script failed validation, retrying:",
+                    validationErrors,
+                );
+                const retryPrompt = this.buildRetryPrompt(
+                    prompt,
+                    recipe.script,
+                    validationErrors,
+                );
+                const retryRecipe = await this.generateWithLLM(retryPrompt);
+                if (retryRecipe) {
+                    const retryErrors = this.validateScript(retryRecipe.script);
+                    if (retryErrors.length === 0) {
+                        retryRecipe.source = {
+                            type: "reasoning",
+                            sourceId: trace.session.requestId,
+                            timestamp: new Date().toISOString(),
+                        };
+                        return retryRecipe;
+                    }
+                }
+                debug("Retry also failed validation");
+                return null;
             }
+
+            recipe.source = {
+                type: "reasoning",
+                sourceId: trace.session.requestId,
+                timestamp: new Date().toISOString(),
+            };
             return recipe;
         } catch (error) {
             debug("Failed to generate recipe:", error);
@@ -102,46 +159,126 @@ export class ReasoningRecipeGenerator {
     ): string {
         const stepsJson = JSON.stringify(steps, null, 2);
 
-        return `You are generating a reusable TaskFlow recipe from a successful reasoning trace.
+        return `You are generating a reusable TaskFlow script from a successful reasoning trace.
 
 Original user request: "${originalRequest}"
 
 Steps executed (only execute_action calls):
 ${stepsJson}
 
-Generate a recipe JSON object that:
-1. Has a camelCase actionName derived from the task description
-2. Identifies which parameter values should become recipe parameters (values that would change between invocations) vs hardcoded values
-3. Uses \${paramName} for recipe parameters and \${stepId.text} or \${stepId.data} for step-to-step data flow
-4. Includes 3-5 grammar patterns using $(paramName:wildcard) or $(paramName:number) captures
+The script's \`api\` parameter implements the following TypeScript interface.
+Use ONLY these methods in the generated script:
 
-Return ONLY a JSON object matching this schema:
+\`\`\`typescript
+${TASKFLOW_API_SCHEMA}
+\`\`\`
+
+SCRIPT GENERATION RULES:
+1. The script MUST be TypeScript. Define: async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult>
+2. Do NOT add import statements — all types are provided globally.
+3. Call agent actions via api.callAction(schemaName, actionName, params)
+4. Use api.queryLLM() for LLM transform steps, api.webSearch() for web search, api.webFetch() for URL fetch
+5. Use api.callAction() for all other agent actions (email, calendar, player, list, etc.)
+6. Add error checking: if a step returns an error, return { success: false, error: ... }
+7. Return { success: true, message: "..." } on success
+8. Parameterize values that change between invocations via params.paramName
+9. Use template literals for string interpolation: \`Top \${params.quantity} songs\`
+10. Default LLM model: "claude-haiku-4-5-20251001" for extraction/formatting
+11. BLOCKED identifiers — do NOT use: ${BLOCKED_IDENTIFIERS}
+
+GRAMMAR PATTERN RULES:
+- Lead with 2-3 distinctive fixed tokens before any wildcard
+- Include a flow-specific anchor keyword that no other agent uses (e.g., "playlist", "digest", "agenda")
+- Make distinguishing tokens mandatory, not optional
+- Avoid starting with verbs owned by other agents: "search", "play", "email", "find", "send", "show"
+- Only two capture types: $(name:wildcard) for strings, $(name:number) for numbers
+- NEVER use $(name:string) or $(name:integer) — those are invalid
+- Provide 3-5 pattern variants with different leading phrases
+
+Generate a JSON object:
 {
-  "version": 1,
-  "actionName": "camelCaseActionName",
+  "name": "camelCaseActionName",
   "description": "what this flow does",
   "parameters": [
-    { "name": "paramName", "type": "string", "required": true, "description": "..." },
-    { "name": "optionalParam", "type": "string", "required": false, "default": "default value", "description": "..." }
+    { "name": "param", "type": "string", "required": true, "description": "..." },
+    { "name": "optionalParam", "type": "number", "required": false, "default": 10, "description": "..." }
   ],
-  "steps": [
-    {
-      "id": "stepId",
-      "schemaName": "utility",
-      "actionName": "webSearch",
-      "parameters": { "query": "\${paramName}" },
-      "observedOutputFormat": "description of output shape"
-    }
-  ],
+  "script": "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult> { ... }",
   "grammarPatterns": [
-    "natural language pattern with $(paramName:wildcard) captures"
+    "natural language pattern with $(paramName:wildcard) or $(paramName:number) captures"
   ]
 }
 
 Return ONLY the JSON object, no markdown or explanation.`;
     }
 
-    private async generateWithLLM(prompt: string): Promise<Recipe | null> {
+    private buildRetryPrompt(
+        originalPrompt: string,
+        failedScript: string,
+        errors: string[],
+    ): string {
+        return `${originalPrompt}
+
+PREVIOUS ATTEMPT FAILED SCRIPT VALIDATION. Fix these errors in the script field:
+${errors.map((e) => `- ${e}`).join("\n")}
+
+Failed script:
+${failedScript}
+
+Generate a corrected version. Return ONLY the JSON object, no markdown or explanation.`;
+    }
+
+    private validateScript(source: string): string[] {
+        const errors: string[] = [];
+
+        if (!/async\s+function\s+execute\s*\(/.test(source)) {
+            errors.push(
+                'Script must define "async function execute(api: TaskFlowScriptAPI, params: FlowParams): Promise<TaskFlowScriptResult>"',
+            );
+        }
+
+        const blocked = [
+            "eval",
+            "Function",
+            "require",
+            "import",
+            "fetch",
+            "XMLHttpRequest",
+            "WebSocket",
+            "window",
+            "document",
+            "globalThis",
+            "setTimeout",
+            "setInterval",
+            "process",
+            "Buffer",
+        ];
+
+        const lines = source.split("\n");
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("//") || trimmed.startsWith("*")) continue;
+
+            for (const id of blocked) {
+                const pattern = new RegExp(`\\b${id}\\b`);
+                if (pattern.test(line)) {
+                    const withoutStrings = line
+                        .replace(/"[^"]*"/g, '""')
+                        .replace(/'[^']*'/g, "''")
+                        .replace(/`[^`]*`/g, "``");
+                    if (pattern.test(withoutStrings)) {
+                        errors.push(`Disallowed identifier: '${id}'`);
+                    }
+                }
+            }
+        }
+
+        return errors;
+    }
+
+    private async generateWithLLM(
+        prompt: string,
+    ): Promise<ScriptRecipe | null> {
         let result = "";
 
         const queryInstance = query({
@@ -160,7 +297,6 @@ Return ONLY the JSON object, no markdown or explanation.`;
 
         if (!result) return null;
 
-        // Extract JSON from response
         const jsonMatch =
             result.match(/```json\s*([\s\S]*?)\s*```/) ||
             result.match(/(\{[\s\S]*\})/);
@@ -171,16 +307,11 @@ Return ONLY the JSON object, no markdown or explanation.`;
         }
 
         try {
-            const recipe = JSON.parse(jsonMatch[1]) as Recipe;
-            if (
-                !recipe.actionName ||
-                !recipe.steps ||
-                recipe.steps.length === 0
-            ) {
-                debug("Invalid recipe: missing actionName or steps");
+            const recipe = JSON.parse(jsonMatch[1]) as ScriptRecipe;
+            if (!recipe.name || !recipe.script) {
+                debug("Invalid recipe: missing name or script");
                 return null;
             }
-            recipe.version = 1;
             return recipe;
         } catch (error) {
             debug("Failed to parse recipe JSON:", error);

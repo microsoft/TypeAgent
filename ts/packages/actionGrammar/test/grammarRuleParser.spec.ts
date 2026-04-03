@@ -382,10 +382,15 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "type",
                         value: { type: "literal", value: "greeting" },
                     },
-                    { key: "count", value: { type: "literal", value: 1 } },
+                    {
+                        type: "property",
+                        key: "count",
+                        value: { type: "literal", value: 1 },
+                    },
                 ],
             });
         });
@@ -409,10 +414,15 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "type",
                         value: { type: "literal", value: "greeting" },
                     },
-                    { key: "count", value: { type: "literal", value: 1 } },
+                    {
+                        type: "property",
+                        key: "count",
+                        value: { type: "literal", value: 1 },
+                    },
                 ],
             });
         });
@@ -426,10 +436,15 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "type",
                         value: { type: "literal", value: "greeting" },
                     },
-                    { key: "count", value: { type: "literal", value: 1 } },
+                    {
+                        type: "property",
+                        key: "count",
+                        value: { type: "literal", value: 1 },
+                    },
                 ],
             });
         });
@@ -453,6 +468,7 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "items",
                         value: {
                             type: "array",
@@ -463,11 +479,13 @@ describe("Grammar Rule Parser", () => {
                         },
                     },
                     {
+                        type: "property",
                         key: "meta",
                         value: {
                             type: "object",
                             value: [
                                 {
+                                    type: "property",
                                     key: "count",
                                     value: { type: "literal", value: 2 },
                                 },
@@ -581,8 +599,13 @@ describe("Grammar Rule Parser", () => {
                             value: {
                                 type: "object",
                                 value: [
-                                    { key: "politeness", value: null },
                                     {
+                                        type: "property",
+                                        key: "politeness",
+                                        value: null,
+                                    },
+                                    {
+                                        type: "property",
                                         key: "actions",
                                         value: {
                                             type: "array",
@@ -603,11 +626,13 @@ describe("Grammar Rule Parser", () => {
                                         },
                                     },
                                     {
+                                        type: "property",
                                         key: "target",
                                         value: {
                                             type: "object",
                                             value: [
                                                 {
+                                                    type: "property",
                                                     key: "name",
                                                     value: {
                                                         type: "variable",
@@ -615,11 +640,13 @@ describe("Grammar Rule Parser", () => {
                                                     },
                                                 },
                                                 {
+                                                    type: "property",
                                                     key: "metadata",
                                                     value: {
                                                         type: "object",
                                                         value: [
                                                             {
+                                                                type: "property",
                                                                 key: "hasArticle",
                                                                 value: {
                                                                     type: "literal",
@@ -627,6 +654,7 @@ describe("Grammar Rule Parser", () => {
                                                                 },
                                                             },
                                                             {
+                                                                type: "property",
                                                                 key: "modifier",
                                                                 value: {
                                                                     type: "variable",
@@ -797,6 +825,7 @@ describe("Grammar Rule Parser", () => {
                 type: "object",
                 value: [
                     {
+                        type: "property",
                         key: "type",
                         value: { type: "literal", value: "greeting" },
                         leadingComments: [
@@ -807,6 +836,7 @@ describe("Grammar Rule Parser", () => {
                         ],
                     },
                     {
+                        type: "property",
                         key: "count",
                         value: { type: "literal", value: 1 },
                     },
@@ -1192,7 +1222,7 @@ describe("Grammar Rule Parser", () => {
         it("should throw error for malformed rule name", () => {
             const grammar = "greeting = hello;";
             expect(() => testParamGrammarRules("test.agr", grammar)).toThrow(
-                "Expected rule definition, 'import' statement, or 'entity' declaration",
+                "Expected rule definition or 'import' statement",
             );
         });
 
@@ -1414,6 +1444,75 @@ describe("Grammar Rule Parser", () => {
         });
     });
 
+    describe("Value Type Annotation", () => {
+        it("parses value type", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `<Rule> : MyType = hello;`,
+            );
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["MyType"]);
+        });
+        it("parses value type with spacing annotation", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `<Rule> [spacing=required] : MyType = hello;`,
+            );
+            expect(defs[0].spacingMode).toBe("required");
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["MyType"]);
+        });
+        it("parses value type with export", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `export <Rule> : MyType = hello;`,
+            );
+            expect(defs[0].exported).toBe(true);
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["MyType"]);
+        });
+        it("parses export with spacing and value type", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `export <Rule> [spacing=required] : MyType = hello;`,
+            );
+            expect(defs[0].exported).toBe(true);
+            expect(defs[0].spacingMode).toBe("required");
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["MyType"]);
+        });
+        it("rule without value type has undefined valueType", () => {
+            const defs = testParamGrammarRules("test.agr", `<Rule> = hello;`);
+            expect(defs[0].valueType).toBeUndefined();
+        });
+        it("parses union value type", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `<Rule> : TypeA | TypeB = hello;`,
+            );
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual([
+                "TypeA",
+                "TypeB",
+            ]);
+        });
+        it("parses three-way union value type", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `<Rule> : A | B | C = hello;`,
+            );
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual([
+                "A",
+                "B",
+                "C",
+            ]);
+        });
+        it("parses union value type with spacing and export", () => {
+            const defs = testParamGrammarRules(
+                "test.agr",
+                `export <Rule> [spacing=required] : A | B = hello;`,
+            );
+            expect(defs[0].exported).toBe(true);
+            expect(defs[0].spacingMode).toBe("required");
+            expect(defs[0].valueType?.map((v) => v.name)).toEqual(["A", "B"]);
+        });
+    });
+
     describe("Complex Integration", () => {
         it("should handle deeply nested value structures", () => {
             const grammar = `
@@ -1596,6 +1695,89 @@ describe("Grammar Rule Parser", () => {
             expect(result.imports[0].afterCloseBraceComments).toEqual([
                 { style: "block", text: " after-brace " },
             ]);
+        });
+    });
+
+    describe("Export Keyword on Rule Definitions", () => {
+        it("parse exported rule definition", () => {
+            const grammar = "export <Rule1> = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions).toHaveLength(1);
+            expect(result.definitions[0].exported).toBe(true);
+            expect(result.definitions[0].definitionName.name).toBe("Rule1");
+        });
+
+        it("non-exported rule has no exported flag", () => {
+            const grammar = "<Rule1> = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions).toHaveLength(1);
+            expect(result.definitions[0].exported).toBeUndefined();
+        });
+
+        it("parse multiple rules with mixed export", () => {
+            const grammar = `
+                export <Rule1> = hello;
+                <Rule2> = world;
+                export <Rule3> = foo;
+            `;
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions).toHaveLength(3);
+            expect(result.definitions[0].exported).toBe(true);
+            expect(result.definitions[0].definitionName.name).toBe("Rule1");
+            expect(result.definitions[1].exported).toBeUndefined();
+            expect(result.definitions[1].definitionName.name).toBe("Rule2");
+            expect(result.definitions[2].exported).toBe(true);
+            expect(result.definitions[2].definitionName.name).toBe("Rule3");
+        });
+
+        it("export with imports and rules", () => {
+            const grammar = `
+                import { BaseRule } from "base.agr";
+                export <Start> = <BaseRule> world;
+            `;
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.imports).toHaveLength(1);
+            expect(result.definitions).toHaveLength(1);
+            expect(result.definitions[0].exported).toBe(true);
+        });
+
+        it("preserves comment between export keyword and rule name", () => {
+            const grammar = "export /* after-export */ <Rule1> = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions[0].exported).toBe(true);
+            expect(result.definitions[0].afterExportComments).toEqual([
+                { style: "block", text: " after-export " },
+            ]);
+        });
+
+        it("preserves leading comment before export keyword", () => {
+            const grammar =
+                "<Rule0> = world;\n// leading\nexport <Rule1> = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions[1].exported).toBe(true);
+            expect(result.definitions[1].leadingComments).toEqual([
+                { style: "line", text: " leading" },
+            ]);
+        });
+
+        it("exported rule with spacing annotation", () => {
+            const grammar = "export <Rule1> [spacing=required] = hello;";
+            const result = parseGrammarRules("test.agr", grammar, false);
+
+            expect(result.definitions[0].exported).toBe(true);
+            expect(result.definitions[0].spacingMode).toBe("required");
+        });
+
+        it("throws when export is not followed by rule definition", () => {
+            expect(() =>
+                parseGrammarRules("test.agr", "export hello;", false),
+            ).toThrow();
         });
     });
 

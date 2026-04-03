@@ -1,0 +1,26 @@
+{
+  "name": "selectSearchResult",
+  "description": "Select a specific search result from the search results page",
+  "version": 1,
+  "parameters": {
+    "position": {
+      "type": "number",
+      "required": true,
+      "description": "The position of the result to select (1-based)"
+    },
+    "productName": {
+      "type": "string",
+      "required": false,
+      "description": "Optional name to match against result titles"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const result = await browser.extractComponent<{ name: string; price?: string; detailsLinkSelector: string }>(\n        {\n            typeName: 'ProductTile',\n            schema: '{ name: string; price?: string; detailsLinkSelector: string; }'\n        },\n        params.productName || ('result number ' + params.position)\n    );\n    if (!result || !result.detailsLinkSelector) {\n        throw new Error('Could not find search result at position ' + params.position);\n    }\n    await browser.click(result.detailsLinkSelector);\n    await browser.awaitPageLoad();\n    return { success: true, message: 'Selected: ' + (result.name || 'result ' + params.position) };\n}",
+  "grammarPatterns": [
+    "select result $(position:number)",
+    "click on result $(position:number)",
+    "select $(productName:wildcard) from results",
+    "open result $(position:number)"
+  ],
+  "scope": { "type": "global" },
+  "source": { "type": "manual", "timestamp": "2026-03-15T00:00:00.000Z" }
+}

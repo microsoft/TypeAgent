@@ -32,9 +32,13 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -62,9 +66,13 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -92,9 +100,13 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -128,9 +140,13 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -164,9 +180,13 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -209,10 +229,18 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            track: { type: "variable", name: "track" },
-                            artist: { type: "variable", name: "artist" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                            {
+                                type: "property",
+                                key: "artist",
+                                value: { type: "variable", name: "artist" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -252,10 +280,18 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            track: { type: "variable", name: "track" },
-                            artist: { type: "variable", name: "artist" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                            {
+                                type: "property",
+                                key: "artist",
+                                value: { type: "variable", name: "artist" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -297,10 +333,18 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            track: { type: "variable", name: "track" },
-                            artist: { type: "variable", name: "artist" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                            {
+                                type: "property",
+                                key: "artist",
+                                value: { type: "variable", name: "artist" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -348,11 +392,23 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            item: { type: "variable", name: "item" },
-                            source: { type: "variable", name: "source" },
-                            dest: { type: "variable", name: "dest" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "item",
+                                value: { type: "variable", name: "item" },
+                            },
+                            {
+                                type: "property",
+                                key: "source",
+                                value: { type: "variable", name: "source" },
+                            },
+                            {
+                                type: "property",
+                                key: "dest",
+                                value: { type: "variable", name: "dest" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -392,9 +448,13 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -427,7 +487,13 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { item: { type: "variable", name: "item" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "item",
+                                value: { type: "variable", name: "item" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -463,7 +529,13 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { query: { type: "variable", name: "query" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "query",
+                                value: { type: "variable", name: "query" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -521,12 +593,28 @@ describe("Wildcard Length Variations - NFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            file: { type: "variable", name: "file" },
-                            source: { type: "variable", name: "source" },
-                            dest: { type: "variable", name: "dest" },
-                            method: { type: "variable", name: "method" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "file",
+                                value: { type: "variable", name: "file" },
+                            },
+                            {
+                                type: "property",
+                                key: "source",
+                                value: { type: "variable", name: "source" },
+                            },
+                            {
+                                type: "property",
+                                key: "dest",
+                                value: { type: "variable", name: "dest" },
+                            },
+                            {
+                                type: "property",
+                                key: "method",
+                                value: { type: "variable", name: "method" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -573,9 +661,13 @@ describe("Wildcard Length Variations - DFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -604,9 +696,13 @@ describe("Wildcard Length Variations - DFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -635,9 +731,13 @@ describe("Wildcard Length Variations - DFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -671,9 +771,13 @@ describe("Wildcard Length Variations - DFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            location: { type: "variable", name: "location" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "location",
+                                value: { type: "variable", name: "location" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -717,10 +821,18 @@ describe("Wildcard Length Variations - DFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            track: { type: "variable", name: "track" },
-                            artist: { type: "variable", name: "artist" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "track",
+                                value: { type: "variable", name: "track" },
+                            },
+                            {
+                                type: "property",
+                                key: "artist",
+                                value: { type: "variable", name: "artist" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -769,11 +881,23 @@ describe("Wildcard Length Variations - DFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            item: { type: "variable", name: "item" },
-                            source: { type: "variable", name: "source" },
-                            dest: { type: "variable", name: "dest" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "item",
+                                value: { type: "variable", name: "item" },
+                            },
+                            {
+                                type: "property",
+                                key: "source",
+                                value: { type: "variable", name: "source" },
+                            },
+                            {
+                                type: "property",
+                                key: "dest",
+                                value: { type: "variable", name: "dest" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -814,7 +938,13 @@ describe("Wildcard Length Variations - DFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { query: { type: "variable", name: "query" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "query",
+                                value: { type: "variable", name: "query" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -873,12 +1003,28 @@ describe("Wildcard Length Variations - DFA", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            file: { type: "variable", name: "file" },
-                            source: { type: "variable", name: "source" },
-                            dest: { type: "variable", name: "dest" },
-                            method: { type: "variable", name: "method" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "file",
+                                value: { type: "variable", name: "file" },
+                            },
+                            {
+                                type: "property",
+                                key: "source",
+                                value: { type: "variable", name: "source" },
+                            },
+                            {
+                                type: "property",
+                                key: "dest",
+                                value: { type: "variable", name: "dest" },
+                            },
+                            {
+                                type: "property",
+                                key: "method",
+                                value: { type: "variable", name: "method" },
+                            },
+                        ],
                     },
                 },
             ],

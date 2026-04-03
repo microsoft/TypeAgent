@@ -14,6 +14,7 @@ import {
 import {
     isWebAgentMessageFromDispatcher,
     isBuiltInWebAgentRpcResponse,
+    isWebFlowRefreshMessage,
     WebAgentRegisterMessage,
     WebAgentRpcMessage,
 } from "../common/webAgentMessageTypes.mjs";
@@ -118,6 +119,12 @@ function ensureDynamicTypeAgentManager(): DynamicTypeAgentManager {
                 return;
             }
 
+            // WebFlow refresh notifications are handled by
+            // WebFlowAgent's window message listener
+            if (isWebFlowRefreshMessage(data)) {
+                return;
+            }
+
             switch (data.method) {
                 case "webAgent/register":
                     if (data.params !== undefined) {
@@ -155,11 +162,19 @@ actualGlobal.registerTypeAgent = async (
     await manager.addTypeAgent(name, manifest, agent);
 };
 
-// Initialize WebAgentLoader for URL-based WebAgent activation (crossword, commerce, etc.)
+// Initialize WebAgentLoader for URL-based WebAgent activation
+const webAgentMainLoadTime = performance.now();
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
+        const domReady = performance.now();
+        console.log(
+            `[webTypeAgentMain] DOMContentLoaded after ${(domReady - webAgentMainLoadTime).toFixed(0)}ms`,
+        );
         initializeWebAgentLoader();
     });
 } else {
+    console.log(
+        "[webTypeAgentMain] DOM already ready, initializing immediately",
+    );
     initializeWebAgentLoader();
 }

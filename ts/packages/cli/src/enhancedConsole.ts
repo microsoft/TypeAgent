@@ -17,8 +17,8 @@ import {
     DisplayAppendMode,
     DisplayContent,
     MessageContent,
-    getContentForType,
 } from "@typeagent/agent-sdk";
+import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
 import type {
     RequestId,
     ClientIO,
@@ -35,12 +35,150 @@ import readline from "readline";
 import { convert } from "html-to-text";
 import { marked } from "marked";
 import { markedTerminal } from "marked-terminal";
+import {
+    isSlashCommand,
+    handleSlashCommand,
+    getVerboseIndicator,
+} from "./slashCommands.js";
+import {
+    setSpinnerAccessor,
+    getDebugPanel,
+    PromptRenderer,
+} from "./debugInterceptor.js";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
 
+// Wire up the debug interceptor's spinner access
+setSpinnerAccessor(() => currentSpinner);
+
 // Pending choice promise — main loop awaits this before showing next prompt
 let pendingChoicePromise: Promise<void> | null = null;
+
+// Active custom prompt renderer (set by questionWithCompletion)
+let activePromptRenderer: PromptRenderer | null = null;
+
+/**
+ * Manages an ANSI scroll region so the prompt is anchored to the
+ * bottom of the terminal.  Content written via writeContent() scrolls
+ * naturally in the upper region; the prompt is redrawn in-place in the
+ * fixed lower region.
+ */
+class TerminalLayout {
+    private promptRows = 0;
+    private active = false;
+    private resizeHandler: (() => void) | undefined;
+
+    /** Activate the scroll region, reserving `rows` at the bottom. */
+    setup(rows: number) {
+        this.promptRows = rows;
+        this.active = true;
+        // Push existing content upward so the fixed prompt region at
+        // the bottom doesn't overwrite the last lines of output.
+        // When the cursor is near the bottom of the terminal, these
+        // newlines force the terminal to scroll, creating blank space
+        // for the prompt area.
+        process.stdout.write("\n".repeat(this.promptRows));
+        const height = process.stdout.rows || 24;
+        const scrollHeight = Math.max(1, height - this.promptRows);
+        process.stdout.write(`\x1b[${scrollHeight};1H`);
+        this.applyScrollRegion();
+        // Listen for terminal resize
+        this.resizeHandler = () => {
+            if (this.active) {
+                this.applyScrollRegion();
+            }
+        };
+        process.stdout.on("resize", this.resizeHandler);
+    }
+
+    /** Update the number of reserved prompt rows (e.g. when input wraps). */
+    setPromptRows(rows: number) {
+        if (rows !== this.promptRows) {
+            this.promptRows = rows;
+            if (this.active) this.applyScrollRegion();
+        }
+    }
+
+    /** Write content into the scroll region (appears above the prompt). */
+    writeContent(text: string) {
+        if (!this.active) {
+            process.stdout.write(text);
+            return;
+        }
+        const height = process.stdout.rows || 24;
+        const scrollBottom = height - this.promptRows;
+        // Save cursor, move to bottom of scroll region, write, restore
+        process.stdout.write(
+            "\x1b[s" + `\x1b[${scrollBottom};1H` + "\n" + text + "\x1b[u",
+        );
+    }
+
+    /** Draw content in the fixed bottom region at a given row offset (0-based from prompt start). */
+    drawFixed(row: number, text: string) {
+        if (!this.active) return;
+        const height = process.stdout.rows || 24;
+        const promptStart = height - this.promptRows + 1;
+        process.stdout.write(`\x1b[${promptStart + row};1H\x1b[2K` + text);
+    }
+
+    /** Clear the entire fixed region. */
+    clearFixed() {
+        if (!this.active) return;
+        const height = process.stdout.rows || 24;
+        const promptStart = height - this.promptRows + 1;
+        for (let r = promptStart; r <= height; r++) {
+            process.stdout.write(`\x1b[${r};1H\x1b[2K`);
+        }
+    }
+
+    /** Move cursor to a specific column on a given row of the fixed region. */
+    moveCursorToFixed(row: number, col: number) {
+        if (!this.active) return;
+        const height = process.stdout.rows || 24;
+        const promptStart = height - this.promptRows + 1;
+        process.stdout.write(`\x1b[${promptStart + row};${col}H`);
+    }
+
+    /** Tear down the scroll region and restore normal terminal behavior. */
+    cleanup() {
+        if (!this.active) return;
+        this.active = false;
+        if (this.resizeHandler) {
+            process.stdout.removeListener("resize", this.resizeHandler);
+            this.resizeHandler = undefined;
+        }
+        // Reset scroll region to full terminal first
+        process.stdout.write("\x1b[r");
+        // Move to the row just after the scroll region ended and clear
+        // everything from there to the bottom of the screen. This wipes
+        // the old fixed region content (prompt/rule/hint).
+        const height = process.stdout.rows || 24;
+        const scrollBottom = Math.max(1, height - this.promptRows);
+        process.stdout.write(`\x1b[${scrollBottom};1H`);
+        // Emit a newline to advance past the last content line, then
+        // clear from cursor to end of screen to remove all stale content.
+        process.stdout.write("\n\x1b[J");
+    }
+
+    get isActive() {
+        return this.active;
+    }
+
+    private applyScrollRegion() {
+        const height = process.stdout.rows || 24;
+        const scrollHeight = Math.max(1, height - this.promptRows);
+        process.stdout.write(`\x1b[1;${scrollHeight}r`);
+    }
+}
+
+// Shared terminal layout instance — activated when questionWithCompletion is running
+let terminalLayout: TerminalLayout | null = null;
+
+// Track the active request for cancellation support
+let currentRequestId: string | undefined;
+let isProcessing = false;
+let lastCtrlCTime = 0;
 
 // Grammar log file path
 const grammarLogPath = path.join(
@@ -268,8 +406,43 @@ export function createEnhancedClientIO(
             if (appendMode === "inline") {
                 currentSpinner.appendStream(displayText);
             } else {
+                // Flush any inline stream content before writing block content
+                currentSpinner.flushStream();
                 currentSpinner.writeAbove(displayText);
             }
+        } else if (terminalLayout?.isActive && activePromptRenderer) {
+            // Scroll region is active — write content into the scroll region.
+            // The prompt stays anchored at the bottom automatically.
+            if (appendMode !== "inline") {
+                if (lastAppendMode === "inline") {
+                    terminalLayout.writeContent("");
+                }
+                terminalLayout.writeContent(displayText);
+            } else {
+                terminalLayout.writeContent(displayText);
+            }
+            activePromptRenderer.redraw();
+        } else if (activePromptRenderer) {
+            // Fallback: scroll region not active but prompt renderer is.
+            const rows = activePromptRenderer.rows();
+            for (let i = 0; i < rows; i++) {
+                process.stdout.write("\x1b[1A\x1b[2K");
+            }
+            if (appendMode !== "inline") {
+                if (lastAppendMode === "inline") {
+                    process.stdout.write("\n");
+                }
+                process.stdout.write(displayText);
+                process.stdout.write("\n");
+            } else {
+                process.stdout.write(displayText);
+            }
+            const dp = getDebugPanel();
+            if (dp && dp.lineCount > 0) {
+                dp.renderStaticSummary();
+            }
+            activePromptRenderer.redraw();
+            process.stdout.write("\x1b[J");
         } else if (rl) {
             // Readline is active - write above the prompt
             // Clear current line, write content, then let readline redraw prompt
@@ -291,6 +464,9 @@ export function createEnhancedClientIO(
                 if (lastAppendMode === "inline") {
                     process.stdout.write("\n");
                 }
+                // Ensure content starts on a fresh line (cursor may be
+                // mid-line after a spinner was cleared without a newline)
+                process.stdout.write("\r\x1b[2K");
                 process.stdout.write(displayText);
                 process.stdout.write("\n");
             } else {
@@ -366,8 +542,8 @@ export function createEnhancedClientIO(
         },
 
         // Display
-        setUserRequest() {
-            // Ignored
+        setUserRequest(requestId: RequestId) {
+            currentRequestId = requestId.requestId;
         },
         setDisplayInfo() {
             // Ignored
@@ -814,6 +990,7 @@ function formatDisplayContent(content: string | DisplayContent): string {
 async function questionWithCompletion(
     message: string,
     getCompletions: (input: string) => Promise<any>,
+    history: string[] = [],
 ): Promise<string> {
     return new Promise<string>((resolve) => {
         let input = "";
@@ -821,6 +998,8 @@ async function questionWithCompletion(
         let allCompletions: string[] = []; // All available completions
         let filteredCompletions: string[] = []; // Filtered based on user typing
         let completionIndex = 0;
+        let historyIndex = history.length; // Start past the end (current empty input)
+        let savedInput = ""; // Saves current input when navigating history
         let filterStartIndex = -1; // Where filtering begins
         let completionPrefix = ""; // Fixed prefix before completions
         let updatingCompletions = false;
@@ -861,30 +1040,51 @@ async function questionWithCompletion(
             }
         };
 
-        // Render the prompt and input with inline gray suggestion
+        let prevInputRows = 1;
+        const layout = new TerminalLayout();
+        terminalLayout = layout;
+
+        // Fixed region layout:
+        //   row 0: separator (─)
+        //   row 1..inputRows: prompt + input (may wrap)
+        //   row inputRows+1: bottom rule (─)
+        //   row inputRows+2: hint line
+        const EXTRA_ROWS = 3; // separator + bottom rule + hint
+
         const render = () => {
-            // Build entire output as a single string to prevent cursor flashing
             const promptText = chalk.cyanBright(message);
+            const width = process.stdout.columns || 80;
 
-            // Calculate cursor column based on cursorPos within input
-            const cursorCol =
-                getDisplayWidth(message) +
-                getDisplayWidth(input.substring(0, cursorPos)) +
-                1;
+            const inputLineWidth =
+                getDisplayWidth(message) + getDisplayWidth(input);
+            const inputRows = Math.max(1, Math.ceil(inputLineWidth / width));
+            const totalRows = inputRows + EXTRA_ROWS;
 
-            // Don't clear whole line first - overwrite in place, then clear to end
-            // This avoids the brief "blank line" flash
-            let output = ANSI.hideCursor;
-            output += "\r"; // Move to column 0 (carriage return)
-            output += promptText + input;
+            // Update scroll region if prompt height changed
+            layout.setPromptRows(totalRows);
 
-            // Show inline completion if available
+            // drawFixed() clears each line before writing, so a separate
+            // clearFixed() pass is not needed and would cause visible
+            // flicker (blank frame between clear and redraw).  Only clear
+            // stale rows left over when the prompt shrinks (e.g. input
+            // un-wraps to fewer lines).
+            const prevTotal = prevInputRows + EXTRA_ROWS;
+            if (totalRows < prevTotal) {
+                for (let r = totalRows; r < prevTotal; r++) {
+                    layout.drawFixed(r, "");
+                }
+            }
+
+            // Row 0: separator
+            layout.drawFixed(0, ANSI.dim + "─".repeat(width) + ANSI.reset);
+
+            // Row 1: prompt + input + ghost completion text
+            let inputLine = promptText + input;
             if (
                 filteredCompletions.length > 0 &&
                 completionIndex < filteredCompletions.length
             ) {
                 const completion = filteredCompletions[completionIndex];
-                // Build full completion from prefix + completion text
                 const fullCompletion =
                     completionPrefix +
                     (filterStartIndex > completionPrefix.length ? " " : "") +
@@ -892,19 +1092,37 @@ async function questionWithCompletion(
                 if (fullCompletion.length > input.length) {
                     const suggestion = fullCompletion.slice(input.length);
                     const counter = ` ${completionIndex + 1}/${filteredCompletions.length}`;
-                    output += chalk.dim(suggestion + counter);
+                    inputLine += chalk.dim(suggestion + counter);
                 }
             }
+            layout.drawFixed(1, inputLine);
 
-            // Clear from cursor to end of line (removes leftover chars from previous longer content)
-            output += "\x1b[K";
+            // Bottom rule
+            layout.drawFixed(
+                inputRows + 1,
+                ANSI.dim + "─".repeat(width) + ANSI.reset,
+            );
 
-            // Position cursor at end of input using absolute positioning
-            output += `\x1b[${cursorCol}G`;
-            output += ANSI.showCursor;
+            // Hint line
+            let hint: string;
+            if (filteredCompletions.length > 0) {
+                hint = "↑↓ completions · tab accept · esc clear";
+            } else if (input.length > 0) {
+                hint = "↑↓ history · esc clear";
+            } else {
+                hint = "↑↓ history · /help commands";
+            }
+            layout.drawFixed(inputRows + 2, "  " + chalk.dim(hint));
 
-            // Write everything in one call
-            stdout.write(output);
+            // Position cursor in the input line
+            const cursorAbsCol =
+                getDisplayWidth(message) +
+                getDisplayWidth(input.substring(0, cursorPos));
+            const cursorRow = Math.floor(cursorAbsCol / width);
+            layout.moveCursorToFixed(1 + cursorRow, (cursorAbsCol % width) + 1);
+            stdout.write(ANSI.showCursor);
+
+            prevInputRows = inputRows;
         };
 
         // Fetch completions for current input
@@ -938,30 +1156,63 @@ async function questionWithCompletion(
             render();
         };
 
-        // Initial render
+        // Activate the scroll region and draw initial prompt
+        layout.setup(prevInputRows + EXTRA_ROWS);
         render();
+
+        const panel = getDebugPanel();
+        const promptRenderer: PromptRenderer = {
+            rows: () => prevInputRows + EXTRA_ROWS,
+            redraw: () => render(),
+        };
+        panel?.setPromptRenderer(promptRenderer);
+        activePromptRenderer = promptRenderer;
 
         // Handle keypresses
         const onData = async (chunk: Buffer) => {
             const data = chunk.toString();
 
+            // Auto-dismiss framed debug panel on any key except Ctrl+D
+            const dpForDismiss = getDebugPanel();
+            if (dpForDismiss?.isPanelVisible && data.charCodeAt(0) !== 4) {
+                dpForDismiss.dismissPanel();
+            }
+
             // Handle multi-byte sequences
             if (data.startsWith("\x1b[")) {
                 // Arrow keys
                 if (data === "\x1b[A") {
-                    // Arrow Up - cycle to previous completion
                     if (filteredCompletions.length > 0) {
+                        // Cycle to previous completion
                         completionIndex =
                             (completionIndex - 1 + filteredCompletions.length) %
                             filteredCompletions.length;
                         render();
+                    } else if (history.length > 0 && historyIndex > 0) {
+                        // Navigate to previous history entry
+                        if (historyIndex === history.length) {
+                            savedInput = input;
+                        }
+                        historyIndex--;
+                        input = history[historyIndex];
+                        cursorPos = input.length;
+                        render();
                     }
                     return;
                 } else if (data === "\x1b[B") {
-                    // Arrow Down - cycle to next completion
                     if (filteredCompletions.length > 0) {
+                        // Cycle to next completion
                         completionIndex =
                             (completionIndex + 1) % filteredCompletions.length;
+                        render();
+                    } else if (historyIndex < history.length) {
+                        // Navigate to next history entry
+                        historyIndex++;
+                        input =
+                            historyIndex === history.length
+                                ? savedInput
+                                : history[historyIndex];
+                        cursorPos = input.length;
                         render();
                     }
                     return;
@@ -979,22 +1230,59 @@ async function questionWithCompletion(
                         render();
                     }
                     return;
-                } else if (data === "\x1b") {
-                    // Esc - clear completions
+                }
+                return;
+            }
+
+            if (data === "\x1b") {
+                if (filteredCompletions.length > 0) {
+                    // Esc with completions showing — clear completions
                     allCompletions = [];
                     filteredCompletions = [];
                     filterStartIndex = -1;
-                    render();
-                    return;
+                } else {
+                    // Esc with no completions — clear input
+                    input = "";
+                    cursorPos = 0;
+                    historyIndex = history.length;
                 }
+                render();
+                return;
             }
 
             const code = data.charCodeAt(0);
 
             if (code === 3) {
-                // Ctrl+C
+                // Ctrl+C — clear bottom rule + hint before exit
+                stdout.write("\n\n\x1b[K\n");
                 cleanup();
                 process.exit(0);
+            } else if (code === 4) {
+                // Ctrl+D — cycle debug panel: off → compact → full → off
+                const dp = getDebugPanel();
+                if (dp && dp.lineCount > 0) {
+                    if (!dp.isPanelVisible) {
+                        // Off → compact
+                        dp.toggleAtPrompt();
+                        const panelLines = dp.renderFramedPanel();
+                        for (const line of panelLines) {
+                            layout.writeContent(line);
+                        }
+                    } else if (!dp.isPanelFull) {
+                        // Compact → full
+                        dp.toggleFullMode();
+                        const panelLines = dp.renderFramedPanel(true);
+                        for (const line of panelLines) {
+                            layout.writeContent(line);
+                        }
+                    } else {
+                        // Full → off
+                        dp.toggleFullMode();
+                        dp.toggleAtPrompt();
+                    }
+                    render();
+                }
+                return;
             } else if (code === 13) {
                 // Enter - accept completion (if any) AND submit
                 if (
@@ -1009,12 +1297,20 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                 }
-                // Windows Terminal ConPTY echoes in raw mode
-                // Move cursor up one line, clear it, and write clean output
-                stdout.write("\x1b[1A"); // Move cursor up 1 line
-                stdout.write("\r" + ANSI.clearLine); // Clear the line
-                stdout.write(chalk.cyanBright(message) + input + "\n");
+                // Tear down the scroll region and write the finalized input
+                // into the normal terminal flow so it appears in scrollback.
                 cleanup();
+                const width = process.stdout.columns || 80;
+                const inputDisplay = `❯ ${input}`;
+                const visibleLen = getDisplayWidth(inputDisplay);
+                const pad = Math.max(0, width - visibleLen);
+                stdout.write(
+                    "\n" +
+                        chalk.bgGray.white.bold(
+                            inputDisplay + " ".repeat(pad),
+                        ) +
+                        "\n\n",
+                );
                 resolve(input);
             } else if (code === 9) {
                 // Tab - accept current completion and continue
@@ -1083,6 +1379,10 @@ async function questionWithCompletion(
         };
 
         const cleanup = () => {
+            layout.cleanup();
+            terminalLayout = null;
+            panel?.setPromptRenderer(null);
+            activePromptRenderer = null;
             stdin.removeListener("data", onData);
             if (stdin.isTTY) {
                 stdin.setRawMode(wasRaw || false);
@@ -1118,13 +1418,29 @@ async function question(
 }
 
 /**
- * Initialize enhanced console
- * Note: Raw mode is intentionally NOT used to avoid conflicts with readline input.
- * Ctrl+C is handled by the default SIGINT handler.
+ * Initialize enhanced console with cancellation support.
+ * During command execution, Escape and Ctrl+C trigger command cancellation.
+ * Double Ctrl+C within 1 second exits the process.
  */
-function initializeEnhancedConsole(_rl?: readline.promises.Interface) {
-    // Set up SIGINT handler for spinner cleanup
+function initializeEnhancedConsole(
+    _rl?: readline.promises.Interface,
+    dispatcherRef?: { current?: Dispatcher },
+) {
     process.on("SIGINT", () => {
+        if (isProcessing && dispatcherRef?.current && currentRequestId) {
+            const now = Date.now();
+            if (now - lastCtrlCTime < 1000) {
+                // Double Ctrl+C — force exit
+                if (currentSpinner) {
+                    currentSpinner.stop();
+                    currentSpinner = null;
+                }
+                process.exit(0);
+            }
+            lastCtrlCTime = now;
+            dispatcherRef.current.cancelCommand(currentRequestId);
+            return;
+        }
         if (currentSpinner) {
             currentSpinner.stop();
             currentSpinner = null;
@@ -1134,6 +1450,82 @@ function initializeEnhancedConsole(_rl?: readline.promises.Interface) {
 }
 
 let usingEnhancedConsole = false;
+
+// ── Startup Banner ──────────────────────────────────────────────────────
+
+// Logo mark — hexagonal badge with floating "T" (4 lines tall, 12 chars wide)
+const LOGO_LINES = [
+    "  ╱▔▔▔▔▔╲   ",
+    " ╱ ▀▀█▀▀ ╲  ",
+    " ╲   █   ╱  ",
+    "  ╲▁▁▁▁▁╱   ",
+];
+const LOGO_WIDTH = 12;
+
+function renderStartupBanner(): void {
+    const width = process.stdout.columns || 80;
+    const innerWidth = width - 4; // "│  " + "  │"
+    const version = "0.0.1";
+
+    // Content lines to render alongside the logo
+    const contentLines = [
+        chalk.cyan.bold("TypeAgent") + chalk.dim(` v${version}`),
+        chalk.dim("Your personal AI assistant"),
+        "",
+        chalk.dim("Type a request or use /help to see commands."),
+    ];
+
+    const hintLine =
+        "  " +
+        chalk.dim(
+            "/help commands · /verbose debug · ctrl+d debug · ctrl+c exit",
+        );
+
+    // Build the box
+    const top = chalk.dim("╭" + "─".repeat(width - 2) + "╮");
+    const bottom = chalk.dim("╰" + "─".repeat(width - 2) + "╯");
+
+    const lines: string[] = [];
+    lines.push(top);
+    // Empty line before logo
+    lines.push(chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│"));
+
+    // Render logo + content side by side
+    const totalRows = Math.max(LOGO_LINES.length, contentLines.length);
+    for (let i = 0; i < totalRows; i++) {
+        const logo =
+            i < LOGO_LINES.length ? LOGO_LINES[i] : " ".repeat(LOGO_WIDTH);
+        const coloredLogo = chalk.cyan(logo);
+        const content = i < contentLines.length ? contentLines[i] : "";
+        const contentVisible = content.replace(
+            // eslint-disable-next-line no-control-regex
+            /\x1b\[[0-9;]*m/g,
+            "",
+        );
+        const padding = Math.max(
+            0,
+            innerWidth - LOGO_WIDTH - contentVisible.length,
+        );
+        lines.push(
+            chalk.dim("│") +
+                "  " +
+                coloredLogo +
+                content +
+                " ".repeat(padding) +
+                chalk.dim("│"),
+        );
+    }
+
+    // Empty line before close
+    lines.push(chalk.dim("│") + " ".repeat(width - 2) + chalk.dim("│"));
+    lines.push(bottom);
+    lines.push(hintLine);
+    lines.push("");
+
+    for (const line of lines) {
+        process.stdout.write(line + "\n");
+    }
+}
 
 /**
  * Wrapper for using enhanced console ClientIO
@@ -1151,19 +1543,11 @@ export async function withEnhancedConsoleClientIO(
     usingEnhancedConsole = true;
 
     try {
-        initializeEnhancedConsole(rl);
-
-        // Show welcome header
-        const width = process.stdout.columns || 80;
-        console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
-        console.log(
-            chalk.bold(" TypeAgent Interactive Mode ") +
-                chalk.dim("(Enhanced UI)"),
-        );
-        console.log(ANSI.dim + "═".repeat(width) + ANSI.reset);
-        console.log("");
-
         const dispatcherRef: { current?: Dispatcher } = {};
+        initializeEnhancedConsole(rl, dispatcherRef);
+
+        // Show welcome banner
+        renderStartupBanner();
         await callback(
             createEnhancedClientIO(rl, dispatcherRef),
             (d: Dispatcher) => {
@@ -1181,6 +1565,56 @@ export async function withEnhancedConsoleClientIO(
 }
 
 /**
+ * Enable raw mode on stdin during command execution so we can detect
+ * Escape and Ctrl+C for cancellation. Returns a cleanup function.
+ */
+function startExecutionKeyListener(
+    dispatcher: Dispatcher | undefined,
+): () => void {
+    if (!dispatcher || !process.stdin.isTTY) {
+        return () => {};
+    }
+
+    const onData = (data: Buffer | string) => {
+        // stdin encoding may be set to utf8 by questionWithCompletion,
+        // so data can be a string. Use charCodeAt for consistent handling.
+        const code = typeof data === "string" ? data.charCodeAt(0) : data[0];
+        if (data.length === 1 && code === 0x1b && currentRequestId) {
+            // Escape key — cancel current command
+            dispatcher.cancelCommand(currentRequestId);
+        } else if (data.length === 1 && code === 4) {
+            // Ctrl+D — toggle debug panel expand/collapse
+            const panel = getDebugPanel();
+            if (panel && panel.lineCount > 0) {
+                panel.toggle();
+            }
+        } else if (data.length === 1 && code === 3 && currentRequestId) {
+            // Ctrl+C during raw mode — cancel or double-press exit
+            const now = Date.now();
+            if (now - lastCtrlCTime < 1000) {
+                if (currentSpinner) {
+                    currentSpinner.stop();
+                    currentSpinner = null;
+                }
+                process.exit(0);
+            }
+            lastCtrlCTime = now;
+            dispatcher.cancelCommand(currentRequestId);
+        }
+    };
+
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.on("data", onData);
+
+    return () => {
+        process.stdin.removeListener("data", onData);
+        // Don't change raw mode or pause here — let the next input handler
+        // (questionWithCompletion) manage stdin state when it starts.
+    };
+}
+
+/**
  * Enhanced command processor with spinner support and tab completion
  */
 export async function processCommandsEnhanced<T>(
@@ -1189,6 +1623,7 @@ export async function processCommandsEnhanced<T>(
     context: T,
     inputs?: string[],
     getCompletions?: (line: string, context: T) => Promise<any>,
+    dispatcherForCancel?: Dispatcher,
 ) {
     const fs = await import("node:fs");
     let history: string[] = [];
@@ -1199,25 +1634,17 @@ export async function processCommandsEnhanced<T>(
         history = hh.commands;
     }
 
-    // Create completer function for tab completion
-    const completer = getCompletions
-        ? async (line: string): Promise<[string[], string]> => {
-              try {
-                  const completions = await getCompletions(line, context);
-                  return [completions, line];
-              } catch {
-                  return [[], line];
-              }
-          }
-        : undefined;
-
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-        history,
-        terminal: true,
-        completer,
-    });
+    // Only create readline when not using inline completions.
+    // questionWithCompletion manages stdin directly; a readline attached
+    // to the same stdin would consume events and break input.
+    const rl = getCompletions
+        ? undefined
+        : createInterface({
+              input: process.stdin,
+              output: process.stdout,
+              history,
+              terminal: true,
+          });
 
     const promptColor = chalk.cyanBright;
 
@@ -1227,30 +1654,37 @@ export async function processCommandsEnhanced<T>(
                 ? await interactivePrompt(context)
                 : interactivePrompt;
 
-        // Draw separator before prompt
         const width = process.stdout.columns || 80;
-        process.stdout.write(ANSI.dim + "─".repeat(width) + ANSI.reset + "\n");
 
         let request: string;
         if (inputs) {
+            process.stdout.write(
+                ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
+            );
             request = getNextInput(prompt, inputs, promptColor);
         } else if (getCompletions) {
-            // Use inline completion system
+            // Use inline completion system with scroll region anchored prompt
             request = await questionWithCompletion(
                 promptColor(prompt),
                 (line: string) => getCompletions(line, context),
+                history,
             );
         } else {
+            process.stdout.write(
+                ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
+            );
             request = await question(promptColor(prompt), rl);
+            if (request.length) {
+                process.stdout.write(
+                    ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
+                );
+            }
         }
 
         // Skip empty input - just loop back to show prompt again
         if (!request.length) {
             continue;
         }
-
-        // Draw separator after input
-        process.stdout.write(ANSI.dim + "─".repeat(width) + ANSI.reset + "\n");
 
         if (
             request.toLowerCase() === "quit" ||
@@ -1259,11 +1693,52 @@ export async function processCommandsEnhanced<T>(
             break;
         }
 
+        // Handle slash commands before sending to dispatcher
+        if (isSlashCommand(request)) {
+            try {
+                const slashResult = await handleSlashCommand(request, (cmd) =>
+                    processCommand(cmd, context),
+                );
+                if (slashResult.exit) {
+                    break;
+                }
+            } catch (error) {
+                console.log(chalk.red(`Error: ${error}`));
+            }
+            history.push(request);
+            console.log("");
+            continue;
+        }
+
         try {
+            // Reset debug panel for this command
+            const panel = getDebugPanel();
+            panel?.reset();
+
             // Start spinner for processing
             startProcessingSpinner("Processing request...");
+            // Show execution hint below spinner
+            const debugHint = panel ? " · ctrl+d debug" : "";
+            const execHint = chalk.dim(
+                `  esc cancel · ctrl+c cancel (2× exit)${debugHint}`,
+            );
+            process.stdout.write("\n" + execHint + "\x1b[K\x1b[1A\r");
 
-            await processCommand(request, context);
+            isProcessing = true;
+            currentRequestId = undefined;
+            const stopKeyListener =
+                startExecutionKeyListener(dispatcherForCancel);
+            let result: any;
+            try {
+                result = await processCommand(request, context);
+            } finally {
+                stopKeyListener();
+                isProcessing = false;
+            }
+
+            // Stop live panel rendering but keep the buffer for post-command review
+            panel?.stopRendering();
+            process.stdout.write("\n\x1b[K\x1b[1A");
 
             // Wait for any pending choice prompt to complete
             // before showing "Complete" and the next prompt.
@@ -1272,11 +1747,21 @@ export async function processCommandsEnhanced<T>(
                 pendingChoicePromise = null;
             }
 
-            // Stop spinner on success (no-op if choice already cleared it)
-            stopSpinner("success", "Complete");
+            if (result?.cancelled) {
+                stopSpinner("warn", "Cancelled");
+            } else {
+                stopSpinner("success", "Complete");
+            }
+
+            // Show static collapsed debug summary after spinner result
+            if (panel && panel.lineCount > 0) {
+                panel.renderStaticSummary();
+            }
 
             history.push(request);
         } catch (error) {
+            isProcessing = false;
+            getDebugPanel()?.stopRendering();
             stopSpinner("fail", "Error");
             console.log(chalk.red("### ERROR:"));
             console.log(error);
@@ -1287,7 +1772,7 @@ export async function processCommandsEnhanced<T>(
         // save command history
         fs.writeFileSync(
             "command_history.json",
-            JSON.stringify({ commands: (rl as any).history }),
+            JSON.stringify({ commands: history }),
         );
     }
 }
@@ -1319,5 +1804,5 @@ function getNextInput(
  * Returns a clean prompt regardless of status text
  */
 export function getEnhancedConsolePrompt(_text: string): string {
-    return "> ";
+    return `${getVerboseIndicator()}❯ `;
 }
