@@ -93,12 +93,14 @@ internal class MouseSettingsHandler : ICommandHandler
         bool enable = param.Value<bool?>("enable") ?? true;
         int[] mouseParams = new int[3];
         _systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
+        // Set acceleration (third parameter): 1 = enhanced precision on, 0 = off
         mouseParams[2] = enable ? 1 : 0;
         _systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
     private void HandleMouseCursorSpeed(JObject param)
     {
+        // Speed range: 1-20 (default 10)
         int speed = param.Value<int?>("speedLevel") ?? 10;
         speed = Math.Clamp(speed, 1, 20);
         _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);

@@ -248,6 +248,10 @@ internal partial class ThemeCommandHandler : ICommandHandler
 
     #endregion
 
+    /// <summary>
+    /// Handles SetThemeMode command.
+    /// Value can be "light", "dark", "toggle", or a boolean.
+    /// </summary>
     private void HandleSetThemeMode(string value)
     {
         if (value.Equals("toggle", StringComparison.OrdinalIgnoreCase))
@@ -318,6 +322,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
         try
         {
             const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+            // AppsUseLightTheme: 0 = dark, 1 = light
             object value = _registry.GetValue(PersonalizePath, "AppsUseLightTheme");
             return value is int intValue ? intValue == 1 : null;
         }

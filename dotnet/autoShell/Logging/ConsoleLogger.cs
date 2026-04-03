@@ -7,7 +7,7 @@ namespace autoShell.Logging;
 
 /// <summary>
 /// Logger that writes errors and warnings to the console with color formatting,
-/// and debug messages to the diagnostics output.
+/// info messages to the console without formatting, and debug messages to the diagnostics output.
 /// </summary>
 internal class ConsoleLogger : ILogger
 {
@@ -28,6 +28,16 @@ internal class ConsoleLogger : ILogger
         ConsoleColor previousColor = Console.ForegroundColor;
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine("Warning: " + message);
+        Console.ForegroundColor = previousColor;
+    }
+
+    /// <inheritdoc/>
+    public void Info(string message)
+    {
+        System.Diagnostics.Debug.WriteLine(message);
+        ConsoleColor previousColor = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("Info: " + message);
         Console.ForegroundColor = previousColor;
     }
 

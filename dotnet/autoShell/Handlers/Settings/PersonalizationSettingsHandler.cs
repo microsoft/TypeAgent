@@ -83,7 +83,9 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
         const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+        // Set apps theme (AppsUseLightTheme: 0 = dark, 1 = light)
         _registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
+        // Set system theme — taskbar, Start menu, etc.
         _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
         _registry.BroadcastSettingChange("ImmersiveColorSet");
     }

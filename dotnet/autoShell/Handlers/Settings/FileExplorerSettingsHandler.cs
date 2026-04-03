@@ -77,7 +77,9 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     private void HandleShowHiddenAndSystemFiles(JObject param)
     {
         bool enable = param.Value<bool?>("enable") ?? true;
+        // 1 = show hidden files, 2 = don't show hidden files
         _registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
+        // Show protected operating system files
         _registry.SetValue(ExplorerAdvanced, "ShowSuperHidden", enable ? 1 : 0, RegistryValueKind.DWord);
     }
 }

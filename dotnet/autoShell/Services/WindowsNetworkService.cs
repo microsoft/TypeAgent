@@ -224,7 +224,7 @@ internal class WindowsNetworkService : INetworkService
                 return;
             }
 
-            _logger.Debug($"Successfully initiated connection to WiFi network: {ssid}");
+            _logger.Info($"Connecting to WiFi network: {ssid}");
         }
         catch (Exception ex)
         {
@@ -285,7 +285,7 @@ internal class WindowsNetworkService : INetworkService
                 }
                 else
                 {
-                    _logger.Debug($"Successfully disconnected from WiFi on interface: {interfaceInfo.strInterfaceDescription}");
+                    _logger.Info("Disconnected from WiFi");
                 }
             }
         }
@@ -345,6 +345,7 @@ internal class WindowsNetworkService : INetworkService
 
                 _ = WlanScan(clientHandle, ref interfaceInfo.InterfaceGuid, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 
+                // Small delay to allow scan to complete
                 System.Threading.Thread.Sleep(100);
 
                 result = WlanGetAvailableNetworkList(clientHandle, ref interfaceInfo.InterfaceGuid, 0, IntPtr.Zero, out networkList);
@@ -446,9 +447,11 @@ internal class WindowsNetworkService : INetworkService
                 return;
             }
 
+            // currentState: 0 = airplane mode ON (radios off), 1 = airplane mode OFF (radios on)
             bool airplaneModeCurrentlyOn = currentState == 0;
             _logger.Debug($"Current airplane mode state: {(airplaneModeCurrentlyOn ? "on" : "off")}");
 
+            // bEnabled: 0 = turn airplane mode ON (disable radios), 1 = turn airplane mode OFF (enable radios)
             int newState = enable ? 0 : 1;
             hr = radioManager.SetSystemRadioState(newState);
             if (hr < 0)
@@ -500,6 +503,11 @@ internal class WindowsNetworkService : INetworkService
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Uses the registry instead of the IRadioManager COM API because
+    /// IRadioManager controls all radios. For Bluetooth-specific control,
+    /// we'd need IRadioInstanceCollection, but the registry approach is more reliable.
+    /// </remarks>
     public void ToggleBluetooth(bool enable)
     {
         try

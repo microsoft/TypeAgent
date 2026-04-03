@@ -95,6 +95,7 @@ internal class DisplaySettingsHandler : ICommandHandler
 
         if (int.TryParse(sizeStr, out int percentage))
         {
+            // Valid scaling values: 100, 125, 150, 175, 200
             percentage = percentage switch
             {
                 < 113 => 100,

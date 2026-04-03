@@ -324,6 +324,9 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Currently may return ACCESS_DENIED on some configurations. TODO: investigate.
+    /// </remarks>
     public void MoveWindowToDesktop(IntPtr hWnd, string desktopIdentifier)
     {
         if (hWnd == IntPtr.Zero)
@@ -410,17 +413,20 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
         _virtualDesktopManagerInternal.GetDesktops(out IObjectArray desktops);
         desktops.GetAt(index, typeof(IVirtualDesktop).GUID, out object od);
 
-        // BUGBUG: different windows versions use different COM interfaces
+        // BUGBUG: different Windows versions use different COM interfaces for desktop switching.
+        // Windows 11 22H2 (build 22621) and later use the updated "BUGBUG" interface.
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22621))
         {
             _virtualDesktopManagerInternal_BUGBUG.SwitchDesktopWithAnimation((IVirtualDesktop)od);
         }
         else if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
         {
+            // Windows 11 21H2 (build 22000)
             _virtualDesktopManagerInternal.SwitchDesktopWithAnimation((IVirtualDesktop)od);
         }
         else
         {
+            // Windows 10 — use the original interface
             _virtualDesktopManagerInternal.SwitchDesktopAndMoveForegroundView((IVirtualDesktop)od);
         }
 

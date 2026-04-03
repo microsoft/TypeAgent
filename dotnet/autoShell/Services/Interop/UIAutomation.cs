@@ -208,7 +208,7 @@ internal sealed class UIAutomation
             {
                 logger.Debug("Found Apply button, clicking...");
                 ClickElement(applyButton, logger);
-                logger.Debug($"Text size set to {percentage}%");
+                logger.Info($"Text size set to {percentage}%");
             }
             else
             {

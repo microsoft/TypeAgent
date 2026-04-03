@@ -6,7 +6,7 @@ using System;
 namespace autoShell.Logging;
 
 /// <summary>
-/// Provides logging methods for error, warning, and debug messages.
+/// Provides logging methods for error, warning, info, and debug messages.
 /// </summary>
 internal interface ILogger
 {
@@ -21,6 +21,12 @@ internal interface ILogger
     /// </summary>
     /// <param name="message">The warning message.</param>
     void Warning(string message);
+
+    /// <summary>
+    /// Logs an informational message visible to the user.
+    /// </summary>
+    /// <param name="message">The info message.</param>
+    void Info(string message);
 
     /// <summary>
     /// Logs a debug-level message.

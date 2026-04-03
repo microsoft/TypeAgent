@@ -111,6 +111,7 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     private void HandleTaskbarAlignment(JObject param)
     {
         string alignment = param.Value<string>("alignment") ?? "center";
+        // 0 = left, 1 = center
         bool useCenter = alignment.Equals("center", StringComparison.OrdinalIgnoreCase);
         _registry.SetValue(ExplorerAdvanced, "TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
     }
