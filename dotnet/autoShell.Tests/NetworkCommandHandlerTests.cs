@@ -22,6 +22,9 @@ public class NetworkCommandHandlerTests
 
     // --- ConnectWifi ---
 
+    /// <summary>
+    /// Verifies that ConnectWifi with an SSID and password calls the network service with both values.
+    /// </summary>
     [Fact]
     public void ConnectWifi_WithSsidAndPassword_CallsService()
     {
@@ -31,6 +34,9 @@ public class NetworkCommandHandlerTests
         _networkMock.Verify(n => n.ConnectToWifi("TestNetwork", "pass123"), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that ConnectWifi without a password calls the service with an empty password string.
+    /// </summary>
     [Fact]
     public void ConnectWifi_WithoutPassword_CallsServiceWithEmptyPassword()
     {
@@ -42,6 +48,9 @@ public class NetworkCommandHandlerTests
 
     // --- DisconnectWifi ---
 
+    /// <summary>
+    /// Verifies that DisconnectWifi invokes the network service disconnect method.
+    /// </summary>
     [Fact]
     public void DisconnectWifi_CallsService()
     {
@@ -53,6 +62,9 @@ public class NetworkCommandHandlerTests
 
     // --- ListWifiNetworks ---
 
+    /// <summary>
+    /// Verifies that ListWifiNetworks calls the network service and retrieves the result.
+    /// </summary>
     [Fact]
     public void ListWifiNetworks_CallsServiceAndWritesResult()
     {
@@ -66,6 +78,9 @@ public class NetworkCommandHandlerTests
 
     // --- ToggleAirplaneMode ---
 
+    /// <summary>
+    /// Verifies that valid boolean values are forwarded to SetAirplaneMode.
+    /// </summary>
     [Theory]
     [InlineData("true", true)]
     [InlineData("false", false)]
@@ -79,6 +94,9 @@ public class NetworkCommandHandlerTests
 
     // --- BluetoothToggle ---
 
+    /// <summary>
+    /// Verifies that the unimplemented BluetoothToggle command does not call any service methods.
+    /// </summary>
     [Fact]
     public void BluetoothToggle_NotImplemented_DoesNotCallService()
     {
@@ -89,6 +107,9 @@ public class NetworkCommandHandlerTests
 
     // --- EnableWifi ---
 
+    /// <summary>
+    /// Verifies that the unimplemented EnableWifi command does not call any service methods.
+    /// </summary>
     [Fact]
     public void EnableWifi_NotImplemented_DoesNotCallService()
     {
@@ -99,6 +120,9 @@ public class NetworkCommandHandlerTests
 
     // --- EnableMeteredConnections ---
 
+    /// <summary>
+    /// Verifies that the unimplemented EnableMeteredConnections command does not call any service methods.
+    /// </summary>
     [Fact]
     public void EnableMeteredConnections_NotImplemented_DoesNotCallService()
     {

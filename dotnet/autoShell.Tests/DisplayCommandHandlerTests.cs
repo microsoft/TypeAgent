@@ -20,6 +20,9 @@ public class DisplayCommandHandlerTests
         _handler = new DisplayCommandHandler(_displayMock.Object, _loggerMock.Object);
     }
 
+    /// <summary>
+    /// Verifies that the handler exposes exactly the ListResolutions, SetScreenResolution, and SetTextSize commands.
+    /// </summary>
     [Fact]
     public void SupportedCommands_ContainsExpectedCommands()
     {
@@ -32,6 +35,9 @@ public class DisplayCommandHandlerTests
 
     // --- ListResolutions ---
 
+    /// <summary>
+    /// Verifies that the ListResolutions command calls the display service to list available resolutions.
+    /// </summary>
     [Fact]
     public void ListResolutions_CallsService()
     {
@@ -44,6 +50,9 @@ public class DisplayCommandHandlerTests
 
     // --- SetScreenResolution ---
 
+    /// <summary>
+    /// Verifies that a "WIDTHxHEIGHT" string is parsed and forwarded to the display service.
+    /// </summary>
     [Fact]
     public void SetScreenResolution_StringFormat_CallsServiceWithParsedValues()
     {
@@ -54,6 +63,9 @@ public class DisplayCommandHandlerTests
         _displayMock.Verify(d => d.SetResolution(1920, 1080, null), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that a "WIDTHxHEIGHT@RATE" string includes the refresh rate in the service call.
+    /// </summary>
     [Fact]
     public void SetScreenResolution_WithRefreshRate_CallsServiceWithRefresh()
     {
@@ -64,6 +76,9 @@ public class DisplayCommandHandlerTests
         _displayMock.Verify(d => d.SetResolution(1920, 1080, (uint)60), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that a JSON object with width and height properties is forwarded to the display service.
+    /// </summary>
     [Fact]
     public void SetScreenResolution_ObjectFormat_CallsServiceWithValues()
     {
@@ -75,6 +90,9 @@ public class DisplayCommandHandlerTests
         _displayMock.Verify(d => d.SetResolution(2560, 1440, null), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that an invalid resolution string does not invoke the display service.
+    /// </summary>
     [Fact]
     public void SetScreenResolution_InvalidFormat_DoesNotCallService()
     {
@@ -85,6 +103,9 @@ public class DisplayCommandHandlerTests
 
     // --- SetTextSize ---
 
+    /// <summary>
+    /// Verifies that a valid integer text size percentage is forwarded to the display service.
+    /// </summary>
     [Fact]
     public void SetTextSize_ValidPercent_CallsService()
     {
@@ -93,6 +114,9 @@ public class DisplayCommandHandlerTests
         _displayMock.Verify(d => d.SetTextSize(150), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that non-numeric text size input does not invoke the display service.
+    /// </summary>
     [Fact]
     public void SetTextSize_InvalidInput_DoesNotCallService()
     {
@@ -103,12 +127,29 @@ public class DisplayCommandHandlerTests
 
     // --- Unknown key ---
 
+    /// <summary>
+    /// Verifies that an unknown command key does not invoke any display service methods.
+    /// </summary>
     [Fact]
     public void Handle_UnknownKey_DoesNothing()
     {
         Handle("UnknownDisplayCmd", "value");
 
         _displayMock.VerifyNoOtherCalls();
+    }
+
+    /// <summary>
+    /// Verifies that a JSON object with width, height, and refreshRate is forwarded to the display service.
+    /// </summary>
+    [Fact]
+    public void SetScreenResolution_ObjectFormatWithRefreshRate_CallsServiceWithRefresh()
+    {
+        _displayMock.Setup(d => d.SetResolution(2560, 1440, (uint)144)).Returns("ok");
+
+        var rawValue = JObject.FromObject(new { width = 2560, height = 1440, refreshRate = 144 });
+        _handler.Handle("SetScreenResolution", "", rawValue);
+
+        _displayMock.Verify(d => d.SetResolution(2560, 1440, (uint)144), Times.Once);
     }
 
     private void Handle(string key, string value)

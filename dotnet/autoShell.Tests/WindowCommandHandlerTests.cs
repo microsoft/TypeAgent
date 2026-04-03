@@ -19,6 +19,9 @@ public class WindowCommandHandlerTests
         _handler = new WindowCommandHandler(_mockAppRegistry.Object, _mockWindow.Object);
     }
 
+    /// <summary>
+    /// Verifies that the handler exposes exactly the Maximize, Minimize, SwitchTo, and Tile commands.
+    /// </summary>
     [Fact]
     public void SupportedCommands_ContainsExpectedCommands()
     {
@@ -32,6 +35,9 @@ public class WindowCommandHandlerTests
 
     // --- Maximize ---
 
+    /// <summary>
+    /// Verifies that Maximize resolves the process name and calls MaximizeWindow.
+    /// </summary>
     [Fact]
     public void Maximize_ResolvesAndMaximizes()
     {
@@ -44,6 +50,9 @@ public class WindowCommandHandlerTests
 
     // --- Minimize ---
 
+    /// <summary>
+    /// Verifies that Minimize resolves the process name and calls MinimizeWindow.
+    /// </summary>
     [Fact]
     public void Minimize_ResolvesAndMinimizes()
     {
@@ -56,6 +65,9 @@ public class WindowCommandHandlerTests
 
     // --- SwitchTo ---
 
+    /// <summary>
+    /// Verifies that SwitchTo resolves the process name and raises its window.
+    /// </summary>
     [Fact]
     public void SwitchTo_ResolvesAndRaisesWindow()
     {
@@ -69,6 +81,9 @@ public class WindowCommandHandlerTests
 
     // --- Tile ---
 
+    /// <summary>
+    /// Verifies that Tile resolves both app names and tiles their windows side by side.
+    /// </summary>
     [Fact]
     public void Tile_ResolvesBothAndTiles()
     {
@@ -80,6 +95,9 @@ public class WindowCommandHandlerTests
         _mockWindow.Verify(w => w.TileWindows("notepad", "calc"), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that Tile with only one app name does not call the tiling service.
+    /// </summary>
     [Fact]
     public void Tile_SingleApp_DoesNotCallService()
     {
@@ -90,6 +108,9 @@ public class WindowCommandHandlerTests
 
     // --- Unknown key ---
 
+    /// <summary>
+    /// Verifies that an unknown command key does not invoke any window or registry service methods.
+    /// </summary>
     [Fact]
     public void Handle_UnknownKey_DoesNothing()
     {

@@ -23,6 +23,9 @@ public class VirtualDesktopCommandHandlerTests
 
     // --- CreateDesktop ---
 
+    /// <summary>
+    /// Verifies that CreateDesktop forwards the JSON desktop names to the virtual desktop service.
+    /// </summary>
     [Fact]
     public void CreateDesktop_CallsServiceWithJsonValue()
     {
@@ -34,6 +37,9 @@ public class VirtualDesktopCommandHandlerTests
 
     // --- NextDesktop ---
 
+    /// <summary>
+    /// Verifies that NextDesktop invokes the service to switch to the next virtual desktop.
+    /// </summary>
     [Fact]
     public void NextDesktop_CallsService()
     {
@@ -44,6 +50,9 @@ public class VirtualDesktopCommandHandlerTests
 
     // --- PreviousDesktop ---
 
+    /// <summary>
+    /// Verifies that PreviousDesktop invokes the service to switch to the previous virtual desktop.
+    /// </summary>
     [Fact]
     public void PreviousDesktop_CallsService()
     {
@@ -54,6 +63,9 @@ public class VirtualDesktopCommandHandlerTests
 
     // --- SwitchDesktop ---
 
+    /// <summary>
+    /// Verifies that SwitchDesktop with a numeric index forwards it to the service.
+    /// </summary>
     [Fact]
     public void SwitchDesktop_ByIndex_CallsService()
     {
@@ -62,6 +74,9 @@ public class VirtualDesktopCommandHandlerTests
         _virtualDesktopMock.Verify(v => v.SwitchDesktop("2"), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that SwitchDesktop with a desktop name forwards it to the service.
+    /// </summary>
     [Fact]
     public void SwitchDesktop_ByName_CallsService()
     {
@@ -72,6 +87,9 @@ public class VirtualDesktopCommandHandlerTests
 
     // --- MoveWindowToDesktop ---
 
+    /// <summary>
+    /// Verifies that MoveWindowToDesktop resolves the process name and looks up its running processes.
+    /// </summary>
     [Fact]
     public void MoveWindowToDesktop_WithValidProcess_CallsService()
     {
@@ -88,6 +106,9 @@ public class VirtualDesktopCommandHandlerTests
 
     // --- PinWindow ---
 
+    /// <summary>
+    /// Verifies that PinWindow resolves the process name and looks up its running processes.
+    /// </summary>
     [Fact]
     public void PinWindow_ResolvesProcessName()
     {
@@ -98,5 +119,58 @@ public class VirtualDesktopCommandHandlerTests
 
         _appRegistryMock.Verify(a => a.ResolveProcessName("Notepad"), Times.Once);
         _processMock.Verify(p => p.GetProcessesByName("notepad"), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that MoveWindowToDesktop without a process field does not call the service.
+    /// </summary>
+    [Fact]
+    public void MoveWindowToDesktop_MissingProcess_DoesNotCallService()
+    {
+        var json = JToken.Parse("""{"desktop":"2"}""");
+        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
+
+        _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(It.IsAny<IntPtr>(), It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that MoveWindowToDesktop without a desktop field does not call the service.
+    /// </summary>
+    [Fact]
+    public void MoveWindowToDesktop_MissingDesktop_DoesNotCallService()
+    {
+        var json = JToken.Parse("""{"process":"Notepad"}""");
+        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
+
+        _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(It.IsAny<IntPtr>(), It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that MoveWindowToDesktop with no matching window handle does not call the move service.
+    /// </summary>
+    [Fact]
+    public void MoveWindowToDesktop_NoWindowHandle_DoesNotCallService()
+    {
+        _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
+        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
+
+        var json = JToken.Parse("""{"process":"Notepad","desktop":"2"}""");
+        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
+
+        _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(It.IsAny<IntPtr>(), It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that PinWindow with no matching window handle does not call the pin service.
+    /// </summary>
+    [Fact]
+    public void PinWindow_NoWindowHandle_DoesNotCallPinWindow()
+    {
+        _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
+        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
+
+        _handler.Handle("PinWindow", "Notepad", JToken.FromObject("Notepad"));
+
+        _virtualDesktopMock.Verify(v => v.PinWindow(It.IsAny<IntPtr>()), Times.Never);
     }
 }

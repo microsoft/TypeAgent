@@ -51,6 +51,9 @@ public class HandlerRegistrationTests
         ];
     }
 
+    /// <summary>
+    /// Verifies that every registered handler declares at least one supported command.
+    /// </summary>
     [Fact]
     public void AllHandlers_HaveNonEmptySupportedCommands()
     {
@@ -60,6 +63,9 @@ public class HandlerRegistrationTests
         }
     }
 
+    /// <summary>
+    /// Verifies that no handler declares the same command key more than once.
+    /// </summary>
     [Fact]
     public void AllHandlers_HaveNoDuplicateCommandsWithinHandler()
     {
@@ -72,6 +78,9 @@ public class HandlerRegistrationTests
         }
     }
 
+    /// <summary>
+    /// Verifies that no command key is claimed by more than one handler.
+    /// </summary>
     [Fact]
     public void AllHandlers_HaveNoDuplicateCommandsAcrossHandlers()
     {
@@ -97,6 +106,9 @@ public class HandlerRegistrationTests
         Assert.Empty(duplicates);
     }
 
+    /// <summary>
+    /// Verifies that every supported command across all handlers has at least one corresponding unit test.
+    /// </summary>
     [Fact]
     public void AllCommands_HaveAtLeastOneUnitTest()
     {

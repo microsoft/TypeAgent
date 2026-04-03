@@ -25,6 +25,9 @@ public class AppCommandHandlerTests
 
     // --- LaunchProgram ---
 
+    /// <summary>
+    /// Verifies that launching a non-running app starts it using its executable path.
+    /// </summary>
     [Fact]
     public void LaunchProgram_AppNotRunning_StartsViaPath()
     {
@@ -38,6 +41,9 @@ public class AppCommandHandlerTests
             psi => psi.FileName == "chrome.exe" && psi.UseShellExecute == true)), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that launching an app with a configured working directory env var sets the working directory.
+    /// </summary>
     [Fact]
     public void LaunchProgram_WithWorkingDir_SetsWorkingDirectory()
     {
@@ -52,6 +58,9 @@ public class AppCommandHandlerTests
             psi => psi.WorkingDirectory != "")), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that launching an app with configured arguments passes them to the process start info.
+    /// </summary>
     [Fact]
     public void LaunchProgram_WithArguments_SetsArguments()
     {
@@ -66,6 +75,9 @@ public class AppCommandHandlerTests
             psi => psi.Arguments == "--allow-all-tools")), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that when no executable path is available, the app is launched via its AppUserModelId through explorer.exe.
+    /// </summary>
     [Fact]
     public void LaunchProgram_NoPath_UsesAppUserModelId()
     {
@@ -80,6 +92,9 @@ public class AppCommandHandlerTests
             psi => psi.FileName == "explorer.exe")), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that closing a program attempts to look up its running processes by name.
+    /// </summary>
     [Fact]
     public void CloseProgram_RunningProcess_CallsGetProcessesByName()
     {
@@ -93,6 +108,9 @@ public class AppCommandHandlerTests
         _processMock.Verify(p => p.GetProcessesByName("notepad"), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that closing a program that is not running does not throw an exception.
+    /// </summary>
     [Fact]
     public void CloseProgram_NotRunning_DoesNothing()
     {
@@ -104,6 +122,9 @@ public class AppCommandHandlerTests
         Assert.Null(ex);
     }
 
+    /// <summary>
+    /// Verifies that the ListAppNames command invokes GetAllAppNames on the app registry.
+    /// </summary>
     [Fact]
     public void ListAppNames_CallsGetAllAppNames()
     {
@@ -112,6 +133,56 @@ public class AppCommandHandlerTests
         Handle("ListAppNames", "");
 
         _appRegistryMock.Verify(a => a.GetAllAppNames(), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that launching an already-running app raises its window instead of starting a new process.
+    /// </summary>
+    [Fact]
+    public void LaunchProgram_AlreadyRunning_RaisesWindow()
+    {
+        _appRegistryMock.Setup(a => a.ResolveProcessName("notepad")).Returns("notepad");
+        _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([Process.GetCurrentProcess()]);
+        _appRegistryMock.Setup(a => a.GetExecutablePath("notepad")).Returns("notepad.exe");
+
+        Handle("LaunchProgram", "notepad");
+
+        _windowMock.Verify(w => w.RaiseWindow("notepad", "notepad.exe"), Times.Once);
+        _processMock.Verify(p => p.Start(It.IsAny<ProcessStartInfo>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that a Win32Exception on first launch attempt triggers a fallback retry using the friendly name.
+    /// </summary>
+    [Fact]
+    public void LaunchProgram_Win32Exception_FallsBackToFriendlyName()
+    {
+        _appRegistryMock.Setup(a => a.ResolveProcessName("myapp")).Returns("myapp");
+        _processMock.Setup(p => p.GetProcessesByName("myapp")).Returns([]);
+        _appRegistryMock.Setup(a => a.GetExecutablePath("myapp")).Returns("myapp.exe");
+        _processMock.SetupSequence(p => p.Start(It.IsAny<ProcessStartInfo>()))
+            .Throws(new System.ComponentModel.Win32Exception("not found"))
+            .Returns(Process.GetCurrentProcess());
+
+        Handle("LaunchProgram", "myapp");
+
+        _processMock.Verify(p => p.Start(It.IsAny<ProcessStartInfo>()), Times.Exactly(2));
+    }
+
+    /// <summary>
+    /// Verifies that launching an app with no path and no AppUserModelId does not start any process.
+    /// </summary>
+    [Fact]
+    public void LaunchProgram_NoPathNoAppModelId_DoesNothing()
+    {
+        _appRegistryMock.Setup(a => a.ResolveProcessName("unknown")).Returns("unknown");
+        _processMock.Setup(p => p.GetProcessesByName("unknown")).Returns([]);
+        _appRegistryMock.Setup(a => a.GetExecutablePath("unknown")).Returns((string)null!);
+        _appRegistryMock.Setup(a => a.GetAppUserModelId("unknown")).Returns((string)null!);
+
+        Handle("LaunchProgram", "unknown");
+
+        _processMock.Verify(p => p.Start(It.IsAny<ProcessStartInfo>()), Times.Never);
     }
 
     private void Handle(string key, string value)

@@ -19,6 +19,9 @@ public class CommandDispatcherTests
         _dispatcher = new CommandDispatcher(_loggerMock.Object);
     }
 
+    /// <summary>
+    /// Verifies that dispatching a JSON object with a "quit" key returns true.
+    /// </summary>
     [Fact]
     public void Dispatch_QuitKey_ReturnsTrue()
     {
@@ -27,6 +30,9 @@ public class CommandDispatcherTests
         Assert.True(result);
     }
 
+    /// <summary>
+    /// Verifies that dispatching a non-quit command returns false.
+    /// </summary>
     [Fact]
     public void Dispatch_NonQuitKey_ReturnsFalse()
     {
@@ -36,6 +42,9 @@ public class CommandDispatcherTests
         Assert.False(result);
     }
 
+    /// <summary>
+    /// Verifies that commands are routed to the correct handler with the expected key and value.
+    /// </summary>
     [Fact]
     public void Dispatch_RoutesToCorrectHandler()
     {
@@ -51,6 +60,9 @@ public class CommandDispatcherTests
         Assert.Equal("2", handler.LastValue);
     }
 
+    /// <summary>
+    /// Verifies that dispatching an unrecognized command does not throw an exception.
+    /// </summary>
     [Fact]
     public void Dispatch_UnknownCommand_DoesNotThrow()
     {
@@ -59,6 +71,9 @@ public class CommandDispatcherTests
         Assert.Null(ex);
     }
 
+    /// <summary>
+    /// Verifies that dispatching an empty JSON object returns false.
+    /// </summary>
     [Fact]
     public void Dispatch_EmptyObject_ReturnsFalse()
     {
@@ -66,6 +81,9 @@ public class CommandDispatcherTests
         Assert.False(result);
     }
 
+    /// <summary>
+    /// Verifies that a "quit" key stops processing of any subsequent keys in the same JSON object.
+    /// </summary>
     [Fact]
     public void Dispatch_QuitStopsProcessingSubsequentKeys()
     {
@@ -80,6 +98,9 @@ public class CommandDispatcherTests
         Assert.Null(handler.LastKey);
     }
 
+    /// <summary>
+    /// Verifies that an exception thrown by a handler does not propagate to the caller.
+    /// </summary>
     [Fact]
     public void Dispatch_HandlerException_DoesNotBubbleUp()
     {
@@ -91,6 +112,9 @@ public class CommandDispatcherTests
         Assert.Null(ex);
     }
 
+    /// <summary>
+    /// Verifies that after a handler throws, subsequent keys in the same dispatch are still processed.
+    /// </summary>
     [Fact]
     public void Dispatch_HandlerException_ContinuesToNextKey()
     {

@@ -18,6 +18,9 @@ public class AudioCommandHandlerTests
         _handler = new AudioCommandHandler(_audioMock.Object);
     }
 
+    /// <summary>
+    /// Verifies that the handler exposes exactly the Volume, Mute, and RestoreVolume commands.
+    /// </summary>
     [Fact]
     public void SupportedCommands_ContainsExpectedCommands()
     {
@@ -30,6 +33,9 @@ public class AudioCommandHandlerTests
 
     // --- Volume ---
 
+    /// <summary>
+    /// Verifies that valid integer percentage values are forwarded to SetVolume.
+    /// </summary>
     [Theory]
     [InlineData("0", 0)]
     [InlineData("50", 50)]
@@ -43,6 +49,9 @@ public class AudioCommandHandlerTests
         _audioMock.Verify(a => a.SetVolume(expected), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that setting volume reads and saves the current level before applying the new one.
+    /// </summary>
     [Fact]
     public void Volume_SavesCurrentVolumeBeforeSetting()
     {
@@ -54,6 +63,9 @@ public class AudioCommandHandlerTests
         _audioMock.Verify(a => a.GetVolume(), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that non-integer input does not trigger a SetVolume call.
+    /// </summary>
     [Theory]
     [InlineData("")]
     [InlineData("abc")]
@@ -67,6 +79,9 @@ public class AudioCommandHandlerTests
 
     // --- RestoreVolume ---
 
+    /// <summary>
+    /// Verifies that RestoreVolume restores the volume to the level saved before the last change.
+    /// </summary>
     [Fact]
     public void RestoreVolume_AfterVolumeChange_RestoresSavedLevel()
     {
@@ -82,6 +97,9 @@ public class AudioCommandHandlerTests
         _audioMock.Verify(a => a.SetVolume(65), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that RestoreVolume defaults to zero when no prior volume change has been recorded.
+    /// </summary>
     [Fact]
     public void RestoreVolume_WithoutPriorChange_RestoresZero()
     {
@@ -92,6 +110,9 @@ public class AudioCommandHandlerTests
 
     // --- Mute ---
 
+    /// <summary>
+    /// Verifies that valid boolean string values are forwarded to SetMute.
+    /// </summary>
     [Theory]
     [InlineData("true", true)]
     [InlineData("True", true)]
@@ -104,6 +125,9 @@ public class AudioCommandHandlerTests
         _audioMock.Verify(a => a.SetMute(expected), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that non-boolean input does not trigger a SetMute call.
+    /// </summary>
     [Theory]
     [InlineData("")]
     [InlineData("yes")]
@@ -118,6 +142,9 @@ public class AudioCommandHandlerTests
 
     // --- Unknown key ---
 
+    /// <summary>
+    /// Verifies that an unknown command key does not invoke any audio service methods.
+    /// </summary>
     [Fact]
     public void Handle_UnknownKey_DoesNothing()
     {

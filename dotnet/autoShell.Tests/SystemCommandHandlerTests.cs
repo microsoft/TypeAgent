@@ -19,6 +19,9 @@ public class SystemCommandHandlerTests
         _handler = new SystemCommandHandler(_processMock.Object, _debuggerMock.Object);
     }
 
+    /// <summary>
+    /// Verifies that the Debug command launches the debugger.
+    /// </summary>
     [Fact]
     public void Debug_LaunchesDebugger()
     {
@@ -27,6 +30,9 @@ public class SystemCommandHandlerTests
         _debuggerMock.Verify(d => d.Launch(), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that the ToggleNotifications command opens the Windows Action Center.
+    /// </summary>
     [Fact]
     public void ToggleNotifications_OpensActionCenter()
     {
