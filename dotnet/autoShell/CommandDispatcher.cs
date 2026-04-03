@@ -29,18 +29,40 @@ internal class CommandDispatcher
     /// </summary>
     public static CommandDispatcher Create(ILogger logger)
     {
-        var registry = new WindowsRegistryService();
-        var systemParams = new WindowsSystemParametersService();
-        var process = new WindowsProcessService();
-        var audio = new WindowsAudioService(logger);
-        var appRegistry = new WindowsAppRegistry(logger);
-        var debugger = new WindowsDebuggerService();
-        var brightness = new WindowsBrightnessService(logger);
-        var display = new WindowsDisplayService(logger);
-        var window = new WindowsWindowService(logger);
-        var network = new WindowsNetworkService(logger);
-        var virtualDesktop = new WindowsVirtualDesktopService(logger);
+        return Create(
+            logger,
+            new WindowsRegistryService(),
+            new WindowsSystemParametersService(),
+            new WindowsProcessService(),
+            new WindowsAudioService(logger),
+            new WindowsAppRegistry(logger),
+            new WindowsDebuggerService(),
+            new WindowsBrightnessService(logger),
+            new WindowsDisplayService(logger),
+            new WindowsWindowService(logger),
+            new WindowsNetworkService(logger),
+            new WindowsVirtualDesktopService(logger)
+        );
+    }
 
+    /// <summary>
+    /// Creates a CommandDispatcher with the specified services, enabling integration testing
+    /// with mock services while exercising real handler wiring.
+    /// </summary>
+    internal static CommandDispatcher Create(
+        ILogger logger,
+        IRegistryService registry,
+        ISystemParametersService systemParams,
+        IProcessService process,
+        IAudioService audio,
+        IAppRegistry appRegistry,
+        IDebuggerService debugger,
+        IBrightnessService brightness,
+        IDisplayService display,
+        IWindowService window,
+        INetworkService network,
+        IVirtualDesktopService virtualDesktop)
+    {
         var dispatcher = new CommandDispatcher(logger);
         dispatcher.Register(
             new AudioCommandHandler(audio),
