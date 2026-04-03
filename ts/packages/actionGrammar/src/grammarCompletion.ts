@@ -640,6 +640,23 @@ export function hasTrailingSeparator(input: string, position: number): boolean {
     return nextNonSeparatorIndex(input, position) > position;
 }
 
+// True when a separator is needed between the character at
+// `position - 1` in `input` and `firstCompletionChar` according
+// to `spacingMode`.  Shared by mergeSepMode, computeCandidateSepMode,
+// and computeRangeNeedsSep.
+function computeNeedsSep(
+    input: string,
+    position: number,
+    firstCompletionChar: string,
+    spacingMode: CompiledSpacingMode,
+): boolean {
+    return (
+        position > 0 &&
+        spacingMode !== "none" &&
+        requiresSeparator(input[position - 1], firstCompletionChar, spacingMode)
+    );
+}
+
 // Compute whether a separator is needed between the character at
 // `position` in `prefix` and `firstCompletionChar`, then merge the
 // result into the running `current` separator mode.
@@ -650,15 +667,11 @@ function mergeSepMode(
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
 ): SeparatorMode | undefined {
-    const needsSep =
-        position > 0 &&
-        spacingMode !== "none" &&
-        requiresSeparator(
-            input[position - 1],
-            firstCompletionChar,
-            spacingMode,
-        );
-    return mergeSeparatorMode(current, needsSep, spacingMode);
+    return mergeSeparatorMode(
+        current,
+        computeNeedsSep(input, position, firstCompletionChar, spacingMode),
+        spacingMode,
+    );
 }
 
 // Compute a candidate's individual SeparatorMode at a given position.
@@ -671,15 +684,10 @@ function computeCandidateSepMode(
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
 ): SeparatorMode {
-    const needsSep =
-        position > 0 &&
-        spacingMode !== "none" &&
-        requiresSeparator(
-            input[position - 1],
-            firstCompletionChar,
-            spacingMode,
-        );
-    return candidateSeparatorMode(needsSep, spacingMode);
+    return candidateSeparatorMode(
+        computeNeedsSep(input, position, firstCompletionChar, spacingMode),
+        spacingMode,
+    );
 }
 
 // True when a SeparatorMode requires a separator character to be present.
@@ -1444,15 +1452,19 @@ function injectForwardEoiCandidates(
 // the separator so the shell's anchor diverges on backspace,
 // triggering an automatic re-fetch.
 function filterSepConflicts(ctx: CompletionContext): void {
-    const { input, fixedCandidates } = ctx;
+    const { input } = ctx;
+    // Snapshot the current candidates array.  The filter below
+    // replaces ctx.fixedCandidates with a new array; keeping a
+    // local reference avoids confusion between old and new.
+    const originalCandidates = ctx.fixedCandidates;
 
     // Compute each candidate's separator mode once; reused by the
     // filter pass below when a conflict is detected.
-    const modes: SeparatorMode[] = new Array(fixedCandidates.length);
+    const modes: SeparatorMode[] = new Array(originalCandidates.length);
     let hasRequiring = false;
     let hasNoneMode = false;
-    for (let i = 0; i < fixedCandidates.length; i++) {
-        const c = fixedCandidates[i];
+    for (let i = 0; i < originalCandidates.length; i++) {
+        const c = originalCandidates[i];
         const firstChar =
             c.kind === "string" ? c.completionText[0] : PROPERTY_SENTINEL_CHAR;
         const mode = computeCandidateSepMode(
@@ -1493,7 +1505,7 @@ function filterSepConflicts(ctx: CompletionContext): void {
     // modes, avoiding a second computeCandidateSepMode call.
     if (ctx.resolveAsTrailingSep) {
         // Trailing separator: drop "none" (rejects separator).
-        ctx.fixedCandidates = fixedCandidates.filter(
+        ctx.fixedCandidates = originalCandidates.filter(
             (_, i) => modes[i] !== "none",
         );
         // Advance P past exactly one separator so backspace triggers
@@ -1512,7 +1524,7 @@ function filterSepConflicts(ctx: CompletionContext): void {
         // Backward does not advance: its anchor stays at the scan
         // position (before the separator).  This keeps
         // backward.mpl < forward.mpl, satisfying Invariant #7.
-        ctx.fixedCandidates = fixedCandidates.filter(
+        ctx.fixedCandidates = originalCandidates.filter(
             (_, i) => !isRequiringSepMode(modes[i]),
         );
     }
@@ -1657,12 +1669,17 @@ function finalizeCandidates(ctx: CompletionContext): void {
         }
     }
 
-    // The two post-loop steps are direction-exclusive (forward
-    // early-returns in injectForwardEoiCandidates; shadows are
-    // only collected during backward), so their order is
-    // interchangeable.  Forward first keeps the forward flow
-    // contiguous with the forwardPartialKeyword /
-    // forwardEoiCandidates variables above.
+    // The three post-loop steps MUST run in this order:
+    //   1. injectForwardEoiCandidates — may clear fixedCandidates
+    //      and advance maxPrefixLength (displace path).
+    //   2. flushShadowCandidates — checks maxPrefixLength set by (1).
+    //   3. filterSepConflicts — operates on the final fixedCandidates
+    //      populated by (1) and (2).
+    // (Steps 1 and 2 are direction-exclusive — forward early-returns
+    // in injectForwardEoiCandidates; shadows are only collected during
+    // backward — so their internal order is interchangeable.  Forward
+    // first keeps the forward flow contiguous with the
+    // forwardPartialKeyword / forwardEoiCandidates variables above.)
 
     // Forward EOI candidate injection: converts wildcard-at-EOI
     // candidates into regular fixedCandidates so they participate
@@ -1690,14 +1707,12 @@ function computeRangeNeedsSep(
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
 ): boolean | undefined {
-    const needsSep =
-        ctx.maxPrefixLength > 0 &&
-        spacingMode !== "none" &&
-        requiresSeparator(
-            ctx.input[ctx.maxPrefixLength - 1],
-            firstCompletionChar,
-            spacingMode,
-        );
+    const needsSep = computeNeedsSep(
+        ctx.input,
+        ctx.maxPrefixLength,
+        firstCompletionChar,
+        spacingMode,
+    );
     if (ctx.hasSepConflict) {
         const mode = candidateSeparatorMode(needsSep, spacingMode);
         if (

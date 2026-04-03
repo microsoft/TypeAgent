@@ -49,6 +49,11 @@ interface GrammarEntry {
     dfa?: DFA;
 }
 
+type GrammarPartial = {
+    partial: GrammarCompletionResult;
+    schemaName: string;
+};
+
 export class GrammarStoreImpl implements GrammarStore {
     private readonly grammars: Map<string, GrammarEntry> = new Map();
     private enabled: boolean = true;
@@ -296,10 +301,6 @@ export class GrammarStoreImpl implements GrammarStore {
         // so we can detect cross-grammar separator mode conflicts after
         // the loop.  Each entry records the grammar's result and schema
         // name for property conversion.
-        type GrammarPartial = {
-            partial: GrammarCompletionResult;
-            schemaName: string;
-        };
         let grammarPartials: GrammarPartial[] = [];
 
         for (const [name, entry] of this.grammars) {
@@ -411,7 +412,8 @@ export class GrammarStoreImpl implements GrammarStore {
         // separator mode conflict detection.
         //
         // Each individual grammar's result is already internally
-        // consistent (Phase 1 within-grammar conflict filtering).
+        // consistent (within-grammar conflict filtering in
+        // grammarCompletion.ts Phase B1).
         // Here we detect when different grammars produce incompatible
         // separator modes and filter by trailing separator state.
         if (grammarPartials.length > 0) {
@@ -434,24 +436,15 @@ export class GrammarStoreImpl implements GrammarStore {
                 hasTrailingSeparator(input, matchedPrefixLength);
 
             let effectivePartials = grammarPartials;
-            let droppedGrammars = false;
             if (hasCrossGrammarConflict) {
                 effectivePartials = grammarPartials.filter(({ partial }) => {
                     if (partial.separatorMode === undefined) return true;
                     if (hasTrailingSep) {
                         // Trailing separator: drop "none" mode grammars.
-                        if (partial.separatorMode === "none") {
-                            droppedGrammars = true;
-                            return false;
-                        }
-                        return true;
+                        return partial.separatorMode !== "none";
                     } else {
                         // No trailing separator: drop requiring modes.
-                        if (isRequiringSepMode(partial.separatorMode)) {
-                            droppedGrammars = true;
-                            return false;
-                        }
-                        return true;
+                        return !isRequiringSepMode(partial.separatorMode);
                     }
                 });
             }
@@ -505,7 +498,7 @@ export class GrammarStoreImpl implements GrammarStore {
             // When grammars were dropped due to separator conflict,
             // advance P past trailing separator and adjust metadata
             // so the shell re-fetches when separator state changes.
-            if (droppedGrammars) {
+            if (hasCrossGrammarConflict) {
                 closedSet = false;
                 if (hasTrailingSep) {
                     // Advance past exactly one trailing separator
