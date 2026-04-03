@@ -28,6 +28,13 @@ let sampleFlowsRegistered = false;
 export interface WebFlowActionResult {
     displayText: string;
     data?: unknown;
+    error?: string;
+    fallbackToReasoning?: boolean;
+    fallbackContext?: {
+        failedFlow: string;
+        errorMessage: string;
+        hint: string;
+    };
 }
 
 async function getStore(
@@ -233,6 +240,54 @@ async function handleEditWebFlowScope(
     };
 }
 
+async function handleEditWebFlow(
+    action: WebFlowActions & { actionName: "editWebFlow" },
+    context: SessionContext<BrowserActionContext>,
+): Promise<WebFlowActionResult> {
+    const store = await getStore(context);
+    const { name, script, description } = action.parameters;
+
+    const flow = await store.get(name);
+    if (!flow) {
+        return {
+            displayText: `WebFlow "${name}" not found`,
+            data: { success: false },
+        };
+    }
+
+    // Validate the new script
+    const validation = validateWebFlowScript(
+        script,
+        Object.keys(flow.parameters),
+        flow,
+    );
+    if (!validation.valid) {
+        const errors = validation.errors
+            .filter((e) => e.severity === "error")
+            .map((e) => e.message);
+        return {
+            displayText: `Script validation failed: ${errors.join("; ")}`,
+            data: { success: false, errors },
+        };
+    }
+
+    // Update the flow
+    flow.script = script;
+    if (description) {
+        flow.description = description;
+    }
+    flow.version = flow.version + 1;
+    await store.save(flow);
+
+    debug(`Updated WebFlow "${name}" script (version ${flow.version})`);
+    sendWebFlowRefreshToClient(context);
+
+    return {
+        displayText: `WebFlow "${name}" updated successfully`,
+        data: { success: true, name, version: flow.version },
+    };
+}
+
 async function handleDynamicFlowExecution(
     actionName: string,
     params: Record<string, unknown>,
@@ -309,10 +364,24 @@ async function handleDynamicFlowExecution(
         resolvedParams,
     );
 
+    // Enable self-repair on script failure
+    if (!result.success) {
+        const errorMsg = result.error ?? "Unknown error";
+        return {
+            displayText: `WebFlow "${actionName}" failed: ${errorMsg}`,
+            data: result,
+            error: errorMsg,
+            fallbackToReasoning: true,
+            fallbackContext: {
+                failedFlow: actionName,
+                errorMessage: errorMsg,
+                hint: `Use editWebFlow to fix the script for "${actionName}", or regenerate the flow with a clearer description.`,
+            },
+        };
+    }
+
     return {
-        displayText: result.success
-            ? (result.message ?? `WebFlow "${actionName}" completed`)
-            : `WebFlow "${actionName}" failed: ${result.error}`,
+        displayText: result.message ?? `WebFlow "${actionName}" completed`,
         data: result,
     };
 }
@@ -586,6 +655,11 @@ export async function handleWebFlowAction(
         case "editWebFlowScope":
             return handleEditWebFlowScope(
                 action as WebFlowActions & { actionName: "editWebFlowScope" },
+                context,
+            );
+        case "editWebFlow":
+            return handleEditWebFlow(
+                action as WebFlowActions & { actionName: "editWebFlow" },
                 context,
             );
         case "startGoalDrivenTask":

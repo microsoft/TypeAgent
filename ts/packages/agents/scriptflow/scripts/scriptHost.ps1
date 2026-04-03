@@ -16,6 +16,10 @@ param(
 
     [string]$AllowedPathsJson = '[]',
 
+    [string]$AllowedModulesJson = '[]',
+
+    [bool]$NetworkAccess = $false,
+
     [int]$TimeoutSeconds = 30
 )
 
@@ -25,6 +29,7 @@ try {
     $allowedCmdlets = $AllowedCmdletsJson | ConvertFrom-Json
     $params = $ParametersJson | ConvertFrom-Json
     $AllowedPaths = @($AllowedPathsJson | ConvertFrom-Json)
+    $AllowedModules = @($AllowedModulesJson | ConvertFrom-Json)
 
     # Expand environment variable references in allowed paths
     # (e.g. "$env:USERPROFILE" → "C:\Users\name")
@@ -56,8 +61,51 @@ try {
                                 break
                             }
                         }
+                        # ENFORCEMENT: Block execution if path not allowed
+                        if (-not $pathAllowed) {
+                            Write-Error "Path access denied: '$resolvedPath' is not in allowedPaths. Allowed paths: $($expandedAllowedPaths -join ', ')"
+                            exit 1
+                        }
                     }
                 }
+            }
+        }
+    }
+
+    # Network access enforcement
+    if (-not $NetworkAccess) {
+        # Define network-capable cmdlets that require networkAccess=true
+        $NetworkCmdlets = @(
+            'Invoke-WebRequest',
+            'Invoke-RestMethod',
+            'Test-NetConnection',
+            'Test-Connection',
+            'Resolve-DnsName',
+            'Send-MailMessage',
+            'Start-BitsTransfer',
+            'Get-NetAdapter',
+            'Get-NetIPAddress',
+            'Get-NetRoute',
+            'New-NetFirewallRule',
+            'Set-NetFirewallRule'
+        )
+
+        foreach ($networkCmdlet in $NetworkCmdlets) {
+            if ($allowedCmdlets -contains $networkCmdlet) {
+                Write-Error "Network cmdlet '$networkCmdlet' requires networkAccess=true in sandbox policy"
+                exit 1
+            }
+        }
+    }
+
+    # Module enforcement
+    if ($AllowedModules.Count -gt 0) {
+        # Scan script for Import-Module commands
+        if ($ScriptBody -match 'Import-Module\s+([^\s;]+)') {
+            $requestedModule = $Matches[1] -replace '"','' -replace "'",''
+            if ($requestedModule -notin $AllowedModules) {
+                Write-Error "Module import denied: '$requestedModule' is not in allowedModules. Allowed modules: $($AllowedModules -join ', ')"
+                exit 1
             }
         }
     }
