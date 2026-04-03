@@ -36,7 +36,10 @@ internal class WindowsBrightnessService : IBrightnessService
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.Debug($"Failed to read brightness: {ex.Message}");
+        }
         return 50;
     }
 

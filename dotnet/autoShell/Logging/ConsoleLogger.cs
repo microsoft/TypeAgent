@@ -6,8 +6,9 @@ using System;
 namespace autoShell.Logging;
 
 /// <summary>
-/// Logger that writes errors and warnings to the console with color formatting,
-/// info messages to the console without formatting, and debug messages to the diagnostics output.
+/// Logger that writes all messages to the diagnostics output.
+/// Errors (red), warnings (yellow), and info (cyan) are also displayed on the console.
+/// Debug messages are written to diagnostics output only.
 /// </summary>
 internal class ConsoleLogger : ILogger
 {

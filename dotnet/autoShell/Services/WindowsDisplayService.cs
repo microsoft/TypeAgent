@@ -78,6 +78,8 @@ internal class WindowsDisplayService : IDisplayService
 
     #endregion P/Invoke
 
+    private record Resolution(uint Width, uint Height, uint BitsPerPixel, uint RefreshRate);
+
     private readonly ILogger _logger;
 
     public WindowsDisplayService(ILogger logger)
@@ -88,29 +90,27 @@ internal class WindowsDisplayService : IDisplayService
     /// <inheritdoc/>
     public string ListResolutions()
     {
-        var resolutions = new List<object>();
+        var resolutions = new List<Resolution>();
         DEVMODE devMode = new DEVMODE();
         devMode.dmSize = (ushort)Marshal.SizeOf(typeof(DEVMODE));
 
         int modeNum = 0;
         while (EnumDisplaySettings(null, modeNum, ref devMode))
         {
-            resolutions.Add(new
-            {
-                Width = devMode.dmPelsWidth,
-                Height = devMode.dmPelsHeight,
-                BitsPerPixel = devMode.dmBitsPerPel,
-                RefreshRate = devMode.dmDisplayFrequency
-            });
+            resolutions.Add(new Resolution(
+                devMode.dmPelsWidth,
+                devMode.dmPelsHeight,
+                devMode.dmBitsPerPel,
+                devMode.dmDisplayFrequency));
             modeNum++;
         }
 
         var uniqueResolutions = resolutions
-            .GroupBy(r => new { ((dynamic)r).Width, ((dynamic)r).Height, ((dynamic)r).RefreshRate })
+            .GroupBy(r => new { r.Width, r.Height, r.RefreshRate })
             .Select(g => g.First())
-            .OrderByDescending(r => ((dynamic)r).Width)
-            .ThenByDescending(r => ((dynamic)r).Height)
-            .ThenByDescending(r => ((dynamic)r).RefreshRate)
+            .OrderByDescending(r => r.Width)
+            .ThenByDescending(r => r.Height)
+            .ThenByDescending(r => r.RefreshRate)
             .ToList();
 
         return JsonConvert.SerializeObject(uniqueResolutions);

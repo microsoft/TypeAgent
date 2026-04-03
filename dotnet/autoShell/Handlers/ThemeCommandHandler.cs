@@ -104,33 +104,33 @@ internal partial class ThemeCommandHandler : ICommandHandler
     /// </summary>
     public bool ApplyTheme(string themeName)
     {
-        string themePath = FindThemePath(themeName);
-        if (string.IsNullOrEmpty(themePath))
-        {
-            return false;
-        }
-
         try
         {
             string previous = GetCurrentTheme();
+            bool success;
 
-            if (!themeName.Equals("previous", StringComparison.OrdinalIgnoreCase))
+            if (themeName.Equals("previous", StringComparison.OrdinalIgnoreCase))
             {
-                _process.StartShellExecute(themePath);
-                _previousTheme = previous;
-                return true;
+                success = RevertToPreviousTheme();
             }
             else
             {
-                bool success = RevertToPreviousTheme();
-
-                if (success)
+                string themePath = FindThemePath(themeName);
+                if (string.IsNullOrEmpty(themePath))
                 {
-                    _previousTheme = previous;
+                    return false;
                 }
 
-                return success;
+                _process.StartShellExecute(themePath);
+                success = true;
             }
+
+            if (success)
+            {
+                _previousTheme = previous;
+            }
+
+            return success;
         }
         catch
         {
@@ -392,7 +392,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
             }
         }
 
-        _themeDictionary["previous"] = GetCurrentTheme();
+        _previousTheme = GetCurrentTheme();
     }
 
     /// <summary>
