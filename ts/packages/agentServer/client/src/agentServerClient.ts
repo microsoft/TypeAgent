@@ -39,7 +39,7 @@ export type AgentServerConnection = {
     ): Promise<SessionDispatcher>;
     leaveSession(sessionId: string): Promise<void>;
     createSession(name: string): Promise<SessionInfo>;
-    listSessions(): Promise<SessionInfo[]>;
+    listSessions(name?: string): Promise<SessionInfo[]>;
     renameSession(sessionId: string, newName: string): Promise<void>;
     deleteSession(sessionId: string): Promise<void>;
     close(): Promise<void>;
@@ -127,8 +127,8 @@ export async function connectAgentServer(
                 return rpc.invoke("createSession", name);
             },
 
-            async listSessions(): Promise<SessionInfo[]> {
-                return rpc.invoke("listSessions");
+            async listSessions(name?: string): Promise<SessionInfo[]> {
+                return rpc.invoke("listSessions", name);
             },
 
             async renameSession(

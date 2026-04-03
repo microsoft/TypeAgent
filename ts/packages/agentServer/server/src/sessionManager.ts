@@ -55,7 +55,7 @@ export type SessionManager = {
         options?: DispatcherConnectOptions,
     ): Promise<{ dispatcher: Dispatcher; connectionId: string }>;
     leaveSession(sessionId: string, connectionId: string): Promise<void>;
-    listSessions(): SessionInfo[];
+    listSessions(name?: string): SessionInfo[];
     renameSession(sessionId: string, newName: string): Promise<void>;
     deleteSession(sessionId: string): Promise<void>;
     close(): Promise<void>;
@@ -292,9 +292,15 @@ export async function createSessionManager(
             }
         },
 
-        listSessions(): SessionInfo[] {
+        listSessions(name?: string): SessionInfo[] {
             const result: SessionInfo[] = [];
             for (const record of sessions.values()) {
+                if (
+                    name !== undefined &&
+                    !record.name.toLowerCase().includes(name.toLowerCase())
+                ) {
+                    continue;
+                }
                 result.push({
                     sessionId: record.sessionId,
                     name: record.name,

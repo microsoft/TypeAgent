@@ -140,8 +140,8 @@ async function main() {
                     return sessionManager.createSession(name);
                 },
 
-                listSessions: async () => {
-                    return sessionManager.listSessions();
+                listSessions: async (name?: string) => {
+                    return sessionManager.listSessions(name);
                 },
 
                 renameSession: async (sessionId: string, newName: string) => {
