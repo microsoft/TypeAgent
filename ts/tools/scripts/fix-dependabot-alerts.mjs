@@ -2051,7 +2051,6 @@ function printSummary(results) {
     }
 
     if (results.blocked.length > 0) {
-        log("");
         const parentBlocked = results.blocked.filter(
             (a) => hasUnblockedActions(a) && !needsOverride(a),
         );
@@ -2072,6 +2071,57 @@ function printSummary(results) {
                 ),
         );
 
+        // Risk assessment for blocked entries
+        const RISK_ORDER = { high: 0, medium: 1, low: 2 };
+        const riskEntries = results.blocked.filter((a) => a.fixPlan);
+        if (riskEntries.length > 0) {
+            const assessed = riskEntries.map((a) => ({
+                entry: a,
+                risk: assessRisk(a),
+            }));
+            assessed.sort((a, b) => {
+                const riskDiff =
+                    (RISK_ORDER[a.risk.level] ?? 3) -
+                    (RISK_ORDER[b.risk.level] ?? 3);
+                if (riskDiff !== 0) return riskDiff;
+                // Secondary: override > workspace > update
+                const ACTION_ORDER = {
+                    override: 0,
+                    workspace: 1,
+                    update: 2,
+                };
+                const aTag = formatActionTag(a.entry);
+                const bTag = formatActionTag(b.entry);
+                const aAction = aTag.includes("override")
+                    ? "override"
+                    : aTag.includes("workspace")
+                      ? "workspace"
+                      : "update";
+                const bAction = bTag.includes("override")
+                    ? "override"
+                    : bTag.includes("workspace")
+                      ? "workspace"
+                      : "update";
+                return (
+                    (ACTION_ORDER[aAction] ?? 3) - (ACTION_ORDER[bAction] ?? 3)
+                );
+            });
+            log(clr.meta(`\n  Risk assessment:`));
+            for (const { entry: a, risk } of assessed) {
+                const riskIcon =
+                    risk.level === "high"
+                        ? clr.fail("▲ high")
+                        : risk.level === "medium"
+                          ? clr.warn("■ medium")
+                          : clr.ok("▽ low");
+                const strategyTag = clr.chrome(formatActionTag(a));
+                log(
+                    `     ${riskIcon}  ${strategyTag} ${clr.pkg(a.pkg)} ${clr.versionOk(`>=${a.patched}`)}: ${clr.meta(risk.reason)}`,
+                );
+            }
+            log("");
+        }
+
         if (parentBlocked.length > 0 || overrideBlocked.length > 0) {
             const autoFixPkgs = [
                 ...parentBlocked.map((a) => a.pkg),
@@ -2083,7 +2133,11 @@ function printSummary(results) {
             if (parentBlocked.length > 0) {
                 const parentDetails = parentBlocked.map((a) => {
                     const updatedPkgs = a.fixPlan?.unblockedActions
-                        ?.filter((act) => act.type === "update-workspace")
+                        ?.filter(
+                            (act) =>
+                                act.type === "update-workspace" &&
+                                act.pkg !== a.pkg,
+                        )
                         .map((act) => act.pkg);
                     const via =
                         updatedPkgs?.length > 0
@@ -2133,52 +2187,10 @@ function printSummary(results) {
         }
     }
 
-    // Risk assessment for blocked entries only (resolved ones shown above)
-    const RISK_ORDER = { high: 0, medium: 1, low: 2 };
-    const riskEntries = results.blocked.filter((a) => a.fixPlan);
-    if (riskEntries.length > 0) {
-        const assessed = riskEntries.map((a) => ({
-            entry: a,
-            risk: assessRisk(a),
-        }));
-        assessed.sort((a, b) => {
-            const riskDiff =
-                (RISK_ORDER[a.risk.level] ?? 3) -
-                (RISK_ORDER[b.risk.level] ?? 3);
-            if (riskDiff !== 0) return riskDiff;
-            // Secondary: override > workspace > update
-            const ACTION_ORDER = { override: 0, workspace: 1, update: 2 };
-            const aTag = formatActionTag(a.entry);
-            const bTag = formatActionTag(b.entry);
-            const aAction = aTag.includes("override")
-                ? "override"
-                : aTag.includes("workspace")
-                  ? "workspace"
-                  : "update";
-            const bAction = bTag.includes("override")
-                ? "override"
-                : bTag.includes("workspace")
-                  ? "workspace"
-                  : "update";
-            return (ACTION_ORDER[aAction] ?? 3) - (ACTION_ORDER[bAction] ?? 3);
-        });
-        log(clr.meta(`\n  Risk assessment:`));
-        for (const { entry: a, risk } of assessed) {
-            const riskIcon =
-                risk.level === "high"
-                    ? clr.fail("▲ high")
-                    : risk.level === "medium"
-                      ? clr.warn("■ medium")
-                      : clr.ok("▽ low");
-            const strategyTag = clr.chrome(formatActionTag(a));
-            log(
-                `     ${riskIcon}  ${strategyTag} ${clr.pkg(a.pkg)} ${clr.versionOk(`>=${a.patched}`)}: ${clr.meta(risk.reason)}`,
-            );
-        }
-    }
-
     if (DRY_RUN) {
-        log(clr.meta("\n  ℹ  This was a dry run. No changes were made."));
+        log(
+            `\n  ${clr.warn.bold("⚠  DRY RUN — no changes were made.")} Run without ${clr.chrome("--dry-run")} to apply.`,
+        );
     }
 
     log("");
