@@ -109,7 +109,7 @@ Each session's full data (chat history, conversation memory, display log) is sto
 
 > **Note:** `contextDomain` is stored as a string and defaults to `""` (empty string) when not provided by the client. The server normalizes `undefined` → `""` before writing to the index. `SessionInfo.contextDomain` is always a non-optional string.
 
-> **Note:** `activeConnections` is a runtime-only field — it is **never written to `sessions-index.json`**. It is populated at query time by inspecting the live dispatcher pool. The index file contains only the five persisted fields shown above (`id`, `contextDomain`, `summary`, `createdAt`, `lastModifiedAt`).
+> **Note:** `activeConnections` is a runtime-only field — it is **never written to `sessions-index.json`**. It is populated at query time by inspecting the live dispatcher pool. The index file contains only the five persisted fields shown above (all `SessionInfo` fields except `activeConnections`).
 
 > **Note:** Legacy session data (from standalone Shell runs) is left in place and coexists on disk with the agentServer's session registry. The agentServer does not read, migrate, or touch legacy session directories. The standalone Shell continues to use its own session management independently for now.
 
@@ -184,7 +184,7 @@ Each session's dispatcher is created with its own `persistDir` pointing to `sess
 
 The session dispatcher maintains a `Set<Promise>` of in-flight `processCommand()` promises and a boolean "draining" flag. These are used by `discardSession()` to implement the graceful drain sequence described in Section 9.
 
-Each session dispatcher is initialized with an `onCompromised` callback that triggers `discardSession()` on that session rather than calling `process.exit(-1)`. This is an intentional deviation from the current single-session behavior: in a multi-session server, a compromised lock on one session should not take down all other active sessions. The affected session is discarded gracefully; the server and all other sessions continue running.
+Each session dispatcher is initialized with an `onCompromised` callback that triggers `discardSession()` on that session rather than calling `process.exit(-1)`. The `onCompromised` handler calls the same public `discardSession()` method, which goes through the per-session lock — if a discard is already in progress, the second call queues behind it and returns cleanly once the session is gone. This is an intentional deviation from the current single-session behavior: in a multi-session server, a compromised lock on one session should not take down all other active sessions. The affected session is discarded gracefully; the server and all other sessions continue running.
 
 This approach is chosen for its simplicity and alignment with the existing design. Memory is not a practical concern at the moment given the expected number of concurrent sessions in realistic usage.
 
@@ -206,9 +206,9 @@ Client calls join({ sessionId?, contextDomain?, clientType, filter })
   │       ├─ contextDomain defaults to "" if omitted
   │       ├─ Create persistDir/sessions/<sessionId>/
   │       ├─ Create dispatcher with persistSession: true, persistDir: sessions/<sessionId>/
-  │       └─ Append entry to sessions-index.json (summary="")
+  │       └─ Append entry to sessions-index.json (summary="", lastModifiedAt=createdAt)
   │
-  ├─ Update sessions-index.json: lastModifiedAt = now
+  ├─ Update sessions-index.json: lastModifiedAt = now  (resume path only)
   ├─ Register client in session dispatcher's routing table
   └─ Return JoinResult { connectionId, sessionId, sessionSummary }
 ```
@@ -325,13 +325,11 @@ When connected to the agentServer:
 
 1. **Session size limits:** Should there be a maximum number of sessions? A maximum disk size per session? These constraints are useful for operational hygiene but depend on expected usage patterns.
 
-2. **`join()` return type change:** Changing `Promise<string>` to `Promise<JoinResult>` is a breaking protocol change. Worth considering a versioned protocol negotiation (e.g., a `protocolVersion` field in `join()`) to allow old clients to continue working.
+2. **Summary generation timing:** The summary is generated asynchronously in the background after the first assistant response, so it does not block the connection or the first exchange. Lazy generation on the first `listSessions()` call was considered but rejected — it would trigger multiple LLM calls simultaneously if several sessions have no summary yet, causing noticeable latency in the session picker.
 
-3. **Summary generation timing:** The summary is generated asynchronously in the background after the first assistant response, so it does not block the connection or the first exchange. Lazy generation on the first `listSessions()` call was considered but rejected — it would trigger multiple LLM calls simultaneously if several sessions have no summary yet, causing noticeable latency in the session picker.
+3. **Client-Enforced Session Isolation:** Session isolation is currently **client-enforced**. The server provides `activeConnections` and `contextDomain` as signals, but nothing prevents a poorly behaved client from joining a session it shouldn't, or from ignoring domain boundaries entirely. In a controlled environment where all clients are trusted this is fine, but as the agentServer is used by a wider variety of clients (different teams, different domains), noisy neighbor problems become a real risk — one client's runaway context growth or unexpected joins could pollute sessions that other clients depend on. Whether to add server-side enforcement (e.g., max connections per session, domain-scoped join restrictions, or explicit session locking) is an open question for a future iteration.
 
-4. **Client-Enforced Session Isolation:** Session isolation is currently **client-enforced**. The server provides `activeConnections` and `contextDomain` as signals, but nothing prevents a poorly behaved client from joining a session it shouldn't, or from ignoring domain boundaries entirely. In a controlled environment where all clients are trusted this is fine, but as the agentServer is used by a wider variety of clients (different teams, different domains), noisy neighbor problems become a real risk — one client's runaway context growth or unexpected joins could pollute sessions that other clients depend on. Whether to add server-side enforcement (e.g., max connections per session, domain-scoped join restrictions, or explicit session locking) is an open question for a future iteration.
-
-5. **Shell history rendering on session resume:** When the Shell resumes a session in connected mode, it calls `getDisplayHistory()` to load prior history. The open question is how this is rendered: does the Shell rebuild the chat view in place from the returned entries, swap its local HTML file, or render history on demand? This is a Shell-specific UX and architecture decision to be resolved when this work is tackled.
+4. **Shell history rendering on session resume:** When the Shell resumes a session in connected mode, it calls `getDisplayHistory()` to load prior history. The open question is how this is rendered: does the Shell rebuild the chat view in place from the returned entries, swap its local HTML file, or render history on demand? This is a Shell-specific UX and architecture decision to be resolved when this work is tackled.
 
 ---
 
