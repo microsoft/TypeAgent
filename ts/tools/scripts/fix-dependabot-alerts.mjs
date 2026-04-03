@@ -637,7 +637,7 @@ function findVersionThatAllows(
         if (allVersions.length > 0) {
             const candidates = allVersions
                 .filter((v) => semver.gt(v, currentVersion))
-                .slice(0, 10);
+                .sort(semver.compare);
             for (const ver of candidates) {
                 const deps = getPackageDeps(pkgName, ver);
                 if (!deps) continue;
@@ -1938,9 +1938,16 @@ function executeResolutions(analyses) {
                     verbose(
                         `Updating intermediates: ${intermediatePkgs.join(", ")}`,
                     );
-                    tryRunCmd("pnpm", ["update", ...intermediatePkgs, "-r"], {
-                        timeout: 120000,
-                    });
+                    const intResult = tryRunCmd(
+                        "pnpm",
+                        ["update", ...intermediatePkgs, "-r"],
+                        { timeout: 120000 },
+                    );
+                    if (intResult === null) {
+                        warn(
+                            `pnpm update failed for intermediate(s): ${intermediatePkgs.join(", ")} — fix for ${a.pkg} may be incomplete`,
+                        );
+                    }
                 }
                 // Run pnpm update to fix the unblocked subtrees
                 const outcome = runUpdateAndVerify(a);
@@ -2244,9 +2251,10 @@ function pruneOverrides() {
         // Check if the package is still in the dependency tree
         const whyData = getPnpmWhy(pkg);
         if (whyData.length === 0) {
-            log(
-                `     ${clr.pkg(pkg)}: ${clr.meta("not installed — keeping override")}`,
+            warn(
+                `${pkg}: not installed in dependency tree — override is dead weight`,
             );
+            toRemove.push(pkg);
             continue;
         }
         const parents = findConstrainingParentsFromData(whyData, pkg);
@@ -2328,6 +2336,13 @@ function emitJson(results) {
         patchedVersion: a.patched,
         latestVersion: a.latestVersion,
         blockingReasons: a.blockingReasons,
+        fixPlan: a.fixPlan
+            ? {
+                  unblockedActions: a.fixPlan.unblockedActions,
+                  blockedVersions: a.fixPlan.blockedVersions,
+                  blockReasons: a.fixPlan.blockReasons,
+              }
+            : null,
     });
 
     const output = {
