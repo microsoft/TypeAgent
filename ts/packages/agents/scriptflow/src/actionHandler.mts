@@ -92,6 +92,7 @@ async function executeFlowScript(
         sandbox: {
             allowedCmdlets: flow.sandbox.allowedCmdlets,
             allowedPaths: flow.sandbox.allowedPaths,
+            allowedModules: flow.sandbox.allowedModules,
             maxExecutionTime: flow.sandbox.maxExecutionTime,
             networkAccess: flow.sandbox.networkAccess,
         },
@@ -164,9 +165,55 @@ function validatePathParameters(
         if (/[<>"|?*]/.test(val.replace(/^[a-zA-Z]:\\/, ""))) {
             return `Parameter '${def.name}' contains invalid path characters: "${val}"`;
         }
-        // Warn if the path doesn't exist (for absolute paths)
-        if (isAbsolute(val) && !existsSync(val)) {
-            debug(`Path parameter '${def.name}' does not exist: ${val}`);
+
+        // Enforce pathMustExist validation rule
+        if (def.validation?.pathMustExist) {
+            if (isAbsolute(val) && !existsSync(val)) {
+                return `Parameter '${def.name}' path does not exist: "${val}" (pathMustExist validation rule)`;
+            }
+        } else {
+            // Just warn if the path doesn't exist (for absolute paths)
+            if (isAbsolute(val) && !existsSync(val)) {
+                debug(`Path parameter '${def.name}' does not exist: ${val}`);
+            }
+        }
+    }
+    return undefined;
+}
+
+function validateParameterRules(
+    params: Record<string, unknown>,
+    paramDefs: ScriptParameter[],
+): string | undefined {
+    for (const def of paramDefs) {
+        const val = params[def.name];
+
+        // Skip validation if parameter not provided and not required
+        if (val === undefined && !def.required) continue;
+
+        // Validate pattern (regex)
+        if (def.validation?.pattern && typeof val === "string") {
+            try {
+                const regex = new RegExp(def.validation.pattern);
+                if (!regex.test(val)) {
+                    return `Parameter '${def.name}' value "${val}" does not match required pattern: ${def.validation.pattern}`;
+                }
+            } catch (err) {
+                debug(
+                    `Invalid regex pattern for parameter '${def.name}': ${def.validation.pattern}`,
+                );
+            }
+        }
+
+        // Validate allowedValues (enum)
+        if (
+            def.validation?.allowedValues &&
+            def.validation.allowedValues.length > 0
+        ) {
+            const strVal = String(val);
+            if (!def.validation.allowedValues.includes(strVal)) {
+                return `Parameter '${def.name}' value "${val}" is not in allowed values: ${def.validation.allowedValues.join(", ")}`;
+            }
         }
     }
     return undefined;
@@ -401,6 +448,15 @@ async function handleScriptFlowAction(
                 return { error: pathError, fallbackToReasoning: true };
             }
 
+            // Validate parameter validation rules (pattern, allowedValues)
+            const validationError = validateParameterRules(
+                flowParameters,
+                flow.parameters,
+            );
+            if (validationError) {
+                return { error: validationError, fallbackToReasoning: true };
+            }
+
             const result = await executeFlowScript(
                 flow,
                 script,
@@ -520,6 +576,15 @@ async function handleScriptFlowAction(
             );
             if (pathError) {
                 return { error: pathError, fallbackToReasoning: true };
+            }
+
+            // Validate parameter validation rules (pattern, allowedValues)
+            const validationError = validateParameterRules(
+                directParams,
+                flow.parameters,
+            );
+            if (validationError) {
+                return { error: validationError, fallbackToReasoning: true };
             }
 
             const result = await executeFlowScript(flow, script, directParams);
