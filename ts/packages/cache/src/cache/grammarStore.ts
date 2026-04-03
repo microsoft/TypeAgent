@@ -7,6 +7,7 @@ import {
     matchGrammar,
     matchGrammarCompletion,
     GrammarCompletionResult,
+    isRequiringSepMode,
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
@@ -417,10 +418,7 @@ export class GrammarStoreImpl implements GrammarStore {
             let hasNoneMode = false;
             for (const { partial } of grammarPartials) {
                 if (partial.separatorMode !== undefined) {
-                    if (
-                        partial.separatorMode === "space" ||
-                        partial.separatorMode === "spacePunctuation"
-                    ) {
+                    if (isRequiringSepMode(partial.separatorMode)) {
                         hasRequiring = true;
                     }
                     if (partial.separatorMode === "none") {
@@ -449,10 +447,7 @@ export class GrammarStoreImpl implements GrammarStore {
                         return true;
                     } else {
                         // No trailing separator: drop requiring modes.
-                        if (
-                            partial.separatorMode === "space" ||
-                            partial.separatorMode === "spacePunctuation"
-                        ) {
+                        if (isRequiringSepMode(partial.separatorMode)) {
                             droppedGrammars = true;
                             return false;
                         }
@@ -511,15 +506,16 @@ export class GrammarStoreImpl implements GrammarStore {
             // advance P past trailing separator and adjust metadata
             // so the shell re-fetches when separator state changes.
             if (droppedGrammars) {
-                closedSet = closedSet === undefined ? false : false;
+                closedSet = false;
                 if (hasTrailingSep) {
-                    // Advance past trailing separators.
-                    const sepMatch = input
-                        .slice(matchedPrefixLength)
-                        .match(/^[\s\p{P}]+/u);
-                    if (sepMatch) {
-                        matchedPrefixLength += sepMatch[0].length;
-                    }
+                    // Advance past exactly one trailing separator
+                    // (not all consecutive separators).  Each
+                    // backspace in a multi-separator run produces
+                    // a distinct anchor for re-fetch.  Remaining
+                    // separators are stripped by the shell's
+                    // "optional" mode handling, keeping the menu
+                    // visible with a clean trie prefix.
+                    matchedPrefixLength += 1;
                     separatorMode = "optional";
                 }
                 // Force afterWildcard "all" → "some" so shell

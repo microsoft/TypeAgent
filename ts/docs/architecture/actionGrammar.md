@@ -875,11 +875,28 @@ logic in `materializeCandidates()` resolves this:
    - No trailing separator → drop requiring candidates (a separator
      would need to be inserted).
 
-3. **Advance P:** When trailing separator is present and candidates were
-   dropped, advance `maxPrefixLength` past the separator so the shell's
-   anchor includes it. This ensures backspace triggers a re-fetch (the
-   anchor diverges). Override `separatorMode` to `"optional"` since the
-   separator is already consumed into P.
+3. **Advance P by one character:** When trailing separator is present
+   and candidates were dropped, advance `maxPrefixLength` by exactly
+   one character (not past all consecutive separators). This ensures
+   backspace triggers a re-fetch (the anchor diverges). Override
+   `separatorMode` to `"optional"` since the separator is already
+   consumed into P.
+
+   Advance-1 is preferred over advance-all because:
+
+   - Each backspace in the separator run produces a distinct anchor,
+     giving the shell a re-fetch opportunity at every keystroke.
+   - With advance-all, deleting the _last_ separator in a multi-
+     separator run is the only keystroke that triggers a re-fetch;
+     intermediate deletes are invisible to the completion system.
+   - Advance-1 matches the shell's `separatorMode="optional"` contract:
+     the session sees one consumed separator and treats the rest as
+     ordinary prefix text. The shell strips leading whitespace for
+     `"optional"` mode (just as it does for requiring modes), so extra
+     separators do not pollute the trie — the menu stays visible with
+     an empty or narrowed prefix.
+   - The re-fetch cost is negligible — the grammar matcher runs in
+     sub-millisecond time.
 
 4. **Force `closedSet=false`:** When candidates are dropped, the
    completion list is no longer exhaustive. The shell must re-fetch when

@@ -413,8 +413,11 @@ contiguous within each category.
 - **Anchor** (`this.anchor`): the prefix string at `startIndex` returned by
   the backend. Everything after the anchor is the `completionPrefix` used to
   filter the local trie.
-- **Separator stripping**: when `separatorMode` requires a separator, the
-  leading separator character in the raw prefix is stripped before trie lookup.
+- **Separator stripping**: when `separatorMode` requires a separator
+  (`"space"` or `"spacePunctuation"`), or is `"optional"`, leading
+  separator characters in the raw prefix are stripped before trie lookup.
+  This means extra whitespace (e.g. double space) does not leak into the
+  trie as filter text — the trie always sees clean completion prefixes.
 - **`noMatchPolicy`**: computed once from the backend's descriptive fields
   (`closedSet`, `afterWildcard`) when a result arrives (see `NoMatchPolicy`
   below). Drives the A3 and C1 decisions as a simple `switch` instead of

@@ -28,6 +28,7 @@ export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
 export {
     matchGrammarCompletion,
     GrammarCompletionResult,
+    isRequiringSepMode,
 } from "./grammarCompletion.js";
 export type { AfterWildcard } from "./grammarCompletion.js";
 

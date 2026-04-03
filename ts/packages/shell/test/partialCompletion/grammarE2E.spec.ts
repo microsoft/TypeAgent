@@ -1080,6 +1080,155 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
         });
     });
 
+    // ── Separator-mode conflict filtering ──────────────────────────────
+    //
+    // When a spacing=none rule and a default-spacing (auto) rule both
+    // match the same prefix, the grammar reports a separator conflict:
+    //   - No trailing separator: none-mode candidates survive, closedSet=false
+    //   - Trailing separator: requiring-mode candidates survive, P advances by 1
+    //
+    // These tests verify the session handles the conflict metadata
+    // correctly: anchor positioning, re-fetch on backspace, and proper
+    // trie filtering.
+
+    describe("separator-mode conflict: spacing=none + auto alternation", () => {
+        // NoneRule needs no separator ("abcd"), AutoRule needs one ("ab cd").
+        // Both produce completion "cd" at P=2, but with incompatible sep modes.
+        const conflictGrammar = loadGrammarRules(
+            "conflict.grammar",
+            [
+                `<NoneRule> [spacing=none] = ab cd -> "none";`,
+                `<AutoRule> = ab cd -> "auto";`,
+                `<Start> = $(x:<NoneRule>) -> x | $(x:<AutoRule>) -> x;`,
+            ].join("\n"),
+        );
+
+        let menu: TestSearchMenu;
+        let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
+        let session: PartialCompletionSession;
+
+        beforeEach(async () => {
+            menu = makeMenu();
+            dispatcher = makeGrammarDispatcher(conflictGrammar, {});
+            session = new PartialCompletionSession(menu, dispatcher);
+        });
+
+        test("'ab' no trailing sep: none-mode completions, closedSet=false", async () => {
+            session.update("ab", getPos);
+            await flush();
+
+            // Grammar reports: completions=["cd"], separatorMode="none",
+            // closedSet=false (candidates were dropped).
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+            expect(menu.setChoices).toHaveBeenLastCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "cd" }),
+                ]),
+            );
+            // separatorMode="none" means menu is active immediately
+            // (no separator needed).
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("'ab ' trailing sep: P advances by 1, closedSet=false", async () => {
+            session.update("ab", getPos);
+            await flush();
+
+            // Type space — anchor diverges from "ab" to "ab " because
+            // closedSet=false means noMatchPolicy="refetch".  The space
+            // doesn't match "cd" in the trie → re-fetch.
+            session.update("ab ", getPos);
+            await flush();
+
+            // Re-fetch at "ab " returns: completions=["cd"],
+            // matchedPrefixLength=3 (P advanced past one separator),
+            // separatorMode="optional".
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+            expect(menu.setChoices).toHaveBeenLastCalledWith(
+                expect.arrayContaining([
+                    expect.objectContaining({ matchText: "cd" }),
+                ]),
+            );
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("backspace from 'ab ' to 'ab': anchor diverges → re-fetch", async () => {
+            session.update("ab", getPos);
+            await flush();
+            session.update("ab ", getPos);
+            await flush();
+
+            const fetchCountBefore =
+                dispatcher.getCommandCompletion.mock.calls.length;
+
+            // Backspace removes the space — anchor was "ab " (P=3),
+            // input "ab" doesn't start with "ab " → anchor diverged → re-fetch.
+            session.update("ab", getPos);
+            await flush();
+
+            expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
+                fetchCountBefore + 1,
+            );
+            expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+                "ab",
+                "forward",
+            );
+        });
+
+        test("double space 'ab  ': optional mode strips extra space, menu stays visible", async () => {
+            session.update("ab", getPos);
+            await flush();
+            session.update("ab ", getPos);
+            await flush();
+
+            // Double space: anchor is "ab " (P=3), rawPrefix=" " (second space).
+            // separatorMode="optional" → needsSep=false, but "optional"
+            // still strips leading whitespace → completionPrefix="".
+            // Empty prefix matches all completions → menu shows.
+            session.update("ab  ", getPos);
+            await flush();
+
+            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+                "",
+                expect.anything(),
+            );
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("'ab c' partial match narrows trie to 'cd'", async () => {
+            session.update("ab", getPos);
+            await flush();
+
+            // 'abc' without separator: closedSet=false, "c" doesn't match "cd"
+            // in the trie (anchor is "ab", separatorMode="none", rawPrefix="c")
+            // → trie prefix "c" narrows to "cd".
+            session.update("abc", getPos);
+
+            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+                "c",
+                expect.anything(),
+            );
+            expect(menu.isActive()).toBe(true);
+        });
+
+        test("'ab ' → 'ab c' narrows to 'cd' via trie", async () => {
+            session.update("ab", getPos);
+            await flush();
+            session.update("ab ", getPos);
+            await flush();
+
+            // At anchor "ab " (P=3), separatorMode="optional",
+            // rawPrefix="c" → trie prefix "c" → matches "cd".
+            session.update("ab c", getPos);
+
+            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+                "c",
+                expect.anything(),
+            );
+            expect(menu.isActive()).toBe(true);
+        });
+    });
+
     // ── getCompletionPrefix public API ───────────────────────────────
 
     describe("getCompletionPrefix with grammar results", () => {

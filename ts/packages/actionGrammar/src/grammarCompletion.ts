@@ -662,7 +662,7 @@ function computeCandidateSepMode(
 }
 
 // True when a SeparatorMode requires a separator character to be present.
-function isRequiringSepMode(mode: SeparatorMode): boolean {
+export function isRequiringSepMode(mode: SeparatorMode): boolean {
     return mode === "space" || mode === "spacePunctuation";
 }
 
@@ -1487,11 +1487,18 @@ function filterSepConflicts(ctx: CompletionContext): void {
     });
 
     // When trailing separator is present and we actually dropped
-    // candidates, advance maxPrefixLength past the separator so
-    // the shell anchor includes the separator character(s).  This
-    // ensures backspace triggers an anchor-diverged re-fetch.
+    // candidates, advance maxPrefixLength past exactly one separator
+    // character so the shell anchor includes it.  This ensures
+    // backspace triggers an anchor-diverged re-fetch.
+    //
+    // Only one character (not all consecutive separators) is consumed:
+    // each backspace in a multi-separator run produces a distinct
+    // anchor, giving the shell a re-fetch opportunity at every
+    // keystroke.  Any remaining separators are stripped by the shell's
+    // separator handling for "optional" mode, so the trie sees a clean
+    // prefix and the menu stays visible.
     if (ctx.hasTrailingSep && ctx.droppedCandidates) {
-        ctx.maxPrefixLength = nextNonSeparatorIndex(input, ctx.maxPrefixLength);
+        ctx.maxPrefixLength += 1;
     }
 }
 
@@ -1664,7 +1671,6 @@ function finalizeCandidates(ctx: CompletionContext): void {
 // should be dropped.
 function computeRangeNeedsSep(
     ctx: CompletionContext,
-    input: string,
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
 ): boolean | undefined {
@@ -1672,7 +1678,7 @@ function computeRangeNeedsSep(
         ctx.maxPrefixLength > 0 &&
         spacingMode !== "none" &&
         requiresSeparator(
-            input[ctx.maxPrefixLength - 1],
+            ctx.input[ctx.maxPrefixLength - 1],
             firstCompletionChar,
             spacingMode,
         );
@@ -1849,7 +1855,6 @@ function materializeCandidates(
                 ) {
                     const needsSep = computeRangeNeedsSep(
                         ctx,
-                        input,
                         partial.remainingText[0],
                         c.spacingMode,
                     );
@@ -1873,7 +1878,6 @@ function materializeCandidates(
                 if (completionProperty !== undefined) {
                     const needsSep = computeRangeNeedsSep(
                         ctx,
-                        input,
                         "a",
                         c.spacingMode,
                     );

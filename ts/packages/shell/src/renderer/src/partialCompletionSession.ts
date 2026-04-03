@@ -89,9 +89,9 @@ function computeNoMatchPolicy(
 //       "slide"   → wildcard boundary, slide anchor forward
 //   - The anchor is never advanced after a result is received (except
 //     when noMatchPolicy is "slide", which slides the anchor forward).
-//     When `separatorMode` requires a separator, the separator is stripped
-//     from the raw prefix before being passed to the menu, so the trie
-//     still matches.
+//     When `separatorMode` requires a separator, or is "optional", the
+//     leading separator characters in the raw prefix are stripped before
+//     being passed to the menu, so the trie still matches.
 //
 // Architecture: docs/architecture/completion.md — §5 Shell — Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
@@ -206,9 +206,11 @@ export class PartialCompletionSession {
             if (!separatorRegex(sepMode).test(rawPrefix)) {
                 return undefined;
             }
-            return stripLeadingSeparator(rawPrefix, sepMode);
         }
-        return rawPrefix;
+        // Strip leading separators for all modes except "none".
+        return sepMode !== "none"
+            ? stripLeadingSeparator(rawPrefix, sepMode)
+            : rawPrefix;
     }
 
     // Decides whether the current session can service `input` without a new
@@ -385,9 +387,12 @@ export class PartialCompletionSession {
 
         // SHOW — strip the leading separator (if any) before passing to the
         // menu trie, so completions like "music" match prefix "" not " ".
-        const completionPrefix = needsSep
-            ? stripLeadingSeparator(rawPrefix, sepMode)
-            : rawPrefix;
+        // "optional" mode: separator is not required, but when present it
+        // should be stripped so the trie sees clean completion text.
+        const completionPrefix =
+            needsSep || sepMode === "optional"
+                ? stripLeadingSeparator(rawPrefix, sepMode)
+                : rawPrefix;
 
         const position = getPosition(completionPrefix);
         if (position !== undefined) {
@@ -574,10 +579,10 @@ function separatorRegex(mode: SeparatorMode): RegExp {
 }
 
 // Strip leading separator characters from rawPrefix.
-// For "space" mode, only whitespace is stripped.
+// For "space" and "optional" modes, only whitespace is stripped.
 // For "spacePunctuation" mode, leading whitespace and punctuation are stripped.
 function stripLeadingSeparator(rawPrefix: string, mode: SeparatorMode): string {
-    return mode === "space"
+    return mode === "space" || mode === "optional"
         ? rawPrefix.trimStart()
         : rawPrefix.replace(/^[\s\p{P}]+/u, "");
 }
