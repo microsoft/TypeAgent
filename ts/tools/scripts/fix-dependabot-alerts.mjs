@@ -1199,13 +1199,34 @@ function detectCrossMajorOverride(pkg, patchedVersion) {
     );
 }
 
+// ── Fix plan query helpers ───────────────────────────────────────────────────
+// Every decision about what to do with an entry is derived from its
+// `fixPlan` (or absence thereof).
+
+/** True when some resolved versions are blocked and need pnpm.overrides. */
+function needsOverride(entry) {
+    return entry.fixPlan?.blockedVersions?.length > 0;
+}
+
+/** True when workspace/intermediate actions are needed (unblocked path). */
+function hasUnblockedActions(entry) {
+    return entry.fixPlan?.unblockedActions?.length > 0;
+}
+
+/** True when a simple `pnpm update` is sufficient (no actions, no blocks). */
+function isSimpleUpdate(entry) {
+    return (
+        entry.fixPlan && !needsOverride(entry) && !hasUnblockedActions(entry)
+    );
+}
+
 /**
  * Assess the risk of a fix action for a given analysis entry.
- * Works for both override and workspace strategies.
+ * Works for entries with unblocked actions or overrides.
  * Returns { level: "low"|"medium"|"high", reason: string }.
  */
 function assessRisk(entry) {
-    const { pkg, patched, currentVersion, strategy } = entry;
+    const { pkg, patched, currentVersion } = entry;
 
     // Check for cross-major bump
     const crossMajor =
@@ -1214,7 +1235,7 @@ function assessRisk(entry) {
         semver.valid(patched) &&
         isBreakingBump(currentVersion, patched);
 
-    if (strategy === "workspace" || strategy === "mixed") {
+    if (hasUnblockedActions(entry)) {
         const wsActions =
             entry.fixPlan?.unblockedActions?.filter(
                 (a) => a.type === "update-workspace",
@@ -1253,7 +1274,7 @@ function assessRisk(entry) {
         };
     }
 
-    // Override strategy
+    // Override-based entries
     const whyData = getPnpmWhy(pkg);
     const parents = findConstrainingParentsFromData(whyData, pkg);
     const blockingParents = parents.filter(
@@ -1338,22 +1359,22 @@ function addOverrides(overridesMap) {
 }
 
 /**
- * Run planFixes on a set of vulnerable whyData entries, display constraints,
- * and classify the entry's strategy + blockingReasons.
+ * Run planFixes on a set of vulnerable whyData entries
+ * and populate fixPlan + blockingReasons.
  *
- * Four outcomes:
- *   1. No actions, no blocked versions → strategy = "update"
+ * Four outcomes (derived from the fixPlan):
+ *   1. No actions, no blocked versions — isSimpleUpdate()
  *      All parent specs already allow the patched version; a simple
  *      `pnpm update <pkg> -r` will resolve the lockfile.
  *
- *   2. Has unblocked actions, no blocked versions → strategy = "workspace"
+ *   2. Has unblocked actions, no blocked versions — hasUnblockedActions() && !needsOverride()
  *      Some workspace package.json files need version bumps before the
  *      fix can propagate.  Requires --update-parents (or --auto-fix).
  *
- *   3. All versions blocked → strategy = "override"
+ *   3. All versions blocked — needsOverride() && !hasUnblockedActions()
  *      Every resolved version's tree is blocked.  Requires pnpm.overrides.
  *
- *   4. Mixed: some unblocked, some blocked → strategy = "mixed"
+ *   4. Mixed: some unblocked, some blocked — hasUnblockedActions() && needsOverride()
  *      Unblocked subtrees get workspace/update actions; blocked subtrees
  *      need pnpm.overrides.  Both --update-parents and --apply-overrides
  *      are needed for a full fix.
@@ -1397,16 +1418,12 @@ function extractWorkspaceRoots(whyData) {
  *   [override]    — no parent upgrade can fix this; needs pnpm.overrides
  */
 function formatActions(entry) {
-    const { pkg, patched, strategy, fixPlan } = entry;
+    const { pkg, patched, fixPlan } = entry;
     const lines = [];
 
-    // Risk assessment (reuses assessRisk for non-trivial strategies)
+    // Risk assessment for non-trivial fixes
     let riskLine = null;
-    if (
-        strategy === "override" ||
-        strategy === "workspace" ||
-        strategy === "mixed"
-    ) {
+    if (hasUnblockedActions(entry) || needsOverride(entry)) {
         const risk = assessRisk(entry);
         const riskIcon =
             risk.level === "high"
@@ -1417,7 +1434,7 @@ function formatActions(entry) {
         riskLine = `Risk: ${riskIcon} ${clr.meta("—")} ${clr.meta(risk.reason)}`;
     }
 
-    if (strategy === "update") {
+    if (isSimpleUpdate(entry)) {
         lines.push(`Fix: ${clr.chrome(`pnpm update ${pkg} -r`)}`);
         return lines;
     }
@@ -1467,7 +1484,7 @@ function formatActions(entry) {
     }
 
     // Override — explain why no parent update can help
-    if (strategy === "override" || strategy === "mixed") {
+    if (needsOverride(entry)) {
         // Find the blockers (constraints with no fixVersion)
         const blockers = constraints.filter((c) => !c.allows && !c.fixVersion);
         const seenBlockers = new Set();
@@ -1483,10 +1500,9 @@ function formatActions(entry) {
             if (!blockerLatest || blockerLatest === b.parentVersion) {
                 latestNote = clr.meta(", already at latest");
             }
-            const scopeNote =
-                strategy === "mixed"
-                    ? ` ${clr.meta("(versions: " + fixPlan.blockedVersions.join(", ") + ")")}`
-                    : "";
+            const scopeNote = hasUnblockedActions(entry)
+                ? ` ${clr.meta("(versions: " + fixPlan.blockedVersions.join(", ") + ")")}`
+                : "";
             lines.push(
                 `  ${clr.chrome("[override]")} ${clr.pkg(b.parent)}${clr.meta("@")}${clr.versionBad(b.parentVersion)} ${specDesc}${latestNote} — no update available${scopeNote}`,
             );
@@ -1508,7 +1524,7 @@ function formatActions(entry) {
 
 /**
  * Render the compact analysis output for a single package.
- * Produces 1-4 lines depending on strategy:
+ * Produces 1-4 lines depending on fix plan:
  *   Line 1: Package identity, severity, version gap
  *   Line 2: "Why" — root cause (only for blocked/workspace/mixed)
  *   Line 3: "↳ used by" — workspace roots (only if relevant)
@@ -1517,11 +1533,11 @@ function formatActions(entry) {
  * When --verbose is active, the full constraint/chain details follow.
  */
 function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
-    const { pkg, patched, severity, alertNums, ghsaIds, strategy } = entry;
+    const { pkg, patched, severity, alertNums, ghsaIds } = entry;
     const progress = clr.meta(`[${pkgIndex}/${pkgTotal}]`);
 
     // ── Line 1: Identity ─────────────────────────────────────────────────
-    if (strategy === "no-patch") {
+    if (!patched) {
         const noPatchVersions = getResolvedVersions(whyData);
         const installedStr =
             noPatchVersions.length > 0
@@ -1533,7 +1549,7 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
         return;
     }
 
-    if (strategy === "already-fixed") {
+    if (!entry.fixPlan) {
         log(
             `\n  ${progress} \ud83d\udce6 ${clr.pkg.bold(pkg)} ${clr.ok("\u2713 fixed")} (${colorSeverity(severity)}) ${clr.meta("—")} all installed versions \u2265${clr.versionOk(patched)}`,
         );
@@ -1546,16 +1562,6 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
     const versionGap = vulnVersions
         .map((v) => clr.versionBad(`\u2717 ${v}`))
         .join(", ");
-
-    // Strategy icon
-    let strategyIcon;
-    if (strategy === "update") {
-        strategyIcon = clr.ok("\u2713");
-    } else if (strategy === "workspace") {
-        strategyIcon = clr.warn("\u25B2");
-    } else {
-        strategyIcon = clr.fail("\u2717");
-    }
 
     log(
         `\n  ${progress} \ud83d\udce6 ${clr.pkg.bold(pkg)} (${colorSeverity(severity)}) ${clr.meta("—")} ${versionGap} ${clr.meta("\u2192")} need ${clr.versionOk(`\u2265${patched}`)}`,
@@ -1572,7 +1578,7 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
     }
 
     // ── "Used by" — which workspace packages are affected ─────────────
-    if (strategy !== "update") {
+    if (!isSimpleUpdate(entry)) {
         const wsRoots = extractWorkspaceRoots(whyData);
         if (wsRoots.length > 0) {
             const rootsStr =
@@ -1603,38 +1609,21 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
 }
 
 /**
- * Classify the entry's strategy and populate fixPlan/blockingReasons.
+ * Populate fixPlan, blockingReasons, and overrideReasons on the entry.
  * Pure classification — no display output.
  */
 function classifyWithFixPlan(entry, whyData) {
     const { pkg, patched } = entry;
 
-    const fixPlan = planFixes(pkg, patched, whyData);
-    entry.fixPlan = fixPlan;
+    entry.fixPlan = planFixes(pkg, patched, whyData);
 
-    const hasUnblockedActions = fixPlan.unblockedActions.length > 0;
-    const hasBlockedVersions = fixPlan.blockedVersions.length > 0;
-
-    if (!hasBlockedVersions && !hasUnblockedActions) {
-        entry.strategy = "update";
-    } else if (!hasBlockedVersions && hasUnblockedActions) {
-        entry.strategy = "workspace";
+    if (hasUnblockedActions(entry)) {
         if (!flagAllows(UPDATE_PARENTS, pkg)) {
             entry.blockingReasons.push("--update-parents not specified");
         }
-    } else if (hasBlockedVersions && !hasUnblockedActions) {
-        entry.strategy = "override";
-        entry.overrideReasons = [...fixPlan.blockReasons];
-        if (!flagAllows(APPLY_OVERRIDES, pkg)) {
-            entry.blockingReasons.push("--apply-overrides not specified");
-        }
-    } else {
-        // Mixed: some versions fixable, some blocked
-        entry.strategy = "mixed";
-        entry.overrideReasons = [...fixPlan.blockReasons];
-        if (!flagAllows(UPDATE_PARENTS, pkg)) {
-            entry.blockingReasons.push("--update-parents not specified");
-        }
+    }
+    if (needsOverride(entry)) {
+        entry.overrideReasons = [...entry.fixPlan.blockReasons];
         if (!flagAllows(APPLY_OVERRIDES, pkg)) {
             entry.blockingReasons.push("--apply-overrides not specified");
         }
@@ -1748,7 +1737,7 @@ function deduplicateAlerts(alerts) {
     return sorted;
 }
 
-/** Stage 3: Classify each vulnerable package into a resolution strategy. */
+/** Stage 3: Classify each vulnerable package. */
 function analyzeVulnerabilities(byPackage) {
     header("Analyzing vulnerabilities");
 
@@ -1776,7 +1765,6 @@ function analyzeVulnerabilities(byPackage) {
             manifestList,
             currentVersion: null,
             latestVersion: null,
-            strategy: null,
             fixPlan: null,
             blockingReasons: [],
         };
@@ -1788,7 +1776,6 @@ function analyzeVulnerabilities(byPackage) {
             const noPatchVersions = getResolvedVersions(whyData);
             entry.currentVersion =
                 noPatchVersions.length > 0 ? noPatchVersions[0] : null;
-            entry.strategy = "no-patch";
         } else {
             const uniqueVersions = getResolvedVersions(whyData);
             const vulnVersions = uniqueVersions.filter((v) =>
@@ -1804,9 +1791,9 @@ function analyzeVulnerabilities(byPackage) {
             entry.latestVersion = getLatestVersion(pkg);
 
             if (vulnVersions.length === 0) {
-                entry.strategy = "already-fixed";
+                // Already fixed — no fixPlan needed
             } else {
-                // Classify strategy via tree-walk fix planner
+                // Classify via tree-walk fix planner
                 classifyWithFixPlan(entry, whyData);
             }
         }
@@ -1819,13 +1806,10 @@ function analyzeVulnerabilities(byPackage) {
     return analyses;
 }
 
-/** Stage 5: Execute update, workspace, or override strategies. */
+/** Stage 5: Execute resolutions. */
 function executeResolutions(analyses) {
     const actionable = analyses.filter(
-        (a) =>
-            a.strategy !== "no-patch" &&
-            a.strategy !== "already-fixed" &&
-            a.blockingReasons.length === 0,
+        (a) => a.fixPlan && a.blockingReasons.length === 0,
     );
 
     if (actionable.length > 0) {
@@ -1833,10 +1817,10 @@ function executeResolutions(analyses) {
     }
 
     const results = {
-        alreadyFixed: analyses.filter((a) => a.strategy === "already-fixed"),
+        alreadyFixed: analyses.filter((a) => a.patched && !a.fixPlan),
         resolved: [],
         blocked: analyses.filter((a) => a.blockingReasons.length > 0),
-        noPatch: analyses.filter((a) => a.strategy === "no-patch"),
+        noPatch: analyses.filter((a) => !a.patched),
         failed: [],
     };
 
@@ -1873,7 +1857,7 @@ function executeResolutions(analyses) {
     for (const a of actionable) {
         const dryTag = DRY_RUN ? clr.meta("[dry-run] ") : "";
 
-        if (a.strategy === "update") {
+        if (isSimpleUpdate(a)) {
             if (DRY_RUN) {
                 ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
             } else {
@@ -1888,7 +1872,7 @@ function executeResolutions(analyses) {
                 }
             }
             results.resolved.push(a);
-        } else if (a.strategy === "workspace" || a.strategy === "mixed") {
+        } else if (hasUnblockedActions(a)) {
             const wsActions =
                 a.fixPlan?.unblockedActions?.filter(
                     (act) => act.type === "update-workspace",
@@ -1909,7 +1893,7 @@ function executeResolutions(analyses) {
                     );
                 }
                 ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
-                if (a.strategy === "mixed") {
+                if (needsOverride(a)) {
                     ok(
                         `${dryTag}Add pnpm.overrides["${a.pkg}"] = ">=${a.patched}" (for blocked versions: ${a.fixPlan.blockedVersions.join(", ")})`,
                     );
@@ -1942,17 +1926,17 @@ function executeResolutions(analyses) {
                 } else if (outcome === "failed") {
                     results.failed.push(a);
                     continue;
-                } else if (a.strategy === "mixed") {
+                } else if (needsOverride(a)) {
                     // Expected: blocked versions remain — override handles them
                     a.blockingReasons.length = 0; // clear; override will fix
                 } else {
-                    // workspace strategy but update didn't fully resolve
+                    // workspace actions but update didn't fully resolve
                     results.blocked.push(a);
                     continue;
                 }
             }
             results.resolved.push(a);
-        } else if (a.strategy === "override") {
+        } else if (needsOverride(a)) {
             if (DRY_RUN) {
                 ok(
                     `${dryTag}Add pnpm.overrides["${a.pkg}"] = ">=${a.patched}"`,
@@ -1967,7 +1951,7 @@ function executeResolutions(analyses) {
     if (!DRY_RUN) {
         const pendingOverrides = new Map();
         for (const a of results.resolved) {
-            if (a.strategy === "override" || a.strategy === "mixed") {
+            if (needsOverride(a)) {
                 pendingOverrides.set(a.pkg, `>=${a.patched}`);
             }
         }
@@ -1981,7 +1965,7 @@ function executeResolutions(analyses) {
                 fail(`Failed to write overrides: ${e.message}`);
                 // Move all override entries to failed
                 results.resolved = results.resolved.filter((a) => {
-                    if (a.strategy === "override" || a.strategy === "mixed") {
+                    if (needsOverride(a)) {
                         a.error = e.message;
                         results.failed.push(a);
                         return false;
@@ -1994,9 +1978,7 @@ function executeResolutions(analyses) {
 
     // If overrides were added, run pnpm install to apply them
     if (!DRY_RUN) {
-        const needsInstall = results.resolved.some(
-            (a) => a.strategy === "override" || a.strategy === "mixed",
-        );
+        const needsInstall = results.resolved.some((a) => needsOverride(a));
         if (needsInstall) {
             log("");
             try {
@@ -2022,12 +2004,12 @@ function formatActionTag(entry) {
         parts.push("workspace");
     }
     if (
-        entry.strategy === "update" ||
+        isSimpleUpdate(entry) ||
         actions.some((a) => a.type === "update-intermediate")
     ) {
         parts.push("update");
     }
-    if (entry.strategy === "override" || entry.strategy === "mixed") {
+    if (needsOverride(entry)) {
         parts.push("override");
     }
     return `[${parts.join("+")}]`;
@@ -2059,11 +2041,11 @@ function printSummary(results) {
     if (results.blocked.length > 0) {
         log("");
         const parentBlocked = results.blocked.filter(
-            (a) => a.strategy === "workspace",
+            (a) => hasUnblockedActions(a) && !needsOverride(a),
         );
         const overrideBlocked = results.blocked.filter(
             (a) =>
-                (a.strategy === "override" || a.strategy === "mixed") &&
+                needsOverride(a) &&
                 a.blockingReasons.some(
                     (r) =>
                         r === "--apply-overrides not specified" ||
@@ -2072,8 +2054,7 @@ function printSummary(results) {
         );
         const unfixable = results.blocked.filter(
             (a) =>
-                a.strategy !== "workspace" &&
-                a.strategy !== "mixed" &&
+                !hasUnblockedActions(a) &&
                 !a.blockingReasons.some(
                     (r) => r === "--apply-overrides not specified",
                 ),
@@ -2126,13 +2107,7 @@ function printSummary(results) {
     }
 
     // Fixed packages — show what was resolved instead of risk
-    const fixedEntries = results.resolved.filter(
-        (a) =>
-            a.strategy === "override" ||
-            a.strategy === "workspace" ||
-            a.strategy === "mixed" ||
-            a.strategy === "update",
-    );
+    const fixedEntries = results.resolved.filter((a) => a.fixPlan);
     if (fixedEntries.length > 0) {
         log(clr.meta(`\n  Fixed packages:`));
         for (const a of fixedEntries) {
@@ -2148,12 +2123,7 @@ function printSummary(results) {
 
     // Risk assessment for blocked entries only (resolved ones shown above)
     const RISK_ORDER = { high: 0, medium: 1, low: 2 };
-    const riskEntries = results.blocked.filter(
-        (a) =>
-            a.strategy === "override" ||
-            a.strategy === "workspace" ||
-            a.strategy === "mixed",
-    );
+    const riskEntries = results.blocked.filter((a) => a.fixPlan);
     if (riskEntries.length > 0) {
         const assessed = riskEntries.map((a) => ({
             entry: a,
@@ -2302,7 +2272,6 @@ function emitJson(results) {
         currentVersion: a.currentVersion,
         patchedVersion: a.patched,
         latestVersion: a.latestVersion,
-        strategy: a.strategy,
         blockingReasons: a.blockingReasons,
     });
 
