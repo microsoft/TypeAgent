@@ -306,7 +306,7 @@ When connected to the agentServer:
 
 - On startup, Shell calls `listSessions()` and presents a session picker (or auto-resumes the most recently active session for its domain).
 - A session management panel allows listing, switching, and discarding sessions.
-- When resuming a session, the Shell loads chat history from the server via `getDisplayHistory()` (which already exists on the `Dispatcher` interface and works per-session since each session has its own `DisplayLog` instance) rather than its local HTML file. How this history is rendered in the Shell UI is an open question — see Open Questions item 5.
+- When resuming a session, the Shell loads chat history from the server via `getDisplayHistory()` (which already exists on the `Dispatcher` interface and works per-session since each session has its own `DisplayLog` instance) rather than its local HTML file. How this history is rendered in the Shell UI is an open question — see Open Questions item 4.
 
 ---
 
