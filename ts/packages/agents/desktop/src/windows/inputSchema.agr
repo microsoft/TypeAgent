@@ -12,6 +12,7 @@ import { DesktopInputActions } from "./inputActionsSchema.ts";
           | <EnhancePointerPrecision>
           | <AdjustMousePointerSize>
           | <MousePointerCustomization>
+          | <CursorTrail>
           | <EnableTouchPad>
           | <TouchpadCursorSpeed>;
 
@@ -52,6 +53,16 @@ import { DesktopInputActions } from "./inputActionsSchema.ts";
     customize mouse pointer to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } }
   | change mouse pointer (style)? to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } }
   | set mouse pointer color to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } };
+
+<CursorTrail> =
+    enable cursor trail -> { actionName: "CursorTrail", parameters: { enable: true } }
+  | disable cursor trail -> { actionName: "CursorTrail", parameters: { enable: false } }
+  | turn on cursor trail -> { actionName: "CursorTrail", parameters: { enable: true } }
+  | turn off cursor trail -> { actionName: "CursorTrail", parameters: { enable: false } }
+  | enable mouse trail -> { actionName: "CursorTrail", parameters: { enable: true } }
+  | disable mouse trail -> { actionName: "CursorTrail", parameters: { enable: false } }
+  | set cursor trail length to $(length:number) -> { actionName: "CursorTrail", parameters: { enable: true, length } }
+  | cursor trail $(length:number) -> { actionName: "CursorTrail", parameters: { enable: true, length } };
 
 <EnableTouchPad> =
     enable touchpad -> { actionName: "EnableTouchPad", parameters: { enable: true } }

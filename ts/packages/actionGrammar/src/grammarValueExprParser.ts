@@ -130,7 +130,7 @@ export interface ValueExprParserContext {
 
 /**
  * Parse a value expression.
- * Entry point called from GrammarRuleParser.parseValue() when enableExpressions is true.
+ * Entry point called from GrammarRuleParser.parseValue() when enableValueExpressions is true.
  */
 export function parseValueExpr(ctx: ValueExprParserContext): ValueNode {
     return parseTernary(ctx);
