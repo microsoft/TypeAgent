@@ -475,9 +475,13 @@ function getPackageDeps(pkgName, version) {
         const pkgJsonPath = getWorkspacePackagePaths().get(pkgName);
         try {
             const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
-            const deps = pkgJson.dependencies || null;
-            _cache.packageDeps.set(cacheKey, deps);
-            return deps;
+            const deps = {
+                ...pkgJson.dependencies,
+                ...pkgJson.devDependencies,
+            };
+            const result = Object.keys(deps).length > 0 ? deps : null;
+            _cache.packageDeps.set(cacheKey, result);
+            return result;
         } catch (e) {
             verbose(
                 `getPackageDeps(${cacheKey}) workspace read failed: ${e.message}`,
@@ -629,11 +633,11 @@ function findVersionThatAllows(
             }
         }
 
-        // Scan recent versions newer than current
+        // Scan versions newer than current, smallest first, to find minimum fix
         if (allVersions.length > 0) {
             const candidates = allVersions
                 .filter((v) => semver.gt(v, currentVersion))
-                .slice(-10);
+                .slice(0, 10);
             for (const ver of candidates) {
                 const deps = getPackageDeps(pkgName, ver);
                 if (!deps) continue;
@@ -838,7 +842,7 @@ function planFixes(pkg, requiredVersion, whyData) {
         }
     }
 
-    if (process.stderr.isTTY) {
+    if (process.stderr.isTTY && !JSON_OUTPUT) {
         process.stderr.write("\r\x1b[K");
     }
 
@@ -1176,6 +1180,14 @@ function buildVersionSpec(oldSpec, newVersion) {
         oldSpec.startsWith("workspace:")
     ) {
         return oldSpec;
+    }
+    // Compound specs (e.g. ">=1.0.0 <2.0.0", "1.x || >=2.0.0") can't be
+    // safely rewritten by prefix alone — warn and fall back to "^newVersion".
+    if (oldSpec.includes(" ") || oldSpec.includes("||")) {
+        warn(
+            `buildVersionSpec: complex spec "${oldSpec}" cannot be rewritten automatically; using "^${newVersion}" — review manually`,
+        );
+        return `^${newVersion}`;
     }
     const prefixMatch = oldSpec.match(/^([~^]|>=?)/);
     const prefix = prefixMatch ? prefixMatch[0] : "^";
@@ -1737,7 +1749,7 @@ function deduplicateAlerts(alerts) {
     return sorted;
 }
 
-/** Stage 3: Classify each vulnerable package. */
+/** Stage 3+4: Classify each vulnerable package and run fix planner. */
 function analyzeVulnerabilities(byPackage) {
     header("Analyzing vulnerabilities");
 
@@ -1939,8 +1951,9 @@ function executeResolutions(analyses) {
                     results.failed.push(a);
                     continue;
                 } else if (needsOverride(a)) {
-                    // Expected: blocked versions remain — override handles them
-                    a.blockingReasons.length = 0; // clear; override will fix
+                    // Expected: blocked versions remain — override handles them.
+                    // Don't mutate a.blockingReasons; the override path below
+                    // will resolve the remaining blocked versions.
                 } else {
                     // workspace actions but update didn't fully resolve
                     results.blocked.push(a);
@@ -2063,13 +2076,30 @@ function printSummary(results) {
                         r === "--update-parents not specified",
                 ),
         );
-        const unfixable = results.blocked.filter(
-            (a) =>
-                !hasUnblockedActions(a) &&
-                !a.blockingReasons.some(
-                    (r) => r === "--apply-overrides not specified",
-                ),
+        // Truly unfixable: all blocking reasons are NOT just missing flags —
+        // at least one reason remains that no flag can address.
+        const FLAG_REASONS = new Set([
+            "--apply-overrides not specified",
+            "--update-parents not specified",
+        ]);
+        const unfixable = results.blocked.filter((a) =>
+            a.blockingReasons.some((r) => !FLAG_REASONS.has(r)),
         );
+
+        // Fixed packages — show before risk so good news comes first
+        const fixedEntries = results.resolved.filter((a) => a.fixPlan);
+        if (fixedEntries.length > 0) {
+            log(clr.meta(`\n  Fixed packages:`));
+            for (const a of fixedEntries) {
+                const strategyTag = clr.chrome(formatActionTag(a));
+                const fromVer = a.currentVersion
+                    ? `${clr.meta(a.currentVersion)} ${clr.meta("→")} `
+                    : "";
+                log(
+                    `     ${clr.ok("✓")}  ${strategyTag} ${clr.pkg(a.pkg)} ${fromVer}${clr.versionOk(`>=${a.patched}`)}`,
+                );
+            }
+        }
 
         // Risk assessment for blocked entries
         const RISK_ORDER = { high: 0, medium: 1, low: 2 };
@@ -2168,21 +2198,6 @@ function printSummary(results) {
         if (!SHOW_CHAINS) {
             log(
                 `\n  Run with ${clr.chrome("--show-chains")} to see full dependency paths for blocked packages.`,
-            );
-        }
-    }
-
-    // Fixed packages — show what was resolved instead of risk
-    const fixedEntries = results.resolved.filter((a) => a.fixPlan);
-    if (fixedEntries.length > 0) {
-        log(clr.meta(`\n  Fixed packages:`));
-        for (const a of fixedEntries) {
-            const strategyTag = clr.chrome(formatActionTag(a));
-            const fromVer = a.currentVersion
-                ? `${clr.meta(a.currentVersion)} ${clr.meta("→")} `
-                : "";
-            log(
-                `     ${clr.ok("✓")}  ${strategyTag} ${clr.pkg(a.pkg)} ${fromVer}${clr.versionOk(`>=${a.patched}`)}`,
             );
         }
     }
