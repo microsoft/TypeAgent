@@ -166,7 +166,7 @@ async function main() {
                 shutdown: async () => {
                     console.log("Shutdown requested, stopping agent server...");
                     wss.close();
-                    await sharedDispatcher.close();
+                    await sessionManager.close();
                     process.exit(0);
                 },
             };
