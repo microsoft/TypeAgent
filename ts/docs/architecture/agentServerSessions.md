@@ -27,6 +27,14 @@ As we begin making a larger shift towards a client-server model with the agent s
 
 
 
+## Non-Goals
+
+- **Authentication or access control on the WebSocket endpoint.** Any process that can reach the agentServer's WebSocket port can call any RPC method, including `discardSession`. Securing the endpoint itself is out of scope for v1.
+- **Per-session access control.** The server does not restrict which clients can join or discard which sessions. Clients are trusted. See Open Questions for a future path.
+- **Multi-user or multi-machine session sharing.** Sessions are local to a single agentServer instance.
+
+---
+
 ## Current State
 
 ### What Exists Today
@@ -99,7 +107,11 @@ A lightweight `sessions-index.json` file lives at `persistDir/sessions/sessions-
 
 Each session's full data (chat history, conversation memory, display log) is stored in `persistDir/sessions/<id>/` — the same layout that exists today, but keyed on UUID instead of an opaque session name.
 
+> **Note:** `contextDomain` is stored as a string and defaults to `""` (empty string) when not provided by the client. The server normalizes `undefined` → `""` before writing to the index. `SessionInfo.contextDomain` is always a non-optional string.
+
 > **Note:** `activeConnections` is a runtime-only field — it is **never written to `sessions-index.json`**. It is populated at query time by inspecting the live dispatcher pool. The index file contains only the five persisted fields shown above (`id`, `contextDomain`, `summary`, `createdAt`, `lastModifiedAt`).
+
+> **Note:** Legacy session data (from standalone Shell runs) is left in place and coexists on disk with the agentServer's session registry. The agentServer does not read, migrate, or touch legacy session directories. The standalone Shell continues to use its own session management independently for now.
 
 ### 3. Protocol Changes
 
@@ -108,7 +120,7 @@ Each session's full data (chat history, conversation memory, display log) is sto
 ```typescript
 type DispatcherConnectOptions = {
     filter?: boolean;
-    clientType?: "shell" | "extension" | "cli";
+    clientType?: "shell" | "extension";
 
     // Session management (new)
     sessionId?: string;           // Resume this session. If omitted → new session.
@@ -143,7 +155,7 @@ type JoinResult = {
 };
 ```
 
-> **Breaking Change:** `join()` currently returns `Promise<string>` (the `connectionId`). This is a breaking change to the return type. Clients that destructure `connectionId` from the result must be updated. Given that all clients are in the same monorepo, this is manageable.
+> **Breaking Change:** `join()` currently returns `Promise<string>` (the `connectionId`). This is a breaking change to the return type. Clients that destructure `connectionId` from the result must be updated. Given that all clients are in the same monorepo, this is manageable. In particular, `agentServerClient.ts` must be updated: its `.then((connectionId) => ...)` callback currently passes the result directly to `createDispatcherRpcClient` as a string — after this change it will receive a `JoinResult` object and must destructure `connectionId` from it explicitly. Note that the RPC layer uses `any` internally, so this will not produce a TypeScript compile error and must be caught by code review or tests.
 
 #### `SessionInfo`
 
@@ -170,7 +182,15 @@ AgentServer
 
 Each session's dispatcher is created with its own `persistDir` pointing to `sessions/<sessionId>/`, giving it fully isolated chat history, conversation memory, display log, and session config. Clients connecting to the same session share one dispatcher instance and its routing `ClientIO` table, consistent with how the current single dispatcher works today.
 
-This approach is chosen for its simplicity and alignment with the existing design. Memory is not a practical concern given the expected number of concurrent sessions in realistic usage.
+The session dispatcher maintains a `Set<Promise>` of in-flight `processCommand()` promises and a boolean "draining" flag. These are used by `discardSession()` to implement the graceful drain sequence described in Section 9.
+
+Each session dispatcher is initialized with an `onCompromised` callback that triggers `discardSession()` on that session rather than calling `process.exit(-1)`. This is an intentional deviation from the current single-session behavior: in a multi-session server, a compromised lock on one session should not take down all other active sessions. The affected session is discarded gracefully; the server and all other sessions continue running.
+
+This approach is chosen for its simplicity and alignment with the existing design. Memory is not a practical concern at the moment given the expected number of concurrent sessions in realistic usage.
+
+#### Concurrency Model
+
+Session lifecycle operations (`join()`, `discardSession()`, and dispatcher pool mutations) require explicit serialization. Each session in the pool carries a **per-session promise lock** — a queued async mutex that serializes all operations on that session. Concurrent `join()` calls targeting the same session ID, or a `join()` racing a `discardSession()` on the same session, are queued and executed in order. Operations on different sessions are independent and proceed concurrently without blocking each other.
 
 ### 5. Session Lifecycle on `join()`
 
@@ -198,7 +218,7 @@ Client calls join({ sessionId?, contextDomain?, clientType, filter })
 After the first assistant response in a brand-new session, the server fires an async background task:
 
 1. Take the first 2–4 turns of chat history.
-2. Call the LLM with a short system prompt: *"Summarize this conversation in one sentence of ≤ 120 characters, suitable for a session list."*
+2. Call the LLM with a short system prompt: *"Summarize this conversation in one sentence of ≤ 120 characters, suitable for a session list."* This call uses a dedicated, cheaper model configured alongside the other model settings (e.g., in the same location as the translator or explainer model config). It does not use the session's primary model.
 3. Write the result to `sessions-index.json` for this session ID.
 
 This is fire-and-forget from the client's perspective — no blocking, no protocol round-trip needed for summary generation. The summary will appear the next time `listSessions()` is called.
@@ -248,7 +268,10 @@ const joinResult = await agentServer.join({
 ### 9. `discardSession(sessionId)`
 
 1. Notify all clients currently connected to the session via a `ClientIO` notification that the session is being discarded.
-2. Cancel all in-flight `processCommand()` calls immediately. Each cancelled call rejects with `SessionDiscardedError`, which clients are expected to handle gracefully.
+2. Drain in-flight `processCommand()` calls gracefully:
+   - Mark the session as "draining". Any new `processCommand()` calls received after this point are rejected immediately with `SessionDiscardedError`.
+   - Await `Promise.allSettled(inFlightPromises)` to allow already-running calls to complete naturally. `inFlightPromises` is the `Set<Promise>` maintained by the session dispatcher (just the promises; no request ID tracking is needed).
+   - After a configurable timeout (default 5 s), proceed with teardown regardless of any still-outstanding promises.
 3. Forcibly close all active connections to the session.
 4. Shut down and evict the session's dispatcher from the in-memory pool.
 5. Remove `persistDir/sessions/<sessionId>/` from disk (recursive delete).
@@ -283,25 +306,7 @@ When connected to the agentServer:
 
 - On startup, Shell calls `listSessions()` and presents a session picker (or auto-resumes the most recently active session for its domain).
 - A session management panel allows listing, switching, and discarding sessions.
-- **TBD:** When resuming a session, the Shell will need to load the chat history from the server (via `getDisplayHistory()`) rather than its local HTML file, since the authoritative history lives in the session's display log on the server. How this is rendered in the Shell UI (rebuild in place, swap file, fresh render) is a Shell-specific implementation decision to be resolved when this work is tackled.
-
----
-
-## Storage Layout
-
-```
-~/.typeagent/
-├── sessions-index.json          ← NEW: session registry (list + metadata)
-└── sessions/
-    ├── <session-uuid-1>/
-    │   ├── data.json             ← chat history, session config
-    │   ├── displayLog.json       ← display log
-    │   └── conversation*/        ← conversation memory (knowledge store)
-    └── <session-uuid-2>/
-        └── ...
-```
-
-On startup, the server should check whether legacy session data exists (presence of `sessions.json` or `sessions/<YYYYMMDD>/` directories without a `sessions-index.json`). If detected, a migration utility should be run before the server begins accepting connections. The migration converts the **last-active legacy session** — defined as the session returned by `restoreLastSession()`, or equivalently the entry with the most recent `lastModifiedAt` in `sessions.json` — into a UUID-keyed entry in `sessions-index.json` and moves its data directory to `sessions/<uuid>/`. All other legacy session directories and their entries in `sessions.json` are deleted.
+- When resuming a session, the Shell loads chat history from the server via `getDisplayHistory()` (which already exists on the `Dispatcher` interface and works per-session since each session has its own `DisplayLog` instance) rather than its local HTML file. How this history is rendered in the Shell UI is an open question — see Open Questions item 5.
 
 ---
 
@@ -326,6 +331,8 @@ On startup, the server should check whether legacy session data exists (presence
 
 4. **Client-Enforced Session Isolation:** Session isolation is currently **client-enforced**. The server provides `activeConnections` and `contextDomain` as signals, but nothing prevents a poorly behaved client from joining a session it shouldn't, or from ignoring domain boundaries entirely. In a controlled environment where all clients are trusted this is fine, but as the agentServer is used by a wider variety of clients (different teams, different domains), noisy neighbor problems become a real risk — one client's runaway context growth or unexpected joins could pollute sessions that other clients depend on. Whether to add server-side enforcement (e.g., max connections per session, domain-scoped join restrictions, or explicit session locking) is an open question for a future iteration.
 
+5. **Shell history rendering on session resume:** When the Shell resumes a session in connected mode, it calls `getDisplayHistory()` to load prior history. The open question is how this is rendered: does the Shell rebuild the chat view in place from the returned entries, swap its local HTML file, or render history on demand? This is a Shell-specific UX and architecture decision to be resolved when this work is tackled.
+
 ---
 
 ## Summary
@@ -333,7 +340,7 @@ On startup, the server should check whether legacy session data exists (presence
 This design adds explicit session management to the agentServer without fundamentally restructuring its architecture. The core additions are:
 
 - A `sessions-index.json` registry for discoverable, GUID-keyed sessions with `contextDomain` labeling and `activeConnections` tracking.
-- Four new RPC methods on the `AgentServer` channel: `listSessions`, `getLatestSession`, `discardSession`.
+- Three new RPC methods on the `AgentServer` channel: `listSessions`, `getLatestSession`, `discardSession`.
 - `sessionId` and `contextDomain` fields in `DispatcherConnectOptions` so clients can create, resume, or find sessions by domain.
 - `getLatestSession(domain)` as a convenience for clients that want to rejoin an existing context without managing session IDs directly.
 - Auto-generated session summaries via a lightweight LLM call after the first exchange.
