@@ -1793,8 +1793,20 @@ function analyzeVulnerabilities(byPackage) {
             if (vulnVersions.length === 0) {
                 // Already fixed — no fixPlan needed
             } else {
+                // Show progress on stderr so the spinner appears under
+                // the right package context (not glued to the previous entry)
+                if (process.stderr.isTTY && !JSON_OUTPUT) {
+                    process.stderr.write(
+                        `\r\x1b[K\n  ${clr.meta(`[${pkgIndex}/${pkgTotal}]`)} ${clr.meta(`Analyzing ${pkg}…`)}`,
+                    );
+                }
                 // Classify via tree-walk fix planner
                 classifyWithFixPlan(entry, whyData);
+                // Move cursor back up so formatPackageAnalysis output
+                // overwrites the progress line cleanly
+                if (process.stderr.isTTY && !JSON_OUTPUT) {
+                    process.stderr.write(`\x1b[A\r\x1b[K`);
+                }
             }
         }
 
@@ -2129,11 +2141,27 @@ function printSummary(results) {
             entry: a,
             risk: assessRisk(a),
         }));
-        assessed.sort(
-            (a, b) =>
+        assessed.sort((a, b) => {
+            const riskDiff =
                 (RISK_ORDER[a.risk.level] ?? 3) -
-                (RISK_ORDER[b.risk.level] ?? 3),
-        );
+                (RISK_ORDER[b.risk.level] ?? 3);
+            if (riskDiff !== 0) return riskDiff;
+            // Secondary: override > workspace > update
+            const ACTION_ORDER = { override: 0, workspace: 1, update: 2 };
+            const aTag = formatActionTag(a.entry);
+            const bTag = formatActionTag(b.entry);
+            const aAction = aTag.includes("override")
+                ? "override"
+                : aTag.includes("workspace")
+                  ? "workspace"
+                  : "update";
+            const bAction = bTag.includes("override")
+                ? "override"
+                : bTag.includes("workspace")
+                  ? "workspace"
+                  : "update";
+            return (ACTION_ORDER[aAction] ?? 3) - (ACTION_ORDER[bAction] ?? 3);
+        });
         log(clr.meta(`\n  Risk assessment:`));
         for (const { entry: a, risk } of assessed) {
             const riskIcon =
