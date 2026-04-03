@@ -129,7 +129,6 @@ type AgentServerInvokeFunctions = {
     // New
     listSessions: (contextDomain?: string) => Promise<SessionInfo[]>;
     getLatestSession: (contextDomain?: string) => Promise<SessionInfo | null>;
-    getSessionHistory: (sessionId: string, afterSeq?: number) => Promise<DisplayLogEntry[]>;
     discardSession: (sessionId: string) => Promise<void>;
 };
 ```
@@ -246,26 +245,7 @@ const joinResult = await agentServer.join({
 });
 ```
 
-### 9. `getSessionHistory(sessionId, afterSeq?)`
-
-Retrieves the display log for a session, thin wrapper over the dispatcher's existing `getDisplayHistory(afterSeq?)`. Returns all `DisplayLogEntry` items in sequence order.
-
-> **Note:** `getSessionHistory` is the public RPC name; internally, it wraps the dispatcher's `getDisplayHistory(afterSeq?)` method. These are two names for the same operation at different layers.
-
-- If `afterSeq` is omitted, returns the full history from the beginning — used by a client loading a resumed session for the first time.
-- If `afterSeq` is provided, returns only entries after that sequence number — used by a client reconnecting to a session it partially rendered, to fetch only what it missed.
-
-```typescript
-// Fresh load on session resume
-const history = await agentServer.getSessionHistory(sessionId);
-
-// Incremental sync after reconnect
-const newEntries = await agentServer.getSessionHistory(sessionId, lastKnownSeq);
-```
-
-This call uses the following read strategy to avoid TOCTOU issues: if the session's dispatcher is currently loaded in the in-memory pool, the call delegates to the dispatcher's in-memory `getDisplayHistory()` rather than reading from disk — no concurrent writer, no partial read. If the session is not in the pool, the display log is read directly from `persistDir/sessions/<sessionId>/displayLog.json` (no concurrent writer in that case either).
-
-### 10. `discardSession(sessionId)`
+### 9. `discardSession(sessionId)`
 
 1. Notify all clients currently connected to the session via a `ClientIO` notification that the session is being discarded.
 2. Cancel all in-flight `processCommand()` calls immediately. Each cancelled call rejects with `SessionDiscardedError`, which clients are expected to handle gracefully.
@@ -353,7 +333,7 @@ On startup, the server should check whether legacy session data exists (presence
 This design adds explicit session management to the agentServer without fundamentally restructuring its architecture. The core additions are:
 
 - A `sessions-index.json` registry for discoverable, GUID-keyed sessions with `contextDomain` labeling and `activeConnections` tracking.
-- Four new RPC methods on the `AgentServer` channel: `listSessions`, `getLatestSession`, `getSessionHistory`, `discardSession`.
+- Four new RPC methods on the `AgentServer` channel: `listSessions`, `getLatestSession`, `discardSession`.
 - `sessionId` and `contextDomain` fields in `DispatcherConnectOptions` so clients can create, resume, or find sessions by domain.
 - `getLatestSession(domain)` as a convenience for clients that want to rejoin an existing context without managing session IDs directly.
 - Auto-generated session summaries via a lightweight LLM call after the first exchange.
