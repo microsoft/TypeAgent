@@ -32,10 +32,11 @@
  *      or a fatal error occurred (fetch failure, unknown flag, etc.)
  */
 
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { AsyncLocalStorage } from "node:async_hooks";
 import chalk from "chalk";
 import semver from "semver";
 
@@ -192,9 +193,51 @@ const clr = {
 const _cache = {
     packageDeps: new Map(),
     latestVersion: new Map(),
+    npmInfo: new Map(), // versions + dist-tags.latest per package
     pnpmWhy: new Map(),
     workspacePkgPaths: null,
 };
+
+// In-flight promise deduplication: prevents duplicate concurrent requests for the same key.
+const _inflight = {
+    packageDeps: new Map(),
+    latestVersion: new Map(),
+    npmInfo: new Map(),
+    pnpmWhy: new Map(),
+};
+
+// ── Concurrency control ───────────────────────────────────────────────────────
+
+/**
+ * Limits concurrent npm registry calls to avoid rate-limiting.
+ * Override with DEPFIX_NPM_CONCURRENCY env var (default 8).
+ */
+class Semaphore {
+    constructor(n) {
+        this._n = n;
+        this._queue = [];
+    }
+    acquire() {
+        if (this._n > 0) {
+            this._n--;
+            return Promise.resolve();
+        }
+        return new Promise((r) => this._queue.push(r));
+    }
+    release() {
+        if (this._queue.length > 0) this._queue.shift()();
+        else this._n++;
+    }
+}
+const _npmSem = new Semaphore(
+    parseInt(process.env.DEPFIX_NPM_CONCURRENCY ?? "8", 10),
+);
+
+// ── Per-package log buffering ─────────────────────────────────────────────────
+// When packages are analysed concurrently, each one buffers its own log lines
+// so output is flushed in order (not interleaved).
+
+const _logStorage = new AsyncLocalStorage();
 
 const MAX_BUFFER = 10 * 1024 * 1024; // 10 MB
 
@@ -251,27 +294,58 @@ function tryRunCmd(cmd, cmdArgs, opts = {}) {
     return result.stdout.trim();
 }
 
+/**
+ * Async variant of tryRunCmd — uses execFile so multiple calls can run in
+ * parallel without blocking the event loop.  Returns null on failure.
+ */
+function tryRunCmdAsync(cmd, cmdArgs, opts = {}) {
+    return new Promise((resolve) => {
+        execFile(
+            cmd,
+            cmdArgs,
+            { cwd: ROOT, maxBuffer: MAX_BUFFER, encoding: "utf-8", ...opts },
+            (error, stdout) => {
+                if (error) {
+                    verbose(
+                        `${cmd} ${cmdArgs.join(" ")} failed: ${error.message}`,
+                    );
+                    resolve(null);
+                } else {
+                    resolve(stdout.trim());
+                }
+            },
+        );
+    });
+}
+
 function verbose(msg) {
     if (VERBOSE && !JSON_OUTPUT) console.log(clr.meta(`  [verbose] ${msg}`));
 }
 
+// Logging helpers — when running inside an AsyncLocalStorage context (concurrent
+// package analysis), lines are buffered and flushed in order by the caller.
+function _emit(line) {
+    if (JSON_OUTPUT) return;
+    const buf = _logStorage.getStore();
+    if (buf) buf.push(line);
+    else console.log(line);
+}
 function log(msg) {
-    if (!JSON_OUTPUT) console.log(msg);
+    _emit(msg);
 }
 function header(msg) {
-    if (!JSON_OUTPUT)
-        console.log(
-            `\n${clr.chrome("═".repeat(70))}\n  ${clr.chrome.bold(msg)}\n${clr.chrome("═".repeat(70))}`,
-        );
+    _emit(
+        `\n${clr.chrome("═".repeat(70))}\n  ${clr.chrome.bold(msg)}\n${clr.chrome("═".repeat(70))}`,
+    );
 }
 function warn(msg) {
-    if (!JSON_OUTPUT) console.log(clr.warn(`  ⚠  ${msg}`));
+    _emit(clr.warn(`  ⚠  ${msg}`));
 }
 function ok(msg) {
-    if (!JSON_OUTPUT) console.log(clr.ok(`  ✓  ${msg}`));
+    _emit(clr.ok(`  ✓  ${msg}`));
 }
 function fail(msg) {
-    if (!JSON_OUTPUT) console.log(clr.fail(`  ✗  ${msg}`));
+    _emit(clr.fail(`  ✗  ${msg}`));
 }
 /**
  * Parse JSON output from `gh --paginate` or `pnpm --json` that may
@@ -400,22 +474,33 @@ function colorSeverity(severity) {
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 function getLatestVersion(pkg) {
-    if (_cache.latestVersion.has(pkg)) return _cache.latestVersion.get(pkg);
-    try {
-        const output = tryRunCmd("npm", [
-            "view",
-            pkg,
-            "dist-tags.latest",
-            "--json",
-        ]);
-        if (!output || output === "undefined") return null;
-        const version = JSON.parse(output);
-        _cache.latestVersion.set(pkg, version);
-        return version;
-    } catch (e) {
-        verbose(`getLatestVersion(${pkg}) failed: ${e.message}`);
-        return null;
-    }
+    if (_cache.latestVersion.has(pkg))
+        return Promise.resolve(_cache.latestVersion.get(pkg));
+    if (_inflight.latestVersion.has(pkg))
+        return _inflight.latestVersion.get(pkg);
+    const p = (async () => {
+        await _npmSem.acquire();
+        try {
+            const output = await tryRunCmdAsync("npm", [
+                "view",
+                pkg,
+                "dist-tags.latest",
+                "--json",
+            ]);
+            if (!output || output === "undefined") return null;
+            const version = JSON.parse(output);
+            _cache.latestVersion.set(pkg, version);
+            return version;
+        } catch (e) {
+            verbose(`getLatestVersion(${pkg}) failed: ${e.message}`);
+            return null;
+        } finally {
+            _npmSem.release();
+            _inflight.latestVersion.delete(pkg);
+        }
+    })();
+    _inflight.latestVersion.set(pkg, p);
+    return p;
 }
 
 /**
@@ -438,9 +523,10 @@ function getResolvedVersions(whyData) {
  *   - versions: all unique resolved versions
  *   - unfixed: versions still below requiredVersion
  */
-function verifyAllVersionsFixed(pkg, requiredVersion) {
+async function verifyAllVersionsFixed(pkg, requiredVersion) {
     _cache.pnpmWhy.delete(pkg);
-    const versions = getResolvedVersions(getPnpmWhy(pkg));
+    _inflight.pnpmWhy.delete(pkg);
+    const versions = getResolvedVersions(await getPnpmWhy(pkg));
     const unfixed = versions.filter((v) => semver.lt(v, requiredVersion));
     return { ok: unfixed.length === 0, versions, unfixed };
 }
@@ -449,36 +535,55 @@ function verifyAllVersionsFixed(pkg, requiredVersion) {
  * Run `pnpm why <pkg> -r --json` and return parsed entries.
  */
 function getPnpmWhy(pkg) {
-    if (_cache.pnpmWhy.has(pkg)) return _cache.pnpmWhy.get(pkg);
-    try {
-        const output = tryRunCmd("pnpm", ["why", pkg, "-r", "--json"]);
-        if (!output || output === "[]") return [];
-        const result = parsePaginatedJson(output);
-        _cache.pnpmWhy.set(pkg, result);
-        return result;
-    } catch (e) {
-        verbose(`getPnpmWhy(${pkg}) failed: ${e.message}`);
-        return [];
-    }
+    if (_cache.pnpmWhy.has(pkg))
+        return Promise.resolve(_cache.pnpmWhy.get(pkg));
+    if (_inflight.pnpmWhy.has(pkg)) return _inflight.pnpmWhy.get(pkg);
+    const p = (async () => {
+        try {
+            const output = await tryRunCmdAsync("pnpm", [
+                "why",
+                pkg,
+                "-r",
+                "--json",
+            ]);
+            if (!output || output === "[]") return [];
+            const result = parsePaginatedJson(output);
+            _cache.pnpmWhy.set(pkg, result);
+            return result;
+        } catch (e) {
+            verbose(`getPnpmWhy(${pkg}) failed: ${e.message}`);
+            return [];
+        } finally {
+            _inflight.pnpmWhy.delete(pkg);
+        }
+    })();
+    _inflight.pnpmWhy.set(pkg, p);
+    return p;
 }
 
-function findConstrainingParentsFromData(whyData, pkg) {
+async function findConstrainingParentsFromData(whyData, pkg) {
     const parents = [];
     const seen = new Set();
+    const pairs = [];
     for (const entry of whyData) {
         if (entry.dependents) {
             for (const dep of entry.dependents) {
                 const key = `${dep.name}@${dep.version}`;
                 if (seen.has(key)) continue;
                 seen.add(key);
-                const depSpec = getParentDepSpec(dep.name, dep.version, pkg);
-                parents.push({
-                    name: dep.name,
-                    version: dep.version,
-                    requiredSpec: depSpec,
-                });
+                pairs.push(dep);
             }
         }
+    }
+    const specs = await Promise.all(
+        pairs.map((dep) => getParentDepSpec(dep.name, dep.version, pkg)),
+    );
+    for (let i = 0; i < pairs.length; i++) {
+        parents.push({
+            name: pairs[i].name,
+            version: pairs[i].version,
+            requiredSpec: specs[i],
+        });
     }
     return parents;
 }
@@ -486,9 +591,9 @@ function findConstrainingParentsFromData(whyData, pkg) {
 /**
  * Get the version spec that parentPkg@parentVersion requires for depPkg.
  */
-function getParentDepSpec(parentPkg, parentVersion, depPkg) {
+async function getParentDepSpec(parentPkg, parentVersion, depPkg) {
     try {
-        const deps = getPackageDeps(parentPkg, parentVersion);
+        const deps = await getPackageDeps(parentPkg, parentVersion);
         if (deps && deps[depPkg]) return deps[depPkg];
     } catch (e) {
         verbose(
@@ -501,9 +606,11 @@ function getParentDepSpec(parentPkg, parentVersion, depPkg) {
 function getPackageDeps(pkgName, version) {
     const cacheKey = `${pkgName}@${version}`;
     if (_cache.packageDeps.has(cacheKey))
-        return _cache.packageDeps.get(cacheKey);
+        return Promise.resolve(_cache.packageDeps.get(cacheKey));
+    if (_inflight.packageDeps.has(cacheKey))
+        return _inflight.packageDeps.get(cacheKey);
 
-    // Check if this is a workspace package — read its package.json directly
+    // Workspace packages: read package.json directly (sync — no npm call needed)
     if (isWorkspacePackage(pkgName)) {
         const pkgJsonPath = getWorkspacePackagePaths().get(pkgName);
         try {
@@ -514,30 +621,38 @@ function getPackageDeps(pkgName, version) {
             };
             const result = Object.keys(deps).length > 0 ? deps : null;
             _cache.packageDeps.set(cacheKey, result);
-            return result;
+            return Promise.resolve(result);
         } catch (e) {
             verbose(
                 `getPackageDeps(${cacheKey}) workspace read failed: ${e.message}`,
             );
-            return null;
+            return Promise.resolve(null);
         }
     }
 
-    try {
-        const output = tryRunCmd("npm", [
-            "view",
-            `${pkgName}@${version}`,
-            "dependencies",
-            "--json",
-        ]);
-        if (!output || output === "undefined") return null;
-        const deps = JSON.parse(output);
-        _cache.packageDeps.set(cacheKey, deps);
-        return deps;
-    } catch (e) {
-        verbose(`getPackageDeps(${cacheKey}) failed: ${e.message}`);
-        return null;
-    }
+    const p = (async () => {
+        await _npmSem.acquire();
+        try {
+            const output = await tryRunCmdAsync("npm", [
+                "view",
+                `${pkgName}@${version}`,
+                "dependencies",
+                "--json",
+            ]);
+            if (!output || output === "undefined") return null;
+            const deps = JSON.parse(output);
+            _cache.packageDeps.set(cacheKey, deps);
+            return deps;
+        } catch (e) {
+            verbose(`getPackageDeps(${cacheKey}) failed: ${e.message}`);
+            return null;
+        } finally {
+            _npmSem.release();
+            _inflight.packageDeps.delete(cacheKey);
+        }
+    })();
+    _inflight.packageDeps.set(cacheKey, p);
+    return p;
 }
 
 function specAllowsVersion(spec, version) {
@@ -626,11 +741,51 @@ function getWorkspaceDepInfo(workspaceName, depPkg) {
 }
 
 /**
+ * Fetch `versions` and `dist-tags.latest` for a package from npm.
+ * Results are deduplicated across concurrent callers via `_inflight`.
+ * @returns {{ versions: string[], latest: string|null } | null}
+ */
+function getNpmInfo(pkgName) {
+    if (_cache.npmInfo.has(pkgName))
+        return Promise.resolve(_cache.npmInfo.get(pkgName));
+    if (_inflight.npmInfo.has(pkgName)) return _inflight.npmInfo.get(pkgName);
+    const p = (async () => {
+        await _npmSem.acquire();
+        try {
+            const output = await tryRunCmdAsync("npm", [
+                "view",
+                pkgName,
+                "versions",
+                "dist-tags.latest",
+                "--json",
+            ]);
+            if (!output) return null;
+            const raw = JSON.parse(output);
+            const result = {
+                versions: raw.versions || [],
+                latest:
+                    raw["dist-tags.latest"] || raw["dist-tags"]?.latest || null,
+            };
+            _cache.npmInfo.set(pkgName, result);
+            return result;
+        } catch (e) {
+            verbose(`getNpmInfo(${pkgName}) failed: ${e.message}`);
+            return null;
+        } finally {
+            _npmSem.release();
+            _inflight.npmInfo.delete(pkgName);
+        }
+    })();
+    _inflight.npmInfo.set(pkgName, p);
+    return p;
+}
+
+/**
  * Find the smallest published version of `pkgName` newer than
  * `currentVersion` whose dependency on `depPkg` allows (or drops)
  * `requiredDepVersion`.  Returns the version string or null.
  */
-function findVersionThatAllows(
+async function findVersionThatAllows(
     pkgName,
     currentVersion,
     depPkg,
@@ -639,22 +794,13 @@ function findVersionThatAllows(
     if (isWorkspacePackage(pkgName)) return null;
 
     try {
-        const npmInfo = tryRunCmd("npm", [
-            "view",
-            pkgName,
-            "versions",
-            "dist-tags.latest",
-            "--json",
-        ]);
-        if (!npmInfo) return null;
-        const npmData = JSON.parse(npmInfo);
-        const latestVersion =
-            npmData["dist-tags.latest"] || npmData["dist-tags"]?.latest;
-        const allVersions = npmData.versions || [];
+        const npmData = await getNpmInfo(pkgName);
+        if (!npmData) return null;
+        const { versions: allVersions, latest: latestVersion } = npmData;
 
         // Check latest first (most common fix path)
         if (latestVersion && latestVersion !== currentVersion) {
-            const deps = getPackageDeps(pkgName, latestVersion);
+            const deps = await getPackageDeps(pkgName, latestVersion);
             if (deps) {
                 const spec = deps[depPkg];
                 if (
@@ -666,20 +812,23 @@ function findVersionThatAllows(
             }
         }
 
-        // Scan versions newer than current, smallest first, to find minimum fix
+        // Fetch deps for all newer candidates in parallel, then find the minimum fix
         if (allVersions.length > 0) {
             const candidates = allVersions
                 .filter((v) => semver.gt(v, currentVersion))
                 .sort(semver.compare);
-            for (const ver of candidates) {
-                const deps = getPackageDeps(pkgName, ver);
+            const allDeps = await Promise.all(
+                candidates.map((v) => getPackageDeps(pkgName, v)),
+            );
+            for (let i = 0; i < candidates.length; i++) {
+                const deps = allDeps[i];
                 if (!deps) continue;
                 const spec = deps[depPkg];
                 if (
                     !spec ||
                     specGuaranteesMinVersion(spec, requiredDepVersion)
                 ) {
-                    return ver;
+                    return candidates[i];
                 }
             }
         }
@@ -709,7 +858,7 @@ function findVersionThatAllows(
  *                         allows: boolean, fixVersion: string|null }>
  * }}
  */
-function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
+async function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
     const actions = [];
     const blockReasons = [];
     const constraints = [];
@@ -741,13 +890,22 @@ function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
         // ── Intermediate package ─────────────────────────────────────────────
         const cacheKey = `${node.name}@${node.version}\u2192${childPkg}\u2265${requiredChildVersion}`;
         if (cache.has(cacheKey)) {
-            const cached = cache.get(cacheKey);
+            const entry = cache.get(cacheKey);
+            const cached = entry instanceof Promise ? await entry : entry;
             actions.push(...cached.actions);
             blockReasons.push(...cached.blockReasons);
             constraints.push(...cached.constraints);
             if (cached.blocked) blocked = true;
             continue;
         }
+
+        // Store a promise immediately so concurrent callers hitting the same
+        // cacheKey await the same computation instead of launching duplicates.
+        let resolveResult;
+        const resultPromise = new Promise((r) => {
+            resolveResult = r;
+        });
+        cache.set(cacheKey, resultPromise);
 
         const result = {
             actions: [],
@@ -756,7 +914,11 @@ function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
             constraints: [],
         };
 
-        const depSpec = getParentDepSpec(node.name, node.version, childPkg);
+        const depSpec = await getParentDepSpec(
+            node.name,
+            node.version,
+            childPkg,
+        );
         const allows =
             !depSpec || specGuaranteesMinVersion(depSpec, requiredChildVersion);
 
@@ -769,11 +931,7 @@ function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
             fixVersion: null,
         });
 
-        if (allows) {
-            // Parent already allows it — pnpm update resolves this edge.
-            // No need to walk further; the parent itself stays at its
-            // current version.
-        } else {
+        if (!allows) {
             // Parent blocks — find a newer version that allows it
             if (process.stderr.isTTY && !JSON_OUTPUT) {
                 process.stderr.write(
@@ -781,7 +939,7 @@ function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
                 );
             }
 
-            const fixVersion = findVersionThatAllows(
+            const fixVersion = await findVersionThatAllows(
                 node.name,
                 node.version,
                 childPkg,
@@ -800,7 +958,7 @@ function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
 
                 // Recurse: can the parent's parents accommodate node@fixVersion?
                 if (node.dependents && node.dependents.length > 0) {
-                    const upResult = walkUpTree(
+                    const upResult = await walkUpTree(
                         node.dependents,
                         node.name,
                         fixVersion,
@@ -828,7 +986,7 @@ function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
             }
         }
 
-        cache.set(cacheKey, result);
+        resolveResult(result);
         actions.push(...result.actions);
         blockReasons.push(...result.blockReasons);
         constraints.push(...result.constraints);
@@ -866,7 +1024,7 @@ function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
  *                              allows: boolean, fixVersion: string|null }>
  * }}
  */
-function planFixes(pkg, requiredVersion, whyData) {
+async function planFixes(pkg, requiredVersion, whyData) {
     const cache = new Map();
     const unblockedActions = [];
     const blockedVersions = [];
@@ -878,7 +1036,7 @@ function planFixes(pkg, requiredVersion, whyData) {
         if (semver.gte(entry.version, requiredVersion)) continue; // already OK
         if (!entry.dependents || entry.dependents.length === 0) continue;
 
-        const result = walkUpTree(
+        const result = await walkUpTree(
             entry.dependents,
             pkg,
             requiredVersion,
@@ -938,7 +1096,7 @@ function deduplicateActions(actions) {
  *   blockerLatestSpec: string|null
  * }>}
  */
-function buildBlockerChains(blockers, upgradeable, vulnPkg) {
+async function buildBlockerChains(blockers, upgradeable, vulnPkg) {
     const chains = [];
     const seenBlockers = new Set();
     for (const blocker of blockers) {
@@ -948,10 +1106,10 @@ function buildBlockerChains(blockers, upgradeable, vulnPkg) {
 
         const chain = buildConstraintChain(vulnPkg, blocker, upgradeable);
 
-        const blockerLatest = getLatestVersion(blocker.parent);
+        const blockerLatest = await getLatestVersion(blocker.parent);
         let blockerLatestSpec = null;
         if (blockerLatest && blockerLatest !== blocker.parentVersion) {
-            const deps = getPackageDeps(blocker.parent, blockerLatest);
+            const deps = await getPackageDeps(blocker.parent, blockerLatest);
             if (deps && deps[blocker.child]) {
                 blockerLatestSpec = deps[blocker.child];
             }
@@ -973,7 +1131,7 @@ function buildBlockerChains(blockers, upgradeable, vulnPkg) {
  *   - A condensed "path:" showing the chain from vuln pkg to blocker
  * For non-blockers, shows a simple "✓ parent" line.
  */
-function displayConstraints(constraintInfo, vulnPkg) {
+async function displayConstraints(constraintInfo, vulnPkg) {
     if (!constraintInfo || constraintInfo.length === 0) return;
 
     // Deduplicate constraints
@@ -994,7 +1152,11 @@ function displayConstraints(constraintInfo, vulnPkg) {
 
     // Build chains: for each blocker, trace the path from vulnPkg to blocker
     // through the upgradeable constraints
-    const blockerChains = buildBlockerChains(blockers, upgradeable, vulnPkg);
+    const blockerChains = await buildBlockerChains(
+        blockers,
+        upgradeable,
+        vulnPkg,
+    );
 
     // Render blocker chains
     for (const {
@@ -1263,8 +1425,8 @@ function buildVersionSpec(oldSpec, newVersion) {
  * boundary if forced to `patchedVersion` via override.
  * Returns an array of currently-installed versions that would cross major.
  */
-function detectCrossMajorOverride(pkg, patchedVersion) {
-    const whyData = getPnpmWhy(pkg);
+async function detectCrossMajorOverride(pkg, patchedVersion) {
+    const whyData = await getPnpmWhy(pkg);
     const installedVersions = whyData
         .map((e) => e.version)
         .filter((v) => v && semver.valid(v));
@@ -1301,7 +1463,7 @@ function isSimpleUpdate(entry) {
  * Works for entries with unblocked actions or overrides.
  * Returns { level: "low"|"medium"|"high", reason: string }.
  */
-function assessRisk(entry) {
+async function assessRisk(entry) {
     const { pkg, patched, currentVersion } = entry;
 
     // Check for cross-major bump
@@ -1351,8 +1513,8 @@ function assessRisk(entry) {
     }
 
     // Override-based entries
-    const whyData = getPnpmWhy(pkg);
-    const parents = findConstrainingParentsFromData(whyData, pkg);
+    const whyData = await getPnpmWhy(pkg);
+    const parents = await findConstrainingParentsFromData(whyData, pkg);
     const blockingParents = parents.filter(
         (p) =>
             p.requiredSpec &&
@@ -1493,14 +1655,14 @@ function extractWorkspaceRoots(whyData) {
  *   [update]      — an intermediate package needs updating to widen its dep spec
  *   [override]    — no parent upgrade can fix this; needs pnpm.overrides
  */
-function formatActions(entry) {
+async function formatActions(entry) {
     const { pkg, patched, fixPlan } = entry;
     const lines = [];
 
     // Risk assessment for non-trivial fixes
     let riskLine = null;
     if (hasUnblockedActions(entry) || needsOverride(entry)) {
-        const risk = assessRisk(entry);
+        const risk = await assessRisk(entry);
         const riskIcon =
             risk.level === "high"
                 ? clr.fail("▲ high")
@@ -1571,7 +1733,7 @@ function formatActions(entry) {
             const specDesc = b.requiredSpec
                 ? `pins ${clr.pkg(b.child)} ${clr.version(b.requiredSpec)}`
                 : `blocks ${clr.pkg(b.child)}`;
-            const blockerLatest = getLatestVersion(b.parent);
+            const blockerLatest = await getLatestVersion(b.parent);
             let latestNote = "";
             if (!blockerLatest || blockerLatest === b.parentVersion) {
                 latestNote = clr.meta(", already at latest");
@@ -1608,7 +1770,7 @@ function formatActions(entry) {
  *
  * When --verbose is active, the full constraint/chain details follow.
  */
-function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
+async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
     const { pkg, patched, severity, alertNums, ghsaIds } = entry;
     const progress = clr.meta(`[${pkgIndex}/${pkgTotal}]`);
 
@@ -1670,14 +1832,14 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
     }
 
     // ── Actions: reason-centric fix steps + risk ─────────────────────────
-    const actionLines = formatActions(entry);
+    const actionLines = await formatActions(entry);
     for (const line of actionLines) {
         log(`     ${line}`);
     }
 
     // ── Verbose: full constraint and chain details ───────────────────────
     if (VERBOSE && entry.fixPlan) {
-        displayConstraints(entry.fixPlan.constraints, pkg);
+        await displayConstraints(entry.fixPlan.constraints, pkg);
     }
     if (SHOW_CHAINS) {
         fmtDepChain(whyData, pkg);
@@ -1688,10 +1850,10 @@ function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
  * Populate fixPlan, blockingReasons, and overrideReasons on the entry.
  * Pure classification — no display output.
  */
-function classifyWithFixPlan(entry, whyData) {
+async function classifyWithFixPlan(entry, whyData) {
     const { pkg, patched } = entry;
 
-    entry.fixPlan = planFixes(pkg, patched, whyData);
+    entry.fixPlan = await planFixes(pkg, patched, whyData);
 
     if (hasUnblockedActions(entry)) {
         if (!flagAllows(UPDATE_PARENTS, pkg)) {
@@ -1724,7 +1886,10 @@ function fetchAlerts() {
             );
         }
         const [, owner, repo] = match;
-        if (!/^[A-Za-z0-9._-]+$/.test(owner) || !/^[A-Za-z0-9._-]+$/.test(repo)) {
+        if (
+            !/^[A-Za-z0-9._-]+$/.test(owner) ||
+            !/^[A-Za-z0-9._-]+$/.test(repo)
+        ) {
             throw new Error(
                 `Unexpected characters in owner/repo parsed from remote: ${owner}/${repo}`,
             );
@@ -1819,100 +1984,120 @@ function deduplicateAlerts(alerts) {
 }
 
 /** Stage 3+4: Classify each vulnerable package and run fix planner. */
-function analyzeVulnerabilities(byPackage) {
+async function analyzeVulnerabilities(byPackage) {
     header("Analyzing vulnerabilities");
 
-    const analyses = [];
-    let pkgIndex = 0;
     const pkgTotal = byPackage.size;
+    const items = [...byPackage.entries()];
 
-    for (const [pkg, info] of byPackage) {
-        pkgIndex++;
-        const {
-            patched,
-            severity,
-            alerts: alertNums,
-            ghsaIds,
-            manifests,
-        } = info;
-        const manifestList = [...manifests].join(", ");
+    // Max concurrent package analyses. Each analysis fires multiple npm calls
+    // which are themselves rate-limited by _npmSem (DEPFIX_NPM_CONCURRENCY).
+    const CONCURRENCY = parseInt(process.env.DEPFIX_CONCURRENCY ?? "5", 10);
+    const sem = new Semaphore(CONCURRENCY);
 
-        // Entry shape:
-        //   pkg:             string   — vulnerable package name
-        //   patched:         string|undefined — minimum safe version; undefined = no patch
-        //   severity:        'critical'|'high'|'medium'|'low'|'unknown'
-        //   alertNums:       number[] — GitHub alert numbers
-        //   ghsaIds:         string[] — GHSA advisory IDs
-        //   manifestList:    string   — comma-separated manifest paths from alerts
-        //   currentVersion:  string|null — installed vulnerable version
-        //   latestVersion:   string|null — latest published version
-        //   fixPlan:         object|null — populated by classifyWithFixPlan(); see planFixes() return type
-        //   blockingReasons: string[] — reasons why automated fix is blocked
-        //   error?:          string   — set if the apply step failed for this entry
-        const entry = {
-            pkg,
-            patched,
-            severity,
-            alertNums,
-            ghsaIds,
-            manifestList,
-            currentVersion: null,
-            latestVersion: null,
-            fixPlan: null,
-            blockingReasons: [],
-        };
+    // Analyse all packages concurrently. Each task buffers its own log lines
+    // so output can be flushed in the original sorted order (not interleaved).
+    const results = await Promise.all(
+        items.map(async ([pkg, info], idx) => {
+            await sem.acquire();
+            const pkgIndex = idx + 1;
+            const lines = [];
+            try {
+                const entry = await _logStorage.run(lines, async () => {
+                    const {
+                        patched,
+                        severity,
+                        alerts: alertNums,
+                        ghsaIds,
+                        manifests,
+                    } = info;
+                    const manifestList = [...manifests].join(", ");
 
-        // Populate version data
-        const whyData = getPnpmWhy(pkg);
+                    // Entry shape:
+                    //   pkg:             string   — vulnerable package name
+                    //   patched:         string|undefined — minimum safe version; undefined = no patch
+                    //   severity:        'critical'|'high'|'medium'|'low'|'unknown'
+                    //   alertNums:       number[] — GitHub alert numbers
+                    //   ghsaIds:         string[] — GHSA advisory IDs
+                    //   manifestList:    string   — comma-separated manifest paths from alerts
+                    //   currentVersion:  string|null — installed vulnerable version
+                    //   latestVersion:   string|null — latest published version
+                    //   fixPlan:         object|null — populated by classifyWithFixPlan(); see planFixes() return type
+                    //   blockingReasons: string[] — reasons why automated fix is blocked
+                    //   risk:            object|null — pre-computed by assessRisk(); used by printSummary/emitJson
+                    //   error?:          string   — set if the apply step failed for this entry
+                    const e = {
+                        pkg,
+                        patched,
+                        severity,
+                        alertNums,
+                        ghsaIds,
+                        manifestList,
+                        currentVersion: null,
+                        latestVersion: null,
+                        fixPlan: null,
+                        blockingReasons: [],
+                        risk: null,
+                    };
 
-        if (!patched) {
-            const noPatchVersions = getResolvedVersions(whyData);
-            entry.currentVersion =
-                noPatchVersions.length > 0 ? noPatchVersions[0] : null;
-        } else {
-            const uniqueVersions = getResolvedVersions(whyData);
-            const vulnVersions = uniqueVersions.filter((v) =>
-                semver.lt(v, patched),
-            );
-            const fixedVersions = uniqueVersions.filter((v) =>
-                semver.gte(v, patched),
-            );
-            entry.currentVersion =
-                vulnVersions.length > 0
-                    ? vulnVersions[0]
-                    : fixedVersions[0] || null;
-            entry.latestVersion = getLatestVersion(pkg);
+                    const whyData = await getPnpmWhy(pkg);
 
-            if (vulnVersions.length === 0) {
-                // Already fixed — no fixPlan needed
-            } else {
-                // Show progress on stderr so the spinner appears under
-                // the right package context (not glued to the previous entry)
-                if (process.stderr.isTTY && !JSON_OUTPUT) {
-                    process.stderr.write(
-                        `\r\x1b[K\n  ${clr.meta(`[${pkgIndex}/${pkgTotal}]`)} ${clr.meta(`Analyzing ${pkg}…`)}`,
-                    );
-                }
-                // Classify via tree-walk fix planner
-                classifyWithFixPlan(entry, whyData);
-                // Move cursor back up so formatPackageAnalysis output
-                // overwrites the progress line cleanly
-                if (process.stderr.isTTY && !JSON_OUTPUT) {
-                    process.stderr.write(`\x1b[A\r\x1b[K`);
-                }
+                    if (!patched) {
+                        const noPatchVersions = getResolvedVersions(whyData);
+                        e.currentVersion =
+                            noPatchVersions.length > 0
+                                ? noPatchVersions[0]
+                                : null;
+                    } else {
+                        const uniqueVersions = getResolvedVersions(whyData);
+                        const vulnVersions = uniqueVersions.filter((v) =>
+                            semver.lt(v, patched),
+                        );
+                        const fixedVersions = uniqueVersions.filter((v) =>
+                            semver.gte(v, patched),
+                        );
+                        e.currentVersion =
+                            vulnVersions.length > 0
+                                ? vulnVersions[0]
+                                : fixedVersions[0] || null;
+                        e.latestVersion = await getLatestVersion(pkg);
+
+                        if (vulnVersions.length > 0) {
+                            await classifyWithFixPlan(e, whyData);
+                            // Pre-compute risk so printSummary/emitJson stay sync
+                            if (hasUnblockedActions(e) || needsOverride(e)) {
+                                e.risk = await assessRisk(e);
+                            }
+                        }
+                    }
+
+                    await formatPackageAnalysis(e, whyData, pkgIndex, pkgTotal);
+                    return e;
+                });
+                return { entry, lines };
+            } finally {
+                sem.release();
             }
-        }
+        }),
+    );
 
-        // Render compact output
-        formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal);
-        analyses.push(entry);
+    if (process.stderr.isTTY && !JSON_OUTPUT) {
+        process.stderr.write("\r\x1b[K");
     }
 
+    // Flush each package's buffered log lines in original order, then collect entries
+    const analyses = [];
+    for (const { entry, lines } of results) {
+        if (!JSON_OUTPUT) {
+            for (const line of lines) console.log(line);
+        }
+        analyses.push(entry);
+    }
     return analyses;
 }
 
 /** Stage 5: Execute resolutions. */
-function executeResolutions(analyses) {
+async function executeResolutions(analyses) {
     const actionable = analyses.filter(
         (a) => a.fixPlan && a.blockingReasons.length === 0,
     );
@@ -1933,12 +2118,12 @@ function executeResolutions(analyses) {
      * Run `pnpm update <pkg> -r` and verify all versions are fixed.
      * Returns "ok" | "blocked" | "failed".
      */
-    function runUpdateAndVerify(a) {
+    async function runUpdateAndVerify(a) {
         try {
             tryRunCmd("pnpm", ["update", a.pkg, "-r"], {
                 timeout: 120000,
             });
-            const check = verifyAllVersionsFixed(a.pkg, a.patched);
+            const check = await verifyAllVersionsFixed(a.pkg, a.patched);
             if (check.ok) {
                 ok(
                     `Updated ${a.pkg} — all versions fixed: ${check.versions.join(", ")}`,
@@ -1966,7 +2151,7 @@ function executeResolutions(analyses) {
             if (DRY_RUN) {
                 ok(`${dryTag}pnpm update ${a.pkg} -r → >=${a.patched}`);
             } else {
-                const outcome = runUpdateAndVerify(a);
+                const outcome = await runUpdateAndVerify(a);
                 if (outcome === "blocked") {
                     results.blocked.push(a);
                     continue;
@@ -2031,7 +2216,7 @@ function executeResolutions(analyses) {
                     }
                 }
                 // Run pnpm update to fix the unblocked subtrees
-                const outcome = runUpdateAndVerify(a);
+                const outcome = await runUpdateAndVerify(a);
                 if (outcome === "ok") {
                     // pnpm update fixed everything (including blocked subtrees
                     // that may have resolved anyway) — no override needed
@@ -2191,11 +2376,11 @@ function printSummary(results) {
 
         // Risk assessment for blocked entries
         const RISK_ORDER = { high: 0, medium: 1, low: 2 };
-        const riskEntries = results.blocked.filter((a) => a.fixPlan);
+        const riskEntries = results.blocked.filter((a) => a.fixPlan && a.risk);
         if (riskEntries.length > 0) {
             const assessed = riskEntries.map((a) => ({
                 entry: a,
-                risk: assessRisk(a),
+                risk: a.risk,
             }));
             assessed.sort((a, b) => {
                 const riskDiff =
@@ -2311,7 +2496,7 @@ function printSummary(results) {
  * Check existing pnpm.overrides and remove entries whose override version
  * is already satisfied by the naturally resolved version.
  */
-function pruneOverrides() {
+async function pruneOverrides() {
     header("Pruning stale pnpm.overrides");
 
     const pkgJsonPath = resolve(ROOT, "package.json");
@@ -2330,7 +2515,7 @@ function pruneOverrides() {
 
     for (const [pkg, spec] of Object.entries(overrides)) {
         // Check if the package is still in the dependency tree
-        const whyData = getPnpmWhy(pkg);
+        const whyData = await getPnpmWhy(pkg);
         if (whyData.length === 0) {
             warn(
                 `${pkg}: not installed in dependency tree — override is dead weight`,
@@ -2338,7 +2523,7 @@ function pruneOverrides() {
             toRemove.push(pkg);
             continue;
         }
-        const parents = findConstrainingParentsFromData(whyData, pkg);
+        const parents = await findConstrainingParentsFromData(whyData, pkg);
 
         // Parse the minimum version from the override spec
         const minVersion = semver.minVersion(spec);
@@ -2447,16 +2632,16 @@ function emitJson(results) {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-function main() {
+async function main() {
     if (PRUNE_OVERRIDES) {
-        pruneOverrides();
+        await pruneOverrides();
         return;
     }
 
     const alerts = fetchAlerts();
     const byPackage = deduplicateAlerts(alerts);
-    const analyses = analyzeVulnerabilities(byPackage);
-    const results = executeResolutions(analyses);
+    const analyses = await analyzeVulnerabilities(byPackage);
+    const results = await executeResolutions(analyses);
 
     if (JSON_OUTPUT) {
         emitJson(results);
