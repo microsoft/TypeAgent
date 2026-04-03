@@ -10,7 +10,7 @@
  *   node tools/scripts/fix-dependabot-alerts.mjs [options]
  *
  * Options:
- *   --dry-run           Report what would be done without making changes
+ *   --dry-run           Report what would be done without making changes.
  *   --apply-overrides   Automatically add pnpm.overrides for transitive deps
  *                       that can't be updated directly
  *   --update-parents    Update parent packages in workspace package.json
@@ -20,10 +20,16 @@
  *                       (collapsed to 3 levels by default; use --show-chains=full
  *                       for expanded output)
  *   --prune-overrides   Remove pnpm.overrides entries that are no longer needed
+ *                       (cannot be combined with --apply-overrides / --update-parents)
  *   --json              Output results as structured JSON (for CI integration)
  *   --verbose           Show detailed constraint analysis, advisory IDs, and
  *                       debug output
  *   --help              Show this help message and exit
+ *
+ * Exit codes:
+ *   0  All alerts resolved (or no open alerts found)
+ *   1  One or more alerts remain blocked / have no patch / failed to apply,
+ *      or a fatal error occurred (fetch failure, unknown flag, etc.)
  */
 
 import { spawnSync } from "node:child_process";
@@ -123,7 +129,8 @@ if (args.includes("--help")) {
     console.log(`Usage: node tools/scripts/fix-dependabot-alerts.mjs [options]
 
 Options:
-  --dry-run           Report what would be done without making changes
+  --dry-run           Analyse and report what would be done without making any
+                      changes.
   --apply-overrides[=pkg1,pkg2,...]
                       Automatically add pnpm.overrides for transitive deps
                       that can't be updated directly. Optionally specify
@@ -137,12 +144,27 @@ Options:
                       Optionally specify package names to limit scope.
   --show-chains       Show full dependency chains (collapsed to 3 levels)
   --show-chains=full  Show fully expanded dependency chains
-  --prune-overrides   Remove pnpm.overrides entries that are no longer needed
+  --prune-overrides   Remove pnpm.overrides entries that are no longer needed.
+                      Cannot be combined with --apply-overrides or
+                      --update-parents.
   --json              Output results as structured JSON (for CI integration)
   --verbose           Show detailed constraint analysis, advisory IDs, and
                       debug output
-  --help              Show this help message and exit`);
+  --help              Show this help message and exit
+
+Exit codes:
+  0  All alerts resolved (or no open alerts found)
+  1  One or more alerts remain blocked, have no published patch, failed to
+     apply, or a fatal error occurred (fetch failure, unknown flag, etc.)`);
     process.exit(0);
+}
+
+if (PRUNE_OVERRIDES && (APPLY_OVERRIDES || UPDATE_PARENTS)) {
+    console.error(
+        "Error: --prune-overrides cannot be combined with --apply-overrides or --update-parents.\n" +
+            "Run fixes first, then re-run with --prune-overrides to clean up stale entries.",
+    );
+    process.exit(1);
 }
 
 // ── Color scheme ─────────────────────────────────────────────────────────────
@@ -174,6 +196,19 @@ const _cache = {
     workspacePkgPaths: null,
 };
 
+const MAX_BUFFER = 10 * 1024 * 1024; // 10 MB
+
+function checkCmdError(cmd, result) {
+    if (result.error) {
+        if (result.error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+            throw new Error(
+                `${cmd} output exceeded buffer limit (${MAX_BUFFER / 1024 / 1024} MB); consider reducing scope`,
+            );
+        }
+        throw new Error(`Failed to spawn ${cmd}: ${result.error.message}`);
+    }
+}
+
 /**
  * Spawn a command with an argument array (no shell interpolation).
  * Throws on non-zero exit, spawn failure, or signal kill.
@@ -182,12 +217,10 @@ function runCmd(cmd, cmdArgs, opts = {}) {
     const result = spawnSync(cmd, cmdArgs, {
         cwd: ROOT,
         encoding: "utf-8",
-        maxBuffer: 10 * 1024 * 1024,
+        maxBuffer: MAX_BUFFER,
         ...opts,
     });
-    if (result.error) {
-        throw new Error(`Failed to spawn ${cmd}: ${result.error.message}`);
-    }
+    checkCmdError(cmd, result);
     if (result.signal) {
         throw new Error(`${cmd} was killed by signal ${result.signal}`);
     }
@@ -206,7 +239,7 @@ function tryRunCmd(cmd, cmdArgs, opts = {}) {
     const result = spawnSync(cmd, cmdArgs, {
         cwd: ROOT,
         encoding: "utf-8",
-        maxBuffer: 10 * 1024 * 1024,
+        maxBuffer: MAX_BUFFER,
         ...opts,
     });
     if (result.error || result.signal || result.status !== 0) {
@@ -664,8 +697,17 @@ function findVersionThatAllows(
  * @param {string}   childPkg    - package that needs the required version
  * @param {string}   requiredChildVersion - minimum version needed
  * @param {Map}      cache       - memoisation map
- * @returns {{ actions: object[], blocked: boolean, blockReasons: string[],
- *             constraints: object[] }}
+ * @returns {{
+ *   actions:     Array<{ type: 'workspace'|'update', pkg: string,
+ *                        workspace?: string, depField?: string,
+ *                        oldSpec?: string, newSpec?: string,
+ *                        fromVersion?: string, toVersion?: string }>,
+ *   blocked:     boolean,
+ *   blockReasons: string[],
+ *   constraints: Array<{ parent: string, parentVersion: string,
+ *                         child: string, requiredSpec: string|null,
+ *                         allows: boolean, fixVersion: string|null }>
+ * }}
  */
 function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
     const actions = [];
@@ -812,8 +854,17 @@ function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
  * @param {string}   pkg             - vulnerable package name
  * @param {string}   requiredVersion - minimum safe version (from advisory)
  * @param {object[]} whyData         - parsed output of `pnpm why <pkg> -r --json`
- * @returns {{ unblockedActions: object[], blockedVersions: string[],
- *             blockReasons: string[], constraints: object[] }}
+ * @returns {{
+ *   unblockedActions: Array<{ type: 'workspace'|'update', pkg: string,
+ *                              workspace?: string, depField?: string,
+ *                              oldSpec?: string, newSpec?: string,
+ *                              fromVersion?: string, toVersion?: string }>,
+ *   blockedVersions:  string[],
+ *   blockReasons:     string[],
+ *   constraints:      Array<{ parent: string, parentVersion: string,
+ *                              child: string, requiredSpec: string|null,
+ *                              allows: boolean, fixVersion: string|null }>
+ * }}
  */
 function planFixes(pkg, requiredVersion, whyData) {
     const cache = new Map();
@@ -871,6 +922,47 @@ function deduplicateActions(actions) {
 }
 
 /**
+ * Build the data model for blocker chains.  Pure data assembly — no rendering.
+ * For each unique blocker, traces the dependency path from vulnPkg through
+ * upgradeable intermediates, and fetches the blocker's latest-published version
+ * and its dep spec for the child package.
+ *
+ * @param {object[]} blockers     - Constraint entries that block the fix
+ * @param {object[]} upgradeable  - Constraint entries that could be updated
+ * @param {string}   vulnPkg      - The vulnerable package being analysed
+ * @returns {Array<{
+ *   blocker:          { parent: string, parentVersion: string, child: string,
+ *                       requiredSpec: string|null },
+ *   chain:            object[],
+ *   blockerLatest:    string|null,
+ *   blockerLatestSpec: string|null
+ * }>}
+ */
+function buildBlockerChains(blockers, upgradeable, vulnPkg) {
+    const chains = [];
+    const seenBlockers = new Set();
+    for (const blocker of blockers) {
+        const blockerKey = `${blocker.parent}@${blocker.parentVersion}`;
+        if (seenBlockers.has(blockerKey)) continue;
+        seenBlockers.add(blockerKey);
+
+        const chain = buildConstraintChain(vulnPkg, blocker, upgradeable);
+
+        const blockerLatest = getLatestVersion(blocker.parent);
+        let blockerLatestSpec = null;
+        if (blockerLatest && blockerLatest !== blocker.parentVersion) {
+            const deps = getPackageDeps(blocker.parent, blockerLatest);
+            if (deps && deps[blocker.child]) {
+                blockerLatestSpec = deps[blocker.child];
+            }
+        }
+
+        chains.push({ blocker, chain, blockerLatest, blockerLatestSpec });
+    }
+    return chains;
+}
+
+/**
  * Display constraint info gathered during the tree walk.
  *
  * Groups constraints into blocking chains (ending at a ✗ blocker) and
@@ -902,34 +994,7 @@ function displayConstraints(constraintInfo, vulnPkg) {
 
     // Build chains: for each blocker, trace the path from vulnPkg to blocker
     // through the upgradeable constraints
-    const blockerChains = [];
-    const seenBlockers = new Set();
-
-    for (const blocker of blockers) {
-        const blockerKey = `${blocker.parent}@${blocker.parentVersion}`;
-        if (seenBlockers.has(blockerKey)) continue;
-        seenBlockers.add(blockerKey);
-
-        // Walk backwards through upgradeable edges to build the path
-        const chain = buildConstraintChain(vulnPkg, blocker, upgradeable);
-
-        // Look up the blocker's latest version and check if it fixes things
-        const blockerLatest = getLatestVersion(blocker.parent);
-        let blockerLatestSpec = null;
-        if (blockerLatest && blockerLatest !== blocker.parentVersion) {
-            const deps = getPackageDeps(blocker.parent, blockerLatest);
-            if (deps && deps[blocker.child]) {
-                blockerLatestSpec = deps[blocker.child];
-            }
-        }
-
-        blockerChains.push({
-            blocker,
-            chain,
-            blockerLatest,
-            blockerLatestSpec,
-        });
-    }
+    const blockerChains = buildBlockerChains(blockers, upgradeable, vulnPkg);
 
     // Render blocker chains
     for (const {
@@ -1181,16 +1246,15 @@ function buildVersionSpec(oldSpec, newVersion) {
     ) {
         return oldSpec;
     }
+    const prefixMatch = oldSpec.match(/^([~^]|>=?)/);
+    const prefix = prefixMatch ? prefixMatch[0] : "";
     // Compound specs (e.g. ">=1.0.0 <2.0.0", "1.x || >=2.0.0") can't be
-    // safely rewritten by prefix alone — warn and fall back to "^newVersion".
+    // safely rewritten by prefix alone — warn the user to review manually.
     if (oldSpec.includes(" ") || oldSpec.includes("||")) {
         warn(
-            `buildVersionSpec: complex spec "${oldSpec}" cannot be rewritten automatically; using "^${newVersion}" — review manually`,
+            `buildVersionSpec: complex spec "${oldSpec}" cannot be rewritten automatically; using "${prefix}${newVersion}" — review manually`,
         );
-        return `^${newVersion}`;
     }
-    const prefixMatch = oldSpec.match(/^([~^]|>=?)/);
-    const prefix = prefixMatch ? prefixMatch[0] : "^";
     return `${prefix}${newVersion}`;
 }
 
@@ -1660,6 +1724,11 @@ function fetchAlerts() {
             );
         }
         const [, owner, repo] = match;
+        if (!/^[A-Za-z0-9._-]+$/.test(owner) || !/^[A-Za-z0-9._-]+$/.test(repo)) {
+            throw new Error(
+                `Unexpected characters in owner/repo parsed from remote: ${owner}/${repo}`,
+            );
+        }
         log(`  Repository: ${clr.chrome(owner + "/" + repo)}`);
 
         const raw = runCmd("gh", [
@@ -1768,6 +1837,18 @@ function analyzeVulnerabilities(byPackage) {
         } = info;
         const manifestList = [...manifests].join(", ");
 
+        // Entry shape:
+        //   pkg:             string   — vulnerable package name
+        //   patched:         string|undefined — minimum safe version; undefined = no patch
+        //   severity:        'critical'|'high'|'medium'|'low'|'unknown'
+        //   alertNums:       number[] — GitHub alert numbers
+        //   ghsaIds:         string[] — GHSA advisory IDs
+        //   manifestList:    string   — comma-separated manifest paths from alerts
+        //   currentVersion:  string|null — installed vulnerable version
+        //   latestVersion:   string|null — latest published version
+        //   fixPlan:         object|null — populated by classifyWithFixPlan(); see planFixes() return type
+        //   blockingReasons: string[] — reasons why automated fix is blocked
+        //   error?:          string   — set if the apply step failed for this entry
         const entry = {
             pkg,
             patched,
