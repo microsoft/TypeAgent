@@ -16,8 +16,7 @@ namespace autoShell.Tests;
 /// </summary>
 internal sealed class AutoShellProcess : IDisposable
 {
-    private static readonly string s_exePath = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "autoShell", "bin", "Debug", "autoShell.exe"));
+    private static readonly string s_exePath = Path.Combine(AppContext.BaseDirectory, "autoShell.exe");
 
     private readonly Process _process;
 
@@ -31,11 +30,6 @@ internal sealed class AutoShellProcess : IDisposable
     /// </summary>
     public static AutoShellProcess StartInteractive()
     {
-        if (!File.Exists(s_exePath))
-        {
-            throw new FileNotFoundException($"autoShell.exe not found at {s_exePath}. Build the project first.");
-        }
-
         var psi = new ProcessStartInfo
         {
             FileName = s_exePath,
@@ -58,11 +52,6 @@ internal sealed class AutoShellProcess : IDisposable
     /// </summary>
     public static (string Output, int ExitCode) RunWithArgs(string args, int timeoutMs = 10000)
     {
-        if (!File.Exists(s_exePath))
-        {
-            throw new FileNotFoundException($"autoShell.exe not found at {s_exePath}. Build the project first.");
-        }
-
         var psi = new ProcessStartInfo
         {
             FileName = s_exePath,
