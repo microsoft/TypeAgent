@@ -306,8 +306,8 @@ AutoShell uses a handler-based architecture with dependency injection. All platf
 autoShell/
 ├── AutoShell.cs              # Entry point — stdin/stdout command loop
 ├── CommandDispatcher.cs      # Routes JSON keys to handlers; Create() wires all dependencies
-├── CoreAudioInterop.cs       # COM interop definitions for Windows audio
-├── UIAutomation.cs           # UI Automation helpers (last-resort, marked [Obsolete])
+├── IAppRegistry.cs           # App registry interface (shared across handlers)
+├── WindowsAppRegistry.cs     # Maps friendly app names to paths and AppUserModelIDs
 ├── Handlers/
 │   ├── ICommandHandler.cs    # Handler interface (SupportedCommands + Handle)
 │   ├── AppCommandHandler.cs          # LaunchProgram, CloseProgram, ListAppNames
@@ -329,7 +329,6 @@ autoShell/
 │       ├── SystemSettingsHandler.cs
 │       └── TaskbarSettingsHandler.cs
 ├── Services/                 # Interfaces + Windows implementations
-│   ├── IAppRegistry.cs / WindowsAppRegistry.cs
 │   ├── IAudioService.cs / WindowsAudioService.cs
 │   ├── IBrightnessService.cs / WindowsBrightnessService.cs
 │   ├── IDebuggerService.cs / WindowsDebuggerService.cs
@@ -339,10 +338,14 @@ autoShell/
 │   ├── IRegistryService.cs / WindowsRegistryService.cs
 │   ├── ISystemParametersService.cs / WindowsSystemParametersService.cs
 │   ├── IVirtualDesktopService.cs / WindowsVirtualDesktopService.cs
-│   └── IWindowService.cs / WindowsWindowService.cs
-└── Logging/
-    ├── ILogger.cs            # Logging interface (Error, Warning, Debug)
-    └── ConsoleLogger.cs      # Colored console + diagnostics output
+│   ├── IWindowService.cs / WindowsWindowService.cs
+│   └── Interop/
+│       ├── CoreAudioInterop.cs   # COM interop definitions for Windows audio
+│       └── UIAutomation.cs       # UI Automation helpers (last-resort)
+├── Logging/
+│   ├── ILogger.cs            # Logging interface (Error, Warning, Debug)
+│   └── ConsoleLogger.cs      # Colored console + diagnostics output
+└── autoShell.Tests/          # 165 unit tests (Moq-based, all services mocked)
 ```
 
 ### Key design decisions
