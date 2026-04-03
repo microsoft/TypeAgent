@@ -45,7 +45,11 @@ internal class AudioCommandHandler : ICommandHandler
             case "Volume":
                 if (int.TryParse(value, out int pct))
                 {
-                    _savedVolumePct = _audio.GetVolume();
+                    int currentVolume = _audio.GetVolume();
+                    if (currentVolume > 0)
+                    {
+                        _savedVolumePct = currentVolume;
+                    }
                     _audio.SetVolume(pct);
                 }
                 break;

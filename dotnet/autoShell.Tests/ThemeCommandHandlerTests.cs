@@ -94,6 +94,7 @@ public class ThemeCommandHandlerTests
 
         Handle("SetThemeMode", "toggle");
 
+        _registryMock.Verify(r => r.GetValue(Path, "AppsUseLightTheme", null), Times.Once);
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
         _registryMock.Verify(r => r.SetValue(Path, "SystemUsesLightTheme", 0, RegistryValueKind.DWord), Times.Once);
     }

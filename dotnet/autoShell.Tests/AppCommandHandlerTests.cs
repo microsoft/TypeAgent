@@ -93,10 +93,12 @@ public class AppCommandHandlerTests
     }
 
     /// <summary>
-    /// Verifies that closing a program attempts to look up its running processes by name.
+    /// Verifies that closing a program resolves its process name and looks up running processes.
+    /// Note: the actual CloseMainWindow() call path cannot be unit-tested because
+    /// Process.MainWindowHandle is not virtual and cannot be mocked.
     /// </summary>
     [Fact]
-    public void CloseProgram_RunningProcess_CallsGetProcessesByName()
+    public void CloseProgram_ResolvesProcessNameAndLooksUpProcesses()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("notepad")).Returns("notepad");
         // Return a real (albeit useless in test) empty array to avoid null ref;

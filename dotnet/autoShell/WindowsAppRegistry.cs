@@ -67,11 +67,11 @@ internal sealed class WindowsAppRegistry : IAppRegistry
 
     /// <inheritdoc/>
     public string GetExecutablePath(string friendlyName)
-        => _friendlyNameToPath[friendlyName];
+        => _friendlyNameToPath.GetValueOrDefault(friendlyName);
 
     /// <inheritdoc/>
     public string GetAppUserModelId(string friendlyName)
-        => _friendlyNameToId[friendlyName];
+        => _friendlyNameToId.GetValueOrDefault(friendlyName);
 
     /// <inheritdoc/>
     public string ResolveProcessName(string friendlyName)

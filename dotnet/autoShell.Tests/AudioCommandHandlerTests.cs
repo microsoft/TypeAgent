@@ -108,6 +108,23 @@ public class AudioCommandHandlerTests
         _audioMock.Verify(a => a.SetVolume(0), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that RestoreVolume uses the actual saved volume, not a hardcoded value,
+    /// by using a different initial volume than the other RestoreVolume test.
+    /// </summary>
+    [Fact]
+    public void RestoreVolume_DifferentInitialVolume_RestoresSavedLevel()
+    {
+        _audioMock.Setup(a => a.GetVolume()).Returns(30);
+
+        Handle("Volume", "80");
+        _audioMock.Invocations.Clear();
+
+        Handle("RestoreVolume", "");
+
+        _audioMock.Verify(a => a.SetVolume(30), Times.Once);
+    }
+
     // --- Mute ---
 
     /// <summary>

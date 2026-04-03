@@ -89,9 +89,11 @@ public class VirtualDesktopCommandHandlerTests
 
     /// <summary>
     /// Verifies that MoveWindowToDesktop resolves the process name and looks up its running processes.
+    /// Note: the actual MoveWindowToDesktop service call cannot be verified because
+    /// Process.MainWindowHandle is not virtual and cannot be mocked to return a non-zero handle.
     /// </summary>
     [Fact]
-    public void MoveWindowToDesktop_WithValidProcess_CallsService()
+    public void MoveWindowToDesktop_ResolvesProcessNameAndLooksUpProcesses()
     {
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         var mockProcess = new Mock<Process>();
