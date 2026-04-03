@@ -11,6 +11,7 @@ import {
     type SeparatorMode,
     separatorRegExpStr,
     requiresSeparator,
+    candidateSeparatorMode,
     mergeSeparatorMode,
     isBoundarySatisfied,
     nextNonSeparatorIndex,
@@ -203,9 +204,9 @@ function matchKeywordWordsFrom(
 // the partial keyword starts (i.e. the first non-separator character after
 // the last separator), or undefined if no partial keyword is found.
 //
-// Used in both directions (called from Phase B1, not inline in
-// Phase A):
-//   - Forward: determines the Phase B1 anchor position for deferred
+// Used in both directions (called from finalizeCandidates,
+// not inline in Phase A):
+//   - Forward: determines the anchor position for deferred
 //     wildcard-at-EOI candidates (see forwardPartialKeyword).
 //   - Backward: collects a fixed candidate at the partial keyword
 //     position, which may advance maxPrefixLength and clear weaker
@@ -507,9 +508,11 @@ function tryPartialStringMatch(
  *    **Wildcard-at-EOI deferral:** when a pending wildcard absorbed all
  *    input to end-of-string, string-part candidates are *not* processed
  *    inline.  Instead, lightweight `WildcardEoiDescriptor`s are saved
- *    for Phase B1 to resolve via `findPartialKeywordInWildcard`.  This
- *    prevents wildcard-at-EOI states from pushing `maxPrefixLength`
- *    past more-meaningful candidates.  See the Phase B1/B2 blocks.
+ *    for `finalizeCandidates` to resolve via
+ *    `findPartialKeywordInWildcard`.  This prevents wildcard-at-EOI
+ *    states from pushing `maxPrefixLength` past more-meaningful
+ *    candidates.  See `finalizeCandidates` and
+ *    `injectForwardEoiCandidates`.
  *
  * 3. **Partial match, NOT finalized** — either:
  *      a. A pending wildcard could not be finalized (trailing text is only
@@ -589,26 +592,27 @@ type RangeCandidate =
       };
 
 // Lightweight descriptor for wildcard-at-EOI states whose
-// partial keyword scan is deferred to Phase B1.  Phase A pushes
-// one descriptor per wildcard-at-EOI string state (both forward
-// and backward).  Phase B1 runs findPartialKeywordInWildcard on
-// each descriptor, resolving it into either a partial keyword
-// anchor or a deferred candidate for Phase B2.
+// partial keyword scan is deferred to Phase B1
+// (finalizeCandidates).  Phase A pushes one descriptor per
+// wildcard-at-EOI string state (both forward and backward).
+// Phase B1 runs findPartialKeywordInWildcard on each descriptor,
+// resolving it into a partial keyword anchor, a fixed candidate,
+// or a range candidate.
 type WildcardEoiDescriptor = {
     wildcardStart: number;
     nextPart: StringPart;
     spacingMode: CompiledSpacingMode;
 };
 
-// Forward partial keyword anchor: populated by Phase B1 when
-// findPartialKeywordInWildcard finds a partial keyword at
-// position P inside a wildcard-at-EOI state.  Phase B2 uses
-// position to anchor and completionWord to emit the completion
-// (tryPartialStringMatch at the anchor position cannot reproduce
-// multi-word keyword results — e.g. for keyword ["played","by"],
-// the partial keyword "by" is found at position 18 from
-// candidateStart=11, but tryPartialStringMatch at 18 returns
-// "played" instead).
+// Forward partial keyword anchor: populated by
+// finalizeCandidates when findPartialKeywordInWildcard finds
+// a partial keyword at position P inside a wildcard-at-EOI state.
+// injectForwardEoiCandidates uses position to anchor and
+// completionWord to emit the completion (tryPartialStringMatch at
+// the anchor position cannot reproduce multi-word keyword
+// results — e.g. for keyword ["played","by"], the partial keyword
+// "by" is found at position 18 from candidateStart=11, but
+// tryPartialStringMatch at 18 returns "played" instead).
 type ForwardPartialKeywordCandidate = {
     position: number;
     completionWord: string;
@@ -634,6 +638,32 @@ function mergeSepMode(
             spacingMode,
         );
     return mergeSeparatorMode(current, needsSep, spacingMode);
+}
+
+// Compute a candidate's individual SeparatorMode at a given position.
+// Uses the same (position, firstCompletionChar, spacingMode) logic as
+// mergeSepMode, but returns the per-candidate mode instead of merging
+// into the running aggregate.
+function computeCandidateSepMode(
+    input: string,
+    position: number,
+    firstCompletionChar: string,
+    spacingMode: CompiledSpacingMode,
+): SeparatorMode {
+    const needsSep =
+        position > 0 &&
+        spacingMode !== "none" &&
+        requiresSeparator(
+            input[position - 1],
+            firstCompletionChar,
+            spacingMode,
+        );
+    return candidateSeparatorMode(needsSep, spacingMode);
+}
+
+// True when a SeparatorMode requires a separator character to be present.
+function isRequiringSepMode(mode: SeparatorMode): boolean {
+    return mode === "space" || mode === "spacePunctuation";
 }
 
 // --- CompletionContext: mutable state shared across completion phases ---
@@ -665,14 +695,22 @@ function mergeSepMode(
 //     the same conditions the old retrigger required.
 //
 // Phase B is split into two sub-phases:
-//  B1 — Anchor resolution: runs findPartialKeywordInWildcard
-//    on deferred wildcardEoiDescriptors, populating
-//    forwardPartialKeyword / forwardEoiCandidates (forward) or
-//    fixedCandidates / rangeCandidates (backward).
-//  B2 — Materialization: converts surviving candidates into
-//    the final completions[] and properties[] arrays.
-//    Also handles EOI instantiation, range candidates,
-//    and deduplication.
+//  B1 — Candidate finalization (finalizeCandidates): resolves
+//    deferred wildcardEoiDescriptors via
+//    findPartialKeywordInWildcard, flushes shadow candidates,
+//    injects forward EOI candidates as fixedCandidates, and
+//    filters separator mode conflicts (filterSepConflicts).
+//    After B1, fixedCandidates are pre-filtered,
+//    rangeCandidates are ready, and maxPrefixLength is finalized.
+//  B2 — Materialization (materializeCandidates): converts
+//    surviving candidates into the final completions[] and
+//    properties[] arrays.  Handles range candidates and
+//    deduplication.
+type DeferredShadowCandidate = {
+    consumedLength: number;
+    candidate: FixedCandidate;
+};
+
 type CompletionContext = {
     readonly input: string;
     readonly direction: "forward" | "backward" | undefined;
@@ -680,6 +718,21 @@ type CompletionContext = {
     fixedCandidates: FixedCandidate[];
     rangeCandidates: RangeCandidate[];
     wildcardEoiDescriptors: WildcardEoiDescriptor[];
+    /** Shadow candidates from backward Cat 3b, deferred until
+     *  maxPrefixLength is finalized so the check is order-independent. */
+    deferredShadowCandidates: DeferredShadowCandidate[];
+    /** True when fixedCandidates have a separator mode conflict
+     *  (some require a separator, others reject it).
+     *  Set by filterSepConflicts. */
+    hasSepConflict: boolean;
+    /** True when trailing separator characters follow maxPrefixLength
+     *  during a separator conflict.  Set by filterSepConflicts. */
+    hasTrailingSep: boolean;
+    /** True when candidates were dropped due to separator conflict
+     *  filtering.  Accumulates (false→true) — set by
+     *  filterSepConflicts and may also be set during range candidate
+     *  processing in materializeCandidates. */
+    droppedCandidates: boolean;
 };
 
 // Update maxPrefixLength.  When it increases, all previously
@@ -887,7 +940,8 @@ function processExactMatch(
 // That next part is what we offer as a completion.
 //
 // Wildcard-at-EOI with a string next part: defer the
-// partial keyword scan to Phase B1 via wildcardEoiDescriptors.
+// partial keyword scan to finalizeCandidates via
+// wildcardEoiDescriptors.
 //
 // Non-string next parts (wildcard, number, rules) don't produce
 // completions here — wildcards are handled by Category 3a
@@ -903,8 +957,8 @@ function processCleanPartial(
     const nextPart = state.parts[state.partIndex];
 
     // Wildcard-at-EOI with a string next part: defer the
-    // partial keyword scan to Phase B1.  This applies to
-    // both directions under the same condition.
+    // partial keyword scan to finalizeCandidates.  This
+    // applies to both directions under the same condition.
     const deferredToEoi =
         savedPendingWildcard?.valueId !== undefined &&
         state.index >= input.length &&
@@ -930,9 +984,9 @@ function processCleanPartial(
     if (direction === "backward" && hasPartToReconsider) {
         // Backward: collect a fallback candidate (backs up
         // to the wildcard start or last matched part).  If
-        // a partial keyword exists inside the wildcard, Phase
-        // B1 will find it and may clear this fallback in
-        // favor of a higher-position candidate.
+        // a partial keyword exists inside the wildcard,
+        // finalizeCandidates will find it and may clear
+        // this fallback in favor of a higher-position candidate.
         tryCollectBackwardCandidate(
             ctx,
             preFinalizeState ?? state,
@@ -1070,6 +1124,47 @@ function processDirtyPartial(
                 state.index,
                 direction,
             );
+            // In backward mode, tryPartialStringMatch may back up
+            // past maxPrefixLength (e.g. spacing=none unconditionally
+            // sets couldBackUp=true, causing the candidate to land at
+            // a lower P).  The backed-up candidate gets discarded if
+            // another rule already set a higher maxPrefixLength.
+            //
+            // Collect the forward-direction candidate as a deferred
+            // shadow.  After the Phase A loop finishes and
+            // maxPrefixLength is finalized, shadows whose
+            // consumedLength matches are flushed into fixedCandidates.
+            // This is order-independent — it doesn't matter whether
+            // the requiring-mode rule or the none-mode rule is
+            // processed first.
+            if (direction === "backward") {
+                const lMode = leadingSpacingMode(state);
+                const fwdPartial = tryPartialStringMatch(
+                    currentPart,
+                    ctx.input,
+                    state.index,
+                    state.spacingMode,
+                    "forward",
+                    undefined,
+                    lMode === "none",
+                );
+                if (fwdPartial !== undefined) {
+                    const candidateSpacingMode =
+                        fwdPartial.consumedLength === state.index
+                            ? lMode
+                            : state.spacingMode;
+                    ctx.deferredShadowCandidates.push({
+                        consumedLength: fwdPartial.consumedLength,
+                        candidate: {
+                            kind: "string",
+                            completionText: fwdPartial.remainingText,
+                            spacingMode: candidateSpacingMode,
+                            isAfterWildcard: false,
+                            partialKeywordBackup: false,
+                        },
+                    });
+                }
+            }
         }
     }
 }
@@ -1101,6 +1196,10 @@ function collectCandidates(
         fixedCandidates: [],
         rangeCandidates: [],
         wildcardEoiDescriptors: [],
+        deferredShadowCandidates: [],
+        hasSepConflict: false,
+        hasTrailingSep: false,
+        droppedCandidates: false,
     };
 
     // Seed the work-list with one MatchState per top-level grammar rule.
@@ -1163,10 +1262,247 @@ function collectCandidates(
             processDirtyPartial(ctx, state, matched);
         }
     }
+
     return ctx;
 }
 
-// --- Phase B1: Resolve partial keyword anchors ---
+// Flush deferred shadow candidates whose consumedLength matches
+// the current maxPrefixLength.  Called after the per-descriptor
+// loop in finalizeCandidates (which can advance
+// maxPrefixLength for backward wildcard-at-EOI partial keywords)
+// so the check uses the final P, not an intermediate value.
+function flushShadowCandidates(ctx: CompletionContext): void {
+    for (const shadow of ctx.deferredShadowCandidates) {
+        if (shadow.consumedLength === ctx.maxPrefixLength) {
+            ctx.fixedCandidates.push(shadow.candidate);
+        }
+    }
+}
+
+// --- Forward EOI candidate injection ---
+//
+// Converts forward wildcard-at-EOI candidates into regular
+// FixedCandidates so they participate in the single conflict
+// detection pass in filterSepConflicts.  Called from
+// finalizeCandidates after the per-descriptor loop.
+//
+// Operates in one of two modes:
+//
+//   Displace: anchor > maxPrefixLength AND the gap contains
+//     non-separator content — only weaker candidates (e.g.
+//     Category 3b) survived Phase A.  Clear fixedCandidates
+//     and set P = anchor, replacing them with EOI candidates.
+//
+//   Merge: anchor === maxPrefixLength (stripping collapsed any
+//     separator-only gap).  Legitimate candidates exist at that
+//     position.  Add EOI candidates alongside them.
+//
+// The anchor is computed to align with keyword behavior: P lands
+// before the flex-space (trailing separators stripped), not after
+// it.  This makes wildcard→keyword transitions consistent with
+// keyword→keyword transitions, where P stays at the last matched
+// token boundary.
+function injectForwardEoiCandidates(
+    ctx: CompletionContext,
+    forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined,
+    forwardEoiCandidates: WildcardStringRangeCandidate[],
+): void {
+    const { input, direction } = ctx;
+
+    const hasPartialKeyword =
+        forwardPartialKeyword !== undefined &&
+        forwardPartialKeyword.position <= input.length;
+    if (
+        direction === "backward" ||
+        (!hasPartialKeyword && forwardEoiCandidates.length === 0)
+    ) {
+        return;
+    }
+
+    // anchor is what becomes matchedPrefixLength for these candidates.
+    // Start from the partial keyword position (if any) or
+    // prefix.length, then strip trailing separators so that P
+    // lands before the flex-space — consistent with how
+    // keyword→keyword P stays at the last matched token boundary.
+    // For partial keywords, this strips the separator gap between
+    // the wildcard content and the partial keyword start.
+    // The strip is bounded by maxPrefixLength: if another rule
+    // already consumed content at that position (e.g. via an
+    // escaped-space keyword), we must not discard it.
+    //
+    // Skip stripping when a partial keyword consumed to EOI
+    // (position === prefix.length): the keyword content itself
+    // may end with separator characters (e.g. comma in "hello,")
+    // that must not be stripped.
+    let anchor = hasPartialKeyword
+        ? forwardPartialKeyword!.position
+        : input.length;
+    if (!hasPartialKeyword || anchor < input.length) {
+        anchor = stripTrailingSeparators(input, anchor, ctx.maxPrefixLength);
+    }
+
+    // Decide whether to clear existing candidates (displace)
+    // or keep them (merge).
+    //
+    // After stripping, anchor either equals maxPrefixLength
+    // (natural merge — stripping consumed the entire gap) or
+    // lands on a non-separator character above maxPrefixLength.
+    // In the latter case the gap necessarily contains that
+    // non-separator, so it's always a displace.
+    //
+    // (A separator-only gap between maxPrefixLength and the
+    // raw position is fully consumed by stripping, collapsing
+    // anchor to maxPrefixLength — the merge case.)
+    if (anchor !== ctx.maxPrefixLength) {
+        debugCompletion(
+            `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `stripped EOI P=${anchor} (displace)`}`,
+        );
+        ctx.fixedCandidates.length = 0;
+        ctx.maxPrefixLength = anchor;
+    } else {
+        debugCompletion(`Phase B: merge at P=${anchor}`);
+    }
+
+    // Add the partial keyword itself.  tryPartialStringMatch at
+    // the anchor position cannot reproduce multi-word keyword
+    // results (e.g. "by" from ["played","by"]), so we use the
+    // saved completionWord directly.
+    if (hasPartialKeyword) {
+        const fpk = forwardPartialKeyword!;
+        ctx.fixedCandidates.push({
+            kind: "string",
+            completionText: fpk.completionWord,
+            spacingMode: fpk.spacingMode,
+            isAfterWildcard: true,
+            partialKeywordBackup: false,
+        });
+    }
+
+    // Instantiate deferred EOI candidates at the anchor.
+    for (const c of forwardEoiCandidates) {
+        if (anchor <= c.wildcardStart) continue;
+        if (
+            getWildcardStr(input, c.wildcardStart, anchor, c.spacingMode) ===
+            undefined
+        ) {
+            continue;
+        }
+        const partial = tryPartialStringMatch(
+            c.nextPart,
+            input,
+            anchor,
+            c.spacingMode,
+            "forward",
+        );
+        if (partial !== undefined) {
+            ctx.fixedCandidates.push({
+                kind: "string",
+                completionText: partial.remainingText,
+                spacingMode: c.spacingMode,
+                isAfterWildcard: true,
+                partialKeywordBackup: false,
+            });
+        }
+    }
+}
+
+// --- Separator mode conflict detection and filtering ---
+//
+// When fixed candidates at the same maxPrefixLength come from
+// rules with different spacing modes, some require a separator
+// while others reject it.  This function detects the conflict,
+// removes the incompatible set based on the trailing separator
+// state, advances P past the separator when needed, and records
+// the conflict state on ctx for materializeCandidates to use
+// during range candidate processing and output adjustment.
+//
+// Three-way compatibility:
+//   Trailing sep?  spacePunctuation  optional  none
+//   No             drop              keep      keep
+//   Yes            keep              keep      drop
+//
+// When candidates are dropped, closedSet is forced to false (by
+// materializeCandidates) so the shell re-fetches when the
+// separator state changes.  When trailing separator is present
+// and candidates are filtered, maxPrefixLength is advanced past
+// the separator so the shell's anchor diverges on backspace,
+// triggering an automatic re-fetch.
+function filterSepConflicts(ctx: CompletionContext): void {
+    const { input, fixedCandidates } = ctx;
+
+    // Compute each candidate's separator mode once; reused by the
+    // filter pass below when a conflict is detected.
+    const modes: SeparatorMode[] = new Array(fixedCandidates.length);
+    let hasRequiring = false;
+    let hasNoneMode = false;
+    for (let i = 0; i < fixedCandidates.length; i++) {
+        const c = fixedCandidates[i];
+        const firstChar = c.kind === "string" ? c.completionText[0] : "a";
+        const mode = computeCandidateSepMode(
+            input,
+            ctx.maxPrefixLength,
+            firstChar,
+            c.spacingMode,
+        );
+        modes[i] = mode;
+        if (isRequiringSepMode(mode)) {
+            hasRequiring = true;
+        }
+        if (mode === "none") {
+            hasNoneMode = true;
+        }
+    }
+
+    // A true separator conflict occurs only when "none" mode
+    // (rejects separator) coexists with requiring modes (needs
+    // separator).  "optional" is compatible with both states and
+    // does not participate in the conflict.
+    ctx.hasSepConflict = hasRequiring && hasNoneMode;
+    if (!ctx.hasSepConflict) return;
+
+    ctx.hasTrailingSep =
+        nextNonSeparatorIndex(input, ctx.maxPrefixLength) > ctx.maxPrefixLength;
+
+    // Filter fixed candidates in place using the pre-computed
+    // modes, avoiding a second computeCandidateSepMode call.
+    ctx.fixedCandidates = fixedCandidates.filter((_, i) => {
+        const mode = modes[i];
+        if (ctx.hasTrailingSep) {
+            // Trailing separator: drop "none" (rejects separator).
+            // Keep "spacePunctuation" and "optional".
+            if (mode === "none") {
+                ctx.droppedCandidates = true;
+                return false;
+            }
+            return true;
+        } else {
+            // No trailing separator: drop requiring modes.
+            // Keep "optional" and "none".
+            if (isRequiringSepMode(mode)) {
+                ctx.droppedCandidates = true;
+                return false;
+            }
+            return true;
+        }
+    });
+
+    // When trailing separator is present and we actually dropped
+    // candidates, advance maxPrefixLength past the separator so
+    // the shell anchor includes the separator character(s).  This
+    // ensures backspace triggers an anchor-diverged re-fetch.
+    if (ctx.hasTrailingSep && ctx.droppedCandidates) {
+        ctx.maxPrefixLength = nextNonSeparatorIndex(input, ctx.maxPrefixLength);
+    }
+}
+
+// --- Phase B1: Finalize candidates ---
+//
+// Resolves deferred wildcard-at-EOI descriptors, flushes shadow
+// candidates, injects forward EOI candidates as fixedCandidates,
+// and filters separator mode conflicts.  After this function
+// returns, fixedCandidates are pre-filtered, rangeCandidates are
+// ready, and maxPrefixLength is finalized — ready for Phase B2
+// (materializeCandidates).
 //
 // wildcardEoiDescriptors contains all wildcard-at-EOI string
 // states from both directions.  findPartialKeywordInWildcard
@@ -1177,13 +1513,17 @@ function collectCandidates(
 //   - Finds a partial keyword → records the best anchor for
 //     forward (forwardPartialKeyword), or collects a fixed
 //     candidate for backward.
-//   - Does not find a partial keyword → defers to Phase B2 via
-//     forwardEoiCandidates (forward) or rangeCandidates
-//     (backward).
-function resolveWildcardAnchors(ctx: CompletionContext): {
-    forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined;
-    forwardEoiCandidates: WildcardStringRangeCandidate[];
-} {
+//   - Does not find a partial keyword → collects a range
+//     candidate (backward) or defers to forward EOI injection.
+//
+// After the per-descriptor loop:
+//   1. Forward EOI candidates are injected as fixedCandidates
+//      via injectForwardEoiCandidates.
+//   2. Shadow candidates are flushed (consumedLength must match
+//      the now-settled maxPrefixLength).
+//   3. Separator mode conflicts are filtered via
+//      filterSepConflicts.
+function finalizeCandidates(ctx: CompletionContext): void {
     const {
         input,
         direction,
@@ -1195,8 +1535,8 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
     // Forward partial keyword: see ForwardPartialKeywordCandidate.
     let forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined;
     // Forward EOI candidates: wildcard-at-EOI string states where
-    // B1 did NOT find a partial keyword.  B2 instantiates them at
-    // the appropriate anchor:
+    // no partial keyword was found.  injectForwardEoiCandidates
+    // instantiates them at the appropriate anchor:
     //   - partial keyword position (if one exists from other states)
     //   - prefix.length (otherwise)
     const forwardEoiCandidates: WildcardStringRangeCandidate[] = [];
@@ -1257,7 +1597,7 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
                 }
             } else {
                 // No useful partial keyword — create range
-                // candidate for Phase B2.
+                // candidate for materializeCandidates.
                 rangeCandidates.push({
                     kind: "wildcardString",
                     wildcardStart: desc.wildcardStart,
@@ -1283,7 +1623,7 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
                     };
                 }
             } else {
-                // No partial keyword — defer to Phase B2.
+                // No partial keyword — defer to EOI injection.
                 forwardEoiCandidates.push({
                     kind: "wildcardString",
                     wildcardStart: desc.wildcardStart,
@@ -1294,14 +1634,63 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
         }
     }
 
-    return { forwardPartialKeyword, forwardEoiCandidates };
+    // The two post-loop steps are direction-exclusive (forward
+    // early-returns in injectForwardEoiCandidates; shadows are
+    // only collected during backward), so their order is
+    // interchangeable.  Forward first keeps the forward flow
+    // contiguous with the forwardPartialKeyword /
+    // forwardEoiCandidates variables above.
+
+    // Forward EOI candidate injection: converts wildcard-at-EOI
+    // candidates into regular fixedCandidates so they participate
+    // in the single conflict detection pass in filterSepConflicts.
+    injectForwardEoiCandidates(
+        ctx,
+        forwardPartialKeyword,
+        forwardEoiCandidates,
+    );
+
+    // Flush deferred shadow candidates into fixedCandidates.
+    flushShadowCandidates(ctx);
+
+    // Filter separator mode conflicts among fixed candidates.
+    filterSepConflicts(ctx);
+}
+
+// Compute needsSep for a range candidate and check whether it
+// should be dropped due to a separator conflict.  Returns the
+// needsSep boolean (for the caller to pass to mergeSeparatorMode)
+// when the candidate survives, or undefined when the candidate
+// should be dropped.
+function computeRangeNeedsSep(
+    ctx: CompletionContext,
+    input: string,
+    firstCompletionChar: string,
+    spacingMode: CompiledSpacingMode,
+): boolean | undefined {
+    const needsSep =
+        ctx.maxPrefixLength > 0 &&
+        spacingMode !== "none" &&
+        requiresSeparator(
+            input[ctx.maxPrefixLength - 1],
+            firstCompletionChar,
+            spacingMode,
+        );
+    if (ctx.hasSepConflict) {
+        const mode = candidateSeparatorMode(needsSep, spacingMode);
+        if (ctx.hasTrailingSep ? mode === "none" : isRequiringSepMode(mode)) {
+            return undefined;
+        }
+    }
+    return needsSep;
 }
 
 // --- Phase B2: Convert candidates to final completions/properties ---
 //
 // Fixed candidates are converted directly — they are already
-// guaranteed to be at maxPrefixLength (candidates at shorter
-// positions were discarded when maxPrefixLength advanced).
+// at maxPrefixLength and pre-filtered for separator conflicts
+// (candidates at shorter positions or with incompatible separator
+// modes were removed by earlier phases).
 //
 // Range candidates are only converted when the "retrigger"
 // conditions are met (see the range-candidate block below).
@@ -1311,10 +1700,9 @@ function resolveWildcardAnchors(ctx: CompletionContext): {
 // completion text at the same maxPrefixLength.  Showing
 // duplicates in the menu is unhelpful, so we deduplicate
 // globally.
+
 function materializeCandidates(
     ctx: CompletionContext,
-    forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined,
-    forwardEoiCandidates: WildcardStringRangeCandidate[],
 ): GrammarCompletionResult {
     const { input, direction, fixedCandidates, rangeCandidates } = ctx;
     const completions = new Set<string>();
@@ -1386,6 +1774,21 @@ function materializeCandidates(
         }
     }
 
+    // When P was advanced past trailing separator chars (trailing-sep
+    // conflict path), the separator is already consumed into P.
+    // Override separatorMode to "optional" — no *additional* separator
+    // is required between the (advanced) P and the completion text.
+    // mergeSepMode may have computed "spacePunctuation" because
+    // input[P-1] is a separator character, but that separator is the
+    // one we consumed, not a new requirement.
+    if (
+        ctx.hasTrailingSep &&
+        ctx.droppedCandidates &&
+        separatorMode !== undefined
+    ) {
+        separatorMode = "optional";
+    }
+
     // Range candidates replace the old two-pass backward retrigger
     // (which recursively called matchGrammarCompletion(forward) at
     // the backed-up position).  Each range candidate records a
@@ -1444,12 +1847,20 @@ function materializeCandidates(
                     partial !== undefined &&
                     !completions.has(partial.remainingText)
                 ) {
-                    completions.add(partial.remainingText);
-                    separatorMode = mergeSepMode(
+                    const needsSep = computeRangeNeedsSep(
+                        ctx,
                         input,
-                        separatorMode,
-                        ctx.maxPrefixLength,
                         partial.remainingText[0],
+                        c.spacingMode,
+                    );
+                    if (needsSep === undefined) {
+                        ctx.droppedCandidates = true;
+                        continue;
+                    }
+                    completions.add(partial.remainingText);
+                    separatorMode = mergeSeparatorMode(
+                        separatorMode,
+                        needsSep,
                         c.spacingMode,
                     );
                     anyAfterWildcard = true;
@@ -1460,12 +1871,20 @@ function materializeCandidates(
                     c.valueId,
                 );
                 if (completionProperty !== undefined) {
-                    properties.push(completionProperty);
-                    separatorMode = mergeSepMode(
+                    const needsSep = computeRangeNeedsSep(
+                        ctx,
                         input,
-                        separatorMode,
-                        ctx.maxPrefixLength,
                         "a",
+                        c.spacingMode,
+                    );
+                    if (needsSep === undefined) {
+                        ctx.droppedCandidates = true;
+                        continue;
+                    }
+                    properties.push(completionProperty);
+                    separatorMode = mergeSeparatorMode(
+                        separatorMode,
+                        needsSep,
                         c.spacingMode,
                     );
                     anyAfterWildcard = true;
@@ -1475,151 +1894,11 @@ function materializeCandidates(
         }
     }
 
-    // Forward EOI candidate instantiation and partial keyword recovery.
-    //
-    // Category 2 wildcard-at-EOI string candidates are deferred
-    // during Phase A (via wildcardEoiDescriptors) and resolved by
-    // Phase B1 into forwardPartialKeyword / forwardEoiCandidates.
-    // The wildcard boundary is ambiguous, so Phase A never pushes
-    // maxPrefixLength for them; Phase B1/B2 decides the final anchor.
-    //
-    // Phase B2 operates in one of two modes:
-    //
-    //   Clear + anchor (displace):
-    //     anchor > maxPrefixLength AND the gap contains non-separator
-    //     content — only weaker candidates (e.g. Category 3b)
-    //     survived Phase A.  Replace them with EOI instantiations.
-    //
-    //   Merge at anchor:
-    //     anchor matches maxPrefixLength (stripping collapsed any
-    //     separator-only gap).  Legitimate candidates exist at that
-    //     position.  Preserve them and add EOI instantiations alongside.
-    //
-    // The anchor is computed to align with keyword behavior: P lands
-    // before the flex-space (trailing separators stripped), not after
-    // it.  This makes wildcard→keyword transitions consistent with
-    // keyword→keyword transitions, where P stays at the last matched
-    // token boundary.
-    const hasPartialKeyword =
-        forwardPartialKeyword !== undefined &&
-        forwardPartialKeyword.position <= input.length;
-    if (
-        // Defensive: forwardEoiCandidates is only populated in the
-        // forward direction, but the guard makes the intent explicit.
-        direction !== "backward" &&
-        (forwardEoiCandidates.length > 0 || hasPartialKeyword)
-    ) {
-        // anchor is what becomes matchedPrefixLength for these candidates.
-        // Start from the partial keyword position (if any) or
-        // prefix.length, then strip trailing separators so that P
-        // lands before the flex-space — consistent with how
-        // keyword→keyword P stays at the last matched token boundary.
-        // For partial keywords, this strips the separator gap between
-        // the wildcard content and the partial keyword start.
-        // The strip is bounded by maxPrefixLength: if another rule
-        // already consumed content at that position (e.g. via an
-        // escaped-space keyword), we must not discard it.
-        //
-        // Skip stripping when a partial keyword consumed to EOI
-        // (position === prefix.length): the keyword content itself
-        // may end with separator characters (e.g. comma in "hello,")
-        // that must not be stripped.
-        let anchor = hasPartialKeyword
-            ? forwardPartialKeyword!.position
-            : input.length;
-        if (!hasPartialKeyword || anchor < input.length) {
-            anchor = stripTrailingSeparators(
-                input,
-                anchor,
-                ctx.maxPrefixLength,
-            );
-        }
-
-        // Decide whether to clear existing candidates (displace)
-        // or keep them (merge).
-        //
-        // After stripping, anchor either equals maxPrefixLength
-        // (natural merge — stripping consumed the entire gap) or
-        // lands on a non-separator character above maxPrefixLength.
-        // In the latter case the gap necessarily contains that
-        // non-separator, so it's always a displace.
-        //
-        // (A separator-only gap between maxPrefixLength and the
-        // raw position is fully consumed by stripping, collapsing
-        // anchor to maxPrefixLength — the merge case.)
-        if (anchor !== ctx.maxPrefixLength) {
-            debugCompletion(
-                `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `stripped EOI P=${anchor} (displace)`}`,
-            );
-            completions.clear();
-            properties.length = 0;
-            ctx.maxPrefixLength = anchor;
-            closedSet = true;
-            separatorMode = undefined;
-            anyAfterWildcard = false;
-            hasNonWildcardCompletion = false;
-        } else {
-            debugCompletion(`Phase B: merge at P=${anchor}`);
-        }
-
-        // Wildcard boundary is ambiguous when Phase B is
-        // actually instantiating candidates (partial keyword or
-        // deferred EOI candidates).
-        if (hasPartialKeyword || forwardEoiCandidates.length > 0) {
-            anyAfterWildcard = true;
-        }
-
-        // Add the partial keyword itself when it determined
-        // the anchor.  tryPartialStringMatch at the anchor
-        // position cannot reproduce multi-word keyword results
-        // (e.g. "by" from ["played","by"]), so we use the
-        // saved completionWord directly.
-        if (hasPartialKeyword) {
-            const fpk = forwardPartialKeyword!;
-            completions.add(fpk.completionWord);
-            separatorMode = mergeSepMode(
-                input,
-                separatorMode,
-                anchor,
-                fpk.completionWord[0],
-                fpk.spacingMode,
-            );
-        }
-
-        // Instantiate deferred EOI candidates at the anchor.
-        for (const c of forwardEoiCandidates) {
-            if (anchor <= c.wildcardStart) continue;
-            if (
-                getWildcardStr(
-                    input,
-                    c.wildcardStart,
-                    anchor,
-                    c.spacingMode,
-                ) === undefined
-            ) {
-                continue;
-            }
-            const partial = tryPartialStringMatch(
-                c.nextPart,
-                input,
-                anchor,
-                c.spacingMode,
-                "forward",
-            );
-            if (
-                partial !== undefined &&
-                !completions.has(partial.remainingText)
-            ) {
-                completions.add(partial.remainingText);
-                separatorMode = mergeSepMode(
-                    input,
-                    separatorMode,
-                    anchor,
-                    partial.remainingText[0],
-                    c.spacingMode,
-                );
-            }
-        }
+    // If candidates were dropped due to separator conflict,
+    // force closedSet=false so the shell re-fetches when the
+    // separator state changes (typing/deleting a space).
+    if (ctx.droppedCandidates) {
+        closedSet = false;
     }
 
     // See the directionSensitive field comment on
@@ -1628,6 +1907,24 @@ function materializeCandidates(
     // not consulted — it constrains the search, not the result.
     const directionSensitive = ctx.maxPrefixLength > 0;
 
+    // Combine the two accumulation booleans into the output
+    // tri-state.  Order-independent: each boolean was set by
+    // any candidate that matched its condition.
+    //
+    // When candidates were dropped due to separator conflict
+    // filtering, force "all" → "some" to prevent the shell
+    // from using the "slide" noMatchPolicy (which would
+    // suppress re-fetch when the separator state changes).
+    const rawAfterWildcard: AfterWildcard = !anyAfterWildcard
+        ? "none"
+        : hasNonWildcardCompletion
+          ? "some"
+          : "all";
+    const afterWildcard: AfterWildcard =
+        ctx.droppedCandidates && rawAfterWildcard === "all"
+            ? "some"
+            : rawAfterWildcard;
+
     return {
         completions: [...completions],
         properties,
@@ -1635,14 +1932,7 @@ function materializeCandidates(
         separatorMode,
         closedSet,
         directionSensitive,
-        // Combine the two accumulation booleans into the output
-        // tri-state.  Order-independent: each boolean was set by
-        // any candidate that matched its condition.
-        afterWildcard: !anyAfterWildcard
-            ? "none"
-            : hasNonWildcardCompletion
-              ? "some"
-              : "all",
+        afterWildcard,
     };
 }
 
@@ -1658,16 +1948,10 @@ export function matchGrammarCompletion(
 
     // Phase A
     const ctx = collectCandidates(grammar, input, minPrefixLength, direction);
-    // Phase B1
-    const { forwardPartialKeyword, forwardEoiCandidates } =
-        resolveWildcardAnchors(ctx);
-
-    // Phase B2
-    const result = materializeCandidates(
-        ctx,
-        forwardPartialKeyword,
-        forwardEoiCandidates,
-    );
+    // Phase B1: finalize candidates (wildcard anchors, shadows, EOI, sep conflicts)
+    finalizeCandidates(ctx);
+    // Phase B2: convert candidates to final completions/properties
+    const result = materializeCandidates(ctx);
 
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
     return result;

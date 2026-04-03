@@ -862,6 +862,27 @@ definite completions to slide — `"some"` triggers re-fetch instead.
   handles this correctly. The two-pass invariant check skips this case
   (when `forwardAtP.matchedPrefixLength < P`).
 
+### Direction asymmetry and separator-mode conflicts
+
+Two related mechanisms protect the invariants when rules with different
+spacing modes compete for the same `maxPrefixLength`:
+
+1. **Separator-mode conflict filtering** (`materializeCandidates` in
+   `grammarCompletion.ts`, post-loop in `grammarStore.ts`): when
+   `"none"` and requiring-separator candidates coexist, filters by
+   trailing separator state, advances P, and forces `closedSet=false`.
+   Protects invariants #9, #13.
+
+2. **Deferred shadow candidates** (`DeferredShadowCandidate` in
+   `grammarCompletion.ts`): when Category 3b backward backs up past the
+   forward position, a shadow candidate is collected and flushed after
+   Phase B1. Protects invariants #3, #7, #8.
+
+For a detailed analysis of why only Category 3b requires shadow
+candidates (and why Categories 1, 2, and 3a are structurally safe),
+see `actionGrammar.md` § "Direction asymmetry: why only Category 3b
+needs shadow candidates".
+
 ---
 
 ## CLI integration

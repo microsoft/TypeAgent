@@ -853,6 +853,148 @@ flow through the cache, dispatcher, and shell layers, and
 `completion.md` § Invariants for the full catalog of correctness
 invariants, their user-visible impact, and which tests verify them.
 
+### Separator-mode conflict filtering
+
+When fixed candidates at the same `maxPrefixLength` come from rules
+with different `spacingMode` values — for example, a `[spacing=none]`
+rule and a default-spacing rule that both match the same prefix — the
+single merged `separatorMode` cannot correctly represent all of them.
+A `"none"` candidate rejects any trailing separator, while a
+`"spacePunctuation"` candidate requires one. The conflict-filtering
+logic in `materializeCandidates()` resolves this:
+
+1. **Detect:** Compute each candidate's individual `SeparatorMode` via
+   `computeCandidateSepMode()`. A conflict exists when both
+   `isRequiringSepMode()` candidates (need separator) and `"none"`
+   candidates (reject separator) are present.
+
+2. **Filter by trailing separator state:** Inspect `input[maxPrefixLength]`:
+
+   - Trailing separator present → drop `"none"` candidates (they would
+     reject the existing separator).
+   - No trailing separator → drop requiring candidates (a separator
+     would need to be inserted).
+
+3. **Advance P:** When trailing separator is present and candidates were
+   dropped, advance `maxPrefixLength` past the separator so the shell's
+   anchor includes it. This ensures backspace triggers a re-fetch (the
+   anchor diverges). Override `separatorMode` to `"optional"` since the
+   separator is already consumed into P.
+
+4. **Force `closedSet=false`:** When candidates are dropped, the
+   completion list is no longer exhaustive. The shell must re-fetch when
+   the separator state changes (typing or deleting a space).
+
+5. **Force `afterWildcard` `"all"` → `"some"`:** When candidates are
+   dropped and all surviving candidates are after a wildcard,
+   `afterWildcard` is downgraded from `"all"` to `"some"` to prevent
+   the shell from using the "slide" `noMatchPolicy` (which would
+   suppress the re-fetch).
+
+The same conflict-detection logic is applied cross-grammar in
+`grammarStore.ts` after collecting per-grammar results.
+
+### Direction asymmetry: why only Category 3b needs shadow candidates
+
+The core invariant is: **completion at P is a function of
+`input[0..P]` alone; direction only picks P.** When multiple rules
+compete, backward may skip a candidate that forward would collect at the
+same P value. This section explains why only Category 3b is vulnerable
+and why Categories 1, 2, and 3a are structurally safe.
+
+#### The abstract problem
+
+When backward processes a rule, it may back up from `endIndex` to a
+lower position `prevEndIndex`. If **another** rule's backward stays at
+`endIndex` (pushing `maxPrefixLength` there), the first rule's forward
+candidate at `endIndex` was never collected — it was discarded when
+backward chose `prevEndIndex`. The question is: which categories can
+produce this "vanishing forward candidate" scenario?
+
+#### Category 3b — VULNERABLE (fixed with deferred shadow candidates)
+
+`tryPartialStringMatch()` is called on the **same `StringPart`** for both
+forward and backward directions and arrives at the **same `endIndex`**
+(greedy word matching is deterministic). Another rule's Category 3b
+backward _can reach that exact endIndex_ — because it matched those same
+words as part of a longer sequence and has `couldBackUp=false` (trailing
+separator present at `endIndex`), so it stays at `endIndex` instead of
+backing up. The first rule's forward candidate (completion at `endIndex`)
+was never collected because backward took the `prevEndIndex` path.
+
+**Fix:** `DeferredShadowCandidate` — during Category 3b backward
+processing, whenever `tryPartialStringMatch` backs up, a forward-
+direction shadow candidate is collected (via a second
+`tryPartialStringMatch("forward")` call) and stored in
+`ctx.deferredShadowCandidates`. After Phase A completes and Phase B1
+resolves wildcard anchors (B1 can advance `maxPrefixLength`), shadows
+whose `consumedLength` matches the final `maxPrefixLength` are flushed
+into `fixedCandidates`. This is order-independent — it doesn't matter
+whether the requiring-mode rule or the none-mode rule is processed first.
+
+The flush is placed **between B1 and B2** (not at the end of Phase A)
+because B1 can advance `maxPrefixLength` for backward wildcard-at-EOI
+partial keywords. Flushing at the end of Phase A would use an
+intermediate P, potentially admitting or rejecting shadows incorrectly.
+
+#### Category 2 (clean partial) — SAFE
+
+`processCleanPartial()` operates on the **next unmatched part** (the
+part after the last consumed one), not the same part as forward. The
+backward code path is gated by `hasPartToReconsider`:
+
+```typescript
+const hasPartToReconsider =
+  state.index >= input.length &&
+  (savedPendingWildcard?.valueId !== undefined ||
+    state.lastMatchedPartInfo !== undefined);
+```
+
+Two structural cases arise:
+
+| Condition                                                                     | `hasPartToReconsider`                                                                | Backward behavior                   | Safety reason                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state.index == input.length`                                                 | **true** (something consumed input → `lastMatchedPartInfo` or `pendingWildcard` set) | Backs up to P_low                   | All other rules at `input.length` also back up (Category 3b: `couldBackUp=true` when `endIndex == input.length` with no trailing separator; Category 2: same `hasPartToReconsider` gate). **No backward rule reaches `input.length`**, so forward P > backward P → different P values, invariant holds trivially. |
+| `state.index < input.length` (trailing separator consumed by `finalizeState`) | **false** (fails `>= input.length` check)                                            | Takes the **forward (else) branch** | Identical to forward. No asymmetry possible.                                                                                                                                                                                                                                                                      |
+
+Additionally, nested rule references (`$(x:<Inner>)`) do not set the
+parent's `lastMatchedPartInfo` — the match occurs inside the child
+state. So `hasPartToReconsider=false` even when `state.index ==
+input.length` and the nested rule consumed all input. Category 2 takes
+the forward path in this case. (Confirmed by debug traces: the log
+prints "Completing string part" for backward, identical to forward.)
+
+#### Category 1 (exact match) — SAFE
+
+Direction-agnostic. `processExactMatch()` always calls
+`tryCollectBackwardCandidate()` regardless of `ctx.direction` — both
+directions back up to the last matched term identically. Since every
+part was matched, forward returns `undefined` (nothing to complete);
+backward receives the same treatment.
+
+#### Category 3a (unfinalizable wildcard) — SAFE
+
+`processDirtyPartial()` with an unfinalizable pending wildcard.
+Forward calls `collectPropertyCandidate()` (entity/property completion);
+backward calls `tryCollectBackwardCandidate()` (backs up to last matched
+keyword). These produce **different types of candidates** (properties vs.
+string completions), not the same candidate at different positions.
+
+The `canReconsider3a` gate requires `state.index >= input.length` (same
+as Category 2's gate), producing the same structural safety: when true,
+all backward rules back up → nobody reaches `input.length` → different P
+values. When false, the code falls through to the forward path
+(`collectPropertyCandidate`).
+
+#### Summary table
+
+| Category              | Forward path                 | Backward path                  | Same-P collision possible? | Why safe (or how fixed)                                                                         |
+| --------------------- | ---------------------------- | ------------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------- |
+| 1 — Exact             | Back up (direction-agnostic) | Back up (direction-agnostic)   | N/A                        | Identical processing                                                                            |
+| 2 — Clean partial     | Next unmatched part          | Back up to last matched part   | No                         | `hasPartToReconsider` gate ensures backward P < forward P; trailing-sep case takes forward path |
+| 3a — Pending wildcard | Property completion          | Back up to last keyword        | No                         | Different candidate types; `canReconsider3a` gate ensures backward P < forward P                |
+| 3b — Dirty partial    | Current part at `endIndex`   | Current part at `prevEndIndex` | **Yes**                    | Fixed: `DeferredShadowCandidate` captures forward candidate, flushed after B1                   |
+
 ### Entity registry
 
 `entityRegistry.ts` provides a global registry (`globalEntityRegistry`)

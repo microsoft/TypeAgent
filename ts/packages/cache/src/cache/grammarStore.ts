@@ -6,6 +6,7 @@ import {
     Grammar,
     matchGrammar,
     matchGrammarCompletion,
+    GrammarCompletionResult,
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
@@ -288,6 +289,17 @@ export class GrammarStoreImpl implements GrammarStore {
         let directionSensitive: boolean = false;
         let afterWildcard: AfterWildcard | undefined;
         const filter = new Set(namespaceKeys);
+
+        // Track per-grammar results at the current matchedPrefixLength
+        // so we can detect cross-grammar separator mode conflicts after
+        // the loop.  Each entry records the grammar's result and schema
+        // name for property conversion.
+        type GrammarPartial = {
+            partial: GrammarCompletionResult;
+            schemaName: string;
+        };
+        let grammarPartials: GrammarPartial[] = [];
+
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
                 continue;
@@ -384,51 +396,136 @@ export class GrammarStoreImpl implements GrammarStore {
                     closedSet = undefined;
                     directionSensitive = false;
                     afterWildcard = undefined;
+                    grammarPartials = [];
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
-                    completions.push(...partial.completions);
-                    if (partial.separatorMode !== undefined) {
-                        separatorMode = mergeSeparatorMode(
-                            separatorMode,
-                            partial.separatorMode,
-                        );
-                    }
-                    // AND-merge: closed set only when all grammar
-                    // results at this prefix length are closed sets.
-                    if (partial.closedSet !== undefined) {
-                        closedSet =
-                            closedSet === undefined
-                                ? partial.closedSet
-                                : closedSet && partial.closedSet;
-                    }
-                    // True if any grammar result at this prefix
-                    // length is direction-sensitive.
-                    directionSensitive =
-                        directionSensitive || partial.directionSensitive;
-                    // Tri-state merge for afterWildcard.
-                    afterWildcard = mergeAfterWildcard(
-                        afterWildcard,
-                        partial.afterWildcard,
-                    );
+                    const { schemaName } = splitSchemaNamespaceKey(name);
+                    grammarPartials.push({ partial, schemaName });
+                }
+            }
+        }
+
+        // Post-loop merge of grammar-based results with cross-grammar
+        // separator mode conflict detection.
+        //
+        // Each individual grammar's result is already internally
+        // consistent (Phase 1 within-grammar conflict filtering).
+        // Here we detect when different grammars produce incompatible
+        // separator modes and filter by trailing separator state.
+        if (grammarPartials.length > 0) {
+            let hasRequiring = false;
+            let hasNoneMode = false;
+            for (const { partial } of grammarPartials) {
+                if (partial.separatorMode !== undefined) {
                     if (
-                        partial.properties !== undefined &&
-                        partial.properties.length > 0
+                        partial.separatorMode === "space" ||
+                        partial.separatorMode === "spacePunctuation"
                     ) {
-                        const { schemaName } = splitSchemaNamespaceKey(name);
-                        for (const p of partial.properties) {
-                            const action: any = p.match;
-                            properties.push({
-                                actions: [
-                                    createExecutableAction(
-                                        schemaName,
-                                        action.actionName,
-                                        action.parameters,
-                                    ),
-                                ],
-                                names: p.propertyNames,
-                            });
-                        }
+                        hasRequiring = true;
                     }
+                    if (partial.separatorMode === "none") {
+                        hasNoneMode = true;
+                    }
+                }
+            }
+
+            const hasCrossGrammarConflict = hasRequiring && hasNoneMode;
+            const hasTrailingSep =
+                hasCrossGrammarConflict &&
+                matchedPrefixLength < input.length &&
+                /[\s\p{P}]/u.test(input[matchedPrefixLength]);
+
+            let effectivePartials = grammarPartials;
+            let droppedGrammars = false;
+            if (hasCrossGrammarConflict) {
+                effectivePartials = grammarPartials.filter(({ partial }) => {
+                    if (partial.separatorMode === undefined) return true;
+                    if (hasTrailingSep) {
+                        // Trailing separator: drop "none" mode grammars.
+                        if (partial.separatorMode === "none") {
+                            droppedGrammars = true;
+                            return false;
+                        }
+                        return true;
+                    } else {
+                        // No trailing separator: drop requiring modes.
+                        if (
+                            partial.separatorMode === "space" ||
+                            partial.separatorMode === "spacePunctuation"
+                        ) {
+                            droppedGrammars = true;
+                            return false;
+                        }
+                        return true;
+                    }
+                });
+            }
+
+            // Merge surviving grammar partials.
+            for (const { partial, schemaName } of effectivePartials) {
+                completions.push(...partial.completions);
+                if (partial.separatorMode !== undefined) {
+                    separatorMode = mergeSeparatorMode(
+                        separatorMode,
+                        partial.separatorMode,
+                    );
+                }
+                // AND-merge: closed set only when all grammar
+                // results at this prefix length are closed sets.
+                if (partial.closedSet !== undefined) {
+                    closedSet =
+                        closedSet === undefined
+                            ? partial.closedSet
+                            : closedSet && partial.closedSet;
+                }
+                // True if any grammar result at this prefix
+                // length is direction-sensitive.
+                directionSensitive =
+                    directionSensitive || partial.directionSensitive;
+                // Tri-state merge for afterWildcard.
+                afterWildcard = mergeAfterWildcard(
+                    afterWildcard,
+                    partial.afterWildcard,
+                );
+                if (
+                    partial.properties !== undefined &&
+                    partial.properties.length > 0
+                ) {
+                    for (const p of partial.properties) {
+                        const action: any = p.match;
+                        properties.push({
+                            actions: [
+                                createExecutableAction(
+                                    schemaName,
+                                    action.actionName,
+                                    action.parameters,
+                                ),
+                            ],
+                            names: p.propertyNames,
+                        });
+                    }
+                }
+            }
+
+            // When grammars were dropped due to separator conflict,
+            // advance P past trailing separator and adjust metadata
+            // so the shell re-fetches when separator state changes.
+            if (droppedGrammars) {
+                closedSet = closedSet === undefined ? false : false;
+                if (hasTrailingSep) {
+                    // Advance past trailing separators.
+                    const sepMatch = input
+                        .slice(matchedPrefixLength)
+                        .match(/^[\s\p{P}]+/u);
+                    if (sepMatch) {
+                        matchedPrefixLength += sepMatch[0].length;
+                    }
+                    separatorMode = "optional";
+                }
+                // Force afterWildcard "all" → "some" so shell
+                // doesn't use "slide" noMatchPolicy.
+                if (afterWildcard === "all") {
+                    afterWildcard = "some";
                 }
             }
         }
