@@ -374,15 +374,13 @@ internal partial class ThemeCommandHandler : ICommandHandler
                 foreach (string themeFile in Directory.GetFiles(themesFolder, "*.theme"))
                 {
                     string themeName = Path.GetFileNameWithoutExtension(themeFile);
-                    if (!_themeDictionary.ContainsKey(themeName))
+                    if (_themeDictionary.TryAdd(themeName, themeFile))
                     {
-                        _themeDictionary[themeName] = themeFile;
-
                         // Parse display name from theme file
                         string displayName = GetThemeDisplayName(themeFile);
-                        if (!string.IsNullOrEmpty(displayName) && !_themeDisplayNameDictionary.ContainsKey(displayName))
+                        if (!string.IsNullOrEmpty(displayName))
                         {
-                            _themeDisplayNameDictionary[displayName] = themeName;
+                            _themeDisplayNameDictionary.TryAdd(displayName, themeName);
                         }
                     }
                 }

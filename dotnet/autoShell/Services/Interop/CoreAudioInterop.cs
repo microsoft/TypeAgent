@@ -4,7 +4,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace autoShell;
+namespace autoShell.Services.Interop;
 // Windows Core Audio API COM interop definitions
 // These replace the AudioSwitcher.AudioApi package for volume control
 

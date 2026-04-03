@@ -93,7 +93,7 @@ internal class AppCommandHandler : ICommandHandler
                 string workDirEnvVar = _appRegistry.GetWorkingDirectoryEnvVar(friendlyName);
                 if (workDirEnvVar != null)
                 {
-                    psi.WorkingDirectory = Environment.ExpandEnvironmentVariables("%" + workDirEnvVar + "%") ?? string.Empty;
+                    psi.WorkingDirectory = Environment.ExpandEnvironmentVariables("%" + workDirEnvVar + "%");
                 }
 
                 string arguments = _appRegistry.GetArguments(friendlyName);

@@ -94,12 +94,11 @@ internal class CommandDispatcher
                 return true;
             }
 
-            string value = kvp.Value.ToString();
-
             try
             {
                 if (_handlers.TryGetValue(key, out ICommandHandler handler))
                 {
+                    string value = kvp.Value?.ToString();
                     handler.Handle(key, value, kvp.Value);
                 }
                 else

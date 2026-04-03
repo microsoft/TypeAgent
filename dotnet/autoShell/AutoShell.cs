@@ -8,7 +8,6 @@ using autoShell.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-
 namespace autoShell;
 
 internal class AutoShell
@@ -20,9 +19,8 @@ internal class AutoShell
 
     #endregion P/Invoke
 
-    private static readonly ConsoleLogger s_logger = new ConsoleLogger();
+    private static readonly ConsoleLogger s_logger = new();
     private static readonly CommandDispatcher s_dispatcher = CommandDispatcher.Create(s_logger);
-
 
     /// <summary>
     /// Program entry point
@@ -37,19 +35,27 @@ internal class AutoShell
         if (args.Length > 0)
         {
             string exe = $"\"{Environment.ProcessPath}\"";
-            string cmdLine = rawCmdLine.Replace(exe, "");
+            string cmdLine = rawCmdLine!.Replace(exe, "");
 
             if (cmdLine.StartsWith(exe, StringComparison.OrdinalIgnoreCase))
             {
                 cmdLine = cmdLine[exe.Length..];
             }
-            else if (cmdLine.StartsWith(Path.GetFileName(Environment.ProcessPath), StringComparison.OrdinalIgnoreCase))
+            else
             {
-                cmdLine = cmdLine[Path.GetFileName(Environment.ProcessPath).Length..];
-            }
-            else if (cmdLine.StartsWith(Path.GetFileNameWithoutExtension(Environment.ProcessPath), StringComparison.OrdinalIgnoreCase))
-            {
-                cmdLine = cmdLine[Path.GetFileNameWithoutExtension(Environment.ProcessPath).Length..];
+                var processFileName = Path.GetFileName(Environment.ProcessPath)!;
+                if (cmdLine.StartsWith(processFileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    cmdLine = cmdLine[processFileName.Length..];
+                }
+                else
+                {
+                    var processFileNameNoExt = Path.GetFileNameWithoutExtension(processFileName);
+                    if (cmdLine.StartsWith(processFileNameNoExt, StringComparison.OrdinalIgnoreCase))
+                    {
+                        cmdLine = cmdLine[processFileNameNoExt.Length..];
+                    }
+                }
             }
 
             try
@@ -99,5 +105,4 @@ internal class AutoShell
 
     private static bool ExecLine(JObject root)
         => s_dispatcher.Dispatch(root);
-
 }

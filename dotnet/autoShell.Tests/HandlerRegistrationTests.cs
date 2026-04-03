@@ -20,7 +20,7 @@ public class HandlerRegistrationTests
         var registryMock = new Moq.Mock<Services.IRegistryService>();
         var systemParamsMock = new Moq.Mock<Services.ISystemParametersService>();
         var processMock = new Moq.Mock<Services.IProcessService>();
-        var appRegistryMock = new Moq.Mock<Services.IAppRegistry>();
+        var appRegistryMock = new Moq.Mock<IAppRegistry>();
         var debuggerMock = new Moq.Mock<Services.IDebuggerService>();
         var brightnessMock = new Moq.Mock<Services.IBrightnessService>();
         var displayMock = new Moq.Mock<Services.IDisplayService>();

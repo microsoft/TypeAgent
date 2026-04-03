@@ -3,6 +3,7 @@
 
 using System;
 using autoShell.Logging;
+using autoShell.Services.Interop;
 
 namespace autoShell.Services;
 

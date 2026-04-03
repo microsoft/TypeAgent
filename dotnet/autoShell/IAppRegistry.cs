@@ -3,7 +3,7 @@
 
 using System.Collections.Generic;
 
-namespace autoShell.Services;
+namespace autoShell;
 
 /// <summary>
 /// Registry of known applications, mapping friendly names to executable paths,

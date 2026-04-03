@@ -7,7 +7,7 @@ using System.Text;
 using autoShell.Logging;
 using UIAutomationClient = Interop.UIAutomationClient;
 
-namespace autoShell;
+namespace autoShell.Services.Interop;
 
 /// <summary>
 /// This is a placeholder for UIAutomation related functionalities.

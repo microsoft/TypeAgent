@@ -11,19 +11,19 @@ namespace autoShell.Logging;
 internal interface ILogger
 {
     /// <summary>
-    /// Logs an exception as an error with colored console output.
+    /// Logs an exception as an error.
     /// </summary>
     /// <param name="ex">The exception to log.</param>
     void Error(Exception ex);
 
     /// <summary>
-    /// Logs a warning message with colored console output.
+    /// Logs a warning message.
     /// </summary>
     /// <param name="message">The warning message.</param>
     void Warning(string message);
 
     /// <summary>
-    /// Logs a debug/trace message to diagnostics output only.
+    /// Logs a debug-level message.
     /// </summary>
     /// <param name="message">The debug message.</param>
     void Debug(string message);

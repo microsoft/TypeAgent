@@ -274,7 +274,7 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
         {
             JArray desktopNames = JArray.Parse(jsonDesktopNames);
 
-            if (desktopNames == null || desktopNames.Count == 0)
+            if (desktopNames.Count == 0)
             {
                 desktopNames = ["desktop X"];
             }

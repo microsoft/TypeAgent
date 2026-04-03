@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using autoShell.Logging;
+using autoShell.Services.Interop;
 using Newtonsoft.Json;
 
 namespace autoShell.Services;

@@ -2,14 +2,13 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using autoShell.Logging;
 using Microsoft.WindowsAPICodePack.Shell;
 
-namespace autoShell.Services;
+namespace autoShell;
 
 /// <summary>
 /// Windows implementation of <see cref="IAppRegistry"/>.
@@ -19,16 +18,16 @@ namespace autoShell.Services;
 internal sealed class WindowsAppRegistry : IAppRegistry
 {
     private readonly ILogger _logger;
-    private readonly Hashtable _friendlyNameToPath = [];
-    private readonly Hashtable _friendlyNameToId = [];
-    private readonly SortedList<string, string[]> _appMetadata;
+    private readonly Dictionary<string, string> _friendlyNameToPath = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _friendlyNameToId = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string[]> _appMetadata;
 
     public WindowsAppRegistry(ILogger logger)
     {
         _logger = logger;
         string userName = Environment.UserName;
 
-        _appMetadata = new SortedList<string, string[]>
+        _appMetadata = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
             { "chrome", ["chrome.exe"] },
             { "power point", ["C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE"] },
@@ -63,31 +62,16 @@ internal sealed class WindowsAppRegistry : IAppRegistry
             _friendlyNameToPath.Add(kvp.Key, kvp.Value[0]);
         }
 
-        try
-        {
-            var installedApps = GetAllInstalledAppIds();
-            foreach (var kvp in installedApps)
-            {
-                _friendlyNameToId.Add(kvp.Key, kvp.Value);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.Debug($"Failed to enumerate installed apps: {ex.Message}");
-        }
+        PopulateInstalledAppIds();
     }
 
     /// <inheritdoc/>
     public string GetExecutablePath(string friendlyName)
-    {
-        return (string)_friendlyNameToPath[friendlyName.ToLowerInvariant()];
-    }
+        => _friendlyNameToPath[friendlyName];
 
     /// <inheritdoc/>
     public string GetAppUserModelId(string friendlyName)
-    {
-        return (string)_friendlyNameToId[friendlyName.ToLowerInvariant()];
-    }
+        => _friendlyNameToId[friendlyName];
 
     /// <inheritdoc/>
     public string ResolveProcessName(string friendlyName)
@@ -99,7 +83,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
     /// <inheritdoc/>
     public string GetWorkingDirectoryEnvVar(string friendlyName)
     {
-        return _appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1
+        return _appMetadata.TryGetValue(friendlyName, out string[] value) && value.Length > 1
             ? value[1]
             : null;
     }
@@ -107,36 +91,41 @@ internal sealed class WindowsAppRegistry : IAppRegistry
     /// <inheritdoc/>
     public string GetArguments(string friendlyName)
     {
-        return _appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 2
+        return _appMetadata.TryGetValue(friendlyName, out string[] value) && value.Length > 2
             ? string.Join(" ", value.Skip(2))
             : null;
     }
 
     /// <inheritdoc/>
     public IEnumerable<string> GetAllAppNames()
-    {
-        return _friendlyNameToId.Keys.Cast<string>();
-    }
+        => _friendlyNameToId.Keys;
 
-    private SortedList<string, string> GetAllInstalledAppIds()
+    private void PopulateInstalledAppIds()
     {
-        var FOLDERID_AppsFolder = new Guid("{1e87508d-89c2-42f0-8a7e-645a0f50ca58}");
-        ShellObject appsFolder = (ShellObject)KnownFolderHelper.FromKnownFolderId(FOLDERID_AppsFolder);
-        var appIds = new SortedList<string, string>();
+        // GUID taken from https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+        var appsFolderId = new Guid("{1e87508d-89c2-42f0-8a7e-645a0f50ca58}");
 
-        foreach (var app in (IKnownFolder)appsFolder)
+        try
         {
-            string appName = app.Name.ToLowerInvariant();
-            if (appIds.ContainsKey(appName))
+            ShellObject appsFolder = (ShellObject)KnownFolderHelper.FromKnownFolderId(appsFolderId);
+
+            foreach (var app in (IKnownFolder)appsFolder)
             {
-                _logger.Debug("Key has multiple values: " + appName);
-            }
-            else
-            {
-                appIds.Add(appName, app.ParsingName);
+                string appName = app.Name;
+                if (_friendlyNameToId.ContainsKey(appName))
+                {
+                    _logger.Debug("Key has multiple values: " + appName);
+                }
+                else
+                {
+                    // The ParsingName property is the AppUserModelID
+                    _friendlyNameToId.Add(appName, app.ParsingName);
+                }
             }
         }
-
-        return appIds;
+        catch (Exception ex)
+        {
+            _logger.Debug($"Failed to enumerate installed apps: {ex.Message}");
+        }
     }
 }
