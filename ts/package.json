@@ -94,24 +94,15 @@
       ]
     },
     "overrides": {
-      "@github/copilot": ">=0.0.423",
-      "@xmldom/xmldom": ">=0.9.9",
-      "brace-expansion": ">=5.0.5",
+      "@azure/core-xml": ">=1.5.0",
       "express>path-to-regexp": "0.1.13",
       "fast-xml-parser": ">=5.5.7",
       "hono": ">=4.12.8",
       "http-proxy-agent": ">=7.0.0",
-      "lodash": ">=4.18.0",
-      "lodash-es": ">=4.18.0",
       "node-forge": ">=1.4.0",
       "node-gyp": "^12.2.0",
-      "nodemailer": ">=8.0.4",
-      "picomatch": ">=4.0.4",
-      "qs": ">=6.14.2",
       "router>path-to-regexp": ">=8.4.0",
-      "serialize-javascript": ">=7.0.5",
-      "undici": ">=7.24.0",
-      "underscore": ">=1.13.8"
+      "serialize-javascript": ">=7.0.5"
     },
     "ignoredBuiltDependencies": [
       "leveldown"
