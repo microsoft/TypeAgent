@@ -8,6 +8,7 @@ import {
     matchGrammarCompletion,
     GrammarCompletionResult,
     isRequiringSepMode,
+    hasTrailingSeparator,
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
@@ -430,8 +431,7 @@ export class GrammarStoreImpl implements GrammarStore {
             const hasCrossGrammarConflict = hasRequiring && hasNoneMode;
             const hasTrailingSep =
                 hasCrossGrammarConflict &&
-                matchedPrefixLength < input.length &&
-                /[\s\p{P}]/u.test(input[matchedPrefixLength]);
+                hasTrailingSeparator(input, matchedPrefixLength);
 
             let effectivePartials = grammarPartials;
             let droppedGrammars = false;

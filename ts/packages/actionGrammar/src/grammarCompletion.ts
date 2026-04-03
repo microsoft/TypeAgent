@@ -619,6 +619,27 @@ type ForwardPartialKeywordCandidate = {
     spacingMode: CompiledSpacingMode;
 };
 
+type DeferredShadowCandidate = {
+    consumedLength: number;
+    candidate: FixedCandidate;
+};
+
+// Sentinel character for property candidates in separator mode
+// computation.  Property completions represent free-form entity
+// slots (not literal keywords), so any representative Latin
+// character works — "a" requires a separator after word characters
+// and doesn't require one after punctuation, matching the typical
+// behavior for entity slots.
+const PROPERTY_SENTINEL_CHAR = "a";
+
+// True when a separator character (whitespace or punctuation) exists
+// at the given position in the input.  Used by both within-grammar
+// conflict filtering (filterSepConflicts) and cross-grammar conflict
+// filtering (grammarStore) to determine trailing separator state.
+export function hasTrailingSeparator(input: string, position: number): boolean {
+    return nextNonSeparatorIndex(input, position) > position;
+}
+
 // Compute whether a separator is needed between the character at
 // `position` in `prefix` and `firstCompletionChar`, then merge the
 // result into the running `current` separator mode.
@@ -706,11 +727,6 @@ export function isRequiringSepMode(mode: SeparatorMode): boolean {
 //    surviving candidates into the final completions[] and
 //    properties[] arrays.  Handles range candidates and
 //    deduplication.
-type DeferredShadowCandidate = {
-    consumedLength: number;
-    candidate: FixedCandidate;
-};
-
 type CompletionContext = {
     readonly input: string;
     readonly direction: "forward" | "backward" | undefined;
@@ -728,6 +744,11 @@ type CompletionContext = {
     /** True when trailing separator characters follow maxPrefixLength
      *  during a separator conflict.  Set by filterSepConflicts. */
     hasTrailingSep: boolean;
+    /** Resolved trailing-sep view for conflict filtering.  False for
+     *  backward (treats separator as absent); equals hasTrailingSep
+     *  for forward.  Set by filterSepConflicts; used by
+     *  computeRangeNeedsSep to avoid recomputing. */
+    resolveAsTrailingSep: boolean;
 };
 
 // Update maxPrefixLength.  When it increases, all previously
@@ -1194,6 +1215,7 @@ function collectCandidates(
         deferredShadowCandidates: [],
         hasSepConflict: false,
         hasTrailingSep: false,
+        resolveAsTrailingSep: false,
     };
 
     // Seed the work-list with one MatchState per top-level grammar rule.
@@ -1431,7 +1453,8 @@ function filterSepConflicts(ctx: CompletionContext): void {
     let hasNoneMode = false;
     for (let i = 0; i < fixedCandidates.length; i++) {
         const c = fixedCandidates[i];
-        const firstChar = c.kind === "string" ? c.completionText[0] : "a";
+        const firstChar =
+            c.kind === "string" ? c.completionText[0] : PROPERTY_SENTINEL_CHAR;
         const mode = computeCandidateSepMode(
             input,
             ctx.maxPrefixLength,
@@ -1454,8 +1477,7 @@ function filterSepConflicts(ctx: CompletionContext): void {
     ctx.hasSepConflict = hasRequiring && hasNoneMode;
     if (!ctx.hasSepConflict) return;
 
-    ctx.hasTrailingSep =
-        nextNonSeparatorIndex(input, ctx.maxPrefixLength) > ctx.maxPrefixLength;
+    ctx.hasTrailingSep = hasTrailingSeparator(input, ctx.maxPrefixLength);
 
     // Backward resolves the conflict as if there were no trailing
     // separator: it will return mpl at the scan position (before the
@@ -1464,17 +1486,32 @@ function filterSepConflicts(ctx: CompletionContext): void {
     // false for backward makes its candidate set match what forward
     // would compute on input[0..mpl] (no trailing sep), satisfying
     // Invariant #3.
-    if (ctx.direction !== "backward" && ctx.hasTrailingSep) {
+    ctx.resolveAsTrailingSep =
+        ctx.direction === "backward" ? false : ctx.hasTrailingSep;
+
+    // Filter fixed candidates in place using the pre-computed
+    // modes, avoiding a second computeCandidateSepMode call.
+    if (ctx.resolveAsTrailingSep) {
         // Trailing separator: drop "none" (rejects separator).
         ctx.fixedCandidates = fixedCandidates.filter(
             (_, i) => modes[i] !== "none",
         );
-        // Advance P past one separator so backspace triggers re-fetch.
-        // Only one character (not all consecutive separators) is
-        // consumed: each backspace produces a distinct anchor.
+        // Advance P past exactly one separator so backspace triggers
+        // re-fetch.  Only one character (not all consecutive
+        // separators) is consumed: each backspace in a multi-separator
+        // run produces a distinct anchor.  Remaining separators are
+        // stripped by the shell's "optional" mode handling, keeping the
+        // menu visible with a clean trie prefix.
+        //
+        // Safe unconditionally: hasSepConflict is true (checked above),
+        // so both "none" and requiring candidates coexist — the filter
+        // above always drops at least one candidate.
         ctx.maxPrefixLength += 1;
     } else {
         // No trailing separator (or backward): drop requiring modes.
+        // Backward does not advance: its anchor stays at the scan
+        // position (before the separator).  This keeps
+        // backward.mpl < forward.mpl, satisfying Invariant #7.
         ctx.fixedCandidates = fixedCandidates.filter(
             (_, i) => !isRequiringSepMode(modes[i]),
         );
@@ -1663,11 +1700,11 @@ function computeRangeNeedsSep(
         );
     if (ctx.hasSepConflict) {
         const mode = candidateSeparatorMode(needsSep, spacingMode);
-        // Use the same trailing-sep view as filterSepConflicts: backward
-        // treats the separator as absent (stays before it).
-        const hasTrailingSep =
-            ctx.direction !== "backward" && ctx.hasTrailingSep;
-        if (hasTrailingSep ? mode === "none" : isRequiringSepMode(mode)) {
+        if (
+            ctx.resolveAsTrailingSep
+                ? mode === "none"
+                : isRequiringSepMode(mode)
+        ) {
             return undefined;
         }
     }
@@ -1756,7 +1793,7 @@ function materializeCandidates(
                     input,
                     separatorMode,
                     ctx.maxPrefixLength,
-                    "a",
+                    PROPERTY_SENTINEL_CHAR,
                     c.spacingMode,
                 );
             }
@@ -1865,7 +1902,7 @@ function materializeCandidates(
                 if (completionProperty !== undefined) {
                     const needsSep = computeRangeNeedsSep(
                         ctx,
-                        "a",
+                        PROPERTY_SENTINEL_CHAR,
                         c.spacingMode,
                     );
                     if (needsSep === undefined) {
