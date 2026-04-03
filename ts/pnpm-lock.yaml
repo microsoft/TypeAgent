@@ -5,15 +5,15 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@azure/core-xml': '>=1.5.0'
+  '@azure/core-xml': '>=1.5.0 <2.0.0'
   express>path-to-regexp: 0.1.13
-  fast-xml-parser: '>=5.5.7'
-  hono: '>=4.12.8'
-  http-proxy-agent: '>=7.0.0'
-  node-forge: '>=1.4.0'
+  fast-xml-parser: '>=5.5.7 <6.0.0'
+  hono: '>=4.12.8 <5.0.0'
+  http-proxy-agent: '>=7.0.0 <8.0.0'
+  node-forge: '>=1.4.0 <2.0.0'
   node-gyp: ^12.2.0
-  router>path-to-regexp: '>=8.4.0'
-  serialize-javascript: '>=7.0.5'
+  router>path-to-regexp: '>=8.4.0 <9.0.0'
+  serialize-javascript: '>=7.0.5 <8.0.0'
 
 importers:
 
@@ -153,7 +153,7 @@ importers:
         version: 8.18.1
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@24.10.13)(ts-node@10.9.2(@types/node@24.10.13)(typescript@5.4.5))
+        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -369,7 +369,7 @@ importers:
         specifier: ^16.3.1
         version: 16.5.0
       fast-xml-parser:
-        specifier: '>=5.5.7'
+        specifier: '>=5.5.7 <6.0.0'
         version: 5.5.9
       interactive-app:
         specifier: workspace:*
@@ -530,7 +530,7 @@ importers:
         version: 16.5.0
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.25)(ts-node@10.9.2(@types/node@20.19.25)(typescript@5.4.5))
+        version: 29.7.0(@types/node@24.10.13)(ts-node@10.9.2(@types/node@24.10.13)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -5933,7 +5933,7 @@ packages:
     resolution: {integrity: sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: '>=4.12.8'
+      hono: '>=4.12.8 <5.0.0'
 
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}

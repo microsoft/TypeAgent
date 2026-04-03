@@ -94,15 +94,15 @@
       ]
     },
     "overrides": {
-      "@azure/core-xml": ">=1.5.0",
+      "@azure/core-xml": ">=1.5.0 <2.0.0",
       "express>path-to-regexp": "0.1.13",
-      "fast-xml-parser": ">=5.5.7",
-      "hono": ">=4.12.8",
-      "http-proxy-agent": ">=7.0.0",
-      "node-forge": ">=1.4.0",
+      "fast-xml-parser": ">=5.5.7 <6.0.0",
+      "hono": ">=4.12.8 <5.0.0",
+      "http-proxy-agent": ">=7.0.0 <8.0.0",
+      "node-forge": ">=1.4.0 <2.0.0",
       "node-gyp": "^12.2.0",
-      "router>path-to-regexp": ">=8.4.0",
-      "serialize-javascript": ">=7.0.5"
+      "router>path-to-regexp": ">=8.4.0 <9.0.0",
+      "serialize-javascript": ">=7.0.5 <8.0.0"
     },
     "ignoredBuiltDependencies": [
       "leveldown"
