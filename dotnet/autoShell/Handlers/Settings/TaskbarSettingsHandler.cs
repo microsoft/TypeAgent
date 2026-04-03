@@ -27,7 +27,7 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
 
     public TaskbarSettingsHandler(IRegistryService registry)
     {
-        this._registry = registry;
+        _registry = registry;
     }
 
     /// <inheritdoc/>
@@ -50,25 +50,25 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         switch (key)
         {
             case "AutoHideTaskbar":
-                this.HandleAutoHideTaskbar(param);
+                HandleAutoHideTaskbar(param);
                 break;
             case "DisplaySecondsInSystrayClock":
-                this.SetToggle(param, "enable", "ShowSecondsInSystemClock");
+                SetToggle(param, "enable", "ShowSecondsInSystemClock");
                 break;
             case "DisplayTaskbarOnAllMonitors":
-                this.SetToggle(param, "enable", "MMTaskbarEnabled");
+                SetToggle(param, "enable", "MMTaskbarEnabled");
                 break;
             case "ShowBadgesOnTaskbar":
-                this.SetToggle(param, "enableBadging", "TaskbarBadges");
+                SetToggle(param, "enableBadging", "TaskbarBadges");
                 break;
             case "TaskbarAlignment":
-                this.HandleTaskbarAlignment(param);
+                HandleTaskbarAlignment(param);
                 break;
             case "TaskViewVisibility":
-                this.SetToggle(param, "visibility", "ShowTaskViewButton");
+                SetToggle(param, "visibility", "ShowTaskViewButton");
                 break;
             case "ToggleWidgetsButtonVisibility":
-                this.SetToggle(param, "visibility", "TaskbarDa", trueValue: "show");
+                SetToggle(param, "visibility", "TaskbarDa", trueValue: "show");
                 break;
         }
 
@@ -92,7 +92,7 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         bool hide = param.Value<bool>("hideWhenNotUsing");
 
         // Auto-hide uses a binary blob in a different registry path
-        if (this._registry.GetValue(StuckRects3, "Settings", null) is byte[] settings && settings.Length >= 9)
+        if (_registry.GetValue(StuckRects3, "Settings", null) is byte[] settings && settings.Length >= 9)
         {
             // Bit 0 of byte 8 controls auto-hide
             if (hide)
@@ -104,7 +104,7 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
                 settings[8] &= 0xFE;
             }
 
-            this._registry.SetValue(StuckRects3, "Settings", settings, RegistryValueKind.Binary);
+            _registry.SetValue(StuckRects3, "Settings", settings, RegistryValueKind.Binary);
         }
     }
 
@@ -112,7 +112,7 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     {
         string alignment = param.Value<string>("alignment") ?? "center";
         bool useCenter = alignment.Equals("center", StringComparison.OrdinalIgnoreCase);
-        this._registry.SetValue(ExplorerAdvanced, "TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
+        _registry.SetValue(ExplorerAdvanced, "TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
     }
 
     /// <summary>
@@ -133,6 +133,6 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
             regValue = (param.Value<bool?>(jsonProperty) ?? true) ? 1 : 0;
         }
 
-        this._registry.SetValue(ExplorerAdvanced, registryValue, regValue, RegistryValueKind.DWord);
+        _registry.SetValue(ExplorerAdvanced, registryValue, regValue, RegistryValueKind.DWord);
     }
 }

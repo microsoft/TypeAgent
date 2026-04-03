@@ -28,7 +28,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
         _logger = logger;
         string userName = Environment.UserName;
 
-        this._appMetadata = new SortedList<string, string[]>
+        _appMetadata = new SortedList<string, string[]>
         {
             { "chrome", ["chrome.exe"] },
             { "power point", ["C:\\Program Files\\Microsoft Office\\root\\Office16\\POWERPNT.EXE"] },
@@ -58,9 +58,9 @@ internal sealed class WindowsAppRegistry : IAppRegistry
             { "github copilot", [$"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe\\copilot.exe", "GITHUB_COPILOT_ROOT_DIR", "--allow-all-tools"] },
         };
 
-        foreach (var kvp in this._appMetadata)
+        foreach (var kvp in _appMetadata)
         {
-            this._friendlyNameToPath.Add(kvp.Key, kvp.Value[0]);
+            _friendlyNameToPath.Add(kvp.Key, kvp.Value[0]);
         }
 
         try
@@ -68,7 +68,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
             var installedApps = GetAllInstalledAppIds();
             foreach (var kvp in installedApps)
             {
-                this._friendlyNameToId.Add(kvp.Key, kvp.Value);
+                _friendlyNameToId.Add(kvp.Key, kvp.Value);
             }
         }
         catch (Exception ex)
@@ -80,13 +80,13 @@ internal sealed class WindowsAppRegistry : IAppRegistry
     /// <inheritdoc/>
     public string GetExecutablePath(string friendlyName)
     {
-        return (string)this._friendlyNameToPath[friendlyName.ToLowerInvariant()];
+        return (string)_friendlyNameToPath[friendlyName.ToLowerInvariant()];
     }
 
     /// <inheritdoc/>
     public string GetAppUserModelId(string friendlyName)
     {
-        return (string)this._friendlyNameToId[friendlyName.ToLowerInvariant()];
+        return (string)_friendlyNameToId[friendlyName.ToLowerInvariant()];
     }
 
     /// <inheritdoc/>
@@ -99,7 +99,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
     /// <inheritdoc/>
     public string GetWorkingDirectoryEnvVar(string friendlyName)
     {
-        return this._appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1
+        return _appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 1
             ? value[1]
             : null;
     }
@@ -107,7 +107,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
     /// <inheritdoc/>
     public string GetArguments(string friendlyName)
     {
-        return this._appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 2
+        return _appMetadata.TryGetValue(friendlyName.ToLowerInvariant(), out string[] value) && value.Length > 2
             ? string.Join(" ", value.Skip(2))
             : null;
     }
@@ -115,7 +115,7 @@ internal sealed class WindowsAppRegistry : IAppRegistry
     /// <inheritdoc/>
     public IEnumerable<string> GetAllAppNames()
     {
-        return this._friendlyNameToId.Keys.Cast<string>();
+        return _friendlyNameToId.Keys.Cast<string>();
     }
 
     private SortedList<string, string> GetAllInstalledAppIds()

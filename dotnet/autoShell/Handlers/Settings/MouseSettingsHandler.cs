@@ -58,28 +58,28 @@ internal class MouseSettingsHandler : ICommandHandler
         {
             case "AdjustMousePointerSize":
             case "MousePointerCustomization":
-                this._process.StartShellExecute("ms-settings:easeofaccess-mouse");
+                _process.StartShellExecute("ms-settings:easeofaccess-mouse");
                 break;
 
             case "CursorTrail":
-                this.HandleMouseCursorTrail(value);
+                HandleMouseCursorTrail(value);
                 break;
 
             case "EnableTouchPad":
             case "TouchpadCursorSpeed":
-                this._process.StartShellExecute("ms-settings:devices-touchpad");
+                _process.StartShellExecute("ms-settings:devices-touchpad");
                 break;
 
             case "EnhancePointerPrecision":
-                this.HandleEnhancePointerPrecision(param);
+                HandleEnhancePointerPrecision(param);
                 break;
 
             case "MouseCursorSpeed":
-                this.HandleMouseCursorSpeed(param);
+                HandleMouseCursorSpeed(param);
                 break;
 
             case "MouseWheelScrollLines":
-                this.HandleMouseWheelScrollLines(param);
+                HandleMouseWheelScrollLines(param);
                 break;
 
             case "SetPrimaryMouseButton":
@@ -92,15 +92,15 @@ internal class MouseSettingsHandler : ICommandHandler
     {
         bool enable = param.Value<bool?>("enable") ?? true;
         int[] mouseParams = new int[3];
-        this._systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
+        _systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
         mouseParams[2] = enable ? 1 : 0;
-        this._systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
+        _systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
     private void HandleMouseCursorSpeed(JObject param)
     {
         int speed = param.Value<int?>("speedLevel") ?? 10;
-        this._systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
+        _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
     /// <summary>
@@ -119,7 +119,7 @@ internal class MouseSettingsHandler : ICommandHandler
 
         int trailValue = enable ? length : 0;
 
-        this._systemParams.SetParameter(SPI_SETMOUSETRAILS, trailValue, IntPtr.Zero, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
+        _systemParams.SetParameter(SPI_SETMOUSETRAILS, trailValue, IntPtr.Zero, SPIF_UPDATEINIFILE | SPIF_SENDCHANGE);
         _logger.Debug(enable
             ? $"Cursor trail enabled with length {length}"
             : "Cursor trail disabled");
@@ -128,7 +128,7 @@ internal class MouseSettingsHandler : ICommandHandler
     private void HandleMouseWheelScrollLines(JObject param)
     {
         int lines = param.Value<int?>("scrollLines") ?? 3;
-        this._systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
+        _systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
     private void HandleSetPrimaryMouseButton(JObject param)

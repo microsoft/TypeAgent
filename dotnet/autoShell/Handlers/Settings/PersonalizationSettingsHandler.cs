@@ -19,8 +19,8 @@ internal class PersonalizationSettingsHandler : ICommandHandler
 
     public PersonalizationSettingsHandler(IRegistryService registry, IProcessService process)
     {
-        this._registry = registry;
-        this._process = process;
+        _registry = registry;
+        _process = process;
     }
 
     /// <inheritdoc/>
@@ -40,19 +40,19 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         switch (key)
         {
             case "ApplyColorToTitleBar":
-                this.HandleApplyColorToTitleBar(param);
+                HandleApplyColorToTitleBar(param);
                 break;
 
             case "EnableTransparency":
-                this.HandleEnableTransparency(param);
+                HandleEnableTransparency(param);
                 break;
 
             case "HighContrastTheme":
-                this._process.StartShellExecute("ms-settings:easeofaccess-highcontrast");
+                _process.StartShellExecute("ms-settings:easeofaccess-highcontrast");
                 break;
 
             case "SystemThemeMode":
-                this.HandleSystemThemeMode(param);
+                HandleSystemThemeMode(param);
                 break;
         }
     }
@@ -60,7 +60,7 @@ internal class PersonalizationSettingsHandler : ICommandHandler
     private void HandleApplyColorToTitleBar(JObject param)
     {
         bool enable = param.Value<bool?>("enableColor") ?? true;
-        this._registry.SetValue(
+        _registry.SetValue(
             @"Software\Microsoft\Windows\DWM",
             "ColorPrevalence",
             enable ? 1 : 0,
@@ -70,7 +70,7 @@ internal class PersonalizationSettingsHandler : ICommandHandler
     private void HandleEnableTransparency(JObject param)
     {
         bool enable = param.Value<bool?>("enable") ?? true;
-        this._registry.SetValue(
+        _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
             "EnableTransparency",
             enable ? 1 : 0,
@@ -83,7 +83,7 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
         const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
-        this._registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
-        this._registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
+        _registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
+        _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
     }
 }

@@ -46,20 +46,20 @@ internal class SystemSettingsHandler : ICommandHandler
                 break;
 
             case "AutomaticTimeSettingAction":
-                this._process.StartShellExecute("ms-settings:dateandtime");
+                _process.StartShellExecute("ms-settings:dateandtime");
                 break;
 
             case "EnableGameMode":
-                this._process.StartShellExecute("ms-settings:gaming-gamemode");
+                _process.StartShellExecute("ms-settings:gaming-gamemode");
                 break;
 
             case "EnableQuietHours":
-                this._process.StartShellExecute("ms-settings:quiethours");
+                _process.StartShellExecute("ms-settings:quiethours");
                 break;
 
             case "MinimizeWindowsOnMonitorDisconnectAction":
             case "RememberWindowLocations":
-                this._process.StartShellExecute("ms-settings:display");
+                _process.StartShellExecute("ms-settings:display");
                 break;
         }
     }

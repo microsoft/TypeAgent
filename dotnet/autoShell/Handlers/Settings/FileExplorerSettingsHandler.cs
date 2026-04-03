@@ -26,7 +26,7 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
 
     public FileExplorerSettingsHandler(IRegistryService registry)
     {
-        this._registry = registry;
+        _registry = registry;
     }
 
     /// <inheritdoc/>
@@ -44,11 +44,11 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
         switch (key)
         {
             case "ShowFileExtensions":
-                this.HandleShowFileExtensions(param);
+                HandleShowFileExtensions(param);
                 break;
 
             case "ShowHiddenAndSystemFiles":
-                this.HandleShowHiddenAndSystemFiles(param);
+                HandleShowHiddenAndSystemFiles(param);
                 break;
         }
 
@@ -71,13 +71,13 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     {
         bool enable = param.Value<bool?>("enable") ?? true;
         // Inverted: enable showing extensions = HideFileExt 0
-        this._registry.SetValue(ExplorerAdvanced, "HideFileExt", enable ? 0 : 1, RegistryValueKind.DWord);
+        _registry.SetValue(ExplorerAdvanced, "HideFileExt", enable ? 0 : 1, RegistryValueKind.DWord);
     }
 
     private void HandleShowHiddenAndSystemFiles(JObject param)
     {
         bool enable = param.Value<bool?>("enable") ?? true;
-        this._registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
-        this._registry.SetValue(ExplorerAdvanced, "ShowSuperHidden", enable ? 1 : 0, RegistryValueKind.DWord);
+        _registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
+        _registry.SetValue(ExplorerAdvanced, "ShowSuperHidden", enable ? 1 : 0, RegistryValueKind.DWord);
     }
 }
