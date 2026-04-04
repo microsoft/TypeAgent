@@ -16,7 +16,7 @@ namespace autoShell;
 /// </summary>
 internal class CommandDispatcher
 {
-    private readonly Dictionary<string, ICommandHandler> _handlers = [];
+    private readonly Dictionary<string, ICommandHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger _logger;
 
     public CommandDispatcher(ILogger logger)

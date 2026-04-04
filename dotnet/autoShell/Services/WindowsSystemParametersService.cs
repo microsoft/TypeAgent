@@ -11,11 +11,11 @@ namespace autoShell.Services;
 /// </summary>
 internal partial class WindowsSystemParametersService : ISystemParametersService
 {
-    [LibraryImport("user32.dll", SetLastError = true)]
+    [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SystemParametersInfo(int uiAction, int uiParam, IntPtr pvParam, int fWinIni);
 
-    [LibraryImport("user32.dll", SetLastError = true)]
+    [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SystemParametersInfo(int uiAction, int uiParam, int[] pvParam, int fWinIni);
 
