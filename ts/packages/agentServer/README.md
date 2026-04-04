@@ -2,11 +2,11 @@
 
 The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multiple clients (Shell, CLI, extensions) to share a single running dispatcher instance with full session management. It is split into three sub-packages:
 
-| Package      | npm name                | Purpose                                                                      |
-| ------------ | ----------------------- | ---------------------------------------------------------------------------- |
-| `protocol/`  | `agent-server-protocol` | RPC channel names, session types, client-type registry                       |
-| `client/`    | `agent-server-client`   | Client library: connect, session management, auto-spawn, stop                |
-| `server/`    | `agent-server`          | Long-running WebSocket server with `SessionManager` and per-session dispatch |
+| Package     | npm name                | Purpose                                                                      |
+| ----------- | ----------------------- | ---------------------------------------------------------------------------- |
+| `protocol/` | `agent-server-protocol` | RPC channel names, session types, client-type registry                       |
+| `client/`   | `agent-server-client`   | Client library: connect, session management, auto-spawn, stop                |
+| `server/`   | `agent-server`          | Long-running WebSocket server with `SessionManager` and per-session dispatch |
 
 ---
 
@@ -38,11 +38,11 @@ Each session has its own `SharedDispatcher` instance with isolated chat history,
 
 Each WebSocket connection multiplexes independent JSON-RPC channels:
 
-| Channel                  | Direction       | Purpose                                                       |
-| ------------------------ | --------------- | ------------------------------------------------------------- |
+| Channel                  | Direction       | Purpose                                                            |
+| ------------------------ | --------------- | ------------------------------------------------------------------ |
 | `agent-server`           | client → server | Session lifecycle: `joinSession`, `leaveSession`, CRUD, `shutdown` |
-| `dispatcher:<sessionId>` | client → server | Commands: `processCommand`, `getCommandCompletion`, etc.      |
-| `clientio:<sessionId>`   | server → client | Display/interaction callbacks: `setDisplay`, `askYesNo`, etc. |
+| `dispatcher:<sessionId>` | client → server | Commands: `processCommand`, `getCommandCompletion`, etc.           |
+| `clientio:<sessionId>`   | server → client | Display/interaction callbacks: `setDisplay`, `askYesNo`, etc.      |
 
 The dispatcher and clientIO channels are namespaced by `sessionId`, allowing a single WebSocket connection to participate in multiple sessions simultaneously.
 

@@ -6,7 +6,7 @@ Defines the WebSocket RPC contract between agentServer clients and the server.
 
 ```typescript
 enum ChannelName {
-    AgentServer = "agent-server", // session lifecycle and management
+  AgentServer = "agent-server", // session lifecycle and management
 }
 
 // Session-namespaced channels (one pair per joined session):
@@ -25,41 +25,41 @@ getClientIOChannelName(sessionId: string): string    // "clientio:<sessionId>"
 
 **`SessionInfo`** — describes a session:
 
-| Field         | Type     | Description                                              |
-| ------------- | -------- | -------------------------------------------------------- |
-| `sessionId`   | `string` | UUIDv4 stable identifier                                 |
-| `name`        | `string` | Human-readable label (1–256 chars)                       |
+| Field         | Type     | Description                                                           |
+| ------------- | -------- | --------------------------------------------------------------------- |
+| `sessionId`   | `string` | UUIDv4 stable identifier                                              |
+| `name`        | `string` | Human-readable label (1–256 chars)                                    |
 | `clientCount` | `number` | Number of clients currently connected (runtime-only, never persisted) |
-| `createdAt`   | `string` | ISO 8601 creation timestamp                              |
+| `createdAt`   | `string` | ISO 8601 creation timestamp                                           |
 
 **`JoinSessionResult`** — returned by `joinSession`:
 
-| Field         | Type     | Description                          |
-| ------------- | -------- | ------------------------------------ |
-| `connectionId`| `string` | Unique identifier for this connection |
-| `sessionId`   | `string` | The session that was joined or auto-created |
+| Field          | Type     | Description                                 |
+| -------------- | -------- | ------------------------------------------- |
+| `connectionId` | `string` | Unique identifier for this connection       |
+| `sessionId`    | `string` | The session that was joined or auto-created |
 
 **`DispatcherConnectOptions`** — options passed to `joinSession`:
 
-| Field        | Type      | Description                                                            |
-| ------------ | --------- | ---------------------------------------------------------------------- |
+| Field        | Type      | Description                                                                       |
+| ------------ | --------- | --------------------------------------------------------------------------------- |
 | `sessionId`  | `string`  | Join a specific session by UUID. Omit to resume the most recently active session. |
-| `clientType` | `string`  | Identifies the client (`"shell"`, `"extension"`, etc.)                 |
-| `filter`     | `boolean` | If true, only receive ClientIO messages for this connection's requests |
+| `clientType` | `string`  | Identifies the client (`"shell"`, `"extension"`, etc.)                            |
+| `filter`     | `boolean` | If true, only receive ClientIO messages for this connection's requests            |
 
 ## RPC methods
 
 **`AgentServerInvokeFunctions`** — methods exposed on the `agent-server` channel:
 
-| Method                                      | Description                                                     |
-| ------------------------------------------- | --------------------------------------------------------------- |
-| `joinSession(options?)`                     | Join or auto-create a session; returns `JoinSessionResult`      |
-| `leaveSession(sessionId)`                   | Leave a session and clean up its channels                       |
-| `createSession(name)`                       | Create a new named session; returns `SessionInfo`               |
-| `listSessions(name?)`                       | List all sessions, optionally filtered by name substring (case-insensitive) |
-| `renameSession(sessionId, newName)`         | Rename a session                                                |
-| `deleteSession(sessionId)`                  | Delete a session and all its persisted data                     |
-| `shutdown()`                                | Request graceful server shutdown                                |
+| Method                              | Description                                                                 |
+| ----------------------------------- | --------------------------------------------------------------------------- |
+| `joinSession(options?)`             | Join or auto-create a session; returns `JoinSessionResult`                  |
+| `leaveSession(sessionId)`           | Leave a session and clean up its channels                                   |
+| `createSession(name)`               | Create a new named session; returns `SessionInfo`                           |
+| `listSessions(name?)`               | List all sessions, optionally filtered by name substring (case-insensitive) |
+| `renameSession(sessionId, newName)` | Rename a session                                                            |
+| `deleteSession(sessionId)`          | Delete a session and all its persisted data                                 |
+| `shutdown()`                        | Request graceful server shutdown                                            |
 
 ## Client-type registry
 

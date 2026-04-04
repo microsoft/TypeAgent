@@ -13,13 +13,13 @@ const connection = await connectAgentServer("ws://localhost:8999");
 
 // Join a session
 const { dispatcher, sessionId } = await connection.joinSession(clientIO, {
-    clientType: "shell",
+  clientType: "shell",
 });
 
 // Session management
 await connection.createSession("my session");
-await connection.listSessions();           // all sessions
-await connection.listSessions("workout");  // filter by name substring
+await connection.listSessions(); // all sessions
+await connection.listSessions("workout"); // filter by name substring
 await connection.renameSession(sessionId, "new name");
 await connection.deleteSession(sessionId);
 
@@ -30,15 +30,15 @@ await connection.close();
 
 **`AgentServerConnection`** methods:
 
-| Method                                  | Description                                                        |
-| --------------------------------------- | ------------------------------------------------------------------ |
-| `joinSession(clientIO, options?)`       | Join a session; returns `{ dispatcher, sessionId }`               |
-| `leaveSession(sessionId)`              | Leave a session and clean up its channels                          |
-| `createSession(name)`                  | Create a new named session                                         |
-| `listSessions(name?)`                  | List sessions, optionally filtered by name substring               |
-| `renameSession(sessionId, newName)`    | Rename a session                                                   |
-| `deleteSession(sessionId)`             | Delete a session and its persisted data                            |
-| `close()`                              | Close the WebSocket connection                                     |
+| Method                              | Description                                          |
+| ----------------------------------- | ---------------------------------------------------- |
+| `joinSession(clientIO, options?)`   | Join a session; returns `{ dispatcher, sessionId }`  |
+| `leaveSession(sessionId)`           | Leave a session and clean up its channels            |
+| `createSession(name)`               | Create a new named session                           |
+| `listSessions(name?)`               | List sessions, optionally filtered by name substring |
+| `renameSession(sessionId, newName)` | Rename a session                                     |
+| `deleteSession(sessionId)`          | Delete a session and its persisted data              |
+| `close()`                           | Close the WebSocket connection                       |
 
 ### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)`
 
@@ -51,10 +51,13 @@ Convenience wrapper that auto-spawns the server if needed and joins a session, r
 
 ```typescript
 const dispatcher = await ensureAndConnectDispatcher(
-    clientIO,
-    8999,
-    { clientType: "shell" },
-    () => { console.error("Disconnected"); process.exit(1); },
+  clientIO,
+  8999,
+  { clientType: "shell" },
+  () => {
+    console.error("Disconnected");
+    process.exit(1);
+  },
 );
 
 await dispatcher.processCommand("help");
@@ -64,7 +67,7 @@ await dispatcher.processCommand("help");
 
 Connects to the running server on the given port and sends a `shutdown()` RPC.
 
-### `connectDispatcher(clientIO, url, options?, onDisconnect?)` *(deprecated)*
+### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_
 
 Backward-compatible wrapper: connects and immediately joins a session, returning a `Dispatcher`. Use `connectAgentServer()` for full multi-session support.
 
