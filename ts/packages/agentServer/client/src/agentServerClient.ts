@@ -81,6 +81,16 @@ export async function connectAgentServer(
                 clientIO: ClientIO,
                 options?: DispatcherConnectOptions,
             ): Promise<SessionDispatcher> {
+                const requestedSessionId = options?.sessionId;
+                if (
+                    requestedSessionId !== undefined &&
+                    joinedSessions.has(requestedSessionId)
+                ) {
+                    throw new Error(
+                        `Already joined session '${requestedSessionId}'. Call leaveSession() before joining again.`,
+                    );
+                }
+
                 const result: JoinSessionResult = await rpc.invoke(
                     "joinSession",
                     options,
