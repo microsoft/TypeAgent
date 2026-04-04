@@ -64,7 +64,7 @@ internal class AutoShell
     private static void RunFromCommandLine()
     {
         string rawCmdLine = Marshal.PtrToStringUni(GetCommandLineW());
-        string cmdLine = StripExecutableName(rawCmdLine!);
+        string cmdLine = StripExecutableName(rawCmdLine);
 
         try
         {
@@ -129,7 +129,7 @@ internal class AutoShell
         }
 
         // Try unquoted filename: autoShell.exe
-        var processFileName = Path.GetFileName(Environment.ProcessPath)!;
+        var processFileName = Path.GetFileName(Environment.ProcessPath);
         if (cmdLine.StartsWith(processFileName, StringComparison.OrdinalIgnoreCase))
         {
             return cmdLine[processFileName.Length..];
@@ -137,12 +137,9 @@ internal class AutoShell
 
         // Try filename without extension: autoShell
         var processFileNameNoExt = Path.GetFileNameWithoutExtension(processFileName);
-        if (cmdLine.StartsWith(processFileNameNoExt, StringComparison.OrdinalIgnoreCase))
-        {
-            return cmdLine[processFileNameNoExt.Length..];
-        }
-
-        return cmdLine;
+        return cmdLine.StartsWith(processFileNameNoExt, StringComparison.OrdinalIgnoreCase)
+            ? cmdLine[processFileNameNoExt.Length..]
+            : cmdLine;
     }
 
     /// <summary>

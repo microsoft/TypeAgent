@@ -3,7 +3,6 @@
 
 using autoShell.Handlers;
 using autoShell.Logging;
-using autoShell.Services;
 using Moq;
 using Newtonsoft.Json.Linq;
 
