@@ -2656,6 +2656,11 @@ function emitJson(results) {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+    // Ensure node_modules matches the lockfile — pnpm why reads from the
+    // installed virtual store, not the lockfile itself.
+    if (!JSON_OUTPUT) console.log("Running pnpm install --frozen-lockfile …");
+    runCmd("pnpm", ["install", "--frozen-lockfile"]);
+
     if (PRUNE_OVERRIDES) {
         await pruneOverrides();
         return;
