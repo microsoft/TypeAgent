@@ -6,30 +6,7 @@
  * Downloads open Dependabot alerts from GitHub and attempts to resolve them
  * by updating packages in the pnpm lock file via `pnpm update` or overrides.
  *
- * Usage:
- *   node tools/scripts/fix-dependabot-alerts.mjs [options]
- *
- * Options:
- *   --dry-run           Report what would be done without making changes.
- *   --apply-overrides   Automatically add pnpm.overrides for transitive deps
- *                       that can't be updated directly
- *   --update-parents    Update parent packages in workspace package.json
- *                       files to fixed versions and run pnpm install
- *   --auto-fix          Shorthand for --apply-overrides --update-parents
- *   --show-chains       Show full dependency chains for transitive deps
- *                       (collapsed to 3 levels by default; use --show-chains=full
- *                       for expanded output)
- *   --prune-overrides   Remove pnpm.overrides entries that are no longer needed
- *                       (cannot be combined with --apply-overrides / --update-parents)
- *   --json              Output results as structured JSON (for CI integration)
- *   --verbose           Show detailed constraint analysis, advisory IDs, and
- *                       debug output
- *   --help              Show this help message and exit
- *
- * Exit codes:
- *   0  All alerts resolved (or no open alerts found)
- *   1  One or more alerts remain blocked / have no patch / failed to apply,
- *      or a fatal error occurred (fetch failure, unknown flag, etc.)
+ * Run with --help to see available options and exit codes.
  */
 
 import { spawnSync, execFile } from "node:child_process";
@@ -189,21 +166,15 @@ const clr = {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// Cache for npm/pnpm subprocess results to avoid redundant invocations
+// Cache for npm/pnpm subprocess results to avoid redundant invocations.
+// packageDeps and workspacePkgPaths are managed directly; the rest use cachedAsync.
 const _cache = {
     packageDeps: new Map(),
-    latestVersion: new Map(),
-    npmInfo: new Map(), // versions + dist-tags.latest per package
-    pnpmWhy: new Map(),
     workspacePkgPaths: null,
 };
 
-// In-flight promise deduplication: prevents duplicate concurrent requests for the same key.
 const _inflight = {
     packageDeps: new Map(),
-    latestVersion: new Map(),
-    npmInfo: new Map(),
-    pnpmWhy: new Map(),
 };
 
 // ── Concurrency control ───────────────────────────────────────────────────────
@@ -247,6 +218,50 @@ const _npmSem = new Semaphore(
     "DEPFIX_NPM_CONCURRENCY",
 );
 
+/**
+ * Build a cached, inflight-deduplicated async function.
+ * Returns a function `fn(key)` that caches results by key and deduplicates
+ * concurrent calls for the same key.  Exposes `fn.cache` and `fn.inflight`
+ * Maps for direct manipulation (e.g. cache invalidation).
+ *
+ * @param {string}   label     - Name for verbose logging on failure
+ * @param {object}   opts
+ * @param {Function} opts.fetchFn   - async (key) => result
+ * @param {Semaphore} [opts.semaphore] - optional concurrency limiter
+ * @param {*}        [opts.fallback=null] - value to cache on failure
+ */
+function cachedAsync(label, { fetchFn, semaphore, fallback = null }) {
+    const cache = new Map();
+    const inflight = new Map();
+
+    function fn(key) {
+        if (cache.has(key)) return Promise.resolve(cache.get(key));
+        if (inflight.has(key)) return inflight.get(key);
+
+        const p = (async () => {
+            if (semaphore) await semaphore.acquire();
+            try {
+                const result = await fetchFn(key);
+                cache.set(key, result);
+                return result;
+            } catch (e) {
+                verbose(`${label}(${key}) failed: ${e.message}`);
+                cache.set(key, fallback);
+                return fallback;
+            } finally {
+                if (semaphore) semaphore.release();
+                inflight.delete(key);
+            }
+        })();
+        inflight.set(key, p);
+        return p;
+    }
+
+    fn.cache = cache;
+    fn.inflight = inflight;
+    return fn;
+}
+
 // ── Per-package log buffering ─────────────────────────────────────────────────
 // When packages are analysed concurrently, each one buffers its own log lines
 // so output is flushed in order (not interleaved).
@@ -269,14 +284,24 @@ function checkCmdError(cmd, result) {
 /**
  * Spawn a command with an argument array (no shell interpolation).
  * Throws on non-zero exit, spawn failure, or signal kill.
+ * Pass { nothrow: true } to return null on failure instead of throwing.
  */
-function runCmd(cmd, cmdArgs, opts = {}) {
+function runCmd(cmd, cmdArgs, { nothrow, ...opts } = {}) {
     const result = spawnSync(cmd, cmdArgs, {
         cwd: ROOT,
         encoding: "utf-8",
         maxBuffer: MAX_BUFFER,
         ...opts,
     });
+    if (nothrow) {
+        if (result.error || result.signal || result.status !== 0) {
+            verbose(
+                `${cmd} ${cmdArgs.join(" ")} failed: ${result.error?.message || result.stderr?.trim() || `exit ${result.status}`}`,
+            );
+            return null;
+        }
+        return result.stdout.trim();
+    }
     checkCmdError(cmd, result);
     if (result.signal) {
         throw new Error(`${cmd} was killed by signal ${result.signal}`);
@@ -292,8 +317,9 @@ function runCmd(cmd, cmdArgs, opts = {}) {
 /**
  * Async variant of runCmd — uses execFile so the event loop is not blocked.
  * Throws on non-zero exit, spawn failure, or signal kill.
+ * Pass { nothrow: true } to return null on failure instead of throwing.
  */
-function runCmdAsync(cmd, cmdArgs, opts = {}) {
+function runCmdAsync(cmd, cmdArgs, { nothrow, ...opts } = {}) {
     return new Promise((resolve, reject) => {
         execFile(
             cmd,
@@ -301,54 +327,18 @@ function runCmdAsync(cmd, cmdArgs, opts = {}) {
             { cwd: ROOT, maxBuffer: MAX_BUFFER, encoding: "utf-8", ...opts },
             (error, stdout, stderr) => {
                 if (error) {
-                    reject(
-                        new Error(
-                            `Command failed: ${cmd} ${cmdArgs.join(" ")}\n${stderr || error.message}`,
-                        ),
-                    );
-                } else {
-                    resolve(stdout.trim());
-                }
-            },
-        );
-    });
-}
-
-/**
- * Like runCmd but returns null on failure instead of throwing.
- */
-function tryRunCmd(cmd, cmdArgs, opts = {}) {
-    const result = spawnSync(cmd, cmdArgs, {
-        cwd: ROOT,
-        encoding: "utf-8",
-        maxBuffer: MAX_BUFFER,
-        ...opts,
-    });
-    if (result.error || result.signal || result.status !== 0) {
-        verbose(
-            `${cmd} ${cmdArgs.join(" ")} failed: ${result.error?.message || result.stderr?.trim() || `exit ${result.status}`}`,
-        );
-        return null;
-    }
-    return result.stdout.trim();
-}
-
-/**
- * Async variant of tryRunCmd — uses execFile so multiple calls can run in
- * parallel without blocking the event loop.  Returns null on failure.
- */
-function tryRunCmdAsync(cmd, cmdArgs, opts = {}) {
-    return new Promise((resolve) => {
-        execFile(
-            cmd,
-            cmdArgs,
-            { cwd: ROOT, maxBuffer: MAX_BUFFER, encoding: "utf-8", ...opts },
-            (error, stdout) => {
-                if (error) {
-                    verbose(
-                        `${cmd} ${cmdArgs.join(" ")} failed: ${error.message}`,
-                    );
-                    resolve(null);
+                    if (nothrow) {
+                        verbose(
+                            `${cmd} ${cmdArgs.join(" ")} failed: ${error.message}`,
+                        );
+                        resolve(null);
+                    } else {
+                        reject(
+                            new Error(
+                                `Command failed: ${cmd} ${cmdArgs.join(" ")}\n${stderr || error.message}`,
+                            ),
+                        );
+                    }
                 } else {
                     resolve(stdout.trim());
                 }
@@ -399,6 +389,47 @@ function parsePaginatedJson(raw) {
         // gh --paginate may concatenate multiple JSON arrays like `][`
         return JSON.parse("[" + raw.replace(/\]\s*\[/g, ",") + "]").flat();
     }
+}
+
+/**
+ * Remove duplicates from an array, keeping the first occurrence of each key.
+ */
+function deduplicateBy(items, keyFn) {
+    const seen = new Set();
+    return items.filter((item) => {
+        const key = keyFn(item);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+/**
+ * Classify constraints into three categories: blockers, upgradeable, and allowing.
+ */
+function classifyConstraints(constraints) {
+    const blockers = [];
+    const upgradeable = [];
+    const allowing = [];
+    for (const c of constraints) {
+        if (c.allows) allowing.push(c);
+        else if (c.fixVersion) upgradeable.push(c);
+        else blockers.push(c);
+    }
+    return { blockers, upgradeable, allowing };
+}
+
+/**
+ * Group fix-plan actions by type into workspace and intermediate arrays.
+ */
+function groupActionsByType(actions) {
+    const workspace = [];
+    const intermediate = [];
+    for (const a of actions || []) {
+        if (a.type === "update-workspace") workspace.push(a);
+        else if (a.type === "update-intermediate") intermediate.push(a);
+    }
+    return { workspace, intermediate };
 }
 
 function fmtDepChain(whyData, pkg) {
@@ -495,53 +526,22 @@ function fmtDepChain(whyData, pkg) {
     }
 }
 
-function colorSeverity(severity) {
-    switch (severity) {
-        case "critical":
-            return clr.fail.bold.inverse(` ${severity} `);
-        case "high":
-            return clr.fail.bold(severity);
-        case "medium":
-            return clr.warn(severity);
-        case "low":
-            return clr.meta(severity);
-        default:
-            return clr.meta(severity);
-    }
-}
+const SEVERITY_COLORS = {
+    critical: (s) => clr.fail.bold.inverse(` ${s} `),
+    high: (s) => clr.fail.bold(s),
+    medium: (s) => clr.warn(s),
+};
+const colorSeverity = (severity) =>
+    (SEVERITY_COLORS[severity] ?? clr.meta)(severity);
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
-function getLatestVersion(pkg) {
-    if (_cache.latestVersion.has(pkg))
-        return Promise.resolve(_cache.latestVersion.get(pkg));
-    if (_inflight.latestVersion.has(pkg))
-        return _inflight.latestVersion.get(pkg);
-    const p = (async () => {
-        await _npmSem.acquire();
-        try {
-            const output = await tryRunCmdAsync("npm", [
-                "view",
-                pkg,
-                "dist-tags.latest",
-                "--json",
-            ]);
-            if (!output || output === "undefined") return null;
-            const version = JSON.parse(output);
-            _cache.latestVersion.set(pkg, version);
-            return version;
-        } catch (e) {
-            verbose(`getLatestVersion(${pkg}) failed: ${e.message}`);
-            // Cache failures to avoid thundering-herd retries for the same package
-            _cache.latestVersion.set(pkg, null);
-            return null;
-        } finally {
-            _npmSem.release();
-            _inflight.latestVersion.delete(pkg);
-        }
-    })();
-    _inflight.latestVersion.set(pkg, p);
-    return p;
+/**
+ * Get the latest published version of a package.
+ * Derived from getNpmInfo to avoid a redundant npm call.
+ */
+async function getLatestVersion(pkg) {
+    return (await getNpmInfo(pkg))?.latest ?? null;
 }
 
 /**
@@ -569,11 +569,11 @@ async function verifyAllVersionsFixed(pkg, requiredVersion) {
     // callers that already hold a reference to the promise still resolve
     // correctly, and a third caller arriving mid-drain doesn't launch a
     // duplicate request.
-    if (_inflight.pnpmWhy.has(pkg)) {
-        await _inflight.pnpmWhy.get(pkg).catch(() => {});
+    if (getPnpmWhy.inflight.has(pkg)) {
+        await getPnpmWhy.inflight.get(pkg).catch(() => {});
     }
-    _cache.pnpmWhy.delete(pkg);
-    _inflight.pnpmWhy.delete(pkg);
+    getPnpmWhy.cache.delete(pkg);
+    getPnpmWhy.inflight.delete(pkg);
     const versions = getResolvedVersions(await getPnpmWhy(pkg));
     const unfixed = versions.filter((v) => semver.lt(v, requiredVersion));
     return { ok: unfixed.length === 0, versions, unfixed };
@@ -582,49 +582,22 @@ async function verifyAllVersionsFixed(pkg, requiredVersion) {
 /**
  * Run `pnpm why <pkg> -r --json` and return parsed entries.
  */
-function getPnpmWhy(pkg) {
-    if (_cache.pnpmWhy.has(pkg))
-        return Promise.resolve(_cache.pnpmWhy.get(pkg));
-    if (_inflight.pnpmWhy.has(pkg)) return _inflight.pnpmWhy.get(pkg);
-    const p = (async () => {
-        try {
-            const output = await tryRunCmdAsync("pnpm", [
-                "why",
-                pkg,
-                "-r",
-                "--json",
-            ]);
-            if (!output || output === "[]") return [];
-            const result = parsePaginatedJson(output);
-            _cache.pnpmWhy.set(pkg, result);
-            return result;
-        } catch (e) {
-            verbose(`getPnpmWhy(${pkg}) failed: ${e.message}`);
-            // Cache empty result on failure to avoid thundering-herd retries
-            _cache.pnpmWhy.set(pkg, []);
-            return [];
-        } finally {
-            _inflight.pnpmWhy.delete(pkg);
-        }
-    })();
-    _inflight.pnpmWhy.set(pkg, p);
-    return p;
-}
+const getPnpmWhy = cachedAsync("getPnpmWhy", {
+    fetchFn: async (pkg) => {
+        const output = await runCmdAsync("pnpm", ["why", pkg, "-r", "--json"], {
+            nothrow: true,
+        });
+        if (!output || output === "[]") return [];
+        return parsePaginatedJson(output);
+    },
+    fallback: [],
+});
 
 async function findConstrainingParentsFromData(whyData, pkg) {
-    const parents = [];
-    const seen = new Set();
-    const pairs = [];
-    for (const entry of whyData) {
-        if (entry.dependents) {
-            for (const dep of entry.dependents) {
-                const key = `${dep.name}@${dep.version}`;
-                if (seen.has(key)) continue;
-                seen.add(key);
-                pairs.push(dep);
-            }
-        }
-    }
+    const pairs = deduplicateBy(
+        whyData.flatMap((entry) => entry.dependents || []),
+        (dep) => `${dep.name}@${dep.version}`,
+    );
     const specs = await Promise.all(
         pairs.map(async (dep) => {
             try {
@@ -634,14 +607,11 @@ async function findConstrainingParentsFromData(whyData, pkg) {
             }
         }),
     );
-    for (let i = 0; i < pairs.length; i++) {
-        parents.push({
-            name: pairs[i].name,
-            version: pairs[i].version,
-            requiredSpec: specs[i],
-        });
-    }
-    return parents;
+    return pairs.map((dep, i) => ({
+        name: dep.name,
+        version: dep.version,
+        requiredSpec: specs[i],
+    }));
 }
 
 /**
@@ -683,12 +653,11 @@ function getPackageDeps(pkgName, version) {
     const p = (async () => {
         await _npmSem.acquire();
         try {
-            const output = await tryRunCmdAsync("npm", [
-                "view",
-                `${pkgName}@${version}`,
-                "dependencies",
-                "--json",
-            ]);
+            const output = await runCmdAsync(
+                "npm",
+                ["view", `${pkgName}@${version}`, "dependencies", "--json"],
+                { nothrow: true },
+            );
             if (!output || output === "undefined") return null;
             const deps = JSON.parse(output);
             _cache.packageDeps.set(cacheKey, deps);
@@ -799,45 +768,24 @@ function getWorkspaceDepInfo(workspaceName, depPkg) {
 
 /**
  * Fetch `versions` and `dist-tags.latest` for a package from npm.
- * Results are deduplicated across concurrent callers via `_inflight`.
  * @returns {{ versions: string[], latest: string|null } | null}
  */
-function getNpmInfo(pkgName) {
-    if (_cache.npmInfo.has(pkgName))
-        return Promise.resolve(_cache.npmInfo.get(pkgName));
-    if (_inflight.npmInfo.has(pkgName)) return _inflight.npmInfo.get(pkgName);
-    const p = (async () => {
-        await _npmSem.acquire();
-        try {
-            const output = await tryRunCmdAsync("npm", [
-                "view",
-                pkgName,
-                "versions",
-                "dist-tags.latest",
-                "--json",
-            ]);
-            if (!output) return null;
-            const raw = JSON.parse(output);
-            const result = {
-                versions: raw.versions || [],
-                latest:
-                    raw["dist-tags.latest"] || raw["dist-tags"]?.latest || null,
-            };
-            _cache.npmInfo.set(pkgName, result);
-            return result;
-        } catch (e) {
-            verbose(`getNpmInfo(${pkgName}) failed: ${e.message}`);
-            // Cache failures to avoid thundering-herd retries for the same package
-            _cache.npmInfo.set(pkgName, null);
-            return null;
-        } finally {
-            _npmSem.release();
-            _inflight.npmInfo.delete(pkgName);
-        }
-    })();
-    _inflight.npmInfo.set(pkgName, p);
-    return p;
-}
+const getNpmInfo = cachedAsync("getNpmInfo", {
+    fetchFn: async (pkgName) => {
+        const output = await runCmdAsync(
+            "npm",
+            ["view", pkgName, "versions", "dist-tags.latest", "--json"],
+            { nothrow: true },
+        );
+        if (!output) return null;
+        const raw = JSON.parse(output);
+        return {
+            versions: raw.versions || [],
+            latest: raw["dist-tags.latest"] || raw["dist-tags"]?.latest || null,
+        };
+    },
+    semaphore: _npmSem,
+});
 
 /**
  * Find the smallest published version of `pkgName` newer than
@@ -1153,17 +1101,12 @@ async function planFixes(pkg, requiredVersion, whyData) {
  * Remove duplicate actions that can arise when the same sub-tree appears
  * in multiple dependency paths (common in monorepos with many workspaces).
  */
-function deduplicateActions(actions) {
-    const seen = new Set();
-    const result = [];
-    for (const action of actions) {
-        const key = `${action.type}:${action.workspace ?? ""}:${action.pkg}:${action.newSpec ?? action.toVersion ?? ""}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        result.push(action);
-    }
-    return result;
-}
+const deduplicateActions = (actions) =>
+    deduplicateBy(
+        actions,
+        (a) =>
+            `${a.type}:${a.workspace ?? ""}:${a.pkg}:${a.newSpec ?? a.toVersion ?? ""}`,
+    );
 
 /**
  * Build the data model for blocker chains.  Pure data assembly — no rendering.
@@ -1184,12 +1127,10 @@ function deduplicateActions(actions) {
  */
 async function buildBlockerChains(blockers, upgradeable, vulnPkg) {
     const chains = [];
-    const seenBlockers = new Set();
-    for (const blocker of blockers) {
-        const blockerKey = `${blocker.parent}@${blocker.parentVersion}`;
-        if (seenBlockers.has(blockerKey)) continue;
-        seenBlockers.add(blockerKey);
-
+    for (const blocker of deduplicateBy(
+        blockers,
+        (b) => `${b.parent}@${b.parentVersion}`,
+    )) {
         const chain = buildConstraintChain(vulnPkg, blocker, upgradeable);
 
         const blockerLatest = await getLatestVersion(blocker.parent);
@@ -1227,21 +1168,15 @@ async function buildBlockerChains(blockers, upgradeable, vulnPkg) {
 async function displayConstraints(constraintInfo, vulnPkg) {
     if (!constraintInfo || constraintInfo.length === 0) return;
 
-    // Deduplicate constraints
-    const seen = new Set();
-    const unique = [];
-    for (const c of constraintInfo) {
-        const key = `${c.parent}@${c.parentVersion}\u2192${c.child}:${c.requiredSpec ?? ""}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        unique.push(c);
-    }
+    // Deduplicate and classify constraints
+    const unique = deduplicateBy(
+        constraintInfo,
+        (c) =>
+            `${c.parent}@${c.parentVersion}\u2192${c.child}:${c.requiredSpec ?? ""}`,
+    );
     if (unique.length === 0) return;
 
-    // Separate: blockers (✗), upgradeable (↑), and allowing (✓)
-    const blockers = unique.filter((c) => !c.allows && !c.fixVersion);
-    const upgradeable = unique.filter((c) => !c.allows && c.fixVersion);
-    const allowing = unique.filter((c) => c.allows);
+    const { blockers, upgradeable, allowing } = classifyConstraints(unique);
 
     // Build chains: for each blocker, trace the path from vulnPkg to blocker
     // through the upgradeable constraints
@@ -1341,13 +1276,10 @@ async function displayConstraints(constraintInfo, vulnPkg) {
         const upgradeableParentNames = new Set(
             upgradeable.map((u) => u.parent),
         );
-        const renderedAllowing = new Set();
-        for (const c of allowing) {
-            // Skip if this parent's child is an upgradeable (already shown above)
-            if (upgradeableParentNames.has(c.child)) continue;
-            const lineKey = `${c.parent}@${c.parentVersion}`;
-            if (renderedAllowing.has(lineKey)) continue;
-            renderedAllowing.add(lineKey);
+        for (const c of deduplicateBy(
+            allowing.filter((c) => !upgradeableParentNames.has(c.child)),
+            (c) => `${c.parent}@${c.parentVersion}`,
+        )) {
             log(
                 `     ${clr.ok("\u2713")} ${clr.pkg(`${c.parent}@${c.parentVersion}`)}`,
             );
@@ -1556,10 +1488,9 @@ async function assessRisk(entry) {
         isBreakingBump(currentVersion, patched);
 
     if (hasUnblockedActions(entry)) {
-        const wsActions =
-            entry.fixPlan?.unblockedActions?.filter(
-                (a) => a.type === "update-workspace",
-            ) || [];
+        const { workspace: wsActions } = groupActionsByType(
+            entry.fixPlan?.unblockedActions,
+        );
         const majorUpdates = wsActions.filter((a) => {
             const oldMin = semver.minVersion(a.oldSpec);
             const newMin = semver.minVersion(a.newSpec);
@@ -1628,13 +1559,9 @@ function getWorkspacePackagePaths() {
     if (_cache.workspacePkgPaths) return _cache.workspacePkgPaths;
     _cache.workspacePkgPaths = new Map();
     try {
-        const output = tryRunCmd("pnpm", [
-            "ls",
-            "-r",
-            "--depth",
-            "-1",
-            "--json",
-        ]);
+        const output = runCmd("pnpm", ["ls", "-r", "--depth", "-1", "--json"], {
+            nothrow: true,
+        });
         if (!output) return _cache.workspacePkgPaths;
         const parsed = parsePaginatedJson(output);
         for (const ws of parsed) {
@@ -1741,10 +1668,10 @@ async function formatActions(entry) {
     const { pkg, patched, fixPlan } = entry;
     const lines = [];
 
-    // Risk assessment for non-trivial fixes
+    // Use pre-computed risk from analyzeVulnerabilities (avoids redundant async call)
     let riskLine = null;
-    if (hasUnblockedActions(entry) || needsOverride(entry)) {
-        const risk = await assessRisk(entry);
+    if (entry.risk) {
+        const risk = entry.risk;
         const riskIcon =
             risk.level === "high"
                 ? clr.fail("▲ high")
@@ -1767,12 +1694,10 @@ async function formatActions(entry) {
 
     // Build a lookup of constraints for richer "why" descriptions
     const constraints = fixPlan?.constraints || [];
+    const { workspace: wsActions, intermediate: intermediateActions } =
+        groupActionsByType(fixPlan?.unblockedActions);
 
     // Workspace package.json updates — spec is too narrow
-    const wsActions =
-        fixPlan?.unblockedActions?.filter(
-            (a) => a.type === "update-workspace",
-        ) || [];
     for (const act of wsActions) {
         lines.push(
             `  ${clr.chrome("[workspace]")} ${clr.pkg(act.workspace)} depends on ${clr.pkg(act.pkg)} ${clr.versionBad(act.oldSpec)}, needs ${clr.versionOk(act.newSpec)} for fix`,
@@ -1780,14 +1705,7 @@ async function formatActions(entry) {
     }
 
     // Intermediate package updates — their dep spec blocks the fix
-    const intermediateActions =
-        fixPlan?.unblockedActions?.filter(
-            (a) => a.type === "update-intermediate",
-        ) || [];
-    const seenIntermediates = new Set();
-    for (const act of intermediateActions) {
-        if (seenIntermediates.has(act.pkg)) continue;
-        seenIntermediates.add(act.pkg);
+    for (const act of deduplicateBy(intermediateActions, (a) => a.pkg)) {
         // Find the matching constraint to explain what spec blocks it
         const constraint = constraints.find(
             (c) =>
@@ -1805,13 +1723,11 @@ async function formatActions(entry) {
 
     // Override — explain why no parent update can help
     if (needsOverride(entry)) {
-        // Find the blockers (constraints with no fixVersion)
-        const blockers = constraints.filter((c) => !c.allows && !c.fixVersion);
-        const seenBlockers = new Set();
-        for (const b of blockers) {
-            const key = `${b.parent}@${b.parentVersion}`;
-            if (seenBlockers.has(key)) continue;
-            seenBlockers.add(key);
+        const { blockers } = classifyConstraints(constraints);
+        for (const b of deduplicateBy(
+            blockers,
+            (b) => `${b.parent}@${b.parentVersion}`,
+        )) {
             const specDesc = b.requiredSpec
                 ? `pins ${clr.pkg(b.child)} ${clr.version(b.requiredSpec)}`
                 : `blocks ${clr.pkg(b.child)}`;
@@ -2262,14 +2178,8 @@ async function executeResolutions(analyses) {
             }
             results.resolved.push(a);
         } else if (hasUnblockedActions(a)) {
-            const wsActions =
-                a.fixPlan?.unblockedActions?.filter(
-                    (act) => act.type === "update-workspace",
-                ) || [];
-            const intermediateActions =
-                a.fixPlan?.unblockedActions?.filter(
-                    (act) => act.type === "update-intermediate",
-                ) || [];
+            const { workspace: wsActions, intermediate: intermediateActions } =
+                groupActionsByType(a.fixPlan?.unblockedActions);
             if (DRY_RUN) {
                 for (const act of wsActions) {
                     ok(
