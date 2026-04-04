@@ -206,7 +206,9 @@ export async function connectAgentServer(
             debugErr("WebSocket error:", error);
             if (!opened && !resolved) {
                 resolved = true;
-                reject(new Error(`Failed to connect to agent server at ${url}`));
+                reject(
+                    new Error(`Failed to connect to agent server at ${url}`),
+                );
             }
         };
     });
