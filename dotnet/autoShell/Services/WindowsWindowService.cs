@@ -106,7 +106,7 @@ internal class WindowsWindowService : IWindowService
             if (p.MainWindowHandle != IntPtr.Zero)
             {
                 SendMessage(p.MainWindowHandle, WM_SYSCOMMAND, SC_MINIMIZE, IntPtr.Zero);
-                break;
+                return;
             }
         }
 
@@ -114,8 +114,6 @@ internal class WindowsWindowService : IWindowService
         if (hWnd != nint.Zero)
         {
             SendMessage(hWnd, WM_SYSCOMMAND, SC_MINIMIZE, IntPtr.Zero);
-            SetForegroundWindow(hWnd);
-            Interaction.AppActivate(pid);
         }
     }
 

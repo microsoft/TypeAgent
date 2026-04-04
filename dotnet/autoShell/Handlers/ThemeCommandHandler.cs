@@ -35,16 +35,6 @@ internal partial class ThemeCommandHandler : ICommandHandler
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int LoadString(IntPtr hInstance, uint uID, [Out] char[] lpBuffer, int nBufferMax);
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr SendMessageTimeout(
-        IntPtr hWnd,
-        uint msg,
-        IntPtr wParam,
-        string lParam,
-        uint fuFlags,
-        uint uTimeout,
-        out IntPtr lpdwResult);
-
     #endregion P/Invoke
 
     private readonly IRegistryService _registry;
@@ -226,7 +216,7 @@ internal partial class ThemeCommandHandler : ICommandHandler
             _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
 
             // Broadcast settings change notification to update UI
-            BroadcastSettingsChange();
+            _registry.BroadcastSettingChange("ImmersiveColorSet");
 
             return true;
         }
@@ -270,24 +260,6 @@ internal partial class ThemeCommandHandler : ICommandHandler
         {
             SetLightDarkMode(useLightMode);
         }
-    }
-
-    /// <summary>
-    /// Broadcasts a WM_SETTINGCHANGE message to notify the system of theme changes.
-    /// </summary>
-    private static void BroadcastSettingsChange()
-    {
-        const int HWND_BROADCAST = 0xffff;
-        const int WM_SETTINGCHANGE = 0x001A;
-        const uint SMTO_ABORTIFHUNG = 0x0002;
-        SendMessageTimeout(
-            (IntPtr)HWND_BROADCAST,
-            WM_SETTINGCHANGE,
-            IntPtr.Zero,
-            "ImmersiveColorSet",
-            SMTO_ABORTIFHUNG,
-            1000,
-            out nint result);
     }
 
     /// <summary>

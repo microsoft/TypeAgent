@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Text;
 using autoShell.Logging;
 using Newtonsoft.Json;
@@ -529,14 +530,16 @@ internal class WindowsNetworkService : INetworkService
     private static string GenerateWifiProfileXml(string ssid, string password)
     {
         string ssidHex = BitConverter.ToString(Encoding.UTF8.GetBytes(ssid)).Replace("-", "");
+        string escapedSsid = SecurityElement.Escape(ssid);
+        string escapedPassword = SecurityElement.Escape(password);
 
         return $@"<?xml version=""1.0""?>
 <WLANProfile xmlns=""http://www.microsoft.com/networking/WLAN/profile/v1"">
-    <name>{ssid}</name>
+    <name>{escapedSsid}</name>
     <SSIDConfig>
         <SSID>
             <hex>{ssidHex}</hex>
-            <name>{ssid}</name>
+            <name>{escapedSsid}</name>
         </SSID>
     </SSIDConfig>
     <connectionType>ESS</connectionType>
@@ -551,7 +554,7 @@ internal class WindowsNetworkService : INetworkService
             <sharedKey>
                 <keyType>passPhrase</keyType>
                 <protected>false</protected>
-                <keyMaterial>{password}</keyMaterial>
+                <keyMaterial>{escapedPassword}</keyMaterial>
             </sharedKey>
         </security>
     </MSM>

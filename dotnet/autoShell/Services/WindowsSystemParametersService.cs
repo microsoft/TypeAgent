@@ -19,7 +19,7 @@ internal partial class WindowsSystemParametersService : ISystemParametersService
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SystemParametersInfo(int uiAction, int uiParam, int[] pvParam, int fWinIni);
 
-    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 
     /// <inheritdoc/>

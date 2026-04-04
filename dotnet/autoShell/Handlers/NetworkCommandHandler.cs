@@ -75,7 +75,14 @@ internal class NetworkCommandHandler : ICommandHandler
                 break;
 
             case "ToggleAirplaneMode":
-                _network.SetAirplaneMode(bool.Parse(value));
+                if (bool.TryParse(value, out bool airplaneMode))
+                {
+                    _network.SetAirplaneMode(airplaneMode);
+                }
+                else
+                {
+                    _logger.Warning($"ToggleAirplaneMode: invalid boolean value '{value}'");
+                }
                 break;
         }
     }
