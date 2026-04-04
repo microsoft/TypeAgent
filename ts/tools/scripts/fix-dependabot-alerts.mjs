@@ -234,6 +234,10 @@ class Semaphore {
         return new Promise((r) => this._queue.push(r));
     }
     release() {
+        // NOTE: shift()() resolves the next waiter's promise synchronously,
+        // but its microtask runs after the current synchronous block completes.
+        // Callers in `finally` blocks rely on this: _inflight cleanup statements
+        // after release() execute before the woken waiter runs.  Do not reorder.
         if (this._queue.length > 0) this._queue.shift()();
         else this._n++;
     }
@@ -283,6 +287,31 @@ function runCmd(cmd, cmdArgs, opts = {}) {
         );
     }
     return result.stdout.trim();
+}
+
+/**
+ * Async variant of runCmd — uses execFile so the event loop is not blocked.
+ * Throws on non-zero exit, spawn failure, or signal kill.
+ */
+function runCmdAsync(cmd, cmdArgs, opts = {}) {
+    return new Promise((resolve, reject) => {
+        execFile(
+            cmd,
+            cmdArgs,
+            { cwd: ROOT, maxBuffer: MAX_BUFFER, encoding: "utf-8", ...opts },
+            (error, stdout, stderr) => {
+                if (error) {
+                    reject(
+                        new Error(
+                            `Command failed: ${cmd} ${cmdArgs.join(" ")}\n${stderr || error.message}`,
+                        ),
+                    );
+                } else {
+                    resolve(stdout.trim());
+                }
+            },
+        );
+    });
 }
 
 /**
@@ -503,6 +532,8 @@ function getLatestVersion(pkg) {
             return version;
         } catch (e) {
             verbose(`getLatestVersion(${pkg}) failed: ${e.message}`);
+            // Cache failures to avoid thundering-herd retries for the same package
+            _cache.latestVersion.set(pkg, null);
             return null;
         } finally {
             _npmSem.release();
@@ -534,6 +565,13 @@ function getResolvedVersions(whyData) {
  *   - unfixed: versions still below requiredVersion
  */
 async function verifyAllVersionsFixed(pkg, requiredVersion) {
+    // Drain any in-flight request before clearing the cache so concurrent
+    // callers that already hold a reference to the promise still resolve
+    // correctly, and a third caller arriving mid-drain doesn't launch a
+    // duplicate request.
+    if (_inflight.pnpmWhy.has(pkg)) {
+        await _inflight.pnpmWhy.get(pkg).catch(() => {});
+    }
     _cache.pnpmWhy.delete(pkg);
     _inflight.pnpmWhy.delete(pkg);
     const versions = getResolvedVersions(await getPnpmWhy(pkg));
@@ -562,7 +600,9 @@ function getPnpmWhy(pkg) {
             return result;
         } catch (e) {
             verbose(`getPnpmWhy(${pkg}) failed: ${e.message}`);
-            throw e;
+            // Cache empty result on failure to avoid thundering-herd retries
+            _cache.pnpmWhy.set(pkg, []);
+            return [];
         } finally {
             _inflight.pnpmWhy.delete(pkg);
         }
@@ -655,6 +695,8 @@ function getPackageDeps(pkgName, version) {
             return deps;
         } catch (e) {
             verbose(`getPackageDeps(${cacheKey}) failed: ${e.message}`);
+            // Cache failures to avoid thundering-herd retries for the same key
+            _cache.packageDeps.set(cacheKey, null);
             return null;
         } finally {
             _npmSem.release();
@@ -785,6 +827,8 @@ function getNpmInfo(pkgName) {
             return result;
         } catch (e) {
             verbose(`getNpmInfo(${pkgName}) failed: ${e.message}`);
+            // Cache failures to avoid thundering-herd retries for the same package
+            _cache.npmInfo.set(pkgName, null);
             return null;
         } finally {
             _npmSem.release();
@@ -1026,6 +1070,9 @@ async function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
         }
 
         resolveResult(result);
+        // Replace the promise with the resolved value so future cache hits
+        // avoid awaiting an already-settled promise.
+        cache.set(cacheKey, result);
         actions.push(...result.actions);
         blockReasons.push(...result.blockReasons);
         constraints.push(...result.constraints);
@@ -2088,6 +2135,12 @@ async function analyzeVulnerabilities(byPackage) {
                         return e;
                     }
 
+                    if (whyData.length === 0) {
+                        verbose(
+                            `${pkg}: pnpm why returned no data — package may not be installed`,
+                        );
+                    }
+
                     if (!patched) {
                         const noPatchVersions = getResolvedVersions(whyData);
                         e.currentVersion =
@@ -2166,7 +2219,7 @@ async function executeResolutions(analyses) {
      */
     async function runUpdateAndVerify(a) {
         try {
-            tryRunCmd("pnpm", ["update", a.pkg, "-r"], {
+            await runCmdAsync("pnpm", ["update", a.pkg, "-r"], {
                 timeout: 120000,
             });
             const check = await verifyAllVersionsFixed(a.pkg, a.patched);
@@ -2250,11 +2303,11 @@ async function executeResolutions(analyses) {
                     verbose(
                         `Updating intermediates: ${intermediatePkgs.join(", ")}`,
                     );
-                    const intResult = tryRunCmd(
+                    const intResult = await runCmdAsync(
                         "pnpm",
                         ["update", ...intermediatePkgs, "-r"],
                         { timeout: 120000 },
-                    );
+                    ).catch(() => null);
                     if (intResult === null) {
                         warn(
                             `pnpm update failed for intermediate(s): ${intermediatePkgs.join(", ")} — fix for ${a.pkg} may be incomplete`,
@@ -2326,7 +2379,7 @@ async function executeResolutions(analyses) {
         if (needsInstall) {
             log("");
             try {
-                runCmd("pnpm", ["install"], { timeout: 300000 });
+                await runCmdAsync("pnpm", ["install"], { timeout: 300000 });
                 ok("pnpm install completed successfully");
             } catch (e) {
                 fail(`pnpm install failed: ${e.message}`);

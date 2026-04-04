@@ -3959,7 +3959,7 @@ importers:
         specifier: workspace:*
         version: link:../../knowPro
       mailparser:
-        specifier: ^3.9.6
+        specifier: 3.9.6
         version: 3.9.6
       memory-storage:
         specifier: workspace:*
@@ -4358,7 +4358,7 @@ importers:
         specifier: ^7.0.3
         version: 7.0.3
       electron:
-        specifier: ^40.8.5
+        specifier: 40.8.5
         version: 40.8.5
       electron-builder:
         specifier: 26.8.1
@@ -18757,7 +18757,7 @@ snapshots:
 
   '@types/keyv@3.1.4':
     dependencies:
-      '@types/node': 24.12.2
+      '@types/node': 20.19.25
 
   '@types/linkify-it@5.0.0': {}
 
