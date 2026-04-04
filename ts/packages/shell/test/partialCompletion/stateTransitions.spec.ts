@@ -439,7 +439,8 @@ describe("PartialCompletionSession — afterWildcard anchor sliding", () => {
         session.update("play foo", getPos);
         await Promise.resolve();
 
-        // With optional separator, raw prefix goes straight to trie.
+        // With optional separator, leading separators in rawPrefix are
+        // stripped before reaching the trie.
         // "bar" doesn't match "next" → trie empty → C6
         // afterWildcard="all" → slide anchor, no re-fetch.
         session.update("play foobar", getPos);

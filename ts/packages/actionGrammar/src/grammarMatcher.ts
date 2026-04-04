@@ -96,7 +96,7 @@ export function requiresSeparator(
 // the grammar always uses spacePunctuation separators.
 // When needsSep is false: "none" spacingMode → "none", otherwise
 // → "optional" (covers auto mode/CJK/mixed and explicit "optional").
-function candidateSeparatorMode(
+export function candidateSeparatorMode(
     needsSep: boolean,
     spacingMode: CompiledSpacingMode,
 ): SeparatorMode {

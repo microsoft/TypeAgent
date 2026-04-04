@@ -250,14 +250,20 @@ function assertSingleResultInvariants(
 
     // 2. closedSet ↔ properties consistency
     const hasProperties = (result.properties?.length ?? 0) > 0;
+    const hasCompletions = result.completions.length > 0;
     if (hasProperties && result.closedSet !== false) {
         throw new Error(
             `Invariant: properties present but closedSet=${result.closedSet} (should be false) ${ctx}`,
         );
     }
-    if (result.closedSet === false && !hasProperties) {
+    // closedSet=false is valid when:
+    //   (a) properties are present (wildcard slots — agent can provide values), or
+    //   (b) completions are present (separator conflict filtering dropped
+    //       some candidates — re-fetch with different separator state
+    //       would yield more completions).
+    if (result.closedSet === false && !hasProperties && !hasCompletions) {
         throw new Error(
-            `Invariant: closedSet=false but properties is empty ${ctx}`,
+            `Invariant: closedSet=false but both properties and completions are empty ${ctx}`,
         );
     }
 }
@@ -337,7 +343,7 @@ function assertTruncatedForwardInvariant(
  *       backward === completion(input[0..backward.matchedPrefixLength], "forward")
  * - #7: forward.directionSensitive →
  *       completion(input[0..forward.matchedPrefixLength], "backward").matchedPrefixLength
- *       < forward.matchedPrefixLength  (backward of truncated backs up)
+ *       < forward.matchedPrefixLength  (backward backs up on truncated)
  * - #8: forward.matchedPrefixLength ≠ backward.matchedPrefixLength
  *       AND backward.directionSensitive →
  *       completion(input[0..backward.matchedPrefixLength], "forward").matchedPrefixLength
@@ -353,11 +359,18 @@ function assertCrossDirectionInvariants(
     const fwdMpl = forward.matchedPrefixLength ?? 0;
     const bwdMpl = backward.matchedPrefixLength ?? 0;
 
+    // Normalize once — completion order is not significant.
+    const sortedForward = normalizeCompletionResult(forward);
+    const sortedBackward = normalizeCompletionResult(backward);
+
     // #4: equal matchedPrefixLength → identical results
     //     If both directions consumed the same amount, all fields must agree.
-    if (fwdMpl === bwdMpl && !completionResultsEqual(forward, backward)) {
+    if (
+        fwdMpl === bwdMpl &&
+        !completionResultsEqual(sortedForward, sortedBackward)
+    ) {
         try {
-            expect(backward).toEqual(forward);
+            expect(sortedBackward).toEqual(sortedForward);
         } catch (e) {
             const err = e as Error;
             err.message =
@@ -378,9 +391,10 @@ function assertCrossDirectionInvariants(
     if (!forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
         const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
-        if (!completionResultsEqual(forward, backwardAtFwd)) {
+        const sortedBwd5 = normalizeCompletionResult(backwardAtFwd);
+        if (!completionResultsEqual(sortedForward, sortedBwd5)) {
             try {
-                expect(backwardAtFwd).toEqual(forward);
+                expect(sortedBwd5).toEqual(sortedForward);
             } catch (e) {
                 const err = e as Error;
                 err.message =
@@ -403,9 +417,10 @@ function assertCrossDirectionInvariants(
         // When forwardAtBwd.mpl < bwdMpl, the forward path has a known
         // gap and can't reproduce backward's position.
         if ((forwardAtBwd.matchedPrefixLength ?? 0) >= bwdMpl || bwdMpl === 0) {
-            if (!completionResultsEqual(backward, forwardAtBwd)) {
+            const sortedFwd6 = normalizeCompletionResult(forwardAtBwd);
+            if (!completionResultsEqual(sortedBackward, sortedFwd6)) {
                 try {
-                    expect(forwardAtBwd).toEqual(backward);
+                    expect(sortedFwd6).toEqual(sortedBackward);
                 } catch (e) {
                     const err = e as Error;
                     err.message =
@@ -421,7 +436,7 @@ function assertCrossDirectionInvariants(
     // #7: forward.directionSensitive →
     //     completion(input[0..fwd.mpl], "backward").mpl < fwd.mpl
     //     When forward says direction matters, backward on the truncated
-    //     input should back up to a shorter position.
+    //     input should back up to a strictly shorter position.
     if (forward.directionSensitive) {
         const truncated = prefix.substring(0, fwdMpl);
         const backwardAtFwd = baseFn(grammar, truncated, undefined, "backward");
