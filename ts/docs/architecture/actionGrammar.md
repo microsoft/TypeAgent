@@ -871,7 +871,7 @@ Three-way compatibility:
 | Yes           | keep               | keep       | drop   |
 
 1. **Detect:** Compute each candidate's individual `SeparatorMode` via
-   `computeCandidateSepMode()`. A conflict exists when both
+   `computeCandidateSeparatorMode()`. A conflict exists when both
    `isRequiringSepMode()` candidates (need separator) and `"none"`
    candidates (reject separator) are present.
 

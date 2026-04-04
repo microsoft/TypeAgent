@@ -11,7 +11,7 @@ import {
     type SeparatorMode,
     separatorRegExpStr,
     requiresSeparator,
-    candidateSepMode,
+    candidateSeparatorMode,
     mergeSeparatorMode,
     isBoundarySatisfied,
     nextNonSeparatorIndex,
@@ -644,7 +644,7 @@ export function hasTrailingSeparator(input: string, position: number): boolean {
 
 // True when a separator is needed between the character at
 // `position - 1` in `input` and `firstCompletionChar` according
-// to `spacingMode`.  Shared by mergeSepMode, computeCandidateSepMode,
+// to `spacingMode`.  Shared by mergeSepMode, computeCandidateSeparatorMode,
 // computeRangeNeedsSep, and (indirectly) filterSepConflicts.
 function computeNeedsSep(
     input: string,
@@ -680,13 +680,13 @@ function mergeSepMode(
 // Uses the same (position, firstCompletionChar, spacingMode) logic as
 // mergeSepMode, but returns the per-candidate mode instead of merging
 // into the running aggregate.
-function computeCandidateSepMode(
+function computeCandidateSeparatorMode(
     input: string,
     position: number,
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
 ): SeparatorMode {
-    return candidateSepMode(
+    return candidateSeparatorMode(
         computeNeedsSep(input, position, firstCompletionChar, spacingMode),
         spacingMode,
     );
@@ -1471,7 +1471,7 @@ function filterSepConflicts(ctx: CompletionContext): void {
         const c = originalCandidates[i];
         const firstChar =
             c.kind === "string" ? c.completionText[0] : PROPERTY_SENTINEL_CHAR;
-        const mode = computeCandidateSepMode(
+        const mode = computeCandidateSeparatorMode(
             input,
             ctx.maxPrefixLength,
             firstChar,
@@ -1506,7 +1506,7 @@ function filterSepConflicts(ctx: CompletionContext): void {
         ctx.direction === "backward" ? false : ctx.hasTrailingSep;
 
     // Filter fixed candidates in place using the pre-computed
-    // modes, avoiding a second computeCandidateSepMode call.
+    // modes, avoiding a second computeCandidateSeparatorMode call.
     if (ctx.effectiveTrailingSep) {
         // Trailing separator: drop "none" (rejects separator).
         ctx.fixedCandidates = originalCandidates.filter(
@@ -1719,7 +1719,7 @@ function computeRangeNeedsSep(
         spacingMode,
     );
     if (ctx.hasSepConflict) {
-        const mode = candidateSepMode(needsSep, spacingMode);
+        const mode = candidateSeparatorMode(needsSep, spacingMode);
         if (
             ctx.effectiveTrailingSep
                 ? mode === "none"

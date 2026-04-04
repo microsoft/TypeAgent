@@ -3144,9 +3144,9 @@ describeForEachCompletion(
         });
 
         // ============================================================
-        // Phase 3 separator-only gap — merge vs displace
+        // Phase 2 separator-only gap — merge vs displace
         //
-        // When Phase 3's anchor (input.length or partial keyword
+        // When Phase 2's anchor (input.length or partial keyword
         // position) differs from maxPrefixLength, the gap between
         // mpl and anchor determines whether existing Cat 2 candidates
         // are preserved (merge) or replaced (displace):
@@ -3154,7 +3154,7 @@ describeForEachCompletion(
         //   Separator-only gap → merge (Cat 2 at EOI)
         //   Non-separator gap  → displace (Cat 3b fallback)
         // ============================================================
-        describe("Phase 3 separator-only gap — merge vs displace", () => {
+        describe("Phase 2 separator-only gap — merge vs displace", () => {
             describe("Cat 3b displace — non-separator gap", () => {
                 // Rule A: play $(song) by $(artist) — wildcard
                 // Rule B: play some video             — keyword
@@ -3178,7 +3178,7 @@ describeForEachCompletion(
                         "forward",
                     );
                     // "video" from Cat 3b (mpl=4) is displaced by
-                    // EOI candidate "by" at anchor=15.
+                    // EOI candidate "by" (raw anchor=15, stripped to 14).
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 14,
@@ -3306,10 +3306,10 @@ describeForEachCompletion(
                 });
             });
 
-            describe("Cat 2 property candidate preserved during merge", () => {
-                // When a Cat 2 candidate is a property completion (from
-                // a wildcard slot at EOI), it should survive Phase 3
-                // merge alongside a string EOI candidate from another rule.
+            describe("Cat 1 property candidate displaced by EOI anchor", () => {
+                // When a Cat 1 exact-match candidate backs up to a
+                // wildcard property slot at a lower P, the EOI anchor
+                // from another rule displaces it (non-separator gap).
                 const g = [
                     `import { SongName, ArtistName };`,
                     `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
@@ -3325,10 +3325,10 @@ describeForEachCompletion(
                         "forward",
                     );
                     // Rule A: wildcard-at-EOI → offers "by" via Phase 2/3
-                    // Rule B: wildcard captured "hello", Cat 2 property
-                    // completion for song.  Phase 3 displaces (gap
-                    // "hello " contains non-separator content), so only
-                    // "by" survives.
+                    // Rule B: wildcard captured "hello", Cat 1 exact
+                    // match backs up to property slot at P=4.  Phase 2
+                    // displaces (gap "hello " contains non-separator
+                    // content), so only "by" survives.
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 10,
@@ -3345,14 +3345,14 @@ describeForEachCompletion(
         describe("afterWildcard AND-merge — cross-rule wildcard + literal", () => {
             // Regression test: when a wildcard rule and a literal keyword
             // rule both produce string completions at the same
-            // matchedPrefixLength, afterWildcard must be "none".
+            // matchedPrefixLength, afterWildcard must be "some" (not "all").
             //
             // Before the AND-merge fix, afterWildcard was OR-merged across
             // candidates, so the literal keyword's completion ("beautiful")
-            // was tagged as slidable.  After the shell slid the anchor
-            // forward (e.g. "play b" → "play book "), the stale "beautiful"
-            // entry remained in the trie and reappeared at the next word
-            // boundary.
+            // was tagged as slidable ("all").  After the shell slid the
+            // anchor forward (e.g. "play b" → "play book "), the stale
+            // "beautiful" entry remained in the trie and reappeared at the
+            // next word boundary.
             const g = [
                 `import { SongName, ArtistName };`,
                 `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
@@ -3382,7 +3382,7 @@ describeForEachCompletion(
                 });
             });
 
-            it("forward on 'play beautiful' — mixed merge, afterWildcard=\"none\"", () => {
+            it("forward on 'play beautiful' — mixed merge, afterWildcard=\"some\"", () => {
                 const result = matchGrammarCompletion(
                     grammar,
                     "play beautiful",
@@ -3390,10 +3390,10 @@ describeForEachCompletion(
                     "forward",
                 );
                 // Rule B: matched "play beautiful" (14 chars), offers
-                //   "music" (afterWildcard="some").
-                // Rule A: wildcard-at-EOI, Phase 2/3 offers "by".
-                // Both at mpl=14.  "music" is position-sensitive →
-                // afterWildcard="some".
+                //   "music" (non-wildcard keyword completion).
+                // Rule A: wildcard-at-EOI, Phase 2 offers "by"
+                //   (after-wildcard completion).
+                // Both at mpl=14.  Mixed → afterWildcard="some".
                 expect(result.completions).toContain("music");
                 expect(result.completions).toContain("by");
                 expectMetadata(result, {
