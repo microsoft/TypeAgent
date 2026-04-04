@@ -74,6 +74,8 @@ export async function connectAgentServer(
             { dispatcher: Dispatcher; connectionId: string }
         >();
 
+        let opened = false;
+        let resolved = false;
         let closed = false;
 
         const connection: AgentServerConnection = {
@@ -171,6 +173,8 @@ export async function connectAgentServer(
 
         ws.onopen = () => {
             debug("WebSocket connection established", ws.readyState);
+            opened = true;
+            resolved = true;
             resolve(connection);
         };
         ws.onmessage = (event: WebSocket.MessageEvent) => {
@@ -181,6 +185,18 @@ export async function connectAgentServer(
             debug("WebSocket connection closed", event.code, event.reason);
             channel.notifyDisconnected();
             joinedSessions.clear();
+            if (!opened) {
+                // Closed before onopen fired — reject the pending promise.
+                if (!resolved) {
+                    resolved = true;
+                    reject(
+                        new Error(
+                            `Failed to connect to agent server at ${url}`,
+                        ),
+                    );
+                }
+                return;
+            }
             if (!closed) {
                 closed = true;
                 onDisconnect?.();
@@ -188,10 +204,9 @@ export async function connectAgentServer(
         };
         ws.onerror = (error: WebSocket.ErrorEvent) => {
             debugErr("WebSocket error:", error);
-            if (!closed) {
-                reject(
-                    new Error(`Failed to connect to agent server at ${url}`),
-                );
+            if (!opened && !resolved) {
+                resolved = true;
+                reject(new Error(`Failed to connect to agent server at ${url}`));
             }
         };
     });

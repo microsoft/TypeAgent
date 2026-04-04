@@ -108,7 +108,16 @@ export async function createSessionManager(
         }
     }
 
-    async function saveMetadata(): Promise<void> {
+    // Serialize metadata writes: each call chains onto the previous one so
+    // concurrent async callers never interleave writeFile/rename operations.
+    let saveQueue: Promise<void> = Promise.resolve();
+
+    function saveMetadata(): Promise<void> {
+        saveQueue = saveQueue.then(doSaveMetadata);
+        return saveQueue;
+    }
+
+    async function doSaveMetadata(): Promise<void> {
         const metadataPath = path.join(sessionsDir, METADATA_FILE);
         const tmpPath = `${metadataPath}.tmp`;
         const entries: SessionMetadata[] = [];

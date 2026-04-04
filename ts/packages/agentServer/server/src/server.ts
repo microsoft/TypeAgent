@@ -87,41 +87,55 @@ async function main() {
                     const clientIOChannel = channelProvider.createChannel(
                         getClientIOChannelName(sessionId),
                     );
-                    const clientIORpcClient =
-                        createClientIORpcClient(clientIOChannel);
+                    try {
+                        const clientIORpcClient =
+                            createClientIORpcClient(clientIOChannel);
 
-                    const result = await sessionManager.joinSession(
-                        sessionId,
-                        clientIORpcClient,
-                        () => {
+                        const result = await sessionManager.joinSession(
+                            sessionId,
+                            clientIORpcClient,
+                            () => {
+                                channelProvider.deleteChannel(
+                                    getDispatcherChannelName(sessionId),
+                                );
+                                channelProvider.deleteChannel(
+                                    getClientIOChannelName(sessionId),
+                                );
+                                joinedSessions.delete(sessionId);
+                            },
+                            options,
+                        );
+
+                        const dispatcherChannel = channelProvider.createChannel(
+                            getDispatcherChannelName(sessionId),
+                        );
+                        try {
+                            createDispatcherRpcServer(
+                                result.dispatcher,
+                                dispatcherChannel,
+                            );
+                        } catch (e) {
                             channelProvider.deleteChannel(
                                 getDispatcherChannelName(sessionId),
                             );
-                            channelProvider.deleteChannel(
-                                getClientIOChannelName(sessionId),
-                            );
-                            joinedSessions.delete(sessionId);
-                        },
-                        options,
-                    );
+                            throw e;
+                        }
 
-                    const dispatcherChannel = channelProvider.createChannel(
-                        getDispatcherChannelName(sessionId),
-                    );
-                    createDispatcherRpcServer(
-                        result.dispatcher,
-                        dispatcherChannel,
-                    );
+                        joinedSessions.set(sessionId, {
+                            dispatcher: result.dispatcher,
+                            connectionId: result.connectionId,
+                        });
 
-                    joinedSessions.set(sessionId, {
-                        dispatcher: result.dispatcher,
-                        connectionId: result.connectionId,
-                    });
-
-                    return {
-                        connectionId: result.connectionId,
-                        sessionId,
-                    };
+                        return {
+                            connectionId: result.connectionId,
+                            sessionId,
+                        };
+                    } catch (e) {
+                        channelProvider.deleteChannel(
+                            getClientIOChannelName(sessionId),
+                        );
+                        throw e;
+                    }
                 },
 
                 leaveSession: async (sessionId: string) => {
