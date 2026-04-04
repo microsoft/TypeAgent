@@ -15,6 +15,9 @@ interface ExtensionSettings {
     maxConcurrentExtractions: number;
     qualityThreshold: number;
     enableIntelligentAnalysis: boolean;
+    autoDiscovery: boolean;
+    autoDiscoveryMode: "scope" | "content";
+    excludeSensitiveSites: boolean;
 }
 
 interface AIModelStatus {
@@ -30,6 +33,9 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
     maxConcurrentExtractions: 3,
     qualityThreshold: 0.3,
     enableIntelligentAnalysis: true,
+    autoDiscovery: true,
+    autoDiscoveryMode: "content",
+    excludeSensitiveSites: true,
 };
 
 class EnhancedOptionsPage {
@@ -110,6 +116,27 @@ class EnhancedOptionsPage {
             (
                 document.getElementById("qualityThreshold") as HTMLInputElement
             ).value = this.settings.qualityThreshold.toString();
+
+            // Auto-discovery settings
+            const autoDiscoveryEl = document.getElementById(
+                "autoDiscovery",
+            ) as HTMLInputElement | null;
+            if (autoDiscoveryEl) {
+                autoDiscoveryEl.checked = this.settings.autoDiscovery;
+            }
+            const autoDiscoveryModeEl = document.getElementById(
+                "autoDiscoveryMode",
+            ) as HTMLSelectElement | null;
+            if (autoDiscoveryModeEl) {
+                autoDiscoveryModeEl.value = this.settings.autoDiscoveryMode;
+            }
+            const excludeSensitiveEl = document.getElementById(
+                "excludeSensitiveSitesDiscovery",
+            ) as HTMLInputElement | null;
+            if (excludeSensitiveEl) {
+                excludeSensitiveEl.checked =
+                    this.settings.excludeSensitiveSites;
+            }
         } catch (error) {
             console.error("Error loading settings:", error);
             this.showStatus("Error loading settings", "danger");
@@ -234,6 +261,28 @@ class EnhancedOptionsPage {
         ) as HTMLInputElement;
         if (selectedMode) {
             this.settings.defaultExtractionMode = selectedMode.value as any;
+        }
+
+        // Auto-discovery settings
+        const autoDiscoveryEl = document.getElementById(
+            "autoDiscovery",
+        ) as HTMLInputElement | null;
+        if (autoDiscoveryEl) {
+            this.settings.autoDiscovery = autoDiscoveryEl.checked;
+        }
+        const autoDiscoveryModeEl = document.getElementById(
+            "autoDiscoveryMode",
+        ) as HTMLSelectElement | null;
+        if (autoDiscoveryModeEl) {
+            this.settings.autoDiscoveryMode = autoDiscoveryModeEl.value as
+                | "scope"
+                | "content";
+        }
+        const excludeSensitiveEl = document.getElementById(
+            "excludeSensitiveSitesDiscovery",
+        ) as HTMLInputElement | null;
+        if (excludeSensitiveEl) {
+            this.settings.excludeSensitiveSites = excludeSensitiveEl.checked;
         }
 
         try {

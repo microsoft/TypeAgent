@@ -82,6 +82,110 @@ interface DiscoveryActionHandlerContext {
     sessionContext: SessionContext<BrowserActionContext>;
 }
 
+// ── Discovery cache ─────────────────────────────────────────────────────────
+//
+// Shared by auto-discovery (on navigation) and manual discovery (context menu).
+// Two-tier lookup with a TTL:
+//
+//   1. Exact URL match (O(1) map lookup)
+//   2. Pattern match — the LLM can return a urlPattern regex indicating that
+//      pages with similar URLs share the same available actions. For example,
+//      all Amazon product pages (https://www.amazon.com/dp/...) have the same
+//      action set regardless of product ID. On a cache miss for the exact URL,
+//      we iterate pattern entries and test each regex against the current URL.
+//
+// When auto-discovery runs on navigation, it populates the cache. When the
+// user triggers "Discover page macros", the cache is checked first to avoid
+// a redundant LLM call.
+
+interface DiscoveryCacheEntry {
+    flows: WebFlowDefinition[];
+    mode: "scope" | "content" | "scope-fallback";
+    timestamp: number;
+    urlPattern?: string | undefined; // Regex matching URLs with the same available actions
+}
+
+const DISCOVERY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const discoveryCache = new Map<string, DiscoveryCacheEntry>();
+
+// Separate index for pattern-based entries, keyed by the original URL that
+// produced the pattern. Patterns are tested in insertion order.
+const patternEntries: DiscoveryCacheEntry[] = [];
+
+function isExpired(entry: DiscoveryCacheEntry): boolean {
+    return Date.now() - entry.timestamp > DISCOVERY_CACHE_TTL_MS;
+}
+
+function testUrlPattern(pattern: string, url: string): boolean {
+    try {
+        return new RegExp(pattern).test(url);
+    } catch {
+        debug(`Invalid urlPattern regex: ${pattern}`);
+        return false;
+    }
+}
+
+function getCachedDiscovery(url: string): DiscoveryCacheEntry | undefined {
+    // 1. Exact URL match
+    const exact = discoveryCache.get(url);
+    if (exact) {
+        if (isExpired(exact)) {
+            discoveryCache.delete(url);
+        } else {
+            return exact;
+        }
+    }
+
+    // 2. Pattern match — check entries that have a urlPattern regex
+    for (let i = patternEntries.length - 1; i >= 0; i--) {
+        const entry = patternEntries[i];
+        if (isExpired(entry)) {
+            patternEntries.splice(i, 1);
+            continue;
+        }
+        if (entry.urlPattern && testUrlPattern(entry.urlPattern, url)) {
+            debug(
+                `Discovery cache pattern hit: ${entry.urlPattern} matched ${url}`,
+            );
+            return entry;
+        }
+    }
+
+    return undefined;
+}
+
+function setCachedDiscovery(
+    url: string,
+    flows: WebFlowDefinition[],
+    mode: "scope" | "content" | "scope-fallback",
+    urlPattern?: string,
+): void {
+    const entry: DiscoveryCacheEntry = {
+        flows,
+        mode,
+        timestamp: Date.now(),
+        urlPattern,
+    };
+
+    discoveryCache.set(url, entry);
+
+    if (urlPattern) {
+        patternEntries.push(entry);
+    }
+
+    // Evict expired entries periodically
+    if (discoveryCache.size > 100) {
+        const now = Date.now();
+        for (const [key, e] of discoveryCache) {
+            if (now - e.timestamp > DISCOVERY_CACHE_TTL_MS) {
+                discoveryCache.delete(key);
+            }
+        }
+    }
+}
+
+// ── Discovery handlers ──────────────────────────────────────────────────────
+
 async function handleFindUserActions(
     action: any,
     ctx: DiscoveryActionHandlerContext,
@@ -89,6 +193,21 @@ async function handleFindUserActions(
     const url = await getBrowserControl(
         ctx.sessionContext.agentContext,
     ).getPageUrl();
+
+    // Check cache first — auto-discovery may have already computed this
+    if (url) {
+        const cached = getCachedDiscovery(url);
+        if (cached) {
+            debug(
+                `Discovery cache hit for ${url}: ${cached.flows.length} flows (mode: ${cached.mode})`,
+            );
+            return {
+                displayText: `Found ${cached.flows.length} applicable actions (cached)`,
+                entities: ctx.entities.getEntities(),
+                data: { actions: cached.flows, cached: true },
+            };
+        }
+    }
 
     // Get existing WebFlows for this domain
     const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
@@ -145,14 +264,30 @@ async function handleFindUserActions(
     }
 
     // The LLM returns a CandidateActionList with the subset of flows
-    // that actually apply to this page.
-    const selected = response.data as { actions: { actionName: string }[] };
+    // that actually apply to this page, plus an optional urlPattern.
+    const selected = response.data as {
+        actions: { actionName: string }[];
+        urlPattern?: string;
+    };
     const selectedNames = new Set(selected.actions.map((a) => a.actionName));
 
     // Filter the full WebFlowDefinitions to only those the LLM selected
     const applicableFlows = candidateFlows.filter((f) =>
         selectedNames.has(f.name),
     );
+
+    // Cache the result for this URL (with optional pattern for similar URLs)
+    if (url) {
+        setCachedDiscovery(
+            url,
+            applicableFlows,
+            "content",
+            selected.urlPattern,
+        );
+        if (selected.urlPattern) {
+            debug(`Discovery urlPattern: ${selected.urlPattern}`);
+        }
+    }
 
     debug(
         `Discovery: ${candidateFlows.length} candidates → ${applicableFlows.length} applicable to page`,
@@ -165,7 +300,127 @@ async function handleFindUserActions(
     };
 }
 
-function generateDiscoverySchema(flows: WebFlowDefinition[]): string {
+async function handleAutoDiscoverActions(
+    action: any,
+    ctx: DiscoveryActionHandlerContext,
+): Promise<DiscoveryActionResult> {
+    const url = action.parameters?.url;
+    const domain = action.parameters?.domain;
+    const mode = action.parameters?.mode ?? "content";
+
+    const webFlowStore = ctx.sessionContext.agentContext.webFlowStore;
+    if (!webFlowStore || !domain) {
+        return {
+            displayText: "No web flow store available",
+            entities: [],
+            data: { actions: [], flowCount: 0 },
+        };
+    }
+
+    // Check cache first
+    if (url) {
+        const cached = getCachedDiscovery(url);
+        if (cached) {
+            debug(
+                `Auto-discovery cache hit for ${url}: ${cached.flows.length} flows`,
+            );
+            return {
+                displayText: `Found ${cached.flows.length} actions for ${domain} (cached)`,
+                entities: [],
+                data: {
+                    actions: cached.flows,
+                    flowCount: cached.flows.length,
+                    mode: cached.mode,
+                    cached: true,
+                },
+            };
+        }
+    }
+
+    // Layer 1: Scope-based discovery — fast domain matching
+    const scopedFlows = await webFlowStore.listForDomainWithDetails(domain);
+
+    if (mode === "scope" || scopedFlows.length === 0) {
+        debug(
+            `Auto-discovery (scope): ${scopedFlows.length} flows for ${domain}`,
+        );
+        if (url) {
+            setCachedDiscovery(url, scopedFlows, "scope");
+        }
+        return {
+            displayText: `Found ${scopedFlows.length} actions for ${domain}`,
+            entities: [],
+            data: {
+                actions: scopedFlows,
+                flowCount: scopedFlows.length,
+                mode: "scope",
+            },
+        };
+    }
+
+    // Layer 2: Content-based discovery — LLM filters to applicable flows
+    const discoverySchema = generateDiscoverySchema(scopedFlows);
+    const htmlFragments = await ctx.browser.getHtmlFragments();
+
+    const response = await ctx.agent.getCandidateUserActions(
+        discoverySchema,
+        htmlFragments,
+    );
+
+    if (!response.success) {
+        debug("Auto-discovery LLM call failed, falling back to scope results");
+        if (url) {
+            setCachedDiscovery(url, scopedFlows, "scope-fallback");
+        }
+        return {
+            displayText: `Found ${scopedFlows.length} actions for ${domain}`,
+            entities: [],
+            data: {
+                actions: scopedFlows,
+                flowCount: scopedFlows.length,
+                mode: "scope-fallback",
+            },
+        };
+    }
+
+    const selected = response.data as {
+        actions: { actionName: string }[];
+        urlPattern?: string;
+    };
+    const selectedNames = new Set(selected.actions.map((a) => a.actionName));
+    const applicableFlows = scopedFlows.filter((f) =>
+        selectedNames.has(f.name),
+    );
+
+    // Cache the content-based result (with optional pattern for similar URLs)
+    if (url) {
+        setCachedDiscovery(
+            url,
+            applicableFlows,
+            "content",
+            selected.urlPattern,
+        );
+        if (selected.urlPattern) {
+            debug(`Auto-discovery urlPattern: ${selected.urlPattern}`);
+        }
+    }
+
+    debug(
+        `Auto-discovery (content): ${scopedFlows.length} scoped → ${applicableFlows.length} applicable for ${domain}`,
+    );
+
+    return {
+        displayText: `Found ${applicableFlows.length} applicable actions for ${domain}`,
+        entities: [],
+        data: {
+            actions: applicableFlows,
+            flowCount: applicableFlows.length,
+            mode: "content",
+        },
+    };
+}
+
+export function generateDiscoverySchema(flows: WebFlowDefinition[]): string {
     const typeNames: string[] = [];
     const typeDefs: string[] = [];
 
@@ -213,7 +468,15 @@ function generateDiscoverySchema(flows: WebFlowDefinition[]): string {
         "\n\n" +
         union +
         "\n\n" +
-        `export type CandidateActionList = {\n    actions: CandidateActions[];\n};`
+        `export type CandidateActionList = {\n` +
+        `    actions: CandidateActions[];\n` +
+        `    // If other pages on this site with different URLs would have the same\n` +
+        `    // set of available actions (e.g. all product detail pages), provide a\n` +
+        `    // regex that matches those URLs. This avoids re-analyzing similar pages.\n` +
+        `    // Example: "https://www\\\\.amazon\\\\.com/dp/[A-Z0-9]+" for Amazon product pages.\n` +
+        `    // Omit if the actions are specific to this exact URL.\n` +
+        `    urlPattern?: string;\n` +
+        `};`
     );
 }
 
@@ -514,6 +777,19 @@ export async function handleSchemaDiscoveryAction(
     };
 
     let result: DiscoveryActionResult;
+
+    // autoDiscoverActions is not part of SchemaDiscoveryActions — handle before switch
+    if ((action as any).actionName === "autoDiscoverActions") {
+        const adResult = await handleAutoDiscoverActions(
+            action,
+            discoveryContext,
+        );
+        return {
+            displayText: adResult.displayText,
+            data: adResult.data,
+            entities: adResult.entities,
+        };
+    }
 
     switch (action.actionName) {
         case "detectPageActions":

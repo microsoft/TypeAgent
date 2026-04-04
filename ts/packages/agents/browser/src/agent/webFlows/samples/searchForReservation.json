@@ -1,0 +1,30 @@
+{
+  "name": "searchForReservation",
+  "description": "Search for a restaurant and show available reservation time slots",
+  "version": 1,
+  "parameters": {
+    "restaurantName": {
+      "type": "string",
+      "required": true,
+      "description": "Name of the restaurant to find"
+    },
+    "numberOfPeople": {
+      "type": "number",
+      "required": false,
+      "default": 2,
+      "description": "Party size for the reservation"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const searchInput = await browser.extractComponent<{ cssSelector: string; submitButtonCssSelector: string }>({\n        typeName: 'SearchInput',\n        schema: '{ cssSelector: string; submitButtonCssSelector: string; }'\n    }, params.restaurantName);\n    if (!searchInput || !searchInput.cssSelector) {\n        throw new Error('Could not find search input on this page');\n    }\n    await browser.clearAndType(searchInput.cssSelector, params.restaurantName);\n    if (searchInput.submitButtonCssSelector) {\n        await browser.clickAndWait(searchInput.submitButtonCssSelector);\n    } else {\n        await browser.pressKey('Enter');\n        await browser.awaitPageLoad();\n    }\n\n    const restaurant = await browser.extractComponent<{ restaurantName: string; detailsLinkSelector: string }>({\n        typeName: 'RestaurantResult',\n        schema: '{ restaurantName: string; rating: string; detailsLinkSelector: string; }'\n    }, params.restaurantName);\n    if (!restaurant || !restaurant.detailsLinkSelector) {\n        throw new Error('Could not find restaurant: ' + params.restaurantName);\n    }\n    await browser.clickAndWait(restaurant.detailsLinkSelector);\n\n    const reservations = await browser.extractComponent<{ date: string; availableTimeSlots?: { time?: string; cssSelector: string }[] }>({\n        typeName: 'BookReservationsModule',\n        schema: '{ date: string; targetTime: string; availableTimeSlots?: { time?: string; cssSelector: string; }[]; numberOfPeople?: number; }'\n    });\n    if (!reservations || !reservations.availableTimeSlots || reservations.availableTimeSlots.length === 0) {\n        return { success: false, error: 'No available time slots found for ' + params.restaurantName };\n    }\n    const times = reservations.availableTimeSlots.map(s => s.time).filter(Boolean).join(', ');\n    return { success: true, message: 'Available times at ' + params.restaurantName + ': ' + times, data: reservations };\n}",
+  "grammarPatterns": [
+    "find (a)? reservation at $(restaurantName:wildcard)",
+    "book $(restaurantName:wildcard) for $(numberOfPeople:number) (people)?",
+    "search for reservation at $(restaurantName:wildcard)",
+    "check availability at $(restaurantName:wildcard)"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": ["opentable.com", "resy.com"]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}

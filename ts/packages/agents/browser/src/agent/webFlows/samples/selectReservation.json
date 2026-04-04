@@ -1,0 +1,23 @@
+{
+  "name": "selectReservation",
+  "description": "Select a specific reservation time slot from the available options on a restaurant page",
+  "version": 1,
+  "parameters": {
+    "time": {
+      "type": "string",
+      "required": true,
+      "description": "The reservation time to select (e.g. '7:00 PM')"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const reservations = await browser.extractComponent<{ date: string; availableTimeSlots?: { time?: string; cssSelector: string }[] }>({\n        typeName: 'BookReservationsModule',\n        schema: '{ date: string; targetTime: string; availableTimeSlots?: { time?: string; cssSelector: string; }[]; numberOfPeople?: number; }'\n    });\n    if (!reservations || !reservations.availableTimeSlots || reservations.availableTimeSlots.length === 0) {\n        return { success: false, error: 'No available time slots found on this page' };\n    }\n    const targetSlot = reservations.availableTimeSlots.find(\n        s => s.time && s.time.toLowerCase().includes(params.time.toLowerCase())\n    );\n    if (!targetSlot) {\n        const available = reservations.availableTimeSlots.map(s => s.time).filter(Boolean).join(', ');\n        return { success: false, error: 'Time ' + params.time + ' not available. Available: ' + available };\n    }\n    await browser.clickAndWait(targetSlot.cssSelector);\n    return { success: true, message: 'Selected reservation at ' + targetSlot.time };\n}",
+  "grammarPatterns": [
+    "select (the)? $(time:wildcard) reservation",
+    "book (the)? $(time:wildcard) (time)? slot",
+    "reserve (at)? $(time:wildcard)"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": ["opentable.com", "resy.com"]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}

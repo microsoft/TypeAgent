@@ -1,0 +1,36 @@
+{
+  "name": "buyProduct",
+  "description": "Search for a product and add it to the shopping cart. If already on the product page, adds directly without searching.",
+  "version": 1,
+  "parameters": {
+    "productName": {
+      "type": "string",
+      "required": true,
+      "description": "The product to find and add to cart"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const pageState = await browser.checkPageState(\n        `Product detail page for \"${params.productName}\" with an add-to-cart button visible`\n    );\n\n    if (!pageState.matched) {\n        const searchInput = await browser.extractComponent<{ cssSelector: string; submitButtonCssSelector: string }>({\n            typeName: 'SearchInput',\n            schema: '{ cssSelector: string; submitButtonCssSelector: string; }'\n        }, params.productName);\n        if (!searchInput || !searchInput.cssSelector) {\n            throw new Error('Could not find search input on this page');\n        }\n        await browser.clearAndType(searchInput.cssSelector, params.productName);\n        if (searchInput.submitButtonCssSelector) {\n            await browser.clickAndWait(searchInput.submitButtonCssSelector);\n        } else {\n            await browser.pressKey('Enter');\n            await browser.awaitPageLoad();\n        }\n\n        const product = await browser.extractComponent<{ name: string; detailsLinkSelector: string }>({\n            typeName: 'ProductTile',\n            schema: '{ name: string; price: string; detailsLinkSelector: string; }'\n        }, params.productName);\n        if (!product || !product.detailsLinkSelector) {\n            throw new Error('Could not find product: ' + params.productName);\n        }\n        await browser.clickAndWait(product.detailsLinkSelector);\n    }\n\n    const hero = await browser.extractComponent<{ name: string; addToCartButtonSelector?: string }>({\n        typeName: 'ProductDetailsHero',\n        schema: '{ name: string; price: string; addToCartButtonSelector?: string; }'\n    }, params.productName);\n    if (!hero || !hero.addToCartButtonSelector) {\n        throw new Error('Could not find add-to-cart button on this page');\n    }\n    await browser.click(hero.addToCartButtonSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Added ' + (hero.name || params.productName) + ' to cart' };\n}",
+  "grammarPatterns": [
+    "buy $(productName:wildcard)",
+    "purchase $(productName:wildcard)",
+    "order $(productName:wildcard)",
+    "buy (me)? (a)? $(productName:wildcard)"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": [
+      "amazon.com",
+      "amazon.co.uk",
+      "amazon.de",
+      "amazon.fr",
+      "target.com",
+      "walmart.com",
+      "bestbuy.com",
+      "homedepot.com",
+      "lowes.com",
+      "costco.com",
+      "ebay.com"
+    ]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "buyAllInRecipe",
+  "description": "Find a recipe on Instacart and add all its ingredients to the cart",
+  "version": 1,
+  "parameters": {
+    "recipeName": {
+      "type": "string",
+      "required": true,
+      "description": "Name of the recipe to buy ingredients for"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    await browser.navigateTo('https://www.instacart.com/');\n    await browser.awaitPageLoad();\n\n    const searchInput = await browser.extractComponent<{ cssSelector: string; submitButtonCssSelector: string }>({\n        typeName: 'SearchInput',\n        schema: '{ cssSelector: string; submitButtonCssSelector: string; }'\n    });\n    if (!searchInput || !searchInput.cssSelector) {\n        throw new Error('Could not find search input');\n    }\n    await browser.clearAndType(searchInput.cssSelector, 'recipes: ' + params.recipeName);\n    if (searchInput.submitButtonCssSelector) {\n        await browser.clickAndWait(searchInput.submitButtonCssSelector);\n    } else {\n        await browser.pressKey('Enter');\n        await browser.awaitPageLoad();\n    }\n\n    const recipe = await browser.extractComponent<{ name: string; detailsLinkSelector: string }>({\n        typeName: 'RecipeInfo',\n        schema: '{ name: string; subtitle: string; detailsLinkSelector: string; }'\n    }, params.recipeName);\n    if (!recipe || !recipe.detailsLinkSelector) {\n        throw new Error('Could not find recipe: ' + params.recipeName);\n    }\n    await browser.clickAndWait(recipe.detailsLinkSelector);\n\n    const hero = await browser.extractComponent<{ recipeName: string; addAllIngredientsSelector: string; ingredients: { name: string; price: string; addToCartButtonSelector?: string }[] }>({\n        typeName: 'RecipeHeroSection',\n        schema: '{ recipeName: string; summary: string; addAllIngredientsSelector: string; saveButtonSelector: string; ingredients: { name: string; price: string; addToCartButtonSelector?: string; }[]; }'\n    });\n    if (!hero || !hero.addAllIngredientsSelector) {\n        throw new Error('Could not find recipe details for: ' + params.recipeName);\n    }\n    await browser.clickAndWait(hero.addAllIngredientsSelector);\n    const count = hero.ingredients ? hero.ingredients.length : 0;\n    return { success: true, message: 'Added ' + count + ' ingredients from \"' + hero.recipeName + '\" to cart' };\n}",
+  "grammarPatterns": [
+    "buy (all)? ingredients for $(recipeName:wildcard) recipe",
+    "add $(recipeName:wildcard) recipe ingredients to cart",
+    "shop for $(recipeName:wildcard) recipe"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": ["instacart.com"]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}
