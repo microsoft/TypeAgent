@@ -874,12 +874,16 @@ spacing modes compete for the same `maxPrefixLength`:
    `grammarCompletion.ts`, post-loop in `grammarStore.ts`): when
    `"none"` and requiring-separator candidates coexist, filters by
    trailing separator state, advances P, and forces `closedSet=false`.
-   Protects invariants #9, #13.
+   Protects invariant #9 (`separatorMode="none"` for `[spacing=none]`
+   rules) and #13 (strongest separator requirement wins at merge).
 
 2. **Deferred shadow candidates** (`DeferredShadowCandidate` in
    `grammarCompletion.ts`): when Category 3b backward backs up past the
    forward position, a shadow candidate is collected and flushed after
-   Phase 2. Protects invariants #3, #7, #8.
+   Phase 2. Protects invariant #3 (truncated-forward idempotency),
+   #7 (forward direction-sensitive → backward backs up), and
+   #8 (backward direction-sensitive → forward reaches backward’s
+   position).
 
 For a detailed analysis of why only Category 3b requires shadow
 candidates (and why Categories 1, 2, and 3a are structurally safe),

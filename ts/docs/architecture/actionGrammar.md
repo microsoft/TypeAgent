@@ -863,6 +863,13 @@ A `"none"` candidate rejects any trailing separator, while a
 `"spacePunctuation"` candidate requires one. The conflict-filtering
 logic in `filterSepConflicts()` (called from `finalizeCandidates()`) resolves this:
 
+Three-way compatibility:
+
+| Trailing sep? | `spacePunctuation` | `optional` | `none` |
+| ------------- | ------------------ | ---------- | ------ |
+| No            | drop               | keep       | keep   |
+| Yes           | keep               | keep       | drop   |
+
 1. **Detect:** Compute each candidate's individual `SeparatorMode` via
    `computeCandidateSepMode()`. A conflict exists when both
    `isRequiringSepMode()` candidates (need separator) and `"none"`
@@ -1011,7 +1018,7 @@ values. When false, the code falls through to the forward path
 | 1 — Exact             | No completion (all matched) | Back up to last matched part   | No                         | Identical processing                                                                            |
 | 2 — Clean partial     | Next unmatched part         | Back up to last matched part   | No                         | `hasPartToReconsider` gate ensures backward P < forward P; trailing-sep case takes forward path |
 | 3a — Pending wildcard | Property completion         | Back up to last keyword        | No                         | Different candidate types; `canReconsider3a` gate ensures backward P < forward P                |
-| 3b — Dirty partial    | Current part at `endIndex`  | Current part at `prevEndIndex` | **Yes**                    | Fixed: `DeferredShadowCandidate` captures forward candidate, flushed in Phase 2                 |
+| 3b — Dirty partial    | Current part at `endIndex`  | Current part at `prevEndIndex` | **Yes**                    | Handled via `DeferredShadowCandidate`: captures forward candidate, flushed in Phase 2           |
 
 ### Entity registry
 

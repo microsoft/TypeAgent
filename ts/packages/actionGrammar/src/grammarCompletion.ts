@@ -660,8 +660,8 @@ function computeNeedsSep(
 }
 
 // Compute whether a separator is needed between the character at
-// `position` in `input` and `firstCompletionChar`, then merge the
-// result into the running `current` separator mode.
+// `position - 1` in `input` and `firstCompletionChar`, then merge
+// the result into the running `current` separator mode.
 function mergeSepMode(
     input: string,
     current: SeparatorMode | undefined,
@@ -758,7 +758,8 @@ type CompletionContext = {
     /** Effective trailing-sep state for conflict filtering.  False for
      *  backward (treats separator as absent); equals hasTrailingSep
      *  for forward.  Set by filterSepConflicts; used by
-     *  computeRangeNeedsSep to avoid recomputing. */
+     *  computeRangeNeedsSep to avoid recomputing the trailing-separator
+     *  check and backward-direction override for each range candidate. */
     effectiveTrailingSep: boolean;
 };
 
@@ -1572,9 +1573,10 @@ function finalizeCandidates(ctx: CompletionContext): void {
 
     // Forward partial keyword: see ForwardPartialKeywordCandidate.
     let forwardPartialKeyword: ForwardPartialKeywordCandidate | undefined;
-    // Forward EOI candidates: wildcard-at-EOI string states where
-    // no partial keyword was found.  injectForwardEoiCandidates
-    // instantiates them at the appropriate anchor:
+    // Forward EOI candidates: wildcard-at-EOI states with a string
+    // next-part where no partial keyword was found.
+    // injectForwardEoiCandidates instantiates them at the
+    // appropriate anchor:
     //   - partial keyword position (if one exists from other states)
     //   - input.length (otherwise)
     const forwardEoiCandidates: WildcardStringRangeCandidate[] = [];
@@ -1701,14 +1703,15 @@ function finalizeCandidates(ctx: CompletionContext): void {
 }
 
 // Compute needsSep for a range candidate and check whether it
-// should be dropped due to a separator conflict.  Returns
-// { needsSep } when the candidate survives, or "drop" when the
-// candidate should be filtered out.
+// should be dropped due to a separator conflict.  Returns a
+// tri-state: "needsSep" (separator required, candidate survives),
+// "noSep" (no separator needed, candidate survives), or "drop"
+// (candidate filtered out by separator conflict).
 function computeRangeNeedsSep(
     ctx: CompletionContext,
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
-): { needsSep: boolean } | "drop" {
+): "needsSep" | "noSep" | "drop" {
     const needsSep = computeNeedsSep(
         ctx.input,
         ctx.maxPrefixLength,
@@ -1725,7 +1728,7 @@ function computeRangeNeedsSep(
             return "drop";
         }
     }
-    return { needsSep };
+    return needsSep ? "needsSep" : "noSep";
 }
 
 // --- Phase 3 (materialize): Convert candidates to final completions/properties ---
@@ -1906,7 +1909,7 @@ function materializeCandidates(
                     completions.add(partial.remainingText);
                     separatorMode = mergeSeparatorMode(
                         separatorMode,
-                        sepResult.needsSep,
+                        sepResult === "needsSep",
                         c.spacingMode,
                     );
                     anyAfterWildcard = true;
@@ -1928,7 +1931,7 @@ function materializeCandidates(
                     properties.push(completionProperty);
                     separatorMode = mergeSeparatorMode(
                         separatorMode,
-                        sepResult.needsSep,
+                        sepResult === "needsSep",
                         c.spacingMode,
                     );
                     anyAfterWildcard = true;

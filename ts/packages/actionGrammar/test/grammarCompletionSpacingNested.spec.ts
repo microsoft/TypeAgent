@@ -404,12 +404,12 @@ describeForEachCompletion(
             `;
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("no conflict: spacePunctuation wins over optional", () => {
+            it("no conflict: spacePunctuation is strongest merged mode", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
                 // Both alternatives match "hello" and offer "world".
                 // Required mode → spacePunctuation; optional mode →
                 // optional.  No "none" mode present, so no conflict.
-                // Normal merge: spacePunctuation wins (strongest).
+                // Normal merge: spacePunctuation is strongest.
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 5,

@@ -413,9 +413,10 @@ export class GrammarStoreImpl implements GrammarStore {
         //
         // Each individual grammar's result is already internally
         // consistent (within-grammar conflict filtering in
-        // grammarCompletion.ts Phase 2).
+        // grammarCompletion.ts Phase 2 — see filterSepConflicts).
         // Here we detect when different grammars produce incompatible
-        // separator modes and filter by trailing separator state.
+        // separator modes and filter by trailing separator state,
+        // mirroring the same detect/filter/advance/force pattern.
         if (grammarPartials.length > 0) {
             let hasRequiring = false;
             let hasNoneMode = false;
