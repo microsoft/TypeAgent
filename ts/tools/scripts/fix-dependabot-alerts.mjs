@@ -213,7 +213,16 @@ const _inflight = {
  * Override with DEPFIX_NPM_CONCURRENCY env var (default 8).
  */
 class Semaphore {
-    constructor(n) {
+    constructor(n, label) {
+        if (!Number.isFinite(n) || n < 1) {
+            const original = n;
+            n = 1;
+            if (!JSON_OUTPUT) {
+                console.warn(
+                    `  ⚠  ${label ?? "Semaphore"}: invalid concurrency ${original}, using ${n}`,
+                );
+            }
+        }
         this._n = n;
         this._queue = [];
     }
@@ -231,6 +240,7 @@ class Semaphore {
 }
 const _npmSem = new Semaphore(
     parseInt(process.env.DEPFIX_NPM_CONCURRENCY ?? "8", 10),
+    "DEPFIX_NPM_CONCURRENCY",
 );
 
 // ── Per-package log buffering ─────────────────────────────────────────────────
@@ -552,7 +562,7 @@ function getPnpmWhy(pkg) {
             return result;
         } catch (e) {
             verbose(`getPnpmWhy(${pkg}) failed: ${e.message}`);
-            return [];
+            throw e;
         } finally {
             _inflight.pnpmWhy.delete(pkg);
         }
@@ -576,7 +586,13 @@ async function findConstrainingParentsFromData(whyData, pkg) {
         }
     }
     const specs = await Promise.all(
-        pairs.map((dep) => getParentDepSpec(dep.name, dep.version, pkg)),
+        pairs.map(async (dep) => {
+            try {
+                return await getParentDepSpec(dep.name, dep.version, pkg);
+            } catch {
+                return null;
+            }
+        }),
     );
     for (let i = 0; i < pairs.length; i++) {
         parents.push({
@@ -592,14 +608,8 @@ async function findConstrainingParentsFromData(whyData, pkg) {
  * Get the version spec that parentPkg@parentVersion requires for depPkg.
  */
 async function getParentDepSpec(parentPkg, parentVersion, depPkg) {
-    try {
-        const deps = await getPackageDeps(parentPkg, parentVersion);
-        if (deps && deps[depPkg]) return deps[depPkg];
-    } catch (e) {
-        verbose(
-            `getParentDepSpec(${parentPkg}@${parentVersion}, ${depPkg}) failed: ${e.message}`,
-        );
-    }
+    const deps = await getPackageDeps(parentPkg, parentVersion);
+    if (deps && deps[depPkg]) return deps[depPkg];
     return null;
 }
 
@@ -626,7 +636,7 @@ function getPackageDeps(pkgName, version) {
             verbose(
                 `getPackageDeps(${cacheKey}) workspace read failed: ${e.message}`,
             );
-            return Promise.resolve(null);
+            throw e;
         }
     }
 
@@ -736,7 +746,12 @@ function getWorkspaceDepInfo(workspaceName, depPkg) {
                 };
             }
         }
-    } catch {}
+    } catch (e) {
+        verbose(
+            `getWorkspaceDepInfo(${workspaceName}, ${depPkg}) failed: ${e.message}`,
+        );
+        throw e;
+    }
     return null;
 }
 
@@ -872,23 +887,33 @@ async function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
     for (const node of parentNodes) {
         // ── Workspace root ───────────────────────────────────────────────────
         if (node.depField) {
-            const info = getWorkspaceDepInfo(node.name, childPkg);
-            if (info && !specAllowsVersion(info.spec, requiredChildVersion)) {
-                const newSpec = buildVersionSpec(
-                    info.spec,
-                    requiredChildVersion,
+            try {
+                const info = getWorkspaceDepInfo(node.name, childPkg);
+                if (
+                    info &&
+                    !specAllowsVersion(info.spec, requiredChildVersion)
+                ) {
+                    const newSpec = buildVersionSpec(
+                        info.spec,
+                        requiredChildVersion,
+                    );
+                    actions.push({
+                        type: "update-workspace",
+                        workspace: node.name,
+                        pkg: childPkg,
+                        oldSpec: info.spec,
+                        newSpec,
+                        depField: info.depField,
+                        pkgJsonPath: info.pkgJsonPath,
+                    });
+                }
+                // else: spec already allows it or child is transitive — pnpm update handles it
+            } catch (e) {
+                blocked = true;
+                blockReasons.push(
+                    `${node.name}: failed to read workspace package.json: ${e.message}`,
                 );
-                actions.push({
-                    type: "update-workspace",
-                    workspace: node.name,
-                    pkg: childPkg,
-                    oldSpec: info.spec,
-                    newSpec,
-                    depField: info.depField,
-                    pkgJsonPath: info.pkgJsonPath,
-                });
             }
-            // else: spec already allows it or child is transitive — pnpm update handles it
             continue;
         }
 
@@ -919,76 +944,85 @@ async function walkUpTree(parentNodes, childPkg, requiredChildVersion, cache) {
             constraints: [],
         };
 
-        const depSpec = await getParentDepSpec(
-            node.name,
-            node.version,
-            childPkg,
-        );
-        const allows =
-            !depSpec || specGuaranteesMinVersion(depSpec, requiredChildVersion);
-
-        result.constraints.push({
-            parent: node.name,
-            parentVersion: node.version,
-            child: childPkg,
-            requiredSpec: depSpec,
-            allows,
-            fixVersion: null,
-        });
-
-        if (!allows) {
-            // Parent blocks — find a newer version that allows it
-            if (process.stderr.isTTY && !JSON_OUTPUT) {
-                process.stderr.write(
-                    `\r\x1b[K  \ud83d\udd0d ${clr.meta(`Checking npm for ${node.name} versions that fix ${childPkg}...`)}`,
-                );
-            }
-
-            const fixVersion = await findVersionThatAllows(
+        try {
+            const depSpec = await getParentDepSpec(
                 node.name,
                 node.version,
                 childPkg,
-                requiredChildVersion,
             );
+            const allows =
+                !depSpec ||
+                specGuaranteesMinVersion(depSpec, requiredChildVersion);
 
-            if (!fixVersion) {
-                result.blocked = true;
-                result.blockReasons.push(
-                    `${node.name}@${node.version} has no upgrade that allows ${childPkg}>=${requiredChildVersion}`,
-                );
-            } else {
-                // Record the fix version for display
-                result.constraints[result.constraints.length - 1].fixVersion =
-                    fixVersion;
+            result.constraints.push({
+                parent: node.name,
+                parentVersion: node.version,
+                child: childPkg,
+                requiredSpec: depSpec,
+                allows,
+                fixVersion: null,
+            });
 
-                // Recurse: can the parent's parents accommodate node@fixVersion?
-                if (node.dependents && node.dependents.length > 0) {
-                    const upResult = await walkUpTree(
-                        node.dependents,
-                        node.name,
-                        fixVersion,
-                        cache,
+            if (!allows) {
+                // Parent blocks — find a newer version that allows it
+                if (process.stderr.isTTY && !JSON_OUTPUT) {
+                    process.stderr.write(
+                        `\r\x1b[K  \ud83d\udd0d ${clr.meta(`Checking npm for ${node.name} versions that fix ${childPkg}...`)}`,
                     );
-                    result.actions.push(...upResult.actions);
-                    result.constraints.push(...upResult.constraints);
-                    if (upResult.blocked) {
-                        result.blocked = true;
-                        result.blockReasons.push(...upResult.blockReasons);
+                }
+
+                const fixVersion = await findVersionThatAllows(
+                    node.name,
+                    node.version,
+                    childPkg,
+                    requiredChildVersion,
+                );
+
+                if (!fixVersion) {
+                    result.blocked = true;
+                    result.blockReasons.push(
+                        `${node.name}@${node.version} has no upgrade that allows ${childPkg}>=${requiredChildVersion}`,
+                    );
+                } else {
+                    // Record the fix version for display
+                    result.constraints[
+                        result.constraints.length - 1
+                    ].fixVersion = fixVersion;
+
+                    // Recurse: can the parent's parents accommodate node@fixVersion?
+                    if (node.dependents && node.dependents.length > 0) {
+                        const upResult = await walkUpTree(
+                            node.dependents,
+                            node.name,
+                            fixVersion,
+                            cache,
+                        );
+                        result.actions.push(...upResult.actions);
+                        result.constraints.push(...upResult.constraints);
+                        if (upResult.blocked) {
+                            result.blocked = true;
+                            result.blockReasons.push(...upResult.blockReasons);
+                        }
+                    }
+
+                    // If the path through this intermediate is unblocked,
+                    // emit an action to update it so pnpm can resolve the
+                    // child to the required version.
+                    if (!result.blocked) {
+                        result.actions.push({
+                            type: "update-intermediate",
+                            pkg: node.name,
+                            fromVersion: node.version,
+                            toVersion: fixVersion,
+                        });
                     }
                 }
-
-                // If the path through this intermediate is unblocked,
-                // emit an action to update it so pnpm can resolve the
-                // child to the required version.
-                if (!result.blocked) {
-                    result.actions.push({
-                        type: "update-intermediate",
-                        pkg: node.name,
-                        fromVersion: node.version,
-                        toVersion: fixVersion,
-                    });
-                }
             }
+        } catch (e) {
+            result.blocked = true;
+            result.blockReasons.push(
+                `${node.name}@${node.version}: ${e.message}`,
+            );
         }
 
         resolveResult(result);
@@ -1114,9 +1148,16 @@ async function buildBlockerChains(blockers, upgradeable, vulnPkg) {
         const blockerLatest = await getLatestVersion(blocker.parent);
         let blockerLatestSpec = null;
         if (blockerLatest && blockerLatest !== blocker.parentVersion) {
-            const deps = await getPackageDeps(blocker.parent, blockerLatest);
-            if (deps && deps[blocker.child]) {
-                blockerLatestSpec = deps[blocker.child];
+            try {
+                const deps = await getPackageDeps(
+                    blocker.parent,
+                    blockerLatest,
+                );
+                if (deps && deps[blocker.child]) {
+                    blockerLatestSpec = deps[blocker.child];
+                }
+            } catch {
+                // Display-only — don't crash if we can't fetch latest deps
             }
         }
 
@@ -1889,11 +1930,15 @@ function fetchAlerts() {
         }
         log(`  Repository: ${clr.chrome(owner + "/" + repo)}`);
 
-        const raw = runCmd("gh", [
-            "api",
-            `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`,
-            "--paginate",
-        ]);
+        const raw = runCmd(
+            "gh",
+            [
+                "api",
+                `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?state=open&per_page=100`,
+                "--paginate",
+            ],
+            { timeout: 120000 },
+        );
 
         alerts = parsePaginatedJson(raw);
     } catch (e) {
@@ -1986,7 +2031,7 @@ async function analyzeVulnerabilities(byPackage) {
     // Max concurrent package analyses. Each analysis fires multiple npm calls
     // which are themselves rate-limited by _npmSem (DEPFIX_NPM_CONCURRENCY).
     const CONCURRENCY = parseInt(process.env.DEPFIX_CONCURRENCY ?? "5", 10);
-    const sem = new Semaphore(CONCURRENCY);
+    const sem = new Semaphore(CONCURRENCY, "DEPFIX_CONCURRENCY");
 
     // Analyse all packages concurrently. Each task buffers its own log lines
     // so output can be flushed in the original sorted order (not interleaved).
@@ -2033,7 +2078,15 @@ async function analyzeVulnerabilities(byPackage) {
                         risk: null,
                     };
 
-                    const whyData = await getPnpmWhy(pkg);
+                    let whyData;
+                    try {
+                        whyData = await getPnpmWhy(pkg);
+                    } catch (whyErr) {
+                        e.error = `pnpm why failed: ${whyErr.message}`;
+                        e.blockingReasons.push(e.error);
+                        fail(`${pkg}: ${e.error}`);
+                        return e;
+                    }
 
                     if (!patched) {
                         const noPatchVersions = getResolvedVersions(whyData);
@@ -2277,6 +2330,19 @@ async function executeResolutions(analyses) {
                 ok("pnpm install completed successfully");
             } catch (e) {
                 fail(`pnpm install failed: ${e.message}`);
+                warn(
+                    "package.json was modified but lockfile is out of sync — run `pnpm install` manually",
+                );
+                // Overrides were written but not applied — all override
+                // entries are unverified; move them to failed.
+                results.resolved = results.resolved.filter((a) => {
+                    if (needsOverride(a)) {
+                        a.error = `pnpm install failed: ${e.message}`;
+                        results.failed.push(a);
+                        return false;
+                    }
+                    return true;
+                });
             }
         }
     }
