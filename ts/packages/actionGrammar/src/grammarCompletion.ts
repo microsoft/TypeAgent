@@ -11,7 +11,7 @@ import {
     type SeparatorMode,
     separatorRegExpStr,
     requiresSeparator,
-    candidateSeparatorMode,
+    candidateSepMode,
     mergeSeparatorMode,
     isBoundarySatisfied,
     nextNonSeparatorIndex,
@@ -628,10 +628,10 @@ type DeferredShadowCandidate = {
 
 // Sentinel character for property candidates in separator mode
 // computation.  Property completions represent free-form entity
-// slots (not literal keywords), so any representative Latin
-// character works — when passed to `requiresSeparator()`, "a"
-// behaves like a typical entity-slot value (needs separator
-// after word characters, not after punctuation).
+// slots (not literal keywords), so any word character works —
+// when passed to `requiresSeparator()`, "a" is a word character
+// (matches \w), so it causes `requiresSeparator` to return true
+// for word-boundary spacing modes.
 const PROPERTY_SENTINEL_CHAR = "a";
 
 // True when a separator character (whitespace or punctuation) exists
@@ -645,7 +645,7 @@ export function hasTrailingSeparator(input: string, position: number): boolean {
 // True when a separator is needed between the character at
 // `position - 1` in `input` and `firstCompletionChar` according
 // to `spacingMode`.  Shared by mergeSepMode, computeCandidateSepMode,
-// and computeRangeNeedsSep.
+// computeRangeNeedsSep, and (indirectly) filterSepConflicts.
 function computeNeedsSep(
     input: string,
     position: number,
@@ -660,7 +660,7 @@ function computeNeedsSep(
 }
 
 // Compute whether a separator is needed between the character at
-// `position` in `prefix` and `firstCompletionChar`, then merge the
+// `position` in `input` and `firstCompletionChar`, then merge the
 // result into the running `current` separator mode.
 function mergeSepMode(
     input: string,
@@ -686,7 +686,7 @@ function computeCandidateSepMode(
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
 ): SeparatorMode {
-    return candidateSeparatorMode(
+    return candidateSepMode(
         computeNeedsSep(input, position, firstCompletionChar, spacingMode),
         spacingMode,
     );
@@ -755,11 +755,11 @@ type CompletionContext = {
     /** True when trailing separator characters follow maxPrefixLength
      *  during a separator conflict.  Set by filterSepConflicts. */
     hasTrailingSep: boolean;
-    /** Resolved trailing-sep view for conflict filtering.  False for
+    /** Effective trailing-sep state for conflict filtering.  False for
      *  backward (treats separator as absent); equals hasTrailingSep
      *  for forward.  Set by filterSepConflicts; used by
      *  computeRangeNeedsSep to avoid recomputing. */
-    resolveAsTrailingSep: boolean;
+    effectiveTrailingSep: boolean;
 };
 
 // Update maxPrefixLength.  When it increases, all previously
@@ -777,7 +777,7 @@ function updateMaxPrefixLength(
     }
 }
 
-// Collect a property completion candidate at a given prefix position.
+// Collect a property completion candidate at a given input position.
 // Updates maxPrefixLength; skips if position is below max.  The
 // candidate is converted to a final GrammarCompletionProperty in Phase 3.
 function collectPropertyCandidate(
@@ -1082,8 +1082,8 @@ function processDirtyPartial(
         // Backward reconsidering is appropriate when:
         //  (a) the last matched part followed a captured
         //      wildcard — wildcard-keyword boundary fork, OR
-        //  (b) the prefix was fully consumed before the
-        //      wildcard started (state.index >= prefix.length)
+        //  (b) the input was fully consumed before the
+        //      wildcard started (state.index >= input.length)
         //      — the user hasn't typed into the wildcard yet
         //      and may want to reconsider the preceding part
         //      (e.g., alternation-prefix overlap:
@@ -1226,7 +1226,7 @@ function collectCandidates(
         deferredShadowCandidates: [],
         hasSepConflict: false,
         hasTrailingSep: false,
-        resolveAsTrailingSep: false,
+        effectiveTrailingSep: false,
     };
 
     // Seed the work-list with one MatchState per top-level grammar rule.
@@ -1501,12 +1501,12 @@ function filterSepConflicts(ctx: CompletionContext): void {
     // false for backward makes its candidate set match what forward
     // would compute on input[0..mpl] (no trailing sep), satisfying
     // Invariant #3.
-    ctx.resolveAsTrailingSep =
+    ctx.effectiveTrailingSep =
         ctx.direction === "backward" ? false : ctx.hasTrailingSep;
 
     // Filter fixed candidates in place using the pre-computed
     // modes, avoiding a second computeCandidateSepMode call.
-    if (ctx.resolveAsTrailingSep) {
+    if (ctx.effectiveTrailingSep) {
         // Trailing separator: drop "none" (rejects separator).
         ctx.fixedCandidates = originalCandidates.filter(
             (_, i) => modes[i] !== "none",
@@ -1533,7 +1533,7 @@ function filterSepConflicts(ctx: CompletionContext): void {
     }
 }
 
-// --- Phase 2 (finalize): Finalize candidates ---
+// --- Phase 2 (finalize): wildcard anchors, shadows, EOI, sep conflicts ---
 //
 // Resolves deferred wildcard-at-EOI descriptors, flushes shadow
 // candidates, injects forward EOI candidates as fixedCandidates,
@@ -1716,9 +1716,9 @@ function computeRangeNeedsSep(
         spacingMode,
     );
     if (ctx.hasSepConflict) {
-        const mode = candidateSeparatorMode(needsSep, spacingMode);
+        const mode = candidateSepMode(needsSep, spacingMode);
         if (
-            ctx.resolveAsTrailingSep
+            ctx.effectiveTrailingSep
                 ? mode === "none"
                 : isRequiringSepMode(mode)
         ) {

@@ -399,7 +399,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     closedSet = undefined;
                     directionSensitive = false;
                     afterWildcard = undefined;
-                    grammarPartials = [];
+                    grammarPartials = []; // Clear results from prior lower matchedPrefixLength
                 }
                 if (partialPrefixLength === matchedPrefixLength) {
                     const { schemaName } = splitSchemaNamespaceKey(name);

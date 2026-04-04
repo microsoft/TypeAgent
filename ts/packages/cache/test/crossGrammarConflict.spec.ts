@@ -12,10 +12,12 @@
 
 import { AgentCache } from "../src/cache/cache.js";
 import { loadGrammarRules } from "action-grammar";
+import { ExplainerFactory } from "../src/cache/factory.js";
 
-const mockExplainerFactory = () => {
+const mockExplainerFactory: ExplainerFactory = () => {
     return {
         generate: async () => ({ success: false, message: "Mock explainer" }),
+        validate: () => undefined,
     } as any;
 };
 

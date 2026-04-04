@@ -540,7 +540,7 @@ a single-pass approach that defers sibling-rule resolution to Phase 2/3
 3. **Phase 3 (materialize):** Converts surviving candidates into
    the final `completions[]` and `properties[]` arrays. Range
    candidates are evaluated: each checks whether `maxPrefixLength`
-   falls inside its valid range (`[wildcardStart+1, prefix.length]`)
+   falls inside its valid range (`[wildcardStart+1, input.length]`)
    and whether the wildcard text at that split is well-formed (via
    `getWildcardStr`). If so, `tryPartialStringMatch` runs forward at
    `maxPrefixLength` to produce sibling completions — the same result
@@ -548,7 +548,7 @@ a single-pass approach that defers sibling-rule resolution to Phase 2/3
    but without a second full traversal of the grammar. For forward EOI candidates,
    the anchor is stripped of trailing separators so that P lands before
    the flex-space (consistent with keyword→keyword behavior). When a
-   partial keyword consumed to EOI (position = prefix.length), the
+   partial keyword consumed to EOI (position = input.length), the
    keyword content may end with separator characters (e.g. comma in
    `"hello,"`), so stripping is skipped to avoid removing keyword
    content. Phase 3 also handles exact-match advancement and global
@@ -1008,7 +1008,7 @@ values. When false, the code falls through to the forward path
 
 | Category              | Forward path                | Backward path                  | Same-P collision possible? | Why safe (or how fixed)                                                                         |
 | --------------------- | --------------------------- | ------------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------- |
-| 1 — Exact             | No completion (all matched) | Back up to last matched part   | N/A                        | Identical processing                                                                            |
+| 1 — Exact             | No completion (all matched) | Back up to last matched part   | No                         | Identical processing                                                                            |
 | 2 — Clean partial     | Next unmatched part         | Back up to last matched part   | No                         | `hasPartToReconsider` gate ensures backward P < forward P; trailing-sep case takes forward path |
 | 3a — Pending wildcard | Property completion         | Back up to last keyword        | No                         | Different candidate types; `canReconsider3a` gate ensures backward P < forward P                |
 | 3b — Dirty partial    | Current part at `endIndex`  | Current part at `prevEndIndex` | **Yes**                    | Fixed: `DeferredShadowCandidate` captures forward candidate, flushed in Phase 2                 |

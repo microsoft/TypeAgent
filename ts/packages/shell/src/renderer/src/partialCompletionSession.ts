@@ -581,6 +581,8 @@ function separatorRegex(mode: SeparatorMode): RegExp {
 
 // Strip leading separator characters from rawPrefix.
 // For "space" and "optional" modes, only whitespace is stripped.
+// ("optional" uses whitespace-only because the consumed separator
+// in conflict filtering was a whitespace character.)
 // For "spacePunctuation" mode, leading whitespace and punctuation are stripped.
 function stripLeadingSeparator(rawPrefix: string, mode: SeparatorMode): string {
     return mode === "space" || mode === "optional"
