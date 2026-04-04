@@ -4,21 +4,17 @@ Defines the WebSocket RPC contract between agentServer clients and the server.
 
 ## Channel names
 
-```typescript
-enum ChannelName {
-  AgentServer = "agent-server", // session lifecycle and management
-}
+The fixed channel name for session lifecycle RPC is exported as `AgentServerChannelName`:
 
-// Session-namespaced channels (one pair per joined session):
-// dispatcher:<sessionId>   — command dispatch
-// clientio:<sessionId>     — display / interaction callbacks
+```typescript
+export const AgentServerChannelName = "agent-server";
 ```
 
-Helper functions to construct the namespaced channel names:
+Session-namespaced channels (one pair per joined session) are constructed via helper functions:
 
 ```typescript
-getDispatcherChannelName(sessionId: string): string  // "dispatcher:<sessionId>"
-getClientIOChannelName(sessionId: string): string    // "clientio:<sessionId>"
+getDispatcherChannelName(sessionId: string): string // "dispatcher:<sessionId>"
+getClientIOChannelName(sessionId: string): string // "clientio:<sessionId>"
 ```
 
 ## Session types

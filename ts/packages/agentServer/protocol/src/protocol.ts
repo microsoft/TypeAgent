@@ -31,9 +31,7 @@ export type AgentServerInvokeFunctions = {
     shutdown: () => Promise<void>;
 };
 
-export const enum ChannelName {
-    AgentServer = "agent-server",
-}
+export const AgentServerChannelName = "agent-server";
 
 /** Build the dispatcher channel name for a given session. */
 export function getDispatcherChannelName(sessionId: string): string {

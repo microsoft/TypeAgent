@@ -4,7 +4,7 @@
 export {
     DispatcherConnectOptions,
     AgentServerInvokeFunctions,
-    ChannelName,
+    AgentServerChannelName,
     SessionInfo,
     JoinSessionResult,
     getDispatcherChannelName,

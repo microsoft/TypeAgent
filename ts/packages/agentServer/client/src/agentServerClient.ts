@@ -16,7 +16,7 @@ import { fileURLToPath } from "url";
 import registerDebug from "debug";
 import {
     AgentServerInvokeFunctions,
-    ChannelName,
+    AgentServerChannelName,
     DispatcherConnectOptions,
     SessionInfo,
     JoinSessionResult,
@@ -65,7 +65,7 @@ export async function connectAgentServer(
 
         const rpc = createRpc<AgentServerInvokeFunctions>(
             "agent-server:client",
-            channel.createChannel(ChannelName.AgentServer),
+            channel.createChannel(AgentServerChannelName),
         );
 
         // Track joined sessions for cleanup on close
@@ -284,7 +284,7 @@ export async function stopAgentServer(port: number = 8999): Promise<void> {
         );
         const rpc = createRpc<AgentServerInvokeFunctions>(
             "agent-server:stop",
-            channel.createChannel(ChannelName.AgentServer),
+            channel.createChannel(AgentServerChannelName),
         );
 
         ws.onopen = () => {

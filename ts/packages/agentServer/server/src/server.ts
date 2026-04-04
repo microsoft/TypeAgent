@@ -15,7 +15,7 @@ import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/clie
 import { createRpc } from "@typeagent/agent-rpc/rpc";
 import {
     AgentServerInvokeFunctions,
-    ChannelName,
+    AgentServerChannelName,
     DispatcherConnectOptions,
     getDispatcherChannelName,
     getClientIOChannelName,
@@ -188,7 +188,7 @@ async function main() {
 
             createRpc(
                 "agent-server",
-                channelProvider.createChannel(ChannelName.AgentServer),
+                channelProvider.createChannel(AgentServerChannelName),
                 invokeFunctions,
             );
         },
