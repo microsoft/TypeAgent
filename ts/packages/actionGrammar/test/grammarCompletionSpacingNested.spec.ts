@@ -1026,17 +1026,17 @@ describeForEachCompletion(
         });
 
         // ================================================================
-        // Section 8j: Shadow flush must happen after B1, not Phase A
+        // Section 8j: Shadow flush must happen after Phase 2, not Phase 1
         //
-        // When a wildcard-at-EOI rule is deferred to Phase B1, B1 may
+        // When a wildcard-at-EOI rule is deferred to Phase 2, Phase 2 may
         // advance maxPrefixLength (e.g. finding a partial keyword inside
         // the wildcard for backward mode).  If the shadow flush runs at
-        // the end of Phase A (before B1), the shadow's consumedLength
+        // the end of Phase 1 (before Phase 2), the shadow's consumedLength
         // won't match the not-yet-advanced maxPrefixLength and the
         // shadow is wrongly discarded.
         //
         // This test uses:
-        //   WildcardRule: $(x:wildcard) done — B1 finds partial keyword
+        //   WildcardRule: $(x:wildcard) done — Phase 2 finds partial keyword
         //     "do" at position 2 for backward("abdo"), advancing P to 2
         //   NoneRule: ab cd — Cat 3b backward backs up to P=0, shadow
         //     at consumedLength=2
@@ -1044,7 +1044,7 @@ describeForEachCompletion(
         // If the flush is too early, backward("abdo") lacks "cd".
         // ================================================================
 
-        describe("shadow flush after B1: wildcard partial keyword advances P", () => {
+        describe("shadow flush after Phase 2: wildcard partial keyword advances P", () => {
             const g = `
                 <WildcardRule> [spacing=none] = $(x:wildcard) done -> { x };
                 <NoneRule> [spacing=none] = ab cd -> "none";
@@ -1056,28 +1056,28 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "ab");
                 // NoneRule: Cat 3b → P=2, offers "cd"
                 // WildcardRule: wildcard absorbs "ab", EOI deferred →
-                //   B2 instantiates "done" at P=2
+                //   Phase 3 instantiates "done" at P=2
                 expect(result.matchedPrefixLength).toBe(2);
                 expect(result.completions).toContain("cd");
                 expect(result.completions).toContain("done");
             });
 
-            it("backward 'abdo': B1 advances P, shadow flushes 'cd'", () => {
+            it("backward 'abdo': Phase 2 advances P, shadow flushes 'cd'", () => {
                 // NoneRule backward: Cat 3b backs up to P=0 (couldBackUp
                 //   in none mode).  Shadow at consumedLength=2 with "cd".
                 // WildcardRule backward: Cat 2 backs up to wildcard
-                //   start=0.  Deferred to B1.
-                // Phase A ends: maxPrefixLength=0.
+                //   start=0.  Deferred to Phase 2.
+                // Phase 1 ends: maxPrefixLength=0.
                 //
-                // B1: findPartialKeywordInWildcard finds "do" at
+                // Phase 2: findPartialKeywordInWildcard finds "do" at
                 //   position 2 → updateMaxPrefixLength(2).  Clears
-                //   Phase A fixedCandidates.  Pushes "done" at P=2.
+                //   Phase 1 fixedCandidates.  Pushes "done" at P=2.
                 //
-                // Shadow flush (after B1): consumedLength(2) matches
+                // Shadow flush (in Phase 2): consumedLength(2) matches
                 //   maxPrefixLength(2) → "cd" flushed into
                 //   fixedCandidates.
                 //
-                // Without the fix (flush at end of Phase A):
+                // Without the fix (flush at end of Phase 1):
                 //   consumedLength(2) ≠ maxPrefixLength(0) → shadow
                 //   discarded → "cd" missing.
                 const result = matchGrammarCompletion(
@@ -1093,7 +1093,7 @@ describeForEachCompletion(
         });
 
         // ================================================================
-        // Section 8k: B1 flush timing with default (no explicit) spacing
+        // Section 8k: Phase 2 flush timing with default (no explicit) spacing
         //
         // Same scenario as 8j but without [spacing=none].  Uses a
         // digit-starting keyword ("1cd", "1done") so auto mode allows
@@ -1101,7 +1101,7 @@ describeForEachCompletion(
         // the couldBackUp=true condition needed for the shadow.
         // ================================================================
 
-        describe("shadow flush after B1: default spacing with digit boundary", () => {
+        describe("shadow flush after Phase 2: default spacing with digit boundary", () => {
             const g = `
                 <WildcardRule> = $(x:wildcard) 1done -> { x };
                 <KeywordRule> = ab 1cd -> "kw";
@@ -1116,13 +1116,13 @@ describeForEachCompletion(
                 expect(result.completions).toContain("1done");
             });
 
-            it("backward 'ab1do': B1 advances P, shadow flushes '1cd'", () => {
+            it("backward 'ab1do': Phase 2 advances P, shadow flushes '1cd'", () => {
                 // KeywordRule backward: Cat 3b, matchedWords=1 ("ab"),
                 //   nextNonSep("ab1do",2)=2 → couldBackUp=true →
                 //   backs up to P=0.  Shadow at consumedLength=2.
                 // WildcardRule backward: wildcard absorbs "ab1do",
-                //   deferred to B1.
-                // B1: finds "1do" as partial of "1done" at position 2
+                //   deferred to Phase 2.
+                // Phase 2: finds "1do" as partial of "1done" at position 2
                 //   → advances maxPrefixLength from 0 to 2.
                 // Shadow flush: consumedLength(2)=maxPrefixLength(2)
                 //   → "1cd" flushed.
@@ -1209,7 +1209,7 @@ describeForEachCompletion(
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("separator conflict + EOI displace: droppedCandidates reset", () => {
-                // Phase A:
+                // Phase 1:
                 //   NoneRule Cat 3b: "cd" at P=2, spacingMode=none
                 //   AutoRule Cat 3b: "cd" at P=2, spacingMode=auto (spacePunctuation)
                 //   WildcardRule: wildcard captures to EOI → wildcardEoiDescriptor
@@ -1218,12 +1218,12 @@ describeForEachCompletion(
                 // Trailing sep at P=2 (' ') → drop none, keep requiring.
                 // P advances to 3. droppedCandidates=true.
                 //
-                // Phase B1: findPartialKeywordInWildcard finds "c" as
+                // Phase 2: findPartialKeywordInWildcard finds "c" as
                 //   prefix of "cd" at position 7 → forwardPartialKeyword.
                 //
-                // Phase B2: anchor stripped to 6. clear+anchor resets
+                // Phase 3: anchor stripped to 6. clear+anchor resets
                 //   closedSet=true AND droppedCandidates=false (the
-                //   Phase A conflict is stale at the displaced P).
+                //   Phase 1 conflict is stale at the displaced P).
                 //   Partial keyword "cd" added with no new conflict.
                 //
                 // Result must match completion("ab foo", forward)

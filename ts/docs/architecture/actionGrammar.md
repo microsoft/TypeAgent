@@ -451,16 +451,16 @@ text `"mx"`. This applies equally to forward and backward directions.
 
 6. **Partial keyword detection in wildcards** (Category 2, both directions):
    When a wildcard absorbs all remaining input and the next grammar part
-   is a keyword, Phase A defers the state (via `WildcardEoiDescriptor`)
-   to Phase B1, which calls `findPartialKeywordInWildcard()` to check
+   is a keyword, Phase 1 defers the state (via `WildcardEoiDescriptor`)
+   to Phase 2, which calls `findPartialKeywordInWildcard()` to check
    whether the wildcard text ends with a prefix of that keyword. For
    example, with `play <song> by <artist>` and input `"play Never b"`,
    the wildcard absorbs `"Never b"` but `"b"` is a prefix of `"by"`.
-   Phase B1 finds the partial keyword and (for backward) collects
+   Phase 2 finds the partial keyword and (for backward) collects
    `"by"` at the partial keyword position (after `"Never "`), with
    `afterWildcard="all"`, instead of using the fallback wildcard-start
-   candidate from Phase A. For forward, Phase B1 records the partial
-   keyword anchor and Phase B2 uses it to emit the completion. This
+   candidate from Phase 1. For forward, Phase 2 records the partial
+   keyword anchor and Phase 3 uses it to emit the completion. This
    handles multi-word keywords as well: for
    `play <song> played by <artist>` and input `"play Never played b"`,
    the function recognizes `"played b"` as a full match of the first
@@ -515,29 +515,29 @@ up to its own last matched part — producing completions from only the
 _winning_ rule(s), which can miss sibling alternatives.
 
 To make backward non-lossy, the matcher uses **range candidates** —
-a single-pass approach that defers sibling-rule resolution to Phase B
-(the post-loop conversion step):
+a single-pass approach that defers sibling-rule resolution to Phase 2/3
+(the post-loop finalization and materialization steps):
 
-1. **Phase A (main loop):** For each state, `collectBackwardCandidate`
+1. **Phase 1 (collect):** For each state, `collectBackwardCandidate`
    determines the backed-up position _P_ via `tryPartialStringMatch`
    or property completion. When a Category 2 state has a wildcard
    preceding a non-string next part (wildcard/number), a
    `RangeCandidate` is saved directly. When the next part is a string,
-   a lightweight `WildcardEoiDescriptor` is saved for Phase B1 instead
+   a lightweight `WildcardEoiDescriptor` is saved for Phase 2 instead
    of running `findPartialKeywordInWildcard` inline. This applies to
    both directions under the same condition.
-2. **Phase B1 (anchor resolution):** Runs
+2. **Phase 2 (finalize):** Runs
    `findPartialKeywordInWildcard` on deferred `wildcardEoiDescriptors`.
    For backward, a partial keyword found strictly inside the prefix
    has its position stripped of trailing separators (stripping stops
    at `maxPrefixLength` to avoid discarding previously matched
    content), then collected as a fixed candidate (which may
    advance `maxPrefixLength`, clearing weaker fallback candidates from
-   Phase A); otherwise a range candidate is created for Phase B2. For
+   Phase 1); otherwise a range candidate is created for Phase 3. For
    forward, the best partial keyword anchor is recorded in
    `forwardPartialKeyword`; states without a partial keyword are
-   deferred to `forwardEoiCandidates` for Phase B2.
-3. **Phase B2 (materialization):** Converts surviving candidates into
+   deferred to `forwardEoiCandidates` for Phase 3.
+3. **Phase 3 (materialize):** Converts surviving candidates into
    the final `completions[]` and `properties[]` arrays. Range
    candidates are evaluated: each checks whether `maxPrefixLength`
    falls inside its valid range (`[wildcardStart+1, prefix.length]`)
@@ -551,12 +551,12 @@ a single-pass approach that defers sibling-rule resolution to Phase B
    partial keyword consumed to EOI (position = prefix.length), the
    keyword content may end with separator characters (e.g. comma in
    `"hello,"`), so stripping is skipped to avoid removing keyword
-   content. Phase B2 also handles exact-match advancement and global
+   content. Phase 3 also handles exact-match advancement and global
    deduplication.
 
 **Correctness invariant — two-pass equivalence.** Let _P_ =
 `completion(input, backward).matchedPrefixLength`. The range-candidate
-resolution in Phase B2 must produce the same completions as
+resolution in Phase 3 must produce the same completions as
 `completion(input[0..P], forward)` — i.e., a single backward pass with
 range candidates produces the same result as running backward to find _P_
 and then re-running forward at _P_ to collect sibling completions.
@@ -714,12 +714,12 @@ more text, moving the boundary forward. The grammar matcher sets
 these positions. The table below explains _why_ the directions always
 differ at these boundaries.
 
-| Mode / Partial keyword?                          | Fwd = Bwd? | Why                                                                              |
-| ------------------------------------------------ | ---------- | -------------------------------------------------------------------------------- |
-| non-`none` — no partial keyword                  | **No**     | Forward defers to Phase B2; backward backs up to wildcard start                  |
-| non-`none` — partial at Q < P                    | **No**     | Both find partial at Q (via Phase B1), but backward can also back up — ambiguous |
-| non-`none` — partial at Q = P (full word at EOI) | **No**     | Forward uses it; backward rejects (Q < `state.index` required)                   |
-| `none` — any                                     | **No**     | `couldBackUp` always true                                                        |
+| Mode / Partial keyword?                          | Fwd = Bwd? | Why                                                                             |
+| ------------------------------------------------ | ---------- | ------------------------------------------------------------------------------- |
+| non-`none` — no partial keyword                  | **No**     | Forward defers to Phase 3; backward backs up to wildcard start                  |
+| non-`none` — partial at Q < P                    | **No**     | Both find partial at Q (via Phase 2), but backward can also back up — ambiguous |
+| non-`none` — partial at Q = P (full word at EOI) | **No**     | Forward uses it; backward rejects (Q < `state.index` required)                  |
+| `none` — any                                     | **No**     | `couldBackUp` always true                                                       |
 
 #### P inside a wildcard (no keyword boundary reached)
 
@@ -1005,12 +1005,12 @@ values. When false, the code falls through to the forward path
 
 #### Summary table
 
-| Category              | Forward path                 | Backward path                  | Same-P collision possible? | Why safe (or how fixed)                                                                         |
-| --------------------- | ---------------------------- | ------------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------- |
-| 1 — Exact             | Back up (direction-agnostic) | Back up (direction-agnostic)   | N/A                        | Identical processing                                                                            |
-| 2 — Clean partial     | Next unmatched part          | Back up to last matched part   | No                         | `hasPartToReconsider` gate ensures backward P < forward P; trailing-sep case takes forward path |
-| 3a — Pending wildcard | Property completion          | Back up to last keyword        | No                         | Different candidate types; `canReconsider3a` gate ensures backward P < forward P                |
-| 3b — Dirty partial    | Current part at `endIndex`   | Current part at `prevEndIndex` | **Yes**                    | Fixed: `DeferredShadowCandidate` captures forward candidate, flushed after B1                   |
+| Category              | Forward path                | Backward path                  | Same-P collision possible? | Why safe (or how fixed)                                                                         |
+| --------------------- | --------------------------- | ------------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------- |
+| 1 — Exact             | No completion (all matched) | Back up to last matched part   | N/A                        | Identical processing                                                                            |
+| 2 — Clean partial     | Next unmatched part         | Back up to last matched part   | No                         | `hasPartToReconsider` gate ensures backward P < forward P; trailing-sep case takes forward path |
+| 3a — Pending wildcard | Property completion         | Back up to last keyword        | No                         | Different candidate types; `canReconsider3a` gate ensures backward P < forward P                |
+| 3b — Dirty partial    | Current part at `endIndex`  | Current part at `prevEndIndex` | **Yes**                    | Fixed: `DeferredShadowCandidate` captures forward candidate, flushed in Phase 2                 |
 
 ### Entity registry
 

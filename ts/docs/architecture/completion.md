@@ -879,7 +879,7 @@ spacing modes compete for the same `maxPrefixLength`:
 2. **Deferred shadow candidates** (`DeferredShadowCandidate` in
    `grammarCompletion.ts`): when Category 3b backward backs up past the
    forward position, a shadow candidate is collected and flushed after
-   Phase B1. Protects invariants #3, #7, #8.
+   Phase 2. Protects invariants #3, #7, #8.
 
 For a detailed analysis of why only Category 3b requires shadow
 candidates (and why Categories 1, 2, and 3a are structurally safe),

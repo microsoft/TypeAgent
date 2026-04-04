@@ -205,12 +205,12 @@ function matchKeywordWordsFrom(
 // the last separator), or undefined if no partial keyword is found.
 //
 // Used in both directions (called from finalizeCandidates,
-// not inline in Phase A):
+// not inline in Phase 1):
 //   - Forward: determines the anchor position for deferred
 //     wildcard-at-EOI candidates (see forwardPartialKeyword).
 //   - Backward: collects a fixed candidate at the partial keyword
 //     position, which may advance maxPrefixLength and clear weaker
-//     fallback candidates from Phase A.
+//     fallback candidates from Phase 1.
 //
 // Handles both single-word and multi-word keyword parts.  For a keyword
 // like ["played", "by"], the function recognizes:
@@ -475,16 +475,18 @@ function tryPartialStringMatch(
  * possible against the prefix (the "longest completable prefix"), then
  * reports completions from the *next* unmatched part.
  *
- * ## Two-Phase Architecture
+ * ## Three-Phase Architecture
  *
- * The function uses a **collect-then-convert** design.  Phase A (the main
- * loop) processes every rule and collects lightweight *candidate
- * descriptors* into two sets — `fixedCandidates` and `rangeCandidates`.
- * Phase B (post-loop) converts surviving candidates into the final
- * `completions[]` and `properties[]` arrays.  See the inline "Two-Phase
- * Collect then Convert Architecture" comment for details.
+ * The function uses a **collect-then-convert** design.  Phase 1 (collect)
+ * processes every rule and collects lightweight *candidate descriptors*
+ * into two sets — `fixedCandidates` and `rangeCandidates`.
+ * Phase 2 (finalize) resolves deferred wildcard anchors, flushes shadow
+ * candidates, and filters separator conflicts.  Phase 3 (materialize)
+ * converts surviving candidates into the final `completions[]` and
+ * `properties[]` arrays.  See the inline "Three-Phase Collect, Finalize,
+ * Materialize Architecture" comment for details.
  *
- * ## Phase A — Three categories
+ * ## Phase 1 — Three categories
  *
  * The function explores every alternative rule/state in the grammar (via the
  * `pending` work-list).  Each state is run through `matchState` which
@@ -592,10 +594,10 @@ type RangeCandidate =
       };
 
 // Lightweight descriptor for wildcard-at-EOI states whose
-// partial keyword scan is deferred to Phase B1
-// (finalizeCandidates).  Phase A pushes one descriptor per
+// partial keyword scan is deferred to Phase 2
+// (finalizeCandidates).  Phase 1 pushes one descriptor per
 // wildcard-at-EOI string state (both forward and backward).
-// Phase B1 runs findPartialKeywordInWildcard on each descriptor,
+// Phase 2 runs findPartialKeywordInWildcard on each descriptor,
 // resolving it into a partial keyword anchor, a fixed candidate,
 // or a range candidate.
 type WildcardEoiDescriptor = {
@@ -697,10 +699,11 @@ export function isRequiringSepMode(mode: SeparatorMode): boolean {
 
 // --- CompletionContext: mutable state shared across completion phases ---
 //
-// The main loop (Phase A) collects lightweight candidate descriptors
+// The main loop (Phase 1) collects lightweight candidate descriptors
 // (FixedCandidate / RangeCandidate) rather than immediately emitting
-// final completion strings and property objects.  A post-loop Phase B
-// converts surviving candidates into the output arrays.
+// final completion strings and property objects.  Phase 2 (finalize)
+// and Phase 3 (materialize) convert surviving candidates into the
+// output arrays.
 //
 // This decouples candidate *discovery* (which rule matched, at what
 // position) from candidate *materialization* (building the
@@ -709,7 +712,7 @@ export function isRequiringSepMode(mode: SeparatorMode): boolean {
 // at the full prefix length, but the final completion position
 // (maxPrefixLength) is only known after ALL rules have been processed.
 // Range candidates exploit this — they defer the "where does the
-// wildcard end?" decision until Phase B, when maxPrefixLength is
+// wildcard end?" decision until Phase 2/3, when maxPrefixLength is
 // settled.
 //
 // fixedCandidates — single valid position, cleared whenever
@@ -720,18 +723,18 @@ export function isRequiringSepMode(mode: SeparatorMode): boolean {
 //     [wildcardStart+1, prefix.length], never cleared.  They
 //     arise in Category 2 backward when a wildcard absorbed
 //     all remaining input and the next part could match at
-//     a flexible position.  Processed in Phase B only under
+//     a flexible position.  Processed in Phase 3 only under
 //     the same conditions the old retrigger required.
 //
-// Phase B is split into two sub-phases:
-//  B1 — Candidate finalization (finalizeCandidates): resolves
+// Phases 2 and 3:
+//  Phase 2 — Finalization (finalizeCandidates): resolves
 //    deferred wildcardEoiDescriptors via
 //    findPartialKeywordInWildcard, flushes shadow candidates,
 //    injects forward EOI candidates as fixedCandidates, and
 //    filters separator mode conflicts (filterSepConflicts).
-//    After B1, fixedCandidates are pre-filtered,
+//    After Phase 2, fixedCandidates are pre-filtered,
 //    rangeCandidates are ready, and maxPrefixLength is finalized.
-//  B2 — Materialization (materializeCandidates): converts
+//  Phase 3 — Materialization (materializeCandidates): converts
 //    surviving candidates into the final completions[] and
 //    properties[] arrays.  Handles range candidates and
 //    deduplication.
@@ -776,7 +779,7 @@ function updateMaxPrefixLength(
 
 // Collect a property completion candidate at a given prefix position.
 // Updates maxPrefixLength; skips if position is below max.  The
-// candidate is converted to a final GrammarCompletionProperty in Phase B.
+// candidate is converted to a final GrammarCompletionProperty in Phase 3.
 function collectPropertyCandidate(
     ctx: CompletionContext,
     state: MatchState,
@@ -1155,7 +1158,7 @@ function processDirtyPartial(
             // another rule already set a higher maxPrefixLength.
             //
             // Collect the forward-direction candidate as a deferred
-            // shadow.  After the Phase A loop finishes and
+            // shadow.  After the Phase 1 loop finishes and
             // maxPrefixLength is finalized, shadows whose
             // consumedLength matches are flushed into fixedCandidates.
             // This is order-independent — it doesn't matter whether
@@ -1193,7 +1196,7 @@ function processDirtyPartial(
     }
 }
 
-// --- Phase A: process every pending state, collecting candidates ---
+// --- Phase 1 (collect): process every pending state, collecting candidates ---
 //
 // Explores every alternative rule/state in the grammar (via the pending
 // work-list).  Each state is run through matchState which consumes as
@@ -1314,7 +1317,7 @@ function flushShadowCandidates(ctx: CompletionContext): void {
 //
 //   Displace: anchor > maxPrefixLength AND the gap contains
 //     non-separator content — only weaker candidates (e.g.
-//     Category 3b) survived Phase A.  Clear fixedCandidates
+//     Category 3b) survived Phase 1.  Clear fixedCandidates
 //     and set P = anchor, replacing them with EOI candidates.
 //
 //   Merge: anchor === maxPrefixLength (stripping collapsed any
@@ -1379,12 +1382,12 @@ function injectForwardEoiCandidates(
     // anchor to maxPrefixLength — the merge case.)
     if (anchor !== ctx.maxPrefixLength) {
         debugCompletion(
-            `Phase B: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `stripped EOI P=${anchor} (displace)`}`,
+            `Phase 2: clear + anchor at ${hasPartialKeyword ? `partial keyword P=${anchor}` : `stripped EOI P=${anchor} (displace)`}`,
         );
         ctx.fixedCandidates.length = 0;
         ctx.maxPrefixLength = anchor;
     } else {
-        debugCompletion(`Phase B: merge at P=${anchor}`);
+        debugCompletion(`Phase 2: merge at P=${anchor}`);
     }
 
     // Add the partial keyword itself.  tryPartialStringMatch at
@@ -1530,21 +1533,21 @@ function filterSepConflicts(ctx: CompletionContext): void {
     }
 }
 
-// --- Phase B1: Finalize candidates ---
+// --- Phase 2 (finalize): Finalize candidates ---
 //
 // Resolves deferred wildcard-at-EOI descriptors, flushes shadow
 // candidates, injects forward EOI candidates as fixedCandidates,
 // and filters separator mode conflicts.  After this function
 // returns, fixedCandidates are pre-filtered, rangeCandidates are
-// ready, and maxPrefixLength is finalized — ready for Phase B2
+// ready, and maxPrefixLength is finalized — ready for Phase 3
 // (materializeCandidates).
 //
 // wildcardEoiDescriptors contains all wildcard-at-EOI string
 // states from both directions.  findPartialKeywordInWildcard
-// is called here (not in Phase A) so that the scan is decoupled
+// is called here (not in Phase 1) so that the scan is decoupled
 // from candidate discovery.
 //
-// For each descriptor, B1 either:
+// For each descriptor, Phase 2 either:
 //   - Finds a partial keyword → records the best anchor for
 //     forward (forwardPartialKeyword), or collects a fixed
 //     candidate for backward.
@@ -1594,7 +1597,7 @@ function finalizeCandidates(ctx: CompletionContext): void {
                 // Partial keyword found strictly inside the prefix.
                 // Collect as a fixed candidate (may advance
                 // maxPrefixLength, clearing weaker fallback
-                // candidates from Phase A).
+                // candidates from Phase 1).
                 //
                 // When the gap between maxPrefixLength and the
                 // partial keyword is separator-only, P stays at
@@ -1698,15 +1701,14 @@ function finalizeCandidates(ctx: CompletionContext): void {
 }
 
 // Compute needsSep for a range candidate and check whether it
-// should be dropped due to a separator conflict.  Returns the
-// needsSep boolean (for the caller to pass to mergeSeparatorMode)
-// when the candidate survives, or undefined when the candidate
-// should be dropped.
+// should be dropped due to a separator conflict.  Returns
+// { needsSep } when the candidate survives, or "drop" when the
+// candidate should be filtered out.
 function computeRangeNeedsSep(
     ctx: CompletionContext,
     firstCompletionChar: string,
     spacingMode: CompiledSpacingMode,
-): boolean | undefined {
+): { needsSep: boolean } | "drop" {
     const needsSep = computeNeedsSep(
         ctx.input,
         ctx.maxPrefixLength,
@@ -1720,13 +1722,13 @@ function computeRangeNeedsSep(
                 ? mode === "none"
                 : isRequiringSepMode(mode)
         ) {
-            return undefined;
+            return "drop";
         }
     }
-    return needsSep;
+    return { needsSep };
 }
 
-// --- Phase B2: Convert candidates to final completions/properties ---
+// --- Phase 3 (materialize): Convert candidates to final completions/properties ---
 //
 // Fixed candidates are converted directly — they are already
 // at maxPrefixLength and pre-filtered for separator conflicts
@@ -1893,18 +1895,18 @@ function materializeCandidates(
                     partial !== undefined &&
                     !completions.has(partial.remainingText)
                 ) {
-                    const needsSep = computeRangeNeedsSep(
+                    const sepResult = computeRangeNeedsSep(
                         ctx,
                         partial.remainingText[0],
                         c.spacingMode,
                     );
-                    if (needsSep === undefined) {
+                    if (sepResult === "drop") {
                         continue;
                     }
                     completions.add(partial.remainingText);
                     separatorMode = mergeSeparatorMode(
                         separatorMode,
-                        needsSep,
+                        sepResult.needsSep,
                         c.spacingMode,
                     );
                     anyAfterWildcard = true;
@@ -1915,18 +1917,18 @@ function materializeCandidates(
                     c.valueId,
                 );
                 if (completionProperty !== undefined) {
-                    const needsSep = computeRangeNeedsSep(
+                    const sepResult = computeRangeNeedsSep(
                         ctx,
                         PROPERTY_SENTINEL_CHAR,
                         c.spacingMode,
                     );
-                    if (needsSep === undefined) {
+                    if (sepResult === "drop") {
                         continue;
                     }
                     properties.push(completionProperty);
                     separatorMode = mergeSeparatorMode(
                         separatorMode,
-                        needsSep,
+                        sepResult.needsSep,
                         c.spacingMode,
                     );
                     anyAfterWildcard = true;
@@ -1988,11 +1990,11 @@ export function matchGrammarCompletion(
         `Start completion for input ${direction ?? "forward"}: "${input}"`,
     );
 
-    // Phase A
+    // Phase 1 (collect)
     const ctx = collectCandidates(grammar, input, minPrefixLength, direction);
-    // Phase B1: finalize candidates (wildcard anchors, shadows, EOI, sep conflicts)
+    // Phase 2 (finalize): wildcard anchors, shadows, EOI, sep conflicts
     finalizeCandidates(ctx);
-    // Phase B2: convert candidates to final completions/properties
+    // Phase 3 (materialize): convert candidates to final completions/properties
     const result = materializeCandidates(ctx);
 
     debugCompletion(`Completed. ${JSON.stringify(result)}`);
