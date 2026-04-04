@@ -319,7 +319,7 @@ function tryRunCmdAsync(cmd, cmdArgs, opts = {}) {
 }
 
 function verbose(msg) {
-    if (VERBOSE && !JSON_OUTPUT) console.log(clr.meta(`  [verbose] ${msg}`));
+    if (VERBOSE && !JSON_OUTPUT) _emit(clr.meta(`  [verbose] ${msg}`));
 }
 
 // Logging helpers — when running inside an AsyncLocalStorage context (concurrent
@@ -812,23 +812,28 @@ async function findVersionThatAllows(
             }
         }
 
-        // Fetch deps for all newer candidates in parallel, then find the minimum fix
+        // Fetch deps in batches to avoid queuing hundreds of npm calls;
+        // short-circuit as soon as the first satisfying version is found.
         if (allVersions.length > 0) {
             const candidates = allVersions
                 .filter((v) => semver.gt(v, currentVersion))
                 .sort(semver.compare);
-            const allDeps = await Promise.all(
-                candidates.map((v) => getPackageDeps(pkgName, v)),
-            );
-            for (let i = 0; i < candidates.length; i++) {
-                const deps = allDeps[i];
-                if (!deps) continue;
-                const spec = deps[depPkg];
-                if (
-                    !spec ||
-                    specGuaranteesMinVersion(spec, requiredDepVersion)
-                ) {
-                    return candidates[i];
+            const BATCH = 20;
+            for (let b = 0; b < candidates.length; b += BATCH) {
+                const batch = candidates.slice(b, b + BATCH);
+                const batchDeps = await Promise.all(
+                    batch.map((v) => getPackageDeps(pkgName, v)),
+                );
+                for (let i = 0; i < batch.length; i++) {
+                    const deps = batchDeps[i];
+                    if (!deps) continue;
+                    const spec = deps[depPkg];
+                    if (
+                        !spec ||
+                        specGuaranteesMinVersion(spec, requiredDepVersion)
+                    ) {
+                        return batch[i];
+                    }
                 }
             }
         }
@@ -1408,6 +1413,12 @@ function buildVersionSpec(oldSpec, newVersion) {
     ) {
         return oldSpec;
     }
+    // npm: aliases (e.g. "npm:other-pkg@^1.0.0") — preserve the alias prefix
+    // and recurse on the version portion after the alias.
+    const aliasMatch = oldSpec.match(/^(npm:[^@]+@)(.*)/);
+    if (aliasMatch) {
+        return aliasMatch[1] + buildVersionSpec(aliasMatch[2], newVersion);
+    }
     const prefixMatch = oldSpec.match(/^([~^]|>=?)/);
     const prefix = prefixMatch ? prefixMatch[0] : "";
     // Compound specs (e.g. ">=1.0.0 <2.0.0", "1.x || >=2.0.0") can't be
@@ -1418,23 +1429,6 @@ function buildVersionSpec(oldSpec, newVersion) {
         );
     }
     return `${prefix}${newVersion}`;
-}
-
-/**
- * Detect installed versions of `pkg` that would cross a major semver
- * boundary if forced to `patchedVersion` via override.
- * Returns an array of currently-installed versions that would cross major.
- */
-async function detectCrossMajorOverride(pkg, patchedVersion) {
-    const whyData = await getPnpmWhy(pkg);
-    const installedVersions = whyData
-        .map((e) => e.version)
-        .filter((v) => v && semver.valid(v));
-    const unique = [...new Set(installedVersions)];
-    return unique.filter(
-        (v) =>
-            semver.lt(v, patchedVersion) && isBreakingBump(v, patchedVersion),
-    );
 }
 
 // ── Fix plan query helpers ───────────────────────────────────────────────────
@@ -1847,7 +1841,7 @@ async function formatPackageAnalysis(entry, whyData, pkgIndex, pkgTotal) {
 }
 
 /**
- * Populate fixPlan, blockingReasons, and overrideReasons on the entry.
+ * Populate fixPlan and blockingReasons on the entry.
  * Pure classification — no display output.
  */
 async function classifyWithFixPlan(entry, whyData) {
@@ -1861,7 +1855,6 @@ async function classifyWithFixPlan(entry, whyData) {
         }
     }
     if (needsOverride(entry)) {
-        entry.overrideReasons = [...entry.fixPlan.blockReasons];
         if (!flagAllows(APPLY_OVERRIDES, pkg)) {
             entry.blockingReasons.push("--apply-overrides not specified");
         }
@@ -2602,6 +2595,7 @@ function emitJson(results) {
         patchedVersion: a.patched,
         latestVersion: a.latestVersion,
         blockingReasons: a.blockingReasons,
+        risk: a.risk ?? null,
         fixPlan: a.fixPlan
             ? {
                   unblockedActions: a.fixPlan.unblockedActions,
@@ -2650,4 +2644,7 @@ async function main() {
     }
 }
 
-main();
+main().catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+});
