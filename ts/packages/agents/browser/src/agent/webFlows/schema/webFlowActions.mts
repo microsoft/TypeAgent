@@ -24,6 +24,15 @@ export type EditWebFlowScope = {
     };
 };
 
+export type EditWebFlow = {
+    actionName: "editWebFlow";
+    parameters: {
+        name: string;
+        script: string;
+        description?: string;
+    };
+};
+
 // Goal-driven mode: describe what you want and a reasoning model completes it
 export type StartGoalDrivenTask = {
     actionName: "startGoalDrivenTask";
@@ -65,6 +74,7 @@ export type WebFlowActions =
     | ListWebFlows
     | DeleteWebFlow
     | EditWebFlowScope
+    | EditWebFlow
     | StartGoalDrivenTask
     | GenerateWebFlow
     | GenerateWebFlowFromRecording;

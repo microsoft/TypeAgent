@@ -251,6 +251,12 @@ export class WebFlowStore {
     generateDynamicSchemaText(): string {
         const entries = Object.entries(this.index?.flows ?? {});
 
+        const flowNames = entries.map(([name]) => name);
+        const flowNameType =
+            flowNames.length > 0
+                ? flowNames.map((n) => `"${n}"`).join(" | ")
+                : "string";
+
         const lines: string[] = [
             "// List available web flows",
             "export type ListWebFlows = {",
@@ -265,6 +271,16 @@ export class WebFlowStore {
             '    actionName: "deleteWebFlow";',
             "    parameters: {",
             "        name: string;",
+            "    };",
+            "};",
+            "",
+            "// Edit an existing web flow script",
+            "export type EditWebFlow = {",
+            '    actionName: "editWebFlow";',
+            "    parameters: {",
+            `        name: ${flowNameType};`,
+            "        script: string;",
+            "        description?: string;",
             "    };",
             "};",
         ];
@@ -310,6 +326,7 @@ export class WebFlowStore {
         lines.push("export type WebFlowActions =");
         lines.push("    | ListWebFlows");
         lines.push("    | DeleteWebFlow");
+        lines.push("    | EditWebFlow");
         for (const typeName of flowTypeNames) {
             lines.push(`    | ${typeName}`);
         }
