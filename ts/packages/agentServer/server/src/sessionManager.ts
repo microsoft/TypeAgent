@@ -16,6 +16,7 @@ import {
 
 import registerDebug from "debug";
 const debugSession = registerDebug("agent-server:session");
+const debugSessionErr = registerDebug("agent-server:session:error");
 
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const SESSIONS_DIR = "server-sessions";
@@ -93,14 +94,23 @@ export async function createSessionManager(
             }
             lastActiveSessionId = persisted.lastActiveSessionId;
             debugSession(`Loaded ${sessions.size} session(s) from metadata`);
-        } catch {
-            // No metadata file yet — first run
-            debugSession("No session metadata found, starting fresh");
+        } catch (e: any) {
+            if (e?.code === "ENOENT") {
+                // No metadata file yet — first run
+                debugSession("No session metadata found, starting fresh");
+            } else {
+                // File exists but is unreadable or malformed — log and start fresh
+                debugSessionErr(
+                    "Failed to load session metadata, starting fresh:",
+                    e,
+                );
+            }
         }
     }
 
     async function saveMetadata(): Promise<void> {
         const metadataPath = path.join(sessionsDir, METADATA_FILE);
+        const tmpPath = `${metadataPath}.tmp`;
         const entries: SessionMetadata[] = [];
         for (const record of sessions.values()) {
             entries.push({
@@ -114,9 +124,10 @@ export async function createSessionManager(
             lastActiveSessionId,
         };
         await fs.promises.writeFile(
-            metadataPath,
+            tmpPath,
             JSON.stringify(persisted, undefined, 2),
         );
+        await fs.promises.rename(tmpPath, metadataPath);
     }
 
     function getSessionPersistDir(sessionId: string): string {

@@ -77,6 +77,12 @@ async function main() {
                         options?.sessionId,
                     );
 
+                    if (joinedSessions.has(sessionId)) {
+                        throw new Error(
+                            `Already joined session '${sessionId}'. Call leaveSession() before joining again.`,
+                        );
+                    }
+
                     // Create session-namespaced channels
                     const clientIOChannel = channelProvider.createChannel(
                         getClientIOChannelName(sessionId),
