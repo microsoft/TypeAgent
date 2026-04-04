@@ -49,7 +49,7 @@ interface GrammarEntry {
     dfa?: DFA;
 }
 
-type GrammarPartial = {
+type PerGrammarResult = {
     partial: GrammarCompletionResult;
     schemaName: string;
 };
@@ -301,7 +301,7 @@ export class GrammarStoreImpl implements GrammarStore {
         // so we can detect cross-grammar separator mode conflicts after
         // the loop.  Each entry records the grammar's result and schema
         // name for property conversion.
-        let grammarPartials: GrammarPartial[] = [];
+        let grammarPartials: PerGrammarResult[] = [];
 
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {

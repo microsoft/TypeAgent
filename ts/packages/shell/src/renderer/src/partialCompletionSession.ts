@@ -89,7 +89,8 @@ function computeNoMatchPolicy(
 //       "slide"   → wildcard boundary, slide anchor forward
 //   - The anchor is never advanced after a result is received (except
 //     when noMatchPolicy is "slide", which slides the anchor forward).
-//     When `separatorMode` requires a separator, or is "optional", the
+//     When `separatorMode` requires a separator, or is "optional"
+//     (set by conflict filtering after consuming one separator into P),
 //     leading separator characters in the raw prefix are stripped before
 //     being passed to the menu, so the trie still matches.
 //

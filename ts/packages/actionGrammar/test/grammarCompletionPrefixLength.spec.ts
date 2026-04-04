@@ -3144,9 +3144,9 @@ describeForEachCompletion(
         });
 
         // ============================================================
-        // Phase B2 separator-only gap — merge vs displace
+        // Phase 3 separator-only gap — merge vs displace
         //
-        // When Phase B2's anchor (prefix.length or partial keyword
+        // When Phase 3's anchor (input.length or partial keyword
         // position) differs from maxPrefixLength, the gap between
         // mpl and anchor determines whether existing Cat 2 candidates
         // are preserved (merge) or replaced (displace):
@@ -3154,7 +3154,7 @@ describeForEachCompletion(
         //   Separator-only gap → merge (Cat 2 at EOI)
         //   Non-separator gap  → displace (Cat 3b fallback)
         // ============================================================
-        describe("Phase B2 separator-only gap — merge vs displace", () => {
+        describe("Phase 3 separator-only gap — merge vs displace", () => {
             describe("Cat 3b displace — non-separator gap", () => {
                 // Rule A: play $(song) by $(artist) — wildcard
                 // Rule B: play some video             — keyword
@@ -3308,7 +3308,7 @@ describeForEachCompletion(
 
             describe("Cat 2 property candidate preserved during merge", () => {
                 // When a Cat 2 candidate is a property completion (from
-                // a wildcard slot at EOI), it should survive Phase B2
+                // a wildcard slot at EOI), it should survive Phase 3
                 // merge alongside a string EOI candidate from another rule.
                 const g = [
                     `import { SongName, ArtistName };`,
@@ -3324,9 +3324,9 @@ describeForEachCompletion(
                         undefined,
                         "forward",
                     );
-                    // Rule A: wildcard-at-EOI → offers "by" via Phase B
+                    // Rule A: wildcard-at-EOI → offers "by" via Phase 2/3
                     // Rule B: wildcard captured "hello", Cat 2 property
-                    // completion for song.  Phase B2 displaces (gap
+                    // completion for song.  Phase 3 displaces (gap
                     // "hello " contains non-separator content), so only
                     // "by" survives.
                     expectMetadata(result, {
@@ -3368,7 +3368,7 @@ describeForEachCompletion(
                     "forward",
                 );
                 // Rule A (wildcard): "b" absorbed into $(song),
-                //   Phase B sets anchor at mpl=6, offers "by".
+                //   Phase 2/3 sets anchor at mpl=6, offers "by".
                 // Rule B (literal): "b" partial-matches "beautiful"
                 //   at mpl=4, which is shorter — discarded.
                 // Only wildcard candidates survive → afterWildcard="all".
@@ -3391,7 +3391,7 @@ describeForEachCompletion(
                 );
                 // Rule B: matched "play beautiful" (14 chars), offers
                 //   "music" (afterWildcard="some").
-                // Rule A: wildcard-at-EOI, Phase B offers "by".
+                // Rule A: wildcard-at-EOI, Phase 2/3 offers "by".
                 // Both at mpl=14.  "music" is position-sensitive →
                 // afterWildcard="some".
                 expect(result.completions).toContain("music");

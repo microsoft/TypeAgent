@@ -629,9 +629,9 @@ type DeferredShadowCandidate = {
 // Sentinel character for property candidates in separator mode
 // computation.  Property completions represent free-form entity
 // slots (not literal keywords), so any representative Latin
-// character works — "a" requires a separator after word characters
-// and doesn't require one after punctuation, matching the typical
-// behavior for entity slots.
+// character works — when passed to `requiresSeparator()`, "a"
+// behaves like a typical entity-slot value (needs separator
+// after word characters, not after punctuation).
 const PROPERTY_SENTINEL_CHAR = "a";
 
 // True when a separator character (whitespace or punctuation) exists
@@ -709,7 +709,7 @@ export function isRequiringSepMode(mode: SeparatorMode): boolean {
 // position) from candidate *materialization* (building the
 // GrammarCompletionProperty, computing separatorMode).  The split is
 // essential for backward completion: the main loop evaluates every rule
-// at the full prefix length, but the final completion position
+// at the full input length, but the final completion position
 // (maxPrefixLength) is only known after ALL rules have been processed.
 // Range candidates exploit this — they defer the "where does the
 // wildcard end?" decision until Phase 2/3, when maxPrefixLength is
@@ -720,7 +720,7 @@ export function isRequiringSepMode(mode: SeparatorMode): boolean {
 //     in both forward and backward modes.
 //
 // rangeCandidates — valid at any wildcard split in
-//     [wildcardStart+1, prefix.length], never cleared.  They
+//     [wildcardStart+1, input.length], never cleared.  They
 //     arise in Category 2 backward when a wildcard absorbed
 //     all remaining input and the next part could match at
 //     a flexible position.  Processed in Phase 3 only under
@@ -1348,7 +1348,7 @@ function injectForwardEoiCandidates(
 
     // anchor is what becomes matchedPrefixLength for these candidates.
     // Start from the partial keyword position (if any) or
-    // prefix.length, then strip trailing separators so that P
+    // input.length, then strip trailing separators so that P
     // lands before the flex-space — consistent with how
     // keyword→keyword P stays at the last matched token boundary.
     // For partial keywords, this strips the separator gap between
@@ -1358,7 +1358,7 @@ function injectForwardEoiCandidates(
     // escaped-space keyword), we must not discard it.
     //
     // Skip stripping when a partial keyword consumed to EOI
-    // (position === prefix.length): the keyword content itself
+    // (position === input.length): the keyword content itself
     // may end with separator characters (e.g. comma in "hello,")
     // that must not be stripped.
     let anchor = hasPartialKeyword
@@ -1576,7 +1576,7 @@ function finalizeCandidates(ctx: CompletionContext): void {
     // no partial keyword was found.  injectForwardEoiCandidates
     // instantiates them at the appropriate anchor:
     //   - partial keyword position (if one exists from other states)
-    //   - prefix.length (otherwise)
+    //   - input.length (otherwise)
     const forwardEoiCandidates: WildcardStringRangeCandidate[] = [];
 
     for (const desc of wildcardEoiDescriptors) {

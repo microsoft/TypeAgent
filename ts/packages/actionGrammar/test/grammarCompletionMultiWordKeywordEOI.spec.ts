@@ -23,7 +23,7 @@ describeForEachCompletion(
         // Bug: findPartialKeywordInWildcard returns position=prefix.length
         //   for the "consumed to EOI with more words remaining" case, but
         //   the forward code requires position < state.index — which fails
-        //   when they're equal.  The result falls through to Phase B's
+        //   when they're equal.  The result falls through to Phase 3's
         //   tryPartialStringMatch at EOI, which naively offers "played"
         //   instead of "by".
         const g = [

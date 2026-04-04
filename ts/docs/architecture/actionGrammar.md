@@ -861,7 +861,7 @@ rule and a default-spacing rule that both match the same prefix — the
 single merged `separatorMode` cannot correctly represent all of them.
 A `"none"` candidate rejects any trailing separator, while a
 `"spacePunctuation"` candidate requires one. The conflict-filtering
-logic in `materializeCandidates()` resolves this:
+logic in `filterSepConflicts()` (called from `finalizeCandidates()`) resolves this:
 
 1. **Detect:** Compute each candidate's individual `SeparatorMode` via
    `computeCandidateSepMode()`. A conflict exists when both
@@ -943,15 +943,16 @@ was never collected because backward took the `prevEndIndex` path.
 processing, whenever `tryPartialStringMatch` backs up, a forward-
 direction shadow candidate is collected (via a second
 `tryPartialStringMatch("forward")` call) and stored in
-`ctx.deferredShadowCandidates`. After Phase A completes and Phase B1
-resolves wildcard anchors (B1 can advance `maxPrefixLength`), shadows
-whose `consumedLength` matches the final `maxPrefixLength` are flushed
-into `fixedCandidates`. This is order-independent — it doesn't matter
-whether the requiring-mode rule or the none-mode rule is processed first.
+`ctx.deferredShadowCandidates`. After Phase 1 completes and Phase 2
+resolves wildcard anchors (Phase 2 can advance `maxPrefixLength`),
+shadows whose `consumedLength` matches the final `maxPrefixLength` are
+flushed into `fixedCandidates`. This is order-independent — it doesn't
+matter whether the requiring-mode rule or the none-mode rule is
+processed first.
 
-The flush is placed **between B1 and B2** (not at the end of Phase A)
-because B1 can advance `maxPrefixLength` for backward wildcard-at-EOI
-partial keywords. Flushing at the end of Phase A would use an
+The flush is placed inside Phase 2 (not at the end of Phase 1) because
+Phase 2 can advance `maxPrefixLength` for backward wildcard-at-EOI
+partial keywords. Flushing at the end of Phase 1 would use an
 intermediate P, potentially admitting or rejecting shadows incorrectly.
 
 #### Category 2 (clean partial) — SAFE

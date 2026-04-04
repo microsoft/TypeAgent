@@ -870,7 +870,7 @@ definite completions to slide — `"some"` triggers re-fetch instead.
 Two related mechanisms protect the invariants when rules with different
 spacing modes compete for the same `maxPrefixLength`:
 
-1. **Separator-mode conflict filtering** (`materializeCandidates` in
+1. **Separator-mode conflict filtering** (`filterSepConflicts` in
    `grammarCompletion.ts`, post-loop in `grammarStore.ts`): when
    `"none"` and requiring-separator candidates coexist, filters by
    trailing separator state, advances P, and forces `closedSet=false`.
