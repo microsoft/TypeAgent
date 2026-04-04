@@ -15,6 +15,7 @@ export interface ScriptExecutionRequest {
     sandbox: {
         allowedCmdlets: string[];
         allowedPaths: string[];
+        allowedModules: string[];
         maxExecutionTime: number;
         networkAccess: boolean;
     };
@@ -53,6 +54,8 @@ export async function executeScript(
         JSON.stringify(request.parameters),
         "-AllowedCmdletsJson",
         JSON.stringify(request.sandbox.allowedCmdlets),
+        "-NetworkAccess",
+        String(request.sandbox.networkAccess),
         "-TimeoutSeconds",
         String(request.sandbox.maxExecutionTime),
     ];
@@ -60,6 +63,11 @@ export async function executeScript(
     if (request.sandbox.allowedPaths.length > 0) {
         args.push("-AllowedPathsJson");
         args.push(JSON.stringify(request.sandbox.allowedPaths));
+    }
+
+    if (request.sandbox.allowedModules.length > 0) {
+        args.push("-AllowedModulesJson");
+        args.push(JSON.stringify(request.sandbox.allowedModules));
     }
 
     const startTime = Date.now();
