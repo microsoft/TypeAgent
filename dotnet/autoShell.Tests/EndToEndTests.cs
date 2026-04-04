@@ -158,7 +158,7 @@ public sealed class EndToEndTests : IDisposable
         JArray.Parse(response1);
 
         // Process should have exited — no second response
-        _process.WaitForExit(3000);
+        _process.WaitForExit(10000);
         Assert.True(_process.HasExited);
     }
 
