@@ -1,0 +1,35 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 7 — Packaging actions.
+
+<PackageAgent> = package (the)? $(integrationName:wildcard) agent -> {
+    actionName: "packageAgent",
+    parameters: {
+        integrationName
+    }
+}
+  | (build | bundle | prepare) (the)? $(integrationName:wildcard) (agent)? (package)? (for distribution)? -> {
+    actionName: "packageAgent",
+    parameters: {
+        integrationName
+    }
+};
+
+<ValidatePackage> = validate (the)? $(integrationName:wildcard) (agent)? package -> {
+    actionName: "validatePackage",
+    parameters: {
+        integrationName
+    }
+}
+  | (check | verify) (the)? $(integrationName:wildcard) (agent)? package -> {
+    actionName: "validatePackage",
+    parameters: {
+        integrationName
+    }
+};
+
+import { PackagingActions } from "./packagingSchema.ts";
+
+<Start> : PackagingActions = <PackageAgent>
+  | <ValidatePackage>;

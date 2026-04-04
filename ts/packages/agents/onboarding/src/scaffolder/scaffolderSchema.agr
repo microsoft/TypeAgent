@@ -1,0 +1,47 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 5 — Scaffolder actions.
+
+<ScaffoldAgent> = scaffold (the)? $(integrationName:wildcard) agent -> {
+    actionName: "scaffoldAgent",
+    parameters: {
+        integrationName
+    }
+}
+  | (create | generate | stamp out) (the)? $(integrationName:wildcard) (agent)? (package)? -> {
+    actionName: "scaffoldAgent",
+    parameters: {
+        integrationName
+    }
+};
+
+<ScaffoldPlugin> = scaffold (the)? $(integrationName:wildcard) (plugin | add-in | extension) -> {
+    actionName: "scaffoldPlugin",
+    parameters: {
+        integrationName,
+        template: "rest-client"
+    }
+}
+  | (create | generate) (the)? $(integrationName:wildcard) $(template:word) (plugin | extension | add-in) -> {
+    actionName: "scaffoldPlugin",
+    parameters: {
+        integrationName,
+        template
+    }
+};
+
+<ListTemplates> = list (available)? templates -> {
+    actionName: "listTemplates",
+    parameters: {}
+}
+  | (show | what are) (the)? (available)? (scaffolding)? templates -> {
+    actionName: "listTemplates",
+    parameters: {}
+};
+
+import { ScaffolderActions } from "./scaffolderSchema.ts";
+
+<Start> : ScaffolderActions = <ScaffoldAgent>
+  | <ScaffoldPlugin>
+  | <ListTemplates>;

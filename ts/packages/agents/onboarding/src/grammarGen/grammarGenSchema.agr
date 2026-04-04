@@ -1,0 +1,49 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 4 — Grammar Generation actions.
+
+<GenerateGrammar> = generate (the)? (agr)? grammar for $(integrationName:wildcard) -> {
+    actionName: "generateGrammar",
+    parameters: {
+        integrationName
+    }
+}
+  | (create | produce | write) (the)? $(integrationName:wildcard) (agr)? grammar (file)? -> {
+    actionName: "generateGrammar",
+    parameters: {
+        integrationName
+    }
+};
+
+<CompileGrammar> = compile (the)? $(integrationName:wildcard) grammar -> {
+    actionName: "compileGrammar",
+    parameters: {
+        integrationName
+    }
+}
+  | (validate | build | check) (the)? $(integrationName:wildcard) grammar -> {
+    actionName: "compileGrammar",
+    parameters: {
+        integrationName
+    }
+};
+
+<ApproveGrammar> = approve (the)? $(integrationName:wildcard) grammar -> {
+    actionName: "approveGrammar",
+    parameters: {
+        integrationName
+    }
+}
+  | (confirm | finalize) (the)? $(integrationName:wildcard) (agr)? grammar -> {
+    actionName: "approveGrammar",
+    parameters: {
+        integrationName
+    }
+};
+
+import { GrammarGenActions } from "./grammarGenSchema.ts";
+
+<Start> : GrammarGenActions = <GenerateGrammar>
+  | <CompileGrammar>
+  | <ApproveGrammar>;

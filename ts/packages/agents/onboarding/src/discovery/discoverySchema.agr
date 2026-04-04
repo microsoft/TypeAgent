@@ -1,0 +1,71 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 1 — Discovery actions.
+
+// crawlDocUrl - crawl API documentation at a URL
+<CrawlDocUrl> = crawl (docs | documentation | api) (at | from)? $(url:wildcard) for $(integrationName:wildcard) -> {
+    actionName: "crawlDocUrl",
+    parameters: {
+        url,
+        integrationName
+    }
+}
+  | (fetch | scrape | read) (the)? $(integrationName:wildcard) (api)? (docs | documentation) (at | from)? $(url:wildcard) -> {
+    actionName: "crawlDocUrl",
+    parameters: {
+        integrationName,
+        url
+    }
+};
+
+// parseOpenApiSpec - parse an OpenAPI or Swagger spec
+<ParseOpenApiSpec> = parse (the)? (openapi | swagger | api) spec (at | from)? $(specSource:wildcard) for $(integrationName:wildcard) -> {
+    actionName: "parseOpenApiSpec",
+    parameters: {
+        specSource,
+        integrationName
+    }
+}
+  | (load | ingest) (the)? $(integrationName:wildcard) (openapi | swagger | api) spec (from | at)? $(specSource:wildcard) -> {
+    actionName: "parseOpenApiSpec",
+    parameters: {
+        integrationName,
+        specSource
+    }
+};
+
+// listDiscoveredActions - show what was found
+<ListDiscoveredActions> = list (discovered | found)? actions for $(integrationName:wildcard) -> {
+    actionName: "listDiscoveredActions",
+    parameters: {
+        integrationName
+    }
+}
+  | (show | what are) (the)? (discovered | available)? actions (for | in)? $(integrationName:wildcard) -> {
+    actionName: "listDiscoveredActions",
+    parameters: {
+        integrationName
+    }
+};
+
+// approveApiSurface - lock in the discovered action set
+<ApproveApiSurface> = approve (the)? (api)? (surface | actions) for $(integrationName:wildcard) -> {
+    actionName: "approveApiSurface",
+    parameters: {
+        integrationName
+    }
+}
+  | (confirm | finalize) (the)? $(integrationName:wildcard) (api)? surface -> {
+    actionName: "approveApiSurface",
+    parameters: {
+        integrationName
+    }
+};
+
+import { DiscoveryActions } from "./discoverySchema.ts";
+
+<Start> : DiscoveryActions = <CrawlDocUrl>
+  | <ParseOpenApiSpec>
+  | <ListDiscoveredActions>
+  | <ApproveApiSurface>;

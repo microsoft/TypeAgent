@@ -1,0 +1,54 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 3 — Schema Generation actions.
+
+// generateSchema - produce TypeScript action schema from discovered actions + phrases
+<GenerateSchema> = generate (the)? (action)? schema for $(integrationName:wildcard) -> {
+    actionName: "generateSchema",
+    parameters: {
+        integrationName
+    }
+}
+  | (create | produce | write) (the)? (typescript)? (action)? schema for $(integrationName:wildcard) -> {
+    actionName: "generateSchema",
+    parameters: {
+        integrationName
+    }
+};
+
+// refineSchema - update the schema based on instructions
+<RefineSchema> = refine (the)? $(integrationName:wildcard) schema (to)? $(instructions:wildcard) -> {
+    actionName: "refineSchema",
+    parameters: {
+        integrationName,
+        instructions
+    }
+}
+  | update (the)? $(integrationName:wildcard) schema (to)? $(instructions:wildcard) -> {
+    actionName: "refineSchema",
+    parameters: {
+        integrationName,
+        instructions
+    }
+};
+
+// approveSchema - lock in the schema
+<ApproveSchema> = approve (the)? $(integrationName:wildcard) schema -> {
+    actionName: "approveSchema",
+    parameters: {
+        integrationName
+    }
+}
+  | (confirm | finalize) (the)? $(integrationName:wildcard) (action)? schema -> {
+    actionName: "approveSchema",
+    parameters: {
+        integrationName
+    }
+};
+
+import { SchemaGenActions } from "./schemaGenSchema.ts";
+
+<Start> : SchemaGenActions = <GenerateSchema>
+  | <RefineSchema>
+  | <ApproveSchema>;
