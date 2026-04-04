@@ -176,8 +176,15 @@ export async function createSessionManager(
                 debugSession(
                     `Idle timeout: closing dispatcher for session "${record.name}" (${record.sessionId})`,
                 );
-                await record.sharedDispatcher.close();
-                record.sharedDispatcher = undefined;
+                try {
+                    await record.sharedDispatcher.close();
+                    record.sharedDispatcher = undefined;
+                } catch (e) {
+                    debugSessionErr(
+                        `Failed to close idle dispatcher for session "${record.name}" (${record.sessionId}):`,
+                        e,
+                    );
+                }
             }
         }, idleTimeoutMs);
     }

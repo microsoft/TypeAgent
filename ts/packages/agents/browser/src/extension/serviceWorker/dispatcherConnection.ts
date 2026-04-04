@@ -25,6 +25,7 @@ import type {
 import {
     getDispatcherChannelName,
     getClientIOChannelName,
+    AgentServerChannelName,
 } from "@typeagent/agent-server-protocol";
 
 import registerDebug from "debug";
@@ -202,7 +203,7 @@ async function doConnect(): Promise<Dispatcher> {
 
         const rpc = createRpc<AgentServerInvokeFunctions>(
             "agent-server:extension",
-            channel.createChannel("agent-server"),
+            channel.createChannel(AgentServerChannelName),
         );
 
         const clientIO = createChatPanelClientIO();

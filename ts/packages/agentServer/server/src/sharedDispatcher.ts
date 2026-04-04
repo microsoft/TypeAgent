@@ -25,7 +25,6 @@ const debugClientIOError = registerDebug("agent-server:clientIO:error");
 type ClientRecord = {
     clientIO: ClientIO;
     filter: boolean;
-    closeFn: () => void;
 };
 
 export async function createSharedDispatcher(
@@ -176,7 +175,6 @@ export async function createSharedDispatcher(
             clients.set(connectionId, {
                 clientIO,
                 filter: options?.filter ?? false,
-                closeFn,
             });
             // Register client type for per-request routing
             if (options?.clientType) {
