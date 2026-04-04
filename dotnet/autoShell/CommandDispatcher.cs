@@ -25,7 +25,7 @@ internal class CommandDispatcher
     }
 
     /// <summary>
-    /// Creates a CommandDispatcher with all production services and handlers registered.
+    /// Creates a <see cref="CommandDispatcher"/> with all production services and handlers registered.
     /// </summary>
     public static CommandDispatcher Create(ILogger logger)
     {
@@ -46,7 +46,7 @@ internal class CommandDispatcher
     }
 
     /// <summary>
-    /// Creates a CommandDispatcher with the specified services, enabling integration testing
+    /// Creates a <see cref="CommandDispatcher"/> with the specified services, enabling integration testing
     /// with mock services while exercising real handler wiring.
     /// </summary>
     internal static CommandDispatcher Create(

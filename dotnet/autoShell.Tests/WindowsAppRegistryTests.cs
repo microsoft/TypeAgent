@@ -7,7 +7,7 @@ using Moq;
 namespace autoShell.Tests;
 
 /// <summary>
-/// Tests the real WindowsAppRegistry implementation to verify dictionary lookups,
+/// Tests the real <see cref="WindowsAppRegistry"/> implementation to verify dictionary lookups,
 /// null-return contracts, and case-insensitive matching.
 /// </summary>
 public class WindowsAppRegistryTests
@@ -68,7 +68,7 @@ public class WindowsAppRegistryTests
     }
 
     /// <summary>
-    /// Verifies that ResolveProcessName returns the executable filename (without extension) for a known app.
+    /// Verifies that <see cref="IAppRegistry.ResolveProcessName"/> returns the executable filename (without extension) for a known app.
     /// </summary>
     [Fact]
     public void ResolveProcessName_KnownApp_ReturnsProcessName()
@@ -79,7 +79,7 @@ public class WindowsAppRegistryTests
     }
 
     /// <summary>
-    /// Verifies that ResolveProcessName returns the input unchanged for an unknown app.
+    /// Verifies that <see cref="IAppRegistry.ResolveProcessName"/> returns the input unchanged for an unknown app.
     /// </summary>
     [Fact]
     public void ResolveProcessName_UnknownApp_ReturnsFriendlyName()
@@ -90,7 +90,7 @@ public class WindowsAppRegistryTests
     }
 
     /// <summary>
-    /// Verifies that GetWorkingDirectoryEnvVar returns null for apps without a configured working directory.
+    /// Verifies that <see cref="IAppRegistry.GetWorkingDirectoryEnvVar"/> returns null for apps without a configured working directory.
     /// </summary>
     [Fact]
     public void GetWorkingDirectoryEnvVar_AppWithoutWorkDir_ReturnsNull()
@@ -101,7 +101,7 @@ public class WindowsAppRegistryTests
     }
 
     /// <summary>
-    /// Verifies that GetArguments returns null for apps without configured arguments.
+    /// Verifies that <see cref="IAppRegistry.GetArguments"/> returns null for apps without configured arguments.
     /// </summary>
     [Fact]
     public void GetArguments_AppWithoutArgs_ReturnsNull()

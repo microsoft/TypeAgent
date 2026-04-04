@@ -9,8 +9,8 @@ using Newtonsoft.Json.Linq;
 namespace autoShell.Tests;
 
 /// <summary>
-/// Integration tests that exercise the full Create() → Dispatch() → handler → service pipeline
-/// using mock services. These verify that CommandDispatcher wiring is correct.
+/// Integration tests that exercise the full <see cref="CommandDispatcher.Create"/> → <see cref="CommandDispatcher.Dispatch"/> → handler → service pipeline
+/// using mock services. These verify that <see cref="CommandDispatcher"/> wiring is correct.
 /// </summary>
 public class CommandDispatcherIntegrationTests
 {
@@ -46,7 +46,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a Volume command dispatched through Create() reaches the audio service.
+    /// Verifies that a Volume command dispatched through <see cref="CommandDispatcher.Create"/> reaches the audio service.
     /// </summary>
     [Fact]
     public void Dispatch_Volume_ReachesAudioService()
@@ -59,7 +59,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a Mute command dispatched through Create() reaches the audio service.
+    /// Verifies that a Mute command dispatched through <see cref="CommandDispatcher.Create"/> reaches the audio service.
     /// </summary>
     [Fact]
     public void Dispatch_Mute_ReachesAudioService()
@@ -70,7 +70,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a LaunchProgram command dispatched through Create() reaches the process service.
+    /// Verifies that a LaunchProgram command dispatched through <see cref="CommandDispatcher.Create"/> reaches the process service.
     /// </summary>
     [Fact]
     public void Dispatch_LaunchProgram_ReachesProcessService()
@@ -85,7 +85,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a SetWallpaper command dispatched through Create() reaches the system parameters service.
+    /// Verifies that a SetWallpaper command dispatched through <see cref="CommandDispatcher.Create"/> reaches the system parameters service.
     /// </summary>
     [Fact]
     public void Dispatch_SetWallpaper_ReachesSystemParamsService()
@@ -96,7 +96,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a ConnectWifi command dispatched through Create() reaches the network service.
+    /// Verifies that a ConnectWifi command dispatched through <see cref="CommandDispatcher.Create"/> reaches the network service.
     /// </summary>
     [Fact]
     public void Dispatch_ConnectWifi_ReachesNetworkService()
@@ -107,7 +107,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a NextDesktop command dispatched through Create() reaches the virtual desktop service.
+    /// Verifies that a NextDesktop command dispatched through <see cref="CommandDispatcher.Create"/> reaches the virtual desktop service.
     /// </summary>
     [Fact]
     public void Dispatch_NextDesktop_ReachesVirtualDesktopService()
@@ -118,7 +118,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a SetThemeMode command dispatched through Create() reaches the registry service.
+    /// Verifies that a SetThemeMode command dispatched through <see cref="CommandDispatcher.Create"/> reaches the registry service.
     /// </summary>
     [Fact]
     public void Dispatch_SetThemeMode_ReachesRegistryService()

@@ -8,7 +8,7 @@ using autoShell.Services.Interop;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of IAudioService using Windows Core Audio COM API.
+/// Concrete implementation of <see cref="IAudioService"/> using Windows Core Audio COM API.
 /// </summary>
 internal class WindowsAudioService : IAudioService
 {

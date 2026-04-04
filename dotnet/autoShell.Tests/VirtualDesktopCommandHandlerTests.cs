@@ -89,7 +89,7 @@ public class VirtualDesktopCommandHandlerTests
     /// <summary>
     /// Verifies that MoveWindowToDesktop resolves the process name and looks up its window handle.
     /// Note: the actual MoveWindowToDesktop service call cannot be verified because
-    /// FindProcessWindowHandle returns IntPtr.Zero by default from the mock.
+    /// <see cref="IWindowService.FindProcessWindowHandle"/> returns <see cref="IntPtr.Zero"/> by default from the mock.
     /// </summary>
     [Fact]
     public void MoveWindowToDesktop_ResolvesProcessNameAndLooksUpWindowHandle()

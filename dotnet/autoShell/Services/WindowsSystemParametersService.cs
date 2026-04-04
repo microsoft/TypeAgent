@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of ISystemParametersService using Win32 P/Invoke.
+/// Concrete implementation of <see cref="ISystemParametersService"/> using Win32 P/Invoke.
 /// </summary>
 internal partial class WindowsSystemParametersService : ISystemParametersService
 {

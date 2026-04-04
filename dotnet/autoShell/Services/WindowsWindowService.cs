@@ -11,7 +11,7 @@ using Microsoft.VisualBasic;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of IWindowService using Win32 P/Invoke.
+/// Concrete implementation of <see cref="IWindowService"/> using Win32 P/Invoke.
 /// </summary>
 internal class WindowsWindowService : IWindowService
 {

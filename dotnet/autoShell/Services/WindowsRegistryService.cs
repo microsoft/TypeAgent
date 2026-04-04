@@ -7,7 +7,7 @@ using Microsoft.Win32;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of IRegistryService using Windows Registry.
+/// Concrete implementation of <see cref="IRegistryService"/> using Windows Registry.
 /// </summary>
 internal class WindowsRegistryService : IRegistryService
 {

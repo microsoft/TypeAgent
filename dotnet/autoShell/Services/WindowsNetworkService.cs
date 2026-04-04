@@ -12,7 +12,7 @@ using Newtonsoft.Json;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of INetworkService using Windows WLAN API and Radio Management COM API.
+/// Concrete implementation of <see cref="INetworkService"/> using Windows WLAN API and Radio Management COM API.
 /// </summary>
 internal class WindowsNetworkService : INetworkService
 {

@@ -19,7 +19,7 @@ internal interface IDisplayService
     string SetResolution(uint width, uint height, uint? refreshRate = null);
 
     /// <summary>
-    /// Sets the text scaling percentage via UIAutomation.
+    /// Sets the text scaling percentage via <see cref="autoShell.Services.Interop.UIAutomation"/>.
     /// </summary>
     void SetTextSize(int percentage);
 }

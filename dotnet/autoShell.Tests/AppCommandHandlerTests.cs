@@ -23,8 +23,6 @@ public class AppCommandHandlerTests
         _handler = new AppCommandHandler(_appRegistryMock.Object, _processMock.Object, _windowMock.Object, _loggerMock.Object);
     }
 
-    // --- LaunchProgram ---
-
     /// <summary>
     /// Verifies that launching a non-running app starts it using its executable path.
     /// </summary>
@@ -94,8 +92,8 @@ public class AppCommandHandlerTests
 
     /// <summary>
     /// Verifies that closing a program resolves its process name and looks up running processes.
-    /// Note: the actual CloseMainWindow() call path cannot be unit-tested because
-    /// Process.MainWindowHandle is not virtual and cannot be mocked.
+    /// Note: the actual <see cref="System.Diagnostics.Process.CloseMainWindow"/> call path cannot be unit-tested because
+    /// <see cref="System.Diagnostics.Process.MainWindowHandle"/> is not virtual and cannot be mocked.
     /// </summary>
     [Fact]
     public void CloseProgram_ResolvesProcessNameAndLooksUpProcesses()
@@ -125,7 +123,7 @@ public class AppCommandHandlerTests
     }
 
     /// <summary>
-    /// Verifies that the ListAppNames command invokes GetAllAppNames on the app registry.
+    /// Verifies that the ListAppNames command invokes <see cref="IAppRegistry.GetAllAppNames"/> on the app registry.
     /// </summary>
     [Fact]
     public void ListAppNames_CallsGetAllAppNames()
@@ -154,7 +152,7 @@ public class AppCommandHandlerTests
     }
 
     /// <summary>
-    /// Verifies that a Win32Exception on first launch attempt triggers a fallback retry using the friendly name.
+    /// Verifies that a <see cref="System.ComponentModel.Win32Exception"/> on first launch attempt triggers a fallback retry using the friendly name.
     /// </summary>
     [Fact]
     public void LaunchProgram_Win32Exception_FallsBackToFriendlyName()

@@ -36,7 +36,21 @@ dotnet build AutoShell.csproj
 
 ## Usage
 
-Run the application and send JSON commands via stdin:
+AutoShell runs in two modes:
+
+**Interactive mode** (default): Run the application and send JSON commands via stdin, one per line:
+```
+dotnet run --project autoShell.csproj
+{"Volume":50}
+{"Mute":true}
+{"quit":null}
+```
+
+**Command-line mode**: Pass a JSON command (or array) as an argument for one-shot execution:
+```
+autoShell.exe {"Volume":50}
+autoShell.exe [{"Volume":50},{"Mute":true}]
+```
 
 ### Command Reference
 
@@ -81,100 +95,100 @@ Run the application and send JSON commands via stdin:
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `BluetoothToggle` | `true`/`false` | Toggles Bluetooth on/off |
-| `EnableMeteredConnections` | `true`/`false` | Enables or disables metered connections |
-| `EnableWifi` | `true`/`false` | Enables or disables Wi-Fi |
+| `BluetoothToggle` | `{"enableBluetooth": true/false}` | Toggles Bluetooth on/off |
+| `EnableMeteredConnections` | (none) | Opens network status settings |
+| `EnableWifi` | `{"enable": true/false}` | Enables or disables Wi-Fi |
 
 ##### Display Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `AdjustColorTemperature` | value | Adjusts color temperature |
-| `AdjustScreenBrightness` | value | Adjusts screen brightness |
-| `AdjustScreenOrientation` | value | Adjusts screen orientation |
-| `DisplayResolutionAndAspectRatio` | value | Sets display resolution and aspect ratio |
-| `DisplayScaling` | value | Sets display scaling |
-| `EnableBlueLightFilterSchedule` | `true`/`false` | Enables or disables blue light filter schedule |
-| `RotationLock` | `true`/`false` | Enables or disables rotation lock |
+| `AdjustColorTemperature` | (none) | Opens Night light settings |
+| `AdjustScreenBrightness` | `{"brightnessLevel": "increase"/"decrease"}` | Adjusts screen brightness ±10% |
+| `AdjustScreenOrientation` | (none) | Opens display settings |
+| `DisplayResolutionAndAspectRatio` | (none) | Opens display settings |
+| `DisplayScaling` | `{"sizeOverride": "150"}` | Opens display settings; targets a DPI percentage |
+| `EnableBlueLightFilterSchedule` | `{"nightLightScheduleDisabled": true/false}` | Enables or disables blue light filter schedule |
+| `RotationLock` | `{"enable": true/false}` | Enables or disables rotation lock |
 
 ##### Personalization Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `ApplyColorToTitleBar` | `true`/`false` | Applies accent color to title bars |
-| `EnableTransparency` | `true`/`false` | Enables or disables transparency effects |
-| `HighContrastTheme` | value | Sets high contrast theme |
-| `SystemThemeMode` | value | Sets the system theme mode |
+| `ApplyColorToTitleBar` | `{"enableColor": true/false}` | Applies accent color to title bars |
+| `EnableTransparency` | `{"enable": true/false}` | Enables or disables transparency effects |
+| `HighContrastTheme` | (none) | Opens high contrast settings |
+| `SystemThemeMode` | `{"mode": "light"/"dark"}` | Sets the system theme mode |
 
 ##### Taskbar Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `AutoHideTaskbar` | `true`/`false` | Auto-hides the taskbar |
-| `DisplaySecondsInSystrayClock` | `true`/`false` | Shows seconds in system tray clock |
-| `DisplayTaskbarOnAllMonitors` | `true`/`false` | Displays taskbar on all monitors |
-| `ShowBadgesOnTaskbar` | `true`/`false` | Shows or hides badges on taskbar |
-| `TaskbarAlignment` | value | Sets taskbar alignment |
-| `TaskViewVisibility` | `true`/`false` | Shows or hides Task View button |
-| `ToggleWidgetsButtonVisibility` | `true`/`false` | Shows or hides Widgets button |
+| `AutoHideTaskbar` | `{"hideWhenNotUsing": true/false}` | Auto-hides the taskbar |
+| `DisplaySecondsInSystrayClock` | `{"enable": true/false}` | Shows seconds in system tray clock |
+| `DisplayTaskbarOnAllMonitors` | `{"enable": true/false}` | Displays taskbar on all monitors |
+| `ShowBadgesOnTaskbar` | `{"enableBadging": true/false}` | Shows or hides badges on taskbar |
+| `TaskbarAlignment` | `{"alignment": "left"/"center"}` | Sets taskbar alignment |
+| `TaskViewVisibility` | `{"visibility": true/false}` | Shows or hides Task View button |
+| `ToggleWidgetsButtonVisibility` | `{"visibility": "show"/"hide"}` | Shows or hides Widgets button |
 
 ##### Mouse & Touchpad Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `AdjustMousePointerSize` | value | Adjusts mouse pointer size |
+| `AdjustMousePointerSize` | (none) | Opens mouse pointer settings |
 | `CursorTrail` | `{"enable": true/false, "length": 2-12}` | Enables/disables cursor trail (length: 2–12) |
-| `EnableTouchPad` | `true`/`false` | Enables or disables touchpad |
-| `EnhancePointerPrecision` | `true`/`false` | Enables or disables pointer precision |
-| `MouseCursorSpeed` | value | Sets mouse cursor speed |
-| `MousePointerCustomization` | value | Customizes mouse pointer |
-| `MouseWheelScrollLines` | value | Sets mouse wheel scroll lines |
-| `SetPrimaryMouseButton` | value | Sets primary mouse button (left/right) |
-| `TouchpadCursorSpeed` | value | Sets touchpad cursor speed |
+| `EnableTouchPad` | (none) | Opens touchpad settings |
+| `EnhancePointerPrecision` | `{"enable": true/false}` | Enables or disables pointer precision |
+| `MouseCursorSpeed` | `{"speedLevel": 1-20}` | Sets mouse cursor speed (default 10) |
+| `MousePointerCustomization` | (none) | Opens mouse pointer settings |
+| `MouseWheelScrollLines` | `{"scrollLines": 1-100}` | Sets mouse wheel scroll lines (default 3) |
+| `SetPrimaryMouseButton` | `{"primaryButton": "left"/"right"}` | Sets primary mouse button |
+| `TouchpadCursorSpeed` | (none) | Opens touchpad settings |
 
 ##### Privacy Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `ManageCameraAccess` | `true`/`false` | Manages camera access |
-| `ManageLocationAccess` | `true`/`false` | Manages location access |
-| `ManageMicrophoneAccess` | `true`/`false` | Manages microphone access |
+| `ManageCameraAccess` | `{"accessSetting": "allow"/"deny"}` | Manages camera access |
+| `ManageLocationAccess` | `{"accessSetting": "allow"/"deny"}` | Manages location access |
+| `ManageMicrophoneAccess` | `{"accessSetting": "allow"/"deny"}` | Manages microphone access |
 
 ##### Power Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `BatterySaverActivationLevel` | value | Sets battery saver activation level |
-| `SetPowerModeOnBattery` | value | Sets power mode on battery |
-| `SetPowerModePluggedIn` | value | Sets power mode when plugged in |
+| `BatterySaverActivationLevel` | `{"thresholdValue": 0-100}` | Sets battery saver activation level |
+| `SetPowerModeOnBattery` | (none) | Opens power settings |
+| `SetPowerModePluggedIn` | (none) | Opens power settings |
 
 ##### Accessibility Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `EnableFilterKeysAction` | `true`/`false` | Enables or disables Filter Keys |
-| `EnableMagnifier` | `true`/`false` | Enables or disables Magnifier |
-| `EnableNarratorAction` | `true`/`false` | Enables or disables Narrator |
-| `EnableStickyKeys` | `true`/`false` | Enables or disables Sticky Keys |
-| `MonoAudioToggle` | `true`/`false` | Toggles mono audio |
+| `EnableFilterKeysAction` | (none) | Toggles Filter Keys |
+| `EnableMagnifier` | (none) | Toggles Magnifier |
+| `EnableNarratorAction` | (none) | Toggles Narrator |
+| `EnableStickyKeys` | (none) | Toggles Sticky Keys |
+| `MonoAudioToggle` | (none) | Toggles mono audio |
 
 ##### File Explorer Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `ShowFileExtensions` | `true`/`false` | Shows or hides file extensions |
-| `ShowHiddenAndSystemFiles` | `true`/`false` | Shows or hides hidden and system files |
+| `ShowFileExtensions` | `{"enable": true/false}` | Shows or hides file extensions |
+| `ShowHiddenAndSystemFiles` | `{"enable": true/false}` | Shows or hides hidden and system files |
 
 ##### System Settings
 
 | Command | Parameter | Description |
 |---------|-----------|-------------|
-| `AutomaticDSTAdjustment` | `true`/`false` | Enables or disables automatic DST adjustment |
-| `AutomaticTimeSettingAction` | `true`/`false` | Enables or disables automatic time setting |
-| `EnableGameMode` | `true`/`false` | Enables or disables game mode |
-| `EnableQuietHours` | `true`/`false` | Enables or disables quiet hours |
-| `MinimizeWindowsOnMonitorDisconnectAction` | `true`/`false` | Minimizes windows when monitor disconnects |
-| `RememberWindowLocations` | `true`/`false` | Remembers window locations per monitor |
+| `AutomaticDSTAdjustment` | `{"enable": true/false}` | Enables or disables automatic DST adjustment |
+| `AutomaticTimeSettingAction` | (none) | Opens date/time settings |
+| `EnableGameMode` | (none) | Opens Game Mode settings |
+| `EnableQuietHours` | (none) | Opens quiet hours / focus assist settings |
+| `MinimizeWindowsOnMonitorDisconnectAction` | (none) | Opens display settings |
+| `RememberWindowLocations` | (none) | Opens display settings |
 
 ### Examples
 
@@ -213,9 +227,14 @@ Mute the system audio:
 {"Mute": true} 
 ```
 
-Set the desktop wallpaper and then quit AutoShell:
+Set the desktop wallpaper:
 ```json
-{"SetWallpaper": "C:\\Users\\Public\\Pictures\\wallpaper.jpg"} {"quit": true}
+{"SetWallpaper": "C:\\Users\\Public\\Pictures\\wallpaper.jpg"}
+```
+
+Quit AutoShell:
+```json
+{"quit": null}
 ```
 
 Create a new virtual desktop named "Design Work":
@@ -343,9 +362,9 @@ autoShell/
 │       ├── CoreAudioInterop.cs   # COM interop definitions for Windows audio
 │       └── UIAutomation.cs       # UI Automation helpers (last-resort)
 ├── Logging/
-│   ├── ILogger.cs            # Logging interface (Error, Warning, Debug)
+│   ├── ILogger.cs            # Logging interface (Error, Warning, Info, Debug)
 │   └── ConsoleLogger.cs      # Colored console + diagnostics output
-└── autoShell.Tests/          # 165 unit tests (Moq-based, all services mocked)
+└── autoShell.Tests/          # unit, integration, and E2E tests
 ```
 
 ### Key design decisions
@@ -353,7 +372,7 @@ autoShell/
 - **CommandDispatcher.Create()** is the composition root — it creates all concrete services and wires them into handlers. Tests bypass this and inject mocks directly.
 - **Handlers are thin** — they parse JSON parameters and delegate to services. No P/Invoke or COM code lives in handlers.
 - **Services own all platform calls** — P/Invoke, COM, WMI, and registry access are encapsulated behind interfaces (`I*Service` / `Windows*Service`).
-- **ILogger** abstracts all diagnostic output. `ConsoleLogger` preserves the original colored error/warning formatting.
+- **ILogger** abstracts all diagnostic output with four levels: Error (red), Warning (yellow), Info (cyan), and Debug (diagnostics only). `ConsoleLogger` preserves the original colored formatting.
 
 ## License
 

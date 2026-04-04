@@ -13,7 +13,7 @@ using Newtonsoft.Json;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of IDisplayService using Win32 P/Invoke and UIAutomation.
+/// Concrete implementation of <see cref="IDisplayService"/> using Win32 P/Invoke and <see cref="Interop.UIAutomation"/>.
 /// </summary>
 internal class WindowsDisplayService : IDisplayService
 {

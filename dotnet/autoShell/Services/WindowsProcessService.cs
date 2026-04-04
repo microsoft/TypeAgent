@@ -6,7 +6,7 @@ using System.Diagnostics;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of IProcessService using System.Diagnostics.Process.
+/// Concrete implementation of <see cref="IProcessService"/> using <see cref="System.Diagnostics.Process"/>.
 /// </summary>
 internal class WindowsProcessService : IProcessService
 {

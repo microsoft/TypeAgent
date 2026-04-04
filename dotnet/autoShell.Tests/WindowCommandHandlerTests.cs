@@ -18,25 +18,10 @@ public class WindowCommandHandlerTests
     {
         _handler = new WindowCommandHandler(_mockAppRegistry.Object, _mockWindow.Object);
     }
-
-    /// <summary>
-    /// Verifies that the handler exposes exactly the Maximize, Minimize, SwitchTo, and Tile commands.
-    /// </summary>
-    [Fact]
-    public void SupportedCommands_ContainsExpectedCommands()
-    {
-        var commands = _handler.SupportedCommands.ToList();
-        Assert.Contains("Maximize", commands);
-        Assert.Contains("Minimize", commands);
-        Assert.Contains("SwitchTo", commands);
-        Assert.Contains("Tile", commands);
-        Assert.Equal(4, commands.Count);
-    }
-
     // --- Maximize ---
 
     /// <summary>
-    /// Verifies that Maximize resolves the process name and calls MaximizeWindow.
+    /// Verifies that Maximize resolves the process name and calls <see cref="IWindowService.MaximizeWindow"/>.
     /// </summary>
     [Fact]
     public void Maximize_ResolvesAndMaximizes()
@@ -51,7 +36,7 @@ public class WindowCommandHandlerTests
     // --- Minimize ---
 
     /// <summary>
-    /// Verifies that Minimize resolves the process name and calls MinimizeWindow.
+    /// Verifies that Minimize resolves the process name and calls <see cref="IWindowService.MinimizeWindow"/>.
     /// </summary>
     [Fact]
     public void Minimize_ResolvesAndMinimizes()

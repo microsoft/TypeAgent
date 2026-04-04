@@ -34,6 +34,6 @@ internal interface IWindowService
     /// Finds a window handle by process name, falling back to title search.
     /// </summary>
     /// <param name="processName">The process name or window title to search for.</param>
-    /// <returns>The window handle if found; otherwise IntPtr.Zero.</returns>
+    /// <returns>The window handle if found; otherwise <see cref="IntPtr.Zero"/>.</returns>
     IntPtr FindProcessWindowHandle(string processName);
 }

@@ -9,7 +9,7 @@ using Microsoft.Win32;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of IBrightnessService using WMI and Windows Registry.
+/// Concrete implementation of <see cref="IBrightnessService"/> using WMI and Windows Registry.
 /// </summary>
 internal class WindowsBrightnessService : IBrightnessService
 {

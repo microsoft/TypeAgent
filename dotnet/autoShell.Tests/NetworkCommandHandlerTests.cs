@@ -80,7 +80,7 @@ public class NetworkCommandHandlerTests
     // --- ToggleAirplaneMode ---
 
     /// <summary>
-    /// Verifies that valid boolean values are forwarded to SetAirplaneMode.
+    /// Verifies that valid boolean values are forwarded to <see cref="INetworkService.SetAirplaneMode"/>.
     /// </summary>
     [Theory]
     [InlineData("true", true)]
@@ -96,7 +96,7 @@ public class NetworkCommandHandlerTests
     // --- BluetoothToggle ---
 
     /// <summary>
-    /// Verifies that BluetoothToggle calls ToggleBluetooth with the parsed enable value.
+    /// Verifies that BluetoothToggle calls <see cref="INetworkService.ToggleBluetooth"/> with the parsed enable value.
     /// </summary>
     [Fact]
     public void BluetoothToggle_Enable_CallsToggleBluetooth()

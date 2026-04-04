@@ -6,7 +6,7 @@ using System.Diagnostics;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of IDebuggerService using System.Diagnostics.Debugger.
+/// Concrete implementation of <see cref="IDebuggerService"/> using <see cref="System.Diagnostics.Debugger"/>.
 /// </summary>
 internal class WindowsDebuggerService : IDebuggerService
 {

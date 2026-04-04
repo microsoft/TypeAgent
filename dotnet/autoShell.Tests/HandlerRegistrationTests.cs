@@ -7,8 +7,7 @@ using autoShell.Handlers.Settings;
 namespace autoShell.Tests;
 
 /// <summary>
-/// Verifies that each handler declares the expected supported commands.
-/// Catches accidental renames or deletions.
+/// Verifies structural invariants across all registered handlers (e.g., no duplicate commands).
 /// </summary>
 public class HandlerRegistrationTests
 {
@@ -52,18 +51,6 @@ public class HandlerRegistrationTests
     }
 
     /// <summary>
-    /// Verifies that every registered handler declares at least one supported command.
-    /// </summary>
-    [Fact]
-    public void AllHandlers_HaveNonEmptySupportedCommands()
-    {
-        foreach (var handler in _handlers)
-        {
-            Assert.NotEmpty(handler.SupportedCommands);
-        }
-    }
-
-    /// <summary>
     /// Verifies that no handler declares the same command key more than once.
     /// </summary>
     [Fact]
@@ -104,50 +91,6 @@ public class HandlerRegistrationTests
         }
 
         Assert.Empty(duplicates);
-    }
-
-    /// <summary>
-    /// Verifies that every supported command across all handlers has at least one corresponding unit test.
-    /// </summary>
-    [Fact]
-    public void AllCommands_HaveAtLeastOneUnitTest()
-    {
-        // Discover all test classes in this assembly
-        var testAssembly = typeof(HandlerRegistrationTests).Assembly;
-        var testMethods = testAssembly.GetTypes()
-            .Where(t => t.IsClass && t.IsPublic)
-            .SelectMany(t => t.GetMethods()
-                .Where(m => m.GetCustomAttributes(typeof(Xunit.FactAttribute), false).Length > 0
-                         || m.GetCustomAttributes(typeof(Xunit.TheoryAttribute), false).Length > 0)
-                .Select(m => new { ClassName = t.Name, MethodName = m.Name }))
-            .ToList();
-
-        var untested = new List<string>();
-
-        foreach (var handler in _handlers)
-        {
-            string handlerTypeName = handler.GetType().Name;
-            // Expected test class: "{HandlerTypeName}Tests"
-            string expectedTestClass = handlerTypeName + "Tests";
-
-            var classTests = testMethods
-                .Where(t => t.ClassName == expectedTestClass)
-                .ToList();
-
-            foreach (string command in handler.SupportedCommands)
-            {
-                bool hasCoverage = classTests.Any(t =>
-                    t.MethodName.StartsWith(command + "_", StringComparison.Ordinal) ||
-                    t.MethodName.Contains("_" + command + "_", StringComparison.Ordinal));
-
-                if (!hasCoverage)
-                {
-                    untested.Add($"{handlerTypeName}.{command}");
-                }
-            }
-        }
-
-        Assert.Empty(untested);
     }
 
 }

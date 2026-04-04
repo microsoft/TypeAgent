@@ -11,7 +11,7 @@ using Newtonsoft.Json.Linq;
 namespace autoShell.Services;
 
 /// <summary>
-/// Concrete implementation of IVirtualDesktopService using Windows COM APIs.
+/// Concrete implementation of <see cref="IVirtualDesktopService"/> using Windows COM APIs.
 /// </summary>
 internal class WindowsVirtualDesktopService : IVirtualDesktopService
 {

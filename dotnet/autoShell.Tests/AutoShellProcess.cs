@@ -93,11 +93,11 @@ internal sealed class AutoShellProcess : IDisposable
         using var cts = new CancellationTokenSource(timeoutMs);
         try
         {
-            var lineTask = _process.StandardOutput.ReadLineAsync();
+            var lineTask = _process.StandardOutput.ReadLineAsync(cts.Token).AsTask();
             var completedTask = await Task.WhenAny(lineTask, Task.Delay(timeoutMs, cts.Token));
             if (completedTask == lineTask)
             {
-                cts.Cancel();
+                await cts.CancelAsync();
                 return await lineTask;
             }
             return null;

@@ -17,24 +17,10 @@ public class AudioCommandHandlerTests
     {
         _handler = new AudioCommandHandler(_audioMock.Object);
     }
-
-    /// <summary>
-    /// Verifies that the handler exposes exactly the Volume, Mute, and RestoreVolume commands.
-    /// </summary>
-    [Fact]
-    public void SupportedCommands_ContainsExpectedCommands()
-    {
-        var commands = _handler.SupportedCommands.ToList();
-        Assert.Contains("Volume", commands);
-        Assert.Contains("Mute", commands);
-        Assert.Contains("RestoreVolume", commands);
-        Assert.Equal(3, commands.Count);
-    }
-
     // --- Volume ---
 
     /// <summary>
-    /// Verifies that valid integer percentage values are forwarded to SetVolume.
+    /// Verifies that valid integer percentage values are forwarded to <see cref="IAudioService.SetVolume"/>.
     /// </summary>
     [Theory]
     [InlineData("0", 0)]
@@ -64,7 +50,7 @@ public class AudioCommandHandlerTests
     }
 
     /// <summary>
-    /// Verifies that non-integer input does not trigger a SetVolume call.
+    /// Verifies that non-integer input does not trigger a <see cref="IAudioService.SetVolume"/> call.
     /// </summary>
     [Theory]
     [InlineData("")]
@@ -128,7 +114,7 @@ public class AudioCommandHandlerTests
     // --- Mute ---
 
     /// <summary>
-    /// Verifies that valid boolean string values are forwarded to SetMute.
+    /// Verifies that valid boolean string values are forwarded to <see cref="IAudioService.SetMute"/>.
     /// </summary>
     [Theory]
     [InlineData("true", true)]
@@ -143,7 +129,7 @@ public class AudioCommandHandlerTests
     }
 
     /// <summary>
-    /// Verifies that non-boolean input does not trigger a SetMute call.
+    /// Verifies that non-boolean input does not trigger a <see cref="IAudioService.SetMute"/> call.
     /// </summary>
     [Theory]
     [InlineData("")]

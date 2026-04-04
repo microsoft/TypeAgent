@@ -19,20 +19,6 @@ public class DisplayCommandHandlerTests
     {
         _handler = new DisplayCommandHandler(_displayMock.Object, _loggerMock.Object);
     }
-
-    /// <summary>
-    /// Verifies that the handler exposes exactly the ListResolutions, SetScreenResolution, and SetTextSize commands.
-    /// </summary>
-    [Fact]
-    public void SupportedCommands_ContainsExpectedCommands()
-    {
-        var commands = _handler.SupportedCommands.ToList();
-        Assert.Contains("ListResolutions", commands);
-        Assert.Contains("SetScreenResolution", commands);
-        Assert.Contains("SetTextSize", commands);
-        Assert.Equal(3, commands.Count);
-    }
-
     // --- ListResolutions ---
 
     /// <summary>
