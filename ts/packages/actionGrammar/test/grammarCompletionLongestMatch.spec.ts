@@ -1001,13 +1001,12 @@ describeForEachCompletion(
                     // candidate (not a string), so afterWildcard stays
                     // true — the "by" string completion is wildcard-stable.
                     //
-                    // Phase 3: the gap between mpl=13 and anchor=14 is
+                    // Phase 2: the gap between mpl=13 and anchor=14 is
                     // a single trailing space (separator-only), so the
                     // existing Cat 2 candidate (property completion for
-                    // $(artist)) is preserved.  The separator in the gap
-                    // has been consumed → separatorMode demoted to
-                    // "optional".  closedSet=false because the property
-                    // slot is open-ended.
+                    // $(artist)) is preserved (merge, not displace).
+                    // closedSet=false because the property slot is
+                    // open-ended.
                     const result = matchGrammarCompletion(
                         grammar,
                         "play hello by ",

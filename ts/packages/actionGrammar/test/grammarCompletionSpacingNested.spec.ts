@@ -1056,7 +1056,7 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "ab");
                 // NoneRule: Cat 3b → P=2, offers "cd"
                 // WildcardRule: wildcard absorbs "ab", EOI deferred →
-                //   Phase 3 instantiates "done" at P=2
+                //   Phase 2 instantiates "done" at P=2
                 expect(result.matchedPrefixLength).toBe(2);
                 expect(result.completions).toContain("cd");
                 expect(result.completions).toContain("done");
@@ -1221,7 +1221,7 @@ describeForEachCompletion(
                 // Phase 2: findPartialKeywordInWildcard finds "c" as
                 //   prefix of "cd" at position 7 → forwardPartialKeyword.
                 //
-                // Phase 3: anchor stripped to 6. clear+anchor resets
+                // Phase 2 (EOI injection): anchor stripped to 6. clear+anchor resets
                 //   closedSet=true AND droppedCandidates=false (the
                 //   Phase 1 conflict is stale at the displaced P).
                 //   Partial keyword "cd" added with no new conflict.
