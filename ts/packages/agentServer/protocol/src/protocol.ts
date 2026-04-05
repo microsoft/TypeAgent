@@ -4,17 +4,43 @@
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
     clientType?: "shell" | "extension"; // identifies the connecting client type
+    sessionId?: string; // join a specific session by UUID. If omitted, joins the most recently active session.
+};
+
+export type SessionInfo = {
+    sessionId: string;
+    name: string;
+    clientCount: number;
+    createdAt: string; // ISO 8601
+};
+
+export type JoinSessionResult = {
+    connectionId: string;
+    sessionId: string;
 };
 
 export type AgentServerInvokeFunctions = {
-    join: (options?: DispatcherConnectOptions) => Promise<string>;
+    joinSession: (
+        options?: DispatcherConnectOptions,
+    ) => Promise<JoinSessionResult>;
+    leaveSession: (sessionId: string) => Promise<void>;
+    createSession: (name: string) => Promise<SessionInfo>;
+    listSessions: (name?: string) => Promise<SessionInfo[]>;
+    renameSession: (sessionId: string, newName: string) => Promise<void>;
+    deleteSession: (sessionId: string) => Promise<void>;
     shutdown: () => Promise<void>;
 };
 
-export const enum ChannelName {
-    AgentServer = "agent-server",
-    Dispatcher = "dispatcher",
-    ClientIO = "clientio",
+export const AgentServerChannelName = "agent-server";
+
+/** Build the dispatcher channel name for a given session. */
+export function getDispatcherChannelName(sessionId: string): string {
+    return `dispatcher:${sessionId}`;
+}
+
+/** Build the clientIO channel name for a given session. */
+export function getClientIOChannelName(sessionId: string): string {
+    return `clientio:${sessionId}`;
 }
 
 // =============================================

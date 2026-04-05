@@ -1,12 +1,12 @@
 # agentServer
 
-The agentServer hosts a **shared TypeAgent dispatcher** over WebSocket, allowing multiple clients (Shell, CLI, extensions) to share a single running dispatcher instance. It is split into three sub-packages:
+The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multiple clients (Shell, CLI, extensions) to share a single running dispatcher instance with full session management. It is split into three sub-packages:
 
-| Package     | npm name                | Purpose                                                      |
-| ----------- | ----------------------- | ------------------------------------------------------------ |
-| `protocol/` | `agent-server-protocol` | RPC channel names, join/shutdown types, client-type registry |
-| `client/`   | `agent-server-client`   | Client library: connect, auto-spawn, stop                    |
-| `server/`   | `agent-server`          | Long-running WebSocket server with shared dispatcher         |
+| Package     | npm name                | Purpose                                                                      |
+| ----------- | ----------------------- | ---------------------------------------------------------------------------- |
+| `protocol/` | `agent-server-protocol` | RPC channel names, session types, client-type registry                       |
+| `client/`   | `agent-server-client`   | Client library: connect, session management, auto-spawn, stop                |
+| `server/`   | `agent-server`          | Long-running WebSocket server with `SessionManager` and per-session dispatch |
 
 ---
 
@@ -21,37 +21,85 @@ Shell (Electron)              CLI (Node.js)
          ┌────────▼────────┐
          │   agentServer   │
          │                 │
-         │  ┌───────────┐  │
-         │  │  Routing  │  │   routes ClientIO callbacks
-         │  │  ClientIO │  │   back to correct client
-         │  └─────┬─────┘  │   by connectionId
-         │        │        │
-         │  ┌─────▼─────┐  │
-         │  │  Shared   │  │   one instance shared
-         │  │Dispatcher │  │   by all connected clients
-         │  └───────────┘  │
+         │  SessionManager │
+         │  ┌────────────┐ │
+         │  │ Session A  │ │  ← clients 0, 1
+         │  │ Dispatcher │ │
+         │  ├────────────┤ │
+         │  │ Session B  │ │  ← client 2
+         │  │ Dispatcher │ │
+         │  └────────────┘ │
          └─────────────────┘
 ```
 
-### Three RPC channels per connection
+Each session has its own `SharedDispatcher` instance with isolated chat history, conversation memory, display log, and persist directory. Clients connected to the same session share one dispatcher; clients in different sessions are fully isolated.
 
-Each WebSocket connection multiplexes three independent JSON-RPC channels:
+### RPC channels per connection
 
-| Channel       | Direction       | Purpose                                                           |
-| ------------- | --------------- | ----------------------------------------------------------------- |
-| `AgentServer` | client → server | Lifecycle: `join()`, `shutdown()`                                 |
-| `Dispatcher`  | client → server | Commands: `processCommand()`, `getCommandCompletion()`, etc.      |
-| `ClientIO`    | server → client | Display/interaction callbacks: `setDisplay()`, `askYesNo()`, etc. |
+Each WebSocket connection multiplexes independent JSON-RPC channels:
 
-### Shared dispatcher + routing ClientIO
+| Channel                  | Direction       | Purpose                                                            |
+| ------------------------ | --------------- | ------------------------------------------------------------------ |
+| `agent-server`           | client → server | Session lifecycle: `joinSession`, `leaveSession`, CRUD, `shutdown` |
+| `dispatcher:<sessionId>` | client → server | Commands: `processCommand`, `getCommandCompletion`, etc.           |
+| `clientio:<sessionId>`   | server → client | Display/interaction callbacks: `setDisplay`, `askYesNo`, etc.      |
 
-A single `Dispatcher` instance is created at server startup and shared by all connected clients. Each `processCommand()` call carries a `ClientRequestId = { connectionId, requestId }`. When the dispatcher (or an agent) calls a `ClientIO` method, the **routing ClientIO** layer uses `connectionId` to forward the callback to the correct client's WebSocket.
+The dispatcher and clientIO channels are namespaced by `sessionId`, allowing a single WebSocket connection to participate in multiple sessions simultaneously.
 
-This means:
+---
 
-- Agents are loaded once and shared across clients.
-- Per-client state (session, cache) is isolated by `connectionId`.
-- Agents are unaware that multiple clients are connected.
+## Starting and stopping the server
+
+### With pnpm (recommended)
+
+From the `ts/` directory:
+
+```bash
+# Build (if not already built)
+pnpm run build agentServer
+
+# Start
+pnpm --filter agent-server start
+
+# Start with a named config (e.g. loads config.test.json)
+pnpm --filter agent-server start -- --config test
+
+# Stop (sends shutdown via RPC)
+pnpm --filter agent-server stop
+```
+
+### With node directly
+
+```bash
+# From the repo root
+node --disable-warning=DEP0190 ts/packages/agentServer/server/dist/server.js
+
+# With optional config name
+node --disable-warning=DEP0190 ts/packages/agentServer/server/dist/server.js --config test
+```
+
+The server listens on `ws://localhost:8999` and logs `Agent server started at ws://localhost:8999` when ready.
+
+---
+
+## Session lifecycle
+
+```
+Client calls joinSession({ sessionId?, clientType, filter })
+  │
+  ├─ sessionId provided?
+  │   ├─ Yes → look up sessions.json
+  │   │   ├─ Found → load SharedDispatcher (lazy init if not in memory)
+  │   │   └─ Not found → error: "Session not found"
+  │   └─ No → resume most recently active session
+  │       └─ No sessions exist → auto-create session named "default"
+  │
+  ├─ Register client in session's SharedDispatcher routing table
+  ├─ Update lastActiveSessionId in sessions.json
+  └─ Return { connectionId, sessionId }
+```
+
+Session dispatchers are automatically evicted from memory after 5 minutes with no connected clients.
 
 ---
 
@@ -60,19 +108,18 @@ This means:
 ```
 Client calls ensureAndConnectDispatcher(clientIO, port)
   │
-  ├─ Check: is server already listening on ws://localhost:<port>?
+  ├─ Is server already listening on ws://localhost:<port>?
   │   └─ No → spawnAgentServer() — detached child process, survives parent exit
-  │   └─ Yes → continue
   │
-  ├─ Open WebSocket → create 3 RPC channels
+  ├─ Open WebSocket → create RPC channels
   │
-  ├─ Send join({ clientType, filter }) on AgentServer channel
-  │   └─ Server assigns connectionId, registers client type
+  ├─ Send joinSession({ clientType, filter }) on agent-server channel
+  │   └─ Server assigns connectionId, returns { connectionId, sessionId }
   │
   └─ Return Dispatcher RPC proxy to caller
 ```
 
-On disconnect, the server removes the client from its routing table and cleans up the connection.
+On disconnect, the server removes all of that connection's sessions from its routing table.
 
 ---
 
@@ -80,25 +127,23 @@ On disconnect, the server removes the client from its routing table and cleans u
 
 [`packages/shell/src/main/instance.ts`](../shell/src/main/instance.ts) supports two modes:
 
-**Standalone (default)** — dispatcher runs in-process inside the Electron main process. No WebSocket overhead, fastest for single-user desktop use.
+**Standalone (default)** — dispatcher runs in-process inside the Electron main process.
 
 ```
 Chat UI (renderer) ↔ IPC ↔ Main process ↔ in-process Dispatcher
 ```
 
-**Connected (`--connect <port>`)** — connects to a running agentServer. Enables sharing a dispatcher across multiple Shell windows or CLI sessions.
+**Connected (`--connect <port>`)** — connects to a running agentServer.
 
 ```
 Chat UI (renderer) ↔ IPC ↔ Main process ↔ WebSocket ↔ agentServer
 ```
 
-The Shell also registers its own `AppAgentProvider` ([`agent.ts`](../shell/src/main/agent.ts)) for shell-specific commands (themes, voice mode, etc.).
-
 ---
 
 ## CLI integration
 
-The CLI ([`packages/cli/src/commands/connect.ts`](../cli/src/commands/connect.ts)) always uses remote connection. It calls `ensureAndConnectDispatcher()`, which auto-spawns the server if it is not already running, then enters an interactive readline loop (or processes a single `--request`).
+The CLI ([`packages/cli/src/commands/connect.ts`](../cli/src/commands/connect.ts)) always uses remote connection. It calls `ensureAndConnectDispatcher()`, which auto-spawns the server if not already running, then enters an interactive readline loop.
 
 ```
 Terminal ↔ EnhancedConsoleClientIO ↔ WebSocket ↔ agentServer
@@ -114,37 +159,43 @@ Terminal ↔ EnhancedConsoleClientIO ↔ WebSocket ↔ agentServer
 Shell launches → createDispatcher() in-process → no server involved
 ```
 
-**Shell or CLI with running server**
+**Shell or CLI — server already running**
 
 ```
 Client → ensureAndConnectDispatcher(port=8999)
-       → server already running → connect → join() → get Dispatcher proxy
+       → server already running → connect → joinSession() → Dispatcher proxy
 ```
 
-**Server not yet running**
+**Shell or CLI — server not yet running**
 
 ```
 Client → ensureAndConnectDispatcher(port=8999)
        → server not found → spawnAgentServer()
        → poll until ready (60 s timeout)
-       → connect → join() → get Dispatcher proxy
+       → connect → joinSession() → Dispatcher proxy
 ```
 
-**Headless server only**
+**Headless server**
 
 ```
-node packages/agentServer/server/dist/server.js
+pnpm --filter agent-server start
 → listens on ws://localhost:8999
-→ any number of Shell/CLI clients can connect and share the dispatcher
+→ any number of Shell/CLI clients can connect and share sessions
 ```
+
+---
+
+## Session persistence
+
+Session metadata is stored at `~/.typeagent/server-sessions/sessions.json`. Each session's data (chat history, conversation memory, display log) lives under `~/.typeagent/server-sessions/<sessionId>/`.
 
 ---
 
 ## Sub-package details
 
-- [protocol/README.md](protocol/README.md) — channel names, RPC types, client-type registry
-- [client/README.md](client/README.md) — `connectDispatcher`, `ensureAndConnectDispatcher`, `stopAgentServer`
-- [server/README.md](server/README.md) — server entry point, `createSharedDispatcher`, routing ClientIO
+- [protocol/README.md](protocol/README.md) — channel names, RPC types, session types, client-type registry
+- [client/README.md](client/README.md) — `connectAgentServer`, `ensureAndConnectDispatcher`, `stopAgentServer`
+- [server/README.md](server/README.md) — server entry point, `SessionManager`, `SharedDispatcher`, routing ClientIO
 
 ---
 

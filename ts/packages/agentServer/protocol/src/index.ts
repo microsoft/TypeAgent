@@ -4,7 +4,11 @@
 export {
     DispatcherConnectOptions,
     AgentServerInvokeFunctions,
-    ChannelName,
+    AgentServerChannelName,
+    SessionInfo,
+    JoinSessionResult,
+    getDispatcherChannelName,
+    getClientIOChannelName,
     registerClientType,
     getClientType,
     unregisterClient,
