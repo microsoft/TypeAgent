@@ -440,6 +440,26 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
             };
         },
 
+        async autoDiscoverActions(params: any) {
+            try {
+                const result = await forward("autoDiscoverActions", {
+                    url: params.url,
+                    domain: params.domain,
+                    mode: params.mode || "scope",
+                });
+                return {
+                    success: true,
+                    flowCount: result?.flowCount ?? 0,
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
+        },
+
         async indexExtractedKnowledge(params: any) {
             try {
                 const result = await forward("indexWebPageContent", {

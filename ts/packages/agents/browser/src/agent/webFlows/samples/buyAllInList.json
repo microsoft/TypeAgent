@@ -1,0 +1,28 @@
+{
+  "name": "buyAllInList",
+  "description": "Navigate to a shopping list and add all available items to the cart",
+  "version": 1,
+  "parameters": {
+    "listName": {
+      "type": "string",
+      "required": true,
+      "description": "Name of the shopping list to buy from"
+    },
+    "storeName": {
+      "type": "string",
+      "required": false,
+      "description": "Store to shop from (uses current store if not specified)"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    await browser.navigateTo('https://www.instacart.com/');\n    await browser.awaitPageLoad();\n\n    if (params.storeName) {\n        const store = await browser.extractComponent<{ name: string; linkSelector?: string }>({\n            typeName: 'StoreInfo',\n            schema: '{ name: string; subtitle?: string; linkSelector?: string; }'\n        }, params.storeName);\n        if (store && store.linkSelector) {\n            await browser.clickAndWait(store.linkSelector);\n        }\n    }\n\n    const listsNav = await browser.extractComponent<{ linkSelector: string }>({\n        typeName: 'ListsNavigationLink',\n        schema: '{ linkSelector: string; }'\n    });\n    if (!listsNav || !listsNav.linkSelector) {\n        throw new Error('Could not find lists navigation link');\n    }\n    await browser.clickAndWait(listsNav.linkSelector);\n\n    const list = await browser.extractComponent<{ name: string; detailsLinkSelector: string }>({\n        typeName: 'ListInfo',\n        schema: '{ name: string; detailsLinkSelector: string; }'\n    }, params.listName);\n    if (!list || !list.detailsLinkSelector) {\n        throw new Error('Could not find list: ' + params.listName);\n    }\n    await browser.clickAndWait(list.detailsLinkSelector);\n\n    const details = await browser.extractComponent<{ name: string; products?: { name: string; price: string; availability?: string; addToCartButtonSelector?: string }[] }>({\n        typeName: 'ListDetailsInfo',\n        schema: '{ name: string; storeName?: string; products?: { name: string; price: string; availability?: string; addToCartButtonSelector?: string; }[]; }'\n    });\n    if (!details || !details.products || details.products.length === 0) {\n        return { success: false, error: 'No products found in list ' + params.listName };\n    }\n\n    let added = 0;\n    const unavailable: string[] = [];\n    for (const product of details.products) {\n        if (product.availability === 'Out of stock') {\n            unavailable.push(product.name);\n        } else if (product.addToCartButtonSelector) {\n            await browser.click(product.addToCartButtonSelector);\n            await browser.awaitPageInteraction();\n            added++;\n        }\n    }\n\n    let message = 'Added ' + added + ' items from \"' + params.listName + '\" to cart';\n    if (unavailable.length > 0) {\n        message += '. Unavailable: ' + unavailable.join(', ');\n    }\n    return { success: true, message };\n}",
+  "grammarPatterns": [
+    "buy (all)? (items)? (in | from) (my)? $(listName:wildcard) list",
+    "add (all)? (items)? from $(listName:wildcard) list to cart",
+    "shop (my)? $(listName:wildcard) list"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": ["instacart.com"]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}

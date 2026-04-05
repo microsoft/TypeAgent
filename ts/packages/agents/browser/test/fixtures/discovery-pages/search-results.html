@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <title>Search results for "headphones" - Example Store</title>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href="/">Home</a>
+        <form class="search-form">
+          <input type="search" value="headphones" class="search-input" />
+          <button type="submit" class="search-submit">Search</button>
+        </form>
+        <a href="/cart" class="cart-link">Cart (0)</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Search results for "headphones"</h1>
+      <div class="filters">
+        <select class="price-filter">
+          <option>All Prices</option>
+          <option>Under $100</option>
+        </select>
+        <select class="brand-filter">
+          <option>All Brands</option>
+          <option>Sony</option>
+          <option>Bose</option>
+        </select>
+      </div>
+      <div class="product-grid">
+        <div class="product-tile" data-product-id="1">
+          <a href="/product/sony-wh1000xm5" class="product-link">
+            <h2>Sony WH-1000XM5</h2>
+            <span class="price">$348.00</span>
+            <span class="rating">4.7 stars</span>
+          </a>
+          <button class="quick-add-btn">Add to Cart</button>
+        </div>
+        <div class="product-tile" data-product-id="2">
+          <a href="/product/airpods-pro" class="product-link">
+            <h2>Apple AirPods Pro</h2>
+            <span class="price">$249.00</span>
+            <span class="rating">4.5 stars</span>
+          </a>
+          <button class="quick-add-btn">Add to Cart</button>
+        </div>
+        <div class="product-tile" data-product-id="3">
+          <a href="/product/bose-qc45" class="product-link">
+            <h2>Bose QC45</h2>
+            <span class="price">$279.00</span>
+            <span class="rating">4.3 stars</span>
+          </a>
+          <button class="quick-add-btn">Add to Cart</button>
+        </div>
+      </div>
+      <nav class="pagination">
+        <a href="?page=1" class="active">1</a>
+        <a href="?page=2">2</a>
+        <a href="?page=3">3</a>
+      </nav>
+    </main>
+  </body>
+</html>

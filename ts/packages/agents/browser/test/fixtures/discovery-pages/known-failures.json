@@ -1,0 +1,17 @@
+{
+  "description": "Known content-based discovery failures to track and improve over time. Listed failures are reported in the benchmark but do not block the exit code.",
+  "failures": [
+    {
+      "page": "product-detail.html",
+      "missingFlow": "getLocationInStore",
+      "reason": "After HTML reduction, the 'Aisle 7, Shelf B' store location text loses context. The LLM doesn't associate it with an in-store location action.",
+      "filed": "2026-04-03"
+    },
+    {
+      "page": "instacart-home.html",
+      "missingFlow": "searchForProduct",
+      "reason": "After HTML reduction, the search input loses identifying attributes. The LLM doesn't recognize it as a product search capability.",
+      "filed": "2026-04-03"
+    }
+  ]
+}
