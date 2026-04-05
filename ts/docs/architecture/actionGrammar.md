@@ -133,21 +133,21 @@ evaluated against the adjacent characters to produce a `separatorMode`
 [Completion matching](#completion-matching-matchgrammarcompletion) and
 `completion.md`):
 
-| Annotation           | `CompiledSpacingMode` | Resulting `separatorMode`                                                                                                                                             |
-| -------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _(none / default)_   | `auto`                | `"spacePunctuation"` if both adjacent characters are word-boundary scripts (Latin, Cyrillic, etc.); `"optional"` if either is CJK or another non-word-boundary script |
-| `[spacing=required]` | `"required"`          | Always `"spacePunctuation"`                                                                                                                                           |
-| `[spacing=optional]` | `"optional"`          | Always `"optional"`                                                                                                                                                   |
-| `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                   |
+| Annotation           | `CompiledSpacingMode` | Resulting `separatorMode`                                                                                                                                                  |
+| -------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(none / default)_   | `auto`                | `"spacePunctuation"` if both adjacent characters are word-boundary scripts (Latin, Cyrillic, etc.); `"optionalSpace"` if either is CJK or another non-word-boundary script |
+| `[spacing=required]` | `"required"`          | Always `"spacePunctuation"`                                                                                                                                                |
+| `[spacing=optional]` | `"optional"`          | Always `"optionalSpacePunctuation"`                                                                                                                                        |
+| `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                        |
 
 **Note:** The table above describes the _baseline_ `separatorMode`
 from the spacing annotation. When the consumed prefix already ends with
 whitespace (i.e., the separator is already present in `matchedPrefixLength`),
-the grammar matcher overrides to `"optional"` because no additional
+the grammar matcher overrides to `"optionalSpace"` because no additional
 separator is needed. Digits are Unicode script "Common" (not a
 word-boundary script), so `auto` spacing at a digit–Latin boundary
 (e.g., `$(n:number)` followed by a Latin keyword) also produces
-`"optional"`.
+`"optionalSpace"`.
 
 ### Entities
 
@@ -777,7 +777,7 @@ Rationale:
    `separatorMode` accurately reflects the grammar's spacing annotation
    (e.g., `"spacePunctuation"` for Latin auto-spacing). If P advanced
    past the space, the separator is already present and `separatorMode`
-   collapses to `"optional"` — losing the information about what kind of
+   collapses to `"optionalSpace"` — losing the information about what kind of
    separator the grammar expects. The shell needs the un-collapsed mode
    to decide whether a non-space punctuation character should trigger a
    re-fetch.
@@ -822,16 +822,16 @@ already covers this case.
 - `separatorMode` — determined by the grammar rule's `[spacing=...]`
   annotation (see [Spacing modes](#spacing-modes) above). Special cases:
   - When `matchedPrefixLength=0` (nothing consumed), `separatorMode` is
-    always `"optional"` (or `"none"` for `[spacing=none]` rules) because
+    always `"optionalSpace"` (or `"none"` for `[spacing=none]` rules) because
     there is no preceding character to require a separator against.
   - When the consumed prefix already ends with whitespace (e.g.,
-    `"play "`), `separatorMode` is `"optional"` because the separator is
+    `"play "`), `separatorMode` is `"optionalSpace"` because the separator is
     already present — no additional separator is needed.
   - For `auto` spacing, `"spacePunctuation"` is produced only when both
     the last consumed character and the first completion character are
     word-boundary scripts (Latin, Cyrillic, etc.) and no separator has
     been consumed; digit–Latin transitions (e.g., `"50"` → `"percent"`)
-    produce `"optional"` because digits are Unicode script "Common", not
+    produce `"optionalSpace"` because digits are Unicode script "Common", not
     a word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
@@ -886,7 +886,7 @@ Three-way compatibility:
    and candidates were dropped, advance `maxPrefixLength` by exactly
    one character (not past all consecutive separators). This ensures
    backspace triggers a re-fetch (the anchor diverges). Override
-   `separatorMode` to `"optional"` since the separator is already
+   `separatorMode` to `"optionalSpace"` since the separator is already
    consumed into P.
 
    Advance-1 is preferred over advance-all because:
@@ -896,10 +896,10 @@ Three-way compatibility:
    - With advance-all, deleting the _last_ separator in a multi-
      separator run is the only keystroke that triggers a re-fetch;
      intermediate deletes are invisible to the completion system.
-   - Advance-1 matches the shell's `separatorMode="optional"` contract:
+   - Advance-1 matches the shell's `separatorMode="optionalSpace"` contract:
      the session sees one consumed separator and treats the rest as
      ordinary prefix text. The shell strips leading whitespace for
-     `"optional"` mode (just as it does for requiring modes), so extra
+     `"optionalSpace"` mode (just as it does for requiring modes), so extra
      separators do not pollute the trie — the menu stays visible with
      an empty or narrowed prefix.
    - The re-fetch cost is negligible — the grammar matcher runs in

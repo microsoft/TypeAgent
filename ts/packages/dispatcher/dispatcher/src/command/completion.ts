@@ -82,7 +82,7 @@ function detectPendingFlag(
 // whitespace acts as a commit signal: the token before it is
 // considered committed and the whitespace itself is consumed, so
 // startIndex should include it and separatorMode should be
-// "optional" (no additional separator needed).
+// "optionalSpace" (no additional separator needed).
 function hasWhitespaceBefore(text: string, index: number): boolean {
     return index > 0 && /\s/.test(text[index - 1]);
 }
@@ -192,7 +192,7 @@ type ParameterCompletionResult = CommandCompletionResult;
 //                       ["true","false"] completions for this flag.
 //   separatorMode    — when set, the caller should use this as the
 //                       base separator mode (before merging with
-//                       agent-reported modes).  "optional" when
+//                       agent-reported modes).  "optionalSpace" when
 //                       trailing whitespace was consumed by startIndex.
 type CompletionTarget = {
     completionNames: string[];
@@ -226,7 +226,7 @@ function resolveCompletionTarget(
             includeFlags: true,
             booleanFlagName,
             separatorMode: hasWhitespaceBefore(input, remainderIndex)
-                ? "optional"
+                ? "optionalSpace"
                 : undefined,
             directionSensitive: false,
         };
@@ -259,7 +259,7 @@ function resolveCompletionTarget(
                 includeFlags: false,
                 booleanFlagName: undefined,
                 separatorMode: hasWhitespaceBefore(input, startIndex)
-                    ? "optional"
+                    ? "optionalSpace"
                     : undefined,
                 directionSensitive: false,
             };
@@ -291,7 +291,7 @@ function resolveCompletionTarget(
             includeFlags: true,
             booleanFlagName,
             separatorMode: hasWhitespaceBefore(input, flagTokenStart)
-                ? "optional"
+                ? "optionalSpace"
                 : undefined,
             directionSensitive: true,
         };
@@ -300,7 +300,7 @@ function resolveCompletionTarget(
     // ── Spec case 2b: last token committed, complete next ───────
     // startIndex is the raw position — includes any trailing
     // whitespace that the user typed.  When trailing whitespace is
-    // present, separatorMode becomes "optional" because the
+    // present, separatorMode becomes "optionalSpace" because the
     // whitespace is already consumed.
     if (pendingFlag !== undefined) {
         // Flag awaiting a value — either the user moved forward or
@@ -311,7 +311,7 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: false,
             booleanFlagName: undefined,
-            separatorMode: trailingWhitespace ? "optional" : undefined,
+            separatorMode: trailingWhitespace ? "optionalSpace" : undefined,
             directionSensitive: !trailingWhitespace,
         };
     }
@@ -321,7 +321,7 @@ function resolveCompletionTarget(
         isPartialValue: false,
         includeFlags: true,
         booleanFlagName,
-        separatorMode: trailingWhitespace ? "optional" : undefined,
+        separatorMode: trailingWhitespace ? "optionalSpace" : undefined,
         directionSensitive: false,
     };
 }
@@ -358,7 +358,7 @@ function resolveCompletionTarget(
 //       at the *end* of the consumed input (including any trailing
 //       whitespace) and offer completions for the next parameters.
 //       When trailing whitespace is present, separatorMode is
-//       "optional" because the whitespace is already consumed.
+//       "optionalSpace" because the whitespace is already consumed.
 //
 // ── Exceptions to case 2a ────────────────────────────────────────────────
 //
@@ -668,7 +668,7 @@ export async function getCommandCompletion(
 
         // Collect completions and track separatorMode across all sources.
         // When trailing whitespace was consumed *and* nothing follows
-        // (suffix is empty), separatorMode starts at "optional" — the
+        // (suffix is empty), separatorMode starts at "optionalSpace" — the
         // space is already part of the anchor so no additional separator
         // is needed.  When a suffix exists (e.g. "--off"), the space
         // before it is structural, not trailing.
@@ -676,7 +676,7 @@ export async function getCommandCompletion(
         let separatorMode: SeparatorMode | undefined =
             result.suffix.length === 0 &&
             hasWhitespaceBefore(input, commandConsumedLength)
-                ? "optional"
+                ? "optionalSpace"
                 : undefined;
         let closedSet = true;
         // Track whether direction influenced the result.  When false,
@@ -768,7 +768,7 @@ export async function getCommandCompletion(
                 result.parsedAppAgentName !== undefined ||
                     result.commands.length > 0
                     ? "space"
-                    : "optional",
+                    : "optionalSpace",
             );
         } else {
             // Both table and descriptor are undefined — the agent
@@ -791,7 +791,7 @@ export async function getCommandCompletion(
                     .getAppAgentNames()
                     .filter((name) => context.agents.isCommandEnabled(name)),
             });
-            separatorMode = mergeSeparatorMode(separatorMode, "optional");
+            separatorMode = mergeSeparatorMode(separatorMode, "optionalSpace");
         }
 
         if (startIndex === 0) {
@@ -802,7 +802,7 @@ export async function getCommandCompletion(
             });
 
             // The first token doesn't require separator before it
-            separatorMode = "optional";
+            separatorMode = "optionalSpace";
         }
         const completionResult: CommandCompletionResult = {
             startIndex,

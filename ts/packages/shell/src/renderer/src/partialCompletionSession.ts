@@ -89,10 +89,10 @@ function computeNoMatchPolicy(
 //       "slide"   → wildcard boundary, slide anchor forward
 //   - The anchor is never advanced after a result is received (except
 //     when noMatchPolicy is "slide", which slides the anchor forward).
-//     When `separatorMode` requires a separator, or is "optional"
-//     (set by conflict filtering after consuming one separator into P),
-//     leading separator characters in the raw prefix are stripped before
-//     being passed to the menu, so the trie still matches.
+//     When `separatorMode` requires a separator, or is "optionalSpace" /
+//     "optionalSpacePunctuation", leading separator characters in the
+//     raw prefix are stripped before being passed to the menu, so the
+//     trie still matches.
 //
 // Architecture: docs/architecture/completion.md — §5 Shell — Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
@@ -208,10 +208,7 @@ export class PartialCompletionSession {
                 return undefined;
             }
         }
-        // Strip leading separators for all modes except "none".
-        return sepMode !== "none"
-            ? stripLeadingSeparator(rawPrefix, sepMode)
-            : rawPrefix;
+        return stripLeadingSeparator(rawPrefix, sepMode);
     }
 
     // Decides whether the current session can service `input` without a new
@@ -328,7 +325,7 @@ export class PartialCompletionSession {
         // satisfy the separatorMode constraint.
         //   "space":            whitespace required
         //   "spacePunctuation": whitespace or Unicode punctuation required
-        //   "optional"/"none":  no separator needed, fall through to SHOW
+        //   "optionalSpacePunctuation"/"optionalSpace"/"none":  no separator needed, fall through to SHOW
         //
         // Three sub-cases when a separator IS required:
         //   ""        — separator not typed yet: HIDE+KEEP (separator may still arrive)
@@ -388,12 +385,12 @@ export class PartialCompletionSession {
 
         // SHOW — strip the leading separator (if any) before passing to the
         // menu trie, so completions like "music" match prefix "" not " ".
-        // "optional" mode: separator is not required, but when present it
+        // "optionalSpace" mode: separator is not required, but when present it
         // should be stripped so the trie sees clean completion text.
-        const completionPrefix =
-            needsSep || sepMode === "optional"
-                ? stripLeadingSeparator(rawPrefix, sepMode)
-                : rawPrefix;
+        // "optionalSpacePunctuation" mode: same as "optionalSpace", but also
+        // strips leading punctuation (for [spacing=optional] grammars
+        // where punctuation is a valid separator).
+        const completionPrefix = stripLeadingSeparator(rawPrefix, sepMode);
 
         const position = getPosition(completionPrefix);
         if (position !== undefined) {
@@ -580,14 +577,22 @@ function separatorRegex(mode: SeparatorMode): RegExp {
 }
 
 // Strip leading separator characters from rawPrefix.
-// For "space" and "optional" modes, only whitespace is stripped.
-// ("optional" uses whitespace-only because the consumed separator
-// in conflict filtering was a whitespace character.)
-// For "spacePunctuation" mode, leading whitespace and punctuation are stripped.
+// For "space" and "optionalSpace" modes, only whitespace is stripped.
+// ("optionalSpace" uses whitespace-only because it covers CJK/digit/mixed
+// contexts where only whitespace is meaningful as a separator.)
+// For "spacePunctuation" and "optionalSpacePunctuation" modes, leading
+// whitespace and punctuation are stripped.
 function stripLeadingSeparator(rawPrefix: string, mode: SeparatorMode): string {
-    return mode === "space" || mode === "optional"
-        ? rawPrefix.trimStart()
-        : rawPrefix.replace(/^[\s\p{P}]+/u, "");
+    switch (mode) {
+        case "none":
+            return rawPrefix;
+        case "space":
+        case "optionalSpace":
+            return rawPrefix.trimStart();
+        case "spacePunctuation":
+        case "optionalSpacePunctuation":
+            return rawPrefix.replace(/^[\s\p{P}]+/u, "");
+    }
 }
 
 // Convert backend CompletionGroups into flat SearchMenuItems,

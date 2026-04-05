@@ -57,7 +57,7 @@ function grammarCompletion(token: string): CompletionGroups {
                 },
             ],
             matchedPrefixLength: quoteOffset + 2,
-            separatorMode: "optional",
+            separatorMode: "optionalSpace",
         };
     }
     // No prefix matched — offer initial completions.
@@ -828,7 +828,7 @@ describe("Command Completion - startIndex", () => {
             expect(result).toBeDefined();
             // Top-level completions (agent names, system subcommands)
             // follow '@' — space is accepted but not required.
-            expect(result!.separatorMode).toBe("optional");
+            expect(result!.separatorMode).toBe("optionalSpace");
             // Agent names are offered when no agent was recognized,
             // independent of which branch (descriptor/table/neither)
             // produced the subcommand completions.
@@ -849,9 +849,9 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // Partial parameter token — only parameter completions returned,
-            // no subcommand group.  separatorMode set to "optional"
+            // no subcommand group.  separatorMode set to "optionalSpace"
             // due to trailing space advancement.
-            expect(result!.separatorMode).toBe("optional");
+            expect(result!.separatorMode).toBe("optionalSpace");
         });
 
         it("returns no separatorMode for partial unmatched token consumed as param", async () => {

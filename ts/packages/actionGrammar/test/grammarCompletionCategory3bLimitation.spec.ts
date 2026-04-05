@@ -225,7 +225,7 @@ describeForEachCompletion(
                     const result = matchGrammarCompletion(grammar, "再生x");
                     expect(result.completions.sort()).toEqual(["映画", "音楽"]);
                     expect(result.matchedPrefixLength).toBe(2);
-                    expect(result.separatorMode).toBe("optional");
+                    expect(result.separatorMode).toBe("optionalSpace");
                 });
             });
 
@@ -242,7 +242,7 @@ describeForEachCompletion(
                     const result = matchGrammarCompletion(grammar, "xyz");
                     expect(result.completions).toEqual(["play"]);
                     expect(result.matchedPrefixLength).toBe(0);
-                    expect(result.separatorMode).toBe("optional");
+                    expect(result.separatorMode).toBe("optionalSpace");
                 });
             });
 
@@ -270,11 +270,13 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("reports optional separatorMode for spacing=optional", () => {
+                it("reports optionalSpacePunctuation separatorMode for spacing=optional", () => {
                     const result = matchGrammarCompletion(grammar, "play x");
                     expect(result.completions).toEqual(["music"]);
                     expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.separatorMode).toBe("optional");
+                    expect(result.separatorMode).toBe(
+                        "optionalSpacePunctuation",
+                    );
                 });
             });
 
@@ -292,7 +294,7 @@ describeForEachCompletion(
                     const result = matchGrammarCompletion(grammar, "play x");
                     expect(result.completions).toEqual(["音楽"]);
                     expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.separatorMode).toBe("optional");
+                    expect(result.separatorMode).toBe("optionalSpace");
                 });
             });
         });

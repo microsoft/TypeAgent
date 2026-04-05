@@ -22,7 +22,7 @@ describeForEachCompletion(
                 expect(result.completions).toContain("first");
                 expectMetadata(result, {
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -330,7 +330,7 @@ describeForEachCompletion(
                 expect(result.completions).toContain("percent");
                 expectMetadata(result, {
                     matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -346,7 +346,7 @@ describeForEachCompletion(
                 expect(result.completions).toContain("percent");
                 expectMetadata(result, {
                     matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -363,7 +363,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["percent"],
                     matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -436,7 +436,7 @@ describeForEachCompletion(
                 expect(result.completions).toContain("play");
                 expectMetadata(result, {
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -523,7 +523,7 @@ describeForEachCompletion(
                 expect(result.completions).toContain("deep");
                 expectMetadata(result, {
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -555,7 +555,7 @@ describeForEachCompletion(
                 expect(result.completions).toContain("hello");
                 expectMetadata(result, {
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -762,7 +762,7 @@ describeForEachCompletion(
                 expect(result.completions.sort()).toEqual(["play", "stop"]);
                 expectMetadata(result, {
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",

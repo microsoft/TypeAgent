@@ -208,8 +208,8 @@ describe("ConstructionCache.completion()", () => {
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
             // The matcher consumes "play" (4 chars). Trailing space
-            // is consumed, so separatorMode is demoted to "optional".
-            expect(result!.separatorMode).toBe("optional");
+            // is consumed, so separatorMode is demoted to "optionalSpace".
+            expect(result!.separatorMode).toBe("optionalSpace");
         });
 
         it("returns spacePunctuation between adjacent word characters", () => {
@@ -251,7 +251,7 @@ describe("ConstructionCache.completion()", () => {
             const result = cache.completion("hey! ", defaultOptions);
             if (result && result.completions.length > 0) {
                 // ' ' is not a word char → optional
-                expect(result!.separatorMode).toBe("optional");
+                expect(result!.separatorMode).toBe("optionalSpace");
             }
         });
 
@@ -455,9 +455,9 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             expect(result!.completions).toEqual(["song"]);
             // Trailing space consumed → matchedPrefixLength advances to 5,
-            // separatorMode demoted to "optional".
+            // separatorMode demoted to "optionalSpace".
             expect(result!.matchedPrefixLength).toBe(5);
-            expect(result!.separatorMode).toBe("optional");
+            expect(result!.separatorMode).toBe("optionalSpace");
         });
 
         it("prefix 'play s' — partial intra-part on second part, returns completions", () => {

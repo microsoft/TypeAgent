@@ -129,7 +129,7 @@ describeForEachCompletion(
         it('forward: "play something played " — first keyword word + space, should offer "by"', () => {
             // Buggy result:
             //   completions: ["played"], matchedPrefixLength: 22,
-            //   separatorMode: "optional", afterWildcard: "all"
+            //   separatorMode: "optionalSpace", afterWildcard: "all"
             //
             // Correct: "played " with trailing space — the first keyword
             // word was fully matched.  Should offer "by" at
@@ -143,7 +143,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 completions: ["by"],
                 matchedPrefixLength: 22,
-                separatorMode: "optional",
+                separatorMode: "optionalSpace",
                 closedSet: true,
                 directionSensitive: true,
                 afterWildcard: "all",
@@ -166,7 +166,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["by"],
                     matchedPrefixLength: 18,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpace",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",

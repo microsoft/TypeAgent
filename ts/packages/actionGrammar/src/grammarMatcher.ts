@@ -19,9 +19,14 @@ import {
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
 // defined here so actionGrammar does not depend on agentSdk.  Keep
 // both definitions in sync.  The grammar matcher only produces
-// "spacePunctuation", "optional", and "none" — never "space"
-// (which is strictly command/flag-level).
-export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+// "spacePunctuation", "optionalSpacePunctuation", "optionalSpace", and
+// "none" — never "space" (which is strictly command/flag-level).
+export type SeparatorMode =
+    | "space"
+    | "spacePunctuation"
+    | "optionalSpacePunctuation"
+    | "optionalSpace"
+    | "none";
 
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
 
@@ -94,8 +99,13 @@ export function requiresSeparator(
 // Convert a per-candidate (needsSep, spacingMode) pair into a
 // SeparatorMode value.  When needsSep is true (separator required),
 // the grammar always uses spacePunctuation separators.
-// When needsSep is false: "none" spacingMode → "none", otherwise
-// → "optional" (covers auto mode/CJK/mixed and explicit "optional").
+// When needsSep is false:
+//   "none" spacingMode  → "none"
+//   "optional" spacingMode → "optionalSpacePunctuation" (explicit
+//       [spacing=optional] annotation; separator not required, but
+//       when present may be whitespace or punctuation)
+//   auto (undefined)    → "optionalSpace" (CJK/digit/mixed — separator
+//       not required; when present only whitespace is meaningful)
 export function candidateSeparatorMode(
     needsSep: boolean,
     spacingMode: CompiledSpacingMode,
@@ -106,12 +116,16 @@ export function candidateSeparatorMode(
     if (spacingMode === "none") {
         return "none";
     }
-    return "optional";
+    if (spacingMode === "optional") {
+        return "optionalSpacePunctuation";
+    }
+    return "optionalSpace";
 }
 
 // Merge a new candidate's separator mode into the running aggregate.
 // The mode requiring the strongest separator wins (i.e. the mode that
-// demands the most from the user): space > spacePunctuation > optional > none.
+// demands the most from the user):
+//   space > spacePunctuation > optionalSpacePunctuation > optional > none.
 export function mergeSeparatorMode(
     current: SeparatorMode | undefined,
     needsSep: boolean,
@@ -132,9 +146,17 @@ export function mergeSeparatorMode(
     ) {
         return "spacePunctuation";
     }
-    // "optional" is a stronger requirement than "none".
-    if (current === "optional" || candidateMode === "optional") {
-        return "optional";
+    // "optionalSpacePunctuation" — separator not required but includes
+    // punctuation when present.  Stronger than plain "optionalSpace".
+    if (
+        current === "optionalSpacePunctuation" ||
+        candidateMode === "optionalSpacePunctuation"
+    ) {
+        return "optionalSpacePunctuation";
+    }
+    // "optionalSpace" is a stronger requirement than "none".
+    if (current === "optionalSpace" || candidateMode === "optionalSpace") {
+        return "optionalSpace";
     }
     return "none";
 }

@@ -244,7 +244,7 @@ describe("mergeCompletionResults", () => {
             };
             const second: CompletionResult = {
                 completions: ["b"],
-                separatorMode: "optional",
+                separatorMode: "optionalSpace",
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.separatorMode).toBe("spacePunctuation");

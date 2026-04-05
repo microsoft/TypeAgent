@@ -1142,7 +1142,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Re-fetch at "ab " returns: completions=["cd"],
             // matchedPrefixLength=3 (P advanced past one separator),
-            // separatorMode="optional".
+            // separatorMode="optionalSpace".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
             expect(menu.setChoices).toHaveBeenLastCalledWith(
                 expect.arrayContaining([
@@ -1182,7 +1182,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
 
             // Double space: anchor is "ab " (P=3), rawPrefix=" " (second space).
-            // separatorMode="optional" → needsSep=false, but "optional"
+            // separatorMode="optionalSpace" → needsSep=false, but "optionalSpace"
             // still strips leading whitespace → completionPrefix="".
             // Empty prefix matches all completions → menu shows.
             session.update("ab  ", getPos);
@@ -1217,7 +1217,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("ab ", getPos);
             await flush();
 
-            // At anchor "ab " (P=3), separatorMode="optional",
+            // At anchor "ab " (P=3), separatorMode="optionalSpace",
             // rawPrefix="c" → trie prefix "c" → matches "cd".
             session.update("ab c", getPos);
 

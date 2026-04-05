@@ -547,7 +547,8 @@ export function expectMetadata(
         separatorMode?:
             | "space"
             | "spacePunctuation"
-            | "optional"
+            | "optionalSpacePunctuation"
+            | "optionalSpace"
             | "none"
             | undefined;
         closedSet?: boolean;

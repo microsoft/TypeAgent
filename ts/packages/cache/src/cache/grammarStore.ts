@@ -507,10 +507,10 @@ export class GrammarStoreImpl implements GrammarStore {
                     // backspace in a multi-separator run produces
                     // a distinct anchor for re-fetch.  Remaining
                     // separators are stripped by the shell's
-                    // "optional" mode handling, keeping the menu
+                    // "optionalSpace" mode handling, keeping the menu
                     // visible with a clean trie prefix.
                     matchedPrefixLength += 1;
-                    separatorMode = "optional";
+                    separatorMode = "optionalSpace";
                 }
                 // Force afterWildcard "all" → "some" so shell
                 // doesn't use "slide" noMatchPolicy.

@@ -76,12 +76,24 @@ export type CommandDescriptors =
 //   "spacePunctuation" — whitespace or Unicode punctuation ([\s\p{P}])
 //                        required.  Used by the grammar matcher for
 //                        Latin-script completions.
-//   "optional"         — separator accepted but not required; menu shown
-//                        immediately.  Used for CJK / mixed-script
-//                        grammar completions.
+//   "optionalSpacePunctuation" — separator accepted but not required;
+//                        when present, both whitespace and Unicode
+//                        punctuation are valid separators.  Used by
+//                        the grammar matcher for [spacing=optional]
+//                        annotated rules.
+//   "optionalSpace"         — separator accepted but not required; when
+//                        present, only whitespace is treated as a
+//                        separator.  Used for CJK / mixed-script
+//                        grammar completions and consumed-separator
+//                        overrides.
 //   "none"             — no separator at all; menu shown immediately.
 //                        Used for [spacing=none] grammars.
-export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+export type SeparatorMode =
+    | "space"
+    | "spacePunctuation"
+    | "optionalSpacePunctuation"
+    | "optionalSpace"
+    | "none";
 
 // Indicates the user's editing direction, provided by the host.
 //   "forward"  — the user is moving ahead (appending characters,

@@ -74,8 +74,8 @@ describe("Cross-grammar separator-mode conflict filtering", () => {
         expect(result).toBeDefined();
         expect(result!.completions).toContain("cd");
         expect(result!.closedSet).toBe(false);
-        // P advanced past the separator → separatorMode overridden to "optional".
-        expect(result!.separatorMode).toBe("optional");
+        // P advanced past the separator → separatorMode overridden to "optionalSpace".
+        expect(result!.separatorMode).toBe("optionalSpace");
         // matchedPrefixLength advanced by 1 past the trailing separator.
         expect(result!.matchedPrefixLength).toBe(3);
     });

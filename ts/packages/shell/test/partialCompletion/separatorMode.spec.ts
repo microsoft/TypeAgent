@@ -155,13 +155,13 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
     });
 });
 
-// ── separatorMode: "optional" ─────────────────────────────────────────────────
+// ── separatorMode: "optionalSpace" ─────────────────────────────────────────────────
 
 describe("PartialCompletionSession — separatorMode: optional", () => {
     test("completions shown immediately without separator", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["music"], 4, {
-            separatorMode: "optional",
+            separatorMode: "optionalSpace",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -169,7 +169,7 @@ describe("PartialCompletionSession — separatorMode: optional", () => {
         session.update("play", getPos);
         await Promise.resolve();
 
-        // "optional" does not require a separator — menu shown immediately
+        // "optionalSpace" does not require a separator — menu shown immediately
         // rawPrefix="" → updatePrefix("", ...)
         expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
     });
@@ -177,7 +177,7 @@ describe("PartialCompletionSession — separatorMode: optional", () => {
     test("typing after anchor filters within session", async () => {
         const menu = makeMenu();
         const result = makeCompletionResult(["music", "movie"], 4, {
-            separatorMode: "optional",
+            separatorMode: "optionalSpace",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -188,6 +188,129 @@ describe("PartialCompletionSession — separatorMode: optional", () => {
         session.update("playmu", getPos);
 
         expect(menu.updatePrefix).toHaveBeenCalledWith("mu", anyPosition);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("whitespace stripped but punctuation kept in prefix", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult([".music"], 4, {
+            separatorMode: "optionalSpace",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // "optionalSpace" only strips whitespace — punctuation is preserved
+        session.update("play .mu", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith(".mu", anyPosition);
+    });
+});
+
+// ── separatorMode: "optionalSpacePunctuation" ─────────────────────────────────
+
+describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation", () => {
+    test("completions shown immediately without separator (like optional)", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "optionalSpacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Like "optionalSpace": no separator required — menu shown at anchor
+        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+    });
+
+    test("typing after anchor filters within session", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music", "movie"], 4, {
+            separatorMode: "optionalSpacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        session.update("playmu", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("mu", anyPosition);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("space stripped from prefix (like spacePunctuation)", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "optionalSpacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        session.update("play mu", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("mu", anyPosition);
+    });
+
+    test("punctuation stripped from prefix (unlike optional)", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "optionalSpacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Key difference from "optionalSpace": punctuation IS stripped
+        session.update("play.mu", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("mu", anyPosition);
+    });
+
+    test("mixed space+punctuation stripped from prefix", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "optionalSpacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Multiple leading separators (space + punctuation) all stripped
+        session.update("play .mu", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("mu", anyPosition);
+    });
+
+    test("no re-fetch when typing past anchor matches trie (separator not required)", async () => {
+        const menu = makeMenu();
+        const result = makeCompletionResult(["music"], 4, {
+            separatorMode: "optionalSpacePunctuation",
+        });
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Unlike "spacePunctuation", typing a letter after the anchor does
+        // NOT immediately invalidate the session — the separator is optional,
+        // so "playm" filters the trie for "m" which matches "music".
+        session.update("playm", getPos);
+
+        expect(menu.updatePrefix).toHaveBeenCalledWith("m", anyPosition);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });

@@ -317,7 +317,7 @@ export type GrammarCompletionResult = {
     // spacingMode) but distinct from them.
     //   "spacePunctuation" — whitespace or punctuation required
     //     (Latin "y" → "m" requires a separator).
-    //   "optional" — separator accepted but not required
+    //   "optionalSpace" — separator accepted but not required
     //     (CJK 再生 → 音楽 does not require a separator).
     //   "none" — no separator at all ([spacing=none] grammars).
     // Omitted when no completions were generated.
@@ -1488,7 +1488,7 @@ function filterSepConflicts(ctx: CompletionContext): void {
 
     // A true separator conflict occurs only when "none" mode
     // (rejects separator) coexists with requiring modes (needs
-    // separator).  "optional" is compatible with both states and
+    // separator).  "optionalSpace" is compatible with both states and
     // does not participate in the conflict.
     ctx.hasSepConflict = hasRequiring && hasNoneMode;
     if (!ctx.hasSepConflict) return;
@@ -1516,7 +1516,7 @@ function filterSepConflicts(ctx: CompletionContext): void {
         // re-fetch.  Only one character (not all consecutive
         // separators) is consumed: each backspace in a multi-separator
         // run produces a distinct anchor.  Remaining separators are
-        // stripped by the shell's "optional" mode handling, keeping the
+        // stripped by the shell's "optionalSpace" mode handling, keeping the
         // menu visible with a clean trie prefix.
         //
         // Safe unconditionally: hasSepConflict is true (checked above),
@@ -1822,7 +1822,7 @@ function materializeCandidates(
 
     // When P was advanced past trailing separator chars (trailing-sep
     // conflict path), the separator is already consumed into P.
-    // Override separatorMode to "optional" — no *additional* separator
+    // Override separatorMode to "optionalSpace" — no *additional* separator
     // is required between the (advanced) P and the completion text.
     // mergeSepMode may have computed "spacePunctuation" because
     // input[P-1] is a separator character, but that separator is the
@@ -1837,7 +1837,7 @@ function materializeCandidates(
         ctx.direction !== "backward" &&
         separatorMode !== undefined
     ) {
-        separatorMode = "optional";
+        separatorMode = "optionalSpace";
     }
 
     // Range candidates replace the old two-pass backward retrigger

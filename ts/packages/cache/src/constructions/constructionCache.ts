@@ -621,7 +621,7 @@ export class ConstructionCache {
                             );
                             separatorMode = mergeSeparatorMode(
                                 separatorMode,
-                                needsSep ? "spacePunctuation" : "optional",
+                                needsSep ? "spacePunctuation" : "optionalSpace",
                             );
                         }
                     }
@@ -664,7 +664,7 @@ export class ConstructionCache {
                             );
                             separatorMode = mergeSeparatorMode(
                                 separatorMode,
-                                needsSep ? "spacePunctuation" : "optional",
+                                needsSep ? "spacePunctuation" : "optionalSpace",
                             );
                         }
                         closedSet = false;
@@ -675,7 +675,7 @@ export class ConstructionCache {
 
         // Advance past trailing separators so that the reported prefix
         // length includes any trailing whitespace the user typed.
-        // When advancing, demote separatorMode to "optional" — the
+        // When advancing, demote separatorMode to "optionalSpace" — the
         // trailing space is already consumed.
         //
         // Skip advancement when backward backed up: the backed-up
@@ -686,7 +686,7 @@ export class ConstructionCache {
             const trailing = input.substring(maxPrefixLength);
             if (/^[\s\p{P}]+$/u.test(trailing)) {
                 maxPrefixLength = input.length;
-                separatorMode = "optional";
+                separatorMode = "optionalSpace";
             }
         }
 

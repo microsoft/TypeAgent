@@ -92,7 +92,7 @@ The return path carries `CommandCompletionResult`:
 {
   startIndex: number;           // where the resolved prefix ends
   completions: CompletionGroup[];
-  separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
+  separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optionalSpacePunctuation" | "optionalSpace" | "none"
   closedSet: boolean;           // true → list is exhaustive
   directionSensitive: boolean;  // true → completion(input[0..P], backward) ≠ completion(input[0..P], forward)
   afterWildcard: AfterWildcard;        // "none" | "some" | "all" — wildcard boundary ambiguity
@@ -414,7 +414,7 @@ contiguous within each category.
   the backend. Everything after the anchor is the `completionPrefix` used to
   filter the local trie.
 - **Separator stripping**: when `separatorMode` requires a separator
-  (`"space"` or `"spacePunctuation"`), or is `"optional"`, leading
+  (`"space"` or `"spacePunctuation"`), or is `"optionalSpace"` / `"optionalSpacePunctuation"`, leading
   separator characters in the raw prefix are stripped before trie lookup.
   This means extra whitespace (e.g. double space) does not leak into the
   trie as filter text — the trie always sees clean completion prefixes.
@@ -465,7 +465,7 @@ text.
 | -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `"space"`            | Whitespace required                 | Commands, flags, agent names                                                                                                                                                                                                                                               |
 | `"spacePunctuation"` | Whitespace or Unicode punctuation   | Latin-script grammar completions                                                                                                                                                                                                                                           |
-| `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars; also digit–Latin boundaries (digits are Unicode script "Common", not "Latin", so a transition like `"0"→"i"` is a script change that does not require a separator)                                                                            |
+| `"optionalSpace"`    | Separator accepted but not required | CJK / mixed-script grammars; also digit–Latin boundaries (digits are Unicode script "Common", not "Latin", so a transition like `"0"→"i"` is a script change that does not require a separator)                                                                            |
 | `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
 
 See `actionGrammar.md` Spacing modes for how the grammar matcher
@@ -842,7 +842,7 @@ _Impact:_ Premature "accept" when one source is open — user misses
 completions from that source.
 
 **#13 — `separatorMode`: strongest requirement wins.**
-`"space"` > `"spacePunctuation"` > `"optional"` > `"none"`.
+`"space"` > `"spacePunctuation"` > `"optionalSpacePunctuation"` > `"optionalSpace"` > `"none"`.
 _Impact:_ Fused display if a weak mode wins over a strong one, or
 unnecessary separation if the reverse.
 
