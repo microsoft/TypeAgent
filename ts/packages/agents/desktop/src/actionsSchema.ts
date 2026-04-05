@@ -35,13 +35,13 @@ export type DesktopActions =
 // Example:
 //  user: Launch edge
 //  agent: {
-//     "actionName": "launchProgram",
+//     "actionName": "LaunchProgram",
 //     "parameters": {
 //        "name": "edge"
 //     }
 //  }
 export type LaunchProgramAction = {
-    actionName: "launchProgram";
+    actionName: "LaunchProgram";
     parameters: {
         name: KnownPrograms | string; // The name of the software application
     };
@@ -49,7 +49,7 @@ export type LaunchProgramAction = {
 
 // Closes a program window on a Windows Desktop
 export type CloseProgramAction = {
-    actionName: "closeProgram";
+    actionName: "CloseProgram";
     parameters: {
         name: KnownPrograms | string; // The name of the software application
     };
@@ -57,7 +57,7 @@ export type CloseProgramAction = {
 
 // Maximizes a program window on a Windows Desktop
 export type MaximizeWindowAction = {
-    actionName: "maximize";
+    actionName: "Maximize";
     parameters: {
         name: KnownPrograms | string; // The name of the software application
     };
@@ -65,7 +65,7 @@ export type MaximizeWindowAction = {
 
 // Minimizes a program window on a Windows Desktop
 export type MinimizeWindowAction = {
-    actionName: "minimize";
+    actionName: "Minimize";
     parameters: {
         name: KnownPrograms | string; // The name of the software application
     };
@@ -73,7 +73,7 @@ export type MinimizeWindowAction = {
 
 // Sets focus to a program window on a Windows Desktop
 export type SwitchToWindowAction = {
-    actionName: "switchTo";
+    actionName: "SwitchTo";
     parameters: {
         name: KnownPrograms | string; // The name of the software application
     };
@@ -81,7 +81,7 @@ export type SwitchToWindowAction = {
 
 // Positions program windows on a program window on a Windows Desktop
 export type TileWindowsAction = {
-    actionName: "tile";
+    actionName: "Tile";
     parameters: {
         leftWindow: KnownPrograms | string; // The name of the software application
         rightWindow: KnownPrograms | string; // The name of the software application
@@ -89,25 +89,25 @@ export type TileWindowsAction = {
 };
 
 export type SetVolumeAction = {
-    actionName: "volume";
+    actionName: "Volume";
     parameters: {
         targetVolume: number; // value between 0 and 100
     };
 };
 
 export type RestoreVolumeAction = {
-    actionName: "restoreVolume";
+    actionName: "RestoreVolume";
 };
 
 export type MuteVolumeAction = {
-    actionName: "mute";
+    actionName: "Mute";
     parameters: {
         on: boolean;
     };
 };
 
 export type SetWallpaperAction = {
-    actionName: "setWallpaper";
+    actionName: "SetWallpaper";
     parameters: {
         filePath?: string; // The path to the file
         url?: string; // The url to the image
@@ -116,14 +116,14 @@ export type SetWallpaperAction = {
 
 // Sets the theme mode of the current [windows] desktop
 export type ChangeThemeModeAction = {
-    actionName: "setThemeMode";
+    actionName: "SetThemeMode";
     parameters: {
         mode: "light" | "dark" | "toggle"; // the theme mode
     };
 };
 
 export type ConnectWifiAction = {
-    actionName: "connectWifi";
+    actionName: "ConnectWifi";
     parameters: {
         ssid: string; // The SSID of the wifi network
         password?: string; // The password of the wifi network, if required
@@ -132,14 +132,14 @@ export type ConnectWifiAction = {
 
 // Disconnects from the current wifi network
 export type DisconnectWifiAction = {
-    actionName: "disconnectWifi";
+    actionName: "DisconnectWifi";
     parameters: {
         // No parameters required
     };
 };
 
 export type ToggleAirplaneModeAction = {
-    actionName: "toggleAirplaneMode";
+    actionName: "ToggleAirplaneMode";
     parameters: {
         enable: boolean; // true to enable, false to disable
     };
@@ -147,14 +147,14 @@ export type ToggleAirplaneModeAction = {
 
 // creates a new Windows Desktop
 export type CreateDesktopAction = {
-    actionName: "createDesktop";
+    actionName: "CreateDesktop";
     parameters: {
         names: string[]; // The name(s) of the desktop(s) to create (default: Desktop 1, Desktop 2, etc.)
     };
 };
 
 export type MoveWindowToDesktopAction = {
-    actionName: "moveWindowToDesktop";
+    actionName: "MoveWindowToDesktop";
     parameters: {
         name: KnownPrograms | string; // The name of the software application
         desktopId: number; // The ID of the desktop to move the window to
@@ -162,14 +162,14 @@ export type MoveWindowToDesktopAction = {
 };
 
 export type PinWindowToAllDesktopsAction = {
-    actionName: "pinWindow";
+    actionName: "PinWindow";
     parameters: {
         name: KnownPrograms | string; // The name of the software application
     };
 };
 
 export type SwitchDesktopAction = {
-    actionName: "switchDesktop";
+    actionName: "SwitchDesktop";
     parameters: {
         desktopId: number; // The ID of the desktop to switch to
     };
@@ -177,7 +177,7 @@ export type SwitchDesktopAction = {
 
 // switches to the next Windows Desktop
 export type NextDesktopAction = {
-    actionName: "nextDesktop";
+    actionName: "NextDesktop";
     parameters: {
         // No parameters required
     };
@@ -185,7 +185,7 @@ export type NextDesktopAction = {
 
 // switches to the previous Windows Desktop
 export type PreviousDesktopAction = {
-    actionName: "previousDesktop";
+    actionName: "PreviousDesktop";
     parameters: {
         // No parameters required
     };
@@ -193,7 +193,7 @@ export type PreviousDesktopAction = {
 
 // Shows/hides windows notification center
 export type ToggleNotificationsAction = {
-    actionName: "toggleNotifications";
+    actionName: "ToggleNotifications";
     parameters: {
         enable: boolean; // true to enable, false to disable
     };
@@ -201,13 +201,13 @@ export type ToggleNotificationsAction = {
 
 // Attaches the debugger to the AutoShell process
 export type DebugAutoShellAction = {
-    actionName: "debug";
+    actionName: "Debug";
     parameters: {};
 };
 
 // Changes the text size that appears throughout Windows and your apps
 export type SetTextSizeAction = {
-    actionName: "setTextSize";
+    actionName: "SetTextSize";
     parameters: {
         // small changes are 5% increments, large changes are 25% increments
         size: number; // size in percentage (100% is default) (range is 100 - 225)
@@ -216,7 +216,7 @@ export type SetTextSizeAction = {
 
 // Change screen resolution
 export type SetScreenResolutionAction = {
-    actionName: "setScreenResolution";
+    actionName: "SetScreenResolution";
     parameters: {
         width: number; // width in pixels
         height: number; // height in pixels
@@ -235,7 +235,7 @@ export type BluetoothToggleAction = {
 
 // Enables or disables WiFi adapter
 export type EnableWifiAction = {
-    actionName: "enableWifi";
+    actionName: "EnableWifi";
     parameters: {
         enable: boolean; // true to enable, false to disable
     };

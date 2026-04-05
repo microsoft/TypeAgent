@@ -45,14 +45,14 @@ import { DesktopActions } from "./actionsSchema.ts";
             | $(name:wildcard) -> name;
 
 // ===== Program Launch/Close =====
-<LaunchProgram> = launch $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: program } }
-                  | open $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: program } }
-                  | start $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: program } }
-                  | run $(program:<Program>) -> { actionName: "launchProgram", parameters: { name: program } };
+<LaunchProgram> = launch $(program:<Program>) -> { actionName: "LaunchProgram", parameters: { name: program } }
+                  | open $(program:<Program>) -> { actionName: "LaunchProgram", parameters: { name: program } }
+                  | start $(program:<Program>) -> { actionName: "LaunchProgram", parameters: { name: program } }
+                  | run $(program:<Program>) -> { actionName: "LaunchProgram", parameters: { name: program } };
 
-<CloseProgram> = close $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: program } }
-                 | quit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: program } }
-                 | exit $(program:<Program>) -> { actionName: "closeProgram", parameters: { name: program } };
+<CloseProgram> = close $(program:<Program>) -> { actionName: "CloseProgram", parameters: { name: program } }
+                 | quit $(program:<Program>) -> { actionName: "CloseProgram", parameters: { name: program } }
+                 | exit $(program:<Program>) -> { actionName: "CloseProgram", parameters: { name: program } };
 
 // ===== Window Management =====
 <WindowManagement> = <MaximizeWindow>
@@ -60,56 +60,56 @@ import { DesktopActions } from "./actionsSchema.ts";
                      | <SwitchToWindow>
                      | <TileWindows>;
 
-<MaximizeWindow> = maximize $(program:<Program>) -> { actionName: "maximize", parameters: { name: program } }
-                   | make $(program:<Program>) full screen -> { actionName: "maximize", parameters: { name: program } };
+<MaximizeWindow> = maximize $(program:<Program>) -> { actionName: "Maximize", parameters: { name: program } }
+                   | make $(program:<Program>) full screen -> { actionName: "Maximize", parameters: { name: program } };
 
-<MinimizeWindow> = minimize $(program:<Program>) -> { actionName: "minimize", parameters: { name: program } }
-                   | hide $(program:<Program>) -> { actionName: "minimize", parameters: { name: program } };
+<MinimizeWindow> = minimize $(program:<Program>) -> { actionName: "Minimize", parameters: { name: program } }
+                   | hide $(program:<Program>) -> { actionName: "Minimize", parameters: { name: program } };
 
-<SwitchToWindow> = switch to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: program } }
-                   | focus (on)? $(program:<Program>) -> { actionName: "switchTo", parameters: { name: program } }
-                   | go to $(program:<Program>) -> { actionName: "switchTo", parameters: { name: program } };
+<SwitchToWindow> = switch to $(program:<Program>) -> { actionName: "SwitchTo", parameters: { name: program } }
+                   | focus (on)? $(program:<Program>) -> { actionName: "SwitchTo", parameters: { name: program } }
+                   | go to $(program:<Program>) -> { actionName: "SwitchTo", parameters: { name: program } };
 
-<TileWindows> = tile $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: left, rightWindow: right } }
-                | put $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "tile", parameters: { leftWindow: left, rightWindow: right } }
-                | tile $(left:<Program>) and $(right:<Program>) -> { actionName: "tile", parameters: { leftWindow: left, rightWindow: right } };
+<TileWindows> = tile $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "Tile", parameters: { leftWindow: left, rightWindow: right } }
+                | put $(left:<Program>) on (the)? left and $(right:<Program>) on (the)? right -> { actionName: "Tile", parameters: { leftWindow: left, rightWindow: right } }
+                | tile $(left:<Program>) and $(right:<Program>) -> { actionName: "Tile", parameters: { leftWindow: left, rightWindow: right } };
 
 // ===== Volume Control =====
-<VolumeControl> = set volume to $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: level } }
-                  | volume $(level:number) (percent)? -> { actionName: "volume", parameters: { targetVolume: level } }
-                  | mute -> { actionName: "mute", parameters: { on: true } }
-                  | unmute -> { actionName: "mute", parameters: { on: false } }
-                  | restore volume -> { actionName: "restoreVolume" };
+<VolumeControl> = set volume to $(level:number) (percent)? -> { actionName: "Volume", parameters: { targetVolume: level } }
+                  | volume $(level:number) (percent)? -> { actionName: "Volume", parameters: { targetVolume: level } }
+                  | mute -> { actionName: "Mute", parameters: { on: true } }
+                  | unmute -> { actionName: "Mute", parameters: { on: false } }
+                  | restore volume -> { actionName: "RestoreVolume" };
 
 // ===== Theme Mode =====
-<ThemeMode> = set theme to dark -> { actionName: "setThemeMode", parameters: { mode: "dark" } }
-              | set theme to light -> { actionName: "setThemeMode", parameters: { mode: "light" } }
-              | toggle (theme)? mode -> { actionName: "setThemeMode", parameters: { mode: "toggle" } }
-              | enable dark mode -> { actionName: "setThemeMode", parameters: { mode: "dark" } }
-              | enable light mode -> { actionName: "setThemeMode", parameters: { mode: "light" } }
-              | switch to dark (mode)? -> { actionName: "setThemeMode", parameters: { mode: "dark" } }
-              | switch to light (mode)? -> { actionName: "setThemeMode", parameters: { mode: "light" } };
+<ThemeMode> = set theme to dark -> { actionName: "SetThemeMode", parameters: { mode: "dark" } }
+              | set theme to light -> { actionName: "SetThemeMode", parameters: { mode: "light" } }
+              | toggle (theme)? mode -> { actionName: "SetThemeMode", parameters: { mode: "toggle" } }
+              | enable dark mode -> { actionName: "SetThemeMode", parameters: { mode: "dark" } }
+              | enable light mode -> { actionName: "SetThemeMode", parameters: { mode: "light" } }
+              | switch to dark (mode)? -> { actionName: "SetThemeMode", parameters: { mode: "dark" } }
+              | switch to light (mode)? -> { actionName: "SetThemeMode", parameters: { mode: "light" } };
 
 // ===== WiFi Control =====
-<WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "connectWifi", parameters: { ssid } }
-                | connect to wifi $(ssid:wildcard) -> { actionName: "connectWifi", parameters: { ssid } }
-                | disconnect (from)? wifi -> { actionName: "disconnectWifi", parameters: {} }
-                | enable airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: true } }
-                | disable airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: false } }
-                | turn on airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: true } }
-                | turn off airplane mode -> { actionName: "toggleAirplaneMode", parameters: { enable: false } };
+<WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "ConnectWifi", parameters: { ssid } }
+                | connect to wifi $(ssid:wildcard) -> { actionName: "ConnectWifi", parameters: { ssid } }
+                | disconnect (from)? wifi -> { actionName: "DisconnectWifi", parameters: {} }
+                | enable airplane mode -> { actionName: "ToggleAirplaneMode", parameters: { enable: true } }
+                | disable airplane mode -> { actionName: "ToggleAirplaneMode", parameters: { enable: false } }
+                | turn on airplane mode -> { actionName: "ToggleAirplaneMode", parameters: { enable: true } }
+                | turn off airplane mode -> { actionName: "ToggleAirplaneMode", parameters: { enable: false } };
 
 // ===== Desktop Management =====
-<DesktopManagement> = create (new)? desktop -> { actionName: "createDesktop", parameters: { names: [] } }
-                      | create desktop $(name:wildcard) -> { actionName: "createDesktop", parameters: { names: [name] } }
-                      | move $(program:<Program>) to desktop $(id:number) -> { actionName: "moveWindowToDesktop", parameters: { name: program, desktopId: id } }
-                      | pin $(program:<Program>) (to all desktops)? -> { actionName: "pinWindow", parameters: { name: program } }
-                      | switch to desktop $(id:number) -> { actionName: "switchDesktop", parameters: { desktopId: id } }
-                      | next desktop -> { actionName: "nextDesktop", parameters: {} }
-                      | previous desktop -> { actionName: "previousDesktop", parameters: {} }
-                      | show notifications -> { actionName: "toggleNotifications", parameters: { enable: true } }
-                      | hide notifications -> { actionName: "toggleNotifications", parameters: { enable: false } }
-                      | toggle notifications -> { actionName: "toggleNotifications", parameters: { enable: true } };
+<DesktopManagement> = create (new)? desktop -> { actionName: "CreateDesktop", parameters: { names: [] } }
+                      | create desktop $(name:wildcard) -> { actionName: "CreateDesktop", parameters: { names: [name] } }
+                      | move $(program:<Program>) to desktop $(id:number) -> { actionName: "MoveWindowToDesktop", parameters: { name: program, desktopId: id } }
+                      | pin $(program:<Program>) (to all desktops)? -> { actionName: "PinWindow", parameters: { name: program } }
+                      | switch to desktop $(id:number) -> { actionName: "SwitchDesktop", parameters: { desktopId: id } }
+                      | next desktop -> { actionName: "NextDesktop", parameters: {} }
+                      | previous desktop -> { actionName: "PreviousDesktop", parameters: {} }
+                      | show notifications -> { actionName: "ToggleNotifications", parameters: { enable: true } }
+                      | hide notifications -> { actionName: "ToggleNotifications", parameters: { enable: false } }
+                      | toggle notifications -> { actionName: "ToggleNotifications", parameters: { enable: true } };
 
 // ===== Network Settings (core) =====
 <NetworkSettings> = <BluetoothToggle>
@@ -123,12 +123,12 @@ import { DesktopActions } from "./actionsSchema.ts";
   | toggle bluetooth -> { actionName: "BluetoothToggle", parameters: {} };
 
 <EnableWifi> =
-    turn on wifi -> { actionName: "enableWifi", parameters: { enable: true } }
-  | turn off wifi -> { actionName: "enableWifi", parameters: { enable: false } }
-  | enable wifi -> { actionName: "enableWifi", parameters: { enable: true } }
-  | disable wifi -> { actionName: "enableWifi", parameters: { enable: false } }
-  | turn on wi\-fi -> { actionName: "enableWifi", parameters: { enable: true } }
-  | turn off wi\-fi -> { actionName: "enableWifi", parameters: { enable: false } };
+    turn on wifi -> { actionName: "EnableWifi", parameters: { enable: true } }
+  | turn off wifi -> { actionName: "EnableWifi", parameters: { enable: false } }
+  | enable wifi -> { actionName: "EnableWifi", parameters: { enable: true } }
+  | disable wifi -> { actionName: "EnableWifi", parameters: { enable: false } }
+  | turn on wi\-fi -> { actionName: "EnableWifi", parameters: { enable: true } }
+  | turn off wi\-fi -> { actionName: "EnableWifi", parameters: { enable: false } };
 
 // ===== Brightness Control (core) =====
 <BrightnessControl> =

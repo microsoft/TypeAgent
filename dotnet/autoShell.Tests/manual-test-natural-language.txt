@@ -1,0 +1,702 @@
+// ============================================================================
+// autoShell Natural Language Test Commands
+// ============================================================================
+// These are the natural language phrases a user would say to the Desktop Agent.
+// They follow the .agr grammar files and should be translated by TypeAgent
+// into the corresponding autoShell JSON commands.
+//
+// Use these to test the full pipeline: user speech → grammar → JSON → autoShell
+//
+// Each test has:
+//   - The natural language command
+//   - An undo command (where applicable)
+//   - EXPECTED: what should happen on screen
+//
+// CAUTION lines mark commands that affect connectivity or are hard to undo.
+// ============================================================================
+
+
+// =====================
+// 1. APPLICATION MANAGEMENT (desktopSchema.agr)
+// =====================
+
+// 1a. Launch programs (grammar: launch/open/start/run <Program>)
+open notepad
+// EXPECTED: Notepad opens
+
+start calculator
+// EXPECTED: Calculator opens
+
+launch file explorer
+// EXPECTED: File Explorer opens
+
+run edge
+// EXPECTED: Microsoft Edge opens
+
+// 1b. Close programs (grammar: close/quit/exit <Program>)
+close calculator
+// EXPECTED: Calculator closes
+
+exit file explorer
+// EXPECTED: File Explorer closes
+
+quit edge
+// EXPECTED: Edge closes
+
+// 1c. Edge case: launch unknown app
+open some app that definitely does not exist
+// EXPECTED: Nothing happens, no crash
+
+// 1d. Edge case: close app that isn't running
+close spotify
+// EXPECTED: Nothing happens, no crash
+
+
+// =====================
+// 2. WINDOW MANAGEMENT (desktopSchema.agr)
+// =====================
+
+// 2a. Maximize (grammar: maximize <Program> / make <Program> full screen)
+maximize notepad
+// EXPECTED: Notepad window fills the screen
+
+make notepad full screen
+// EXPECTED: Same as above (alternate phrasing)
+
+// 2b. Minimize (grammar: minimize <Program> / hide <Program>)
+minimize notepad
+// EXPECTED: Notepad minimizes to taskbar
+
+hide notepad
+// EXPECTED: Same as above
+
+// 2c. Switch to (grammar: switch to / focus on / go to <Program>)
+switch to notepad
+// EXPECTED: Notepad comes to foreground
+
+focus on notepad
+// EXPECTED: Same
+
+go to notepad
+// EXPECTED: Same
+
+// 2d. Tile (grammar: tile <left> and <right> / put <left> on the left and <right> on the right)
+open calculator
+tile notepad and calculator
+// EXPECTED: Notepad on left half, Calculator on right half
+
+put notepad on the left and calculator on the right
+// EXPECTED: Same as above
+
+// 2e. Clean up
+close calculator
+close notepad
+
+
+// =====================
+// 3. VOLUME CONTROL (desktopSchema.agr)
+// =====================
+
+// 3a. Set volume (grammar: set volume to <number> / volume <number>)
+set volume to 30 percent
+// EXPECTED: System volume drops to 30%
+
+volume 80
+// EXPECTED: Volume jumps to 80%
+
+// 3b. Mute/unmute
+mute
+// EXPECTED: Audio muted
+
+unmute
+// EXPECTED: Audio unmuted
+
+// 3c. Restore
+set volume to 25
+restore volume
+// EXPECTED: Volume goes to 25, then restore brings back 80 (previous)
+
+
+// =====================
+// 4. THEME & MODE (desktopSchema.agr)
+// =====================
+
+// 4a. Dark mode (grammar: set theme to dark / enable dark mode / switch to dark)
+set theme to dark
+// EXPECTED: System switches to dark mode; taskbar and apps go dark
+
+// 4b. Light mode (undo)
+enable light mode
+// EXPECTED: System switches back to light mode
+
+// 4c. Toggle
+toggle mode
+// EXPECTED: Flips from current to opposite
+
+// 4d. Undo toggle
+toggle theme mode
+// EXPECTED: Flips back
+
+// 4e. Alternate phrasings
+switch to dark mode
+// EXPECTED: Dark mode
+switch to light
+// EXPECTED: Light mode
+
+
+// =====================
+// 5. WIFI & NETWORK (desktopSchema.agr)
+// =====================
+
+// 5a. Enable/disable wifi (grammar: turn on/off wifi / enable/disable wifi)
+turn on wifi
+// EXPECTED: Wi-Fi adapter enabled
+
+// CAUTION: This will disconnect you if on Wi-Fi!
+// turn off wifi
+// EXPECTED: Wi-Fi adapter disabled
+
+// 5b. Connect/disconnect (grammar: connect to <ssid> wifi / disconnect from wifi)
+// connect to MyNetwork wifi
+// EXPECTED: "Info: Connecting to WiFi network: MyNetwork"
+
+disconnect from wifi
+// EXPECTED: "Info: Disconnected from WiFi"
+
+// 5c. Airplane mode
+// CAUTION: Kills all wireless!
+// enable airplane mode
+// EXPECTED: All radios off
+
+// turn off airplane mode
+// EXPECTED: Radios restored
+
+// 5d. Bluetooth (grammar: turn on/off bluetooth / enable/disable bluetooth / toggle bluetooth)
+turn on bluetooth
+// EXPECTED: Bluetooth enabled via registry
+
+turn off bluetooth
+// EXPECTED: Bluetooth disabled
+
+toggle bluetooth
+// EXPECTED: Defaults to enable (true)
+
+// 5e. Enable wifi alternate phrasing
+enable wifi
+// EXPECTED: Wi-Fi on
+
+turn on wi-fi
+// EXPECTED: Same (hyphenated variant)
+
+
+// =====================
+// 6. BRIGHTNESS (desktopSchema.agr)
+// =====================
+
+// 6a. Increase (grammar: increase brightness / make the screen brighter / brighten the screen)
+increase brightness
+// EXPECTED: Screen brightness goes up ~10%
+
+make the screen brighter
+// EXPECTED: Same
+
+brighten the screen
+// EXPECTED: Same
+
+// 6b. Decrease (undo)
+decrease brightness
+// EXPECTED: Screen brightness goes down ~10%
+
+make the screen dimmer
+// EXPECTED: Same
+
+dim the screen
+// EXPECTED: Same
+
+
+// =====================
+// 7. VIRTUAL DESKTOPS (desktopSchema.agr)
+// =====================
+
+// 7a. Create desktop
+create new desktop
+// EXPECTED: A new virtual desktop appears (check with Win+Tab)
+
+create desktop Work
+// EXPECTED: Desktop named "Work" created
+
+// 7b. Switch
+next desktop
+// EXPECTED: Switches to next virtual desktop
+
+previous desktop
+// EXPECTED: Switches back
+
+switch to desktop 1
+// EXPECTED: Goes to first desktop
+
+// 7c. Move window
+open notepad
+move notepad to desktop 2
+// EXPECTED: Notepad moves to desktop 2
+
+// 7d. Pin
+pin notepad to all desktops
+// EXPECTED: Notepad visible on every desktop
+
+// 7e. Clean up
+close notepad
+
+// 7f. Notifications (grammar in desktop management)
+show notifications
+// EXPECTED: Action Center opens
+
+toggle notifications
+// EXPECTED: Action Center toggles
+
+
+// =====================
+// 8. PERSONALIZATION (personalizationSchema.agr)
+// =====================
+
+// 8a. Transparency (grammar: enable/disable transparency / turn on/off transparency effects)
+enable transparency
+// EXPECTED: Window transparency effects on
+
+turn off transparency effects
+// EXPECTED: Transparency off
+
+// 8b. Title bar color (grammar: apply color to title bar / enable/disable title bar color)
+apply color to title bar
+// EXPECTED: Title bars show accent color
+
+disable title bar color
+// EXPECTED: Title bars go back to default
+
+// 8c. High contrast
+open high contrast settings
+// EXPECTED: High contrast settings page opens
+
+
+// =====================
+// 9. TASKBAR (taskbarSchema.agr)
+// =====================
+
+// 9a. Alignment (grammar: center/left align the taskbar / align taskbar to center/left)
+left align the taskbar
+// EXPECTED: Start menu and icons move to the left
+
+center the taskbar
+// EXPECTED: Back to center (undo)
+
+align taskbar to left
+// EXPECTED: Alternate phrasing, same result
+
+align taskbar to center
+// EXPECTED: Undo
+
+// 9b. Auto-hide (grammar: auto hide the taskbar / always show the taskbar)
+auto hide the taskbar
+// EXPECTED: Taskbar slides off screen, shows on hover
+
+always show the taskbar
+// EXPECTED: Taskbar stays visible (undo)
+
+hide the taskbar
+// EXPECTED: Same as auto-hide
+
+show the taskbar
+// EXPECTED: Undo
+
+// 9c. Task View button
+hide task view button
+// EXPECTED: Task View button disappears from taskbar
+
+show task view button
+// EXPECTED: Button reappears (undo)
+
+// 9d. Widgets button
+hide widgets button
+// EXPECTED: Widgets button disappears
+
+show widgets
+// EXPECTED: Reappears (undo)
+
+// 9e. Badges
+enable taskbar badges
+// EXPECTED: Notification badges show on taskbar icons
+
+disable taskbar badges
+// EXPECTED: Badges hidden (undo)
+
+// 9f. Seconds in clock
+show seconds in clock
+// EXPECTED: System clock shows HH:MM:SS
+
+hide seconds in clock
+// EXPECTED: Clock shows HH:MM only (undo)
+
+// 9g. Multi-monitor
+show taskbar on all monitors
+// EXPECTED: Taskbar appears on all displays
+
+show taskbar only on main monitor
+// EXPECTED: Other monitors lose taskbar (undo)
+
+
+// =====================
+// 10. MOUSE & INPUT (inputSchema.agr)
+// =====================
+
+// 10a. Cursor speed (grammar: set mouse speed to <number> / mouse speed <number>)
+set mouse speed to 15
+// EXPECTED: Mouse moves faster
+
+mouse speed 10
+// EXPECTED: Back to default (undo)
+
+change mouse sensitivity to 5
+// EXPECTED: Slow cursor
+
+adjust mouse speed to 10
+// EXPECTED: Back to default
+
+// 10b. Scroll lines (grammar: set scroll lines to <number> / scroll <number> lines)
+set scroll lines to 5
+// EXPECTED: More scrolling per wheel notch
+
+scroll 3 lines per notch
+// EXPECTED: Back to default (undo)
+
+// 10c. Primary button (grammar: set primary mouse button to left/right / swap mouse buttons)
+swap mouse buttons
+// EXPECTED: Left and right click swap — UNDO IMMEDIATELY!
+
+set primary mouse button to left
+// EXPECTED: Back to normal (undo)
+
+use left handed mouse
+// EXPECTED: Right button becomes primary
+
+use right handed mouse
+// EXPECTED: Back to normal (undo)
+
+// 10d. Pointer precision (grammar: enable/disable enhanced pointer precision / mouse acceleration)
+enable mouse acceleration
+// EXPECTED: Pointer precision (acceleration) on
+
+disable mouse acceleration
+// EXPECTED: Off (undo)
+
+turn off mouse acceleration
+// EXPECTED: Same
+
+// 10e. Cursor trail (grammar: enable/disable cursor trail / mouse trail / set cursor trail length to <number>)
+enable cursor trail
+// EXPECTED: Mouse leaves a trail of cursors
+
+set cursor trail length to 10
+// EXPECTED: Longer trail
+
+disable cursor trail
+// EXPECTED: Trail gone (undo)
+
+turn on mouse trail
+// EXPECTED: Alternate phrasing
+
+turn off cursor trail
+// EXPECTED: Undo
+
+// 10f. Pointer size (grammar: increase/decrease pointer size / bigger/smaller cursor)
+bigger cursor
+// EXPECTED: Opens mouse pointer settings
+
+smaller cursor
+// EXPECTED: Opens mouse pointer settings
+
+make pointer bigger
+// EXPECTED: Same
+
+// 10g. Pointer customization
+change mouse pointer style to black
+// EXPECTED: Opens mouse pointer settings
+
+// 10h. Touchpad
+enable touchpad
+// EXPECTED: Opens touchpad settings
+
+disable touchpad
+// EXPECTED: Opens touchpad settings
+
+set touchpad speed to 5
+// EXPECTED: Opens touchpad settings
+
+adjust touchpad sensitivity
+// EXPECTED: Opens touchpad settings
+
+
+// =====================
+// 11. DISPLAY SETTINGS (displaySchema.agr)
+// =====================
+
+// 11a. Night light (grammar: enable/disable night light / blue light filter)
+enable night light
+// EXPECTED: Night light schedule enabled
+
+disable night light
+// EXPECTED: Night light off (undo)
+
+turn on blue light filter
+// EXPECTED: Same as enable night light
+
+turn off night light
+// EXPECTED: Undo
+
+// 11b. Color temperature
+adjust color temperature
+// EXPECTED: Opens Night light settings
+
+warmer screen colors
+// EXPECTED: Opens settings (reduce blue light)
+
+cooler colors
+// EXPECTED: Opens settings (increase blue light)
+
+// 11c. Scaling (grammar: set display scaling to <size> / set zoom to <size>)
+set display scaling to 125 percent
+// EXPECTED: Opens display settings, targets 125%
+
+set zoom to 150
+// EXPECTED: Opens display settings, targets 150%
+
+// 11d. Orientation
+set screen orientation to portrait
+// EXPECTED: Opens display settings
+
+rotate screen to landscape
+// EXPECTED: Opens display settings
+
+// 11e. Rotation lock
+lock screen rotation
+// EXPECTED: Rotation locked
+
+unlock rotation
+// EXPECTED: Unlocked (undo)
+
+
+// =====================
+// 12. PRIVACY (privacySchema.agr)
+// =====================
+
+// 12a. Camera (grammar: allow/deny camera access / enable/disable camera / turn on/off camera)
+deny camera access
+// EXPECTED: App camera access denied
+
+allow camera access
+// EXPECTED: Restored (undo)
+
+turn off camera
+// EXPECTED: Same as deny
+
+enable camera
+// EXPECTED: Undo
+
+// 12b. Microphone
+deny microphone access
+// EXPECTED: App microphone access denied
+
+turn on microphone
+// EXPECTED: Restored (undo)
+
+disable microphone
+// EXPECTED: Same as deny
+
+allow microphone access
+// EXPECTED: Undo
+
+// 12c. Location
+disable location services
+// EXPECTED: Location access denied
+
+enable location
+// EXPECTED: Restored (undo)
+
+turn off location
+// EXPECTED: Deny
+
+allow location access
+// EXPECTED: Undo
+
+
+// =====================
+// 13. POWER (powerSchema.agr)
+// =====================
+
+// 13a. Battery saver (grammar: set battery saver to <number> / activate battery saver at <number>)
+set battery saver to 30 percent
+// EXPECTED: Battery saver activates at 30%
+
+turn on battery saver at 20
+// EXPECTED: Back to default (undo)
+
+activate battery saver at 50 percent
+// EXPECTED: Threshold set to 50%
+
+battery saver at 20
+// EXPECTED: Undo
+
+// 13b. Power mode — plugged in
+set power mode to best performance
+// EXPECTED: Opens power settings
+
+enable balanced mode
+// EXPECTED: Opens power settings
+
+enable power saver mode
+// EXPECTED: Opens power settings
+
+// 13c. Power mode — on battery
+set battery power mode to best power efficiency
+// EXPECTED: Opens power settings
+
+on battery use best performance
+// EXPECTED: Opens power settings
+
+
+// =====================
+// 14. SYSTEM SETTINGS (systemSchema.agr)
+// =====================
+
+// 14a. Metered connection
+enable metered connection
+// EXPECTED: Opens network status settings
+
+disable metered connection
+// EXPECTED: Opens settings
+
+// 14b. Game mode
+enable game mode
+// EXPECTED: Opens Game Mode settings
+
+open game mode settings
+// EXPECTED: Same
+
+// 14c. Accessibility
+enable narrator
+// EXPECTED: Narrator starts speaking — disable quickly!
+
+stop narrator
+// EXPECTED: Narrator stops (undo)
+
+start magnifier
+// EXPECTED: Screen magnifier starts
+
+disable magnifier
+// EXPECTED: Magnifier closes (undo)
+
+enable sticky keys
+// EXPECTED: Sticky Keys on
+
+turn off sticky keys
+// EXPECTED: Off (undo)
+
+enable filter keys
+// EXPECTED: Filter Keys on
+
+disable filter keys
+// EXPECTED: Off (undo)
+
+enable mono audio
+// EXPECTED: Stereo collapses to mono
+
+turn off mono audio
+// EXPECTED: Stereo restored (undo)
+
+// 14d. File explorer
+show file extensions
+// EXPECTED: File names show ".txt", ".docx", etc. in Explorer
+
+hide file extensions
+// EXPECTED: Extensions hidden (undo)
+
+show hidden files
+// EXPECTED: Hidden/system files visible in Explorer
+
+hide hidden files
+// EXPECTED: Hidden (undo)
+
+display file extensions
+// EXPECTED: Alternate phrasing
+
+// 14e. Time settings
+enable automatic time sync
+// EXPECTED: Opens time settings / enables auto-sync
+
+enable automatic dst adjustment
+// EXPECTED: DST auto-adjustment on
+
+disable automatic dst
+// EXPECTED: Off (undo)
+
+automatically adjust for dst
+// EXPECTED: Alternate phrasing
+
+// 14f. Focus assist
+enable quiet hours
+// EXPECTED: Opens focus assist settings
+
+do not disturb
+// EXPECTED: Same
+
+open focus assist settings
+// EXPECTED: Same
+
+// 14g. Multi-monitor
+remember window locations
+// EXPECTED: Opens display settings
+
+minimize windows when monitor disconnects
+// EXPECTED: Opens display settings
+
+keep windows when monitor disconnects
+// EXPECTED: Opens display settings
+
+
+// =====================
+// 15. EDGE CASES & MIXED
+// =====================
+
+// 15a. Known program names from grammar
+open chrome
+open word
+open excel
+open powerpoint
+open outlook
+open visual studio code
+open paint
+open snipping tool
+open task manager
+open cmd
+open powershell
+// EXPECTED: Each opens the corresponding app (close them after testing)
+
+// 15b. Wildcard program names
+open my custom app
+launch something random
+// EXPECTED: Attempts to find and launch; may fail gracefully
+
+// 15c. Chained undo test
+set theme to dark
+enable transparency
+apply color to title bar
+left align the taskbar
+set mouse speed to 15
+show seconds in clock
+// Now undo everything:
+set theme to light
+disable transparency
+disable title bar color
+center the taskbar
+set mouse speed to 10
+hide seconds in clock
+// EXPECTED: All settings restored to defaults

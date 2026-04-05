@@ -21,11 +21,11 @@ import { DesktopDisplayActions } from "./displayActionsSchema.ts";
   | disable blue light filter -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "", nightLightScheduleDisabled: true } };
 
 <AdjustColorTemperature> =
-    adjust color temperature -> { actionName: "adjustColorTemperature", parameters: {} }
-  | reduce blue light -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "reduce" } }
-  | increase blue light -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "increase" } }
-  | warmer (screen)? colors -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "reduce" } }
-  | cooler (screen)? colors -> { actionName: "adjustColorTemperature", parameters: { filterEffect: "increase" } };
+    adjust color temperature -> { actionName: "AdjustColorTemperature", parameters: {} }
+  | reduce blue light -> { actionName: "AdjustColorTemperature", parameters: { filterEffect: "reduce" } }
+  | increase blue light -> { actionName: "AdjustColorTemperature", parameters: { filterEffect: "increase" } }
+  | warmer (screen)? colors -> { actionName: "AdjustColorTemperature", parameters: { filterEffect: "reduce" } }
+  | cooler (screen)? colors -> { actionName: "AdjustColorTemperature", parameters: { filterEffect: "increase" } };
 
 <DisplayScaling> =
     set (display)? scaling to $(size:string) (percent)? -> { actionName: "DisplayScaling", parameters: { sizeOverride: size } }
