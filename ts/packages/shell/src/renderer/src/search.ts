@@ -1,9 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { isElectron } from "./main";
 import { SearchMenuBase } from "./searchMenuBase";
 import { InlineSearchMenuUI } from "./searchMenuUI/inlineSearchMenuUI";
 import { LocalSearchMenuUI } from "./searchMenuUI/localSearchMenuUI";
+import { RemoteSearchMenuUI } from "./searchMenuUI/remoteSearchMenuUI";
 import {
     SearchMenuItem,
     SearchMenuPosition,
@@ -29,7 +31,9 @@ export class SearchMenu extends SearchMenuBase {
         if (this.searchMenuUI === undefined) {
             this.searchMenuUI = this.inline
                 ? new InlineSearchMenuUI(this.onCompletion, this.textEntry!)
-                : new LocalSearchMenuUI(this.onCompletion);
+                : isElectron()
+                  ? new RemoteSearchMenuUI(this.onCompletion)
+                  : new LocalSearchMenuUI(this.onCompletion);
         }
         this.searchMenuUI.update({ position, prefix, items });
     }
