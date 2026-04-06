@@ -283,9 +283,10 @@ export function validateTaskFlowScript(
     const host = createVirtualHost(files);
 
     const program = ts.createProgram(
-        ["script.ts"],
+        ["sandbox.d.ts", "script.ts"],
         {
             strict: true,
+            noImplicitAny: false,
             noEmit: true,
             target: ts.ScriptTarget.ES2022,
             module: ts.ModuleKind.ES2022,

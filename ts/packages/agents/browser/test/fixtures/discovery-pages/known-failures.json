@@ -8,10 +8,26 @@
       "filed": "2026-04-03"
     },
     {
+      "page": "product-detail.html",
+      "missingFlow": "buyProduct",
+      "reason": "On a product detail page, the LLM sees addToCart as sufficient and excludes buyProduct as redundant. Both are valid — buyProduct handles the broader 'buy this' intent.",
+      "filed": "2026-04-05"
+    },
+    {
       "page": "instacart-home.html",
       "missingFlow": "searchForProduct",
       "reason": "After HTML reduction, the search input loses identifying attributes. The LLM doesn't recognize it as a product search capability.",
       "filed": "2026-04-03"
+    }
+  ],
+  "designIssues": [
+    {
+      "description": "LLM excludes multi-step flows that can navigate to the right context",
+      "example": "buyProduct excluded on homedepot.com homepage because no product is visible, but the flow handles this by searching first",
+      "affectedFlows": ["buyProduct", "searchForReservation"],
+      "rootCause": "The LLM prompt asks which actions 'can actually be performed on THIS page' — it doesn't know that flows can navigate away from the current page",
+      "proposedFix": "Update the LLM prompt to distinguish between direct-action flows (need matching page elements) and navigating flows (can search/navigate to the right context from any page on the site). Include flow descriptions in the schema so the LLM can see that buyProduct 'searches for a product and adds it to cart'.",
+      "filed": "2026-04-05"
     }
   ]
 }

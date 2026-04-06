@@ -1,7 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createExtensionService } from "./knowledgeUtilities";
+import { createChromeRpcClient } from "./chromeRpcClient";
+import { createElectronRpcClient } from "./electronRpcClient";
 
 export interface FilterOptions {
     searchQuery?: string;
@@ -20,16 +21,28 @@ export type MacroCategory =
     | "Other";
 export type NotificationType = "success" | "error" | "warning" | "info";
 
-const extensionService = createExtensionService();
+function getRpc() {
+    if (typeof window !== "undefined" && (window as any).electronAPI) {
+        const client = createElectronRpcClient();
+        return client?.rpc;
+    }
+    const client = createChromeRpcClient();
+    return client.rpc;
+}
 
 export async function getAllWebFlows(): Promise<any[]> {
-    return await extensionService.getAllWebFlows();
+    const rpc = getRpc();
+    if (!rpc) throw new Error("RPC not available");
+    const response = await (rpc as any).invoke("getAllWebFlows", {});
+    return response?.actions || response || [];
 }
 
 export async function deleteWebFlow(
     name: string,
 ): Promise<{ success: boolean; error?: string }> {
-    return await extensionService.deleteWebFlow(name);
+    const rpc = getRpc();
+    if (!rpc) throw new Error("RPC not available");
+    return await (rpc as any).invoke("deleteWebFlow", { name });
 }
 
 export function filterMacros(macros: any[], options: FilterOptions): any[] {
