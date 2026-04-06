@@ -1,8 +1,0 @@
-{
-  "extends": "../../../../tsconfig.bundle-typecheck.json",
-  "compilerOptions": {
-    "lib": ["DOM", "ES2020", "DOM.Iterable"]
-  },
-  "include": ["./**/*.ts"],
-  "references": [{ "path": "../../shared" }]
-}

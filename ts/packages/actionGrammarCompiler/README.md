@@ -9,7 +9,7 @@ The package provides two CLI entry points:
 - **`agc`** — production binary
 - **`agc-dev`** — development binary (with ts-node loader)
 
-Both support a legacy invocation style: if the first argument isn't a recognized command name, the `compile` command is assumed automatically.
+Both support a shortcut invocation style: if the first argument isn't a recognized command name, the `compile` command is assumed automatically.
 
 ## Commands
 

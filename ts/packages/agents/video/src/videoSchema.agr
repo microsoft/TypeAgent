@@ -14,7 +14,9 @@
 
 // Video Schema Grammar
 
-<Start> = <createVideoAction>;
+import { VideoAction } from "./videoActionSchema.ts";
+
+<Start> : VideoAction = <createVideoAction>;
 
 // Main action rule
 <createVideoAction> = $(request:<VideoRequest>) $(files:<FileSpec>)? $(duration:<DurationSpec>)? $(caption:<CaptionSpec>)? -> { actionName: "createVideoAction", parameters: { originalRequest: request, relatedFiles: files, duration: duration, caption: caption } };

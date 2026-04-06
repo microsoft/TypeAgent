@@ -1,0 +1,326 @@
+[
+  {
+    "id": "gm-01",
+    "category": "grammar-match",
+    "description": "createTopSongsPlaylist: exact pattern with all params",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "create 10 jazz songs playlist for this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "extractedParams": {
+            "genre": "jazz",
+            "quantity": 10,
+            "timePeriod": "this month"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-02",
+    "category": "grammar-match",
+    "description": "createTopSongsPlaylist: different genre and quantity",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "create 5 country playlist from this week",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "extractedParams": {
+            "genre": "country",
+            "quantity": 5,
+            "timePeriod": "this week"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-03",
+    "category": "grammar-match",
+    "description": "createTopSongsPlaylist: large quantity, hyphenated genre",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "create 20 hip-hop songs playlist for 2024",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "extractedParams": {
+            "genre": "hip-hop",
+            "quantity": 20,
+            "timePeriod": "2024"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-04",
+    "category": "grammar-match",
+    "description": "createTopSongsPlaylist: alternate 'make' pattern",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "make a bluegrass playlist with 15 songs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "extractedParams": { "genre": "bluegrass", "quantity": 15 }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-05",
+    "category": "grammar-match",
+    "description": "createTopSongsPlaylist: terse pattern",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "top 10 rock songs playlist",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "extractedParams": { "genre": "rock", "quantity": 10 }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-06",
+    "category": "grammar-match",
+    "description": "playPopularKpopSong: exact pattern",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "play the most popular kpop song this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "playPopularKpopSong",
+          "extractedParams": { "timePeriod": "this month" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-07",
+    "category": "grammar-match",
+    "description": "playPopularKpopSong: top variant",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "play the top kpop song this week",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "playPopularKpopSong",
+          "extractedParams": { "timePeriod": "this week" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-08",
+    "category": "grammar-match",
+    "description": "playPopularKpopSong: find and play",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "find the hottest kpop song right now and play it",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "playPopularKpopSong",
+          "extractedParams": { "timePeriod": "right now" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-09",
+    "category": "grammar-match",
+    "description": "playPopularKpopSong: number one variant",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "play the number one kpop song today",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "playPopularKpopSong",
+          "extractedParams": { "timePeriod": "today" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-10",
+    "category": "grammar-match",
+    "description": "weeklyEmailDigest: with time period",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "send me a weekly email digest for this week",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "weeklyEmailDigest",
+          "extractedParams": { "timePeriod": "this week" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-11",
+    "category": "grammar-match",
+    "description": "weeklyEmailDigest: terse with time",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "email digest for today",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "weeklyEmailDigest",
+          "extractedParams": { "timePeriod": "today" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-12",
+    "category": "grammar-match",
+    "description": "weeklyEmailDigest: summarize variant",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "summarize my recent emails for last 3 days",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "weeklyEmailDigest",
+          "extractedParams": { "timePeriod": "last 3 days" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-13",
+    "category": "grammar-match",
+    "description": "weeklyEmailDigest: no params (use defaults)",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "weekly email digest",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "weeklyEmailDigest"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-14",
+    "category": "grammar-match",
+    "description": "listTaskFlows: direct request",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-15",
+    "category": "grammar-match",
+    "description": "listTaskFlows: show variant",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "show me all the available task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-16",
+    "category": "grammar-match",
+    "description": "listTaskFlows: display variant",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "display task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-17",
+    "category": "grammar-match",
+    "description": "Negative: no playlist intent",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "play some jazz music",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-18",
+    "category": "grammar-match",
+    "description": "Negative: direct email action",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "send an email to John",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-19",
+    "category": "grammar-match",
+    "description": "Negative: missing kpop qualifier",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "what's the top song right now",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "gm-20",
+    "category": "grammar-match",
+    "description": "Negative: ambiguous web command",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "search the web for recipes",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null
+        }
+      }
+    ]
+  }
+]

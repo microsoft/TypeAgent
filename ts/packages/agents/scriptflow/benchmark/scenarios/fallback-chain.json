@@ -1,0 +1,181 @@
+[
+  {
+    "id": "fb-01",
+    "category": "fallback-chain",
+    "description": "Path validation fail: list files in downloads and show safenet ones",
+    "setup": { "requiredFlows": ["listFiles"] },
+    "utterances": [
+      {
+        "text": "list files in downloads and show safenet ones",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "fallback": {
+            "shouldFallback": true,
+            "fallbackReason": "path validation"
+          },
+          "llmJudge": {
+            "question": "Did the system recognize that the utterance contains both a path and a filter request, and handle them appropriately?"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-02",
+    "category": "fallback-chain",
+    "description": "Script lacks feature: list files in C:\\temp sorted by date descending",
+    "setup": { "requiredFlows": ["listFiles"] },
+    "utterances": [
+      {
+        "text": "list files in C:\\temp sorted by date descending",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "fallback": {
+            "shouldFallback": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-03",
+    "category": "fallback-chain",
+    "description": "Multi-step request: find large files and delete the oldest",
+    "setup": { "requiredFlows": ["findLargeFiles"] },
+    "utterances": [
+      {
+        "text": "find large files and delete the oldest",
+        "expected": {
+          "routedTo": "grammar",
+          "fallback": {
+            "shouldFallback": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-04",
+    "category": "fallback-chain",
+    "description": "No existing flow: show processes using more than 1GB memory",
+    "setup": { "requiredFlows": ["listFiles"] },
+    "utterances": [
+      {
+        "text": "show processes using more than 1GB memory",
+        "expected": {
+          "routedTo": "reasoning",
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-05",
+    "category": "fallback-chain",
+    "description": "Partial match + unsupported action: check disk space and email me if low",
+    "setup": { "requiredFlows": ["checkDiskSpace"] },
+    "utterances": [
+      {
+        "text": "check disk space and email me if low",
+        "expected": {
+          "routedTo": "grammar",
+          "fallback": {
+            "shouldFallback": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-06",
+    "category": "fallback-chain",
+    "description": "Cross-agent: scan logs for errors and create a JIRA ticket",
+    "setup": { "requiredFlows": ["scanLogErrors"] },
+    "utterances": [
+      {
+        "text": "scan logs for errors and create a JIRA ticket",
+        "expected": {
+          "routedTo": "grammar",
+          "fallback": {
+            "shouldFallback": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-07",
+    "category": "fallback-chain",
+    "description": "Env var handling: list files in $env:USERPROFILE\\Documents",
+    "setup": { "requiredFlows": ["listFiles"] },
+    "utterances": [
+      {
+        "text": "list files in $env:USERPROFILE\\Documents",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Name"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-08",
+    "category": "fallback-chain",
+    "description": "Special char handling: filter csv with regex pattern [0-9]+",
+    "setup": { "requiredFlows": ["filterCsv"] },
+    "utterances": [
+      {
+        "text": "filter csv with regex pattern [0-9]+",
+        "expected": {
+          "routedTo": "llm-translation",
+          "matchedFlow": "filterCsv"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-09",
+    "category": "fallback-chain",
+    "description": "No existing flow triggers reasoning: find files containing TODO in .ts files under src",
+    "setup": { "requiredFlows": ["listFiles"] },
+    "utterances": [
+      {
+        "text": "find files containing TODO in .ts files under src",
+        "expected": {
+          "routedTo": "reasoning",
+          "matchedFlow": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "fb-10",
+    "category": "fallback-chain",
+    "description": "Empty dir execution: list files in empty test directory",
+    "setup": {
+      "requiredFlows": ["listFiles"],
+      "environmentSetup": "Setup-BenchmarkEnv"
+    },
+    "utterances": [
+      {
+        "text": "list files in ${BENCHMARK_DIR}\\empty-dir-that-does-not-exist",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "execution": {
+            "shouldSucceed": false
+          },
+          "fallback": {
+            "shouldFallback": true
+          }
+        }
+      }
+    ]
+  }
+]

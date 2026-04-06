@@ -3,6 +3,7 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#import-statement" },
+    { "include": "#export-rule-definition" },
     { "include": "#rule-definition" }
   ],
   "repository": {
@@ -11,15 +12,23 @@
         {
           "name": "comment.line.double-slash.agr",
           "match": "//.*$"
+        },
+        {
+          "name": "comment.block.agr",
+          "begin": "/\\*",
+          "end": "\\*/",
+          "captures": {
+            "0": { "name": "punctuation.definition.comment.agr" }
+          }
         }
       ]
     },
     "import-statement": {
       "patterns": [
         {
-          "comment": "Named import: import { RuleA, RuleB } from './path.agr';",
+          "comment": "Import statement: import { names } from './path'; or import * from './path'; or import { Entity };",
           "begin": "^\\s*(import)\\b",
-          "end": "(;)|(?=$|//)",
+          "end": "(;)|(?=$)",
           "beginCaptures": {
             "1": { "name": "keyword.control.import.agr" }
           },
@@ -27,13 +36,27 @@
             "1": { "name": "punctuation.terminator.statement.agr" }
           },
           "patterns": [
+            { "include": "#comments" },
             {
-              "match": "(\\{)([^}]*)(\\})",
-              "captures": {
-                "1": { "name": "punctuation.definition.import-list.begin.agr" },
-                "2": { "name": "variable.other.agr" },
-                "3": { "name": "punctuation.definition.import-list.end.agr" }
-              }
+              "begin": "(\\{)",
+              "end": "(\\})",
+              "beginCaptures": {
+                "1": { "name": "punctuation.definition.import-list.begin.agr" }
+              },
+              "endCaptures": {
+                "1": { "name": "punctuation.definition.import-list.end.agr" }
+              },
+              "patterns": [
+                { "include": "#comments" },
+                {
+                  "name": "variable.other.import.agr",
+                  "match": "[A-Za-z_][A-Za-z0-9_]*"
+                },
+                {
+                  "name": "punctuation.separator.comma.agr",
+                  "match": ","
+                }
+              ]
             },
             {
               "name": "keyword.operator.wildcard.agr",
@@ -48,21 +71,82 @@
         }
       ]
     },
+    "export-rule-definition": {
+      "comment": "Exported rule definition: export <Name> ... = ... ;",
+      "begin": "^\\s*(export)\\s+(?=<)",
+      "end": "(;)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.export.agr" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.terminator.statement.agr" }
+      },
+      "patterns": [{ "include": "#rule-header" }, { "include": "#rule-body" }]
+    },
     "rule-definition": {
       "patterns": [
         {
-          "begin": "^\\s*(<)([A-Za-z_][A-Za-z0-9_]*)(>)\\s*(=)",
+          "comment": "Rule definition: <Name> [annotation]? : Type? = ... ;",
+          "begin": "^\\s*(?=<[A-Za-z_])",
           "end": "(;)",
-          "beginCaptures": {
-            "1": { "name": "punctuation.definition.rule-name.begin.agr" },
-            "2": { "name": "entity.name.type.rule.agr" },
-            "3": { "name": "punctuation.definition.rule-name.end.agr" },
-            "4": { "name": "keyword.operator.assignment.agr" }
-          },
           "endCaptures": {
             "1": { "name": "punctuation.terminator.statement.agr" }
           },
-          "patterns": [{ "include": "#rule-body" }]
+          "patterns": [
+            { "include": "#rule-header" },
+            { "include": "#rule-body" }
+          ]
+        }
+      ]
+    },
+    "rule-header": {
+      "comment": "Rule header: <Name> [spacing=mode]? : Type (| Type)* =",
+      "patterns": [
+        { "include": "#comments" },
+        {
+          "comment": "Rule name in definition position",
+          "match": "(<)([A-Za-z_][A-Za-z0-9_]*)(>)",
+          "captures": {
+            "1": { "name": "punctuation.definition.rule-name.begin.agr" },
+            "2": { "name": "entity.name.type.rule.agr" },
+            "3": { "name": "punctuation.definition.rule-name.end.agr" }
+          }
+        },
+        { "include": "#spacing-annotation" },
+        { "include": "#value-type-annotation" },
+        {
+          "name": "keyword.operator.assignment.agr",
+          "match": "="
+        }
+      ]
+    },
+    "spacing-annotation": {
+      "comment": "Spacing annotation: [spacing=required|optional|auto|none]",
+      "match": "(\\[)(spacing)(=)(required|optional|auto|none)(\\])",
+      "captures": {
+        "1": { "name": "punctuation.definition.annotation.begin.agr" },
+        "2": { "name": "entity.other.attribute-name.agr" },
+        "3": { "name": "keyword.operator.assignment.agr" },
+        "4": { "name": "support.constant.spacing-mode.agr" },
+        "5": { "name": "punctuation.definition.annotation.end.agr" }
+      }
+    },
+    "value-type-annotation": {
+      "comment": "Value type annotation: : TypeName (| TypeName)*",
+      "begin": "(:)\\s*(?=[A-Za-z_])",
+      "end": "(?==)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.separator.type-annotation.agr" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        {
+          "name": "entity.name.type.value-type.agr",
+          "match": "[A-Za-z_][A-Za-z0-9_]*"
+        },
+        {
+          "name": "keyword.operator.alternation.agr",
+          "match": "\\|"
         }
       ]
     },
@@ -73,7 +157,7 @@
         { "include": "#action-bare" },
         { "include": "#capture" },
         { "include": "#rule-reference" },
-        { "include": "#string-literal" },
+        { "include": "#escape-sequence" },
         { "include": "#operators" },
         { "include": "#keywords" }
       ]
@@ -81,23 +165,42 @@
     "capture": {
       "patterns": [
         {
-          "match": "(\\$)(\\()([A-Za-z_][A-Za-z0-9_]*)(:)([A-Za-z_<>][A-Za-z0-9_<>]*)(\\))",
+          "comment": "Typed capture with rule reference: $(var:<RuleName>)",
+          "match": "(\\$)(\\()([A-Za-z_][A-Za-z0-9_]*)(:)(<)([A-Za-z_][A-Za-z0-9_]*)(>)(\\))(\\?)?",
           "captures": {
             "1": { "name": "keyword.operator.capture.agr" },
             "2": { "name": "punctuation.definition.capture.begin.agr" },
-            "3": { "name": "variable.other.agr" },
+            "3": { "name": "variable.other.capture.agr" },
             "4": { "name": "punctuation.separator.type.agr" },
-            "5": { "name": "entity.name.type.agr" },
-            "6": { "name": "punctuation.definition.capture.end.agr" }
+            "5": { "name": "punctuation.definition.rule-reference.begin.agr" },
+            "6": { "name": "entity.name.type.rule-reference.agr" },
+            "7": { "name": "punctuation.definition.rule-reference.end.agr" },
+            "8": { "name": "punctuation.definition.capture.end.agr" },
+            "9": { "name": "keyword.operator.optional.agr" }
           }
         },
         {
-          "match": "(\\$)(\\()([A-Za-z_][A-Za-z0-9_]*)(\\))",
+          "comment": "Typed capture: $(var:Type) with optional quantifier",
+          "match": "(\\$)(\\()([A-Za-z_][A-Za-z0-9_]*)(:)([A-Za-z_][A-Za-z0-9_]*)(\\))([?*+])?",
           "captures": {
             "1": { "name": "keyword.operator.capture.agr" },
             "2": { "name": "punctuation.definition.capture.begin.agr" },
-            "3": { "name": "variable.other.agr" },
-            "4": { "name": "punctuation.definition.capture.end.agr" }
+            "3": { "name": "variable.other.capture.agr" },
+            "4": { "name": "punctuation.separator.type.agr" },
+            "5": { "name": "entity.name.type.agr" },
+            "6": { "name": "punctuation.definition.capture.end.agr" },
+            "7": { "name": "keyword.operator.quantifier.agr" }
+          }
+        },
+        {
+          "comment": "Untyped capture: $(var) with optional quantifier",
+          "match": "(\\$)(\\()([A-Za-z_][A-Za-z0-9_]*)(\\))([?*+])?",
+          "captures": {
+            "1": { "name": "keyword.operator.capture.agr" },
+            "2": { "name": "punctuation.definition.capture.begin.agr" },
+            "3": { "name": "variable.other.capture.agr" },
+            "4": { "name": "punctuation.definition.capture.end.agr" },
+            "5": { "name": "keyword.operator.quantifier.agr" }
           }
         }
       ]
@@ -105,11 +208,12 @@
     "rule-reference": {
       "patterns": [
         {
-          "match": "(<)([A-Za-z_][A-Za-z0-9_]*)(>)",
+          "match": "(<)([A-Za-z_][A-Za-z0-9_]*)(>)([?*+])?",
           "captures": {
             "1": { "name": "punctuation.definition.rule-reference.begin.agr" },
             "2": { "name": "entity.name.type.rule-reference.agr" },
-            "3": { "name": "punctuation.definition.rule-reference.end.agr" }
+            "3": { "name": "punctuation.definition.rule-reference.end.agr" },
+            "4": { "name": "keyword.operator.quantifier.agr" }
           }
         }
       ]
@@ -120,55 +224,273 @@
           "name": "string.quoted.double.agr",
           "begin": "\"",
           "end": "\"",
-          "patterns": [
-            {
-              "name": "constant.character.escape.agr",
-              "match": "\\\\."
-            }
-          ]
+          "patterns": [{ "include": "#string-escape" }]
         },
         {
           "name": "string.quoted.single.agr",
           "begin": "(?<!\\w)'",
           "end": "'",
-          "patterns": [
-            {
-              "name": "constant.character.escape.agr",
-              "match": "\\\\."
-            }
-          ]
+          "patterns": [{ "include": "#string-escape" }]
         }
       ]
     },
+    "string-escape": {
+      "patterns": [
+        {
+          "name": "constant.character.escape.unicode-codepoint.agr",
+          "match": "\\\\u\\{[0-9A-Fa-f]+\\}"
+        },
+        {
+          "name": "constant.character.escape.unicode.agr",
+          "match": "\\\\u[0-9A-Fa-f]{4}"
+        },
+        {
+          "name": "constant.character.escape.hex.agr",
+          "match": "\\\\x[0-9A-Fa-f]{2}"
+        },
+        {
+          "name": "constant.character.escape.agr",
+          "match": "\\\\[0nrvtbf'\"\\\\]"
+        },
+        {
+          "name": "constant.character.escape.agr",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "escape-sequence": {
+      "comment": "Escape sequences in bare string expressions (outside quotes)",
+      "name": "constant.character.escape.agr",
+      "match": "\\\\."
+    },
     "action-object": {
-      "comment": "Object action result: -> { ... } — embedded JavaScript content",
+      "comment": "Object action result: -> { ... } with nested AGR value syntax",
       "begin": "(->)\\s*(\\{)",
-      "end": "\\}",
+      "end": "(\\})",
       "beginCaptures": {
         "1": { "name": "keyword.operator.arrow.agr" },
         "2": { "name": "punctuation.definition.action.begin.agr" }
       },
       "endCaptures": {
-        "0": { "name": "punctuation.definition.action.end.agr" }
+        "1": { "name": "punctuation.definition.action.end.agr" }
       },
-      "contentName": "meta.embedded.block.javascript",
-      "patterns": [{ "include": "source.js" }]
+      "contentName": "meta.action-value.agr",
+      "patterns": [{ "include": "#value-body" }]
+    },
+    "action-array": {
+      "comment": "Array action result: -> [ ... ]",
+      "begin": "(->)\\s*(\\[)",
+      "end": "(\\])",
+      "beginCaptures": {
+        "1": { "name": "keyword.operator.arrow.agr" },
+        "2": { "name": "punctuation.definition.array.begin.agr" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.array.end.agr" }
+      },
+      "contentName": "meta.action-value.agr",
+      "patterns": [{ "include": "#value-body" }]
     },
     "action-bare": {
-      "comment": "Bare action result: -> value  where value is string, number, or identifier. End is non-consuming so | or ; is available to the parent rule scope.",
+      "comment": "Bare action result: -> expression (value expression with operators)",
       "begin": "(->)\\s*",
-      "end": "(?=[|;])",
+      "end": "(?=[|;)}\\]])",
       "beginCaptures": {
         "1": { "name": "keyword.operator.arrow.agr" }
       },
+      "patterns": [{ "include": "#value-expression" }]
+    },
+    "value-body": {
+      "comment": "Shared patterns for value positions (inside objects and arrays)",
       "patterns": [
+        { "include": "#comments" },
         { "include": "#string-literal" },
-        { "include": "#keywords" },
+        { "include": "#template-literal" },
+        { "include": "#value-object" },
+        { "include": "#value-array" },
+        { "include": "#spread-operator" },
+        { "include": "#numeric-literal" },
+        { "include": "#value-keywords" },
+        { "include": "#value-operators" },
+        {
+          "name": "punctuation.separator.comma.agr",
+          "match": ","
+        },
+        {
+          "name": "punctuation.separator.colon.agr",
+          "match": ":"
+        },
+        {
+          "name": "variable.other.property.agr",
+          "match": "[A-Za-z_][A-Za-z0-9_]*(?=\\s*:)"
+        },
         {
           "name": "variable.other.agr",
           "match": "[A-Za-z_][A-Za-z0-9_]*"
         }
       ]
+    },
+    "value-expression": {
+      "comment": "Patterns for full value expressions (after ->), including operators, ternary, template literals, calls, member access",
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#string-literal" },
+        { "include": "#template-literal" },
+        { "include": "#value-object" },
+        { "include": "#value-array" },
+        { "include": "#spread-operator" },
+        { "include": "#numeric-literal" },
+        { "include": "#value-keywords" },
+        { "include": "#value-operators" },
+        { "include": "#value-paren-group" },
+        {
+          "name": "punctuation.separator.comma.agr",
+          "match": ","
+        },
+        {
+          "name": "variable.other.agr",
+          "match": "[A-Za-z_][A-Za-z0-9_]*"
+        }
+      ]
+    },
+    "value-paren-group": {
+      "comment": "Grouped expression or function call arguments: (expr, ...)",
+      "begin": "(\\()",
+      "end": "(\\))",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.expression.begin.agr" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.expression.end.agr" }
+      },
+      "patterns": [{ "include": "#value-expression" }]
+    },
+    "value-operators": {
+      "comment": "Operators in value expression context. Order matters: longer matches first.",
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.agr",
+          "match": "===|!=="
+        },
+        {
+          "name": "keyword.operator.relational.agr",
+          "match": "<=|>="
+        },
+        {
+          "name": "keyword.operator.nullish-coalescing.agr",
+          "match": "\\?\\?"
+        },
+        {
+          "name": "keyword.operator.optional-chaining.agr",
+          "match": "\\?\\."
+        },
+        {
+          "name": "keyword.operator.logical.agr",
+          "match": "\\|\\||&&"
+        },
+        {
+          "name": "keyword.operator.typeof.agr",
+          "match": "\\btypeof\\b"
+        },
+        {
+          "name": "keyword.operator.ternary.agr",
+          "match": "\\?"
+        },
+        {
+          "name": "keyword.operator.logical-not.agr",
+          "match": "!"
+        },
+        {
+          "name": "keyword.operator.arithmetic.agr",
+          "match": "[+\\-*/%]"
+        },
+        {
+          "name": "keyword.operator.member-access.agr",
+          "match": "\\."
+        }
+      ]
+    },
+    "template-literal": {
+      "comment": "Template literals: `text ${expr} text`",
+      "name": "string.template.agr",
+      "begin": "`",
+      "end": "`",
+      "patterns": [
+        {
+          "comment": "Template expression: ${expr}",
+          "begin": "(\\$\\{)",
+          "end": "(\\})",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.template-expression.begin.agr"
+            }
+          },
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.template-expression.end.agr"
+            }
+          },
+          "contentName": "meta.template-expression.agr",
+          "patterns": [{ "include": "#value-expression" }]
+        },
+        { "include": "#string-escape" }
+      ]
+    },
+    "value-object": {
+      "comment": "Nested object literal: { ... }",
+      "begin": "(\\{)",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.object.begin.agr" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.object.end.agr" }
+      },
+      "patterns": [{ "include": "#value-body" }]
+    },
+    "value-array": {
+      "comment": "Array literal: [ ... ]",
+      "begin": "(\\[)",
+      "end": "(\\])",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.array.begin.agr" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.array.end.agr" }
+      },
+      "patterns": [{ "include": "#value-body" }]
+    },
+    "spread-operator": {
+      "name": "keyword.operator.spread.agr",
+      "match": "\\.\\.\\."
+    },
+    "numeric-literal": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.agr",
+          "match": "\\b0[xX][0-9A-Fa-f]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.agr",
+          "match": "-?\\b\\d+\\.\\d+([eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.exponential.agr",
+          "match": "-?\\b\\d+[eE][+-]?\\d+\\b"
+        },
+        {
+          "name": "constant.numeric.infinity.agr",
+          "match": "-?\\bInfinity\\b"
+        },
+        {
+          "name": "constant.numeric.integer.agr",
+          "match": "-?\\b\\d+\\b"
+        }
+      ]
+    },
+    "value-keywords": {
+      "name": "constant.language.agr",
+      "match": "\\b(true|false|null|undefined)\\b"
     },
     "operators": {
       "patterns": [
@@ -178,15 +500,23 @@
         },
         {
           "name": "keyword.operator.optional.agr",
-          "match": "\\?"
+          "match": "\\)\\?"
         },
         {
           "name": "keyword.operator.zero-or-more.agr",
-          "match": "\\*"
+          "match": "\\)\\*"
         },
         {
           "name": "keyword.operator.one-or-more.agr",
-          "match": "\\+"
+          "match": "\\)\\+"
+        },
+        {
+          "name": "punctuation.definition.group.begin.agr",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.definition.group.end.agr",
+          "match": "\\)"
         }
       ]
     },
@@ -196,10 +526,7 @@
           "name": "constant.language.agr",
           "match": "\\b(true|false|null|undefined)\\b"
         },
-        {
-          "name": "constant.numeric.agr",
-          "match": "\\b\\d+\\b"
-        }
+        { "include": "#numeric-literal" }
       ]
     }
   }

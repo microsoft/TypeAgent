@@ -41,5 +41,22 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/emailActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/emailSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

@@ -12,9 +12,5 @@
     "module": "ESNext"
   },
   "include": ["./**/*.ts"],
-  "references": [
-    { "path": "./plans" },
-    { "path": "./pdf" },
-    { "path": "../shared" }
-  ]
+  "references": [{ "path": "./pdf" }, { "path": "../shared" }]
 }

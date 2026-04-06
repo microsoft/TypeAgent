@@ -7,8 +7,29 @@ import {
     CommandDescriptor,
     CommandDescriptors,
     CommandDescriptorTable,
-    CompletionGroup,
+    CompletionDirection,
+    CompletionGroups,
+    SeparatorMode,
 } from "../command.js";
+
+// Merge two SeparatorMode values — the mode requiring the strongest
+// separator wins (i.e. the mode that demands the most from the user).
+// Priority: "space" > "spacePunctuation" > "optional" > "none" > undefined.
+// Architecture: docs/architecture/completion.md — §3 Agent SDK
+export function mergeSeparatorMode(
+    a: SeparatorMode | undefined,
+    b: SeparatorMode | undefined,
+): SeparatorMode | undefined {
+    if (a === undefined) return b;
+    if (b === undefined) return a;
+    const order: Record<SeparatorMode, number> = {
+        space: 3,
+        spacePunctuation: 2,
+        optional: 1,
+        none: 0,
+    };
+    return order[a] >= order[b] ? a : b;
+}
 import {
     ParameterDefinitions,
     ParsedCommandParams,
@@ -42,7 +63,8 @@ export type CommandHandler = CommandDescriptor & {
         context: SessionContext<unknown>,
         params: PartialParsedCommandParams<ParameterDefinitions>,
         names: string[],
-    ): Promise<CompletionGroup[]>;
+        direction?: CompletionDirection,
+    ): Promise<CompletionGroups>;
 };
 
 type CommandHandlerTypes = CommandHandlerNoParams | CommandHandler;
@@ -169,9 +191,14 @@ export function getCommandInterface(
             params: ParsedCommandParams<ParameterDefinitions>,
             names: string[],
             context: SessionContext<unknown>,
+            direction?: CompletionDirection,
         ) => {
             const handler = getCommandHandler(handlers, commands);
-            return handler.getCompletion?.(context, params, names) ?? [];
+            return (
+                handler.getCompletion?.(context, params, names, direction) ?? {
+                    groups: [],
+                }
+            );
         };
     }
     return commandInterface;

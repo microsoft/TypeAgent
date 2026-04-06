@@ -9,6 +9,16 @@ export interface AppAgentProvider {
     loadAppAgent(appAgentName: string): Promise<AppAgent>;
     unloadAppAgent(appAgentName: string): Promise<void>;
     setTraceNamespaces?(namespaces: string): void;
+    // Optional: providers that start slowly can return a stub manifest from
+    // getAppAgentManifest and call the registered callback with the real
+    // manifest once the agent is ready.
+    onSchemaReady?: (
+        callback: (agentName: string, manifest: AppAgentManifest) => void,
+    ) => void;
+    // Optional: returns the names of agents currently loading asynchronously.
+    // Only these agents should show ⏳ in the UI. If omitted, no agents are
+    // treated as loading.
+    getLoadingAgentNames?(): string[];
 }
 
 export interface AppAgentInstaller {

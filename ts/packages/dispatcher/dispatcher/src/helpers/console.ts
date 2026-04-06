@@ -6,8 +6,8 @@ import {
     DisplayAppendMode,
     DisplayContent,
     MessageContent,
-    getContentForType,
 } from "@typeagent/agent-sdk";
+import { getContentForType } from "@typeagent/agent-sdk/helpers/display";
 import type {
     RequestId,
     ClientIO,
@@ -170,6 +170,9 @@ function createConsoleClientIO(
         },
 
         // Display
+        setUserRequest() {
+            // Ignored
+        },
         setDisplayInfo() {
             // Ignored
         },

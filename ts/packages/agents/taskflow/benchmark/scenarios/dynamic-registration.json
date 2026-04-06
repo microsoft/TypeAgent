@@ -1,0 +1,56 @@
+[
+  {
+    "id": "dyn-01",
+    "category": "dynamic-registration",
+    "description": "All seeded flows including fixtures appear in list",
+    "setup": {
+      "requiredFlows": [
+        "createTopSongsPlaylist",
+        "searchAndList",
+        "dailyAgendaEmail"
+      ]
+    },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": [
+              "createTopSongsPlaylist",
+              "searchAndList",
+              "dailyAgendaEmail"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "dyn-02",
+    "category": "dynamic-registration",
+    "description": "Deleted flow no longer matches grammar",
+    "setup": { "requiredFlows": ["searchAndList"] },
+    "utterances": [
+      {
+        "text": "delete task flow searchAndList",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "deleteTaskFlow",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Deleted"]
+          }
+        }
+      },
+      {
+        "text": "search and list quantum computing",
+        "expected": {
+          "matchedFlow": null
+        }
+      }
+    ]
+  }
+]

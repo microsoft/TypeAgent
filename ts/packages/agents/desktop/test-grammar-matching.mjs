@@ -11,15 +11,49 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load the grammar file
-console.log("Loading grammar file...");
-const grammarPath = path.join(__dirname, "src/desktopSchema.agr");
-const grammarText = fs.readFileSync(grammarPath, "utf-8");
-const grammar = loadGrammarRules("desktopSchema.agr", grammarText);
+// Load grammar files
+console.log("Loading grammar files...");
 
-// Compile to NFA
-console.log("Compiling grammar to NFA...");
-const nfa = compileGrammarToNFA(grammar);
+function loadGrammar(relPath) {
+    const grammarPath = path.join(__dirname, relPath);
+    const grammarText = fs.readFileSync(grammarPath, "utf-8");
+    const grammar = loadGrammarRules(path.basename(relPath), grammarText);
+    const nfa = compileGrammarToNFA(grammar);
+    console.log(`  Loaded: ${relPath}`);
+    return { grammar, nfa };
+}
+
+// Load main grammar + all sub-action grammars from manifest
+const manifest = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "src/manifest.json"), "utf-8"),
+);
+
+const grammars = [loadGrammar("src/desktopSchema.agr")];
+
+if (manifest.subActionManifests) {
+    for (const [key, sub] of Object.entries(manifest.subActionManifests)) {
+        const agrFileName = path
+            .basename(sub.schema.grammarFile)
+            .replace(".ag.json", ".agr");
+        const agrPath = path.join("src/windows", agrFileName);
+        if (fs.existsSync(path.join(__dirname, agrPath))) {
+            grammars.push(loadGrammar(agrPath));
+        } else {
+            console.warn(`⚠️  Grammar file not found for ${key}: ${agrPath}`);
+        }
+    }
+}
+
+// Try matching a phrase against all loaded grammars
+function matchPhrase(phrase) {
+    for (const { grammar, nfa } of grammars) {
+        const results = matchGrammarWithNFA(grammar, nfa, phrase);
+        if (results.length > 0) {
+            return results[0];
+        }
+    }
+    return null;
+}
 
 console.log("\n=== Testing Desktop Agent Grammar Matching ===\n");
 
@@ -69,6 +103,9 @@ const testCases = [
         phrase: "enable mouse acceleration",
         expected: "EnhancePointerPrecision",
     },
+    { phrase: "enable cursor trail", expected: "CursorTrail" },
+    { phrase: "disable mouse trail", expected: "CursorTrail" },
+    { phrase: "set cursor trail length to 8", expected: "CursorTrail" },
 
     // Privacy
     { phrase: "allow microphone access", expected: "ManageMicrophoneAccess" },
@@ -103,14 +140,14 @@ let passed = 0;
 let failed = 0;
 
 for (const { phrase, expected } of testCases) {
-    const results = matchGrammarWithNFA(grammar, nfa, phrase);
+    const result = matchPhrase(phrase);
 
-    if (results.length > 0) {
-        const action = results[0].match.actionName;
+    if (result) {
+        const action = result.match.actionName;
         if (action === expected) {
             console.log(`✅ "${phrase}"`);
             console.log(
-                `   → ${action} ${JSON.stringify(results[0].match.parameters)}`,
+                `   → ${action} ${JSON.stringify(result.match.parameters)}`,
             );
             passed++;
         } else {

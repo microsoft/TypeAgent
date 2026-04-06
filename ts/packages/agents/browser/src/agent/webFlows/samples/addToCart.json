@@ -1,0 +1,20 @@
+{
+  "name": "addToCart",
+  "description": "Add the currently viewed product to the shopping cart",
+  "version": 1,
+  "parameters": {
+    "productName": {
+      "type": "string",
+      "required": true,
+      "description": "The name of the product to add"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const hero = await browser.extractComponent<{ name: string; price: string; addToCartButtonSelector?: string }>({\n        typeName: 'ProductDetailsHero',\n        schema: '{ name: string; price: string; addToCartButtonSelector?: string; }'\n    }, params.productName);\n    if (!hero || !hero.addToCartButtonSelector) {\n        throw new Error('Could not find add-to-cart button on this page');\n    }\n    await browser.click(hero.addToCartButtonSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Added ' + (hero.name || params.productName) + ' to cart' };\n}",
+  "grammarPatterns": [
+    "add $(productName:wildcard) to cart",
+    "add $(productName:wildcard) to my cart",
+    "buy $(productName:wildcard)"
+  ],
+  "scope": { "type": "global" },
+  "source": { "type": "manual", "timestamp": "2026-03-13T00:00:00.000Z" }
+}

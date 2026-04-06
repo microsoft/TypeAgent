@@ -307,9 +307,15 @@ export class NoteEditor {
 
         const noteData: NoteData = {
             content,
-            selectedText: this.currentSelection?.text,
-            screenshotData: this.currentScreenshot || undefined,
-            blockquoteContent: this.currentSelection?.text, // Store blockquote content separately
+            ...(this.currentSelection?.text !== undefined && {
+                selectedText: this.currentSelection.text,
+            }),
+            ...(this.currentScreenshot
+                ? { screenshotData: this.currentScreenshot }
+                : {}),
+            ...(this.currentSelection?.text !== undefined && {
+                blockquoteContent: this.currentSelection.text,
+            }),
         };
 
         try {

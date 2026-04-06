@@ -43,6 +43,7 @@
   "dependencies": {
     "@oclif/core": "^4.2.10",
     "@oclif/plugin-help": "^6",
+    "@typeagent/action-schema": "workspace:*",
     "action-grammar": "workspace:*"
   },
   "devDependencies": {

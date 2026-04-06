@@ -5,140 +5,11 @@ import { z } from "zod/v4";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
-import fs from "fs/promises";
-import path from "path";
-import os from "os";
 
 function toolResult(result: string): CallToolResult {
     return {
         content: [{ type: "text", text: result }],
     };
-}
-
-interface HTMLFrame {
-    frameId: number;
-    content: string;
-    text?: string;
-}
-
-/**
- * Prettify HTML by adding line breaks after major tags
- */
-function prettifyHTML(html: string): string {
-    return html
-        .replace(
-            /<\/(div|section|article|aside|nav|header|footer|main|form|table|ul|ol|li|tr|td|th|thead|tbody|tfoot|h[1-6]|p|blockquote|pre|figure|figcaption|address|hr)>/gi,
-            "</$1>\n",
-        )
-        .replace(/<(head|body|html)>/gi, "<$1>\n")
-        .replace(/<\/(head|body|html)>/gi, "</$1>\n");
-}
-
-/**
- * Extract title from HTML content
- */
-function extractTitle(html: string): string {
-    const titleMatch = html.match(/<title>(.*?)<\/title>/i);
-    return titleMatch ? titleMatch[1] : "Untitled";
-}
-
-/**
- * Estimate token count (rough approximation: 1 token ≈ 4 characters)
- */
-function estimateTokens(text: string): number {
-    return Math.ceil(text.length / 4);
-}
-
-/**
- * Post-process HTML result from browser
- * - Deserializes nested JSON structure
- * - Saves each frame as a separate prettified HTML file
- * - Returns structured summary instead of raw escaped JSON
- */
-async function postProcessHTML(
-    rawResponse: string,
-    logger: any,
-): Promise<string> {
-    try {
-        // Parse the JSON array structure
-        const frames: HTMLFrame[] = JSON.parse(rawResponse);
-
-        if (!Array.isArray(frames) || frames.length === 0) {
-            return rawResponse; // Not HTML format, return as-is
-        }
-
-        // Get main frame (frameId 0) or first frame
-        const mainFrame = frames.find((f) => f.frameId === 0) || frames[0];
-
-        // Use task's HTML directory if available (from TYPEAGENT_HTML_DIR env var),
-        // otherwise fall back to temp directory
-        let htmlDir: string;
-        if (process.env.TYPEAGENT_HTML_DIR) {
-            htmlDir = process.env.TYPEAGENT_HTML_DIR;
-            // Ensure directory exists
-            await fs.mkdir(htmlDir, { recursive: true });
-            logger.log(
-                `[HTML_PROCESSOR] Using task HTML directory: ${htmlDir}`,
-            );
-        } else {
-            htmlDir = await fs.mkdtemp(
-                path.join(os.tmpdir(), "typeagent-html-"),
-            );
-            logger.log(`[HTML_PROCESSOR] Using temp directory: ${htmlDir}`);
-        }
-
-        // Save each frame as a separate file
-        const savedFiles: string[] = [];
-        for (const frame of frames) {
-            const prettified = prettifyHTML(frame.content);
-            const filename =
-                frame.frameId === 0
-                    ? "main-frame.html"
-                    : `frame-${frame.frameId}.html`;
-            const filepath = path.join(htmlDir, filename);
-
-            await fs.writeFile(filepath, prettified, "utf-8");
-            savedFiles.push(filepath);
-
-            logger.log(
-                `[HTML_PROCESSOR] Saved frame ${frame.frameId} to ${filepath} (${frame.content.length} bytes, ~${estimateTokens(frame.content)} tokens)`,
-            );
-        }
-
-        // Extract metadata from main frame
-        const title = extractTitle(mainFrame.content);
-        const tokenCount = estimateTokens(mainFrame.content);
-
-        // Return structured summary
-        const summary = {
-            title,
-            frameCount: frames.length,
-            mainFrameTokens: tokenCount,
-            mainFramePath: savedFiles[0],
-            allFramePaths: savedFiles,
-            // Include a truncated preview for quick analysis (first 8000 chars)
-            preview: mainFrame.content.substring(0, 8000),
-        };
-
-        return `HTML content retrieved successfully.
-
-**Page Title**: ${title}
-**Frame Count**: ${frames.length}
-**Main Frame**: ~${tokenCount} tokens
-
-**Saved HTML Files**:
-${savedFiles.map((f, i) => `  - Frame ${i}: ${f}`).join("\n")}
-
-**Quick Preview** (first 8000 characters):
-${summary.preview}
-
-**Full HTML**: Use Read tool to access the saved HTML files for detailed analysis.
-Each frame is saved as a separate prettified HTML file with line breaks for easy reading.`;
-    } catch (error) {
-        logger.error(`[HTML_PROCESSOR] Failed to process HTML: ${error}`);
-        // If processing fails, return original response
-        return rawResponse;
-    }
 }
 
 interface BrowserActionToolDefinition {
@@ -236,57 +107,6 @@ const browserActionTools: BrowserActionToolDefinition[] = [
     },
 
     {
-        name: "browser__clickOnElement",
-        description: "Click on a DOM element specified by CSS selector",
-        schema: {
-            cssSelector: z
-                .string()
-                .describe(
-                    "CSS selector for the element to click (e.g., '#button-id', '.class-name', 'button[type=submit]')",
-                ),
-        },
-        handler: async (params, getDispatcher, responseCollector, logger) => {
-            return executeBrowserAction(
-                "clickOnElement",
-                { cssSelector: params.cssSelector },
-                getDispatcher,
-                responseCollector,
-                logger,
-            );
-        },
-    },
-
-    {
-        name: "browser__enterTextInElement",
-        description: "Enter text into an input field specified by CSS selector",
-        schema: {
-            value: z.string().describe("Text to enter into the field"),
-            cssSelector: z
-                .string()
-                .describe("CSS selector for the input element"),
-            submitForm: z
-                .boolean()
-                .optional()
-                .describe(
-                    "Submit the form after entering text (default: false)",
-                ),
-        },
-        handler: async (params, getDispatcher, responseCollector, logger) => {
-            return executeBrowserAction(
-                "enterTextInElement",
-                {
-                    value: params.value,
-                    cssSelector: params.cssSelector,
-                    submitForm: params.submitForm,
-                },
-                getDispatcher,
-                responseCollector,
-                logger,
-            );
-        },
-    },
-
-    {
         name: "browser__followLinkByText",
         description: "Follow a link containing specific text",
         schema: {
@@ -309,67 +129,6 @@ const browserActionTools: BrowserActionToolDefinition[] = [
                 responseCollector,
                 logger,
             );
-        },
-    },
-
-    {
-        name: "browser__search",
-        description: "Perform a web search using the default search engine",
-        schema: {
-            query: z.string().describe("Search query"),
-        },
-        handler: async (params, getDispatcher, responseCollector, logger) => {
-            return executeBrowserAction(
-                "search",
-                { query: params.query },
-                getDispatcher,
-                responseCollector,
-                logger,
-            );
-        },
-    },
-
-    {
-        name: "browser__getHTML",
-        description:
-            "Get HTML content from the current page. Returns structured summary with file paths to saved HTML frames.",
-        schema: {
-            fullHTML: z
-                .boolean()
-                .optional()
-                .describe("Get full HTML or fragments (default: fragments)"),
-            extractText: z
-                .boolean()
-                .optional()
-                .describe("Extract only text content (default: false)"),
-        },
-        handler: async (params, getDispatcher, responseCollector, logger) => {
-            const result = await executeBrowserAction(
-                "getHTML",
-                {
-                    fullHTML: params.fullHTML,
-                    extractText: params.extractText,
-                },
-                getDispatcher,
-                responseCollector,
-                logger,
-            );
-
-            // Post-process HTML if we got a successful result
-            if (result.content && result.content[0]?.type === "text") {
-                const rawResponse = result.content[0].text;
-
-                // Only process if it looks like JSON array (starts with '[{')
-                if (rawResponse.trim().startsWith("[{")) {
-                    const processedResponse = await postProcessHTML(
-                        rawResponse,
-                        logger,
-                    );
-                    return toolResult(processedResponse);
-                }
-            }
-
-            return result;
         },
     },
 
@@ -419,17 +178,168 @@ const browserActionTools: BrowserActionToolDefinition[] = [
     },
 
     {
-        name: "browser__awaitPageLoad",
-        description: "Wait for the page to finish loading",
-        schema: {},
+        name: "webflow__list",
+        description:
+            "List available WebFlow actions for a domain. Returns action names, descriptions, and parameter schemas.",
+        schema: {
+            domain: z
+                .string()
+                .optional()
+                .describe(
+                    "Domain to list flows for (e.g., 'amazon.com'). If omitted, lists all flows.",
+                ),
+        },
         handler: async (params, getDispatcher, responseCollector, logger) => {
-            return executeBrowserAction(
-                "awaitPageLoad",
-                {},
-                getDispatcher,
-                responseCollector,
-                logger,
-            );
+            const dispatcher = getDispatcher();
+            if (!dispatcher) {
+                return toolResult(
+                    "Cannot list WebFlows: not connected to TypeAgent dispatcher.",
+                );
+            }
+
+            const command = params.domain
+                ? `@action browser getWebFlowsForDomain --parameters '{"domain":"${params.domain}"}'`
+                : `@action browser getAllWebFlows`;
+
+            logger.log(`[WEBFLOW] Listing flows: ${command}`);
+            responseCollector.messages = [];
+
+            try {
+                await dispatcher.processCommand(command);
+                if (responseCollector.messages.length > 0) {
+                    return toolResult(responseCollector.messages.join("\n\n"));
+                }
+                return toolResult("No WebFlows found.");
+            } catch (error) {
+                return toolResult(
+                    `Failed to list WebFlows: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
+        },
+    },
+
+    {
+        name: "webflow__execute",
+        description:
+            "Execute a saved WebFlow action by name with parameters. Use webflow__list first to discover available flows.",
+        schema: {
+            flowName: z.string().describe("Name of the WebFlow to execute"),
+            parameters: z
+                .string()
+                .optional()
+                .describe(
+                    'JSON string of parameters to pass to the flow (e.g., \'{"productName": "shoes"}\')',
+                ),
+        },
+        handler: async (params, getDispatcher, responseCollector, logger) => {
+            const dispatcher = getDispatcher();
+            if (!dispatcher) {
+                return toolResult(
+                    "Cannot execute WebFlow: not connected to TypeAgent dispatcher.",
+                );
+            }
+
+            let paramObj: Record<string, any> = {};
+            if (params.parameters) {
+                try {
+                    paramObj = JSON.parse(params.parameters);
+                } catch {
+                    return toolResult(
+                        `Invalid parameters JSON: ${params.parameters}`,
+                    );
+                }
+            }
+
+            const paramStr =
+                Object.keys(paramObj).length > 0
+                    ? `--parameters '${JSON.stringify(paramObj).replaceAll("'", "\\'")}'`
+                    : "";
+            const command =
+                `@action browser.webFlows ${params.flowName} ${paramStr}`.trim();
+
+            logger.log(`[WEBFLOW] Executing: ${command}`);
+            responseCollector.messages = [];
+
+            try {
+                await dispatcher.processCommand(command);
+                if (responseCollector.messages.length > 0) {
+                    return toolResult(responseCollector.messages.join("\n\n"));
+                }
+                return toolResult(
+                    `WebFlow "${params.flowName}" executed successfully.`,
+                );
+            } catch (error) {
+                return toolResult(
+                    `WebFlow "${params.flowName}" failed: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
+        },
+    },
+
+    {
+        name: "webflow__run_draft",
+        description:
+            "Write and execute a draft WebFlow script using the browser API. " +
+            "The script must be: async function execute(browser, params) { ... } " +
+            "Available API: browser.click(sel), browser.enterText(sel, text), " +
+            "browser.selectOption(sel, value), browser.awaitPageLoad(), " +
+            "browser.awaitPageInteraction(), browser.getPageText(), " +
+            "browser.captureScreenshot(), browser.navigateTo(url), " +
+            "browser.checkPageState(description), browser.queryContent(question), " +
+            "browser.followLink(sel), browser.pressKey(key), browser.getCurrentUrl()",
+        schema: {
+            script: z
+                .string()
+                .describe(
+                    'JavaScript async function source, e.g.: async function execute(browser, params) { await browser.click("#btn"); return { success: true }; }',
+                ),
+            parameters: z
+                .string()
+                .optional()
+                .describe("JSON string of parameters to pass to the script"),
+            timeout: z
+                .number()
+                .optional()
+                .describe(
+                    "Execution timeout in milliseconds (default: 120000)",
+                ),
+        },
+        handler: async (params, getDispatcher, responseCollector, logger) => {
+            const dispatcher = getDispatcher();
+            if (!dispatcher) {
+                return toolResult(
+                    "Cannot run draft script: not connected to TypeAgent dispatcher.",
+                );
+            }
+
+            const actionParams: Record<string, unknown> = {
+                script: params.script,
+            };
+            if (params.parameters) {
+                actionParams.params = params.parameters;
+            }
+            if (params.timeout) {
+                actionParams.timeout = params.timeout;
+            }
+
+            const paramStr = `--parameters '${JSON.stringify(actionParams).replaceAll("'", "\\'")}'`;
+            const command =
+                `@action browser executeAdHocScript ${paramStr}`.trim();
+
+            logger.log(`[WEBFLOW_DRAFT] Executing draft script`);
+            responseCollector.messages = [];
+
+            try {
+                await dispatcher.processCommand(command);
+                if (responseCollector.messages.length > 0) {
+                    return toolResult(responseCollector.messages.join("\n\n"));
+                }
+                return toolResult("Draft script executed successfully.");
+            } catch (error) {
+                return toolResult(
+                    `Draft script failed: ${error instanceof Error ? error.message : String(error)}`,
+                );
+            }
         },
     },
 ];

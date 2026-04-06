@@ -1,5 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export { connectDispatcher } from "./agentServerClient.js";
+export {
+    connectAgentServer,
+    AgentServerConnection,
+    SessionDispatcher,
+    connectDispatcher,
+    ensureAndConnectDispatcher,
+    stopAgentServer,
+} from "./agentServerClient.js";
 export type * from "@typeagent/dispatcher-rpc/types";
+export type {
+    SessionInfo,
+    JoinSessionResult,
+    DispatcherConnectOptions,
+} from "@typeagent/agent-server-protocol";

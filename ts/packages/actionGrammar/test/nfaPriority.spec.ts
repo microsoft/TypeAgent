@@ -32,9 +32,16 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playWildcard" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: {
+                                    type: "literal",
+                                    value: "playWildcard",
+                                },
+                            },
+                        ],
                     },
                 },
                 {
@@ -44,9 +51,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playMusic" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playMusic" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -78,9 +89,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playShort" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playShort" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -96,9 +111,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playLong" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playLong" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -129,9 +148,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playOne" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playOne" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -153,9 +176,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playTwo" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playTwo" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -194,9 +221,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playTwo" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playTwo" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -211,9 +242,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "playOne" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "playOne" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -257,9 +292,16 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "manyWildcards" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: {
+                                    type: "literal",
+                                    value: "manyWildcards",
+                                },
+                            },
+                        ],
                     },
                 },
                 {
@@ -270,9 +312,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "allFixed" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "allFixed" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -304,9 +350,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "unchecked" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "unchecked" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -321,9 +371,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "checked" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "checked" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -356,9 +410,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "unchecked" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "unchecked" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -373,9 +431,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            action: { type: "literal", value: "checked" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "action",
+                                value: { type: "literal", value: "checked" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -413,9 +475,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            priority: { type: "literal", value: "lowest" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "priority",
+                                value: { type: "literal", value: "lowest" },
+                            },
+                        ],
                     },
                 },
                 // Mid priority: 1 fixed + 1 unchecked wildcard
@@ -431,7 +497,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { priority: { type: "literal", value: "mid" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "priority",
+                                value: { type: "literal", value: "mid" },
+                            },
+                        ],
                     },
                 },
                 // High priority: 1 fixed + 1 checked wildcard
@@ -447,7 +519,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { priority: { type: "literal", value: "high" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "priority",
+                                value: { type: "literal", value: "high" },
+                            },
+                        ],
                     },
                 },
                 // Highest priority: 2 fixed strings
@@ -458,9 +536,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            priority: { type: "literal", value: "highest" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "priority",
+                                value: { type: "literal", value: "highest" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -492,7 +574,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { rule: { type: "literal", value: "A" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "rule",
+                                value: { type: "literal", value: "A" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -507,7 +595,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { rule: { type: "literal", value: "B" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "rule",
+                                value: { type: "literal", value: "B" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -546,7 +640,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { rule: { type: "literal", value: "optional" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "rule",
+                                value: { type: "literal", value: "optional" },
+                            },
+                        ],
                     },
                 },
                 {
@@ -556,7 +656,13 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: { rule: { type: "literal", value: "fixed" } },
+                        value: [
+                            {
+                                type: "property",
+                                key: "rule",
+                                value: { type: "literal", value: "fixed" },
+                            },
+                        ],
                     },
                 },
             ],
@@ -599,9 +705,16 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            rule: { type: "literal", value: "allUnchecked" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "rule",
+                                value: {
+                                    type: "literal",
+                                    value: "allUnchecked",
+                                },
+                            },
+                        ],
                     },
                 },
                 {
@@ -623,9 +736,16 @@ describe("NFA Priority System", () => {
                     ],
                     value: {
                         type: "object",
-                        value: {
-                            rule: { type: "literal", value: "mixedChecked" },
-                        },
+                        value: [
+                            {
+                                type: "property",
+                                key: "rule",
+                                value: {
+                                    type: "literal",
+                                    value: "mixedChecked",
+                                },
+                            },
+                        ],
                     },
                 },
             ],

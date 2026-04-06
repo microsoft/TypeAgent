@@ -19,7 +19,7 @@ import {
     KnowledgeExtractionProgressEvent,
 } from "./progress/knowledgeProgressEvents.mjs";
 import {
-    generateDetailedKnowledgeCards,
+    generateLiveKnowledgePreview,
     updateExtractionProgressState,
     ActiveKnowledgeExtraction,
 } from "./ui/knowledgeCardRenderer.mjs";
@@ -190,7 +190,7 @@ async function performKnowledgeExtraction(
         // Get page contents
         let title = "Unknown Page";
         const htmlFragments =
-            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments(
+            await context.sessionContext.agentContext.browserControl?.getHtmlFragments(
                 false,
                 "knowledgeExtraction",
             );
@@ -367,9 +367,18 @@ export class ExtractKnowledgeHandler implements CommandHandlerNoParams {
                 const relationshipsCount =
                     existingKnowledge.relationships?.length || 0;
 
-                // Display existing knowledge with detailed cards
-                const knowledgeHtml =
-                    generateDetailedKnowledgeCards(existingKnowledge);
+                // Display existing knowledge with HTML bubble cards
+                const knowledgeHtml = generateLiveKnowledgePreview(
+                    {
+                        entities: existingKnowledge.entities || [],
+                        topics:
+                            existingKnowledge.topics ||
+                            existingKnowledge.keyTopics ||
+                            [],
+                        relationships: existingKnowledge.relationships || [],
+                    },
+                    "complete",
+                );
                 context.actionIO.appendDisplay(
                     {
                         type: "html",
@@ -452,9 +461,19 @@ export class ExtractKnowledgeHandler implements CommandHandlerNoParams {
                             const relationshipsCount =
                                 latestKnowledge.relationships?.length || 0;
 
-                            // Generate detailed knowledge cards for the extracted knowledge
-                            const knowledgeHtml =
-                                generateDetailedKnowledgeCards(latestKnowledge);
+                            // Generate HTML knowledge cards (same format as live preview)
+                            const knowledgeHtml = generateLiveKnowledgePreview(
+                                {
+                                    entities: latestKnowledge.entities || [],
+                                    topics:
+                                        latestKnowledge.topics ||
+                                        latestKnowledge.keyTopics ||
+                                        [],
+                                    relationships:
+                                        latestKnowledge.relationships || [],
+                                },
+                                "complete",
+                            );
 
                             const headerText = existingKnowledge
                                 ? "✅ Knowledge Re-extraction Complete"

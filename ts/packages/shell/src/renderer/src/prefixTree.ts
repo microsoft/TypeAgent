@@ -6,9 +6,9 @@ export class TSTNode<TData> {
         this.count = 0;
     }
     count: number;
-    left?: TSTNode<TData>;
-    middle?: TSTNode<TData>;
-    right?: TSTNode<TData>;
+    left: TSTNode<TData> | undefined;
+    middle: TSTNode<TData> | undefined;
+    right: TSTNode<TData> | undefined;
     data: TData | undefined;
 }
 

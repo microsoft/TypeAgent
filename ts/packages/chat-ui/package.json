@@ -23,11 +23,12 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "ansi_up": "^6.0.2",
-    "dompurify": "^3.2.5",
+    "dompurify": "^3.3.2",
     "markdown-it": "^14.1.0"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",
+    "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
   }
 }

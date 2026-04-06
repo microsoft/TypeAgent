@@ -3,8 +3,8 @@
   "description": "Agent to take and upload photos",
   "schema": {
     "description": "Photo agent that helps the user provide images to the system either by taking pictures or uploading existing images.",
-    "schemaFile": "./photoSchema.ts",
-    "compiledSchemaFile": "agents/photo/dist/photoSchema.pas.json",
+    "originalSchemaFile": "./photoSchema.ts",
+    "schemaFile": "../dist/photoSchema.pas.json",
     "schemaType": "PhotoAction"
   }
 }

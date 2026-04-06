@@ -41,5 +41,35 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/calendarSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/calendarSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/calendarActionsSchemaV3.ts"
+          ],
+          "outputGlobs": [
+            "dist/calendarSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

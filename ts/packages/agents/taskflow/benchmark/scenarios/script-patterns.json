@@ -1,0 +1,94 @@
+[
+  {
+    "id": "sp-01",
+    "category": "script-patterns",
+    "description": "Script with chained actions: webFetch -> queryLLM(parseJson) -> createPlaylist",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "create 5 jazz songs playlist for this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["playlist"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sp-02",
+    "category": "script-patterns",
+    "description": "Script with nested object parameter (findEmail with messageRef.receivedDateTime.dayRange)",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "email digest for this week",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "weeklyEmailDigest",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sp-03",
+    "category": "script-patterns",
+    "description": "Script with data extraction and array construction (playTrack with artists array)",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "play the most popular kpop song this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "playPopularKpopSong",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sp-04",
+    "category": "script-patterns",
+    "description": "Script with webSearch -> queryLLM -> createList (fixture: searchAndList)",
+    "setup": { "requiredFlows": ["searchAndList"] },
+    "utterances": [
+      {
+        "text": "search and list TypeScript best practices",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "searchAndList",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["findings"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "sp-05",
+    "category": "script-patterns",
+    "description": "Script with calendar + LLM + email (fixture: dailyAgendaEmail)",
+    "setup": { "requiredFlows": ["dailyAgendaEmail"] },
+    "utterances": [
+      {
+        "text": "daily agenda email",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "dailyAgendaEmail",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  }
+]

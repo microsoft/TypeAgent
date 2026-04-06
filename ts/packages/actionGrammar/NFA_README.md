@@ -332,7 +332,7 @@ Tests cover:
 
 ### Why Separate from Existing Grammar System?
 
-The existing `grammarMatcher.ts` is optimized for the current use case. This new NFA infrastructure provides:
+The existing `grammarMatcher.ts` / `grammarCompletion.ts` are optimized for the current use case. This new NFA infrastructure provides:
 
 1. **Theoretical foundation**: Standard NFA/DFA algorithms
 2. **Debugging tools**: Inspect and trace automaton execution

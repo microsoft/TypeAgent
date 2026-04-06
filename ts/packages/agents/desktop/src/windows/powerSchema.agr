@@ -4,7 +4,9 @@
 // Desktop Power Settings Grammar
 // Battery saver and power mode configuration
 
-<Start> = <BatterySaverActivationLevel>
+import { DesktopPowerActions } from "./powerActionsSchema.ts";
+
+<Start> : DesktopPowerActions = <BatterySaverActivationLevel>
           | <SetPowerModePluggedIn>
           | <SetPowerModeOnBattery>;
 
@@ -24,8 +26,8 @@
   | use best performance -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } };
 
 <SetPowerModeOnBattery> =
-    set battery power mode to best performance -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "bestPerformance" } }
-  | set battery power mode to balanced -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "balanced" } }
-  | set battery power mode to best power efficiency -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "bestPowerEfficiency" } }
-  | on battery use best performance -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "bestPerformance" } }
-  | on battery use power saver -> { actionName: "SetPowerModeOnBattery", parameters: { powerMode: "bestPowerEfficiency" } };
+    set battery power mode to best performance -> { actionName: "SetPowerModeOnBattery", parameters: { mode: "bestPerformance" } }
+  | set battery power mode to balanced -> { actionName: "SetPowerModeOnBattery", parameters: { mode: "balanced" } }
+  | set battery power mode to best power efficiency -> { actionName: "SetPowerModeOnBattery", parameters: { mode: "bestPowerEfficiency" } }
+  | on battery use best performance -> { actionName: "SetPowerModeOnBattery", parameters: { mode: "bestPerformance" } }
+  | on battery use power saver -> { actionName: "SetPowerModeOnBattery", parameters: { mode: "bestPowerEfficiency" } };

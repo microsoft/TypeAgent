@@ -53,26 +53,5 @@ describe("Context Menu Module", () => {
 
             expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 123 });
         });
-
-        it("should handle reInitCrosswordPage menu click", async () => {
-            const mockTab = { id: 123, url: "https://example.com" };
-            const mockInfo = { menuItemId: "reInitCrosswordPage" };
-
-            chrome.tabs.sendMessage.mockImplementation(() => Promise.resolve());
-
-            await contextMenuModule.handleContextMenuClick(mockInfo, mockTab);
-
-            expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(123, {
-                type: "setup_UniversalCrossword",
-            });
-        });
-
-        it("should return early if tab is undefined", async () => {
-            const mockInfo = { menuItemId: "reInitCrosswordPage" };
-
-            await contextMenuModule.handleContextMenuClick(mockInfo, undefined);
-
-            expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
-        });
     });
 });

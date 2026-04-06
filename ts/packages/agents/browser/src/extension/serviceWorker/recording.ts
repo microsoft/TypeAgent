@@ -50,8 +50,6 @@ export async function stopRecording(): Promise<any> {
  * @returns Promise resolving to the screenshot data URL
  */
 export async function takeScreenshot(): Promise<string> {
-    // Use high-frequency capture with PNG (default, matches current behavior)
-    // Can use JPEG for speed/size: { format: 'jpeg', quality: 0.9 }
     return await screenshotCoordinator.captureScreenshot();
 }
 

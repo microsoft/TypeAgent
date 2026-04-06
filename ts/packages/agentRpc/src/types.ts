@@ -20,8 +20,11 @@ import {
     StorageListOptions,
     TemplateSchema,
     TypeAgentAction,
-    CompletionGroup,
+    CompletionDirection,
+    CompletionGroups,
     ResolveEntityResult,
+    SchemaContent,
+    GrammarContent,
 } from "@typeagent/agent-sdk";
 import { AgentInterfaceFunctionName } from "./server.js";
 
@@ -119,6 +122,7 @@ export type AgentContextInvokeFunctions = {
         agentName: string;
     }) => Promise<number>;
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
+    reloadAgentSchema: (param: { contextId: number }) => Promise<void>;
     popupQuestion: (param: {
         contextId: number;
         message: string;
@@ -181,8 +185,9 @@ export type AgentInvokeFunctions = {
             commands: string[];
             params: ParsedCommandParams<ParameterDefinitions>;
             names: string[];
+            direction?: CompletionDirection;
         },
-    ): Promise<CompletionGroup[]>;
+    ): Promise<CompletionGroups>;
     executeCommand(
         param: Partial<ActionContextParams> & {
             commands: string[];
@@ -221,6 +226,12 @@ export type AgentInvokeFunctions = {
             response: boolean | number[];
         },
     ): Promise<ActionResult | undefined>;
+    getDynamicSchema(
+        param: Partial<ContextParams> & { schemaName: string },
+    ): Promise<SchemaContent | undefined>;
+    getDynamicGrammar(
+        param: Partial<ContextParams> & { schemaName: string },
+    ): Promise<GrammarContent | undefined>;
 };
 
 export type ContextParams = {

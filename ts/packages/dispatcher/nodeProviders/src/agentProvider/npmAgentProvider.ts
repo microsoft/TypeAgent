@@ -31,6 +31,13 @@ function patchPaths(manifest: ActionManifest | AppAgentManifest, dir: string) {
             );
         }
 
+        if (typeof manifest.schema.originalSchemaFile === "string") {
+            manifest.schema.originalSchemaFile = path.resolve(
+                dir,
+                manifest.schema.originalSchemaFile,
+            );
+        }
+
         if (typeof manifest.schema.grammarFile === "string") {
             manifest.schema.grammarFile = path.resolve(
                 dir,

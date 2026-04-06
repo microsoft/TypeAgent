@@ -1,0 +1,26 @@
+EmployeeId,Name,Department,Title,Status,Location,StartDate,Salary
+1001,Alice Chen,Engineering,Senior Developer,Active,Seattle,2019-03-15,145000
+1002,Bob Martinez,Engineering,Staff Engineer,Active,Seattle,2017-06-01,172000
+1003,Carol Nguyen,Marketing,Marketing Manager,Active,New York,2020-01-10,118000
+1004,David Kim,Engineering,Junior Developer,Active,Remote,2023-08-21,95000
+1005,Eva Johansson,Sales,Account Executive,On Leave,Chicago,2021-04-12,105000
+1006,Frank Okafor,Engineering,DevOps Engineer,Active,Seattle,2018-11-03,155000
+1007,Grace Patel,Marketing,Content Strategist,Active,New York,2022-02-28,98000
+1008,Hiro Tanaka,Engineering,Principal Engineer,Active,Seattle,2015-09-14,195000
+1009,Isabel Ruiz,Sales,Sales Director,Active,Chicago,2016-07-22,165000
+1010,James Wright,Support,Support Lead,Active,Remote,2020-10-05,88000
+1011,Karen Li,Engineering,QA Engineer,Terminated,Seattle,2021-01-18,105000
+1012,Liam O'Connor,Support,Support Specialist,Active,Remote,2023-03-01,72000
+1013,Maria Santos,Engineering,Frontend Developer,Active,New York,2022-06-15,125000
+1014,Nathan Brooks,Marketing,SEO Analyst,Terminated,Remote,2022-09-01,85000
+1015,Olivia Hoffman,Engineering,Data Engineer,Active,Seattle,2019-11-20,152000
+1016,Peter Chang,Sales,Business Development,Active,Chicago,2023-01-09,92000
+1017,Quinn Foster,Engineering,Security Engineer,Active,Seattle,2020-05-11,160000
+1018,Rachel Adams,Support,Support Manager,Active,Remote,2018-08-30,110000
+1019,Samuel Diaz,Engineering,Backend Developer,On Leave,New York,2021-07-14,132000
+1020,Tina Volkov,Marketing,VP Marketing,Active,New York,2016-02-01,195000
+1021,Uma Krishnan,Engineering,ML Engineer,Active,Seattle,2022-04-18,168000
+1022,Victor Bauer,Sales,Account Manager,Active,Chicago,2023-06-01,88000
+1023,Wendy Liu,Engineering,Site Reliability,Active,Remote,2019-08-12,148000
+1024,Xavier Moreau,Support,Technical Writer,Active,Remote,2024-01-15,78000
+1025,Yuki Hayashi,Engineering,Mobile Developer,Terminated,Seattle,2020-12-01,135000

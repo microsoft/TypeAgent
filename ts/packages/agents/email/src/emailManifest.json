@@ -3,8 +3,8 @@
   "description": "Agent integration with MS Graph's email",
   "schema": {
     "description": "Email agent helps manage email messages. Use it to send, reply, forward, find messages etc.",
-    "schemaFile": "./emailActionsSchema.ts",
-    "compiledSchemaFile": "agents/email/dist/emailSchema.pas.json",
+    "originalSchemaFile": "./emailActionsSchema.ts",
+    "schemaFile": "../dist/emailSchema.pas.json",
     "schemaType": "EmailAction"
   }
 }

@@ -389,6 +389,26 @@ export function parseActionSchemaSource(
     }
 }
 
+/**
+ * Parse all type alias and interface declarations from a TypeScript source
+ * string into a map of type name to SchemaTypeDefinition.
+ *
+ * Unlike {@link parseActionSchemaSource}, this does not require types to
+ * conform to the action schema shape (actionName / parameters) and does
+ * not perform action-schema-specific validation.
+ */
+export function parseSchemaSource(
+    source: string,
+    fileName: string = "",
+): Map<string, SchemaTypeDefinition> {
+    const sourceFile = ts.createSourceFile(
+        fileName,
+        source,
+        ts.ScriptTarget.ES5,
+    );
+    return ActionParser.parseAllTypes(sourceFile);
+}
+
 export type ParsedSchemaEntryTypeDefinitions = {
     action?: SchemaTypeDefinition | undefined;
     activity?: SchemaTypeDefinition | undefined;
@@ -412,11 +432,18 @@ class ActionParser {
         );
         return result;
     }
-    private constructor() {}
-    private parseSchema(
+
+    static parseAllTypes(
         sourceFile: ts.SourceFile,
-        typeName: string | SchemaTypeNames,
-    ): ParsedSchemaEntryTypeDefinitions {
+    ): Map<string, SchemaTypeDefinition> {
+        const parser = new ActionParser();
+        parser.parseAndResolveTypes(sourceFile);
+        return parser.typeMap;
+    }
+
+    private constructor() {}
+
+    private parseAndResolveTypes(sourceFile: ts.SourceFile): void {
         this.fullText = sourceFile.getFullText();
         ts.forEachChild(sourceFile, (node: ts.Node) => {
             this.parseAST(node);
@@ -429,6 +456,13 @@ class ActionParser {
             }
             pending.definition = resolvedType;
         }
+    }
+
+    private parseSchema(
+        sourceFile: ts.SourceFile,
+        typeName: string | SchemaTypeNames,
+    ): ParsedSchemaEntryTypeDefinitions {
+        this.parseAndResolveTypes(sourceFile);
 
         const definitions: ParsedSchemaEntryTypeDefinitions = {};
         const actionTypeName =

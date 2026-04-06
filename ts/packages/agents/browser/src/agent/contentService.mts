@@ -3,7 +3,7 @@
 
 import { SessionContext } from "@typeagent/agent-sdk";
 import { BrowserActionContext } from "./browserActions.mjs";
-import { BrowserConnector } from "./browserConnector.mjs";
+import { BrowserControl } from "../common/browserControl.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:content-service");
@@ -13,21 +13,12 @@ const debug = registerDebug("typeagent:browser:content-service");
  * This provides content downloading and processing without exposing implementation details
  */
 export class ContentService {
-    private browserConnector: BrowserConnector | undefined;
-    private sessionContext: SessionContext<BrowserActionContext> | undefined;
+    private browserControl: BrowserControl | undefined;
 
     constructor(sessionContext?: SessionContext<BrowserActionContext>) {
-        this.sessionContext = sessionContext;
-
         const agentContext = sessionContext?.agentContext;
-        if (
-            agentContext?.agentWebSocketServer &&
-            agentContext.externalBrowserControl
-        ) {
-            this.browserConnector = new BrowserConnector(
-                agentContext.agentWebSocketServer,
-                agentContext.externalBrowserControl.control,
-            );
+        if (agentContext?.externalBrowserControl) {
+            this.browserControl = agentContext.externalBrowserControl.control;
             debug("Initialized with browser download capabilities");
         } else {
             debug("Initialized without browser capabilities");
@@ -38,16 +29,16 @@ export class ContentService {
      * Download content using browser extension
      */
     async downloadContent(url: string, options: any = {}): Promise<any> {
-        if (!this.browserConnector) {
-            throw new Error("Browser connector not available");
+        if (!this.browserControl) {
+            throw new Error("Browser control not available");
         }
 
         try {
             debug(`Downloading content for: ${url}`);
 
-            const downloadAction = {
-                actionName: "downloadContentWithBrowser",
-                parameters: {
+            const response = await this.browserControl.runBrowserAction(
+                "downloadContentWithBrowser",
+                {
                     url: url,
                     options: {
                         useAuthentication: options.useAuthentication ?? true,
@@ -63,10 +54,6 @@ export class ContentService {
                         },
                     },
                 },
-            };
-
-            const response = await this.browserConnector.sendActionToBrowser(
-                downloadAction,
                 "browser",
             );
 
@@ -101,16 +88,16 @@ export class ContentService {
         htmlContent: string,
         options: any = {},
     ): Promise<any> {
-        if (!this.browserConnector) {
-            throw new Error("Browser connector not available");
+        if (!this.browserControl) {
+            throw new Error("Browser control not available");
         }
 
         try {
             debug(`Processing HTML content (${htmlContent.length} bytes)`);
 
-            const processAction = {
-                actionName: "processHtmlContent",
-                parameters: {
+            const response = await this.browserControl.runBrowserAction(
+                "processHtmlContent",
+                {
                     htmlContent: htmlContent,
                     options: {
                         filterToReadingView:
@@ -121,10 +108,6 @@ export class ContentService {
                         maxElements: options.maxElements,
                     },
                 },
-            };
-
-            const response = await this.browserConnector.sendActionToBrowser(
-                processAction,
                 "browser",
             );
 
@@ -149,10 +132,7 @@ export class ContentService {
      * Check if browser capabilities are available
      */
     isBrowserAvailable(): boolean {
-        return (
-            !!this.browserConnector &&
-            !!this.sessionContext?.agentContext.agentWebSocketServer
-        );
+        return !!this.browserControl;
     }
 }
 

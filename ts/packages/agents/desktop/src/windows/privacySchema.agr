@@ -4,7 +4,9 @@
 // Desktop Privacy Settings Grammar
 // Microphone, camera, and location access
 
-<Start> = <ManageMicrophoneAccess>
+import { DesktopPrivacyActions } from "./privacyActionsSchema.ts";
+
+<Start> : DesktopPrivacyActions = <ManageMicrophoneAccess>
           | <ManageCameraAccess>
           | <ManageLocationAccess>;
 

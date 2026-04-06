@@ -8,6 +8,7 @@ export type DesktopInputActions =
     | EnhancePointerPrecisionAction
     | AdjustMousePointerSizeAction
     | MousePointerCustomizationAction
+    | CursorTrailAction
     | EnableTouchPadAction
     | TouchpadCursorSpeedAction;
 
@@ -58,6 +59,15 @@ export type MousePointerCustomizationAction = {
     parameters: {
         color: string;
         style?: string;
+    };
+};
+
+// Enables or disables the mouse cursor trail and sets its length
+export type CursorTrailAction = {
+    actionName: "CursorTrail";
+    parameters: {
+        enable: boolean;
+        length?: number; // 2-12, default 7. Only used when enable is true
     };
 };
 

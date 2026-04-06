@@ -4,12 +4,65 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { Dispatcher } from "agent-dispatcher";
 import {
-    getConsolePrompt,
-    processCommands,
-    withConsoleClientIO,
-} from "agent-dispatcher/helpers/console";
-import { connectDispatcher } from "@typeagent/agent-server-client";
+    getEnhancedConsolePrompt,
+    processCommandsEnhanced,
+    withEnhancedConsoleClientIO,
+} from "../enhancedConsole.js";
+import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
+import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
+
+type CompletionData = {
+    allCompletions: string[];
+    filterStartIndex: number;
+    prefix: string;
+};
+
+async function getCompletionsData(
+    line: string,
+    dispatcher: Dispatcher,
+): Promise<CompletionData | null> {
+    try {
+        if (isSlashCommand(line)) {
+            const completions = getSlashCompletions(line);
+            if (completions.length === 0) return null;
+            return {
+                allCompletions: completions,
+                filterStartIndex: 0,
+                prefix: "",
+            };
+        }
+        const direction = "forward" as const;
+        const result = await dispatcher.getCommandCompletion(line, direction);
+        if (result.completions.length === 0) {
+            return null;
+        }
+
+        const allCompletions: string[] = [];
+        for (const group of result.completions) {
+            for (const completion of group.completions) {
+                allCompletions.push(completion);
+            }
+        }
+
+        const filterStartIndex = result.startIndex;
+        const prefix = line.substring(0, filterStartIndex);
+
+        const separator =
+            result.separatorMode === "space" ||
+            result.separatorMode === "spacePunctuation"
+                ? " "
+                : "";
+
+        return {
+            allCompletions,
+            filterStartIndex,
+            prefix: prefix + separator,
+        };
+    } catch (e) {
+        return null;
+    }
+}
 
 export default class Connect extends Command {
     static description = "Interactive mode";
@@ -28,6 +81,11 @@ export default class Connect extends Command {
             description: "Port for type agent server",
             default: 8999,
         }),
+        verbose: Flags.string({
+            description:
+                "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
+            required: false,
+        }),
     };
     static args = {
         input: Args.file({
@@ -39,10 +97,26 @@ export default class Connect extends Command {
     async run(): Promise<void> {
         const { args, flags } = await this.parse(Connect);
 
-        await withConsoleClientIO(async (clientIO, bindDispatcher) => {
-            const dispatcher = await connectDispatcher(
+        if (flags.verbose !== undefined) {
+            const { default: registerDebug } = await import("debug");
+            const namespaces = flags.verbose || "typeagent:*";
+            registerDebug.enable(namespaces);
+            process.env.DEBUG = namespaces;
+            const { enableVerboseFromFlag } = await import(
+                "../slashCommands.js"
+            );
+            enableVerboseFromFlag(namespaces);
+        }
+
+        const { installDebugInterceptor } = await import(
+            "../debugInterceptor.js"
+        );
+        installDebugInterceptor();
+
+        await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
+            const dispatcher = await ensureAndConnectDispatcher(
                 clientIO,
-                `ws://localhost:${flags.port}`,
+                flags.port,
                 undefined,
                 () => {
                     console.error("Disconnected from dispatcher");
@@ -63,15 +137,18 @@ export default class Connect extends Command {
                 if (processed && flags.exit) {
                     return;
                 }
-                await processCommands(
+                await processCommandsEnhanced(
                     async (dispatcher: Dispatcher) =>
-                        getConsolePrompt(
+                        getEnhancedConsolePrompt(
                             getStatusSummary(await dispatcher.getStatus(), {
                                 showPrimaryName: false,
                             }),
                         ),
                     (command: string, dispatcher: Dispatcher) =>
                         dispatcher.processCommand(command),
+                    dispatcher,
+                    undefined,
+                    (line: string) => getCompletionsData(line, dispatcher),
                     dispatcher,
                 );
             } finally {

@@ -134,6 +134,7 @@ export type DispatcherConfig = {
         history: boolean;
         activity: boolean;
         planReuse: "enabled" | "disabled"; // workflow plan reuse for reasoning actions
+        scriptReuse: "enabled" | "disabled"; // PowerShell script reuse for reasoning actions
         memory: {
             legacy: boolean; // use legacy memory behavior
         };
@@ -223,6 +224,7 @@ const defaultSessionConfig: SessionConfig = {
         history: true,
         activity: false, // TODO: experimental.
         planReuse: "disabled", // default: workflow plan reuse disabled (opt-in)
+        scriptReuse: "disabled", // default: script reuse disabled (opt-in)
         memory: {
             legacy: true, // use the new memory behavior
         },

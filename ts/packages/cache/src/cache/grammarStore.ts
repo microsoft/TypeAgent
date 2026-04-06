@@ -6,6 +6,9 @@ import {
     Grammar,
     matchGrammar,
     matchGrammarCompletion,
+    GrammarCompletionResult,
+    isRequiringSepMode,
+    hasTrailingSeparator,
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
@@ -19,9 +22,17 @@ import {
 
 const debug = registerDebug("typeagent:cache:grammarStore");
 import {
+    CompletionDirection,
+    SeparatorMode,
+    AfterWildcard,
+} from "@typeagent/agent-sdk";
+import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
+import {
     CompletionProperty,
     CompletionResult,
     MatchOptions,
+    mergeAfterWildcard,
+    shouldPreferNewResult,
 } from "../constructions/constructionCache.js";
 import { MatchResult, GrammarStore } from "./types.js";
 import { getSchemaNamespaceKey, splitSchemaNamespaceKey } from "./cache.js";
@@ -37,6 +48,11 @@ interface GrammarEntry {
     nfa?: NFA;
     dfa?: DFA;
 }
+
+type PerGrammarResult = {
+    partial: GrammarCompletionResult;
+    schemaName: string;
+};
 
 export class GrammarStoreImpl implements GrammarStore {
     private readonly grammars: Map<string, GrammarEntry> = new Map();
@@ -120,7 +136,7 @@ export class GrammarStoreImpl implements GrammarStore {
                     `Failed to compile grammar to NFA for ${schemaName}:`,
                     error,
                 );
-                // Fall back to old matcher if compilation fails
+                // NFA compilation failed; fall back to simple grammar matcher
             }
         }
         if (this.useDFA && entry.nfa) {
@@ -185,12 +201,12 @@ export class GrammarStoreImpl implements GrammarStore {
                     ? "DFA"
                     : this.useNFA && entry.nfa
                       ? "NFA"
-                      : "legacy";
+                      : "simple";
             debug(
                 `Matching "${request}" against ${schemaName} (${matchMode}) - NFA states: ${entry.nfa?.states.length || 0}, DFA states: ${entry.dfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
             );
 
-            // Choose matcher: DFA > NFA > legacy
+            // Choose matcher: DFA > NFA > simple
             let grammarMatches;
             if (this.useDFA && entry.dfa) {
                 const tokens = tokenizeRequest(request);
@@ -259,9 +275,11 @@ export class GrammarStoreImpl implements GrammarStore {
         return sortMatches(matches);
     }
 
+    // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
-        requestPrefix: string | undefined,
+        input: string,
         options?: MatchOptions,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
         if (!this.enabled) {
             return undefined;
@@ -272,19 +290,30 @@ export class GrammarStoreImpl implements GrammarStore {
         }
         const completions: string[] = [];
         const properties: CompletionProperty[] = [];
+        let matchedPrefixLength = 0;
+        let separatorMode: SeparatorMode | undefined;
+        let closedSet: boolean | undefined;
+        let directionSensitive: boolean = false;
+        let afterWildcard: AfterWildcard | undefined;
         const filter = new Set(namespaceKeys);
+
+        // Track per-grammar results at the current matchedPrefixLength
+        // so we can detect cross-grammar separator mode conflicts after
+        // the loop.  Each entry records the grammar's result and schema
+        // name for property conversion.
+        let grammarPartials: PerGrammarResult[] = [];
+
         for (const [name, entry] of this.grammars) {
             if (filter && !filter.has(name)) {
                 continue;
             }
             if (this.useDFA && entry.dfa) {
                 // DFA-based completions
-                const tokens = requestPrefix
-                    ? requestPrefix
-                          .trim()
-                          .split(/\s+/)
-                          .filter((t) => t.length > 0)
-                    : [];
+                const tokens = input
+                    .trim()
+                    .split(/\s+/)
+                    .filter((t) => t.length > 0);
+
                 const dfaCompResult = getDFACompletions(entry.dfa, tokens);
                 if (
                     dfaCompResult.completions &&
@@ -312,12 +341,11 @@ export class GrammarStoreImpl implements GrammarStore {
                 }
             } else if (this.useNFA && entry.nfa) {
                 // NFA-based completions: tokenize into complete whole tokens
-                const tokens = requestPrefix
-                    ? requestPrefix
-                          .trim()
-                          .split(/\s+/)
-                          .filter((t) => t.length > 0)
-                    : [];
+                const tokens = input
+                    .trim()
+                    .split(/\s+/)
+                    .filter((t) => t.length > 0);
+
                 const nfaResult = computeNFACompletions(entry.nfa, tokens);
                 if (nfaResult.completions.length > 0) {
                     completions.push(...nfaResult.completions);
@@ -345,19 +373,113 @@ export class GrammarStoreImpl implements GrammarStore {
                     }
                 }
             } else {
-                // Legacy grammar-based completions
+                // simple grammar-based completions
                 const partial = matchGrammarCompletion(
                     entry.grammar,
-                    requestPrefix ?? "",
+                    input,
+                    matchedPrefixLength,
+                    direction,
                 );
-                if (partial.completions.length > 0) {
-                    completions.push(...partial.completions);
+                const partialPrefixLength = partial.matchedPrefixLength ?? 0;
+                if (partialPrefixLength !== matchedPrefixLength) {
+                    const adopt = shouldPreferNewResult(
+                        matchedPrefixLength,
+                        afterWildcard,
+                        partialPrefixLength,
+                        partial.afterWildcard,
+                        input.length,
+                    );
+
+                    if (!adopt) continue;
+
+                    matchedPrefixLength = partialPrefixLength;
+                    completions.length = 0;
+                    properties.length = 0;
+                    separatorMode = undefined;
+                    closedSet = undefined;
+                    directionSensitive = false;
+                    afterWildcard = undefined;
+                    grammarPartials = []; // Clear results from prior lower matchedPrefixLength
                 }
+                if (partialPrefixLength === matchedPrefixLength) {
+                    const { schemaName } = splitSchemaNamespaceKey(name);
+                    grammarPartials.push({ partial, schemaName });
+                }
+            }
+        }
+
+        // Post-loop merge of grammar-based results with cross-grammar
+        // separator mode conflict detection.
+        //
+        // Each individual grammar's result is already internally
+        // consistent (within-grammar conflict filtering in
+        // grammarCompletion.ts Phase 2 — see filterSepConflicts).
+        // Here we detect when different grammars produce incompatible
+        // separator modes and filter by trailing separator state,
+        // mirroring the same detect/filter/advance/force pattern.
+        if (grammarPartials.length > 0) {
+            let hasRequiring = false;
+            let hasNoneMode = false;
+            for (const { partial } of grammarPartials) {
+                if (partial.separatorMode !== undefined) {
+                    if (isRequiringSepMode(partial.separatorMode)) {
+                        hasRequiring = true;
+                    }
+                    if (partial.separatorMode === "none") {
+                        hasNoneMode = true;
+                    }
+                }
+            }
+
+            const hasCrossGrammarConflict = hasRequiring && hasNoneMode;
+            const hasTrailingSep =
+                hasCrossGrammarConflict &&
+                hasTrailingSeparator(input, matchedPrefixLength);
+
+            let effectivePartials = grammarPartials;
+            if (hasCrossGrammarConflict) {
+                effectivePartials = grammarPartials.filter(({ partial }) => {
+                    if (partial.separatorMode === undefined) return true;
+                    if (hasTrailingSep) {
+                        // Trailing separator: drop "none" mode grammars.
+                        return partial.separatorMode !== "none";
+                    } else {
+                        // No trailing separator: drop requiring modes.
+                        return !isRequiringSepMode(partial.separatorMode);
+                    }
+                });
+            }
+
+            // Merge surviving grammar partials.
+            for (const { partial, schemaName } of effectivePartials) {
+                completions.push(...partial.completions);
+                if (partial.separatorMode !== undefined) {
+                    separatorMode = mergeSeparatorMode(
+                        separatorMode,
+                        partial.separatorMode,
+                    );
+                }
+                // AND-merge: closed set only when all grammar
+                // results at this prefix length are closed sets.
+                if (partial.closedSet !== undefined) {
+                    closedSet =
+                        closedSet === undefined
+                            ? partial.closedSet
+                            : closedSet && partial.closedSet;
+                }
+                // True if any grammar result at this prefix
+                // length is direction-sensitive.
+                directionSensitive =
+                    directionSensitive || partial.directionSensitive;
+                // Tri-state merge for afterWildcard.
+                afterWildcard = mergeAfterWildcard(
+                    afterWildcard,
+                    partial.afterWildcard,
+                );
                 if (
                     partial.properties !== undefined &&
                     partial.properties.length > 0
                 ) {
-                    const { schemaName } = splitSchemaNamespaceKey(name);
                     for (const p of partial.properties) {
                         const action: any = p.match;
                         properties.push({
@@ -373,11 +495,39 @@ export class GrammarStoreImpl implements GrammarStore {
                     }
                 }
             }
+
+            // When grammars were dropped due to separator conflict,
+            // advance P past trailing separator and adjust metadata
+            // so the shell re-fetches when separator state changes.
+            if (hasCrossGrammarConflict) {
+                closedSet = false;
+                if (hasTrailingSep) {
+                    // Advance past exactly one trailing separator
+                    // (not all consecutive separators).  Each
+                    // backspace in a multi-separator run produces
+                    // a distinct anchor for re-fetch.  Remaining
+                    // separators are stripped by the shell's
+                    // "optional" mode handling, keeping the menu
+                    // visible with a clean trie prefix.
+                    matchedPrefixLength += 1;
+                    separatorMode = "optional";
+                }
+                // Force afterWildcard "all" → "some" so shell
+                // doesn't use "slide" noMatchPolicy.
+                if (afterWildcard === "all") {
+                    afterWildcard = "some";
+                }
+            }
         }
 
         return {
             completions,
             properties,
+            matchedPrefixLength,
+            separatorMode,
+            closedSet,
+            directionSensitive,
+            afterWildcard,
         };
     }
 }

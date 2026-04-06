@@ -43,8 +43,29 @@
       "world": "MAIN"
     },
     {
+      "matches": [
+        "https://*.wsj.com/puzzles/crossword*",
+        "https://embed.universaluclick.com/*",
+        "https://data.puzzlexperts.com/puzzleapp*",
+        "https://nytsyn.pzzl.com/cwd_seattle*",
+        "https://*.seattletimes.com/games-nytimes-crossword*",
+        "https://*.denverpost.com/games/daily-crossword*",
+        "https://*.denverpost.com/puzzles/*",
+        "https://*.bestcrosswords.com/bestcrosswords/guestconstructor*"
+      ],
+      "js": ["sites/crossword.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
       "matches": ["https://paleobiodb.org/*"],
       "js": ["sites/paleobiodb.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://*/*"],
+      "js": ["sites/webflow.js"],
       "run_at": "document_start",
       "world": "MAIN"
     }
@@ -65,9 +86,7 @@
     {
       "resources": [
         "offscreen/offscreen.html",
-        "offscreen/contentProcessor.js",
-        "offscreen/screenshotCapture.html",
-        "offscreen/screenshotCapture.js"
+        "offscreen/contentProcessor.js"
       ],
       "matches": ["<all_urls>"]
     }
@@ -86,8 +105,7 @@
     "contextMenus",
     "downloads",
     "sidePanel",
-    "offscreen",
-    "tabCapture"
+    "offscreen"
   ],
   "host_permissions": ["<all_urls>"],
   "icons": {

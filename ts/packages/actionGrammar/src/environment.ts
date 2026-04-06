@@ -369,7 +369,7 @@ function parseObjectProperties(
  * Parse a value expression from the grammar's action value format.
  * The grammar parser produces ValueNode objects with the following structure:
  * - { type: "literal", value: ... }
- * - { type: "object", value: { [key: string]: ValueNode } }
+ * - { type: "object", value: CompiledObjectElement[] }
  * - { type: "array", value: ValueNode[] }
  * - { type: "variable", name: string }
  *
@@ -399,25 +399,59 @@ export function parseValueExpression(value: any): ValueExpression {
                 };
 
             case "object": {
-                // ValueNode format: { type: "object", value: { [key: string]: ValueNode | null } }
-                const objValue = value.value as Record<string, any>;
+                // New format: { type: "object", value: CompiledObjectElement[] }
+                const elements = value.value as any[];
 
-                // Check if it's an action object
+                // Helper to extract properties from elements array.
+                // TODO: Spread elements are silently skipped: the current NFA
+                // and DFA matchers do not support value expressions, so
+                // spread is only evaluated in the NFA interpreter
+                // (grammarMatcher.ts).  This code path converts compiled
+                // output for environment evaluation, which only sees
+                // property elements.
+                const extractProps = (
+                    elems: any[],
+                ): Map<string, ValueExpression> => {
+                    const props = new Map<string, ValueExpression>();
+                    for (const elem of elems) {
+                        if (elem.type === "property") {
+                            if (elem.value === null) {
+                                props.set(elem.key, {
+                                    type: "variable",
+                                    variableName: elem.key,
+                                });
+                            } else {
+                                props.set(
+                                    elem.key,
+                                    parseValueExpression(elem.value),
+                                );
+                            }
+                        }
+                    }
+                    return props;
+                };
+
+                // Check if it's an action object (has "actionName" property)
+                const actionNameElem = elements.find(
+                    (e: any) => e.type === "property" && e.key === "actionName",
+                );
                 if (
-                    "actionName" in objValue &&
-                    objValue.actionName.type === "literal"
+                    actionNameElem &&
+                    actionNameElem.value?.type === "literal"
                 ) {
-                    const parametersNode = objValue.parameters;
+                    const parametersElem = elements.find(
+                        (e: any) =>
+                            e.type === "property" && e.key === "parameters",
+                    );
                     const params =
-                        parametersNode &&
-                        parametersNode.type === "object" &&
-                        parametersNode.value
-                            ? parseObjectProperties(parametersNode.value)
+                        parametersElem?.value?.type === "object" &&
+                        parametersElem.value.value
+                            ? extractProps(parametersElem.value.value)
                             : new Map<string, ValueExpression>();
 
                     return {
                         type: "action",
-                        actionName: objValue.actionName.value,
+                        actionName: actionNameElem.value.value,
                         parameters: params,
                     };
                 }
@@ -425,7 +459,7 @@ export function parseValueExpression(value: any): ValueExpression {
                 // Generic object
                 return {
                     type: "object",
-                    properties: parseObjectProperties(objValue),
+                    properties: extractProps(elements),
                 };
             }
         }

@@ -5,7 +5,8 @@ import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { openai as ai } from "aiclient";
 import {
     ActionContext,
-    CompletionGroup,
+    CompletionDirection,
+    CompletionGroups,
     ParsedCommandParams,
     SessionContext,
 } from "@typeagent/agent-sdk";
@@ -76,19 +77,25 @@ export class TranslateCommandHandler implements CommandHandler {
         context: SessionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<CompletionGroup[]> {
-        const completions: CompletionGroup[] = [];
+        direction?: CompletionDirection,
+    ): Promise<CompletionGroups> {
+        const result: CompletionGroups = { groups: [] };
         for (const name of names) {
             if (name === "request") {
-                const requestPrefix = params.args.request;
-                completions.push(
-                    ...(await requestCompletion(
-                        requestPrefix,
-                        context.agentContext,
-                    )),
+                const input = params.args.request ?? "";
+                const requestResult = await requestCompletion(
+                    input,
+                    context.agentContext,
+                    direction,
                 );
+                result.groups.push(...requestResult.groups);
+                result.matchedPrefixLength = requestResult.matchedPrefixLength;
+                result.separatorMode = requestResult.separatorMode;
+                result.closedSet = requestResult.closedSet;
+                result.directionSensitive = requestResult.directionSensitive;
+                result.afterWildcard = requestResult.afterWildcard;
             }
         }
-        return completions;
+        return result;
     }
 }

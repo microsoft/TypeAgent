@@ -2,28 +2,56 @@
 // Licensed under the MIT License.
 
 import { sendActionToAgent } from "./websocket";
-import { getWebSocket } from "./websocket";
+
+// RPC send function — set after RPC server is created in index.ts
+let rpcSendFn: ((name: string, ...args: any[]) => void) | undefined;
+
+export function setContextMenuRpcSend(
+    fn: (name: string, ...args: any[]) => void,
+) {
+    rpcSendFn = fn;
+}
+
+async function openChatAndInjectCommand(
+    tabId: number,
+    command: string,
+): Promise<void> {
+    await chrome.sidePanel.open({ tabId });
+    await chrome.sidePanel.setOptions({
+        tabId,
+        path: "views/chatPanel.html",
+        enabled: true,
+    });
+    // Small delay to let the chat panel initialize before injecting
+    setTimeout(() => {
+        rpcSendFn?.("injectCommand", { command });
+    }, 500);
+}
 
 /**
  * Initializes the context menu items
  */
 export function initializeContextMenu(): void {
     chrome.contextMenus.create({
-        title: "Refresh crossword agent",
-        id: "reInitCrosswordPage",
+        title: "Open TypeAgent Chat",
+        id: "openChatPanel",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
-    chrome.contextMenus.create({
-        title: "Clear crossword cache",
-        id: "clearCrosswordPageCache",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    // Add separator
     chrome.contextMenus.create({
         type: "separator",
-        id: "menuSeparator",
+        id: "menuSeparator1",
+    });
+
+    chrome.contextMenus.create({
+        title: "Learn more from page",
+        id: "learnMoreFromPage",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        type: "separator",
+        id: "menuSeparator2",
     });
 
     chrome.contextMenus.create({
@@ -39,20 +67,13 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        id: "sidepanel-registerAgent",
-        title: "Update Page Agent",
-        contexts: ["all"],
-        documentUrlPatterns: ["chrome-extension://*/views/pageMacros.html"],
-    });
-
-    chrome.contextMenus.create({
         type: "separator",
-        id: "menuSeparator2",
+        id: "menuSeparator3",
     });
 
     chrome.contextMenus.create({
-        title: "Open TypeAgent Chat",
-        id: "openChatPanel",
+        title: "Knowledge Library",
+        id: "showWebsiteLibrary",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 }
@@ -71,51 +92,11 @@ export async function handleContextMenuClick(
     }
 
     switch (info.menuItemId) {
-        case "reInitCrosswordPage": {
-            // insert site-specific script
-            await chrome.tabs.sendMessage(tab.id!, {
-                type: "setup_UniversalCrossword",
-            });
-
-            // trigger translator
-            const webSocket = getWebSocket();
-            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                webSocket.send(
-                    JSON.stringify({
-                        method: "enableSiteTranslator",
-                        params: { translator: "browser.crossword" },
-                    }),
-                );
-            }
-
-            break;
-        }
-        case "clearCrosswordPageCache": {
-            // remove cached schema for current tab
-            // trigger translator
-            const webSocket = getWebSocket();
-            if (
-                tab.url &&
-                webSocket &&
-                webSocket.readyState === WebSocket.OPEN
-            ) {
-                webSocket.send(
-                    JSON.stringify({
-                        method: "removeCrosswordPageCache",
-                        params: { url: tab.url },
-                    }),
-                );
-            }
-            break;
-        }
         case "discoverPageActions": {
-            await chrome.sidePanel.open({ tabId: tab.id! });
-
-            await chrome.sidePanel.setOptions({
-                tabId: tab.id!,
-                path: "views/pageMacros.html",
-                enabled: true,
-            });
+            await openChatAndInjectCommand(
+                tab.id!,
+                "@browser actions discover",
+            );
             break;
         }
         case "manageMacros": {
@@ -139,35 +120,19 @@ export async function handleContextMenuClick(
             }
             break;
         }
-        case "sidepanel-registerAgent": {
-            const schemaResult = await sendActionToAgent({
-                actionName: "registerPageDynamicAgent",
-                parameters: {},
-            });
-            break;
-        }
-
         case "extractKnowledgeFromPage": {
-            await chrome.sidePanel.open({ tabId: tab.id! });
-
-            await chrome.sidePanel.setOptions({
-                tabId: tab.id!,
-                path: "views/pageKnowledge.html",
-                enabled: true,
-            });
-
+            await openChatAndInjectCommand(
+                tab.id!,
+                "@browser extractKnowledge",
+            );
             break;
         }
 
         case "learnMoreFromPage": {
-            await chrome.sidePanel.open({ tabId: tab.id! });
-
-            await chrome.sidePanel.setOptions({
-                tabId: tab.id!,
-                path: "views/pageQnA.html",
-                enabled: true,
-            });
-
+            await openChatAndInjectCommand(
+                tab.id!,
+                "@browser ask What is this page about?",
+            );
             break;
         }
 

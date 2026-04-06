@@ -6,7 +6,7 @@ import {
     AppAgent,
     AppAgentInitSettings,
     AppAgentManifest,
-    CompletionGroup,
+    CompletionGroups,
     ParsedCommandParams,
     PartialParsedCommandParams,
     SessionContext,
@@ -209,11 +209,11 @@ class ShellSetSettingCommandHandler implements CommandHandler {
         context: SessionContext<ShellContext>,
         params: PartialParsedCommandParams<typeof this.parameters>,
         names: string[],
-    ): Promise<CompletionGroup[]> {
-        const completions: CompletionGroup[] = [];
+    ): Promise<CompletionGroups> {
+        const completions: CompletionGroups = { groups: [] };
         for (const name of names) {
             if (name === "name") {
-                completions.push({
+                completions.groups.push({
                     name,
                     completions: getObjectPropertyNames(
                         context.agentContext.shellWindow.getUserSettings(),
@@ -228,7 +228,7 @@ class ShellSetSettingCommandHandler implements CommandHandler {
                         context.agentContext.shellWindow.getUserSettings();
                     const value = getObjectProperty(settings, settingName);
                     if (typeof value === "boolean") {
-                        completions.push({
+                        completions.groups.push({
                             name,
                             completions: ["true", "false"],
                         });

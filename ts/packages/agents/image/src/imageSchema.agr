@@ -1,8 +1,10 @@
 // Copyright (c) 2024 Action Grammar Generator
 // Auto-generated grammar for imageSchema
 
+import { ImageAction } from "./imageActionSchema.ts";
+
 // Start rule - references all action rules by exact action names
-<Start> = <createImageAction>;
+<Start> : ImageAction = <createImageAction>;
 
 // Main action rule for creating images
 <createImageAction> = <CreateImagePhrase> $(originalRequest:string) <WithCaption> $(caption:string) <NumImagesSpec> $(numImages:string) -> { 

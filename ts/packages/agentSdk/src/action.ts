@@ -13,6 +13,7 @@ export interface AppAction {
 
 export type ActionResultError = {
     error: string;
+    fallbackToReasoning?: boolean | undefined;
 };
 
 export type ActionResultActivityContext = Omit<

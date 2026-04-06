@@ -4,7 +4,9 @@
 // Desktop Taskbar Settings Grammar
 // Auto-hide, alignment, task view, widgets, badges, multi-monitor, clock
 
-<Start> = <AutoHideTaskbar>
+import { DesktopTaskbarActions } from "./taskbarActionsSchema.ts";
+
+<Start> : DesktopTaskbarActions = <AutoHideTaskbar>
           | <TaskbarAlignment>
           | <TaskViewVisibility>
           | <ToggleWidgetsButton>

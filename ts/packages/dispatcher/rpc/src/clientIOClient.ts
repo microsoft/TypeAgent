@@ -21,6 +21,9 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         exit(...args): void {
             return rpc.send("exit", ...args);
         },
+        setUserRequest(...args): void {
+            return rpc.send("setUserRequest", ...args);
+        },
         setDisplayInfo(...args): void {
             return rpc.send("setDisplayInfo", ...args);
         },

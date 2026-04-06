@@ -24,10 +24,7 @@ import {
     ScreenshotToolbar,
     ScreenshotAction,
 } from "./components/ScreenshotToolbar";
-import {
-    AnnotationManager,
-    AnnotationCreationData,
-} from "./core/annotationManager";
+import { AnnotationManager } from "./core/annotationManager";
 import { PDFJSHighlightManager } from "./core/pdfJSHighlightManager";
 
 import "./pdf-viewer.css";
@@ -183,7 +180,7 @@ export class TypeAgentPDFViewerApp {
         });
 
         // Set up highlight click callback
-        this.pdfJSHighlightManager.setHighlightClickCallback(
+        this.pdfJSHighlightManager!.setHighlightClickCallback(
             (highlightId, highlightData, event) => {
                 this.handleHighlightClick(highlightId, highlightData, event);
             },
@@ -253,16 +250,6 @@ export class TypeAgentPDFViewerApp {
 
         this.screenshotToolbar.addAction(noteAction);
         this.screenshotToolbar.addAction(questionAction);
-    }
-
-    private handleHighlightAction(selection: SelectionInfo): void {
-        if (!this.colorPicker || !this.selectionManager) return;
-        const bounds = this.selectionManager.getSelectionBounds(selection);
-        this.colorPicker.show(
-            bounds.left + bounds.width / 2,
-            bounds.bottom + 10,
-            (color) => this.createHighlight(selection, color),
-        );
     }
 
     private handleNoteAction(selection: SelectionInfo): void {
@@ -412,8 +399,12 @@ export class TypeAgentPDFViewerApp {
                 type: "note",
                 selection,
                 content: noteData.content,
-                blockquoteContent: noteData.blockquoteContent,
-                screenshotData: noteData.screenshotData,
+                ...(noteData.blockquoteContent !== undefined && {
+                    blockquoteContent: noteData.blockquoteContent,
+                }),
+                ...(noteData.screenshotData !== undefined && {
+                    screenshotData: noteData.screenshotData,
+                }),
             });
             this.selectionManager?.clearSelection();
             console.log("✅ Note created successfully");
@@ -436,8 +427,12 @@ export class TypeAgentPDFViewerApp {
                 type: "question",
                 selection,
                 content,
-                blockquoteContent: questionData.blockquoteContent,
-                screenshotData: questionData.screenshotData,
+                ...(questionData.blockquoteContent !== undefined && {
+                    blockquoteContent: questionData.blockquoteContent,
+                }),
+                ...(questionData.screenshotData !== undefined && {
+                    screenshotData: questionData.screenshotData,
+                }),
             });
             this.selectionManager?.clearSelection();
             console.log(

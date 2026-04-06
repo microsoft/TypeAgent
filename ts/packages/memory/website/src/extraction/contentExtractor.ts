@@ -325,7 +325,7 @@ export class ContentExtractor {
             .replace(/^#{1,6}\s+/gm, "")
             .replace(/~~(.+?)~~/g, "$1")
             .replace(/!\[([^\]]*)\]\([^\)]+\)/g, "$1")
-            .replace(/<[^>]+>/g, "")
+            .replace(/[<>]/g, "")
             .replace(/\s+/g, " ")
             .trim();
     }

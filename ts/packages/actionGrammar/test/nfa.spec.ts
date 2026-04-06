@@ -151,7 +151,13 @@ describe("NFA Infrastructure", () => {
                         ],
                         value: {
                             type: "object",
-                            value: { name: { type: "variable", name: "name" } },
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "name",
+                                    value: { type: "variable", name: "name" },
+                                },
+                            ],
                         },
                     },
                 ],
@@ -183,7 +189,13 @@ describe("NFA Infrastructure", () => {
                         ],
                         value: {
                             type: "object",
-                            value: { name: { type: "variable", name: "name" } },
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "name",
+                                    value: { type: "variable", name: "name" },
+                                },
+                            ],
                         },
                     },
                 ],
@@ -351,9 +363,13 @@ describe("NFA Infrastructure", () => {
                         ],
                         value: {
                             type: "object",
-                            value: {
-                                count: { type: "variable", name: "count" },
-                            },
+                            value: [
+                                {
+                                    type: "property",
+                                    key: "count",
+                                    value: { type: "variable", name: "count" },
+                                },
+                            ],
                         },
                     },
                 ],

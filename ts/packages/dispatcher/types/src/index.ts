@@ -3,3 +3,4 @@
 
 export * from "./dispatcher.js";
 export * from "./clientIO.js";
+export * from "./displayLogEntry.js";

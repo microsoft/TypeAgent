@@ -39,7 +39,7 @@ import { SearchSelectExpr } from "knowpro";
 import { conversation as kp } from "knowledge-processor";
 import { getObjectProperty } from "@typeagent/common-utils";
 import { ActionSchemaFile } from "../translation/actionConfigProvider.js";
-import { getActionParametersType } from "../translation/actionSchemaUtils.js";
+import { tryGetActionParametersType } from "../translation/actionSchemaUtils.js";
 import { isPendingRequestAction } from "../translation/pendingRequest.js";
 
 const debugEntities = registerDebug("typeagent:dispatcher:actions:entities");
@@ -256,28 +256,51 @@ export function getEntityPropertyTypeName(
 ) {
     const entitySchemas = actionSchemaFile.parsedActionSchema.entitySchemas;
     if (entitySchemas === undefined) {
+        debugEntities(
+            `getEntityPropertyTypeName: no entity schemas for ${actionSchemaFile.schemaName}.${actionName}, param '${paramName}'`,
+        );
         return undefined;
     }
-    const actionParametersType = getActionParametersType(
+    const actionParametersType = tryGetActionParametersType(
         actionSchemaFile,
         actionName,
     );
+    if (actionParametersType === undefined) {
+        debugEntities(
+            `getEntityPropertyTypeName: no parameters in schema for ${actionSchemaFile.schemaName}.${actionName}`,
+        );
+        return undefined;
+    }
     const parameterType = getPropertyType(actionParametersType, paramName);
     if (parameterType === undefined) {
-        throw new Error(`Unable to get type for parameter ${paramName}`);
+        debugEntities(
+            `getEntityPropertyTypeName: parameter '${paramName}' not found in ${actionSchemaFile.schemaName}.${actionName}`,
+        );
+        return undefined;
     }
     const resolvedParameterType = resolveTypeReference(parameterType);
     if (resolvedParameterType === undefined) {
+        debugEntities(
+            `getEntityPropertyTypeName: unresolved type reference for '${paramName}' in ${actionSchemaFile.schemaName}.${actionName}`,
+        );
         throw new Error(
             `Unable to resolve type reference for parameter ${paramName}`,
         );
     }
 
-    return resolveEntityTypeName(
+    const result = resolveEntityTypeName(
         parameterType,
         resolvedParameterType,
         entitySchemas,
     );
+    if (result === undefined) {
+        debugEntities(
+            `getEntityPropertyTypeName: '${paramName}' in ${actionSchemaFile.schemaName}.${actionName} ` +
+                `is not an entity type (resolved type: '${resolvedParameterType.type}'). ` +
+                `Known entity schemas: [${[...entitySchemas.keys()].join(", ")}]`,
+        );
+    }
+    return result;
 }
 
 export function resolveEntityTypeName(
@@ -309,6 +332,11 @@ export async function canResolvePropertyEntity(
     agents: AppAgentManager,
 ) {
     const { action, parameterName } = getPropertyInfo(propertyName, actions);
+    debugEntities(
+        `canResolvePropertyEntity: propertyName='${propertyName}', ` +
+            `action=${action.schemaName}.${action.actionName}, ` +
+            `parameterName='${parameterName}'`,
+    );
     if (parameterName === undefined) {
         throw new Error("Action name cannot be entity wildcard");
     }
@@ -316,6 +344,9 @@ export async function canResolvePropertyEntity(
     const appAgentName = getAppAgentName(action.schemaName);
     if (!agents.isActionActive(appAgentName)) {
         // Test mode? Assume it is true.
+        debugEntities(
+            `canResolvePropertyEntity: agent '${appAgentName}' not active, assuming resolvable`,
+        );
         return true;
     }
 
@@ -327,9 +358,12 @@ export async function canResolvePropertyEntity(
         actionSchemaFile,
     );
     if (entityPropertyTypeName === undefined) {
-        throw new Error(
-            `Invalid entity wildcard property name ${propertyName}`,
+        debugEntities(
+            `canResolvePropertyEntity: '${propertyName}' is not a valid entity wildcard. ` +
+                `Action ${action.schemaName}.${action.actionName} parameter '${parameterName}' ` +
+                `does not resolve to an entity type`,
         );
+        return false;
     }
 
     // REVIEW: should we check with agents as well? (which might take a long time)
@@ -783,10 +817,19 @@ export async function resolveEntities(
 
     const config = agents.getActionConfig(action.schemaName);
     const actionSchemaFile = agents.getActionSchemaFileForConfig(config);
-    const actionParametersType = getActionParametersType(
+    debugEntities(
+        `resolveEntities: ${action.schemaName}.${action.actionName} with parameters: ${JSON.stringify(parameters)}`,
+    );
+    const actionParametersType = tryGetActionParametersType(
         actionSchemaFile,
         action.actionName,
     );
+    if (actionParametersType === undefined) {
+        debugEntities(
+            `resolveEntities: skipping ${action.schemaName}.${action.actionName} — no parameters in schema`,
+        );
+        return;
+    }
 
     let resolvedEntities: Entity[] | undefined;
     const trackedEntityResolver: EntityResolver = {

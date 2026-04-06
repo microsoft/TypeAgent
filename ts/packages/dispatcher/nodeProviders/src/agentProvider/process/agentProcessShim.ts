@@ -47,11 +47,17 @@ export async function createAgentProcess(
     if (systemNode) {
         forkOptions.execPath = systemNode;
     }
+    // Pipe child stderr so it flows through the parent's process.stderr.write,
+    // which may be intercepted for debug output formatting (e.g. --testUI).
+    forkOptions.stdio = ["pipe", "inherit", "pipe", "ipc"];
     const agentProcess = child_process.fork(
         fileURLToPath(new URL(`./agentProcess.js`, import.meta.url)),
         [agentName, modulePath],
         forkOptions,
     );
+    agentProcess.stderr?.on("data", (chunk: Buffer) => {
+        process.stderr.write(chunk);
+    });
 
     const channelProvider = createChannelProvider(
         `agent-process:client:${agentName}`,

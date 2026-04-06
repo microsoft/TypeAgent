@@ -3,6 +3,7 @@
     "ts/packages/typechat/",
     "ts/pnpm-lock.yaml",
     "docs/pnpm-lock.yaml",
-    "ts/pnpm-workspace.yaml"
+    "ts/pnpm-workspace.yaml",
+    "ts/examples/websiteAliases/cache/"
   ]
 }

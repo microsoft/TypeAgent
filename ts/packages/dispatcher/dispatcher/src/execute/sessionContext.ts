@@ -162,6 +162,9 @@ export function createSessionContext<T = unknown>(
                 name,
             );
         },
+        async reloadAgentSchema(): Promise<void> {
+            await context.agents.reloadAgentSchema(name, context);
+        },
     };
 
     (sessionContext as any).conversationManager = context.conversationManager;

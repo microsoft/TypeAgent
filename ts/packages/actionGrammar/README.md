@@ -88,7 +88,8 @@ LLM-powered grammar generation from schemas and examples:
 | `grammarRuleParser.ts`     | Recursive descent parser for `.agr` files                                 |
 | `grammarCompiler.ts`       | Compiles parsed rules into the in-memory `Grammar` representation         |
 | `grammarTypes.ts`          | Types for in-memory and serialized grammar representations                |
-| `grammarMatcher.ts`        | Recursive backtracking matcher and completion system                      |
+| `grammarMatcher.ts`        | Recursive backtracking matcher                                            |
+| `grammarCompletion.ts`     | Completion system (partial-match completions from grammar rules)          |
 | `nfaCompiler.ts`           | Compiles `Grammar` → token-based NFA with slot-based variable capture     |
 | `nfaInterpreter.ts`        | Parallel NFA execution with priority ranking                              |
 | `dfaCompiler.ts`           | NFA→DFA subset construction                                               |
@@ -123,6 +124,44 @@ npm test
 
 # Run integration tests (requires API keys)
 npm run test:integration
+
+# Run a specific test suite
+pnpm run jest-esm --testPathPattern="grammarMatcherBasic"
+```
+
+Key test suites:
+
+- `grammarMatcherBasic.spec.ts` — Core recursive backtracking behavior
+- `grammarMatcherVariables.spec.ts` — Variable capture and value expressions
+- `grammarMatcherSpacingBasic.spec.ts` — Spacing mode handling
+- `grammarCompletionKeywordSpacePunct.spec.ts` — Completion with keyword spacing and punctuation
+- `nfa.spec.ts` — NFA builder and compilation
+- `nfaDfaParity.spec.ts` — NFA/DFA equivalence verification
+- `nfaPriority.spec.ts` — Match priority and ranking
+- `nfaRealGrammars.spec.ts` — End-to-end tests with production grammars
+- `dfa.spec.ts` — DFA compiler correctness
+- `dfaBenchmark.spec.ts` — Performance benchmarks
+
+## Downstream consumers
+
+| Package                 | Usage                                              |
+| ----------------------- | -------------------------------------------------- |
+| `dispatcher`            | Per-agent grammar matching; dynamic rule loading   |
+| `cache`                 | Serialized grammar storage; grammar store          |
+| `agentSdkWrapper`       | Schema-to-grammar generation bridge                |
+| `defaultAgentProvider`  | Grammar integration tests with real agent grammars |
+| `cli`                   | Grammar matching commands                          |
+| `actionGrammarCompiler` | Standalone compilation and formatting tools        |
+
+## Debugging
+
+Enable debug logging with environment variables:
+
+```bash
+DEBUG=typeagent:grammar:*        # Parsing and matching
+DEBUG=typeagent:nfa:*            # NFA execution
+DEBUG=typeagent:dfa:*            # DFA operations
+DEBUG=typeagent:actionGrammar:*  # Grammar generation
 ```
 
 ## Dependencies
@@ -131,7 +170,7 @@ npm run test:integration
 | --------------------------- | ------------------------------------------------------------------------------------- |
 | `action-schema` (workspace) | Reading `.pas.json` schema files for checked-variable enrichment                      |
 | `debug`                     | Debug logging (`typeagent:grammar:*`, `typeagent:nfa:*`, `typeagent:actionGrammar:*`) |
-| `regexp.escape`             | Safe regex escaping for the legacy matcher                                            |
+| `regexp.escape`             | Safe regex escaping for the simple recursive backtracking matcher                     |
 
 ## Trademarks
 

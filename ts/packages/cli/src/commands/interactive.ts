@@ -17,18 +17,13 @@ import {
 import inspector from "node:inspector";
 import { getChatModelNames } from "aiclient";
 import {
-    getConsolePrompt,
-    processCommands,
-    withConsoleClientIO,
-} from "agent-dispatcher/helpers/console";
-import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
+import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getFsStorageProvider } from "dispatcher-node-providers";
-import { createInterface } from "readline/promises";
 
 const modelNames = await getChatModelNames();
 const instanceDir = getInstanceDir();
@@ -47,34 +42,29 @@ type CompletionData = {
     prefix: string; // Fixed prefix before completions
 };
 
+// Architecture: docs/architecture/completion.md — §CLI integration
 async function getCompletionsData(
     line: string,
     dispatcher: Dispatcher,
 ): Promise<CompletionData | null> {
     try {
-        // Token-boundary logic: for non-@ input, only send complete tokens
-        // to the backend. The NFA can only match whole tokens, so sending a
-        // partial word like "p" fails. Instead, send up to the last token
-        // boundary and let the CLI filter locally by the partial word.
-        let queryLine = line;
-        const trimmed = line.trimStart();
-        if (
-            trimmed.length > 0 &&
-            !trimmed.startsWith("@") &&
-            !/\s$/.test(line)
-        ) {
-            const lastSpace = line.lastIndexOf(" ");
-            if (lastSpace === -1) {
-                // First word being typed: send empty to get start-state completions
-                queryLine = "";
-            } else {
-                // Mid-word after spaces: send up to last token boundary
-                queryLine = line.substring(0, lastSpace + 1);
-            }
+        // Handle slash command completions
+        if (isSlashCommand(line)) {
+            const completions = getSlashCompletions(line);
+            if (completions.length === 0) return null;
+            return {
+                allCompletions: completions,
+                filterStartIndex: 0,
+                prefix: "",
+            };
         }
-
-        const result = await dispatcher.getCommandCompletion(queryLine);
-        if (!result || !result.completions || result.completions.length === 0) {
+        // Send the full input to the backend; the grammar matcher reports
+        // how much it consumed (matchedPrefixLength → startIndex) so the
+        // CLI need not split on spaces to find token boundaries.
+        // CLI tab-completion is always a forward action.
+        const direction = "forward" as const;
+        const result = await dispatcher.getCommandCompletion(line, direction);
+        if (result.completions.length === 0) {
             return null;
         }
 
@@ -86,19 +76,22 @@ async function getCompletionsData(
             }
         }
 
-        // When we truncated the query, compute filter position from original input
-        const filterStartIndex =
-            queryLine !== line
-                ? line.lastIndexOf(" ") === -1
-                    ? 0
-                    : line.lastIndexOf(" ") + 1
-                : result.startIndex;
+        const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
+
+        // When the result reports a separator-requiring mode between the
+        // typed prefix and the completion text, prepend a space so the
+        // readline display doesn't produce "playmusic" for "play" + "music".
+        const separator =
+            result.separatorMode === "space" ||
+            result.separatorMode === "spacePunctuation"
+                ? " "
+                : "";
 
         return {
             allCompletions,
             filterStartIndex,
-            prefix,
+            prefix: prefix + separator,
         };
     } catch (e) {
         return null;
@@ -135,10 +128,10 @@ export default class Interactive extends Command {
             default: true,
             allowNo: true,
         }),
-        testUI: Flags.boolean({
+        verbose: Flags.string({
             description:
-                "Enable enhanced terminal UI with spinners and visual prompts",
-            default: false,
+                "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
+            required: false,
         }),
     };
     static args = {
@@ -155,27 +148,27 @@ export default class Interactive extends Command {
             inspector.open(undefined, undefined, true);
         }
 
-        // Choose between standard and enhanced UI
-        const withClientIO = flags.testUI
-            ? withEnhancedConsoleClientIO
-            : withConsoleClientIO;
-        const processCommandsFn = flags.testUI
-            ? processCommandsEnhanced
-            : processCommands;
-        const getPromptFn = flags.testUI
-            ? getEnhancedConsolePrompt
-            : getConsolePrompt;
+        if (flags.verbose !== undefined) {
+            const { default: registerDebug } = await import("debug");
+            const namespaces = flags.verbose || "typeagent:*";
+            registerDebug.enable(namespaces);
+            process.env.DEBUG = namespaces;
+            // Also set internal verbose state for prompt indicator
+            const { enableVerboseFromFlag } = await import(
+                "../slashCommands.js"
+            );
+            enableVerboseFromFlag(namespaces);
+        }
 
-        // Only create readline for standard console - enhanced console creates its own
-        const rl = flags.testUI
-            ? undefined
-            : createInterface({
-                  input: process.stdin,
-                  output: process.stdout,
-                  terminal: true,
-              });
+        // Install debug interceptor so all stderr debug output
+        // (whether from /verbose, --verbose, or DEBUG env var)
+        // renders in the indented panel.
+        const { installDebugInterceptor } = await import(
+            "../debugInterceptor.js"
+        );
+        installDebugInterceptor();
 
-        await withClientIO(async (clientIO, bindDispatcher) => {
+        await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
             const indexingServiceRegistry =
                 await getIndexingServiceRegistry(persistDir);
@@ -207,9 +200,9 @@ export default class Interactive extends Command {
                     }
                 }
 
-                await processCommandsFn(
+                await processCommandsEnhanced(
                     async (dispatcher: Dispatcher) =>
-                        getPromptFn(
+                        getEnhancedConsolePrompt(
                             getStatusSummary(await dispatcher.getStatus(), {
                                 showPrimaryName: false,
                             }),
@@ -218,14 +211,13 @@ export default class Interactive extends Command {
                         dispatcher.processCommand(command),
                     dispatcher,
                     undefined, // inputs
-                    flags.testUI
-                        ? (line: string) => getCompletionsData(line, dispatcher)
-                        : undefined,
+                    (line: string) => getCompletionsData(line, dispatcher),
+                    dispatcher,
                 );
             } finally {
                 await dispatcher.close();
             }
-        }, rl);
+        });
 
         // Some background network (like mongo) might keep the process live, exit explicitly.
         process.exit(0);

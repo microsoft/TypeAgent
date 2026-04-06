@@ -4,8 +4,8 @@
   "defaultEnabled": true,
   "schema": {
     "description": "Utility operations: search the web, fetch page content, read and write files",
-    "schemaFile": "./src/utilitySchema.mts",
-    "compiledSchemaFile": "agents/utility/dist/utilitySchema.pas.json",
+    "originalSchemaFile": "./src/utilitySchema.mts",
+    "schemaFile": "./dist/utilitySchema.pas.json",
     "grammarFile": "./dist/utilitySchema.ag.json",
     "schemaType": "UtilityAction"
   }

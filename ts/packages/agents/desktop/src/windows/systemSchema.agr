@@ -4,7 +4,9 @@
 // Desktop System Settings Grammar
 // Accessibility, file explorer, time settings, focus assist, multi-monitor, gaming, metered connections
 
-<Start> = <EnableMeteredConnections>
+import { DesktopSystemActions } from "./systemActionsSchema.ts";
+
+<Start> : DesktopSystemActions = <EnableMeteredConnections>
           | <EnableGameMode>
           | <EnableNarrator>
           | <EnableMagnifier>

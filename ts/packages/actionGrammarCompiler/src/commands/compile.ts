@@ -4,7 +4,48 @@
 import { Command, Flags } from "@oclif/core";
 import path from "node:path";
 import fs from "node:fs";
-import { grammarToJson, loadGrammarRulesNoThrow } from "action-grammar";
+import {
+    grammarToJson,
+    loadGrammarRulesNoThrow,
+    SchemaLoader,
+} from "action-grammar";
+import { parseSchemaSource } from "@typeagent/action-schema";
+import type { SchemaTypeDefinition } from "@typeagent/action-schema";
+
+/**
+ * Creates a SchemaLoader that reads .ts files from disk and parses them
+ * with actionSchema to resolve type definitions.
+ * Results are cached per source file.
+ * The source path is already resolved to an absolute path by the compiler.
+ */
+function createFileSchemaLoader(): SchemaLoader {
+    // Cache: source path → map of type name → definition
+    const cache = new Map<string, Map<string, SchemaTypeDefinition>>();
+
+    return (
+        typeName: string,
+        source: string,
+    ): SchemaTypeDefinition | undefined => {
+        let typeMap = cache.get(source);
+        if (typeMap === undefined) {
+            if (fs.existsSync(source)) {
+                try {
+                    const content = fs.readFileSync(source, "utf-8");
+                    typeMap = parseSchemaSource(content, source);
+                } catch {
+                    // If parsing fails, the type won't be resolved
+                    // Validation will be silently skipped for this type
+                    typeMap = new Map<string, SchemaTypeDefinition>();
+                }
+            } else {
+                typeMap = new Map<string, SchemaTypeDefinition>();
+            }
+            cache.set(source, typeMap);
+        }
+
+        return typeMap.get(typeName);
+    };
+}
 
 export default class Compile extends Command {
     static description = "Compile action grammar files";
@@ -28,12 +69,13 @@ export default class Compile extends Command {
 
         const errors: string[] = [];
         const warnings: string[] = [];
+        const schemaLoader = createFileSchemaLoader();
         const grammar = loadGrammarRulesNoThrow(
             flags.input,
             undefined,
             errors,
             warnings,
-            { startValueRequired: true },
+            { startValueRequired: true, schemaLoader },
         );
 
         if (grammar === undefined) {

@@ -2,11 +2,6 @@
 // Licensed under the MIT License.
 
 import {
-    getMacrosForUrl,
-    getAllMacros,
-    getMacroDomains,
-    deleteMacro,
-    deleteMultipleMacros,
     showNotification,
     showLoadingState,
     showEmptyState,
@@ -14,10 +9,11 @@ import {
     showConfirmationDialog,
     extractDomain,
     categorizeMacro,
-    formatRelativeDate,
     escapeHtml,
     extractCategories,
     filterMacros,
+    deleteWebFlow,
+    getAllWebFlows,
 } from "./macroUtilities";
 import { extensionService } from "./knowledgeUtilities";
 
@@ -48,7 +44,6 @@ interface MacroIndexState {
 }
 
 class MacroIndexApp {
-    private viewHostUrl: string | null = null;
     private state: MacroIndexState = {
         allMacros: [],
         filteredMacros: [],
@@ -69,15 +64,9 @@ class MacroIndexApp {
     async initialize() {
         console.log("Initializing Macro Index App");
 
-        this.viewHostUrl = await this.getViewHostUrl();
-
         this.setupEventListeners();
         await this.loadAllMacros();
         this.renderUI();
-    }
-
-    private async getViewHostUrl(): Promise<string | null> {
-        return await extensionService.getViewHostUrl();
     }
 
     private setupEventListeners() {
@@ -194,8 +183,7 @@ class MacroIndexApp {
         showLoadingState(container, "Loading Macros");
 
         try {
-            // Get all macros across all URLs
-            const macros = await getAllMacros();
+            const macros = await getAllWebFlows();
             this.state.allMacros = macros;
 
             // Populate filter dropdowns
@@ -375,14 +363,21 @@ class MacroIndexApp {
         deleteButton.disabled = true;
 
         try {
-            const result = await deleteMultipleMacros(
-                this.state.selectedMacros,
-            );
+            let successCount = 0;
+            let errorCount = 0;
+            for (const name of this.state.selectedMacros) {
+                const result = await deleteWebFlow(name);
+                if (result.success) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                }
+            }
 
-            if (result.successCount > 0) {
+            if (successCount > 0) {
                 showNotification(
-                    `Successfully deleted ${result.successCount} macro(s)${result.errorCount > 0 ? `, ${result.errorCount} failed` : ""}`,
-                    result.errorCount > 0 ? "warning" : "success",
+                    `Successfully deleted ${successCount} action(s)${errorCount > 0 ? `, ${errorCount} failed` : ""}`,
+                    errorCount > 0 ? "warning" : "success",
                 );
                 this.state.selectedMacros = [];
                 await this.loadAllMacros();
@@ -547,7 +542,7 @@ class MacroIndexApp {
         });
 
         deleteBtn?.addEventListener("click", () => {
-            this.deleteMacro(macro.id || macro.name, macro.name);
+            this.deleteAction(macro.name);
         });
     }
 
@@ -565,41 +560,7 @@ class MacroIndexApp {
         this.updateBulkOperationsUI();
     }
 
-    private async viewMacroDetails(macro: any) {
-        try {
-            if (!this.viewHostUrl) {
-                showNotification("Loading view service...", "info");
-                this.viewHostUrl = await this.getViewHostUrl();
-
-                if (!this.viewHostUrl) {
-                    showNotification("View service is not available", "error");
-                    return;
-                }
-            }
-
-            if (macro.author !== "user") {
-                showNotification(
-                    "Viewing is only available for user-defined actions",
-                    "info",
-                );
-                return;
-            }
-
-            const actionId = macro.id || macro.name;
-            if (!actionId) {
-                showNotification("Invalid action ID", "error");
-                return;
-            }
-
-            const viewUrl = `${this.viewHostUrl}/plans/?actionId=${encodeURIComponent(actionId)}&mode=viewAction`;
-            this.showActionViewModal(macro.name, viewUrl);
-        } catch (error) {
-            console.error("Error opening action view:", error);
-            showNotification("Failed to open action view", "error");
-        }
-    }
-
-    private showActionViewModal(actionTitle: string, iframeUrl: string) {
+    private viewMacroDetails(macro: any) {
         const modal = document.getElementById(
             "actionDetailsModal",
         ) as HTMLElement;
@@ -611,26 +572,67 @@ class MacroIndexApp {
         ) as HTMLElement;
 
         if (!modal || !modalTitle || !modalBody) {
-            console.error("Modal elements not found");
             showNotification("Error opening action view", "error");
             return;
         }
 
-        // Add macro-view-modal class to hide header
-        modal.classList.add("macro-view-modal");
-
-        modalTitle.textContent = actionTitle;
-
-        const iframe = document.createElement("iframe");
-        iframe.className = "macro-view-iframe";
-        iframe.src = iframeUrl;
-        iframe.title = `View ${actionTitle}`;
-
+        modalTitle.textContent = macro.name;
         modalBody.innerHTML = "";
-        modalBody.appendChild(iframe);
 
-        // Set up message listener for iframe communication
-        this.setupIframeMessageListener(modal, iframe);
+        const description = document.createElement("p");
+        description.className = "macro-detail-description";
+        description.textContent = macro.description || "No description";
+        modalBody.appendChild(description);
+
+        if (macro.parameters && Object.keys(macro.parameters).length > 0) {
+            const paramsHeading = document.createElement("h6");
+            paramsHeading.textContent = "Parameters";
+            modalBody.appendChild(paramsHeading);
+
+            const paramsList = document.createElement("ul");
+            paramsList.className = "macro-detail-params";
+            for (const [name, param] of Object.entries(macro.parameters) as [
+                string,
+                any,
+            ][]) {
+                const li = document.createElement("li");
+                const required = param.required ? " (required)" : "";
+                li.textContent = `${name}: ${param.type || "string"}${required}`;
+                if (param.description) {
+                    li.textContent += ` — ${param.description}`;
+                }
+                paramsList.appendChild(li);
+            }
+            modalBody.appendChild(paramsList);
+        }
+
+        if (macro.script) {
+            const scriptHeading = document.createElement("h6");
+            scriptHeading.textContent = "Script";
+            modalBody.appendChild(scriptHeading);
+
+            const pre = document.createElement("pre");
+            pre.className = "macro-detail-script";
+            const code = document.createElement("code");
+            code.className = "language-javascript";
+            code.textContent = macro.script;
+            pre.appendChild(code);
+            modalBody.appendChild(pre);
+        }
+
+        if (macro.source) {
+            const meta = document.createElement("div");
+            meta.className = "macro-detail-meta";
+            meta.textContent = `Source: ${macro.source.type || "unknown"}`;
+            if (macro.source.timestamp) {
+                meta.textContent += ` | Created: ${new Date(macro.source.timestamp).toLocaleDateString()}`;
+            }
+            modalBody.appendChild(meta);
+        }
+
+        if (window.Prism) {
+            window.Prism.highlightAll();
+        }
 
         const bsModal = new (window as any).bootstrap.Modal(modal);
         bsModal.show();
@@ -639,38 +641,10 @@ class MacroIndexApp {
             "hidden.bs.modal",
             () => {
                 modalBody.innerHTML = "";
-                modal.classList.remove("macro-view-modal");
-                // Remove message listener
-                window.removeEventListener("message", this.handleIframeMessage);
             },
             { once: true },
         );
     }
-
-    private setupIframeMessageListener(
-        modal: HTMLElement,
-        iframe: HTMLIFrameElement,
-    ) {
-        this.handleIframeMessage = (event: MessageEvent) => {
-            // Verify origin for security (optional but recommended)
-            if (event.source !== iframe.contentWindow) {
-                return;
-            }
-
-            if (event.data.type === "closeModal") {
-                const bsModal = (window as any).bootstrap.Modal.getInstance(
-                    modal,
-                );
-                if (bsModal) {
-                    bsModal.hide();
-                }
-            }
-        };
-
-        window.addEventListener("message", this.handleIframeMessage);
-    }
-
-    private handleIframeMessage: (event: MessageEvent) => void = () => {};
 
     private editMacro(macro: any) {
         // TODO: Implement macro editing
@@ -678,22 +652,22 @@ class MacroIndexApp {
         showNotification("Macro editing coming soon!", "info");
     }
 
-    private async deleteMacro(macroId: string, macroName: string) {
+    private async deleteAction(actionName: string) {
         const confirmed = await showConfirmationDialog(
-            `Are you sure you want to delete the macro "${macroName}"? This cannot be undone.`,
+            `Are you sure you want to delete "${actionName}"? This cannot be undone.`,
         );
         if (!confirmed) return;
 
         try {
-            const result = await deleteMacro(macroId);
+            const result = await deleteWebFlow(actionName);
             if (result.success) {
                 showNotification(
-                    `Macro "${macroName}" deleted successfully!`,
+                    `"${actionName}" deleted successfully!`,
                     "success",
                 );
                 await this.loadAllMacros();
             } else {
-                throw new Error(result.error || "Failed to delete macro");
+                throw new Error(result.error || "Failed to delete action");
             }
         } catch (error) {
             console.error("Error deleting action:", error);

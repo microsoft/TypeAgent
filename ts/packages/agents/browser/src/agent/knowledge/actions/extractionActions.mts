@@ -37,6 +37,7 @@ import {
 } from "../ui/knowledgeCardRenderer.mjs";
 import { updateExtractionTimestamp } from "../cache/extractionCache.mjs";
 import registerDebug from "debug";
+import { convert } from "html-to-text";
 
 const debug = registerDebug("typeagent:browser:knowledge");
 
@@ -159,9 +160,9 @@ export function createExtractionInputsFromFragments(
                         "Failed to create doc parts from HTML:",
                         error,
                     );
-                    textContent = fragment.content
-                        .replace(/<[^>]*>/g, "")
-                        .trim();
+                    textContent = convert(fragment.content, {
+                        wordwrap: false,
+                    }).trim();
                 }
             }
 
@@ -1285,7 +1286,7 @@ export async function performKnowledgeExtraction(
         // Get page contents
         let title = "Unknown Page";
         const htmlFragments =
-            await context.sessionContext.agentContext.browserConnector?.getHtmlFragments(
+            await context.sessionContext.agentContext.browserControl?.getHtmlFragments(
                 false,
                 "knowledgeExtraction",
             );

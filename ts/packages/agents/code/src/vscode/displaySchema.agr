@@ -3,8 +3,10 @@
 
 // Display Schema Grammar - Comprehensive coverage of VS Code display actions
 
+import { CodeDisplayActions } from "./displayActionsSchema.ts";
+
 // Start rule - all available actions
-<Start> = <zoomIn> | <zoomOut> | <fontZoomReset> | <showExplorer> | <showSearch> | <showSourceControl> | <showOutputPanel> | <toggleSearchDetails> | <replaceInFiles> | <openMarkdownPreview> | <openMarkdownPreviewToSide> | <zenMode> | <closeEditor> | <openSettings>;
+<Start> : CodeDisplayActions = <zoomIn> | <zoomOut> | <fontZoomReset> | <showExplorer> | <showSearch> | <showSourceControl> | <showOutputPanel> | <toggleSearchDetails> | <replaceInFiles> | <openMarkdownPreview> | <openMarkdownPreviewToSide> | <zenMode> | <closeEditor> | <openSettings>;
 
 // Shared sub-rules for common patterns
 <Polite> = ('can you' | 'could you' | 'please' | 'would you')?;

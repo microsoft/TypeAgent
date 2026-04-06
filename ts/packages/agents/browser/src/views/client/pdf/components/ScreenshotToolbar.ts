@@ -226,7 +226,6 @@ export class ScreenshotToolbar {
         // Calculate position relative to the selected region
         const regionLeft = pageRect.left + region.x;
         const regionTop = pageRect.top + region.y;
-        const regionRight = regionLeft + region.width;
         const regionBottom = regionTop + region.height;
 
         // Get toolbar dimensions
@@ -240,7 +239,6 @@ export class ScreenshotToolbar {
         // Calculate optimal position
         let left = regionLeft + region.width / 2 - toolbarRect.width / 2;
         let top: number;
-        let arrowPosition: "top" | "bottom";
 
         // Keep toolbar within viewport horizontally
         if (left < padding) {
@@ -255,17 +253,14 @@ export class ScreenshotToolbar {
             viewportHeight - padding
         ) {
             top = regionBottom + arrowOffset;
-            arrowPosition = "top";
         }
         // If not enough space below, position above
         else if (regionTop - toolbarRect.height - arrowOffset > padding) {
             top = regionTop - toolbarRect.height - arrowOffset;
-            arrowPosition = "bottom";
         }
         // Fallback: position below anyway
         else {
             top = regionBottom + arrowOffset;
-            arrowPosition = "top";
         }
 
         this.element.style.top = `${top}px`;

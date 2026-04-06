@@ -29,7 +29,6 @@ export class ScreenshotSelector {
     private overlay: HTMLElement | null = null;
     private selectionBox: HTMLElement | null = null;
     private startPoint: { x: number; y: number } | null = null;
-    private currentRegion: ScreenshotRegion | null = null;
     private selectCallback: ScreenshotSelectCallback | null = null;
     private cancelCallback: ScreenshotCancelCallback | null = null;
 
@@ -69,7 +68,7 @@ export class ScreenshotSelector {
 
         this.isActive = false;
         this.startPoint = null;
-        // Don't clear currentRegion - keep it for toolbar positioning
+        // Don't clear region - keep it for toolbar positioning
         // Don't hide selection box - keep it visible while toolbar is shown
 
         // Hide overlay but keep selection box visible
@@ -92,7 +91,6 @@ export class ScreenshotSelector {
      * Clear the selection completely (called when toolbar is hidden)
      */
     clearSelection(): void {
-        this.currentRegion = null;
         this.hideSelectionBox();
     }
 
@@ -240,7 +238,6 @@ export class ScreenshotSelector {
             pageNumber,
         };
 
-        this.currentRegion = region;
         console.log("📸 Starting capture for region:", region);
 
         // Add a small delay to ensure the mouse event has fully processed

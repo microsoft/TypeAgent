@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { escapedSpaces, spaces, testMatchGrammar } from "./testUtils.js";
+import { describeForEachMatcher, escapedSpaces, spaces } from "./testUtils.js";
 
-describe("Grammar Matcher - Basic", () => {
+describeForEachMatcher("Grammar Matcher - Basic", (testMatchGrammar) => {
     describe("Basic Matched Values", () => {
         const values = [
             true,

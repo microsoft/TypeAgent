@@ -5,7 +5,9 @@
 
 // General schema grammar for IDE commands and navigation
 
-<Start> = <showCommandPalette> | <gotoFileOrLineOrSymbol> | <showUserSettings> | <showKeyboardShortcuts>;
+import { CodeGeneralActions } from "./generalActionsSchema.ts";
+
+<Start> : CodeGeneralActions = <showCommandPalette> | <gotoFileOrLineOrSymbol> | <showUserSettings> | <showKeyboardShortcuts>;
 
 // Action rules
 <showCommandPalette> = <Polite> ('open' | 'show' | 'bring up' | 'display') 'the'? 'command palette' -> { actionName: "showCommandPalette", parameters: {} };

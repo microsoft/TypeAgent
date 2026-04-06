@@ -487,6 +487,30 @@ export async function runDesktopActions(
             confirmationMessage = `Mouse pointer customized`;
             break;
         }
+        case "CursorTrail": {
+            const minTrail = 2;
+            const maxTrail = 12;
+            let trailLength = action.parameters.length;
+            let trailNote = "";
+            if (trailLength !== undefined) {
+                if (trailLength < minTrail || trailLength > maxTrail) {
+                    const requested = trailLength;
+                    trailLength = Math.max(
+                        minTrail,
+                        Math.min(maxTrail, trailLength),
+                    );
+                    trailNote = ` (requested ${requested}, adjusted to ${trailLength} — valid range is ${minTrail}–${maxTrail})`;
+                }
+            }
+            actionData = JSON.stringify({
+                enable: action.parameters.enable,
+                length: trailLength,
+            });
+            confirmationMessage = action.parameters.enable
+                ? `Cursor trail enabled${trailNote || (trailLength ? ` with length ${trailLength}` : "")}`
+                : `Cursor trail disabled`;
+            break;
+        }
 
         // Touchpad Settings
         case "EnableTouchPad": {

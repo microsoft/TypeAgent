@@ -3,6 +3,7 @@
 
 import registerDebug from "debug";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
+import { ParsedActionSchema } from "@typeagent/action-schema";
 
 const debug = registerDebug("typeagent:cache");
 import * as Telemetry from "telemetry";
@@ -29,6 +30,7 @@ import {
     mergeCompletionResults,
     NamespaceKeyFilter,
 } from "../constructions/constructionCache.js";
+import { CompletionDirection } from "@typeagent/agent-sdk";
 import {
     ExplainWorkQueue,
     ExplanationOptions,
@@ -147,7 +149,7 @@ export class AgentCache {
     private _agentGrammarRegistry?: any; // AgentGrammarRegistry from action-grammar
     private _persistedGrammarStore?: any; // GrammarStore from action-grammar for persistence
     private _useNFAGrammar: boolean = false;
-    private _getSchemaFilePath?: (schemaName: string) => string;
+    private _getParsedActionSchema?: (schemaName: string) => ParsedActionSchema;
 
     /**
      * Configure grammar generation for the NFA/dynamic grammar system
@@ -157,7 +159,7 @@ export class AgentCache {
         agentGrammarRegistry: any,
         persistedGrammarStore: any,
         useNFA: boolean,
-        getSchemaFilePath?: (schemaName: string) => string,
+        getParsedActionSchema?: (schemaName: string) => ParsedActionSchema,
     ): void {
         this._agentGrammarRegistry = agentGrammarRegistry;
         this._persistedGrammarStore = persistedGrammarStore;
@@ -167,8 +169,8 @@ export class AgentCache {
         debug(
             `Grammar system configured: ${useNFA ? "NFA" : "completion-based"}`,
         );
-        if (getSchemaFilePath !== undefined) {
-            this._getSchemaFilePath = getSchemaFilePath;
+        if (getParsedActionSchema !== undefined) {
+            this._getParsedActionSchema = getParsedActionSchema;
         }
     }
 
@@ -377,25 +379,26 @@ export class AgentCache {
                         `Grammar gen starting for ${schemaName}.${actionName}`,
                     );
                     debug(
-                        `_getSchemaFilePath is ${this._getSchemaFilePath ? "configured" : "NOT configured"}`,
+                        `_getParsedActionSchema is ${this._getParsedActionSchema ? "configured" : "NOT configured"}`,
                     );
 
                     // Check if we have the required components
-                    if (!this._getSchemaFilePath) {
-                        debug(`Schema file path getter not configured`);
+                    if (!this._getParsedActionSchema) {
+                        debug(`Parsed action schema getter not configured`);
                         grammarResult = {
                             success: false,
-                            message: "Schema file path getter not configured",
+                            message:
+                                "Parsed action schema getter not configured",
                         };
                     } else {
                         try {
-                            // Get schema file path
+                            // Get parsed action schema
                             debug(
-                                `Calling getSchemaFilePath("${schemaName}")...`,
+                                `Calling getParsedActionSchema("${schemaName}")...`,
                             );
-                            const schemaPath =
-                                this._getSchemaFilePath(schemaName);
-                            debug(`Schema path: ${schemaPath}`);
+                            const parsedSchema =
+                                this._getParsedActionSchema(schemaName);
+                            debug(`Parsed schema loaded for ${schemaName}`);
 
                             // Import populateCache dynamically to avoid circular dependencies
                             debug(`Importing populateCache...`);
@@ -415,7 +418,7 @@ export class AgentCache {
                                     actionName,
                                     parameters,
                                 },
-                                schemaPath,
+                                parsedSchema,
                             });
                             if (genResult.success && genResult.generatedRule) {
                                 debug(
@@ -589,6 +592,7 @@ export class AgentCache {
         // Otherwise use completion-based construction store
         debug(`match: Using completion-based construction store`);
         const store = this._constructionStore;
+        const grammarStore = this._grammarStore;
         if (store.isEnabled()) {
             const constructionMatches = store.match(request, options);
             if (constructionMatches.length > 0) {
@@ -598,34 +602,42 @@ export class AgentCache {
                     return rest;
                 });
             }
+            if (!grammarStore.isEnabled()) {
+                return [];
+            }
+        } else if (!grammarStore.isEnabled()) {
+            throw new Error("AgentCache is disabled");
         }
 
         // Fallback to grammar store if construction store has no matches
-        const grammarStore = this._grammarStore;
-        if (grammarStore.isEnabled()) {
-            return this._grammarStore.match(request, options);
-        }
-        throw new Error("AgentCache is disabled");
+        return grammarStore.match(request, options);
     }
 
+    // Architecture: docs/architecture/completion.md — §2 Cache Layer
     public completion(
-        requestPrefix: string | undefined,
+        input: string,
         options?: MatchOptions,
+        direction?: CompletionDirection, // defaults to forward-like behavior when omitted
     ): CompletionResult | undefined {
         // If NFA grammar system is configured, only use grammar store
         if (this._useNFAGrammar) {
             const grammarStore = this._grammarStore;
-            return grammarStore.completion(requestPrefix, options);
+            return grammarStore.completion(input, options, direction);
         }
 
         // Otherwise use completion-based construction store (with grammar store fallback)
         const store = this._constructionStore;
-        const storeCompletion = store.completion(requestPrefix, options);
+        const storeCompletion = store.completion(input, options, direction);
         const grammarStore = this._grammarStore;
         const grammarCompletion = grammarStore.completion(
-            requestPrefix,
+            input,
             options,
+            direction,
         );
-        return mergeCompletionResults(storeCompletion, grammarCompletion);
+        return mergeCompletionResults(
+            storeCompletion,
+            grammarCompletion,
+            input.length,
+        );
     }
 }

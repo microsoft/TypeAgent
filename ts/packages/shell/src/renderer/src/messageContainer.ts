@@ -127,10 +127,18 @@ export class MessageContainer {
         return this.defaultSource;
     }
 
+    private _sourceIcon: string | undefined;
+
     private get sourceIcon() {
         // use agent icon for agents, user Initial for users
         if (this.classNameSuffix === "agent") {
-            return this.agents.get(this.source) ?? "❔";
+            const baseName = this.source.split(".")[0];
+            return (
+                this.agents.get(this.source) ??
+                this.agents.get(baseName) ??
+                this._sourceIcon ??
+                "❔"
+            );
         }
         return this.source?.charAt(0).toLocaleUpperCase();
     }
@@ -244,6 +252,7 @@ export class MessageContainer {
         content: DisplayContent,
         source: string,
         appendMode?: DisplayAppendMode, // default to not appending.
+        sourceIcon?: string,
     ) {
         if (this.messageStart === undefined) {
             // Don't count dispatcher status messages as first response.
@@ -257,6 +266,9 @@ export class MessageContainer {
         this.flushLastTemporary();
 
         this.source = source;
+        if (sourceIcon !== undefined) {
+            this._sourceIcon = sourceIcon;
+        }
         this.updateSource();
 
         const speakText = setContent(

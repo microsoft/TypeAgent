@@ -29,12 +29,10 @@ export class TextSelectionManager {
     private callbacks: SelectionChangeCallback[] = [];
     private currentSelection: SelectionInfo | null = null;
     private selectionTimeout: number | null = null;
-    private pdfViewer: any;
     private contextualToolbar: any = null;
     private ignoreSelectionChangeUntil: number = 0; // Timestamp to ignore selection changes until
 
-    constructor(pdfViewer: any) {
-        this.pdfViewer = pdfViewer;
+    constructor(_pdfViewer: any) {
         this.setupEventListeners();
     }
 
@@ -266,7 +264,7 @@ export class TextSelectionManager {
 
         // If it's a text node, get its parent
         if (element.nodeType === Node.TEXT_NODE) {
-            element = element.parentElement || element.parentNode;
+            element = (element.parentElement || element.parentNode) as Node;
         }
 
         // Traverse up to find the page element
@@ -277,7 +275,8 @@ export class TextSelectionManager {
                 );
                 return pageAttr ? parseInt(pageAttr) : -1;
             }
-            element = element.parentElement || element.parentNode;
+            element = ((element as Element).parentElement ||
+                element.parentNode) as Node;
         }
 
         return -1;

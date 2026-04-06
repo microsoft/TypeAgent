@@ -70,16 +70,10 @@
 
 // findTodaysEvents
 <FindTodaysEvents> = what's on my calendar $(date:wildcard) -> {
-    actionName: "findTodaysEvents",
-    parameters: {
-        date
-    }
+    actionName: "findTodaysEvents"
 }
   | show me all my appointments and meetings for $(date:wildcard) -> {
-    actionName: "findTodaysEvents",
-    parameters: {
-        date
-    }
+    actionName: "findTodaysEvents"
 }
   | (can you)? (tell me)? what (do)? I have scheduled for today -> {
     actionName: "findTodaysEvents"
@@ -87,7 +81,9 @@
 
 // findThisWeeksEvents
 
-<Start> = <ScheduleEvent>
+import { CalendarActionV3 } from "./calendarActionsSchemaV3.ts";
+
+<Start> : CalendarActionV3 = <ScheduleEvent>
   | <FindEvents>
   | <AddParticipant>
   | <FindTodaysEvents>
@@ -97,10 +93,7 @@
     actionName: "findThisWeeksEvents"
 }
   | show me all my events for this week starting $(startDay:word) -> {
-    actionName: "findThisWeeksEvents",
-    parameters: {
-        startDay
-    }
+    actionName: "findThisWeeksEvents"
 }
   | (can you)? find what I have scheduled this week -> {
     actionName: "findThisWeeksEvents"

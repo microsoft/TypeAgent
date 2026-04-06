@@ -49,5 +49,100 @@
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/codeActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/codeSchema.pas.json"
+          ]
+        }
+      },
+      "asc:debug": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/vscode/debugActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/debugSchema.pas.json"
+          ]
+        }
+      },
+      "asc:display": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/vscode/displayActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/displaySchema.pas.json"
+          ]
+        }
+      },
+      "asc:editor": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/vscode/editorCodeActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/editorSchema.pas.json"
+          ]
+        }
+      },
+      "asc:extension": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/vscode/extensionsActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/extensionSchema.pas.json"
+          ]
+        }
+      },
+      "asc:general": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/vscode/generalActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/generalSchema.pas.json"
+          ]
+        }
+      },
+      "asc:workbench": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/vscode/workbenchCommandActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/workbenchSchema.pas.json"
+          ]
+        }
+      }
+    }
   }
 }

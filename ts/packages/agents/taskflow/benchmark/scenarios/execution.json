@@ -1,0 +1,83 @@
+[
+  {
+    "id": "ex-01",
+    "category": "execution",
+    "description": "listTaskFlows execution returns flow names",
+    "setup": {
+      "requiredFlows": [
+        "createTopSongsPlaylist",
+        "playPopularKpopSong",
+        "weeklyEmailDigest"
+      ]
+    },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["createTopSongsPlaylist", "weeklyEmailDigest"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-02",
+    "category": "execution",
+    "description": "createTopSongsPlaylist end-to-end (requires live web + Spotify)",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "create 5 jazz songs playlist for this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["playlist"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-03",
+    "category": "execution",
+    "description": "playPopularKpopSong end-to-end (requires live web + Spotify)",
+    "setup": { "requiredFlows": ["playPopularKpopSong"] },
+    "utterances": [
+      {
+        "text": "play the most popular kpop song this month",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "playPopularKpopSong",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ex-04",
+    "category": "execution",
+    "description": "weeklyEmailDigest end-to-end (requires live email)",
+    "setup": { "requiredFlows": ["weeklyEmailDigest"] },
+    "utterances": [
+      {
+        "text": "weekly email digest",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "weeklyEmailDigest",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["digest"]
+          }
+        }
+      }
+    ]
+  }
+]

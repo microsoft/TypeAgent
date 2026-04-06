@@ -160,6 +160,8 @@ export class Construction {
                 nonOptionalCount: this.parts.filter((p) => !p.optional).length,
                 implicitParameterCount: this.implicitParameterCount,
                 partialPartCount: matchedValues.partialPartCount,
+                partialMatchedCurrent: matchedValues.matchedCurrent,
+                matchedStarts: matchedValues.matchedStarts,
             },
         ];
     }

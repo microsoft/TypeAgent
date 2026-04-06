@@ -44,7 +44,7 @@ export const webapi: ClientAPI = {
     getChatHistory: async () => {
         return undefined;
     },
-    saveChatHistory: () => {
+    saveChatHistory: (_html: string, _seq: number) => {
         // not supported on mobile
     },
     saveSettings: () => {

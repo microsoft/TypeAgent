@@ -201,6 +201,9 @@ async function initialize() {
     const chatHistory = instanceDir
         ? path.join(getShellDataDir(instanceDir), "chat_history.html")
         : undefined;
+    const chatHistorySeq = instanceDir
+        ? path.join(getShellDataDir(instanceDir), "chat_history.seq")
+        : undefined;
     ipcMain.handle("get-chat-history", async (event) => {
         if (chatHistory === undefined || !settings.chatHistory)
             return undefined;
@@ -211,7 +214,22 @@ async function initialize() {
 
         // Load chat history if enabled
         if (existsSync(chatHistory)) {
-            return readFileSync(chatHistory, "utf-8");
+            const html = readFileSync(chatHistory, "utf-8");
+            let seq = -1;
+            if (chatHistorySeq && existsSync(chatHistorySeq)) {
+                try {
+                    seq = parseInt(
+                        readFileSync(chatHistorySeq, "utf-8").trim(),
+                        10,
+                    );
+                    if (isNaN(seq)) {
+                        seq = -1;
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+            return { html, seq };
         }
 
         return undefined;
@@ -219,7 +237,7 @@ async function initialize() {
 
     // Store the chat history whenever the DOM changes
     // this let's us rehydrate the chat when reopening the shell
-    ipcMain.on("save-chat-history", async (event, html) => {
+    ipcMain.on("save-chat-history", async (event, html, seq) => {
         if (chatHistory === undefined || !settings.chatHistory) {
             return;
         }
@@ -237,6 +255,13 @@ async function initialize() {
 
         try {
             writeFileSync(chatHistory, html);
+            if (
+                chatHistorySeq !== undefined &&
+                typeof seq === "number" &&
+                seq >= 0
+            ) {
+                writeFileSync(chatHistorySeq, String(seq));
+            }
         } catch (e) {
             debugShell(
                 `Unable to save history to '${chatHistory}'. Error: ${e}`,

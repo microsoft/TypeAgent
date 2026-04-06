@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { PDFAnnotation } from "../../server/features/pdf/pdfTypes";
+import { PDFAnnotation } from "../../../server/features/pdf/pdfTypes";
 import { SelectionInfo } from "./textSelectionManager";
 import { PDFApiService } from "../services/pdfApiService";
 import { HighlightColor } from "../components/ColorPicker";
@@ -32,7 +32,6 @@ export class AnnotationManager {
     private apiService: PDFApiService;
     private documentId: string | null = null;
     private annotations: Map<string, RenderedAnnotation> = new Map();
-    private annotationLayer: HTMLElement | null = null;
 
     constructor(pdfViewer: any, apiService: PDFApiService, eventBus?: any) {
         this.pdfViewer = pdfViewer;
@@ -271,11 +270,11 @@ export class AnnotationManager {
         // Store additional metadata for notes
         if (type === "note" || type === "question") {
             annotation.metadata = {
-                blockquoteContent,
+                ...(blockquoteContent !== undefined && { blockquoteContent }),
                 screenshotData,
                 hasScreenshot: !!screenshotData,
                 hasBlockquote: !!blockquoteContent,
-                creationScale: this.pdfViewer.currentScale || 1, // Store creation scale
+                creationScale: this.pdfViewer.currentScale || 1,
             };
         }
 

@@ -231,7 +231,12 @@ export class IndexManager {
                 serviceRoot = this.getDefaultServicePath(index.source);
             }
 
-            const childProcess = fork(serviceRoot);
+            const childProcess = fork(serviceRoot, {
+                stdio: ["pipe", "inherit", "pipe", "ipc"],
+            });
+            childProcess.stderr?.on("data", (chunk: Buffer) => {
+                process.stderr.write(chunk);
+            });
 
             this.indexingServices.set(index, childProcess);
 

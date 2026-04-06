@@ -18,6 +18,42 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:views:server:pdf:routes");
 
+function escapeHtml(input: string): string {
+    return input
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+        .replace(/\//g, "&#x2F;");
+}
+
+function sanitizeObject<T>(value: T): T {
+    if (typeof value === "string") {
+        return escapeHtml(value) as unknown as T;
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => sanitizeObject(item)) as unknown as T;
+    }
+
+    if (value && typeof value === "object") {
+        const result: Record<string, unknown> = {};
+        for (const [key, v] of Object.entries(
+            value as Record<string, unknown>,
+        )) {
+            result[key] = sanitizeObject(v);
+        }
+        return result as T;
+    }
+
+    return value;
+}
+
+function sanitizeAnnotation(annotation: PDFAnnotation): PDFAnnotation {
+    return sanitizeObject(annotation);
+}
+
 // Get the directory name in ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -293,8 +329,9 @@ export class PDFRoutes {
                 updatedAt: new Date().toISOString(),
             };
 
+            const sanitizedAnnotation = sanitizeAnnotation(annotation);
             const savedAnnotation =
-                await this.pdfService.addAnnotation(annotation);
+                await this.pdfService.addAnnotation(sanitizedAnnotation);
 
             // Broadcast to other clients
             this.broadcastUpdate(
@@ -325,8 +362,9 @@ export class PDFRoutes {
                 documentId,
             };
 
+            const sanitizedAnnotation = sanitizeAnnotation(annotation);
             const updatedAnnotation =
-                await this.pdfService.updateAnnotation(annotation);
+                await this.pdfService.updateAnnotation(sanitizedAnnotation);
 
             if (!updatedAnnotation) {
                 res.status(404).json({ error: "Annotation not found" });
@@ -384,7 +422,10 @@ export class PDFRoutes {
         try {
             const documentId = req.params.documentId;
             const bookmarks = this.pdfService.getBookmarks(documentId);
-            res.json(bookmarks);
+            const sanitizedBookmarks = bookmarks.map(
+                sanitizeObject<PDFBookmark>,
+            );
+            res.json(sanitizedBookmarks);
         } catch (error) {
             debug("Error getting bookmarks:", error);
             res.status(500).json({ error: "Failed to get bookmarks" });
@@ -406,7 +447,10 @@ export class PDFRoutes {
                 createdAt: new Date().toISOString(),
             };
 
-            const savedBookmark = this.pdfService.addBookmark(bookmark);
+            const sanitizedBookmark = sanitizeObject<PDFBookmark>(bookmark);
+
+            const savedBookmark =
+                this.pdfService.addBookmark(sanitizedBookmark);
 
             // Broadcast to other clients
             this.broadcastUpdate(documentId, "bookmark-added", savedBookmark);
@@ -461,17 +505,19 @@ export class PDFRoutes {
                 lastSeen: new Date().toISOString(),
             };
 
-            this.pdfService.updateUserPresence(documentId, presence);
+            const sanitizedPresence = sanitizeObject<UserPresence>(presence);
+
+            this.pdfService.updateUserPresence(documentId, sanitizedPresence);
 
             // Broadcast to other clients
             this.broadcastUpdate(
                 documentId,
                 "user-joined",
-                presence,
-                presence.userId,
+                sanitizedPresence,
+                sanitizedPresence.userId,
             );
 
-            res.json(presence);
+            res.json(sanitizedPresence);
         } catch (error) {
             debug("Error updating presence:", error);
             res.status(400).json({ error: "Failed to update presence" });

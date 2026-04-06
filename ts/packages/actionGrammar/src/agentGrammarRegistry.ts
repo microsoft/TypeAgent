@@ -71,8 +71,8 @@ export class AgentGrammar {
     } {
         const errors: string[] = [];
 
-        // Prepend entity declarations so generated rules can reference
-        // entity types like CalendarDate, CalendarTime, Ordinal, etc.
+        // Prepend entity declarations as source-less imports so generated rules
+        // can reference entity types like CalendarDate, CalendarTime, Ordinal, etc.
         // Collect from both the existing grammar and the global registry.
         const entityNames = new Set<string>(this.grammar.entities || []);
         for (const name of globalEntityRegistry.getEntityNames()) {
@@ -80,7 +80,7 @@ export class AgentGrammar {
         }
         let fullAgrText = agrText;
         if (entityNames.size > 0) {
-            fullAgrText = `entity ${[...entityNames].join(", ")};\n${agrText}`;
+            fullAgrText = `import { ${[...entityNames].join(", ")} };\n${agrText}`;
         }
 
         // Parse the generated rules

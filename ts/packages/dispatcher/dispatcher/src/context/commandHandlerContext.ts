@@ -96,6 +96,11 @@ import fs from "node:fs";
 import { CosmosClient, PartitionKeyBuilder } from "@azure/cosmos";
 import { CosmosPartitionKeyBuilder } from "telemetry";
 import { DefaultAzureCredential } from "@azure/identity";
+import { DisplayLog } from "../displayLog.js";
+import {
+    fromJSONParsedActionSchema,
+    ParsedActionSchemaJSON,
+} from "@typeagent/action-schema";
 
 const debug = registerDebug("typeagent:dispatcher:init");
 const debugError = registerDebug("typeagent:dispatcher:init:error");
@@ -157,10 +162,13 @@ export type CommandHandlerContext = {
     currentScriptDir: string;
     logger?: Logger | undefined;
     currentRequestId: RequestId | undefined;
+    currentAbortSignal: AbortSignal | undefined;
+    activeRequests: Map<string, AbortController>;
     noReasoning: boolean;
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
+    displayLog: DisplayLog;
 
     batchMode: boolean;
     pendingChoiceRoutes: Map<
@@ -428,6 +436,7 @@ async function addAppAgentProviders(
         );
 
         if (appAgentProviders) {
+            const stateRefreshFn = () => setAppAgentStates(context);
             for (const provider of appAgentProviders) {
                 await context.agents.addProvider(
                     provider,
@@ -435,6 +444,7 @@ async function addAppAgentProviders(
                     embeddingCache,
                     context.agentGrammarRegistry,
                     useNFAGrammar,
+                    stateRefreshFn,
                 );
             }
         }
@@ -580,6 +590,8 @@ export async function initializeCommandHandlerContext(
             // Runtime context
             commandLock: createLimiter(1), // Make sure we process one command at a time.
             currentRequestId: undefined,
+            currentAbortSignal: undefined,
+            activeRequests: new Map<string, AbortController>(),
             noReasoning: false,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
@@ -596,6 +608,7 @@ export async function initializeCommandHandlerContext(
             chatHistory: createChatHistory(
                 session.getConfig().execution.history,
             ),
+            displayLog: await DisplayLog.load(persistDir),
             logger,
             metricsManager: metrics ? new RequestMetricsManager() : undefined,
             promptLogger: createPromptLogger(getCosmosFactories()),
@@ -769,16 +782,19 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
                 );
             }
 
-            // Prefer explicit compiledSchemaFile field
-            if (actionConfig.compiledSchemaFilePath) {
-                return getPackageFilePath(actionConfig.compiledSchemaFilePath);
-            }
+            let schemaPath: string | undefined;
 
-            // Fallback: try to derive .pas.json path from .ts schemaFilePath
+            // Use schemaFilePath directly if it's already a .pas.json file
             if (
+                actionConfig.schemaFilePath &&
+                actionConfig.schemaFilePath.endsWith(".pas.json")
+            ) {
+                schemaPath = getPackageFilePath(actionConfig.schemaFilePath);
+            } else if (
                 actionConfig.schemaFilePath &&
                 actionConfig.schemaFilePath.endsWith(".ts")
             ) {
+                // Fallback: try to derive .pas.json path from .ts schemaFilePath
                 // Try common pattern: ./src/schema.ts -> ../dist/schema.pas.json
                 const derivedPath = actionConfig.schemaFilePath
                     .replace(/^\.\/src\//, "../dist/")
@@ -787,15 +803,22 @@ async function setupGrammarGeneration(context: CommandHandlerContext) {
                     `Attempting fallback .pas.json path for ${schemaName}: ${derivedPath}`,
                 );
                 try {
-                    return getPackageFilePath(derivedPath);
+                    schemaPath = getPackageFilePath(derivedPath);
                 } catch {
                     // Fallback path doesn't exist, continue to error
                 }
             }
 
-            throw new Error(
-                `Compiled schema file path (.pas.json) not found for schema: ${schemaName}. ` +
-                    `Please add 'compiledSchemaFile' field to the manifest pointing to the .pas.json file.`,
+            if (!schemaPath) {
+                throw new Error(
+                    `Compiled schema file path (.pas.json) not found for schema: ${schemaName}. ` +
+                        `Please ensure the schema is compiled to a .pas.json file.`,
+                );
+            }
+
+            const content = fs.readFileSync(schemaPath, "utf-8");
+            return fromJSONParsedActionSchema(
+                JSON.parse(content) as ParsedActionSchemaJSON,
             );
         },
     );
