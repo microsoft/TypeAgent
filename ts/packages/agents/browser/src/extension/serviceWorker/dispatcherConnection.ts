@@ -20,6 +20,12 @@ import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import type {
     AgentServerInvokeFunctions,
     DispatcherConnectOptions,
+    JoinSessionResult,
+} from "@typeagent/agent-server-protocol";
+import {
+    getDispatcherChannelName,
+    getClientIOChannelName,
+    AgentServerChannelName,
 } from "@typeagent/agent-server-protocol";
 
 import registerDebug from "debug";
@@ -197,14 +203,10 @@ async function doConnect(): Promise<Dispatcher> {
 
         const rpc = createRpc<AgentServerInvokeFunctions>(
             "agent-server:extension",
-            channel.createChannel("agent-server" as any),
+            channel.createChannel(AgentServerChannelName),
         );
 
         const clientIO = createChatPanelClientIO();
-        createClientIORpcServer(
-            clientIO,
-            channel.createChannel("clientio" as any),
-        );
 
         let resolved = false;
 
@@ -214,13 +216,27 @@ async function doConnect(): Promise<Dispatcher> {
                 filter: true,
                 clientType: "extension",
             };
-            rpc.invoke("join", options)
-                .then((connectionId) => {
-                    debug("Joined dispatcher, connectionId=%s", connectionId);
+            rpc.invoke("joinSession", options)
+                .then((result: JoinSessionResult) => {
+                    debug(
+                        "Joined session=%s, connectionId=%s",
+                        result.sessionId,
+                        result.connectionId,
+                    );
                     resolved = true;
+
+                    createClientIORpcServer(
+                        clientIO,
+                        channel.createChannel(
+                            getClientIOChannelName(result.sessionId),
+                        ),
+                    );
+
                     const d = createDispatcherRpcClient(
-                        channel.createChannel("dispatcher" as any),
-                        connectionId,
+                        channel.createChannel(
+                            getDispatcherChannelName(result.sessionId),
+                        ),
+                        result.connectionId,
                     );
                     // Override close to close our WebSocket
                     d.close = async () => {

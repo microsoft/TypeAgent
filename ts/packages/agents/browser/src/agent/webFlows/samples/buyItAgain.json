@@ -1,0 +1,29 @@
+{
+  "name": "buyItAgain",
+  "description": "Reorder items from your past purchases on Instacart",
+  "version": 1,
+  "parameters": {
+    "storeName": {
+      "type": "string",
+      "required": true,
+      "description": "Store to reorder from"
+    },
+    "productName": {
+      "type": "string",
+      "required": false,
+      "description": "Specific product to reorder. If not specified, adds all past items."
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    await browser.navigateTo('https://www.instacart.com/');\n    await browser.awaitPageLoad();\n\n    const store = await browser.extractComponent<{ name: string; linkSelector?: string }>({\n        typeName: 'StoreInfo',\n        schema: '{ name: string; subtitle?: string; linkSelector?: string; }'\n    }, params.storeName);\n    if (store && store.linkSelector) {\n        await browser.clickAndWait(store.linkSelector);\n    }\n\n    const buyAgainNav = await browser.extractComponent<{ linkSelector: string }>({\n        typeName: 'BuyItAgainNavigationLink',\n        schema: '{ linkSelector: string; }'\n    });\n    if (!buyAgainNav || !buyAgainNav.linkSelector) {\n        throw new Error('Could not find Buy It Again section');\n    }\n    await browser.clickAndWait(buyAgainNav.linkSelector);\n\n    const section = await browser.extractComponent<{ products?: { name: string; price: string; availability?: string; addToCartButtonSelector?: string }[] }>({\n        typeName: 'BuyItAgainHeaderSection',\n        schema: '{ allItemsSelector: string; pastOrdersSelector: string; products?: { name: string; price: string; availability?: string; addToCartButtonSelector?: string; }[]; }'\n    });\n    if (!section || !section.products || section.products.length === 0) {\n        return { success: false, error: 'No past purchase items found' };\n    }\n\n    if (params.productName) {\n        const match = section.products.find(\n            p => p.name.toLowerCase().includes(params.productName.toLowerCase())\n        );\n        if (!match || !match.addToCartButtonSelector) {\n            return { success: false, error: 'Could not find ' + params.productName + ' in past purchases' };\n        }\n        await browser.click(match.addToCartButtonSelector);\n        await browser.awaitPageInteraction();\n        return { success: true, message: 'Reordered ' + match.name + ' from Buy It Again' };\n    }\n\n    let added = 0;\n    for (const product of section.products) {\n        if (product.availability !== 'Out of stock' && product.addToCartButtonSelector) {\n            await browser.click(product.addToCartButtonSelector);\n            await browser.awaitPageInteraction();\n            added++;\n        }\n    }\n    return { success: true, message: 'Added ' + added + ' items from Buy It Again to cart' };\n}",
+  "grammarPatterns": [
+    "buy it again from $(storeName:wildcard)",
+    "reorder (from)? $(storeName:wildcard)",
+    "buy $(productName:wildcard) again from $(storeName:wildcard)",
+    "reorder (all)? (past)? items from $(storeName:wildcard)"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": ["instacart.com"]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}

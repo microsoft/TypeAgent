@@ -13,8 +13,12 @@ const DEFAULT_OPTIONS: ScriptExecutionOptions = {
     timeout: 300_000,
 };
 
+const INVALID_PARAM_NAMES = new Set(["import", "eval"]);
+
 const BLOCKED_GLOBALS_OVERRIDE: Record<string, undefined> = Object.fromEntries(
-    [...BLOCKED_IDENTIFIERS].map((name) => [name, undefined]),
+    [...BLOCKED_IDENTIFIERS]
+        .filter((name) => !INVALID_PARAM_NAMES.has(name))
+        .map((name) => [name, undefined]),
 );
 
 export async function executeTaskFlowScript(

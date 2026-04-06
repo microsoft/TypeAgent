@@ -413,8 +413,11 @@ contiguous within each category.
 - **Anchor** (`this.anchor`): the prefix string at `startIndex` returned by
   the backend. Everything after the anchor is the `completionPrefix` used to
   filter the local trie.
-- **Separator stripping**: when `separatorMode` requires a separator, the
-  leading separator character in the raw prefix is stripped before trie lookup.
+- **Separator stripping**: when `separatorMode` requires a separator
+  (`"space"` or `"spacePunctuation"`), or is `"optional"`, leading
+  separator characters in the raw prefix are stripped before trie lookup.
+  This means extra whitespace (e.g. double space) does not leak into the
+  trie as filter text — the trie always sees clean completion prefixes.
 - **`noMatchPolicy`**: computed once from the backend's descriptive fields
   (`closedSet`, `afterWildcard`) when a result arrives (see `NoMatchPolicy`
   below). Drives the A3 and C1 decisions as a simple `switch` instead of
@@ -861,6 +864,31 @@ definite completions to slide — `"some"` triggers re-fetch instead.
   `10` for grammar `set volume $(n:number) percent`. The backward path
   handles this correctly. The two-pass invariant check skips this case
   (when `forwardAtP.matchedPrefixLength < P`).
+
+### Direction asymmetry and separator-mode conflicts
+
+Two related mechanisms protect the invariants when rules with different
+spacing modes compete for the same `maxPrefixLength`:
+
+1. **Separator-mode conflict filtering** (`filterSepConflicts` in
+   `grammarCompletion.ts`, post-loop in `grammarStore.ts`): when
+   `"none"` and requiring-separator candidates coexist, filters by
+   trailing separator state, advances P, and forces `closedSet=false`.
+   Protects invariant #9 (`separatorMode="none"` for `[spacing=none]`
+   rules) and #13 (strongest separator requirement wins at merge).
+
+2. **Deferred shadow candidates** (`DeferredShadowCandidate` in
+   `grammarCompletion.ts`): when Category 3b backward backs up past the
+   forward position, a shadow candidate is collected and flushed after
+   Phase 2. Protects invariant #3 (truncated-forward idempotency),
+   #7 (forward direction-sensitive → backward backs up), and
+   #8 (backward direction-sensitive → forward reaches backward’s
+   position).
+
+For a detailed analysis of why only Category 3b requires shadow
+candidates (and why Categories 1, 2, and 3a are structurally safe),
+see `actionGrammar.md` § "Direction asymmetry: why only Category 3b
+needs shadow candidates".
 
 ---
 

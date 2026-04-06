@@ -61,6 +61,74 @@ interface WebFlowResult {
     error?: string;
 }
 
+// Component types for use with extractComponent<T>()
+interface SearchInputComponent {
+    cssSelector: string;
+    submitButtonCssSelector: string;
+}
+
+interface ProductTileComponent {
+    name: string;
+    price: string;
+    detailsLinkSelector: string;
+    addToCartButtonSelector?: string;
+}
+
+interface ProductDetailsHeroComponent {
+    name: string;
+    price: string;
+    cssSelector: string;
+    addToCartButtonSelector?: string;
+}
+
+interface ShoppingCartButtonComponent {
+    label: string;
+    detailsLinkSelector: string;
+}
+
+interface ShoppingCartDetailsComponent {
+    storeName: string;
+    totalAmount: string;
+    productsInCart?: { name: string; price: string; quantity?: string }[];
+}
+
+interface NavigationLinkComponent {
+    title: string;
+    linkSelector: string;
+}
+
+interface ButtonComponent {
+    title: string;
+    cssSelector: string;
+}
+
+interface TextInputComponent {
+    title: string;
+    cssSelector: string;
+    placeholderText?: string;
+}
+
+interface ElementComponent {
+    title: string;
+    cssSelector: string;
+}
+
+interface DropdownControlComponent {
+    title: string;
+    cssSelector: string;
+    values: { text: string; value: string }[];
+}
+
+interface StoreInfoComponent {
+    name: string;
+    linkSelector?: string;
+    zipCode?: string;
+}
+
+interface NearbyStoresListComponent {
+    stores: { name: string; linkSelector: string }[];
+}
+
 declare const browser: Readonly<WebFlowBrowserAPI>;
 declare const params: Readonly<FlowParams>;
 declare const console: {

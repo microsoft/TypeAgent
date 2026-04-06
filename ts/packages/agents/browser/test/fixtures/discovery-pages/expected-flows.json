@@ -1,0 +1,244 @@
+{
+  "description": "Expected flow discovery results for each test page. Scope-based discovery returns all global flows + domain-matched flows. Content-based discovery (LLM) filters to page-applicable flows.",
+  "pages": {
+    "product-detail.html": {
+      "simulatedDomain": "www.amazon.com",
+      "scopeDiscovery": {
+        "shouldInclude": [
+          "searchForProduct",
+          "addToCart",
+          "buyProduct",
+          "viewShoppingCart",
+          "removeFromCart",
+          "findNearbyStore",
+          "getLocationInStore",
+          "navigateToPage",
+          "navigateToProductPage",
+          "selectSearchResult",
+          "browseProductCategories",
+          "filterProducts",
+          "signUpForNewsletter"
+        ],
+        "shouldExclude": [
+          "searchForReservation",
+          "selectReservation",
+          "buyAllInList",
+          "searchForRecipe",
+          "buyAllInRecipe",
+          "saveRecipe",
+          "setPreferredStore",
+          "buyItAgain"
+        ]
+      },
+      "contentDiscovery": {
+        "shouldInclude": [
+          "addToCart",
+          "buyProduct",
+          "getLocationInStore",
+          "viewShoppingCart"
+        ],
+        "shouldExclude": [
+          "selectSearchResult",
+          "browseProductCategories",
+          "searchForReservation"
+        ]
+      }
+    },
+    "search-results.html": {
+      "simulatedDomain": "www.target.com",
+      "scopeDiscovery": {
+        "shouldInclude": [
+          "searchForProduct",
+          "addToCart",
+          "buyProduct",
+          "selectSearchResult",
+          "filterProducts",
+          "viewShoppingCart",
+          "navigateToPage"
+        ],
+        "shouldExclude": [
+          "searchForReservation",
+          "selectReservation",
+          "buyAllInList",
+          "searchForRecipe",
+          "saveRecipe",
+          "setPreferredStore",
+          "buyItAgain"
+        ]
+      },
+      "contentDiscovery": {
+        "shouldInclude": ["selectSearchResult", "addToCart", "filterProducts"],
+        "shouldExclude": ["getLocationInStore", "searchForReservation"]
+      }
+    },
+    "shopping-cart.html": {
+      "simulatedDomain": "www.walmart.com",
+      "scopeDiscovery": {
+        "shouldInclude": [
+          "viewShoppingCart",
+          "removeFromCart",
+          "searchForProduct",
+          "addToCart",
+          "navigateToPage"
+        ],
+        "shouldExclude": [
+          "searchForReservation",
+          "selectReservation",
+          "buyAllInList",
+          "searchForRecipe",
+          "saveRecipe",
+          "setPreferredStore",
+          "buyItAgain"
+        ]
+      },
+      "contentDiscovery": {
+        "shouldInclude": ["viewShoppingCart", "removeFromCart"],
+        "shouldExclude": ["addToCart", "searchForReservation"]
+      }
+    },
+    "instacart-home.html": {
+      "simulatedDomain": "www.instacart.com",
+      "scopeDiscovery": {
+        "shouldInclude": [
+          "setPreferredStore",
+          "findNearbyStore",
+          "searchForProduct",
+          "searchForRecipe",
+          "buyItAgain",
+          "buyAllInList",
+          "viewShoppingCart",
+          "addToCart",
+          "removeFromCart",
+          "navigateToPage",
+          "signUpForNewsletter"
+        ],
+        "shouldExclude": [
+          "searchForReservation",
+          "selectReservation",
+          "buyProduct"
+        ]
+      },
+      "contentDiscovery": {
+        "shouldInclude": [
+          "setPreferredStore",
+          "searchForProduct",
+          "buyItAgain"
+        ],
+        "shouldExclude": [
+          "saveRecipe",
+          "buyAllInRecipe",
+          "searchForReservation"
+        ]
+      }
+    },
+    "instacart-recipe.html": {
+      "simulatedDomain": "www.instacart.com",
+      "scopeDiscovery": {
+        "shouldInclude": [
+          "saveRecipe",
+          "buyAllInRecipe",
+          "viewShoppingCart",
+          "addToCart",
+          "searchForProduct",
+          "navigateToPage"
+        ],
+        "shouldExclude": [
+          "searchForReservation",
+          "selectReservation",
+          "buyProduct"
+        ]
+      },
+      "contentDiscovery": {
+        "shouldInclude": ["saveRecipe", "buyAllInRecipe"],
+        "shouldExclude": [
+          "setPreferredStore",
+          "buyAllInList",
+          "searchForReservation"
+        ]
+      }
+    },
+    "restaurant-listing.html": {
+      "simulatedDomain": "www.opentable.com",
+      "scopeDiscovery": {
+        "shouldInclude": [
+          "searchForReservation",
+          "selectReservation",
+          "navigateToPage",
+          "searchForProduct",
+          "signUpForNewsletter",
+          "addToCart",
+          "viewShoppingCart"
+        ],
+        "shouldExclude": [
+          "buyProduct",
+          "buyAllInList",
+          "searchForRecipe",
+          "saveRecipe",
+          "setPreferredStore",
+          "buyItAgain"
+        ],
+        "_note": "Global flows like addToCart appear in scope-based discovery. Content-based discovery filters them out."
+      },
+      "contentDiscovery": {
+        "shouldInclude": ["searchForReservation"],
+        "shouldExclude": ["selectReservation", "addToCart", "viewShoppingCart"]
+      }
+    },
+    "reservation-page.html": {
+      "simulatedDomain": "www.opentable.com",
+      "scopeDiscovery": {
+        "shouldInclude": [
+          "searchForReservation",
+          "selectReservation",
+          "navigateToPage",
+          "searchForProduct",
+          "addToCart"
+        ],
+        "shouldExclude": [
+          "buyProduct",
+          "buyAllInList",
+          "saveRecipe",
+          "setPreferredStore",
+          "buyItAgain"
+        ]
+      },
+      "contentDiscovery": {
+        "shouldInclude": ["selectReservation"],
+        "shouldExclude": ["addToCart", "viewShoppingCart"]
+      }
+    },
+    "non-commerce.html": {
+      "simulatedDomain": "www.typescriptlang.org",
+      "scopeDiscovery": {
+        "shouldInclude": [
+          "navigateToPage",
+          "searchForProduct",
+          "signUpForNewsletter",
+          "addToCart",
+          "viewShoppingCart"
+        ],
+        "shouldExclude": [
+          "buyProduct",
+          "searchForReservation",
+          "selectReservation",
+          "buyAllInList",
+          "searchForRecipe",
+          "buyAllInRecipe",
+          "saveRecipe",
+          "setPreferredStore",
+          "buyItAgain"
+        ],
+        "_note": "Global flows appear everywhere in scope-based discovery. Content-based discovery filters to only navigateToPage on a docs site."
+      },
+      "contentDiscovery": {
+        "shouldInclude": ["navigateToPage"],
+        "shouldExclude": [
+          "addToCart",
+          "viewShoppingCart",
+          "signUpForNewsletter",
+          "searchForReservation"
+        ]
+      }
+    }
+  }
+}

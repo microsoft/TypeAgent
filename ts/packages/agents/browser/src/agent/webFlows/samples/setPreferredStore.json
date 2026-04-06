@@ -1,0 +1,23 @@
+{
+  "name": "setPreferredStore",
+  "description": "Select a store as your preferred shopping location on Instacart",
+  "version": 1,
+  "parameters": {
+    "storeName": {
+      "type": "string",
+      "required": true,
+      "description": "Name of the store to set as preferred (e.g. 'Costco', 'Safeway')"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    await browser.navigateTo('https://www.instacart.com/');\n    await browser.awaitPageLoad();\n\n    const store = await browser.extractComponent<{ name: string; linkSelector?: string }>({\n        typeName: 'StoreInfo',\n        schema: '{ name: string; subtitle?: string; linkSelector?: string; }'\n    }, params.storeName);\n    if (!store || !store.linkSelector) {\n        throw new Error('Could not find store: ' + params.storeName);\n    }\n    await browser.clickAndWait(store.linkSelector);\n    return { success: true, message: 'Selected ' + store.name + ' as your store' };\n}",
+  "grammarPatterns": [
+    "set (my)? (preferred)? store to $(storeName:wildcard)",
+    "switch (to)? $(storeName:wildcard) (store)?",
+    "shop at $(storeName:wildcard)"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": ["instacart.com"]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}

@@ -7,6 +7,7 @@ import { interceptHistory } from "./spaNavigation";
 import { PDFInterceptor } from "./pdfInterceptor";
 import { initializeContinuationHandler } from "./continuationHandler";
 import "./autoIndexing"; // Initialize auto-indexing
+import "./autoDiscovery"; // Initialize auto-discovery of webflow actions
 
 // Imports to help with bundling
 import "./domUtils";

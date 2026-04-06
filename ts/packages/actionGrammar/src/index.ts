@@ -28,6 +28,8 @@ export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
 export {
     matchGrammarCompletion,
     GrammarCompletionResult,
+    isRequiringSepMode,
+    hasTrailingSeparator,
 } from "./grammarCompletion.js";
 export type { AfterWildcard } from "./grammarCompletion.js";
 

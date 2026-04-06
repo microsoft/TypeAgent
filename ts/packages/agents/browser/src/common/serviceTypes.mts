@@ -194,6 +194,11 @@ export type BrowserAgentInvokeFunctions = {
     getLibraryStats(params: any): Promise<any>;
 
     // Macros
+    autoDiscoverActions(params: {
+        url: string;
+        domain: string;
+        mode: "scope" | "content";
+    }): Promise<any>;
     detectPageActions(params: { registerAgent?: boolean }): Promise<any>;
 
     registerPageDynamicAgent(params: { agentName: string }): Promise<any>;
@@ -446,6 +451,7 @@ export type AllServiceWorkerInvokeFunctions = ExtensionLocalInvokeFunctions &
         analyzeKnowledgeGaps(params: any): Promise<any>;
         indexPageContentDirect(params: any): Promise<any>;
         autoIndexPage(params: any): Promise<any>;
+        autoDiscoverActions(params: any): Promise<any>;
         getPageIndexStatus(params: any): Promise<any>;
         getPageIndexedKnowledge(params: any): Promise<any>;
         indexExtractedKnowledge(params: any): Promise<any>;

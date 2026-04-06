@@ -325,14 +325,15 @@ export function validateWebFlowScript(
     const host = createVirtualHost(files);
 
     const program = ts.createProgram(
-        ["script.ts"],
+        ["sandbox.d.ts", "script.ts"],
         {
             strict: true,
+            noImplicitAny: false, // Accept untyped parameters (JS-style scripts)
             noEmit: true,
             target: ts.ScriptTarget.ES2022,
             module: ts.ModuleKind.ES2022,
             moduleResolution: ts.ModuleResolutionKind.Node10,
-            types: [], // Block all ambient types (Node, DOM, etc.)
+            types: [],
             skipLibCheck: true,
         },
         host,
