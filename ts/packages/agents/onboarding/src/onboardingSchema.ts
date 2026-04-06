@@ -1,9 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Top-level onboarding coordination actions.
-// These actions manage the lifecycle of an integration onboarding workflow.
-
 export type OnboardingActions =
     | StartOnboardingAction
     | ResumeOnboardingAction

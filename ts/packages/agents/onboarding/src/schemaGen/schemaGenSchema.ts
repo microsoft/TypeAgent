@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Phase 3 — Schema Generation: produce a TypeScript action schema file
-// that maps natural language user requests to the target API surface.
-// Output is saved to ~/.typeagent/onboarding/<name>/schemaGen/schema.ts
-
 export type SchemaGenActions =
     | GenerateSchemaAction
     | RefineSchemaAction

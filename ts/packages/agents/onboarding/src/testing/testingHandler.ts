@@ -26,8 +26,12 @@ import {
 import { getTestingModel } from "../lib/llm.js";
 import { PhraseSet } from "../phraseGen/phraseGenHandler.js";
 import { createDispatcher } from "agent-dispatcher";
-import { getDefaultAppAgentProviders } from "default-agent-provider";
-import { getFsStorageProvider } from "dispatcher-node-providers";
+import {
+    createNpmAppAgentProvider,
+    getFsStorageProvider,
+} from "dispatcher-node-providers";
+import fs from "node:fs";
+import path from "node:path";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import type {
     ClientIO,
@@ -442,12 +446,26 @@ function createCapturingClientIO(buffer: string[]): ClientIO {
     } satisfies ClientIO;
 }
 
-// Create a dispatcher wired to the default agent providers.
+// Build a provider containing only the externally-registered agents.
 // The scaffolded agent must be registered in the TypeAgent config before
 // running tests (use `packageAgent --register` or add manually to config.json).
+function getExternalAppAgentProviders(instanceDir: string) {
+    const configPath = path.join(instanceDir, "externalAgentsConfig.json");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const agents = fs.existsSync(configPath)
+        ? (JSON.parse(fs.readFileSync(configPath, "utf8")) as any).agents ?? {}
+        : {};
+    return [
+        createNpmAppAgentProvider(
+            agents,
+            path.join(instanceDir, "externalagents/package.json"),
+        ),
+    ];
+}
+
 async function createTestDispatcher() {
     const instanceDir = getInstanceDir();
-    const appAgentProviders = getDefaultAppAgentProviders(instanceDir);
+    const appAgentProviders = getExternalAppAgentProviders(instanceDir);
     const buffer: string[] = [];
     const clientIO = createCapturingClientIO(buffer);
 
@@ -502,11 +520,13 @@ async function runSingleTest(
     return {
         phrase: tc.phrase,
         expectedActionName: tc.expectedActionName,
-        actualActionName,
+        ...(actualActionName !== undefined ? { actualActionName } : undefined),
         passed,
-        error: passed
+        ...(passed
             ? undefined
-            : `Expected "${tc.expectedActionName}", got "${actualActionName ?? "no action"}"`,
+            : {
+                  error: `Expected "${tc.expectedActionName}", got "${actualActionName ?? "no action"}"`,
+              }),
     };
 }
 

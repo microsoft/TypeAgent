@@ -16,18 +16,18 @@
     }
 };
 
-<ScaffoldPlugin> = scaffold (the)? $(integrationName:wildcard) (plugin | add-in | extension) -> {
+<ScaffoldPlugin> = scaffold (the)? $(integrationName:wildcard) (plugin | extension) -> {
     actionName: "scaffoldPlugin",
     parameters: {
         integrationName,
         template: "rest-client"
     }
 }
-  | (create | generate) (the)? $(integrationName:wildcard) $(template:word) (plugin | extension | add-in) -> {
+  | (create | generate) (the)? $(integrationName:wildcard) (plugin | extension) -> {
     actionName: "scaffoldPlugin",
     parameters: {
         integrationName,
-        template
+        template: "rest-client"
     }
 };
 

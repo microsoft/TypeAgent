@@ -16,7 +16,7 @@
         integrationName
     }
 }
-  | generate $(phrasesPerAction:word) phrases (per action)? for $(integrationName:wildcard) -> {
+  | generate $(phrasesPerAction:number) phrases (per action)? for $(integrationName:wildcard) -> {
     actionName: "generatePhrases",
     parameters: {
         integrationName,

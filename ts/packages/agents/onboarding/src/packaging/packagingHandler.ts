@@ -11,7 +11,6 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import {
-    createActionResultFromTextDisplay,
     createActionResultFromMarkdownDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { PackagingActions } from "./packagingSchema.js";
@@ -19,13 +18,10 @@ import {
     loadState,
     updatePhase,
     readArtifact,
-    writeArtifactJson,
-    getWorkspacePath,
 } from "../lib/workspace.js";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs/promises";
-import os from "os";
 
 export async function executePackagingAction(
     action: TypeAgentAction<PackagingActions>,

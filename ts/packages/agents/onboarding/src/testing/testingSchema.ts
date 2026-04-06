@@ -1,9 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Phase 6 — Testing: generate test cases from sample phrases and run a
-// phrase-to-action validation loop, proposing repairs for failures.
-
 export type TestingActions =
     | GenerateTestsAction
     | RunTestsAction

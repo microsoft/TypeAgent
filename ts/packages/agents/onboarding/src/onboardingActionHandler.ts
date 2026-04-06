@@ -167,10 +167,10 @@ async function executeOnboardingAction(
                     `Integration "${integrationName}" already exists (current phase: ${existing.currentPhase}). Use resumeOnboarding to continue.`,
                 );
             }
-            const state = await createWorkspace({
+            await createWorkspace({
                 integrationName,
-                description,
-                apiType,
+                ...(description !== undefined ? { description } : undefined),
+                ...(apiType !== undefined ? { apiType } : undefined),
             });
             return createActionResultFromMarkdownDisplay(
                 `## Onboarding started: ${integrationName}\n\n` +

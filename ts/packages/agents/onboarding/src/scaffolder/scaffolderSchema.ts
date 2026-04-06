@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Phase 5 — Scaffolder: stamp out the complete TypeAgent agent package
-// from the approved schema, grammar, and config. Output goes to
-// ~/.typeagent/onboarding/<name>/scaffolder/agent/
-
 export type ScaffolderActions =
     | ScaffoldAgentAction
     | ScaffoldPluginAction
@@ -34,5 +30,5 @@ export type ScaffoldPluginAction = {
 
 export type ListTemplatesAction = {
     actionName: "listTemplates";
-    parameters: Record<string, never>;
+    parameters: {};
 };

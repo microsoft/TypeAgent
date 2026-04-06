@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Phase 2 — Phrase Generation: produce natural language sample phrases
-// for each discovered action. Phrases are used to train and validate
-// the grammar and schema in later phases.
-
 export type PhraseGenActions =
     | GeneratePhrasesAction
     | AddPhraseAction

@@ -1,9 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Phase 4 — Grammar Generation: produce a .agr grammar file from the
-// approved TypeScript schema and sample phrases, then compile and validate it.
-
 export type GrammarGenActions =
     | GenerateGrammarAction
     | CompileGrammarAction

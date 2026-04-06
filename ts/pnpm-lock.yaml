@@ -2246,9 +2246,6 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
-      default-agent-provider:
-        specifier: workspace:*
-        version: link:../../defaultAgentProvider
       dispatcher-node-providers:
         specifier: workspace:*
         version: link:../../dispatcher/nodeProviders

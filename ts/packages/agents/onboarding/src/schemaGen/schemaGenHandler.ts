@@ -11,7 +11,6 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import {
-    createActionResultFromTextDisplay,
     createActionResultFromMarkdownDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { SchemaGenActions } from "./schemaGenSchema.js";

@@ -1,10 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Phase 1 — Discovery: enumerate the API surface of the target application.
-// Actions in this phase ingest documentation or API specs and produce
-// a list of candidate actions saved to ~/.typeagent/onboarding/<name>/discovery/api-surface.json
-
 export type DiscoveryActions =
     | CrawlDocUrlAction
     | ParseOpenApiSpecAction

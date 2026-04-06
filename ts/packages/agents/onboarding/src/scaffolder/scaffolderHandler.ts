@@ -11,7 +11,6 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import {
-    createActionResultFromTextDisplay,
     createActionResultFromMarkdownDisplay,
 } from "@typeagent/agent-sdk/helpers/action";
 import { ScaffolderActions } from "./scaffolderSchema.js";
@@ -20,11 +19,9 @@ import {
     updatePhase,
     writeArtifact,
     readArtifact,
-    getWorkspacePath,
 } from "../lib/workspace.js";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
 
 // Default output root within the TypeAgent repo
 const AGENTS_DIR = path.resolve(
