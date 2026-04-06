@@ -1,8 +1,6 @@
 # AgentServer Sessions Architecture
 
 **Author:** George Ng
-**Status:** Review
-**Last Updated:** 2026-04-03
 
 ---
 
@@ -241,21 +239,31 @@ SessionInfo[]
 
 ### CLI
 
-The CLI's `connect.ts` command gains optional flags:
+The CLI implements the full session management surface described in this document.
 
-```
-typeagent connect [--session <id>]
-typeagent sessions create <name>
-typeagent sessions list [--name <substring>]
-typeagent sessions rename <id> <newName>
-typeagent sessions delete <id>
+#### `connect` — join a session
+
+```bash
+agent-cli connect                        # resume most recently active session
+agent-cli connect --session <id>         # resume a specific session by ID
 ```
 
-- If `--session <id>` is given, `joinSession()` is called with `sessionId`.
-- If no session flag is given, `joinSession()` is called without `sessionId` → resumes most recently active session (or auto-creates `"default"`).
-- `sessions list` calls `listSessions()` and prints a formatted table.
-- `sessions list --name <substring>` filters by name substring.
-- `sessions delete <id>` calls `deleteSession(id)` after a confirmation prompt.
+`connect.ts` passes `{ sessionId: flags.session }` to `ensureAndConnectDispatcher()` when `--session` is provided; omitting the flag calls `joinSession()` without a session ID, letting the server resolve the most recently active session (or auto-create `"default"`).
+
+#### `sessions` topic — session CRUD
+
+| Command | RPC call |
+|---|---|
+| `agent-cli sessions create <name>` | `createSession(name)` |
+| `agent-cli sessions list [--name <sub>]` | `listSessions(name?)` |
+| `agent-cli sessions rename <id> <newName>` | `renameSession(id, newName)` |
+| `agent-cli sessions delete <id> [--yes]` | `deleteSession(id)` |
+
+`sessions create`, `list`, `rename`, and `delete` use `connectAgentServer()` directly (no `joinSession()`) — they are management operations that do not require joining a session.
+
+`sessions delete` prompts `Delete session <id> and all its data? (y/N)` before calling `deleteSession()`. Pass `--yes` / `-y` to skip the prompt.
+
+`sessions list` renders a fixed-width table with columns `SESSION ID`, `NAME`, `CLIENTS`, and `CREATED AT`. Pass `--name <substring>` to filter by name (case-insensitive).
 
 ### Shell
 

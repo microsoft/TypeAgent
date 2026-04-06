@@ -100,18 +100,53 @@ class TerminalLayout {
         }
     }
 
+    private inlineBuffer: string = "";
+
     /** Write content into the scroll region (appears above the prompt). */
     writeContent(text: string) {
         if (!this.active) {
             process.stdout.write(text);
             return;
         }
+        this.inlineBuffer = "";
         const height = process.stdout.rows || 24;
         const scrollBottom = height - this.promptRows;
         // Save cursor, move to bottom of scroll region, write, restore
         process.stdout.write(
             "\x1b[s" + `\x1b[${scrollBottom};1H` + "\n" + text + "\x1b[u",
         );
+    }
+
+    /** Append inline (streaming) text. Accumulates in a buffer and re-renders
+     *  the full inline line at the scroll-region bottom on each call, so tokens
+     *  flow correctly on one line without a scroll-advance "\n" between them. */
+    writeInline(text: string) {
+        if (!this.active) {
+            process.stdout.write(text);
+            return;
+        }
+        this.inlineBuffer += text;
+        const height = process.stdout.rows || 24;
+        const scrollBottom = height - this.promptRows;
+        // Overwrite the current inline line in place: position at the start
+        // of the scroll-bottom row, clear the line, re-render the buffer.
+        process.stdout.write(
+            "\x1b[s" +
+                `\x1b[${scrollBottom};1H` +
+                "\x1b[2K" +
+                this.inlineBuffer +
+                "\x1b[u",
+        );
+    }
+
+    /** Flush the inline buffer as a committed block line (called when the
+     *  next message is a non-inline block). */
+    flushInline() {
+        if (!this.active || this.inlineBuffer === "") {
+            return;
+        }
+        // writeContent() clears inlineBuffer as its first step.
+        this.writeContent(this.inlineBuffer);
     }
 
     /** Draw content in the fixed bottom region at a given row offset (0-based from prompt start). */
@@ -414,12 +449,12 @@ export function createEnhancedClientIO(
             // Scroll region is active — write content into the scroll region.
             // The prompt stays anchored at the bottom automatically.
             if (appendMode !== "inline") {
-                if (lastAppendMode === "inline") {
-                    terminalLayout.writeContent("");
-                }
+                // writeContent() already clears inlineBuffer, so no need to
+                // flushInline() first — that would write the buffer AND then
+                // write displayText, causing the streamed text to appear twice.
                 terminalLayout.writeContent(displayText);
             } else {
-                terminalLayout.writeContent(displayText);
+                terminalLayout.writeInline(displayText);
             }
             activePromptRenderer.redraw();
         } else if (activePromptRenderer) {

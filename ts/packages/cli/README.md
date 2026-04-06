@@ -136,6 +136,60 @@ There are 3 command under `agent-cli run`:
 - `agent-cli run translate <request>` - only do translation. Same as `@translate` in interactive mode.
 - `agent-cli run explain <request> => <action>` - only do explanation. Same as `@explain` in interactive mode.
 
+### `agent-cli connect`
+
+`agent-cli connect` starts the interactive agent in connected mode, attaching to a running (or auto-started) agent server.
+
+```bash
+agent-cli connect                        # resume most recently active session
+agent-cli connect --session <id>         # resume a specific session by ID
+agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
+```
+
+- If `--session <id>` is omitted, the server resumes the most recently active session, or auto-creates a session named `"default"` if none exist.
+- The server is started automatically if it is not already running.
+
+### `agent-cli sessions`
+
+`agent-cli sessions` provides full CRUD management of agent server sessions.
+
+#### `agent-cli sessions create <name>`
+
+Create a new named session on the server and print its session ID.
+
+```bash
+agent-cli sessions create "workout playlist setup"
+# Created session 'workout playlist setup' (a1b2c3d4-e5f6-...)
+```
+
+#### `agent-cli sessions list`
+
+List all sessions on the server in a formatted table.
+
+```bash
+agent-cli sessions list
+agent-cli sessions list --name <substring>   # filter by name (case-insensitive)
+```
+
+Output columns: `SESSION ID`, `NAME`, `CLIENTS` (currently connected), `CREATED AT`.
+
+#### `agent-cli sessions rename <id> <newName>`
+
+Rename an existing session.
+
+```bash
+agent-cli sessions rename a1b2c3d4-e5f6-... "evening playlist"
+```
+
+#### `agent-cli sessions delete <id>`
+
+Delete a session and all its persisted data (chat history, conversation memory). Prompts for confirmation unless `--yes` / `-y` is passed.
+
+```bash
+agent-cli sessions delete a1b2c3d4-e5f6-...         # prompts: Delete session ...? (y/N)
+agent-cli sessions delete a1b2c3d4-e5f6-... --yes   # skip confirmation
+```
+
 ### `agent-cli data`: Test data management
 
 This command is used for explanation data management:

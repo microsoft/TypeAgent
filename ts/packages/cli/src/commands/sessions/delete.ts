@@ -1,8 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { Args, Command, Flags, ux } from "@oclif/core";
+import { Args, Command, Flags } from "@oclif/core";
 import { connectAgentServer } from "@typeagent/agent-server-client";
+import { createInterface } from "readline/promises";
 
 export default class SessionsDelete extends Command {
     static description = "Delete a session and its persisted data from the agent server";
@@ -28,10 +29,16 @@ export default class SessionsDelete extends Command {
         const { args, flags } = await this.parse(SessionsDelete);
 
         if (!flags.yes) {
-            const confirmed = await ux.confirm(
-                `Delete session ${args.id} and all its data? (y/n)`,
+            const rl = createInterface({
+                input: process.stdin,
+                output: process.stdout,
+                terminal: true,
+            });
+            const answer = await rl.question(
+                `Delete session ${args.id} and all its data? (y/N) `,
             );
-            if (!confirmed) {
+            rl.close();
+            if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
                 this.log("Aborted.");
                 return;
             }
