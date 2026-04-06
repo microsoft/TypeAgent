@@ -81,6 +81,10 @@ export default class Connect extends Command {
             description: "Port for type agent server",
             default: 8999,
         }),
+        session: Flags.string({
+            description: "Session ID to join. Omit to resume the most recently active session.",
+            required: false,
+        }),
         verbose: Flags.string({
             description:
                 "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
@@ -117,7 +121,7 @@ export default class Connect extends Command {
             const dispatcher = await ensureAndConnectDispatcher(
                 clientIO,
                 flags.port,
-                undefined,
+                flags.session ? { sessionId: flags.session } : undefined,
                 () => {
                     console.error("Disconnected from dispatcher");
                     process.exit(1);
