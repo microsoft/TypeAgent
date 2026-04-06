@@ -25,7 +25,9 @@ export default class SessionsCreate extends Command {
         const connection = await connectAgentServer(url);
         try {
             const session = await connection.createSession(args.name);
-            this.log(`Created session '${session.name}' (${session.sessionId})`);
+            this.log(
+                `Created session '${session.name}' (${session.sessionId})`,
+            );
         } finally {
             await connection.close();
         }

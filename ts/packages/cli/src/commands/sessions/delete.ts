@@ -6,7 +6,8 @@ import { connectAgentServer } from "@typeagent/agent-server-client";
 import { createInterface } from "readline/promises";
 
 export default class SessionsDelete extends Command {
-    static description = "Delete a session and its persisted data from the agent server";
+    static description =
+        "Delete a session and its persisted data from the agent server";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",
@@ -38,7 +39,10 @@ export default class SessionsDelete extends Command {
                 `Delete session ${args.id} and all its data? (y/N) `,
             );
             rl.close();
-            if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
+            if (
+                answer.toLowerCase() !== "y" &&
+                answer.toLowerCase() !== "yes"
+            ) {
                 this.log("Aborted.");
                 return;
             }

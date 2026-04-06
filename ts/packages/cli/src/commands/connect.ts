@@ -82,7 +82,8 @@ export default class Connect extends Command {
             default: 8999,
         }),
         session: Flags.string({
-            description: "Session ID to join. Omit to resume the most recently active session.",
+            description:
+                "Session ID to join. Omit to resume the most recently active session.",
             required: false,
         }),
         verbose: Flags.string({

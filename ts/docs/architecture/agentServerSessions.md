@@ -252,12 +252,12 @@ agent-cli connect --session <id>         # resume a specific session by ID
 
 #### `sessions` topic — session CRUD
 
-| Command | RPC call |
-|---|---|
-| `agent-cli sessions create <name>` | `createSession(name)` |
-| `agent-cli sessions list [--name <sub>]` | `listSessions(name?)` |
+| Command                                    | RPC call                     |
+| ------------------------------------------ | ---------------------------- |
+| `agent-cli sessions create <name>`         | `createSession(name)`        |
+| `agent-cli sessions list [--name <sub>]`   | `listSessions(name?)`        |
 | `agent-cli sessions rename <id> <newName>` | `renameSession(id, newName)` |
-| `agent-cli sessions delete <id> [--yes]` | `deleteSession(id)` |
+| `agent-cli sessions delete <id> [--yes]`   | `deleteSession(id)`          |
 
 `sessions create`, `list`, `rename`, and `delete` use `connectAgentServer()` directly (no `joinSession()`) — they are management operations that do not require joining a session.
 
