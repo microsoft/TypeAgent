@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createChromeRpcClient } from "./chromeRpcClient";
-import { createElectronRpcClient } from "./electronRpcClient";
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
 
 export interface FilterOptions {
     searchQuery?: string;
@@ -21,28 +21,32 @@ export type MacroCategory =
     | "Other";
 export type NotificationType = "success" | "error" | "warning" | "info";
 
-function getRpc() {
-    if (typeof window !== "undefined" && (window as any).electronAPI) {
-        const client = createElectronRpcClient();
-        return client?.rpc;
-    }
-    const client = createChromeRpcClient();
-    return client.rpc;
+async function sendToServiceWorker<T>(message: any): Promise<T> {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(message, (response: any) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+                return;
+            }
+            resolve(response);
+        });
+    });
 }
 
 export async function getAllWebFlows(): Promise<any[]> {
-    const rpc = getRpc();
-    if (!rpc) throw new Error("RPC not available");
-    const response = await (rpc as any).invoke("getAllWebFlows", {});
+    const response = await sendToServiceWorker<any>({
+        type: "getAllWebFlows",
+    });
     return response?.actions || response || [];
 }
 
 export async function deleteWebFlow(
     name: string,
 ): Promise<{ success: boolean; error?: string }> {
-    const rpc = getRpc();
-    if (!rpc) throw new Error("RPC not available");
-    return await (rpc as any).invoke("deleteWebFlow", { name });
+    return await sendToServiceWorker<{ success: boolean; error?: string }>({
+        type: "deleteWebFlow",
+        name,
+    });
 }
 
 export function filterMacros(macros: any[], options: FilterOptions): any[] {

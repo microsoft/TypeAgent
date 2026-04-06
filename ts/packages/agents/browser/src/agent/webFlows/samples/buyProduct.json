@@ -13,8 +13,7 @@
   "grammarPatterns": [
     "buy $(productName:wildcard)",
     "purchase $(productName:wildcard)",
-    "order $(productName:wildcard)",
-    "buy (me)? (a)? $(productName:wildcard)"
+    "order $(productName:wildcard)"
   ],
   "scope": {
     "type": "site",

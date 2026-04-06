@@ -386,12 +386,21 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                         : [],
                 });
                 (globalThis as any).__lastRecording = undefined;
-                // The agent returns { displayText, data: { webFlowName } }
+
+                // The discovery handler returns result.data directly.
+                // Check if generation/save actually succeeded.
+                if (result?.success === false) {
+                    return {
+                        success: false,
+                        error:
+                            result?.error ||
+                            "Failed to generate action from recording",
+                    };
+                }
+
                 const savedName =
-                    result?.data?.webFlowName ||
                     result?.webFlowName ||
                     result?.flowName ||
-                    result?.displayText?.match(/Created action:\s*(.+)/)?.[1] ||
                     params.actionName;
                 return {
                     success: true,

@@ -385,7 +385,7 @@ function addContextualFollowUps(command: string) {
         chatPanel.addFollowUpButtons([
             {
                 label: "Record New Action",
-                command: "@browser actions record New Action",
+                command: "@browser actions record myAction",
             },
         ]);
     } else if (normalized.startsWith("@browser ask")) {
