@@ -2232,6 +2232,49 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
 
+  packages/agents/onboarding:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../dispatcher/dispatcher
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      default-agent-provider:
+        specifier: workspace:*
+        version: link:../../defaultAgentProvider
+      dispatcher-node-providers:
+        specifier: workspace:*
+        version: link:../../dispatcher/nodeProviders
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agents/photo:
     dependencies:
       '@typeagent/agent-sdk':
@@ -3358,6 +3401,9 @@ importers:
       music-local:
         specifier: workspace:*
         version: link:../agents/playerLocal
+      onboarding-agent:
+        specifier: workspace:*
+        version: link:../agents/onboarding
       photo-agent:
         specifier: workspace:*
         version: link:../agents/photo
