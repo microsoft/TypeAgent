@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using autoShell.Services;
+using autoShell.Services.Interop;
 using Microsoft.Win32;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -25,14 +26,14 @@ internal partial class ThemeCommandHandler : ICommandHandler
     private const int SPIF_UPDATEINIFILE_SENDCHANGE = 3;
     private const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
 
-    [LibraryImport("kernel32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport(NativeDlls.Kernel32, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
 
-    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [LibraryImport(NativeDlls.Kernel32, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool FreeLibrary(IntPtr hModule);
 
-    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport(NativeDlls.User32, StringMarshalling = StringMarshalling.Utf16)]
     private static partial int LoadString(IntPtr hInstance, uint uID, [Out] char[] lpBuffer, int nBufferMax);
 
     #endregion P/Invoke

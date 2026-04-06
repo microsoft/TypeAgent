@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Runtime.InteropServices;
+using autoShell.Services.Interop;
 using Microsoft.Win32;
 
 namespace autoShell.Services;
@@ -48,7 +50,7 @@ internal class WindowsRegistryService : IRegistryService
             out _);
     }
 
-    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
+    [DllImport(NativeDlls.User32, CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr SendMessageTimeout(
         IntPtr hWnd, uint Msg, IntPtr wParam, string lParam,
         uint fuFlags, uint uTimeout, out IntPtr lpdwResult);

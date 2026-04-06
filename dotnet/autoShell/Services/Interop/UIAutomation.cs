@@ -26,19 +26,19 @@ internal sealed class UIAutomation
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const byte VK_DELETE = 0x2E;
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern bool SetCursorPos(int X, int Y);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, IntPtr dwExtraInfo);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, IntPtr dwExtraInfo);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
     #endregion P/Invoke

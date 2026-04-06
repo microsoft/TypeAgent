@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using autoShell.Services;
+using autoShell.Services.Interop;
 using Microsoft.Win32;
 using Newtonsoft.Json.Linq;
 
@@ -18,7 +19,7 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     #region P/Invoke
     private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
 
-    [LibraryImport("user32.dll", EntryPoint = "SendNotifyMessageW")]
+    [LibraryImport(NativeDlls.User32, EntryPoint = "SendNotifyMessageW")]
     private static partial IntPtr SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     #endregion P/Invoke
 

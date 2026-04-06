@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Security;
 using System.Text;
 using autoShell.Logging;
+using autoShell.Services.Interop;
 using Newtonsoft.Json;
 
 namespace autoShell.Services;
@@ -45,31 +46,31 @@ internal class WindowsNetworkService : INetworkService
         int OnHardwareSliderChange(int param1, int param2);
     }
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern int WlanOpenHandle(uint dwClientVersion, IntPtr pReserved, out uint pdwNegotiatedVersion, out IntPtr phClientHandle);
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern int WlanCloseHandle(IntPtr hClientHandle, IntPtr pReserved);
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern int WlanEnumInterfaces(IntPtr hClientHandle, IntPtr pReserved, out IntPtr ppInterfaceList);
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern int WlanGetAvailableNetworkList(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, IntPtr pReserved, out IntPtr ppAvailableNetworkList);
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern int WlanScan(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pDOT11_SSID, IntPtr pIeData, IntPtr pReserved);
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern void WlanFreeMemory(IntPtr pMemory);
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern int WlanConnect(IntPtr hClientHandle, ref Guid pInterfaceGuid, ref WLAN_CONNECTION_PARAMETERS pConnectionParameters, IntPtr pReserved);
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern int WlanDisconnect(IntPtr hClientHandle, ref Guid pInterfaceGuid, IntPtr pReserved);
 
-    [DllImport("wlanapi.dll")]
+    [DllImport(NativeDlls.WlanApi)]
     private static extern int WlanSetProfile(IntPtr hClientHandle, ref Guid pInterfaceGuid, uint dwFlags, [MarshalAs(UnmanagedType.LPWStr)] string strProfileXml, [MarshalAs(UnmanagedType.LPWStr)] string strAllUserProfileSecurity, bool bOverwrite, IntPtr pReserved, out uint pdwReasonCode);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

@@ -70,10 +70,10 @@ internal class WindowsDisplayService : IDisplayService
         public uint dmPanningHeight;
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
+    [DllImport(NativeDlls.User32, CharSet = CharSet.Ansi)]
     private static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
 
-    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
+    [DllImport(NativeDlls.User32, CharSet = CharSet.Ansi)]
     private static extern int ChangeDisplaySettings(ref DEVMODE devMode, int flags);
 
     #endregion P/Invoke

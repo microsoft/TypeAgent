@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using autoShell.Logging;
+using autoShell.Services.Interop;
 using Microsoft.VisualBasic;
 
 namespace autoShell.Services;
@@ -29,39 +30,39 @@ internal class WindowsWindowService : IWindowService
         public int Bottom;
     }
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern bool GetWindowRect(IntPtr hWnd, ref RECT rect);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern IntPtr GetDesktopWindow();
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    [DllImport("user32.dll", EntryPoint = "SendMessage", SetLastError = true)]
+    [DllImport(NativeDlls.User32, EntryPoint = "SendMessage", SetLastError = true)]
     private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, uint wParam, IntPtr lParam);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern bool IsWindowVisible(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
+    [DllImport(NativeDlls.User32)]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     #endregion

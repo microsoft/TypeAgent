@@ -3,6 +3,7 @@
 
 using System;
 using System.Runtime.InteropServices;
+using autoShell.Services.Interop;
 
 namespace autoShell.Services;
 
@@ -11,15 +12,15 @@ namespace autoShell.Services;
 /// </summary>
 internal partial class WindowsSystemParametersService : ISystemParametersService
 {
-    [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    [LibraryImport(NativeDlls.User32, EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SystemParametersInfo(int uiAction, int uiParam, IntPtr pvParam, int fWinIni);
 
-    [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW", SetLastError = true)]
+    [LibraryImport(NativeDlls.User32, EntryPoint = "SystemParametersInfoW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SystemParametersInfo(int uiAction, int uiParam, int[] pvParam, int fWinIni);
 
-    [LibraryImport("user32.dll", EntryPoint = "SystemParametersInfoW", StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport(NativeDlls.User32, EntryPoint = "SystemParametersInfoW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
 
     /// <inheritdoc/>
@@ -46,7 +47,7 @@ internal partial class WindowsSystemParametersService : ISystemParametersService
         return SystemParametersInfo(action, param, vparam, flags);
     }
 
-    [LibraryImport("user32.dll")]
+    [LibraryImport(NativeDlls.User32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool SwapMouseButtonNative(int fSwap);
 

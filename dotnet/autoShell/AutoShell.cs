@@ -5,6 +5,7 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using autoShell.Logging;
+using autoShell.Services.Interop;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -25,7 +26,7 @@ internal class AutoShell
 {
     #region P/Invoke
 
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    [DllImport(NativeDlls.Kernel32, CharSet = CharSet.Unicode)]
     private static extern IntPtr GetCommandLineW();
 
     #endregion P/Invoke
