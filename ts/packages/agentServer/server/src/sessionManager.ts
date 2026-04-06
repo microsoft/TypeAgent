@@ -322,15 +322,16 @@ export async function createSessionManager(
         listSessions(name?: string): SessionInfo[] {
             const result: SessionInfo[] = [];
             for (const record of sessions.values()) {
+                const recordName = record.name ?? "";
                 if (
-                    name !== undefined &&
-                    !record.name.toLowerCase().includes(name.toLowerCase())
+                    name != null &&
+                    !recordName.toLowerCase().includes(name.toLowerCase())
                 ) {
                     continue;
                 }
                 result.push({
                     sessionId: record.sessionId,
-                    name: record.name,
+                    name: recordName,
                     clientCount: record.sharedDispatcher?.clientCount ?? 0,
                     createdAt: record.createdAt,
                 });

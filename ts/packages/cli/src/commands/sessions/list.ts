@@ -16,7 +16,7 @@ function formatTable(sessions: SessionInfo[]): string {
     );
     const nameWidth = Math.max(
         "NAME".length,
-        ...sessions.map((s) => s.name.length),
+        ...sessions.map((s) => (s.name ?? "").length),
     );
     const clientsWidth = "CLIENTS".length;
     const createdWidth = "CREATED AT".length;
@@ -38,7 +38,7 @@ function formatTable(sessions: SessionInfo[]): string {
     const rows = sessions.map((s) =>
         [
             s.sessionId.padEnd(idWidth),
-            s.name.padEnd(nameWidth),
+            (s.name ?? "").padEnd(nameWidth),
             String(s.clientCount).padEnd(clientsWidth),
             s.createdAt,
         ].join("  "),
