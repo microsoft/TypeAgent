@@ -1688,7 +1688,9 @@ function isInShellBundle(pkg) {
 async function verifyShellPackaging() {
     if (SKIP_SHELL_CHECK) return { ok: true };
 
-    verbose("Running electron-builder install-app-deps to verify shell packaging …");
+    verbose(
+        "Running electron-builder install-app-deps to verify shell packaging …",
+    );
     const shellPath = getWorkspacePackagePaths().get(SHELL_WORKSPACE);
     if (!shellPath) {
         verbose("Shell workspace not found — skipping post-check");
@@ -2485,19 +2487,13 @@ async function executeResolutions(analyses) {
         );
         if (overrideResolved.length > 0) {
             log("");
-            log(
-                clr.chrome(
-                    "  Verifying shell packaging compatibility …",
-                ),
-            );
+            log(clr.chrome("  Verifying shell packaging compatibility …"));
             const check = await verifyShellPackaging();
             if (!check.ok) {
                 warn(
                     `electron-builder shell packaging check failed: ${check.error}`,
                 );
-                warn(
-                    "Rolling back overrides for shell-bundle packages …",
-                );
+                warn("Rolling back overrides for shell-bundle packages …");
 
                 // Identify which overrides are for shell-bundle packages
                 const shellDeps = getShellProductionDeps();
@@ -2552,7 +2548,9 @@ async function executeResolutions(analyses) {
                             );
                         }
                     } catch (e) {
-                        fail(`pnpm install failed after rollback: ${e.message}`);
+                        fail(
+                            `pnpm install failed after rollback: ${e.message}`,
+                        );
                     }
                 } else {
                     // No shell-bundle overrides identified, but check still

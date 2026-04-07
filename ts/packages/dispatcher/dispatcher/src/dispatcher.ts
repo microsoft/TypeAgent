@@ -147,16 +147,17 @@ function extractActions(
     return actions;
 }
 
-function getAgentSchemas(
+async function getAgentSchemas(
     context: CommandHandlerContext,
     agentName?: string,
-): AgentSchemaInfo[] {
+): Promise<AgentSchemaInfo[]> {
+    await context.agents.waitUntilReady();
     const configs = context.agents.getActionConfigs();
     // Group configs by top-level agent name (part before first '.')
     const agentMap = new Map<string, typeof configs>();
     for (const config of configs) {
         const topName = config.schemaName.split(".")[0];
-        if (agentName !== undefined && topName !== agentName) continue;
+        if (agentName != null && topName !== agentName) continue;
         const list = agentMap.get(topName) ?? [];
         list.push(config);
         agentMap.set(topName, list);
@@ -173,9 +174,14 @@ function getAgentSchemas(
 
         const subSchemas: AgentSubSchemaInfo[] = [];
         for (const config of sorted) {
-            const schemaFile = context.agents.tryGetActionSchemaFile(
-                config.schemaName,
-            );
+            let schemaFile;
+            try {
+                schemaFile = context.agents.tryGetActionSchemaFile(
+                    config.schemaName,
+                );
+            } catch {
+                continue;
+            }
             const actions = schemaFile
                 ? extractActions(schemaFile.parsedActionSchema.actionSchemas)
                 : [];

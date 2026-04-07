@@ -367,6 +367,12 @@ export class CommandServer {
                 clientIO,
                 this.agentServerUrl,
                 { filter: true },
+                () => {
+                    this.logger.log(
+                        "Dispatcher connection dropped, will reconnect...",
+                    );
+                    this.dispatcher = null;
+                },
             );
             this.logger.log(
                 `Connected to TypeAgent dispatcher at ${this.agentServerUrl}`,
@@ -629,8 +635,21 @@ export class CommandServer {
         if (!this.dispatcher) {
             return [];
         }
-        const schemas = await this.dispatcher.getAgentSchemas(agentName);
-        return schemas.filter((a) => !SKIP_AGENTS.has(a.name));
+        try {
+            const schemas = await this.dispatcher.getAgentSchemas(agentName);
+            return schemas.filter((a) => !SKIP_AGENTS.has(a.name));
+        } catch (error) {
+            if (
+                error instanceof Error &&
+                error.message.includes("Agent channel disconnected")
+            ) {
+                this.logger.log(
+                    "Agent channel disconnected during getAgentSchemas, clearing dispatcher",
+                );
+                this.dispatcher = null;
+            }
+            return [];
+        }
     }
 
     private async discoverAgents(request: {

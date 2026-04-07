@@ -36,3 +36,6 @@ packages/agents/spelunker/evals/eval-*/source
 
 # Generated cache files
 examples/websiteAliases/cache
+
+# VS Studio Files
+.vs/**
