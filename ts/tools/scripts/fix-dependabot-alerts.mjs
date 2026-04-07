@@ -30,6 +30,7 @@ const KNOWN_FLAG_PREFIXES = [
     "--show-chains",
     "--prune-overrides",
     "--skip-shell-check",
+    "--skip-install",
     "--json",
     "--verbose",
     "--help",
@@ -103,6 +104,7 @@ const SHOW_CHAINS =
 const SHOW_CHAINS_FULL = args.includes("--show-chains=full");
 const PRUNE_OVERRIDES = args.includes("--prune-overrides");
 const SKIP_SHELL_CHECK = args.includes("--skip-shell-check");
+const SKIP_INSTALL = args.includes("--skip-install");
 const JSON_OUTPUT = args.includes("--json");
 const VERBOSE = args.includes("--verbose");
 
@@ -132,6 +134,8 @@ Options:
                       check. By default, overrides for packages in the shell's
                       production dependency tree are blocked because
                       electron-builder validates exact version matches.
+  --skip-install      Skip the initial pnpm install --frozen-lockfile. Use when
+                      dependencies are already installed (e.g. in CI).
   --json              Output results as structured JSON (for CI integration)
   --verbose           Show detailed constraint analysis, advisory IDs, and
                       debug output
@@ -2912,8 +2916,10 @@ function emitJson(results) {
 async function main() {
     // Ensure node_modules matches the lockfile — pnpm why reads from the
     // installed virtual store, not the lockfile itself.
-    if (!JSON_OUTPUT) console.log("Running pnpm install --frozen-lockfile …");
-    runCmd("pnpm", ["install", "--frozen-lockfile"]);
+    if (!SKIP_INSTALL) {
+        if (!JSON_OUTPUT) console.log("Running pnpm install --frozen-lockfile …");
+        runCmd("pnpm", ["install", "--frozen-lockfile"]);
+    }
 
     if (PRUNE_OVERRIDES) {
         await pruneOverrides();

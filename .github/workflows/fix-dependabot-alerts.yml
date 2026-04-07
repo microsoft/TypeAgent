@@ -80,7 +80,7 @@ jobs:
         run: |
           # ── Step 1: Discover fixable packages ───────────────────────
           echo "::group::Analysing alerts"
-          node tools/scripts/fix-dependabot-alerts.mjs --dry-run --json > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
+          node tools/scripts/fix-dependabot-alerts.mjs --dry-run --json --skip-install > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
 
           if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
             echo "::error::Script produced no valid JSON output"
@@ -147,6 +147,7 @@ jobs:
               esac
             done
             filtered_args+=("--auto-fix=$PKG")
+            filtered_args+=("--skip-install")
             echo "Running: fix-dependabot-alerts.mjs ${filtered_args[*]}"
             set +e
             node tools/scripts/fix-dependabot-alerts.mjs "${filtered_args[@]}" 2>&1
