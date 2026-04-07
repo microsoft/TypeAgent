@@ -151,7 +151,9 @@ export async function createSessionManager(
         return path.join(sessionsDir, sessionId);
     }
 
-    function ensureDispatcher(record: SessionRecord): Promise<SharedDispatcher> {
+    function ensureDispatcher(
+        record: SessionRecord,
+    ): Promise<SharedDispatcher> {
         if (record.sharedDispatcher !== undefined) {
             return Promise.resolve(record.sharedDispatcher);
         }
