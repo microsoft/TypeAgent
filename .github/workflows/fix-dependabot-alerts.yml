@@ -1,0 +1,307 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+# Automatically remediate Dependabot security alerts by running the
+# fix-dependabot-alerts script, verifying the build for each fix,
+# and opening a pull request with the passing changes.
+
+name: fix-dependabot-alerts
+
+on:
+  schedule:
+    # Run weekly on Monday at 9:00 UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Dry run — analyse only, don't apply fixes"
+        type: boolean
+        default: false
+      auto-fix-args:
+        description: "Extra flags for the script (e.g. --apply-overrides=pkg1,pkg2)"
+        type: string
+        default: "--auto-fix"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  security-events: read
+
+env:
+  ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+  ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+
+jobs:
+  fix-alerts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          package_json_file: ts/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: ts
+        run: pnpm install --frozen-lockfile --strict-peer-dependencies
+
+      # ── Analyse and fix alerts (bisect) ─────────────────────────────
+      #
+      # 1. Dry-run to discover fixable packages
+      # 2. Apply each package's fix individually
+      # 3. Build-check after each; rollback failures
+      # 4. Only passing fixes survive into the PR
+      - name: Analyse and fix alerts
+        id: fix
+        working-directory: ts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # ── Step 1: Discover fixable packages ───────────────────────
+          echo "::group::Analysing alerts"
+          node tools/scripts/fix-dependabot-alerts.mjs --dry-run --json > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
+
+          if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
+            echo "Script produced no JSON output"
+            echo "resolved=0" >> "$GITHUB_OUTPUT"
+            echo "blocked=0" >> "$GITHUB_OUTPUT"
+            echo "failed=0" >> "$GITHUB_OUTPUT"
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+            echo "::endgroup::"
+            exit 0
+          fi
+
+          TOTAL_BLOCKED=$(jq '.summary.blocked' /tmp/dep-analysis.json)
+          TOTAL_NO_PATCH=$(jq '.summary.noPatch' /tmp/dep-analysis.json)
+
+          # Get the list of packages the script would resolve
+          FIXABLE=$(jq -r '.resolved[].package' /tmp/dep-analysis.json | sort -u)
+          FIXABLE_COUNT=$(echo "$FIXABLE" | grep -c . || true)
+          echo "Fixable packages ($FIXABLE_COUNT): $FIXABLE"
+          echo "::endgroup::"
+
+          if [ "$FIXABLE_COUNT" -eq 0 ]; then
+            echo "No fixable alerts"
+            echo "resolved=0" >> "$GITHUB_OUTPUT"
+            echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
+            echo "failed=0" >> "$GITHUB_OUTPUT"
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ inputs.dry-run }}" == "true" ]; then
+            echo "resolved=$FIXABLE_COUNT" >> "$GITHUB_OUTPUT"
+            echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
+            echo "failed=0" >> "$GITHUB_OUTPUT"
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # ── Step 2: Apply fixes one package at a time ───────────────
+          APPLIED=""
+          ROLLED_BACK=""
+          FLAGS="${{ inputs.auto-fix-args || '--auto-fix' }}"
+
+          for PKG in $FIXABLE; do
+            echo "::group::Fixing $PKG"
+
+            # Save a rollback point
+            cp package.json /tmp/pkg-backup.json
+            cp pnpm-lock.yaml /tmp/lock-backup.yaml 2>/dev/null || true
+
+            # Apply fix for this specific package — always use --auto-fix=$PKG
+            # regardless of other flags, so each package is targeted individually
+            read -r -a extra_args <<< "$FLAGS"
+            filtered_args=()
+            for arg in "${extra_args[@]}"; do
+              case "$arg" in
+                --auto-fix|--auto-fix=*)
+                  ;;
+                *)
+                  filtered_args+=("$arg")
+                  ;;
+              esac
+            done
+            filtered_args+=("--auto-fix=$PKG")
+            echo "Running: fix-dependabot-alerts.mjs ${filtered_args[*]}"
+            set +e
+            node tools/scripts/fix-dependabot-alerts.mjs "${filtered_args[@]}" 2>&1
+            fix_exit=$?
+            set -e
+
+            if ! git diff --quiet; then
+              # Changes were made — verify build
+              echo "Changes detected, verifying build..."
+              node tools/scripts/repo-policy-check.mjs --fix 2>/dev/null || true
+
+              set +e
+              pnpm run build 2>&1
+              build_exit=$?
+              set -e
+
+              if [ "$build_exit" -ne 0 ]; then
+                echo "::warning::Build failed after fixing $PKG — rolling back"
+                # Rollback: restore package.json and lockfile, reinstall
+                cp /tmp/pkg-backup.json package.json
+                cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
+                pnpm install 2>&1 || true
+                git checkout -- . 2>/dev/null || true
+                ROLLED_BACK="$ROLLED_BACK $PKG"
+              else
+                echo "✅ $PKG fixed and build passed"
+                APPLIED="$APPLIED $PKG"
+              fi
+            else
+              echo "No changes for $PKG (may already be fixed)"
+            fi
+
+            echo "::endgroup::"
+          done
+
+          # ── Step 3: Report results ──────────────────────────────────
+          APPLIED_COUNT=$(echo "$APPLIED" | wc -w | tr -d ' ')
+          ROLLED_BACK_COUNT=$(echo "$ROLLED_BACK" | wc -w | tr -d ' ')
+
+          echo "resolved=$APPLIED_COUNT" >> "$GITHUB_OUTPUT"
+          echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
+          echo "failed=$ROLLED_BACK_COUNT" >> "$GITHUB_OUTPUT"
+          echo "applied_packages=$APPLIED" >> "$GITHUB_OUTPUT"
+          echo "rolled_back_packages=$ROLLED_BACK" >> "$GITHUB_OUTPUT"
+
+          cd ..
+          if git diff --quiet; then
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+            echo "Files changed:"
+            git diff --stat
+          fi
+
+      # ── Final build + shell packaging verification ──────────────────
+      - name: Final build verification
+        if: ${{ steps.fix.outputs.changes == 'true' }}
+        id: build
+        working-directory: ts
+        run: |
+          node tools/scripts/repo-policy-check.mjs --fix || true
+          pnpm run build
+          echo "build_ok=true" >> "$GITHUB_OUTPUT"
+        env:
+          DEBUG_DEMB: true
+
+      - name: Package - shell
+        if: ${{ steps.build.outputs.build_ok == 'true' }}
+        id: shell
+        working-directory: ts
+        run: |
+          pnpm run shell:package
+          echo "shell_ok=true" >> "$GITHUB_OUTPUT"
+
+      # ── Create PR ───────────────────────────────────────────────────
+      - name: Create pull request
+        if: ${{ steps.fix.outputs.changes == 'true' && steps.build.outputs.build_ok == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "fix: remediate Dependabot security alerts
+
+          Automated by fix-dependabot-alerts workflow.
+
+          Applied:${{ steps.fix.outputs.applied_packages }}
+          Rolled back:${{ steps.fix.outputs.rolled_back_packages || ' (none)' }}
+          Blocked: ${{ steps.fix.outputs.blocked }} package(s)
+          Shell packaging: ${{ steps.shell.outputs.shell_ok == 'true' && 'passed' || 'skipped' }}
+
+          Co-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+          git push origin "$BRANCH"
+
+          # Build PR body from step outputs
+          APPLIED="${{ steps.fix.outputs.applied_packages }}"
+          ROLLED="${{ steps.fix.outputs.rolled_back_packages }}"
+          RESOLVED="${{ steps.fix.outputs.resolved }}"
+          BLOCKED="${{ steps.fix.outputs.blocked }}"
+          FAILED="${{ steps.fix.outputs.failed }}"
+
+          BODY=$(cat <<'PREOF'
+          ## Automated Dependabot Alert Remediation
+
+          This PR was automatically generated by the `fix-dependabot-alerts` workflow.
+          Each fix was applied individually and build-verified before inclusion.
+
+          ### Summary
+          PREOF
+          )
+
+          BODY="$BODY
+          - **Applied ($RESOLVED):**$APPLIED
+          - **Blocked:** $BLOCKED package(s) (require manual intervention)
+          - **Rolled back ($FAILED):**${ROLLED:- (none)}
+          - **Build:** ✅ Passed
+          - **Shell packaging:** ${{ steps.shell.outputs.shell_ok == 'true' && '✅ Passed' || '⚠️ Skipped' }}
+
+          ### How this works
+          1. Analyses all open Dependabot alerts
+          2. Applies each fix **individually** with build verification
+          3. Rolls back any fix that breaks the build
+          4. Only passing fixes are included in this PR
+
+          ### Review checklist
+          - [ ] Check that no breaking changes were introduced
+          - [ ] Verify rolled-back packages are investigated separately
+          - [ ] Run tests locally if concerned about specific packages"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "fix: remediate Dependabot security alerts ($(date +%Y-%m-%d))" \
+            --body "$BODY" \
+            --label "dependencies,security"
+
+      # ── Summary ─────────────────────────────────────────────────────
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Dependabot Alert Remediation" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Applied | ${{ steps.fix.outputs.resolved || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Blocked | ${{ steps.fix.outputs.blocked || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Rolled back | ${{ steps.fix.outputs.failed || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ steps.fix.outputs.applied_packages }}" ]; then
+            echo "**Applied:**${{ steps.fix.outputs.applied_packages }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "${{ steps.fix.outputs.rolled_back_packages }}" ]; then
+            echo "**Rolled back:**${{ steps.fix.outputs.rolled_back_packages }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.fix.outputs.changes }}" == "true" ]; then
+            echo "✅ Changes applied and PR created" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ inputs.dry-run }}" == "true" ]; then
+            echo "ℹ️ Dry run — no changes applied" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ℹ️ No fixable alerts found" >> "$GITHUB_STEP_SUMMARY"
+          fi

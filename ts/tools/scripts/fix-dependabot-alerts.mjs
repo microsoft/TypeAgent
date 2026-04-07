@@ -10,7 +10,8 @@
  */
 
 import { spawnSync, execFile } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -28,6 +29,7 @@ const KNOWN_FLAG_PREFIXES = [
     "--auto-fix",
     "--show-chains",
     "--prune-overrides",
+    "--skip-shell-check",
     "--json",
     "--verbose",
     "--help",
@@ -100,6 +102,7 @@ const SHOW_CHAINS =
     args.includes("--show-chains") || args.includes("--show-chains=full");
 const SHOW_CHAINS_FULL = args.includes("--show-chains=full");
 const PRUNE_OVERRIDES = args.includes("--prune-overrides");
+const SKIP_SHELL_CHECK = args.includes("--skip-shell-check");
 const JSON_OUTPUT = args.includes("--json");
 const VERBOSE = args.includes("--verbose");
 
@@ -125,6 +128,10 @@ Options:
   --prune-overrides   Remove pnpm.overrides entries that are no longer needed.
                       Cannot be combined with --apply-overrides or
                       --update-parents.
+  --skip-shell-check  Skip the electron-builder shell packaging compatibility
+                      check. By default, overrides for packages in the shell's
+                      production dependency tree are blocked because
+                      electron-builder validates exact version matches.
   --json              Output results as structured JSON (for CI integration)
   --verbose           Show detailed constraint analysis, advisory IDs, and
                       debug output
@@ -1583,6 +1590,151 @@ function isWorkspacePackage(pkgName) {
     return getWorkspacePackagePaths().has(pkgName);
 }
 
+// ── Shell packaging guard ────────────────────────────────────────────────────
+//
+// electron-builder's traversalNodeModulesCollector validates that installed
+// package versions exactly match the version ranges declared in each parent's
+// package.json.  pnpm overrides change the *resolved* version but do NOT
+// update the declaring package.json, so overrides for any package in the
+// shell's production dependency tree will break `shell:package`.
+//
+// Pre-check:  resolve the shell's production dep tree and block overrides
+//             for packages that appear in it.
+// Post-check: run `electron-builder install-app-deps` after applying
+//             overrides and roll back any that cause failures.
+
+const SHELL_WORKSPACE = "agent-shell";
+
+/**
+ * Build a Set of all packages in the shell workspace's production
+ * dependency tree.  Uses `pnpm ls --prod --json` filtered to the shell
+ * workspace.
+ *
+ * Returns an empty set (with a warning) if the shell workspace is not
+ * found or the command fails — the post-check will still catch problems.
+ */
+function getShellProductionDeps() {
+    if (_cache.shellProdDeps) return _cache.shellProdDeps;
+
+    try {
+        const output = runCmd(
+            "pnpm",
+            [
+                "ls",
+                "--filter",
+                SHELL_WORKSPACE,
+                "--prod",
+                "--depth",
+                "Infinity",
+                "--json",
+            ],
+            { nothrow: true },
+        );
+        if (!output) {
+            warn(
+                "Could not resolve shell production deps — shell packaging post-check will still validate",
+            );
+            _cache.shellProdDeps = new Set();
+            return _cache.shellProdDeps;
+        }
+        const deps = new Set();
+        const parsed = parsePaginatedJson(output);
+        function collectDeps(node) {
+            if (!node) return;
+            for (const [name, info] of Object.entries(node)) {
+                deps.add(name);
+                if (info.dependencies) collectDeps(info.dependencies);
+            }
+        }
+        for (const ws of parsed) {
+            if (ws.dependencies) collectDeps(ws.dependencies);
+        }
+        verbose(`Shell production deps: ${deps.size} packages`);
+        _cache.shellProdDeps = deps;
+        return deps;
+    } catch (e) {
+        verbose(`getShellProductionDeps failed: ${e.message}`);
+        warn(
+            "Could not resolve shell production deps — shell packaging post-check will still validate",
+        );
+        _cache.shellProdDeps = new Set();
+        return _cache.shellProdDeps;
+    }
+}
+
+/**
+ * Check if a package is in the shell's production dependency tree.
+ * Returns false when --skip-shell-check is set or if the dep tree
+ * could not be resolved (falls through to post-check).
+ */
+function isInShellBundle(pkg) {
+    if (SKIP_SHELL_CHECK) return false;
+    const deps = getShellProductionDeps();
+    return deps.has(pkg);
+}
+
+/**
+ * Post-check: run `pnpm deploy --prod` for the shell workspace into a
+ * temporary directory, then run `electron-builder install-app-deps` to
+ * validate that the dependency tree is consistent.  Returns { ok, error? }.
+ *
+ * This catches any override that causes electron-builder's
+ * traversalNodeModulesCollector to fail with "Production dependency not found".
+ */
+async function verifyShellPackaging() {
+    if (SKIP_SHELL_CHECK) return { ok: true };
+
+    verbose("Running electron-builder install-app-deps to verify shell packaging …");
+    const shellPath = getWorkspacePackagePaths().get(SHELL_WORKSPACE);
+    if (!shellPath) {
+        verbose("Shell workspace not found — skipping post-check");
+        return { ok: true };
+    }
+    const shellDir = dirname(shellPath);
+    const electronBuilderConfig = resolve(
+        shellDir,
+        "electron-builder.config.js",
+    );
+    const deployDir = mkdtempSync(resolve(tmpdir(), "depfix-shell-"));
+
+    try {
+        await runCmdAsync(
+            "pnpm",
+            [
+                "deploy",
+                "--filter",
+                SHELL_WORKSPACE,
+                "--prod",
+                "--ignore-scripts",
+                deployDir,
+            ],
+            { timeout: 300000 },
+        );
+
+        await runCmdAsync(
+            "npx",
+            [
+                "electron-builder",
+                "install-app-deps",
+                "--projectDir",
+                deployDir,
+                "--config",
+                electronBuilderConfig,
+            ],
+            { timeout: 300000 },
+        );
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: e.message };
+    } finally {
+        try {
+            rmSync(deployDir, { recursive: true, force: true });
+        } catch {
+            // Ignore cleanup errors
+        }
+    }
+}
+
 /**
  * Add multiple pnpm.overrides entries in a single read/write cycle.
  * @param {Map<string, string>} overridesMap - package name → version spec
@@ -1861,6 +2013,16 @@ async function classifyWithFixPlan(entry, whyData) {
     if (needsOverride(entry)) {
         if (!flagAllows(APPLY_OVERRIDES, pkg)) {
             entry.blockingReasons.push("--apply-overrides not specified");
+        }
+        // Pre-check: block overrides for packages in the shell's production
+        // dependency tree — electron-builder will reject the version mismatch.
+        if (!SKIP_SHELL_CHECK && isInShellBundle(pkg)) {
+            entry.blockingReasons.push(
+                "in shell production bundle — override would break electron-builder packaging (use --skip-shell-check to override)",
+            );
+            verbose(
+                `${pkg}: blocked override — package is in ${SHELL_WORKSPACE} production deps`,
+            );
         }
     }
 }
@@ -2310,6 +2472,97 @@ async function executeResolutions(analyses) {
         }
     }
 
+    // Post-check: verify electron-builder shell packaging is not broken
+    // by any applied overrides.  If it fails, identify and roll back the
+    // offending overrides, re-run pnpm install, then retry verification.
+    if (!DRY_RUN && !SKIP_SHELL_CHECK) {
+        const overrideResolved = results.resolved.filter((a) =>
+            needsOverride(a),
+        );
+        if (overrideResolved.length > 0) {
+            log("");
+            log(
+                clr.chrome(
+                    "  Verifying shell packaging compatibility …",
+                ),
+            );
+            const check = await verifyShellPackaging();
+            if (!check.ok) {
+                warn(
+                    `electron-builder shell packaging check failed: ${check.error}`,
+                );
+                warn(
+                    "Rolling back overrides for shell-bundle packages …",
+                );
+
+                // Identify which overrides are for shell-bundle packages
+                const shellDeps = getShellProductionDeps();
+                const toRollback = overrideResolved.filter((a) =>
+                    shellDeps.has(a.pkg),
+                );
+
+                if (toRollback.length > 0) {
+                    // Remove the offending overrides from package.json
+                    const pkgJsonPath = resolve(ROOT, "package.json");
+                    const pkgJson = JSON.parse(
+                        readFileSync(pkgJsonPath, "utf-8"),
+                    );
+                    for (const a of toRollback) {
+                        if (pkgJson.pnpm?.overrides?.[a.pkg]) {
+                            delete pkgJson.pnpm.overrides[a.pkg];
+                            fail(
+                                `Rolled back pnpm.overrides["${a.pkg}"] — in shell bundle`,
+                            );
+                        }
+                        a.error =
+                            "override rolled back — breaks electron-builder shell packaging";
+                        results.failed.push(a);
+                    }
+                    writeFileSync(
+                        pkgJsonPath,
+                        JSON.stringify(pkgJson, null, 2) + "\n",
+                        "utf-8",
+                    );
+
+                    results.resolved = results.resolved.filter(
+                        (a) => !toRollback.includes(a),
+                    );
+
+                    // Re-run pnpm install after removing overrides
+                    try {
+                        await runCmdAsync("pnpm", ["install"], {
+                            timeout: 300000,
+                        });
+                        ok("pnpm install completed after rollback");
+
+                        // Retry the shell packaging check
+                        const recheck = await verifyShellPackaging();
+                        if (recheck.ok) {
+                            ok("Shell packaging check passed after rollback");
+                        } else {
+                            warn(
+                                `Shell packaging still fails after rollback: ${recheck.error}`,
+                            );
+                            warn(
+                                "Run 'pnpm run -C packages/shell package' manually to diagnose",
+                            );
+                        }
+                    } catch (e) {
+                        fail(`pnpm install failed after rollback: ${e.message}`);
+                    }
+                } else {
+                    // No shell-bundle overrides identified, but check still
+                    // failed — may be a pre-existing issue.
+                    warn(
+                        "Shell packaging failure may be pre-existing — no shell-bundle overrides to roll back",
+                    );
+                }
+            } else {
+                ok("Shell packaging check passed ✓");
+            }
+        }
+    }
+
     return results;
 }
 
@@ -2623,6 +2876,7 @@ function emitJson(results) {
         currentVersion: a.currentVersion,
         patchedVersion: a.patched,
         latestVersion: a.latestVersion,
+        inShellBundle: isInShellBundle(a.pkg),
         blockingReasons: a.blockingReasons,
         risk: a.risk ?? null,
         fixPlan: a.fixPlan
