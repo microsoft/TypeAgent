@@ -27,6 +27,7 @@ import { ApiSurface } from "../discovery/discoveryHandler.js";
 import { PhraseSet } from "../phraseGen/phraseGenHandler.js";
 import { spawn } from "child_process";
 import path from "path";
+import { fileURLToPath } from "url";
 
 export async function executeGrammarGenAction(
     action: TypeAgentAction<GrammarGenActions>,
@@ -91,8 +92,17 @@ async function handleCompileGrammar(integrationName: string): Promise<ActionResu
     }
 
     return new Promise((resolve) => {
+        // Resolve agc from the package's own node_modules/.bin
+        const pkgDir = path.resolve(
+            fileURLToPath(import.meta.url), "..", "..", "..",
+        );
+        const binDir = path.join(pkgDir, "node_modules", ".bin");
+        const env = { ...process.env, PATH: binDir + path.delimiter + (process.env.PATH ?? "") };
+
         const proc = spawn("agc", ["-i", grammarPath, "-o", outputPath], {
             stdio: ["ignore", "pipe", "pipe"],
+            env,
+            shell: true,
         });
 
         let stdout = "";
