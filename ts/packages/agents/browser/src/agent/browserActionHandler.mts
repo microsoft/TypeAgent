@@ -259,6 +259,7 @@ export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeBrowserContext,
         updateAgentContext: updateBrowserContext,
+        closeAgentContext: closeBrowserContext,
         executeAction: executeBrowserAction,
         resolveEntity,
         getDynamicDisplay: getDynamicDisplayImpl,
@@ -537,6 +538,21 @@ async function updateBrowserContext(
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
         }
+    }
+}
+
+async function closeBrowserContext(
+    context: SessionContext<BrowserActionContext>,
+) {
+    if (context.agentContext.agentWebSocketServer) {
+        context.agentContext.agentWebSocketServer.stop();
+        delete context.agentContext.agentWebSocketServer;
+    }
+    if (context.agentContext.browserProcess) {
+        context.agentContext.browserProcess.kill();
+    }
+    if (context.agentContext.viewProcess) {
+        context.agentContext.viewProcess.kill();
     }
 }
 

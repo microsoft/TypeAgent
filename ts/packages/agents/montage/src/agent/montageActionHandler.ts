@@ -230,6 +230,10 @@ async function closeMontageContext(
     context: SessionContext<MontageActionContext>,
 ) {
     await saveMontages(context);
+    if (context.agentContext.viewProcess) {
+        context.agentContext.viewProcess.kill();
+        context.agentContext.viewProcess = undefined;
+    }
 }
 
 async function updateMontageContext(

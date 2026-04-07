@@ -278,5 +278,16 @@ process.on("disconnect", () => {
 });
 
 // Start the server
-app.listen(port);
-debug(`Montage server started on port ${port}`);
+const server = app.listen(port, () => {
+    debug(`Montage server started on port ${port}`);
+});
+server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+        console.error(
+            `Port ${port} is already in use. Is another instance already running?`,
+        );
+    } else {
+        console.error(`Server error: ${err.message}`);
+    }
+    process.exit(1);
+});

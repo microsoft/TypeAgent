@@ -146,13 +146,24 @@ export class BaseServer {
      * Start the server
      */
     start(): Promise<void> {
-        return new Promise((resolve) => {
-            this.app.listen(this.config.port, () => {
+        return new Promise((resolve, reject) => {
+            const server = this.app.listen(this.config.port, () => {
                 debug(`Server running at http://localhost:${this.config.port}`);
                 debug(
                     `Registered features: ${Array.from(this.features.keys()).join(", ")}`,
                 );
                 resolve();
+            });
+            server.on("error", (err: NodeJS.ErrnoException) => {
+                if (err.code === "EADDRINUSE") {
+                    reject(
+                        new Error(
+                            `Port ${this.config.port} is already in use. Is another instance already running?`,
+                        ),
+                    );
+                } else {
+                    reject(err);
+                }
             });
         });
     }
